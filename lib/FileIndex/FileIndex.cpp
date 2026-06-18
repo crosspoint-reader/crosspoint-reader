@@ -11,7 +11,7 @@
 namespace {
 constexpr const char* INDEX_DIR = "/.crosspoint/fileindex";
 constexpr char MAGIC[4] = {'C', 'P', 'F', 'I'};
-constexpr uint8_t INDEX_VERSION = 2;
+constexpr uint8_t INDEX_VERSION = 3;
 // Run chunk: entries sorted in RAM before being flushed as one sorted run.
 // 64 x 32 B = 2 KB, allocated once per build.
 constexpr size_t CHUNK_ENTRIES = 64;
@@ -172,6 +172,7 @@ struct FileIndex::BuildState {
   uint32_t blobLen = 0;
   std::unique_ptr<char[]> nameA;  // full-name comparison buffers
   std::unique_ptr<char[]> nameB;
+  uint32_t offsetsSignature = FNV32_BASIS;
   uint32_t yieldCounter = 0;
 };
 
@@ -266,10 +267,12 @@ bool FileIndex::loadExisting(const char* dirPath, SortMode sortMode, uint32_t si
 
   // Length check catches truncated/partial files
   if (valid) {
-    const uint64_t expectedSize =
-        static_cast<uint64_t>(h.offsetsStart) + static_cast<uint64_t>(h.dirCount + h.fileCount) * sizeof(uint32_t);
+    const uint64_t recordCount = static_cast<uint64_t>(h.dirCount) + h.fileCount;
+    const uint64_t expectedSize = static_cast<uint64_t>(h.offsetsStart) + recordCount * sizeof(uint32_t);
     valid = file.fileSize64() == expectedSize;
   }
+
+  if (valid) valid = validateOffsets(file, h);
 
   if (!valid) {
     file.close();
@@ -279,6 +282,72 @@ bool FileIndex::loadExisting(const char* dirPath, SortMode sortMode, uint32_t si
   hdr = h;
   idxFile = std::move(file);
   opened = true;
+  return true;
+}
+
+bool FileIndex::validateOffsets(HalFile& file, const IndexHeader& h) {
+  const uint64_t recordCount = static_cast<uint64_t>(h.dirCount) + h.fileCount;
+  const uint64_t expectedBlobStart = sizeof(IndexHeader) + h.pathLen;
+  const uint64_t blobEnd = static_cast<uint64_t>(h.blobStart) + h.blobLen;
+
+  if (recordCount > UINT32_MAX || h.blobStart != expectedBlobStart || h.offsetsStart != blobEnd) {
+    LOG_DBG("FIDX", "offset validation layout mismatch");
+    return false;
+  }
+
+  if (recordCount == 0) {
+    if (h.offsetsSignature != FNV32_BASIS) {
+      LOG_DBG("FIDX", "offset signature mismatch: got=%08x expected=%08x", static_cast<unsigned>(FNV32_BASIS),
+              static_cast<unsigned>(h.offsetsSignature));
+      return false;
+    }
+    return true;
+  }
+
+  const uint64_t minBlobBytes = recordCount * sizeof(RecordHeader);
+  if (h.blobLen < minBlobBytes || h.offsetsStart < h.blobStart + sizeof(RecordHeader)) {
+    LOG_DBG("FIDX", "offset validation blob bounds mismatch");
+    return false;
+  }
+
+  if (!file.seek(h.offsetsStart)) {
+    LOG_DBG("FIDX", "offset validation seek failed");
+    return false;
+  }
+
+  uint32_t sig = FNV32_BASIS;
+  uint32_t remaining = static_cast<uint32_t>(recordCount);
+  uint32_t offsetIndex = 0;
+  uint32_t yieldCounter = 0;
+  const uint32_t maxOffset = h.offsetsStart - sizeof(RecordHeader);
+  while (remaining > 0) {
+    const uint32_t count = std::min<uint32_t>(remaining, static_cast<uint32_t>(OFFSETS_CACHE_ENTRIES));
+    const size_t bytes = count * sizeof(uint32_t);
+    if (file.read(offsetsCache, bytes) != static_cast<int>(bytes)) {
+      LOG_DBG("FIDX", "offset validation read failed");
+      return false;
+    }
+
+    for (uint32_t i = 0; i < count; i++) {
+      const uint32_t offset = offsetsCache[i];
+      sig = fnv1a32(&offset, sizeof(offset), sig);
+      if (offset < h.blobStart || offset > maxOffset) {
+        LOG_DBG("FIDX", "offset out of bounds: idx=%u offset=%u range=%u..%u", static_cast<unsigned>(offsetIndex + i),
+                static_cast<unsigned>(offset), static_cast<unsigned>(h.blobStart), static_cast<unsigned>(maxOffset));
+        return false;
+      }
+    }
+
+    offsetIndex += count;
+    remaining -= count;
+    maybeYield(yieldCounter);
+  }
+
+  if (sig != h.offsetsSignature) {
+    LOG_DBG("FIDX", "offset signature mismatch: got=%08x expected=%08x", static_cast<unsigned>(sig),
+            static_cast<unsigned>(h.offsetsSignature));
+    return false;
+  }
   return true;
 }
 
@@ -469,6 +538,7 @@ bool FileIndex::build(const char* dirPath, SortMode sortMode, AcceptFn accept, u
     newHdr.blobStart = blobStart;
     newHdr.blobLen = bs.blobLen;
     newHdr.offsetsStart = blobStart + bs.blobLen;
+    newHdr.offsetsSignature = bs.offsetsSignature;
     ok = bs.idxTmp.seek(0) && bs.idxTmp.write(&newHdr, sizeof(newHdr)) == sizeof(newHdr);
     bs.idxTmp.flush();
   }
@@ -649,7 +719,9 @@ bool FileIndex::sortSmallTieGroup(BuildState& bs, size_t count, uint32_t& append
   }
 
   for (size_t i = 0; i < count; i++) {
-    if (!writeExact(bs.idxTmp, &bs.chunk[i].blobOffset, sizeof(uint32_t), "offset")) return false;
+    const uint32_t offset = bs.chunk[i].blobOffset;
+    bs.offsetsSignature = fnv1a32(&offset, sizeof(offset), bs.offsetsSignature);
+    if (!writeExact(bs.idxTmp, &offset, sizeof(offset), "offset")) return false;
   }
   appendPos += count * sizeof(uint32_t);
   return true;
@@ -842,7 +914,9 @@ bool FileIndex::appendTieOffsets(BuildState& bs, const char* path, uint32_t reco
       used = 0;
     }
     if (ok) {
-      memcpy(offsets + used, &cursor.record.blobOffset, sizeof(uint32_t));
+      const uint32_t offset = cursor.record.blobOffset;
+      bs.offsetsSignature = fnv1a32(&offset, sizeof(offset), bs.offsetsSignature);
+      memcpy(offsets + used, &offset, sizeof(offset));
       used += sizeof(uint32_t);
       consumeTieRecord(cursor);
     }
@@ -890,6 +964,7 @@ bool FileIndex::writeOffsets(BuildState& bs, uint32_t recordCount) {
     return false;
   }
 
+  bs.offsetsSignature = FNV32_BASIS;
   uint32_t appendPos = bs.idxTmp.position();
   RunRecord groupKey{};
   uint32_t groupCount = 0;

@@ -17,6 +17,8 @@ int sign(int v) { return (v > 0) - (v < 0); }
 
 constexpr size_t kFileIndexKeySize = 28;
 constexpr size_t kFileIndexChunkEntries = 64;
+constexpr uint32_t kFileIndexRecordHeaderBytes = 12;
+constexpr uint32_t kFnv32Basis = 2166136261u;
 
 enum class SortMode { Name, Date, Size, Type };
 
@@ -25,6 +27,42 @@ struct IndexRecord {
   uint32_t blobOffset;
   std::string name;
 };
+
+uint32_t fnv1a32(const void* data, size_t len, uint32_t hash) {
+  const uint8_t* p = static_cast<const uint8_t*>(data);
+  for (size_t i = 0; i < len; i++) {
+    hash ^= p[i];
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+uint32_t offsetSignature(const std::vector<uint32_t>& offsets) {
+  uint32_t sig = kFnv32Basis;
+  for (const uint32_t offset : offsets) {
+    sig = fnv1a32(&offset, sizeof(offset), sig);
+  }
+  return sig;
+}
+
+bool validateOffsetTableModel(const std::vector<uint32_t>& offsets, size_t expectedCount, uint32_t blobStart,
+                              uint32_t offsetsStart, uint32_t expectedSignature) {
+  if (offsets.size() != expectedCount) return false;
+  if (expectedCount == 0) return expectedSignature == kFnv32Basis;
+  if (offsetsStart < blobStart + kFileIndexRecordHeaderBytes) return false;
+  if (static_cast<uint64_t>(offsetsStart - blobStart) <
+      static_cast<uint64_t>(expectedCount) * kFileIndexRecordHeaderBytes) {
+    return false;
+  }
+
+  uint32_t sig = kFnv32Basis;
+  const uint32_t maxOffset = offsetsStart - kFileIndexRecordHeaderBytes;
+  for (const uint32_t offset : offsets) {
+    sig = fnv1a32(&offset, sizeof(offset), sig);
+    if (offset < blobStart || offset > maxOffset) return false;
+  }
+  return sig == expectedSignature;
+}
 
 // Compare two names via fixed-size zero-padded sort keys, the way the on-SD
 // merge sort does: memcmp of the padded keys, naturalCompare as tiebreak.
@@ -185,6 +223,23 @@ const char* const kOrdered[] = {
 };
 constexpr size_t kOrderedCount = sizeof(kOrdered) / sizeof(kOrdered[0]);
 
+const char* const kUnicodeNames[] = {
+    "resume.epub",
+    "r\xC3\xA9sum\xC3\xA9.epub",
+    "e\xCC\x81tude.epub",
+    "\xC3\xA9tude.epub",
+    "greek \xCE\xB1 2.epub",
+    "greek \xCE\xB1 10.epub",
+    "cyrillic \xD1\x8F 2.epub",
+    "arabic \xD8\xA7\xD9\x84\xD9\x83\xD8\xAA\xD8\xA7\xD8\xA8 3.epub",
+    "hebrew \xD7\xA1\xD7\xA4\xD7\xA8 4.epub",
+    "zh \xE4\xB8\xAD\xE6\x96\x87 2.epub",
+    "zh \xE4\xB8\xAD\xE6\x96\x87 10.epub",
+    "jp \xE3\x81\x8B\xE3\x81\xAA 5.epub",
+    "kr \xED\x95\x9C\xEA\xB8\x80 6.epub",
+};
+constexpr size_t kUnicodeNameCount = sizeof(kUnicodeNames) / sizeof(kUnicodeNames[0]);
+
 // Pairs naturalCompare considers equal.
 const char* const kEqualPairs[][2] = {
     {"01 intro", "1 intro"},
@@ -219,6 +274,12 @@ TEST(NaturalCompare, SelfEqual) {
   }
 }
 
+TEST(NaturalCompare, Utf8BytesAreNotNormalized) {
+  EXPECT_LT(FsHelpers::naturalCompare("resume.epub", "r\xC3\xA9sum\xC3\xA9.epub"), 0);
+  EXPECT_NE(FsHelpers::naturalCompare("\xC3\xA9tude.epub", "e\xCC\x81tude.epub"), 0);
+  EXPECT_LT(FsHelpers::naturalCompare("zh \xE4\xB8\xAD\xE6\x96\x87 2.epub", "zh \xE4\xB8\xAD\xE6\x96\x87 10.epub"), 0);
+}
+
 // Full-size keys (large enough that nothing truncates) must order exactly
 // like naturalCompare for every pair.
 TEST(NaturalSortKey, FullKeyMatchesNaturalCompare) {
@@ -232,6 +293,17 @@ TEST(NaturalSortKey, FullKeyMatchesNaturalCompare) {
   }
   for (const auto& pair : kEqualPairs) {
     EXPECT_EQ(keyCompare(pair[0], pair[1], kBigKey), 0) << "\"" << pair[0] << "\" vs \"" << pair[1] << "\"";
+  }
+}
+
+TEST(NaturalSortKey, Utf8FullKeyMatchesNaturalCompare) {
+  constexpr size_t kBigKey = 256;
+  for (size_t i = 0; i < kUnicodeNameCount; i++) {
+    for (size_t j = 0; j < kUnicodeNameCount; j++) {
+      EXPECT_EQ(sign(keyCompare(kUnicodeNames[i], kUnicodeNames[j], kBigKey)),
+                sign(FsHelpers::naturalCompare(kUnicodeNames[i], kUnicodeNames[j])))
+          << "\"" << kUnicodeNames[i] << "\" vs \"" << kUnicodeNames[j] << "\"";
+    }
   }
 }
 
@@ -249,6 +321,26 @@ TEST(NaturalSortKey, TruncatedKeyNeverContradicts) {
   }
 }
 
+TEST(NaturalSortKey, Utf8TruncatedKeyNeverContradicts) {
+  constexpr size_t kSmallKey = 8;
+  for (size_t i = 0; i < kUnicodeNameCount; i++) {
+    for (size_t j = 0; j < kUnicodeNameCount; j++) {
+      const int kc = keyCompare(kUnicodeNames[i], kUnicodeNames[j], kSmallKey);
+      if (kc == 0) continue;
+      EXPECT_EQ(sign(kc), sign(FsHelpers::naturalCompare(kUnicodeNames[i], kUnicodeNames[j])))
+          << "\"" << kUnicodeNames[i] << "\" vs \"" << kUnicodeNames[j] << "\"";
+    }
+  }
+}
+
+TEST(NaturalSortKey, Utf8BytesArePreserved) {
+  uint8_t key[16]{};
+  const size_t n = FsHelpers::naturalSortKey("\xD0\xAF.epub", key, sizeof(key));
+  ASSERT_GE(n, 2u);
+  EXPECT_EQ(key[0], 0xD0);
+  EXPECT_EQ(key[1], 0xAF);
+}
+
 TEST(NaturalSortKey, NeverEmitsZeroBytes) {
   uint8_t key[64];
   for (const char* name : kOrdered) {
@@ -263,6 +355,61 @@ TEST(NaturalSortKey, RespectsCapacity) {
   uint8_t key[4];
   const size_t n = FsHelpers::naturalSortKey("a very long file name 1234567890.epub", key, sizeof(key));
   EXPECT_EQ(n, sizeof(key));
+}
+
+TEST(FileIndexOffsetValidation, AcceptsMatchingSignatureAndBounds) {
+  constexpr uint32_t blobStart = 128;
+  constexpr uint32_t offsetsStart = 192;
+  const std::vector<uint32_t> offsets{128, 142, 160};
+  const uint32_t sig = offsetSignature(offsets);
+
+  EXPECT_TRUE(validateOffsetTableModel(offsets, offsets.size(), blobStart, offsetsStart, sig));
+}
+
+TEST(FileIndexOffsetValidation, RejectsBitFlipWithSameLength) {
+  constexpr uint32_t blobStart = 128;
+  constexpr uint32_t offsetsStart = 192;
+  const std::vector<uint32_t> offsets{128, 142, 160};
+  const uint32_t sig = offsetSignature(offsets);
+  auto corrupted = offsets;
+  corrupted[1] ^= 0x04;
+
+  EXPECT_FALSE(validateOffsetTableModel(corrupted, corrupted.size(), blobStart, offsetsStart, sig));
+}
+
+TEST(FileIndexOffsetValidation, RejectsSwappedOffsetsWithSameLength) {
+  constexpr uint32_t blobStart = 128;
+  constexpr uint32_t offsetsStart = 192;
+  const std::vector<uint32_t> offsets{128, 142, 160};
+  const uint32_t sig = offsetSignature(offsets);
+  auto swapped = offsets;
+  std::swap(swapped[0], swapped[2]);
+
+  EXPECT_FALSE(validateOffsetTableModel(swapped, swapped.size(), blobStart, offsetsStart, sig));
+}
+
+TEST(FileIndexOffsetValidation, RejectsTruncatedOrMismatchedOffsetCount) {
+  constexpr uint32_t blobStart = 128;
+  constexpr uint32_t offsetsStart = 192;
+  const std::vector<uint32_t> offsets{128, 142, 160};
+  const uint32_t sig = offsetSignature(offsets);
+  auto truncated = offsets;
+  truncated.pop_back();
+
+  EXPECT_FALSE(validateOffsetTableModel(truncated, offsets.size(), blobStart, offsetsStart, sig));
+  EXPECT_FALSE(validateOffsetTableModel(offsets, offsets.size() + 1, blobStart, offsetsStart, sig));
+}
+
+TEST(FileIndexOffsetValidation, RejectsOffsetsOutsideBlobEvenWithMatchingSignature) {
+  constexpr uint32_t blobStart = 128;
+  constexpr uint32_t offsetsStart = 192;
+  const std::vector<uint32_t> belowStart{127, 142, 160};
+  const std::vector<uint32_t> pastLastHeader{128, 142, offsetsStart - kFileIndexRecordHeaderBytes + 1};
+
+  EXPECT_FALSE(
+      validateOffsetTableModel(belowStart, belowStart.size(), blobStart, offsetsStart, offsetSignature(belowStart)));
+  EXPECT_FALSE(validateOffsetTableModel(pastLastHeader, pastLastHeader.size(), blobStart, offsetsStart,
+                                        offsetSignature(pastLastHeader)));
 }
 
 class FileIndexCollisionTest : public testing::TestWithParam<std::tuple<SortMode, size_t>> {};

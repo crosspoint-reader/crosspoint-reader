@@ -18,8 +18,10 @@
  * Staleness is detected by re-enumerating the directory on open() and hashing
  * (name, size, timestamp, isDir) of every accepted entry into a signature; a
  * mismatch with the stored header (or a different sort mode / filter result)
- * triggers a rebuild. Rebuilds write to a temp file and atomically rename, so
- * a power loss never leaves a corrupt index in place.
+ * triggers a rebuild. The offsets table has its own signature so same-size
+ * corruption is rejected before browsing reads through it. Rebuilds write to a
+ * temp file and atomically rename, so a power loss never leaves a corrupt index
+ * in place.
  *
  * Layout: [IndexHeader][dir path][records in enumeration order][sorted offsets]
  * The offsets table stores directories first, then files, each section sorted
@@ -88,6 +90,7 @@ class FileIndex {
     uint32_t blobStart;
     uint32_t blobLen;
     uint32_t offsetsStart;
+    uint32_t offsetsSignature;
   };
   struct RecordHeader {
     uint32_t size;
@@ -113,6 +116,7 @@ class FileIndex {
 
   bool scanDirectory(const char* dirPath, AcceptFn accept, uint32_t& signature, uint32_t& dirs, uint32_t& files);
   bool loadExisting(const char* dirPath, SortMode sortMode, uint32_t signature, uint32_t dirs, uint32_t files);
+  bool validateOffsets(HalFile& file, const IndexHeader& h);
   bool build(const char* dirPath, SortMode sortMode, AcceptFn accept, uint32_t signature, uint32_t dirs,
              uint32_t files);
   bool flushChunk(BuildState& bs);
