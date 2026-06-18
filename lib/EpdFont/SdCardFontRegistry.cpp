@@ -15,6 +15,40 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t s
   return nullptr;
 }
 
+const SdCardFontFileInfo* SdCardFontFamilyInfo::findClosestReaderSize(const uint8_t fontSizeEnum,
+                                                                      const uint8_t style) const {
+  if (files.empty()) return nullptr;
+
+  uint8_t target = 14;
+  switch (fontSizeEnum) {
+    case 0:
+      target = 12;
+      break;
+    case 2:
+      target = 16;
+      break;
+    case 3:
+      target = 18;
+      break;
+    case 1:
+    default:
+      target = 14;
+      break;
+  }
+
+  const SdCardFontFileInfo* best = nullptr;
+  uint8_t bestDelta = 255;
+  for (const auto& f : files) {
+    if (f.style != style) continue;
+    const uint8_t delta = f.pointSize > target ? f.pointSize - target : target - f.pointSize;
+    if (!best || delta < bestDelta || (delta == bestDelta && f.pointSize < best->pointSize)) {
+      best = &f;
+      bestDelta = delta;
+    }
+  }
+  return best;
+}
+
 bool SdCardFontFamilyInfo::hasSize(uint8_t size) const {
   for (const auto& f : files) {
     if (f.pointSize == size) return true;

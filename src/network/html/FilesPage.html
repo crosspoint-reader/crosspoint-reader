@@ -291,6 +291,27 @@
     .upload-form input[type="file"].has-files::file-selector-button {
       background-color: #95a5a6;
     }
+    .drop-zone {
+      border: 2px dashed var(--border-color);
+      border-radius: 6px;
+      padding: 14px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+    .drop-zone.dragover {
+      border-color: var(--accent-color);
+      background-color: var(--accent-color-10);
+    }
+    .drop-zone-hint {
+      margin: 8px 0 0;
+      font-size: 0.85em;
+      color: var(--label-color);
+      pointer-events: none;
+    }
+    .drop-zone.dragover .drop-zone-hint {
+      color: var(--accent-color);
+    }
     .upload-btn {
       background-color: #27ae60;
       color: white;
@@ -1526,7 +1547,10 @@
     <h3>📤 Upload file</h3>
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
-      <input type="file" id="fileInput" onchange="validateFile()" multiple>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" onchange="validateFile()" multiple>
+        <p class="drop-zone-hint">⬇ Drop files here — or click to browse</p>
+      </div>
       <div class="picker-columns" id="pickerColumns">
         <div class="convert-options" id="convertOptions" style="display:none;">
           <div class="convert-row">
@@ -2024,6 +2048,7 @@
     operationCancelled = false;
     isUploadInProgress = false;
     document.getElementById('uploadModalClose').classList.remove('disabled');
+    document.getElementById('fileInput').disabled = false;
     const progressFill = document.getElementById('progress-fill');
     const progressText = document.getElementById('progress-text');
     progressFill.style.width = '0%';
@@ -2044,6 +2069,7 @@
     const fileInput = document.getElementById('fileInput');
     fileInput.value = '';
     fileInput.classList.remove('has-files');
+    fileInput.disabled = false;
     const uploadBtn = document.getElementById('uploadBtn');
     uploadBtn.disabled = true;
     uploadBtn.style.display = 'block';
@@ -3023,6 +3049,68 @@
         }
       }, 10);
     });
+
+    // Drag-and-drop: route dropped files through the existing file input so the
+    // normal validateFile() pipeline (EPUB optimize options, batch mode, upload)
+    // runs unchanged. Assigning input.files via DataTransfer is supported in all
+    // current Chromium/Firefox/Safari, which is what the device serves the page to.
+    const dropZone = document.getElementById('dropZone');
+    if (dropZone) {
+      // dragenter/dragleave fire for child elements too; a counter avoids the
+      // highlight flickering as the cursor moves over the hint text or input.
+      let dragDepth = 0;
+
+      // An in-flight transfer can't be interrupted, so the zone is inert while
+      // uploading: no picker, no hover highlight — matching the disabled upload
+      // button and the drop handler's guard below.
+      const uploadBusy = () =>
+        typeof isUploadInProgress !== 'undefined' && isUploadInProgress;
+
+      // "click to browse" should work anywhere in the zone, not just on the
+      // native button. The hint has pointer-events:none so its clicks retarget
+      // to the zone; clicks on the native button retarget to fileInput (shadow
+      // DOM) and are skipped here so the picker isn't opened twice.
+      dropZone.addEventListener('click', function(e) {
+        if (uploadBusy()) return;
+        if (e.target !== fileInput) fileInput.click();
+      });
+
+      dropZone.addEventListener('dragenter', function(e) {
+        e.preventDefault();
+        dragDepth++;
+        if (!uploadBusy()) dropZone.classList.add('dragover');
+      });
+
+      dropZone.addEventListener('dragover', function(e) {
+        // Required so the browser doesn't navigate to / open the dropped file.
+        e.preventDefault();
+      });
+
+      dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) dropZone.classList.remove('dragover');
+      });
+
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dragDepth = 0;
+        dropZone.classList.remove('dragover');
+
+        // Don't let a drop disrupt an in-flight transfer.
+        if (uploadBusy()) return;
+
+        const dropped = e.dataTransfer && e.dataTransfer.files;
+        if (!dropped || dropped.length === 0) return;
+
+        // Replace the current selection, matching native file-picker semantics.
+        const dt = new DataTransfer();
+        for (const file of dropped) dt.items.add(file);
+        fileInput.files = dt.files;
+
+        validateFile();
+      });
+    }
   })();
 
   function validateFile() {
@@ -3070,7 +3158,7 @@
       }
 
       updateBatchModeUI(files.length > 1);
-      uploadBtn.disabled = false;
+      uploadBtn.disabled = isUploadInProgress;
     } else {
       updateBatchModeUI(false);
       uploadBtn.disabled = true;
@@ -5043,6 +5131,8 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
 }
 
 function uploadFile() {
+  if (isUploadInProgress) return;
+
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
@@ -5057,6 +5147,7 @@ function uploadFile() {
   uploadGeneration++;
   const myGeneration = uploadGeneration;
   document.getElementById('uploadModalClose').classList.add('disabled');
+  fileInput.disabled = true;
 
   const progressContainer = document.getElementById('progress-container');
   const progressFill = document.getElementById('progress-fill');
