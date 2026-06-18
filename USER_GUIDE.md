@@ -120,21 +120,33 @@ A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined
 
 ### 3.5.1 Calibre Wireless Transfers
 
-CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
+#### Configuring the Crosspoint Plugin in Calibre
+1. In Calibre select Preferences.
+2. In the Preferences dialog select Plugins.
+3. In Plugins search for "crosspoint".
+4. Click on "Customize plugin".
+5. Update the value for "Host" to match the IP for the x4.
+6. Leave the other settings as they are.
+7. [optional] Modify the "Upload path" to point to a subfolder other than the root "/" folder. Enter this as a path relative to the root folder. Example: `/mybooks`
+8. Restart Calibre.
 
-1. Install the plugin in Calibre:
-   
-   - Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
-   
-   - Download the zip file.
-   
-   - Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+<img width="420" height="385" alt="Image" src="https://github.com/user-attachments/assets/01fc7e33-a9a7-48ba-9e26-2e68d1f9daec" />
 
-2. On the device: File Transfer -> Calibre Wireless, then join a network.
+#### Uploading Books
 
-3. Make sure your computer is on the same Wi-Fi network.
+To upload a book using the Crosspoint plugin in Calibre:
 
-4. In Calibre, click "Send to device" to transfer books.
+1. Select one or more books.
+2. Right click on that selection.
+3. Select "Send to Device" > "Send to main memory"
+
+The Crosspoint plugin will connect to the x4, create a folder for the book's author in the root folder (or the folder you configured for the plugin), then copy the book into that folder.
+
+<img width="783" height="310" alt="Image" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
+
+#### Removing a Book
+
+There does not appear to be a way to remove a book from the x4 from within Calibre, or at least the feature "Remove books" is unable to do so. Books can be removed using the web interface or via USB.
 
 ### 3.6 Settings
 
