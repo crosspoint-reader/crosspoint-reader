@@ -33,6 +33,7 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "components/icons/bookmark.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
 #include "util/ScreenshotUtil.h"
@@ -164,6 +165,16 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.openEpubPath = epub->getPath();
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+
+  // Load bookmarks into memory for fast page-turn checks
+  cachedBookmarks.reserve(16);
+  const std::string bmPath = BookmarkUtil::getBookmarkPath(epub->getPath());
+  if (Storage.exists(bmPath.c_str())) {
+    String json = Storage.readFile(bmPath.c_str());
+    if (!json.isEmpty()) {
+      JsonSettingsIO::loadBookmarks(cachedBookmarks, json.c_str());
+    }
+  }
 
   // Trigger first update
   requestUpdate();
@@ -894,6 +905,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
+  updateBookmarkFlag();
+
   {
     auto p = section->loadPageFromSectionFile();
     if (!p) {
@@ -925,7 +938,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 
   if (showBookmarkMessage) {
-    GUI.drawPopup(renderer, tr(STR_BOOKMARK_ADDED));
+    GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
   }
 }
 
@@ -981,6 +994,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
+  if (currentPageBookmarked) {
+    renderer.drawIcon(BookmarkIcon, renderer.getScreenWidth() - 32 - orientedMarginRight, orientedMarginTop, 32, 32);
+  }
   const auto tBwRender = millis();
 
   if (imagePageWithAA) {
@@ -1215,7 +1231,7 @@ void EpubReaderActivity::addBookmark() {
   if (!section || !epub) {
     return;
   }
-  LOG_DBG("ERS", "Adding bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
+  LOG_DBG("ERS", "Toggle bookmark at spine %d, page %d", currentSpineIndex, section ? section->currentPage : -1);
   int currentPage;
   int pageCount;
   {
@@ -1224,43 +1240,52 @@ void EpubReaderActivity::addBookmark() {
     currentPage = section->currentPage;
   }
 
-  std::string pageText;
-  if (currentPage >= 0 && currentPage < pageCount) {
-    pageText = section->getTextFromSectionFile();
-  }
-
   SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
 
-  BookmarkEntry entry;
-  entry.percentage = progress.percentage;
-  entry.xpath = progress.xpath;
-  entry.summary = BookmarkUtil::sanitizeBookmarkSummary(pageText);
+  // Check if a bookmark already exists at this position — if so, remove it
+  auto it = std::find_if(cachedBookmarks.begin(), cachedBookmarks.end(),
+                         [&](const BookmarkEntry& b) { return b.xpath == progress.xpath; });
+  if (it != cachedBookmarks.end()) {
+    cachedBookmarks.erase(it);
+    bookmarkRemoved = true;
+    currentPageBookmarked = false;
+  } else {
+    std::string pageText;
+    if (currentPage >= 0 && currentPage < pageCount) {
+      pageText = section->getTextFromSectionFile();
+    }
+    BookmarkEntry entry;
+    entry.percentage = progress.percentage;
+    entry.xpath = progress.xpath;
+    entry.summary = BookmarkUtil::sanitizeBookmarkSummary(pageText);
+    cachedBookmarks.insert(cachedBookmarks.begin(), entry);
+    bookmarkRemoved = false;
+    currentPageBookmarked = true;
+  }
 
-  // Add bookmark
   const std::string path = BookmarkUtil::getBookmarkPath(epub->getPath());
-  LOG_DBG("ERS", "Bookmark path: %s", path.c_str());
   const std::string bookmarksDir = BookmarkUtil::getBookmarksDir();
   Storage.mkdir(bookmarksDir.c_str());
-  std::vector<BookmarkEntry> bookmarks;
-  if (Storage.exists(path.c_str())) {
-    LOG_DBG("ERS", "Existing bookmark file found, loading bookmarks");
-    String json = Storage.readFile(path.c_str());
-    if (!json.isEmpty()) {
-      JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
-    }
-  } else {
-    LOG_DBG("ERS", "No existing bookmark file, starting with empty bookmark list");
+  const bool ok = JsonSettingsIO::saveBookmarks(cachedBookmarks, path.c_str());
+  if (!ok) {
+    LOG_ERR("ERS", "Failed to save bookmarks to: %s", path.c_str());
   }
-  bookmarks.insert(bookmarks.begin(), entry);
-  LOG_DBG("ERS", "Saving bookmark to file: %s", path.c_str());
-  const bool ok = JsonSettingsIO::saveBookmarks(bookmarks, path.c_str());
-  if (ok) {
-    showBookmarkMessage = true;
-  } else {
-    LOG_ERR("ERS", "Failed to save bookmark to: %s", path.c_str());
-  }
-
   requestUpdate();
+}
+
+void EpubReaderActivity::updateBookmarkFlag() {
+  if (!section || !epub || cachedBookmarks.empty()) {
+    currentPageBookmarked = false;
+    return;
+  }
+  const CrossPointPosition pos = getCurrentPosition();
+  const float intra =
+      (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
+  const float currentPct = epub->calculateProgress(currentSpineIndex, intra);
+  constexpr float EPSILON = 0.0001f;
+  currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
+    return std::abs(b.percentage - currentPct) < EPSILON;
+  });
 }
 
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
