@@ -16,8 +16,6 @@
 
 namespace {
 constexpr const char* ELLIPSIS_UTF8 = "\xe2\x80\xa6";
-constexpr int PREVIEW_PADDING = 12;
-constexpr int PREVIEW_HEIGHT_PERCENT = 30;
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -45,7 +43,7 @@ void FontSelectionActivity::onEnter() {
   afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
   bottomReserved = metrics_.buttonHintsHeight + metrics_.verticalSpacing;
   usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
-  previewHeight = usableHeight * PREVIEW_HEIGHT_PERCENT / 100;
+  previewHeight = usableHeight * metrics_.previewHeightPercent / 100;
 
   originalFontFamily_ = SETTINGS.fontFamily;
   strncpy(originalSdFontFamilyName_, SETTINGS.sdFontFamilyName, sizeof(originalSdFontFamilyName_) - 1);
@@ -148,18 +146,18 @@ void FontSelectionActivity::handleSelection() {
 
 void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, bool available,
                                               const char* fontName) const {
-  const int left = PREVIEW_PADDING;
-  const int width = renderer.getScreenWidth() - (PREVIEW_PADDING * 2);
+  const int left = metrics_.previewPadding;
+  const int width = renderer.getScreenWidth() - (metrics_.previewPadding * 2);
   if (width <= 0 || height <= 0) return;
 
   const int labelFontId = UI_10_FONT_ID;
   const int labelH = renderer.getTextHeight(labelFontId);
   const int labelGap = 4;
-  const int labelReserved = labelH + labelGap + PREVIEW_PADDING;
+  const int labelReserved = labelH + labelGap + metrics_.previewPadding;
 
   char labelBuf[128];
   snprintf(labelBuf, sizeof(labelBuf), "%s \"%s\"", tr(STR_PREVIEW), fontName ? fontName : "");
-  const int labelY = top + height - PREVIEW_PADDING - labelH;
+  const int labelY = top + height - metrics_.previewPadding - labelH;
   renderer.drawText(labelFontId, left, labelY, labelBuf);
 
   if (!available || fontId == 0) return;
@@ -167,7 +165,7 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, b
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
 
-  const int innerHeight = height - PREVIEW_PADDING - labelReserved;
+  const int innerHeight = height - metrics_.previewPadding - labelReserved;
   const int maxLines = std::max(1, innerHeight / (lineH + 2));
 
   const char* previewText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
@@ -179,7 +177,7 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, b
 
   const auto lines = renderer.wrappedText(fontId, previewText, width, maxLines);
 
-  int y = top + PREVIEW_PADDING;
+  int y = top + metrics_.previewPadding;
   const int textBottomLimit = top + height - labelReserved;
   for (const auto& line : lines) {
     if (y + lineH > textBottomLimit) break;
