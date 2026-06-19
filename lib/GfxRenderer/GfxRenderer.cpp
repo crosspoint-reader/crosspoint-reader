@@ -1681,6 +1681,32 @@ void GfxRenderer::drawTextRotated180(const int fontId, const int x, const int y,
   }
 }
 
+void GfxRenderer::drawTextRotated180VCentered(const int fontId, const int x, const int boxTop, const int boxHeight,
+                                              const char* text, const bool black, const EpdFontFamily::Style style,
+                                              const BidiUtils::BidiBaseDir baseDir) const {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return;
+  }
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+
+  // Find the top y that vertically centres the text's real ink box in [boxTop, boxTop+boxHeight).
+  // Ink spans screen rows [baseline - maxY, baseline - minY] with baseline = y + ascender, so
+  // ink centre = y + ascender - (minY + maxY) / 2. Solve for y given the desired centre.
+  int minX = 0, minY = 0, maxX = 0, maxY = 0;
+  fontIt->second.getTextBounds(renderedText, 0, 0, &minX, &minY, &maxX, &maxY, style);
+  const int y = boxTop + boxHeight / 2 - getFontAscenderSize(fontId) + (minY + maxY) / 2;
+
+  drawTextRotated180(fontId, x, y, text, black, style, baseDir);
+}
+
 uint8_t* GfxRenderer::getFrameBuffer() const { return frameBuffer; }
 
 size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }

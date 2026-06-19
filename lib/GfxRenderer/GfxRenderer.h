@@ -218,6 +218,14 @@ class GfxRenderer {
   void drawTextRotated180(int fontId, int x, int y, const char* text, bool black = true,
                           EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                           BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  // Draws 180-degree rotated text horizontally at \p x and vertically centred (by its real ink
+  // box) within [boxTop, boxTop + boxHeight). Used for bottom button hints when the device is
+  // held inverted: forcing Portrait plus the physical 180 flip means mirroring the upright
+  // position would reproduce its small vertical offset, so the inverted text must be centred
+  // in the box directly.
+  void drawTextRotated180VCentered(int fontId, int x, int boxTop, int boxHeight, const char* text, bool black = true,
+                                   EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                                   BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   int getTextHeight(int fontId) const;
 
   // Grayscale functions

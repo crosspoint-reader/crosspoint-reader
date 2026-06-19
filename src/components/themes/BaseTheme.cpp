@@ -163,11 +163,12 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      const int textY = pageHeight - buttonY + textYOffset;
       if (flipHintText) {
-        renderer.drawTextRotated180(UI_10_FONT_ID, textX, textY, labels[i]);
+        // Centre in the box directly: the physical 180 flip means mirroring the upright
+        // position would surface its small vertical offset (#2375 review).
+        renderer.drawTextRotated180VCentered(UI_10_FONT_ID, textX, pageHeight - buttonY, buttonHeight, labels[i]);
       } else {
-        renderer.drawText(UI_10_FONT_ID, textX, textY, labels[i]);
+        renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
       }
     }
   }

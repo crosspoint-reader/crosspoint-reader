@@ -389,13 +389,6 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   // Forced Portrait keeps the hints at the physical buttons (#362); the inverted case still
   // needs its glyphs flipped 180° to read correctly when the device is held inverted (#2364).
   const bool flipHintText = origOrientation == GfxRenderer::Orientation::PortraitInverted;
-  const auto drawHint = [&renderer, flipHintText](int x, int y, const char* text) {
-    if (flipHintText) {
-      renderer.drawTextRotated180(kGuideFontId, x, y, text, true, EpdFontFamily::REGULAR);
-    } else {
-      renderer.drawText(kGuideFontId, x, y, text, true, EpdFontFamily::REGULAR);
-    }
-  };
 
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
@@ -406,6 +399,16 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int groupWidth = (pageWidth - sidePadding * 2 - groupGap) / 2;
   const int hintY = pageHeight - hintHeight - bottomMargin;
   const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
+
+  const auto drawHint = [&renderer, flipHintText, hintY, hintHeight](int x, int y, const char* text) {
+    if (flipHintText) {
+      // Centre in the box directly: the physical 180 flip means mirroring the upright
+      // position would surface its small vertical offset (#2375 review).
+      renderer.drawTextRotated180VCentered(kGuideFontId, x, hintY, hintHeight, text, true, EpdFontFamily::REGULAR);
+    } else {
+      renderer.drawText(kGuideFontId, x, y, text, true, EpdFontFamily::REGULAR);
+    }
+  };
 
   const bool backDisabled = (btn1 == nullptr || btn1[0] == '\0');
   const int leftGroupX = sidePadding;
