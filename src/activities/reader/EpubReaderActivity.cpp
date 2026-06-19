@@ -1258,6 +1258,9 @@ void EpubReaderActivity::addBookmark() {
     entry.percentage = progress.percentage;
     entry.xpath = progress.xpath;
     entry.summary = BookmarkUtil::sanitizeBookmarkSummary(pageText);
+    entry.computedSpineIndex = currentSpineIndex;
+    entry.computedChapterPageCount = pageCount;
+    entry.computedChapterProgress = currentPage;
     cachedBookmarks.insert(cachedBookmarks.begin(), entry);
     bookmarkRemoved = false;
     currentPageBookmarked = true;
