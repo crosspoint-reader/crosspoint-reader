@@ -213,6 +213,11 @@ class GfxRenderer {
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  // Helper for drawing 180-degree rotated text. Fills the same bounding box as drawText(),
+  // flipped upside-down. Used for bottom button hints in inverted orientation.
+  void drawTextRotated180(int fontId, int x, int y, const char* text, bool black = true,
+                          EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                          BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   int getTextHeight(int fontId) const;
 
   // Grayscale functions

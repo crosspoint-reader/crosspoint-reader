@@ -134,7 +134,7 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
   }
 }
 
-enum class TextRotation { None, Rotated90CW };
+enum class TextRotation { None, Rotated90CW, Rotated180 };
 
 // Shared glyph rendering logic for normal and rotated text.
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
@@ -238,6 +238,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     if (!renderer.glyphIntersectsStrip(ob, ib - (width - 1), ob + height - 1, ib)) {
       return;
     }
+  } else if constexpr (rotation == TextRotation::Rotated180) {
+    const int gx1 = cursorX - left;  // rightmost screen X (glyphX = 0)
+    const int gy1 = cursorY + top;   // bottommost screen Y (glyphY = 0)
+    if (!renderer.glyphIntersectsStrip(gx1 - (width - 1), gy1 - (height - 1), gx1, gy1)) {
+      return;
+    }
   } else {
     const int gx0 = cursorX + left;
     const int gy0 = cursorY - top;
@@ -255,6 +261,9 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     if constexpr (rotation == TextRotation::Rotated90CW) {
       outerBase = cursorX + fontData->ascender - top;  // screenX = outerBase + glyphY
       innerBase = cursorY - left;                      // screenY = innerBase - glyphX
+    } else if constexpr (rotation == TextRotation::Rotated180) {
+      outerBase = cursorY + top;   // screenY = outerBase - glyphY
+      innerBase = cursorX - left;  // screenX = innerBase - glyphX
     } else {
       outerBase = cursorY - top;   // screenY = outerBase + glyphY
       innerBase = cursorX + left;  // screenX = innerBase + glyphX
@@ -263,15 +272,17 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     if (is2Bit) {
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
-        const int outerCoord = outerBase + glyphY;
         for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
           int screenX, screenY;
           if constexpr (rotation == TextRotation::Rotated90CW) {
-            screenX = outerCoord;
+            screenX = outerBase + glyphY;
             screenY = innerBase - glyphX;
+          } else if constexpr (rotation == TextRotation::Rotated180) {
+            screenX = innerBase - glyphX;
+            screenY = outerBase - glyphY;
           } else {
             screenX = innerBase + glyphX;
-            screenY = outerCoord;
+            screenY = outerBase + glyphY;
           }
 
           const uint8_t byte = bitmap[pixelPosition >> 2];
@@ -298,15 +309,17 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
     } else {
       int pixelPosition = 0;
       for (int glyphY = 0; glyphY < height; glyphY++) {
-        const int outerCoord = outerBase + glyphY;
         for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
           int screenX, screenY;
           if constexpr (rotation == TextRotation::Rotated90CW) {
-            screenX = outerCoord;
+            screenX = outerBase + glyphY;
             screenY = innerBase - glyphX;
+          } else if constexpr (rotation == TextRotation::Rotated180) {
+            screenX = innerBase - glyphX;
+            screenY = outerBase - glyphY;
           } else {
             screenX = innerBase + glyphX;
-            screenY = outerCoord;
+            screenY = outerBase + glyphY;
           }
 
           const uint8_t byte = bitmap[pixelPosition >> 3];
@@ -1576,6 +1589,89 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
 
     renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, x, lastBaseY, black, style);
+    prevCp = cp;
+  }
+}
+
+void GfxRenderer::drawTextRotated180(const int fontId, const int x, const int y, const char* text, const bool black,
+                                     const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
+  // Cannot draw a NULL / empty string
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return;
+  }
+  const auto& font = fontIt->second;
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+
+  // Respect font-cache scan mode like drawText(): record the text for prewarming and skip
+  // rendering during the scan pass.
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(renderedText, fontId, style);
+    return;
+  }
+
+  // A 180° rotation reflects every glyph pen about the centre of the text's bounding box,
+  // so the output fills the same box as drawText(fontId, x, y, ...) but upside-down. The
+  // layout pass below mirrors drawText() exactly (kerning, ligatures, combining marks); only
+  // the final pen passed to renderCharImpl is reflected: rotatedPen = 2*centre - normalPen.
+  // The doubled centre uses the inclusive far pixel (width/height - 1): a W-wide box spans
+  // pixels [x, x+W-1], so its centre is x + (W-1)/2 and the reflection lands back in place.
+  // Measure the already-resolved text via the cached font handle to avoid repeating the BiDi
+  // pass and a second fontMap lookup.
+  int textW = 0, textH = 0;
+  font.getTextDimensions(renderedText, &textW, &textH, style);
+  const int cx2 = 2 * x + textW - 1;                  // 2 * box centre X
+  const int cy2 = 2 * y + getTextHeight(fontId) - 1;  // 2 * box centre Y (box height = ascender)
+
+  const int yPos = y + getFontAscenderSize(fontId);
+  int lastBaseX = x;
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
+  int lastBaseTop = 0;
+  int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
+
+  const char* textCursor = renderedText;
+  uint32_t cp;
+  uint32_t prevCp = 0;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
+    // Skip Hebrew Niqqud (vowel marks)
+    if (cp >= 0x0591 && cp <= 0x05C7) {
+      continue;
+    }
+
+    if (utf8IsCombiningMark(cp)) {
+      const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
+      if (!combiningGlyph) continue;
+      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+      const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
+                                                       combiningGlyph->width);
+      renderCharImpl<TextRotation::Rotated180>(*this, renderMode, font, cp, cx2 - combiningX, cy2 - (yPos - raiseBy),
+                                               black, style);
+      continue;
+    }
+
+    cp = font.applyLigatures(cp, textCursor, style);
+
+    if (prevCp != 0) {
+      const auto kernFP = font.getKerning(prevCp, cp, style);  // 4.4 fixed-point kern
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);       // snap 12.4 fixed-point to nearest pixel
+    }
+
+    const EpdGlyph* glyph = font.getGlyph(cp, style);
+
+    lastBaseLeft = glyph ? glyph->left : 0;
+    lastBaseWidth = glyph ? glyph->width : 0;
+    lastBaseTop = glyph ? glyph->top : 0;
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;  // 12.4 fixed-point
+
+    renderCharImpl<TextRotation::Rotated180>(*this, renderMode, font, cp, cx2 - lastBaseX, cy2 - yPos, black, style);
     prevCp = cp;
   }
 }

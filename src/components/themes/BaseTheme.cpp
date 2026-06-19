@@ -137,6 +137,13 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  // Forcing Portrait positions the hints at the physical buttons regardless of the active
+  // orientation (see #362). The inverted case still needs its glyphs flipped 180° so the
+  // labels read the right way up for someone holding the device inverted (#2364). The two
+  // landscape modes are left upright: a 90° flip would change the text's footprint and force
+  // taller hint buttons, whereas 180° keeps the exact same button box.
+  const bool flipHintText = orig_orientation == GfxRenderer::Orientation::PortraitInverted;
+
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 106;
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
@@ -156,7 +163,12 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      const int textY = pageHeight - buttonY + textYOffset;
+      if (flipHintText) {
+        renderer.drawTextRotated180(UI_10_FONT_ID, textX, textY, labels[i]);
+      } else {
+        renderer.drawText(UI_10_FONT_ID, textX, textY, labels[i]);
+      }
     }
   }
 
