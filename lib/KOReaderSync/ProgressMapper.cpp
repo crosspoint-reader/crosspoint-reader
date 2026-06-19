@@ -900,17 +900,3 @@ std::string ProgressMapper::generateXPath(const std::shared_ptr<Epub>& epub, int
   const int p = s.paragraphCount();
   return (p > 0) ? base + "/p[" + std::to_string(p) + "]" : base;
 }
-
-int ProgressMapper::spineIndexFromXPath(const std::shared_ptr<Epub>& epub, const std::string& xpath, float percentage) {
-  const int docFrag = parseIndex(xpath, "/body/DocFragment[");
-  if (docFrag >= 1 && (docFrag - 1) < epub->getSpineItemsCount()) {
-    return docFrag - 1;
-  }
-  const size_t bookSize = epub->getBookSize();
-  if (bookSize == 0) return 0;
-  const size_t targetBytes = static_cast<size_t>(static_cast<float>(bookSize) * std::clamp(percentage, 0.0f, 1.0f));
-  for (int i = 0; i < epub->getSpineItemsCount(); i++) {
-    if (epub->getCumulativeSpineItemSize(i) >= targetBytes) return i;
-  }
-  return 0;
-}

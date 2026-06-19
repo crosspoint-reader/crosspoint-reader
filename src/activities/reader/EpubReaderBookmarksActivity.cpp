@@ -40,9 +40,12 @@ void EpubReaderBookmarksActivity::onEnter() {
     } else {
       JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
 
-      // Compute spine index cheaply from the DocFragment index in the xpath
+      // pre-compute bookmark page values for quicker rendering
       for (auto& bookmark : bookmarks) {
-        bookmark.computedSpineIndex = ProgressMapper::spineIndexFromXPath(epub, bookmark.xpath, bookmark.percentage);
+        CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
+        bookmark.computedSpineIndex = pos.spineIndex;
+        bookmark.computedChapterPageCount = pos.totalPages;
+        bookmark.computedChapterProgress = pos.pageNumber;
       }
     }
   } else {
@@ -183,7 +186,9 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
     auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
     auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.computedSpineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-    return std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - " + tocTitle;
+    return std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - " +
+           std::to_string(bookmark.computedChapterProgress + 1) + "/" +
+           std::to_string(bookmark.computedChapterPageCount) + " - " + tocTitle;
   };
   const auto getBookmarkIcon = [isPortrait](int index) {
     // only enabled icon in portrait mode due to limitation with rotating icons for other orientations

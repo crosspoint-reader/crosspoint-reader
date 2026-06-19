@@ -65,13 +65,6 @@ class ProgressMapper {
                                          GfxRenderer& renderer, int currentSpineIndex = -1,
                                          int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
 
-  /**
-   * Cheaply extract spine index from an xpath string (parses DocFragment[N]).
-   * Falls back to percentage-based lookup if xpath is empty or unparseable.
-   * No I/O — pure arithmetic.
-   */
-  static int spineIndexFromXPath(const std::shared_ptr<Epub>& epub, const std::string& xpath, float percentage);
-
  private:
   /**
    * Generate a fallback XPath by streaming the spine item's XHTML and resolving
