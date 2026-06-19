@@ -1617,20 +1617,25 @@ void GfxRenderer::drawTextRotated180(const int fontId, const int x, const int y,
     return;
   }
 
-  // A 180° rotation reflects every glyph pen about the centre of the text's bounding box,
-  // so the output fills the same box as drawText(fontId, x, y, ...) but upside-down. The
-  // layout pass below mirrors drawText() exactly (kerning, ligatures, combining marks); only
-  // the final pen passed to renderCharImpl is reflected: rotatedPen = 2*centre - normalPen.
-  // The doubled centre uses the inclusive far pixel (width/height - 1): a W-wide box spans
-  // pixels [x, x+W-1], so its centre is x + (W-1)/2 and the reflection lands back in place.
-  // Measure the already-resolved text via the cached font handle to avoid repeating the BiDi
-  // pass and a second fontMap lookup.
-  int textW = 0, textH = 0;
-  font.getTextDimensions(renderedText, &textW, &textH, style);
-  const int cx2 = 2 * x + textW - 1;                  // 2 * box centre X
-  const int cy2 = 2 * y + getTextHeight(fontId) - 1;  // 2 * box centre Y (box height = ascender)
+  // A 180° rotation reflects every glyph pen about the centre of the rendered text, so the
+  // output lands on the same pixels as drawText(fontId, x, y, ...) but upside-down. The layout
+  // pass below mirrors drawText() exactly (kerning, ligatures, combining marks); only the final
+  // pen passed to renderCharImpl is reflected: rotatedPen = 2*centre - normalPen.
+  //
+  // Reflect about the real ink bounding box (getTextBounds), not an ascender-derived box: a
+  // glyph's cap height is smaller than the font ascender, so an ascender-based centre would
+  // leave the flipped text vertically off-centre in the button (#2375 review). getTextBounds
+  // returns extents relative to a baseline at the origin; the rendered baseline sits at
+  // y + ascender. The trailing -1 converts the exclusive far edge to the inclusive far pixel so
+  // the reflection lands back in place. Reusing the already-resolved text and cached font handle
+  // also avoids a second BiDi pass / fontMap lookup.
+  int minX = 0, minY = 0, maxX = 0, maxY = 0;
+  font.getTextBounds(renderedText, 0, 0, &minX, &minY, &maxX, &maxY, style);
+  const int ascender = getFontAscenderSize(fontId);
+  const int cx2 = 2 * x + minX + maxX - 1;               // 2 * ink centre X
+  const int cy2 = 2 * (y + ascender) - minY - maxY - 1;  // 2 * ink centre Y
 
-  const int yPos = y + getFontAscenderSize(fontId);
+  const int yPos = y + ascender;
   int lastBaseX = x;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
