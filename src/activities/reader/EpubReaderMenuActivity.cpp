@@ -3,6 +3,9 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <cstdio>
+#include <string>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -10,22 +13,30 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const int footnotesCount, const bool hasBookmarks)
+                                               const std::vector<FootnoteEntry>& footnotes, const bool hasBookmarks)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(footnotesCount, hasBookmarks)),
+      menuItems(buildMenuItems(footnotes, hasBookmarks)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
 
-std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(int footnotesCount,
-                                                                                     bool hasBookmarks) {
+std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(
+    const std::vector<FootnoteEntry>& footnotes, bool hasBookmarks) {
   std::vector<MenuItem> items;
   items.reserve(12);
-  if (footnotesCount > 0) {
-    if (footnotesCount == 1) {
-      items.push_back({MenuAction::FOOTNOTES, StrId::STR_GO_TO_FOOTNOTE});
+  if (!footnotes.empty()) {
+    if (footnotes.size() == 1) {
+      std::string label = footnotes[0].number;
+      if (label.empty()) {
+        label = tr(STR_LINK);
+      }
+      // Format key (e.g. "Go to Footnote: %s") so translations control the
+      // separator and number placement (RTL languages need the marker first).
+      char labelBuf[64];
+      snprintf(labelBuf, sizeof(labelBuf), tr(STR_GO_TO_FOOTNOTE), label.c_str());
+      items.push_back({MenuAction::FOOTNOTES, StrId::STR_GO_TO_FOOTNOTE, labelBuf});
     } else {
       items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
     }
@@ -131,7 +142,13 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   GUI.drawList(
       renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
-      [this](int index) { return I18N.get(menuItems[index].labelId); }, nullptr, nullptr,
+      [this](int index) {
+        if (!menuItems[index].label.empty()) {
+          return menuItems[index].label;
+        }
+        return std::string(I18N.get(menuItems[index].labelId));
+      },
+      nullptr, nullptr,
       [this](int index) {
         const auto value = menuItems[index].action;
         if (value == MenuAction::ROTATE_SCREEN) {
