@@ -9,6 +9,7 @@
 #include <vector>
 
 class HalFile;
+class FsFile;
 
 class HalStorage {
  public:
@@ -63,6 +64,11 @@ class HalFile : public Print {
   class Impl;
   std::unique_ptr<Impl> impl;
   explicit HalFile(std::unique_ptr<Impl> impl);
+
+  // Wrap an FsFile in a HalFile, allocating Impl with nothrow new. Returns an
+  // empty HalFile (operator bool == false) on OOM, after logging; `what` labels
+  // the failed allocation. Callers must already hold StorageLock.
+  static HalFile fromFsFile(FsFile&& fsFile, const char* what);
 
  public:
   HalFile();

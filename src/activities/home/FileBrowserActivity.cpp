@@ -18,10 +18,19 @@
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+// Pre-size the list to avoid the early geometric-growth reallocation churn that
+// fragments the heap (CLAUDE.md rule 7). Dirs larger than this still work, they
+// just grow from here.
+constexpr size_t FILE_LIST_RESERVE = 256;
+// Hard memory floor: stop collecting entries once free heap drops below this.
+// A directory with thousands of files would otherwise exhaust RAM and crash.
+// Instead we truncate and leave headroom for rendering.
+constexpr uint32_t FILE_LIST_MIN_FREE_HEAP = 24 * 1024;
 }  // namespace
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
+  files.reserve(FILE_LIST_RESERVE);
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -37,6 +46,14 @@ void FileBrowserActivity::loadFiles() {
   }
 
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    // Stop before the heap is exhausted: a dir with thousands of entries would
+    // otherwise abort() during vector/string growth.
+    if (ESP.getFreeHeap() < FILE_LIST_MIN_FREE_HEAP) {
+      LOG_ERR("FileBrowser", "Low heap (%u B free), truncating list at %u entries",
+              static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(files.size()));
+      break;
+    }
+
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
         strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {
