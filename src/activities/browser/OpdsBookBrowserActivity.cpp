@@ -4,12 +4,17 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include "CrossPointSettings.h"
+#include "Epub.h"
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/reader/EpubReaderActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -97,7 +102,21 @@ void OpdsBookBrowserActivity::loop() {
         const auto& entry = entries[selectorIndex];
         if (entry.type == OpdsEntryType::BOOK) {
           if (isBookDownloaded(entry)) {
-            activityManager.goToReader(filenameForBook(entry));
+            const std::string bookPath = filenameForBook(entry);
+            sdFontSystem.ensureLoaded(renderer);
+            auto epub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
+            if (epub && epub->load(true, SETTINGS.embeddedStyle == 0)) {
+              startActivityForResult(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub)),
+                                     [this](const ActivityResult&) {
+                                       state = BrowserState::BROWSING;
+                                       requestUpdate();
+                                     });
+            } else {
+              LOG_ERR("OPDS", "Failed to open epub: %s", bookPath.c_str());
+              state = BrowserState::ERROR;
+              errorMessage = tr(STR_DOWNLOAD_FAILED);
+              requestUpdate();
+            }
           } else {
             downloadBook(entry);
           }
@@ -420,7 +439,7 @@ void OpdsBookBrowserActivity::checkAndConnectWifi() {
   if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
     if (server.syncEnabled) {
       state = BrowserState::SYNCING;
-      statusMessage = tr(STR_SYNCING_ARTICLES);
+      statusMessage = "";
       requestUpdate(true);
       syncBooks();
     }
@@ -445,7 +464,7 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
   if (connected) {
     if (server.syncEnabled) {
       state = BrowserState::SYNCING;
-      statusMessage = tr(STR_SYNCING_ARTICLES);
+      statusMessage = "";
       requestUpdate(true);
       syncBooks();
     }

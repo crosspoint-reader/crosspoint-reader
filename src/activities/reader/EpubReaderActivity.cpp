@@ -321,14 +321,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Short press BACK goes directly to home (or restores position if viewing footnote)
+  // finish() lets push-callers (e.g. OPDS browser) return normally; replace-callers still reach Home via empty stack.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
       return;
     }
-    onGoHome();
+    finish();
     return;
   }
 
