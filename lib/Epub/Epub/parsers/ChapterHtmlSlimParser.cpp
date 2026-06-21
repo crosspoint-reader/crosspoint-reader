@@ -802,6 +802,17 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
     self->startNewTextBlock(accumulated.withoutBottom());
+    // keep-with-next: if the heading would fall near the bottom of the page with
+    // insufficient room for the heading line plus at least two body lines after it,
+    // start a fresh page so the heading is never stranded alone at the bottom.
+    const int lineHeight = static_cast<int>(self->renderer.getLineHeight(self->fontId) * self->lineCompression);
+    if (self->currentPage && !self->currentPage->elements.empty() &&
+        self->currentPageNextY + lineHeight * 3 > self->viewportHeight) {
+      self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex, self->xpathListItemIndex);
+      self->completedPageCount++;
+      self->currentPage.reset(new (std::nothrow) Page());
+      self->currentPageNextY = 0;
+    }
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
