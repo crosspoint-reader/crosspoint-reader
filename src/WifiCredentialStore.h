@@ -4,7 +4,8 @@
 
 struct WifiCredential {
   std::string ssid;
-  std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  std::string password;   // Plaintext in memory; obfuscated with hardware key on disk
+  bool isBackup = false;  // Designates this network as mobile hotspot fallback
 };
 
 class WifiCredentialStore;
@@ -57,6 +58,11 @@ class WifiCredentialStore {
 
   // Check if a network is saved
   bool hasSavedCredential(const std::string& ssid) const;
+
+  // Mobile backup hotspot — at most one credential is marked as backup
+  void setBackup(const std::string& ssid, bool backup);
+  bool isBackupCredential(const std::string& ssid) const;
+  const WifiCredential* getBackupCredential() const;
 
   // Last connected network
   void setLastConnectedSsid(const std::string& ssid);

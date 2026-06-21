@@ -33,8 +33,10 @@ void WifiSelectionActivity::onEnter() {
   enteredPassword.clear();
   usedSavedPassword = false;
   savePromptSelection = 0;
+  backupPromptSelection = 0;
   forgetPromptSelection = 0;
   autoConnecting = false;
+  autoConnectingBackup = false;
 
   // Cache MAC address for display
   uint8_t mac[6];
@@ -120,6 +122,8 @@ void WifiSelectionActivity::processWifiScanResults() {
   networks.clear();
   networks.reserve(scanResult);
 
+  const auto* backupCred = WIFI_STORE.getBackupCredential();
+
   for (int i = 0; i < scanResult; i++) {
     char ssid[33];
     strlcpy(ssid, WiFi.SSID(i).c_str(), sizeof(ssid));
@@ -138,6 +142,7 @@ void WifiSelectionActivity::processWifiScanResults() {
       network.rssi = rssi;
       network.isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
       network.hasSavedPassword = WIFI_STORE.hasSavedCredential(network.ssid);
+      network.isBackup = backupCred && (backupCred->ssid == network.ssid);
       networks.push_back(std::move(network));
     } else if (rssi > it->rssi) {
       it->rssi = rssi;
@@ -229,6 +234,21 @@ void WifiSelectionActivity::attemptConnection() {
   }
 }
 
+bool WifiSelectionActivity::tryFallbackToBackup() {
+  if (!autoConnecting || autoConnectingBackup) return false;
+  const auto* backupCred = WIFI_STORE.getBackupCredential();
+  if (!backupCred || backupCred->ssid == selectedSSID) return false;
+
+  autoConnectingBackup = true;
+  selectedSSID = backupCred->ssid;
+  enteredPassword = backupCred->password;
+  selectedRequiresPassword = !backupCred->password.empty();
+  usedSavedPassword = true;
+  LOG_DBG("WIFI", "Primary failed, trying mobile backup: %s", selectedSSID.c_str());
+  attemptConnection();
+  return true;
+}
+
 void WifiSelectionActivity::checkConnectionStatus() {
   if (state != WifiSelectionState::CONNECTING && state != WifiSelectionState::AUTO_CONNECTING) {
     return;
@@ -278,6 +298,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
   }
 
   if (status == WL_CONNECT_FAILED || status == WL_NO_SSID_AVAIL) {
+    if (tryFallbackToBackup()) return;
     connectionError = tr(STR_ERROR_GENERAL_FAILURE);
     if (status == WL_NO_SSID_AVAIL) {
       connectionError = tr(STR_ERROR_NETWORK_NOT_FOUND);
@@ -290,6 +311,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
   // Check for timeout
   if (millis() - connectionStartTime > CONNECTION_TIMEOUT_MS) {
     WiFi.disconnect();
+    if (tryFallbackToBackup()) return;
     connectionError = tr(STR_ERROR_CONNECTION_TIMEOUT);
     state = WifiSelectionState::CONNECTION_FAILED;
     requestUpdate();
@@ -333,13 +355,48 @@ void WifiSelectionActivity::loop() {
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (savePromptSelection == 0) {
         // User chose "Yes" - save the password
-        RenderLock lock(*this);
-        WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+        {
+          RenderLock lock(*this);
+          WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+        }
+        // Offer to set as mobile backup if not already designated
+        if (!WIFI_STORE.isBackupCredential(selectedSSID)) {
+          state = WifiSelectionState::BACKUP_PROMPT;
+          backupPromptSelection = 1;  // Default to "No" (non-destructive)
+          requestUpdate();
+          return;
+        }
       }
       // Complete - parent will start web server
       onComplete(true);
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       // Skip saving, complete anyway
+      onComplete(true);
+    }
+    return;
+  }
+
+  // Handle backup prompt state
+  if (state == WifiSelectionState::BACKUP_PROMPT) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      if (backupPromptSelection > 0) {
+        backupPromptSelection--;
+        requestUpdate();
+      }
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      if (backupPromptSelection < 1) {
+        backupPromptSelection++;
+        requestUpdate();
+      }
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      if (backupPromptSelection == 0) {
+        RenderLock lock(*this);
+        WIFI_STORE.setBackup(selectedSSID, true);
+      }
+      onComplete(true);
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onComplete(true);
     }
     return;
@@ -392,6 +449,13 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::CONNECTION_FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      // If backup auto-connect failed, go straight to scan without forgetting
+      if (autoConnectingBackup) {
+        autoConnectingBackup = false;
+        autoConnecting = false;
+        startWifiScan();
+        return;
+      }
       // If we were auto-connecting or using a saved credential, offer to forget
       // the network
       if (autoConnecting || usedSavedPassword) {
@@ -511,6 +575,9 @@ void WifiSelectionActivity::render(RenderLock&&) {
     case WifiSelectionState::SAVE_PROMPT:
       renderSavePrompt(&screen, &metrics);
       break;
+    case WifiSelectionState::BACKUP_PROMPT:
+      renderBackupPrompt(&screen, &metrics);
+      break;
     case WifiSelectionState::CONNECTION_FAILED:
       renderConnectionFailed(&screen, &metrics);
       break;
@@ -537,9 +604,14 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
         renderer, Rect{screen->x, contentTop, screen->width, contentHeight}, static_cast<int>(networks.size()),
         selectedNetworkIndex, [this](int index) { return networks[index].ssid; }, nullptr, nullptr,
         [this](int index) {
-          auto network = networks[index];
-          return std::string(network.hasSavedPassword ? "+ " : "") + (network.isEncrypted ? "* " : "") +
-                 getSignalStrengthIndicator(network.rssi);
+          const auto& network = networks[index];
+          std::string indicator;
+          if (network.hasSavedPassword) indicator += "+";
+          if (network.isBackup) indicator += "B";
+          if (!indicator.empty()) indicator += " ";
+          if (network.isEncrypted) indicator += "* ";
+          indicator += getSignalStrengthIndicator(network.rssi);
+          return indicator;
         });
   }
 
@@ -561,8 +633,8 @@ void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetr
   if (state == WifiSelectionState::SCANNING) {
     UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, tr(STR_SCANNING));
   } else {
-    UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 40, tr(STR_CONNECTING), true,
-                              EpdFontFamily::BOLD);
+    const char* headline = autoConnectingBackup ? tr(STR_TRYING_MOBILE_BACKUP) : tr(STR_CONNECTING);
+    UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 40, headline, true, EpdFontFamily::BOLD);
 
     std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
     if (ssidInfo.length() > 25) {
@@ -630,6 +702,44 @@ void WifiSelectionActivity::renderSavePrompt(const Rect* screen, const ThemeMetr
   }
 
   // Use centralized button hints
+  const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void WifiSelectionActivity::renderBackupPrompt(const Rect* screen, const ThemeMetrics* metrics) const {
+  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto top = screen->y + (screen->height - height * 3) / 2;
+
+  UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 40, tr(STR_CONNECTED), true, EpdFontFamily::BOLD);
+
+  std::string ssidInfo = std::string(tr(STR_NETWORK_PREFIX)) + selectedSSID;
+  if (ssidInfo.length() > 28) {
+    ssidInfo.replace(25, ssidInfo.length() - 25, "...");
+  }
+  UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, ssidInfo.c_str());
+
+  UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top + 40, tr(STR_SET_AS_MOBILE_BACKUP));
+
+  const int buttonY = top + 80;
+  constexpr int buttonWidth = 60;
+  constexpr int buttonSpacing = 30;
+  constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
+  const int startX = screen->x + (screen->width - totalWidth) / 2;
+
+  if (backupPromptSelection == 0) {
+    std::string text = "[" + std::string(tr(STR_YES)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX, buttonY, text.c_str());
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + 4, buttonY, tr(STR_YES));
+  }
+
+  if (backupPromptSelection == 1) {
+    std::string text = "[" + std::string(tr(STR_NO)) + "]";
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing, buttonY, text.c_str());
+  } else {
+    renderer.drawText(UI_10_FONT_ID, startX + buttonWidth + buttonSpacing + 4, buttonY, tr(STR_NO));
+  }
+
   const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
