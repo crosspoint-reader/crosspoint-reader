@@ -1564,8 +1564,7 @@ void CrossPointWebServer::handleSetWifiBackup() {
       return;
     }
     WIFI_STORE.setBackup(credentials[static_cast<size_t>(idx)].ssid, true);
-    LOG_DBG("WEB", "Set mobile backup to index %d (SSID: %s)", idx,
-            credentials[static_cast<size_t>(idx)].ssid.c_str());
+    LOG_DBG("WEB", "Set mobile backup to index %d (SSID: %s)", idx, credentials[static_cast<size_t>(idx)].ssid.c_str());
   }
 
   server->send(200, "text/plain", "OK");
