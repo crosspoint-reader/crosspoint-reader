@@ -92,6 +92,12 @@ class ChapterHtmlSlimParser {
   int preDepth = INT_MAX;          // depth at which <pre> was entered (INT_MAX = not in pre)
   bool preLineHasContent = false;  // true after first non-whitespace char in current pre line
 
+  // Widow prevention: hold the most recently filled page so makePages() can rescue
+  // its last line when a paragraph leaves only one line on the following page (a widow).
+  std::unique_ptr<Page> widowPendingPage;
+  uint16_t widowPendingParagraphIndex = 0;
+  uint16_t widowPendingListItemIndex = 0;
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
@@ -105,6 +111,7 @@ class ChapterHtmlSlimParser {
   void flushPendingAnchor();
   void flushPartWordBuffer();
   void makePages();
+  void commitPendingPage();
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   void emitHorizontalRule(const BlockStyle& blockStyle);
   // XML callbacks
