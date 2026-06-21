@@ -1281,7 +1281,7 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
+  char output[640];
   constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
 
@@ -1293,6 +1293,9 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     doc["username"] = servers[i].username;
     // Never expose passwords over the API — only indicate whether one is set
     doc["hasPassword"] = !servers[i].password.empty();
+    doc["show_on_home"] = servers[i].showOnHome;
+    doc["sync_enabled"] = servers[i].syncEnabled;
+    doc["sync_limit"] = servers[i].syncLimit;
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
@@ -1324,6 +1327,9 @@ void CrossPointWebServer::handlePostOpdsServer() {
   opdsServer.name = doc["name"] | std::string("");
   opdsServer.url = doc["url"] | std::string("");
   opdsServer.username = doc["username"] | std::string("");
+  opdsServer.showOnHome = doc["show_on_home"] | false;
+  opdsServer.syncEnabled = doc["sync_enabled"] | false;
+  opdsServer.syncLimit = doc["sync_limit"] | 20;
 
   // The password field is optional in the JSON payload. When absent (vs. present but empty),
   // we preserve the existing password — the web UI omits it when the user hasn't changed it.

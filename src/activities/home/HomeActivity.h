@@ -17,10 +17,10 @@ class HomeActivity final : public Activity {
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
   std::vector<size_t> homeServerIndices;  // Indices into OPDS_STORE for servers with showOnHome
-  bool coverRendered = false;      // Track if cover has been rendered once
-  bool coverBufferStored = false;  // Track if cover buffer is stored
-  uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
-  size_t coverBufferSize = 0;      // Bytes allocated to coverBuffer
+  bool coverRendered = false;             // Track if cover has been rendered once
+  bool coverBufferStored = false;         // Track if cover buffer is stored
+  uint8_t* coverBuffer = nullptr;         // HomeActivity's own buffer for cover image
+  size_t coverBufferSize = 0;             // Bytes allocated to coverBuffer
   // Logical rect last passed to drawRecentBookCover. The cover snapshot only
   // needs to cover this region, not the entire framebuffer, so we cache the
   // tile instead of all 48 KB. Set in render() before the call.

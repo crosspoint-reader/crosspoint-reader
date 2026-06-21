@@ -122,9 +122,8 @@ void HomeActivity::onEnter() {
 
   const auto base = static_cast<int>(recentBooks.size());
   const auto hsc = static_cast<int>(homeServerIndices.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE
-                      ? 0
-                      : base + menuItemToIndex(initialMenuItem, hasOpdsServers, hsc);
+  selectorIndex =
+      initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers, hsc);
 
   // Trigger first update
   requestUpdate();
@@ -197,8 +196,7 @@ void HomeActivity::loop() {
         const size_t serverIdx = homeServerIndices[menuIndex - 2];
         const auto* srv = OPDS_STORE.getServer(serverIdx);
         if (srv) {
-          activityManager.replaceActivity(
-              std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *srv));
+          activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *srv));
         }
       } else {
         switch (indexToMenuItem(menuIndex, hasOpdsServers, hsc)) {

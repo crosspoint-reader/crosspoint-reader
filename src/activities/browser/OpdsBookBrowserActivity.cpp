@@ -1,12 +1,11 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
-
-#include <HalStorage.h>
 
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -172,8 +171,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  const bool selectedIsDownloaded =
-      !entries.empty() && isBookDownloaded(entries[selectorIndex]);
+  const bool selectedIsDownloaded = !entries.empty() && isBookDownloaded(entries[selectorIndex]);
   const char* confirmLabel = (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK)
                                  ? (selectedIsDownloaded ? tr(STR_OPEN) : tr(STR_DOWNLOAD))
                                  : tr(STR_OPEN);
@@ -280,8 +278,7 @@ void OpdsBookBrowserActivity::navigateBack() {
 }
 
 std::string OpdsBookBrowserActivity::filenameForBook(const OpdsEntry& entry) const {
-  const std::string stem =
-      entry.author.empty() ? entry.title : entry.author + " - " + entry.title;
+  const std::string stem = entry.author.empty() ? entry.title : entry.author + " - " + entry.title;
   return "/" + StringUtils::sanitizeFilename(stem) + ".epub";
 }
 
