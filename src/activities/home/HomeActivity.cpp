@@ -17,17 +17,15 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/browser/OpdsBookBrowserActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
-  if (!recentBooks.empty()) {
-    count += recentBooks.size();
-  }
-  if (hasOpdsServers) {
-    count++;
-  }
+  int count = 4;  // File Browser, Recents, File Transfer, Settings
+  count += static_cast<int>(recentBooks.size());
+  count += static_cast<int>(homeServerIndices.size());
+  if (hasOpdsServers) count++;
   return count;
 }
 
@@ -113,11 +111,20 @@ void HomeActivity::onEnter() {
 
   hasOpdsServers = OPDS_STORE.hasServers();
 
+  homeServerIndices.clear();
+  for (size_t i = 0; i < OPDS_STORE.getCount(); i++) {
+    const auto* srv = OPDS_STORE.getServer(i);
+    if (srv && srv->showOnHome) homeServerIndices.push_back(i);
+  }
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  const auto hsc = static_cast<int>(homeServerIndices.size());
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                      ? 0
+                      : base + menuItemToIndex(initialMenuItem, hasOpdsServers, hsc);
 
   // Trigger first update
   requestUpdate();
@@ -180,28 +187,39 @@ void HomeActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectorIndex < recentBooks.size()) {
+    if (selectorIndex < static_cast<int>(recentBooks.size())) {
       onSelectBook(recentBooks[selectorIndex].path);
     } else {
       const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
-        case HomeMenuItem::FILE_BROWSER:
-          onFileBrowserOpen();
-          break;
-        case HomeMenuItem::RECENTS:
-          onRecentsOpen();
-          break;
-        case HomeMenuItem::OPDS_BROWSER:
-          onOpdsBrowserOpen();
-          break;
-        case HomeMenuItem::FILE_TRANSFER:
-          onFileTransferOpen();
-          break;
-        case HomeMenuItem::SETTINGS_MENU:
-          onSettingsOpen();
-          break;
-        default:
-          break;
+      const int hsc = static_cast<int>(homeServerIndices.size());
+      // Indices [0, hsc) are home-server shortcuts inserted after RECENTS
+      if (menuIndex >= 2 && menuIndex < 2 + hsc) {
+        const size_t serverIdx = homeServerIndices[menuIndex - 2];
+        const auto* srv = OPDS_STORE.getServer(serverIdx);
+        if (srv) {
+          activityManager.replaceActivity(
+              std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *srv));
+        }
+      } else {
+        switch (indexToMenuItem(menuIndex, hasOpdsServers, hsc)) {
+          case HomeMenuItem::FILE_BROWSER:
+            onFileBrowserOpen();
+            break;
+          case HomeMenuItem::RECENTS:
+            onRecentsOpen();
+            break;
+          case HomeMenuItem::OPDS_BROWSER:
+            onOpdsBrowserOpen();
+            break;
+          case HomeMenuItem::FILE_TRANSFER:
+            onFileTransferOpen();
+            break;
+          case HomeMenuItem::SETTINGS_MENU:
+            onSettingsOpen();
+            break;
+          default:
+            break;
+        }
       }
     }
   }
@@ -235,9 +253,19 @@ void HomeActivity::render(RenderLock&&) {
                                         tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
 
+  // Insert home-server shortcuts after "Recent Books" (position 2)
+  for (int si = static_cast<int>(homeServerIndices.size()) - 1; si >= 0; si--) {
+    const auto* srv = OPDS_STORE.getServer(homeServerIndices[si]);
+    if (srv) {
+      menuItems.insert(menuItems.begin() + 2, srv->name.c_str());
+      menuIcons.insert(menuIcons.begin() + 2, Library);
+    }
+  }
+
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    const int opdsBrowserPos = 2 + static_cast<int>(homeServerIndices.size());
+    menuItems.insert(menuItems.begin() + opdsBrowserPos, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + opdsBrowserPos, Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {

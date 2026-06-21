@@ -373,6 +373,9 @@ bool JsonSettingsIO::saveOpds(const OpdsServerStore& store, const char* path) {
     obj["url"] = server.url;
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+    obj["sync_enabled"] = server.syncEnabled;
+    obj["sync_limit"] = server.syncLimit;
+    obj["show_on_home"] = server.showOnHome;
   }
 
   String json;
@@ -405,6 +408,9 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
       server.password = obj["password"] | std::string("");
       if (!server.password.empty() && needsResave) *needsResave = true;
     }
+    server.syncEnabled = obj["sync_enabled"] | false;
+    server.syncLimit = obj["sync_limit"] | 20;
+    server.showOnHome = obj["show_on_home"] | false;
     store.servers.push_back(std::move(server));
   }
 

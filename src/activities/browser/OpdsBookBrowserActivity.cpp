@@ -6,6 +6,8 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <HalStorage.h>
+
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -88,13 +90,21 @@ void OpdsBookBrowserActivity::loop() {
     return;
   }
 
-  if (state == BrowserState::DOWNLOADING) return;
+  if (state == BrowserState::DOWNLOADING || state == BrowserState::SYNCING) return;
 
   if (state == BrowserState::BROWSING) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
-        entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
+        if (entry.type == OpdsEntryType::BOOK) {
+          if (isBookDownloaded(entry)) {
+            activityManager.goToReader(filenameForBook(entry));
+          } else {
+            downloadBook(entry);
+          }
+        } else {
+          navigateToEntry(entry);
+        }
       }
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
@@ -149,8 +159,9 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  if (state == BrowserState::DOWNLOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
+  if (state == BrowserState::SYNCING || state == BrowserState::DOWNLOADING) {
+    const char* stateLabel = (state == BrowserState::SYNCING) ? tr(STR_SYNCING_ARTICLES) : tr(STR_DOWNLOADING);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, stateLabel);
     auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
     if (downloadTotal > 0) {
@@ -161,8 +172,11 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     return;
   }
 
-  const char* confirmLabel =
-      (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+  const bool selectedIsDownloaded =
+      !entries.empty() && isBookDownloaded(entries[selectorIndex]);
+  const char* confirmLabel = (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK)
+                                 ? (selectedIsDownloaded ? tr(STR_OPEN) : tr(STR_DOWNLOAD))
+                                 : tr(STR_OPEN);
   const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -175,8 +189,13 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
     for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
       const auto& entry = entries[i];
-      std::string displayText = (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : entry.title;
-      if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) displayText += " - " + entry.author;
+      std::string displayText;
+      if (entry.type == OpdsEntryType::NAVIGATION) {
+        displayText = "> " + entry.title;
+      } else {
+        displayText = (isBookDownloaded(entry) ? "* " : "  ") + entry.title;
+        if (!entry.author.empty()) displayText += " - " + entry.author;
+      }
       auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
       renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
                         i != static_cast<size_t>(selectorIndex));
@@ -260,6 +279,73 @@ void OpdsBookBrowserActivity::navigateBack() {
   }
 }
 
+std::string OpdsBookBrowserActivity::filenameForBook(const OpdsEntry& entry) const {
+  const std::string stem =
+      entry.author.empty() ? entry.title : entry.author + " - " + entry.title;
+  return "/" + StringUtils::sanitizeFilename(stem) + ".epub";
+}
+
+bool OpdsBookBrowserActivity::isBookDownloaded(const OpdsEntry& entry) const {
+  if (entry.type != OpdsEntryType::BOOK) return false;
+  return Storage.exists(filenameForBook(entry).c_str());
+}
+
+bool OpdsBookBrowserActivity::doDownload(const std::string& url, const std::string& filename) {
+  const auto result = HttpDownloader::downloadToFile(
+      url, filename,
+      [this](const size_t downloaded, const size_t total) {
+        downloadProgress = downloaded;
+        downloadTotal = total;
+        requestUpdate(true);
+      },
+      nullptr, server.username, server.password);
+  if (result == HttpDownloader::OK) {
+    clearBookCache(filename);
+    return true;
+  }
+  return false;
+}
+
+void OpdsBookBrowserActivity::syncBooks() {
+  if (server.url.empty()) return;
+
+  LOG_INF("OPDS", "Starting sync for server: %s (limit %d)", server.name.c_str(), server.syncLimit);
+
+  OpdsParser parser;
+  {
+    OpdsParserStream stream{parser};
+    if (!HttpDownloader::fetchUrl(server.url, stream, server.username, server.password)) {
+      LOG_ERR("OPDS", "Sync: failed to fetch feed");
+      return;
+    }
+  }
+  if (!parser) {
+    LOG_ERR("OPDS", "Sync: failed to parse feed");
+    return;
+  }
+
+  const auto& syncEntries = parser.getEntries();
+  int synced = 0;
+  for (const auto& entry : syncEntries) {
+    if (synced >= server.syncLimit) break;
+    if (entry.type != OpdsEntryType::BOOK) continue;
+    if (isBookDownloaded(entry)) continue;
+
+    const std::string filename = filenameForBook(entry);
+    statusMessage = entry.title;
+    downloadProgress = downloadTotal = 0;
+    requestUpdate(true);
+
+    const std::string feedUrl = UrlUtils::buildUrl(server.url, "");
+    const std::string downloadUrl = UrlUtils::buildUrl(feedUrl, entry.href);
+    LOG_INF("OPDS", "Sync: downloading %s -> %s", downloadUrl.c_str(), filename.c_str());
+    if (doDownload(downloadUrl, filename)) {
+      synced++;
+    }
+  }
+  LOG_INF("OPDS", "Sync complete: %d new book(s) downloaded", synced);
+}
+
 void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
@@ -268,22 +354,11 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
-  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+  const std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
+  const std::string filename = filenameForBook(book);
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
-  const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
-      [this](const size_t downloaded, const size_t total) {
-        downloadProgress = downloaded;
-        downloadTotal = total;
-        requestUpdate(true);
-      },
-      nullptr, server.username, server.password);
-
-  if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
+  if (doDownload(downloadUrl, filename)) {
     state = BrowserState::BROWSING;
   } else {
     state = BrowserState::ERROR;
@@ -346,6 +421,12 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
 
 void OpdsBookBrowserActivity::checkAndConnectWifi() {
   if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+    if (server.syncEnabled) {
+      state = BrowserState::SYNCING;
+      statusMessage = tr(STR_SYNCING_ARTICLES);
+      requestUpdate(true);
+      syncBooks();
+    }
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     requestUpdate();
@@ -365,6 +446,12 @@ void OpdsBookBrowserActivity::launchWifiSelection() {
 
 void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
   if (connected) {
+    if (server.syncEnabled) {
+      state = BrowserState::SYNCING;
+      statusMessage = tr(STR_SYNCING_ARTICLES);
+      requestUpdate(true);
+      syncBooks();
+    }
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     requestUpdate(true);

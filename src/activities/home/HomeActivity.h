@@ -16,6 +16,7 @@ class HomeActivity final : public Activity {
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
+  std::vector<size_t> homeServerIndices;  // Indices into OPDS_STORE for servers with showOnHome
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
@@ -30,13 +31,16 @@ class HomeActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
 
-  // Convert HomeMenuItem to menu index (used in onEnter)
-  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
+  // Convert HomeMenuItem to menu index (used in onEnter).
+  // homeServerCount = number of servers with showOnHome (inserted after RECENTS).
+  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl, int homeServerCount = 0) {
     int i = 0;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
     ++i;
     if (item == HomeMenuItem::RECENTS) return i;
     ++i;
+    // Home server shortcuts occupy [i, i+homeServerCount)
+    i += homeServerCount;
     if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
     if (hasOpdsUrl) ++i;
     if (item == HomeMenuItem::FILE_TRANSFER) return i;
@@ -45,11 +49,14 @@ class HomeActivity final : public Activity {
     return 0;
   }
 
-  // Convert menu index to HomeMenuItem (used in loop)
-  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
+  // Convert menu index to HomeMenuItem (used in loop).
+  // Returns NONE for indices that fall in the home-server-shortcut range.
+  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl, int homeServerCount = 0) {
     int i = 0;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (idx == i++) return HomeMenuItem::RECENTS;
+    // Home server shortcuts occupy [i, i+homeServerCount) — caller handles them
+    i += homeServerCount;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
