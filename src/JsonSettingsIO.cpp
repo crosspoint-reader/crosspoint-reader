@@ -280,6 +280,7 @@ bool JsonSettingsIO::saveWifi(const WifiCredentialStore& store, const char* path
     JsonObject obj = arr.add<JsonObject>();
     obj["ssid"] = cred.ssid;
     obj["password_obf"] = obfuscation::obfuscateToBase64(cred.password);
+    if (cred.isBackup) obj["backup"] = true;  // omit false to save JSON space
   }
 
   String json;
@@ -310,6 +311,7 @@ bool JsonSettingsIO::loadWifi(WifiCredentialStore& store, const char* json, bool
       cred.password = obj["password"] | std::string("");
       if (!cred.password.empty() && needsResave) *needsResave = true;
     }
+    cred.isBackup = obj["backup"] | false;
     store.credentials.push_back(cred);
   }
 

@@ -150,6 +150,25 @@ const WifiCredential* WifiCredentialStore::findCredential(const std::string& ssi
 
 bool WifiCredentialStore::hasSavedCredential(const std::string& ssid) const { return findCredential(ssid) != nullptr; }
 
+void WifiCredentialStore::setBackup(const std::string& ssid, const bool backup) {
+  for (auto& cred : credentials) {
+    cred.isBackup = (backup && cred.ssid == ssid);
+  }
+  saveToFile();
+}
+
+bool WifiCredentialStore::isBackupCredential(const std::string& ssid) const {
+  const auto* backup = getBackupCredential();
+  return backup && backup->ssid == ssid;
+}
+
+const WifiCredential* WifiCredentialStore::getBackupCredential() const {
+  for (const auto& cred : credentials) {
+    if (cred.isBackup) return &cred;
+  }
+  return nullptr;
+}
+
 void WifiCredentialStore::setLastConnectedSsid(const std::string& ssid) {
   if (lastConnectedSsid != ssid) {
     lastConnectedSsid = ssid;
