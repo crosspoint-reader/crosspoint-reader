@@ -12,6 +12,12 @@ size_t utf8RemoveLastChar(std::string& str);
 // Truncate string by removing N UTF-8 codepoints from the end.
 void utf8TruncateChars(std::string& str, size_t numChars);
 
+// Canonical composition (NFC) for the Latin / Vietnamese range: precomposes a
+// base letter followed by combining diacritical mark(s) into a single codepoint.
+// Needed because the device fonts have no combining-mark positioning, so text
+// stored in NFD (e.g. some EPUB chapter titles) otherwise renders broken.
+std::string utf8ComposeNfc(const std::string& in);
+
 // Truncate a raw char buffer to the last complete UTF-8 codepoint boundary.
 // Returns the new length (<= len). If the buffer ends mid-sequence, the
 // incomplete trailing bytes are excluded.
@@ -21,12 +27,15 @@ int utf8SafeTruncateBuffer(const char* buf, int len);
 // Covers CJK Unified Ideographs, Hiragana, Katakana, Hangul Syllables, CJK punctuation,
 // and fullwidth forms — the ranges where word boundaries are implicit per character.
 inline bool utf8IsCjkBreakable(const uint32_t cp) {
-  return (cp >= 0x3000 && cp <= 0x303F)        // CJK Symbols and Punctuation
+  return (cp >= 0x1100 && cp <= 0x11FF)        // Hangul Jamo
+         || (cp >= 0x3000 && cp <= 0x303F)     // CJK Symbols and Punctuation
          || (cp >= 0x3040 && cp <= 0x309F)     // Hiragana
          || (cp >= 0x30A0 && cp <= 0x30FF)     // Katakana
+         || (cp >= 0x3130 && cp <= 0x318F)     // Hangul Compatibility Jamo
          || (cp >= 0x3400 && cp <= 0x4DBF)     // CJK Extension A
          || (cp >= 0x4E00 && cp <= 0x9FFF)     // CJK Unified Ideographs
          || (cp >= 0xAC00 && cp <= 0xD7AF)     // Hangul Syllables
+         || (cp >= 0xD7B0 && cp <= 0xD7FF)     // Hangul Jamo Extended-B
          || (cp >= 0xF900 && cp <= 0xFAFF)     // CJK Compatibility Ideographs
          || (cp >= 0xFE30 && cp <= 0xFE4F)     // CJK Compatibility Forms
          || (cp >= 0xFF01 && cp <= 0xFF60)     // Fullwidth Latin / Punctuation

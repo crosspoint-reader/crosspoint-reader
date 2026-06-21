@@ -70,6 +70,7 @@ STR_SIDE_BTN_LAYOUT: "Бүйірлік түймелер орналасуы (оқ
 STR_TOUCH_READER_CONTROLS: "Сенсорлық басқару (оқырман)"
 STR_FRONT_BTN_FOLLOW_ORIENTATION: "Алдыңғы түймелерді бағдарлау"
 STR_LONG_PRESS_SKIP: "Ұзақ басу арқылы тарау өткізу"
+STR_FONT_PREVIEW_TEXT: "Канагаттандырылмагандыктарыныздан"
 STR_FONT_FAMILY: "Оқырман қаріп тобы"
 STR_FONT_SIZE: "Интерфейс қаріп өлшемі"
 STR_LINE_SPACING: "Оқырман жол аралығы"

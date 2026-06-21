@@ -1,5 +1,6 @@
 #include "ActivityManager.h"
 
+#include <FontCacheManager.h>
 #include <HalPowerManager.h>
 
 #include <algorithm>
