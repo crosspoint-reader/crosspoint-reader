@@ -88,6 +88,10 @@ class ChapterHtmlSlimParser {
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
+  // <pre> whitespace-preservation tracking
+  int preDepth = INT_MAX;          // depth at which <pre> was entered (INT_MAX = not in pre)
+  bool preLineHasContent = false;  // true after first non-whitespace char in current pre line
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
