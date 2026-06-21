@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 #include <Serialization.h>
+
 #include <algorithm>
 
 // Initialize the static instance
@@ -164,8 +165,7 @@ bool WifiCredentialStore::isBackupCredential(const std::string& ssid) const {
 }
 
 const WifiCredential* WifiCredentialStore::getBackupCredential() const {
-  auto it = std::find_if(credentials.begin(), credentials.end(),
-                         [](const WifiCredential& c) { return c.isBackup; });
+  auto it = std::find_if(credentials.begin(), credentials.end(), [](const WifiCredential& c) { return c.isBackup; });
   return it != credentials.end() ? &*it : nullptr;
 }
 
