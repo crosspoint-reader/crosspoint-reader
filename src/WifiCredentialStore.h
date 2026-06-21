@@ -4,7 +4,7 @@
 
 struct WifiCredential {
   std::string ssid;
-  std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  std::string password;   // Plaintext in memory; obfuscated with hardware key on disk
   bool isBackup = false;  // Designates this network as mobile hotspot fallback
 };
 
