@@ -174,6 +174,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
   server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
   server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
+  server->on("/api/wifi/backup", HTTP_POST, [this] { handleSetWifiBackup(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -1415,6 +1416,7 @@ void CrossPointWebServer::handleGetWifiNetworks() const {
     // Never expose Wi-Fi passwords over the API — only indicate whether one is set
     doc["hasPassword"] = !credentials[i].password.empty();
     doc["isLastConnected"] = credentials[i].ssid == lastConnectedSsid;
+    doc["isBackup"] = credentials[i].isBackup;
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
@@ -1524,6 +1526,48 @@ void CrossPointWebServer::handleDeleteWifiNetwork() {
   }
 
   LOG_DBG("WEB", "Deleted Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
+  server->send(200, "text/plain", "OK");
+}
+
+// POST /api/wifi/backup — designates one saved network as the mobile hotspot backup.
+// Body: {"index": <int>} to set backup, or {"index": -1} to clear it.
+void CrossPointWebServer::handleSetWifiBackup() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+
+  const String body = server->arg("plain");
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, body);
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+
+  if (!doc["index"].is<int>()) {
+    server->send(400, "text/plain", "Missing index");
+    return;
+  }
+
+  const int idx = doc["index"].as<int>();
+  const auto& credentials = WIFI_STORE.getCredentials();
+
+  if (idx == -1) {
+    // Clear backup designation
+    const auto* current = WIFI_STORE.getBackupCredential();
+    if (current) WIFI_STORE.setBackup(current->ssid, false);
+    LOG_DBG("WEB", "Cleared mobile backup designation");
+  } else {
+    if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+      server->send(400, "text/plain", "Invalid network index");
+      return;
+    }
+    WIFI_STORE.setBackup(credentials[static_cast<size_t>(idx)].ssid, true);
+    LOG_DBG("WEB", "Set mobile backup to index %d (SSID: %s)", idx,
+            credentials[static_cast<size_t>(idx)].ssid.c_str());
+  }
+
   server->send(200, "text/plain", "OK");
 }
 
