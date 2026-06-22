@@ -242,3 +242,20 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
 
+  # ── Arabic ─────────────────────────────────────────────────────────────
+  # Arabic fonts must use the "arabic" interval preset so that both the base
+  # Arabic block (U+0600-U+06FF) AND the Unicode Presentation Forms
+  # (U+FB50-U+FDFF, U+FE70-U+FEFF) are included.  ArabicShaper replaces
+  # base codepoints with presentation-form codepoints at runtime; without the
+  # presentation forms in the font the shaped glyphs will not render.
+
+  - name: Amiri
+    description: "Classical Arabic serif (Arabic script)"
+    intervals: arabic
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/aliftype/amiri/main/fonts/Amiri-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/aliftype/amiri/main/fonts/Amiri-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/aliftype/amiri/main/fonts/Amiri-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/aliftype/amiri/main/fonts/Amiri-BoldItalic.ttf"}
+

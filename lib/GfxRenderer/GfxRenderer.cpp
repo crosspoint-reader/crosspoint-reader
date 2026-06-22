@@ -1,5 +1,6 @@
 #include "GfxRenderer.h"
 
+#include <ArabicShaper.h>
 #include <BidiUtils.h>
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
@@ -472,12 +473,11 @@ namespace {
 const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
   if (!text || *text == '\0') return text;
 
-  if (baseDir != BidiUtils::BidiBaseDir::RTL) {
-    // Byte-level scan: skip BiDi when no RTL script lead bytes are present.
-    // Hebrew UTF-8 lead bytes: 0xD6-0xD7; Arabic/Syriac: 0xD8-0xDB.
-    // This covers all RTL content without false negatives and avoids triggering
-    // the full UAX#9 algorithm for Latin-extended, em-dashes, accented text, etc.
-    bool hasRtlBytes = false;
+  // Byte-level scan for RTL lead bytes (Hebrew: 0xD6-0xD7, Arabic: 0xD8-0xDB).
+  // We always scan the ORIGINAL text so that shaping (which replaces Arabic base
+  // chars with presentation forms at different UTF-8 lead bytes) doesn't hide RTL.
+  bool hasRtlBytes = (baseDir == BidiUtils::BidiBaseDir::RTL);
+  if (!hasRtlBytes) {
     for (const unsigned char* q = reinterpret_cast<const unsigned char*>(text); *q; ++q) {
       if (*q >= 0xD6 && *q <= 0xDB) {
         hasRtlBytes = true;
@@ -487,7 +487,23 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
     if (!hasRtlBytes) return text;
   }
 
-  if (BidiUtils::applyBidiVisual(text, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
+  // Apply Arabic contextual shaping (logical order → logical order with
+  // Unicode Presentation Forms) before BiDi reorders the text visually.
+  // The shaped codepoints are classified as AL in bidiclasses.t so UAX#9
+  // handles them correctly as RTL Arabic script.
+  std::string shapedBuf;
+  const char* inputText = ArabicShaper::shape(text, shapedBuf);
+
+  if (BidiUtils::applyBidiVisual(inputText, visualBuffer, static_cast<int>(baseDir)) &&
+      !visualBuffer.empty()) {
+    return visualBuffer.c_str();
+  }
+
+  // BiDi produced no output (e.g. single-char input, empty line).
+  // If shaping changed the text, put the shaped version in visualBuffer so
+  // the returned pointer stays valid beyond this function's scope.
+  if (inputText != text) {
+    visualBuffer = std::move(shapedBuf);
     return visualBuffer.c_str();
   }
   return text;

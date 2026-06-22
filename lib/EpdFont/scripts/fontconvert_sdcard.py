@@ -55,6 +55,12 @@ INTERVAL_PRESETS = {
     "hangul":      [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)],
     "cherokee":    [(0x13A0, 0x13FF), (0xAB70, 0xABBF)],
     "tifinagh":    [(0x2D30, 0x2D7F)],
+    # Arabic script (standard + extended) + Unicode Presentation Forms.
+    # The Presentation Forms (FE70-FEFF, FB50-FDFF) are required by
+    # ArabicShaper at runtime; include them whenever converting an Arabic font.
+    "arabic":      [(0x0600, 0x06FF),   # Arabic block (letters, diacritics, digits)
+                    (0xFB50, 0xFDFF),   # Arabic Presentation Forms-A (extended Arabic)
+                    (0xFE70, 0xFEFF)],  # Arabic Presentation Forms-B (standard Arabic)
     # Symbol blocks commonly seen in scifi/popsci/literary fiction.
 
     "symbols":     [(0x2070, 0x209F), (0x20A0, 0x20CF), (0x2150, 0x218F),
