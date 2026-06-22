@@ -12,7 +12,8 @@
 namespace {
 // v27: words NFC-composed at layout time; bump invalidates NFD section caches.
 // v28: <pre> blocks preserve line breaks and leading-space indentation; <code> renders italic.
-constexpr uint8_t SECTION_FILE_VERSION = 28;
+// v29: <li> bullet deferred to first word block with hanging indent; changes layout for all lists.
+constexpr uint8_t SECTION_FILE_VERSION = 29;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
