@@ -1501,9 +1501,8 @@ void ChapterHtmlSlimParser::makePages() {
   // WIDOW PREVENTION: if exactly one line of this paragraph landed on a fresh page
   // (a typographic widow), rescue the last line from the pending page so the new
   // page opens with two lines instead of one.
-  if (currentPage && currentPage->elements.size() == 1 && completedPageCount > pageCountBefore &&
-      widowPendingPage && widowPendingPage->elements.size() >= 2 &&
-      widowPendingPage->elements.back()->getTag() == TAG_PageLine) {
+  if (currentPage && currentPage->elements.size() == 1 && completedPageCount > pageCountBefore && widowPendingPage &&
+      widowPendingPage->elements.size() >= 2 && widowPendingPage->elements.back()->getTag() == TAG_PageLine) {
     auto& rescuedEl = static_cast<PageLine&>(*widowPendingPage->elements.back());
     auto& widowEl = static_cast<PageLine&>(*currentPage->elements.front());
     auto rescuedBlock = rescuedEl.getBlock();
