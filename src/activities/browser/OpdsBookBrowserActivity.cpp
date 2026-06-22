@@ -628,12 +628,15 @@ void OpdsBookBrowserActivity::openBook(const std::string& path, BrowserState ret
   sdFontSystem.ensureLoaded(renderer);
   auto epub = makeUniqueNoThrow<Epub>(path, "/.crosspoint");
   if (epub && epub->load(true, SETTINGS.embeddedStyle == 0)) {
-    startActivityForResult(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub)),
-                           [this, returnState](const ActivityResult&) {
-                             state = returnState;
-                             if (returnState == BrowserState::CACHED) buildCachedEntries();
-                             requestUpdate();
-                           });
+    auto reader = makeUniqueNoThrow<EpubReaderActivity>(renderer, mappedInput, std::move(epub));
+    if (reader) {
+      reader->setReturnToCallerAtEnd(true);
+      startActivityForResult(std::move(reader), [this, returnState](const ActivityResult&) {
+        state = returnState;
+        if (returnState == BrowserState::CACHED) buildCachedEntries();
+        requestUpdate();
+      });
+    }
   } else {
     LOG_ERR("OPDS", "Failed to open epub: %s", path.c_str());
     state = BrowserState::ERROR;
