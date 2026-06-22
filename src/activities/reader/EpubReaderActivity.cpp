@@ -1086,7 +1086,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     if (needsAnyGrayscale) {
       // Save the BW frame before the grayscale passes overwrite it, restore
       // after. Only needed when grayscale actually renders.
-      renderer.storeBwBuffer();
+      if (!renderer.storeBwBuffer()) {
+        LOG_ERR("ERS", "Failed to store BW buffer for grayscale render; skipping grayscale this page");
+        const auto tEnd = millis();
+        LOG_DBG("ERS", "Page render: prewarm=%lums bw_render=%lums display=%lums total=%lums", tPrewarm - t0,
+                tBwRender - tPrewarm, tDisplay - tBwRender, tEnd - t0);
+        return;
+      }
       const auto tBwStore = millis();
 
       renderer.clearScreen(0x00);
