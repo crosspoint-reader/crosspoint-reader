@@ -46,7 +46,7 @@ void OpdsBookBrowserActivity::onEnter() {
   pendingWifiAction = PostWifiAction::NONE;
 
   // Show cached feed immediately if available — no WiFi required
-  if (feedCache.load(server.url)) {
+  if (server.cacheEnabled && feedCache.load(server.url)) {
     buildCachedEntries();
     state = BrowserState::CACHED;
     requestUpdate();
@@ -457,13 +457,13 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path, bool returnToCa
     return;
   }
 
-  // Save to cache for any root-level fetch so the next session shows data immediately
+  // Save to cache for root-level fetches (only when caching is enabled for this server)
   const bool isRootFetch = path.empty() || path == server.url;
-  if (isRootFetch) {
+  if (server.cacheEnabled && isRootFetch) {
     feedCache.save(server.url, entries);
   }
 
-  if (returnToCached) {
+  if (returnToCached && server.cacheEnabled) {
     buildCachedEntries();
     state = BrowserState::CACHED;
   } else {
@@ -555,14 +555,14 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
-  Storage.mkdir("/opds-books");
+  if (!server.downloadPath.empty()) Storage.mkdir(server.downloadPath.c_str());
   const std::string filename = newPathForBook(book);
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   const std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   if (doDownload(downloadUrl, filename)) {
-    feedCache.updateLocalPath(book.id, filename);
+    if (server.cacheEnabled) feedCache.updateLocalPath(book.id, filename);
     const BrowserState returnState = fromCache ? BrowserState::CACHED : BrowserState::BROWSING;
     if (returnState == BrowserState::CACHED) {
       buildCachedEntries();
@@ -596,11 +596,11 @@ void OpdsBookBrowserActivity::syncBooks() {
     return;
   }
 
-  // Save fresh feed to cache before downloading
+  // Save fresh feed to cache before downloading (only if caching enabled)
   const auto& syncEntries = parser.getEntries();
-  feedCache.save(server.url, syncEntries);
+  if (server.cacheEnabled) feedCache.save(server.url, syncEntries);
 
-  Storage.mkdir("/opds-books");
+  if (!server.downloadPath.empty()) Storage.mkdir(server.downloadPath.c_str());
 
   int synced = 0;
   for (const auto& entry : syncEntries) {
@@ -617,7 +617,7 @@ void OpdsBookBrowserActivity::syncBooks() {
     const std::string downloadUrl = UrlUtils::buildUrl(feedUrl, entry.href);
     LOG_INF("OPDS", "Sync: downloading %s -> %s", downloadUrl.c_str(), filename.c_str());
     if (doDownload(downloadUrl, filename)) {
-      feedCache.updateLocalPath(entry.id, filename);
+      if (server.cacheEnabled) feedCache.updateLocalPath(entry.id, filename);
       synced++;
     }
   }
@@ -648,22 +648,29 @@ void OpdsBookBrowserActivity::openBook(const std::string& path, BrowserState ret
 
 std::string OpdsBookBrowserActivity::newPathForBook(const OpdsEntry& entry) const {
   const std::string stem = entry.author.empty() ? entry.title : entry.author + " - " + entry.title;
-  return "/opds-books/" + StringUtils::sanitizeFilename(stem) + ".epub";
+  return server.downloadPath + "/" + StringUtils::sanitizeFilename(stem) + ".epub";
 }
 
 std::string OpdsBookBrowserActivity::getDownloadedPath(const OpdsEntry& entry) const {
   if (entry.type != OpdsEntryType::BOOK) return {};
 
   // Check cache-recorded path first (matched by stable entry ID)
-  if (!entry.id.empty()) {
+  if (server.cacheEnabled && !entry.id.empty()) {
     const std::string cached = feedCache.getLocalPath(entry.id);
     if (!cached.empty() && Storage.exists(cached.c_str())) return cached;
   }
 
-  // Fallback: legacy path in root (books downloaded before this feature)
-  const std::string stem = entry.author.empty() ? entry.title : entry.author + " - " + entry.title;
-  const std::string legacy = "/" + StringUtils::sanitizeFilename(stem) + ".epub";
-  if (Storage.exists(legacy.c_str())) return legacy;
+  // Computed path from current download folder setting
+  const std::string computed = newPathForBook(entry);
+  if (Storage.exists(computed.c_str())) return computed;
+
+  // Legacy root fallback for books downloaded before downloadPath was configurable
+  // (only needed when the configured folder is not already root)
+  if (!server.downloadPath.empty()) {
+    const std::string stem = entry.author.empty() ? entry.title : entry.author + " - " + entry.title;
+    const std::string legacy = "/" + StringUtils::sanitizeFilename(stem) + ".epub";
+    if (Storage.exists(legacy.c_str())) return legacy;
+  }
 
   return {};
 }
