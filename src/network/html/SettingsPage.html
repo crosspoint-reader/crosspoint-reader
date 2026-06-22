@@ -610,11 +610,18 @@
     const lastConnected = net.isLastConnected
       ? '<div style="margin-top:8px;color:var(--label-color);font-size:0.9em;">Last connected network</div>'
       : '';
+    const backupBadge = net.isBackup
+      ? '<span style="margin-left:8px;color:var(--label-color);font-size:0.9em;">(mobile backup)</span>'
+      : '';
+    const backupBtn = isNew ? '' :
+      net.isBackup
+        ? '<button class="btn-small" onclick="setWifiBackup(-1)" style="opacity:0.6;">Clear backup</button>'
+        : '<button class="btn-small" onclick="setWifiBackup(' + idx + ')">Set as backup</button>';
 
     return '<div class="opds-server" id="wifi-' + id + '">' +
       '<div class="setting-row">' +
         '<span class="setting-name">SSID</span>' +
-        '<span class="setting-control"><input type="text" id="wifi-ssid-' + id + '" value="' + escapeHtml(net.ssid || '') + '"></span>' +
+        '<span class="setting-control"><input type="text" id="wifi-ssid-' + id + '" value="' + escapeHtml(net.ssid || '') + '">' + backupBadge + '</span>' +
       '</div>' +
       '<div class="setting-row">' +
         '<span class="setting-name">Password</span>' +
@@ -623,6 +630,7 @@
       lastConnected +
       '<div class="opds-actions">' +
         '<button class="btn-small btn-save-server" onclick="saveWifiNetwork(' + idx + ')">Save</button>' +
+        backupBtn +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteWifiNetwork(' + idx + ')">Delete</button>') +
       '</div>' +
     '</div>';
@@ -705,6 +713,22 @@
       });
       if (!resp.ok) throw new Error(await resp.text());
       showMessage('Wi-Fi network deleted', false);
+      await loadWifiNetworks();
+    } catch (e) {
+      showMessage('Error: ' + e.message, true);
+    }
+  }
+
+  // idx == -1 clears the backup designation; otherwise sets that network as backup.
+  async function setWifiBackup(idx) {
+    try {
+      const resp = await fetch('/api/wifi/backup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({index: idx})
+      });
+      if (!resp.ok) throw new Error(await resp.text());
+      showMessage(idx === -1 ? 'Mobile backup cleared' : 'Mobile backup updated', false);
       await loadWifiNetworks();
     } catch (e) {
       showMessage('Error: ' + e.message, true);

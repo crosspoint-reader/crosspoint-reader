@@ -139,4 +139,5 @@ class CrossPointWebServer {
   void handleGetWifiNetworks() const;
   void handlePostWifiNetwork();
   void handleDeleteWifiNetwork();
+  void handleSetWifiBackup();
 };

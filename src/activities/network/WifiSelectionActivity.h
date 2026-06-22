@@ -30,7 +30,6 @@ enum class WifiSelectionState {
   CONNECTING,         // Attempting to connect
   CONNECTED,          // Successfully connected
   SAVE_PROMPT,        // Asking user if they want to save the password
-  BACKUP_PROMPT,      // Asking user if this network should be the mobile backup
   CONNECTION_FAILED,  // Connection failed
   FORGET_PROMPT       // Asking user if they want to forget the network
 };
@@ -76,9 +75,8 @@ class WifiSelectionActivity final : public Activity {
   // Whether we are attempting to auto-connect
   bool autoConnecting = false;
 
-  // Save/forget/backup prompt selection (0 = Yes/Cancel, 1 = No/Forget)
+  // Save/forget prompt selection (0 = Yes/Cancel, 1 = No/Forget)
   int savePromptSelection = 0;
-  int backupPromptSelection = 0;
   int forgetPromptSelection = 0;
 
   // Whether the current auto-connect attempt is the backup fallback
@@ -93,7 +91,6 @@ class WifiSelectionActivity final : public Activity {
   void renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderConnected(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderSavePrompt(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderBackupPrompt(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderForgetPrompt(const Rect* screen, const ThemeMetrics* metrics) const;
 
