@@ -13,9 +13,9 @@
 #include "fontIds.h"
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
+// Editable fields: Name, URL, Username, Password, Cache Feed, Download Folder.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int BASE_ITEMS = 6;
 }  // namespace
 
 int OpdsSettingsActivity::getMenuItemCount() const {
@@ -156,7 +156,26 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (selectedIndex == 4 && !isNewServer) {
+  } else if (selectedIndex == 4) {
+    // Cache feed — direct toggle, no sub-activity
+    editServer.cacheEnabled = !editServer.cacheEnabled;
+    saveServer();
+    requestUpdate();
+  } else if (selectedIndex == 5) {
+    // Download folder
+    const std::string prefill = editServer.downloadPath.empty() ? "/" : editServer.downloadPath;
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.downloadPath = (kb.text == "/" || kb.text.empty()) ? "" : kb.text;
+        saveServer();
+        requestUpdate();
+      }
+    };
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_DOWNLOAD_FOLDER),
+                                                                   prefill, 63, InputType::Text),
+                           handler);
+  } else if (selectedIndex == 6 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -186,7 +205,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const int menuItems = getMenuItemCount();
 
   const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                              StrId::STR_PASSWORD};
+                              StrId::STR_PASSWORD,    StrId::STR_CACHE_FEED,      StrId::STR_DOWNLOAD_FOLDER};
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
@@ -206,6 +225,10 @@ void OpdsSettingsActivity::render(RenderLock&&) {
           return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
         } else if (index == 3) {
           return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
+        } else if (index == 4) {
+          return std::string(I18N.get(editServer.cacheEnabled ? StrId::STR_YES : StrId::STR_NO));
+        } else if (index == 5) {
+          return editServer.downloadPath.empty() ? std::string(tr(STR_DEFAULT_VALUE)) : editServer.downloadPath;
         }
         return std::string("");
       },

@@ -378,6 +378,8 @@ bool JsonSettingsIO::saveOpds(const OpdsServerStore& store, const char* path) {
     obj["sync_enabled"] = server.syncEnabled;
     obj["sync_limit"] = server.syncLimit;
     obj["show_on_home"] = server.showOnHome;
+    obj["cache_enabled"] = server.cacheEnabled;
+    if (!server.downloadPath.empty()) obj["download_path"] = server.downloadPath;
   }
 
   String json;
@@ -413,6 +415,8 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
     server.syncEnabled = obj["sync_enabled"] | false;
     server.syncLimit = obj["sync_limit"] | 20;
     server.showOnHome = obj["show_on_home"] | false;
+    server.cacheEnabled = obj["cache_enabled"] | false;
+    server.downloadPath = obj["download_path"] | std::string("");
     store.servers.push_back(std::move(server));
   }
 

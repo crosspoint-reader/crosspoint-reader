@@ -6,10 +6,12 @@ struct OpdsServer {
   std::string name;
   std::string url;
   std::string username;
-  std::string password;      // Plaintext in memory; obfuscated with hardware key on disk
-  bool syncEnabled = false;  // Auto-download new books from this feed on WiFi connect
-  int syncLimit = 20;        // Max books to download per sync
-  bool showOnHome = false;   // Show server as a shortcut on the Home Screen
+  std::string password;       // Plaintext in memory; obfuscated with hardware key on disk
+  bool syncEnabled = false;   // Auto-download new books from this feed on WiFi connect
+  int syncLimit = 20;         // Max books to download per sync
+  bool showOnHome = false;    // Show server as a shortcut on the Home Screen
+  bool cacheEnabled = false;  // Cache feed entries to disk for offline browsing
+  std::string downloadPath;   // Folder for downloaded books; empty = root "/" (default)
 };
 
 class OpdsServerStore;

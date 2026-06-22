@@ -1297,6 +1297,8 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     doc["show_on_home"] = servers[i].showOnHome;
     doc["sync_enabled"] = servers[i].syncEnabled;
     doc["sync_limit"] = servers[i].syncLimit;
+    doc["cache_enabled"] = servers[i].cacheEnabled;
+    doc["download_path"] = servers[i].downloadPath;
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
@@ -1331,6 +1333,8 @@ void CrossPointWebServer::handlePostOpdsServer() {
   opdsServer.showOnHome = doc["show_on_home"] | false;
   opdsServer.syncEnabled = doc["sync_enabled"] | false;
   opdsServer.syncLimit = doc["sync_limit"] | 20;
+  opdsServer.cacheEnabled = doc["cache_enabled"] | false;
+  opdsServer.downloadPath = doc["download_path"] | std::string("");
 
   // The password field is optional in the JSON payload. When absent (vs. present but empty),
   // we preserve the existing password — the web UI omits it when the user hasn't changed it.

@@ -773,6 +773,14 @@
         '<span class="setting-control"><input type="checkbox" id="opds-home-' + id + '"' + (srv.show_on_home ? ' checked' : '') + '></span>' +
       '</div>' +
       '<div class="setting-row">' +
+        '<span class="setting-name">Cache feed offline</span>' +
+        '<span class="setting-control"><input type="checkbox" id="opds-cache-' + id + '"' + (srv.cache_enabled ? ' checked' : '') + '></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Download folder</span>' +
+        '<span class="setting-control"><input type="text" id="opds-dlpath-' + id + '" value="' + escapeHtml(srv.download_path || '') + '" placeholder="/ (default)"></span>' +
+      '</div>' +
+      '<div class="setting-row">' +
         '<span class="setting-name">Auto-sync</span>' +
         '<span class="setting-control"><input type="checkbox" id="opds-sync-' + id + '"' + (syncEnabled ? ' checked' : '') + ' onchange="toggleSyncLimit(\'' + id + '\')"></span>' +
       '</div>' +
@@ -822,7 +830,7 @@
     const addBtn = card.querySelector('.btn-add').parentElement;
     // Prevent multiple unsaved new-server forms at once (idx -1 → id "new")
     if (document.getElementById('opds-new')) return;
-    addBtn.insertAdjacentHTML('beforebegin', renderOpdsServer({name:'',url:'',username:'',hasPassword:false,show_on_home:false,sync_enabled:false,sync_limit:20}, -1));
+    addBtn.insertAdjacentHTML('beforebegin', renderOpdsServer({name:'',url:'',username:'',hasPassword:false,show_on_home:false,cache_enabled:false,download_path:'',sync_enabled:false,sync_limit:20}, -1));
   }
 
   async function saveOpdsServer(idx) {
@@ -832,6 +840,8 @@
       url: document.getElementById('opds-url-' + id).value,
       username: document.getElementById('opds-user-' + id).value,
       show_on_home: document.getElementById('opds-home-' + id).checked,
+      cache_enabled: document.getElementById('opds-cache-' + id).checked,
+      download_path: document.getElementById('opds-dlpath-' + id).value.trim(),
       sync_enabled: document.getElementById('opds-sync-' + id).checked,
       sync_limit: parseInt(document.getElementById('opds-limit-' + id).value) || 20,
     };
