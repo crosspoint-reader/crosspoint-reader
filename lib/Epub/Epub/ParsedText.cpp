@@ -25,6 +25,8 @@ constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // before giving up. 64 is a hedge for pathological cases like long numeric tokens.
 constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
 constexpr size_t MIN_JUSTIFY_GAPS = 1;
+// Maximum number of consecutive line-ending hyphens before suppressing further hyphenation.
+constexpr int MAX_CONSECUTIVE_HYPHENS = 3;
 
 // Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
 bool mayContainRtlBytes(const char* str) {
@@ -669,10 +671,12 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
   bool isFirstLine = true;
+  int consecutiveHyphens = 0;
 
   while (currentIndex < wordWidths.size()) {
     const size_t lineStart = currentIndex;
     int lineWidth = 0;
+    bool lineWasHyphenated = false;
 
     // First line has reduced width due to text-indent
     const int effectivePageWidth = isFirstLine ? pageWidth - firstLineIndent : pageWidth;
@@ -700,15 +704,18 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
         continue;
       }
 
-      // Word would overflow — try to split based on hyphenation points
+      // Word would overflow — try to split based on hyphenation points, unless the
+      // consecutive-hyphen limit has been reached (suppresses rivers of hyphens).
       const int availableWidth = effectivePageWidth - lineWidth - spacing;
       const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
+      const bool hyphenAllowed = consecutiveHyphens < MAX_CONSECUTIVE_HYPHENS;
 
-      if (availableWidth > 0 &&
+      if (hyphenAllowed && availableWidth > 0 &&
           hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
         // Prefix now fits; append it to this line and move to next line
         lineWidth += spacing + wordWidths[currentIndex];
         ++currentIndex;
+        lineWasHyphenated = true;
         break;
       }
 
@@ -726,6 +733,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       --currentIndex;
     }
 
+    consecutiveHyphens = lineWasHyphenated ? consecutiveHyphens + 1 : 0;
     lineBreakIndices.push_back(currentIndex);
     isFirstLine = false;
   }
