@@ -8,6 +8,8 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "MappedInputManager.h"
@@ -520,10 +522,8 @@ void OpdsBookBrowserActivity::buildCachedEntries() {
   entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_SYNC_BOOKS), "", "", ""});
   actionItemCount = 2;
 
-  // cppcheck-suppress useStlAlgorithm
-  for (const auto& ce : feedCache.getEntries()) {
-    entries.push_back(ce.entry);
-  }
+  std::transform(feedCache.getEntries().begin(), feedCache.getEntries().end(), std::back_inserter(entries),
+                 [](const OpdsCachedEntry& ce) { return ce.entry; });
 
   // Keep selectorIndex in range
   if (selectorIndex >= static_cast<int>(entries.size())) selectorIndex = 0;
