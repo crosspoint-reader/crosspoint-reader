@@ -284,8 +284,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
     renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
 
-    for (size_t i = pageStartIndex;
-         i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
+    for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
       const auto& entry = entries[i];
       std::string displayText;
 
@@ -521,6 +520,7 @@ void OpdsBookBrowserActivity::buildCachedEntries() {
   entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_SYNC_BOOKS), "", "", ""});
   actionItemCount = 2;
 
+  // cppcheck-suppress useStlAlgorithm
   for (const auto& ce : feedCache.getEntries()) {
     entries.push_back(ce.entry);
   }

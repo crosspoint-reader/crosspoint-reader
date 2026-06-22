@@ -20,15 +20,15 @@
 class OpdsBookBrowserActivity final : public Activity {
  public:
   enum class BrowserState {
-    CACHED,         // Showing feed from disk cache — no WiFi needed
-    CHECK_WIFI,     // Checking / waiting for WiFi before a pending action
-    WIFI_SELECTION, // Sub-activity: user picking a WiFi network
-    LOADING,        // Fetching a feed page from the server
-    BROWSING,       // Showing live feed data (sub-catalog navigation)
-    SYNCING,        // Bulk-downloading books in the background
-    DOWNLOADING,    // Downloading a single book
+    CACHED,          // Showing feed from disk cache — no WiFi needed
+    CHECK_WIFI,      // Checking / waiting for WiFi before a pending action
+    WIFI_SELECTION,  // Sub-activity: user picking a WiFi network
+    LOADING,         // Fetching a feed page from the server
+    BROWSING,        // Showing live feed data (sub-catalog navigation)
+    SYNCING,         // Bulk-downloading books in the background
+    DOWNLOADING,     // Downloading a single book
     ERROR,
-    SEARCH_INPUT    // Sub-activity: keyboard for search query
+    SEARCH_INPUT  // Sub-activity: keyboard for search query
   };
 
  private:
@@ -58,12 +58,12 @@ class OpdsBookBrowserActivity final : public Activity {
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
 
-  OpdsServer server;         // Copied at construction — safe even if the store changes
-  OpdsFeedCache feedCache;   // Disk cache for the root feed
+  OpdsServer server;        // Copied at construction — safe even if the store changes
+  OpdsFeedCache feedCache;  // Disk cache for the root feed
   PostWifiAction pendingWifiAction = PostWifiAction::NONE;
-  OpdsEntry pendingEntry;    // Entry to act on once WiFi is ready
-  bool fromCache = false;    // True when BROWSING was reached from the CACHED state
-  int actionItemCount = 0;   // Number of virtual action items prepended in CACHED mode
+  OpdsEntry pendingEntry;   // Entry to act on once WiFi is ready
+  bool fromCache = false;   // True when BROWSING was reached from the CACHED state
+  int actionItemCount = 0;  // Number of virtual action items prepended in CACHED mode
 
   // WiFi / action flow
   void checkAndConnectWifi();

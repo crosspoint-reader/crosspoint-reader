@@ -205,7 +205,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const int menuItems = getMenuItemCount();
 
   const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                              StrId::STR_PASSWORD, StrId::STR_CACHE_FEED, StrId::STR_DOWNLOAD_FOLDER};
+                              StrId::STR_PASSWORD,    StrId::STR_CACHE_FEED,      StrId::STR_DOWNLOAD_FOLDER};
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
@@ -226,7 +226,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
         } else if (index == 3) {
           return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
         } else if (index == 4) {
-          return std::string(tr(editServer.cacheEnabled ? STR_YES : STR_NO));
+          return std::string(I18N.get(editServer.cacheEnabled ? StrId::STR_YES : StrId::STR_NO));
         } else if (index == 5) {
           return editServer.downloadPath.empty() ? std::string(tr(STR_DEFAULT_VALUE)) : editServer.downloadPath;
         }

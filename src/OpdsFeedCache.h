@@ -6,8 +6,8 @@
 #include <vector>
 
 struct OpdsCachedEntry {
-  OpdsEntry entry;       // title, author, href, id, type
-  std::string localPath; // "/opds-books/..." or empty if not yet downloaded
+  OpdsEntry entry;        // title, author, href, id, type
+  std::string localPath;  // "/opds-books/..." or empty if not yet downloaded
 };
 
 /**
@@ -45,7 +45,10 @@ class OpdsFeedCache {
   const std::vector<OpdsCachedEntry>& getEntries() const { return cachedEntries; }
   bool isLoaded() const { return !cachedServerUrl.empty(); }
   bool isEmpty() const { return cachedEntries.empty(); }
-  void clear() { cachedEntries.clear(); cachedServerUrl.clear(); }
+  void clear() {
+    cachedEntries.clear();
+    cachedServerUrl.clear();
+  }
 
  private:
   static constexpr int CACHE_FORMAT_VERSION = 1;
