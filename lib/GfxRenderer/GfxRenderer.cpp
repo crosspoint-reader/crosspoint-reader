@@ -494,8 +494,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
   std::string shapedBuf;
   const char* inputText = ArabicShaper::shape(text, shapedBuf);
 
-  if (BidiUtils::applyBidiVisual(inputText, visualBuffer, static_cast<int>(baseDir)) &&
-      !visualBuffer.empty()) {
+  if (BidiUtils::applyBidiVisual(inputText, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
     return visualBuffer.c_str();
   }
 
