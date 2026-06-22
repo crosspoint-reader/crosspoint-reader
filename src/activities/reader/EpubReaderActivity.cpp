@@ -309,6 +309,13 @@ void EpubReaderActivity::loop() {
           }
         }
         break;
+      case CrossPointSettings::LP_MENU_SLEEP:
+        if (mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+          ignoreNextConfirmRelease = true;
+          activityManager.goToSleep();
+          return;
+        }
+        break;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
         break;
@@ -358,15 +365,27 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // FORCE_REFRESH: re-render the current page with a full (HALF_REFRESH) waveform + AA pass.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
+      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    pagesUntilFullRefresh = 0;
+    requestUpdate();
+    return;
+  }
+
   const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   if (!prevTriggered && !nextTriggered) {
     return;
   }
 
-  // At end of the book, forward button goes home and back button returns to last page
+  // At end of the book, forward button goes home (or back to caller) and back button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
     if (nextTriggered) {
-      onGoHome();
+      if (returnToCallerAtEnd) {
+        finish();
+      } else {
+        onGoHome();
+      }
     } else {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
       nextPageNumber = 0;

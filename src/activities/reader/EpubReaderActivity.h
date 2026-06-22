@@ -41,6 +41,7 @@ class EpubReaderActivity final : public Activity {
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
+  bool returnToCallerAtEnd = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -75,6 +76,7 @@ class EpubReaderActivity final : public Activity {
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
       : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
+  void setReturnToCallerAtEnd(bool v) { returnToCallerAtEnd = v; }
   void onEnter() override;
   void onExit() override;
   void loop() override;
