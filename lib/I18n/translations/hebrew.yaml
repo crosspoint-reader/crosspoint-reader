@@ -361,7 +361,7 @@ STR_FRONT_BTN_FOLLOW_ORIENTATION: "התאמת לחצנים קדמיים לכיו
 STR_REMOVE_READ_FROM_RECENTS: "הסר ספרים שנקראו מרשימת האחרונים"
 STR_MOVE_FINISHED_TO_READ: "העבר ספרים שהסתיימו לתיקיית 'נקראו'"
 STR_DISABLED: "מבוטל"
-STR_HOLD_OPEN_TO_DELETE: "החזק לחוץ על פתח כדי למחוק"
+STR_HOLD_OPEN_TO_DELETE: "לחיצה ארוכה על 'פתח' כדי למחוק"
 STR_CLOCK: "שעון"
 STR_CLOCK_UTC_OFFSET: "הפרש זמן UTC"
 STR_CLOCK_FORMAT: "תבנית השעון"
