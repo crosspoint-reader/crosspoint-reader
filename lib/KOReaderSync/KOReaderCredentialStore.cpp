@@ -173,3 +173,8 @@ void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;
   LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
 }
+
+void KOReaderCredentialStore::setAllowUntrustedCert(bool allow) {
+  allowUntrustedCert = allow;
+  LOG_DBG("KRS", "Set allow untrusted cert: %s", allow ? "yes" : "no");
+}

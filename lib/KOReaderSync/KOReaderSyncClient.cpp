@@ -1,7 +1,9 @@
 #include "KOReaderSyncClient.h"
 
 #include <ArduinoJson.h>
+#include <HTTPClient.h>
 #include <Logging.h>
+#include <WiFiClientSecure.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 
@@ -72,6 +74,9 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
   config.timeout_ms = 15000;
   config.buffer_size = HTTP_BUF_SIZE;
   config.buffer_size_tx = HTTP_BUF_SIZE;
+  // Verified-TLS path only. The "accept untrusted cert" path never reaches here —
+  // it uses performInsecure() (WiFiClientSecure), because the prebuilt Arduino SDK
+  // (CONFIG_ESP_TLS_INSECURE unset) gives esp_http_client no way to skip verification.
   config.crt_bundle_attach = esp_crt_bundle_attach;
 
   // HTTP Basic Auth for Calibre-Web-Automated compatibility
@@ -93,6 +98,62 @@ esp_http_client_handle_t createClient(const char* url, ResponseBuffer* buf,
 
   return client;
 }
+
+// Insecure HTTPS request for self-signed / untrusted servers.
+// esp_http_client cannot skip cert verification on the prebuilt Arduino SDK
+// (CONFIG_ESP_TLS_INSECURE is not set), so this path uses WiFiClientSecure,
+// which drives mbedTLS directly and honors setInsecure(). Returns the HTTP
+// status code (>0), or a negative HTTPClient error on connection failure.
+// On success the response body is written to outResponse.
+int performInsecure(const char* url, esp_http_client_method_t method, const std::string& body,
+                    std::string& outResponse) {
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();  // accept any server certificate
+
+  HTTPClient http;
+  if (!http.begin(secureClient, url)) {
+    LOG_ERR("KOSync", "Insecure HTTPClient begin failed");
+    return -1;
+  }
+  http.setTimeout(15000);
+  http.setAuthorization(KOREADER_STORE.getUsername().c_str(), KOREADER_STORE.getPassword().c_str());
+  http.addHeader("Accept", "application/vnd.koreader.v1+json");
+  http.addHeader("x-auth-user", KOREADER_STORE.getUsername().c_str());
+  http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password().c_str());
+
+  int code;
+  if (method == HTTP_METHOD_PUT) {
+    http.addHeader("Content-Type", "application/json");
+    code = http.PUT(reinterpret_cast<uint8_t*>(const_cast<char*>(body.data())), body.size());
+  } else {
+    code = http.GET();
+  }
+
+  if (code > 0) outResponse = http.getString().c_str();
+  http.end();
+  return code;
+}
+
+// Parse a /syncs/progress JSON response body into outProgress.
+KOReaderSyncClient::Error parseProgress(const char* body, const std::string& documentHash,
+                                        KOReaderProgress& outProgress) {
+  JsonDocument doc;
+  const DeserializationError error = deserializeJson(doc, body);
+  if (error) {
+    LOG_ERR("KOSync", "JSON parse failed: %s", error.c_str());
+    return KOReaderSyncClient::JSON_ERROR;
+  }
+
+  outProgress.document = documentHash;
+  outProgress.progress = doc["progress"].as<std::string>();
+  outProgress.percentage = doc["percentage"].as<float>();
+  outProgress.device = doc["device"].as<std::string>();
+  outProgress.deviceId = doc["device_id"].as<std::string>();
+  outProgress.timestamp = doc["timestamp"].as<int64_t>();
+
+  LOG_DBG("KOSync", "Got progress: %.2f%% at %s", outProgress.percentage * 100, outProgress.progress.c_str());
+  return KOReaderSyncClient::OK;
+}
 }  // namespace
 
 KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
@@ -108,6 +169,17 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
   if (freeHeap < MIN_HEAP_FOR_TLS) {
     LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free (need %u)", freeHeap, MIN_HEAP_FOR_TLS);
     return LOW_MEMORY;
+  }
+
+  if (KOREADER_STORE.getAllowUntrustedCert()) {
+    std::string resp;
+    const int httpCode = performInsecure(url.c_str(), HTTP_METHOD_GET, "", resp);
+    lastHttpCode = httpCode;
+    LOG_DBG("KOSync", "Auth response (insecure): %d", httpCode);
+    if (httpCode <= 0) return NETWORK_ERROR;
+    if (httpCode == 200) return OK;
+    if (httpCode == 401) return AUTH_FAILED;
+    return SERVER_ERROR;
   }
 
   ResponseBuffer buf;
@@ -143,6 +215,18 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     return LOW_MEMORY;
   }
 
+  if (KOREADER_STORE.getAllowUntrustedCert()) {
+    std::string resp;
+    const int httpCode = performInsecure(url.c_str(), HTTP_METHOD_GET, "", resp);
+    lastHttpCode = httpCode;
+    LOG_DBG("KOSync", "Get progress response (insecure): %d", httpCode);
+    if (httpCode <= 0) return NETWORK_ERROR;
+    if (httpCode == 200) return parseProgress(resp.c_str(), documentHash, outProgress);
+    if (httpCode == 401) return AUTH_FAILED;
+    if (httpCode == 404) return NOT_FOUND;
+    return SERVER_ERROR;
+  }
+
   ResponseBuffer buf;
   esp_http_client_handle_t client = createClient(url.c_str(), &buf);
   if (!client) return NETWORK_ERROR;
@@ -155,27 +239,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   LOG_DBG("KOSync", "Get progress response: %d (err: %d)", httpCode, err);
 
   if (err != ESP_OK) return NETWORK_ERROR;
-
-  if (httpCode == 200 && buf.data) {
-    JsonDocument doc;
-    const DeserializationError error = deserializeJson(doc, buf.data);
-
-    if (error) {
-      LOG_ERR("KOSync", "JSON parse failed: %s", error.c_str());
-      return JSON_ERROR;
-    }
-
-    outProgress.document = documentHash;
-    outProgress.progress = doc["progress"].as<std::string>();
-    outProgress.percentage = doc["percentage"].as<float>();
-    outProgress.device = doc["device"].as<std::string>();
-    outProgress.deviceId = doc["device_id"].as<std::string>();
-    outProgress.timestamp = doc["timestamp"].as<int64_t>();
-
-    LOG_DBG("KOSync", "Got progress: %.2f%% at %s", outProgress.percentage * 100, outProgress.progress.c_str());
-    return OK;
-  }
-
+  if (httpCode == 200 && buf.data) return parseProgress(buf.data, documentHash, outProgress);
   if (httpCode == 401) return AUTH_FAILED;
   if (httpCode == 404) return NOT_FOUND;
   return SERVER_ERROR;
@@ -208,6 +272,17 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   serializeJson(doc, body);
 
   LOG_DBG("KOSync", "Request body: %s", body.c_str());
+
+  if (KOREADER_STORE.getAllowUntrustedCert()) {
+    std::string resp;
+    const int httpCode = performInsecure(url.c_str(), HTTP_METHOD_PUT, body, resp);
+    lastHttpCode = httpCode;
+    LOG_DBG("KOSync", "Update progress response (insecure): %d", httpCode);
+    if (httpCode <= 0) return NETWORK_ERROR;
+    if (httpCode == 200 || httpCode == 202) return OK;
+    if (httpCode == 401) return AUTH_FAILED;
+    return SERVER_ERROR;
+  }
 
   ResponseBuffer buf;
   esp_http_client_handle_t client = createClient(url.c_str(), &buf, HTTP_METHOD_PUT);
