@@ -42,6 +42,7 @@ namespace {
 // pages per minute, first item is 1 to prevent division by zero if accessed
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
+constexpr float bookmarkProgressEpsilon = 0.0001f;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -64,8 +65,33 @@ bool isInReadFolder(const std::string& path) {
   return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
 }
 
-bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const SavedProgressPosition& progress) {
-  return bookmark.xpath == progress.xpath;
+struct ProgressRange {
+  float start;
+  float end;
+};
+
+ProgressRange getPageProgressRange(const std::shared_ptr<Epub>& epub, const int spineIndex, const int page,
+                                   const int pageCount) {
+  if (pageCount <= 1) {
+    return {epub->calculateProgress(spineIndex, 0.0f), epub->calculateProgress(spineIndex, 1.0f)};
+  }
+
+  const float step = 1.0f / static_cast<float>(pageCount - 1);
+  const float anchor = std::clamp(static_cast<float>(page) * step, 0.0f, 1.0f);
+  const float start = std::max(0.0f, anchor - (step * 0.5f));
+  const float end = std::min(1.0f, anchor + (step * 0.5f));
+  return {epub->calculateProgress(spineIndex, start), epub->calculateProgress(spineIndex, end)};
+}
+
+bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const SavedProgressPosition& progress,
+                             const ProgressRange& pageRange) {
+  if (bookmark.xpath == progress.xpath) {
+    return true;
+  }
+
+  const float bookmarkProgress = std::clamp(bookmark.percentage, 0.0f, 1.0f);
+  return bookmarkProgress + bookmarkProgressEpsilon >= pageRange.start &&
+         bookmarkProgress - bookmarkProgressEpsilon <= pageRange.end;
 }
 
 // Pick a non-colliding destination path inside /Read/ for a finished book.
@@ -1259,12 +1285,14 @@ void EpubReaderActivity::addBookmark() {
   }
 
   SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+  const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, currentPage, pageCount);
 
-  // Check if a bookmark already exists at this position — if so, remove it
-  auto it = std::find_if(cachedBookmarks.begin(), cachedBookmarks.end(),
-                         [&](const BookmarkEntry& b) { return bookmarkMatchesProgress(b, progress); });
-  if (it != cachedBookmarks.end()) {
-    cachedBookmarks.erase(it);
+  const size_t bookmarkCountBeforeToggle = cachedBookmarks.size();
+  cachedBookmarks.erase(
+      std::remove_if(cachedBookmarks.begin(), cachedBookmarks.end(),
+                     [&](const BookmarkEntry& b) { return bookmarkMatchesProgress(b, progress, pageRange); }),
+      cachedBookmarks.end());
+  if (cachedBookmarks.size() != bookmarkCountBeforeToggle) {
     bookmarkRemoved = true;
     currentPageBookmarked = false;
   } else {
@@ -1299,13 +1327,12 @@ void EpubReaderActivity::updateBookmarkFlag() {
     currentPageBookmarked = false;
     return;
   }
-  if (!section) {
-    currentPageBookmarked = false;
-    return;
-  }
   SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
-  currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(),
-                                      [&](const BookmarkEntry& b) { return bookmarkMatchesProgress(b, progress); });
+  const ProgressRange pageRange =
+      getPageProgressRange(epub, currentSpineIndex, section->currentPage, section->pageCount);
+  currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
+    return bookmarkMatchesProgress(b, progress, pageRange);
+  });
 }
 
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
