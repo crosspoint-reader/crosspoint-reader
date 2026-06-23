@@ -85,6 +85,14 @@ void EpubReaderBookmarksActivity::loop() {
         selectorIndex--;
       }
 
+      if (bookmarks.empty()) {
+        ActivityResult result;
+        result.isCancelled = true;
+        setResult(std::move(result));
+        finish();
+        return;
+      }
+
       requestUpdate();
       confirmingDelete = DELETE_MODE_OFF;
       return;
@@ -203,11 +211,8 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
                    getBookmarkTitle, getBookmarkSubtitle, getBookmarkIcon);
 
       GUI.drawHelpText(renderer, Rect{contentX, pageHeight - hintGutterBottom, contentWidth, LINE_HEIGHT},
-                       tr(STR_HOLD_CONFIRM_TO_DELETE));
+                       tr(STR_HOLD_OPEN_TO_DELETE));
     }
-  } else {
-    GUI.drawHelpText(renderer, Rect{contentX, LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
-                     tr(STR_BOOKMARK_INSTRUCTIONS));
   }
 
   const auto backLabel = confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_CANCEL) : tr(STR_BACK);

@@ -33,7 +33,6 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
-#include "components/icons/bookmark.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
 #include "util/ScreenshotUtil.h"
@@ -42,6 +41,7 @@ namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 // pages per minute, first item is 1 to prevent division by zero if accessed
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
+constexpr size_t initialBookmarkCacheCapacity = 16;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -62,6 +62,10 @@ constexpr char READ_FOLDER[] = "/read";
 bool isInReadFolder(const std::string& path) {
   constexpr size_t n = sizeof(READ_FOLDER) - 1;  // length of "/Read" (excludes NUL)
   return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
+}
+
+bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const SavedProgressPosition& progress) {
+  return bookmark.xpath == progress.xpath;
 }
 
 // Pick a non-colliding destination path inside /Read/ for a finished book.
@@ -166,15 +170,7 @@ void EpubReaderActivity::onEnter() {
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
-  // Load bookmarks into memory for fast page-turn checks
-  cachedBookmarks.reserve(16);
-  const std::string bmPath = BookmarkUtil::getBookmarkPath(epub->getPath());
-  if (Storage.exists(bmPath.c_str())) {
-    String json = Storage.readFile(bmPath.c_str());
-    if (!json.isEmpty()) {
-      JsonSettingsIO::loadBookmarks(cachedBookmarks, json.c_str());
-    }
-  }
+  loadCachedBookmarks();
 
   // Trigger first update
   requestUpdate();
@@ -284,7 +280,7 @@ void EpubReaderActivity::loop() {
       const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
       startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
                                  renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                                 SETTINGS.orientation, !currentPageFootnotes.empty()),
+                                 SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
                              [this](const ActivityResult& result) {
                                // Always apply orientation change even if the menu was cancelled
                                const auto& menu = std::get<MenuResult>(result.data);
@@ -503,6 +499,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
+    loadCachedBookmarks();
     if (!result.isCancelled) {
       const auto& sync = std::get<ProgressChangeResult>(result.data);
       if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
@@ -616,6 +613,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
           progressChangeResultHandler);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::TOGGLE_BOOKMARK: {
+      addBookmark();
       break;
     }
   }
@@ -994,9 +995,6 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
-  if (currentPageBookmarked) {
-    renderer.drawIcon(BookmarkIcon, renderer.getScreenWidth() - 32 - orientedMarginRight, orientedMarginTop, 32, 32);
-  }
   const auto tBwRender = millis();
 
   if (imagePageWithAA) {
@@ -1165,7 +1163,7 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset);
+  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
@@ -1227,6 +1225,26 @@ void EpubReaderActivity::restoreSavedPosition() {
   requestUpdate();
 }
 
+void EpubReaderActivity::loadCachedBookmarks() {
+  cachedBookmarks.clear();
+  if (cachedBookmarks.capacity() < initialBookmarkCacheCapacity) {
+    cachedBookmarks.reserve(initialBookmarkCacheCapacity);
+  }
+  if (!epub) {
+    currentPageBookmarked = false;
+    return;
+  }
+
+  const std::string bmPath = BookmarkUtil::getBookmarkPath(epub->getPath());
+  if (Storage.exists(bmPath.c_str())) {
+    String json = Storage.readFile(bmPath.c_str());
+    if (!json.isEmpty()) {
+      JsonSettingsIO::loadBookmarks(cachedBookmarks, json.c_str());
+    }
+  }
+  updateBookmarkFlag();
+}
+
 void EpubReaderActivity::addBookmark() {
   if (!section || !epub) {
     return;
@@ -1244,7 +1262,7 @@ void EpubReaderActivity::addBookmark() {
 
   // Check if a bookmark already exists at this position — if so, remove it
   auto it = std::find_if(cachedBookmarks.begin(), cachedBookmarks.end(),
-                         [&](const BookmarkEntry& b) { return b.xpath == progress.xpath; });
+                         [&](const BookmarkEntry& b) { return bookmarkMatchesProgress(b, progress); });
   if (it != cachedBookmarks.end()) {
     cachedBookmarks.erase(it);
     bookmarkRemoved = true;
@@ -1281,14 +1299,13 @@ void EpubReaderActivity::updateBookmarkFlag() {
     currentPageBookmarked = false;
     return;
   }
-  const CrossPointPosition pos = getCurrentPosition();
-  const float intra =
-      (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
-  const float currentPct = epub->calculateProgress(currentSpineIndex, intra);
-  constexpr float EPSILON = 0.0001f;
-  currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
-    return std::abs(b.percentage - currentPct) < EPSILON;
-  });
+  if (!section) {
+    currentPageBookmarked = false;
+    return;
+  }
+  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
+  currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(),
+                                      [&](const BookmarkEntry& b) { return bookmarkMatchesProgress(b, progress); });
 }
 
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
