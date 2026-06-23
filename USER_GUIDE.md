@@ -527,6 +527,8 @@ On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the dev
 
 When reading an EPUB that contains footnotes, you can navigate to the footnote text by selecting the footnote reference in the book. From the footnote, you can return to your original reading position.
 
+If the device goes to sleep or you close the book while viewing a footnote, the book reopens to your original reading position, not the footnote.
+
 ### System Navigation
 
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.

@@ -210,6 +210,14 @@ void EpubReaderActivity::onExit() {
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+
+  // Leaving mid-footnote loses the in-RAM return stack on deep sleep; persist the
+  // pre-footnote position so the book reopens at the link origin, not the footnote.
+  if (footnoteDepth > 0 && epub) {
+    const SavedPosition& origin = savedPositions[0];
+    saveProgress(origin.spineIndex, origin.pageNumber, 0);
+  }
+
   section.reset();
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
@@ -1008,22 +1016,31 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
+  const int fontId = SETTINGS.getReaderFontId();
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);  // scan pass
+  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
-  // Force special handling for pages with images when anti-aliasing is on
-  bool imagePageWithAA = page->hasImages() && SETTINGS.textAntiAliasing;
+  const bool pageHasImages = page->hasImages();
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
+  auto renderGrayscalePass = [&]() {
+    if (needsTextGrayscale) {
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    } else {
+      page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    }
+  };
 
-  page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
   const auto tBwRender = millis();
 
-  if (imagePageWithAA) {
+  if (pageHasImages) {
     // Double FAST_REFRESH with selective image blanking (pablohc's technique):
     // HALF_REFRESH sets particles too firmly for the grayscale LUT to adjust.
     // Instead, blank only the image area and do two fast refreshes.
@@ -1036,7 +1053,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -1060,7 +1077,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // per plane, but renderCharImpl culls out-of-band glyphs before decode so the
   // cost stays close to one render. Both text (drawPixel) and images
   // (DirectPixelWriter) honor the active strip target.
-  if (SETTINGS.textAntiAliasing && renderer.supportsStripGrayscale()) {
+  if (needsAnyGrayscale && renderer.supportsStripGrayscale()) {
     constexpr int STRIP_ROWS = 80;
     const int gh = renderer.getDisplayHeight();
     const int gwBytes = renderer.getDisplayWidthBytes();
@@ -1076,7 +1093,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
         renderer.beginStripTarget(scratch.get(), y, rows);
         renderer.clearScreen(0x00);
-        page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+        renderGrayscalePass();
         renderer.endStripTarget();
         renderer.writeGrayscalePlaneStrip(true, scratch.get(), y, rows);
       }
@@ -1088,7 +1105,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
         renderer.beginStripTarget(scratch.get(), y, rows);
         renderer.clearScreen(0x00);
-        page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+        renderGrayscalePass();
         renderer.endStripTarget();
         renderer.writeGrayscalePlaneStrip(false, scratch.get(), y, rows);
       }
@@ -1113,22 +1130,28 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   } else {
     // Fallback path for a controller without strip support. grayscale rendering
     // TODO: Only do this if font supports it
-    if (SETTINGS.textAntiAliasing) {
+    if (needsAnyGrayscale) {
       // Save the BW frame before the grayscale passes overwrite it, restore
       // after. Only needed when grayscale actually renders.
-      renderer.storeBwBuffer();
+      if (!renderer.storeBwBuffer()) {
+        LOG_ERR("ERS", "Failed to store BW buffer for grayscale render; skipping grayscale this page");
+        const auto tEnd = millis();
+        LOG_DBG("ERS", "Page render: prewarm=%lums bw_render=%lums display=%lums total=%lums", tPrewarm - t0,
+                tBwRender - tPrewarm, tDisplay - tBwRender, tEnd - t0);
+        return;
+      }
       const auto tBwStore = millis();
 
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      renderGrayscalePass();
       renderer.copyGrayscaleLsbBuffers();
       const auto tGrayLsb = millis();
 
       // Render and copy to MSB buffer
       renderer.clearScreen(0x00);
       renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-      page->render(renderer, SETTINGS.getReaderFontId(), orientedMarginLeft, orientedMarginTop);
+      renderGrayscalePass();
       renderer.copyGrayscaleMsbBuffers();
       const auto tGrayMsb = millis();
 
@@ -1146,8 +1169,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               tPrewarm - t0, tBwRender - tPrewarm, tDisplay - tBwRender, tBwStore - tDisplay, tGrayLsb - tBwStore,
               tGrayMsb - tGrayLsb, tGrayDisplay - tGrayMsb, tBwRestore - tGrayDisplay, tEnd - t0);
     } else {
-      // No anti-aliasing: BW frame already displayed above, no grayscale to
-      // render, so no save/restore.
+      // No text AA and no images: BW frame already displayed above, no grayscale
+      // to render, so no save/restore.
       const auto tEnd = millis();
       LOG_DBG("ERS", "Page render: prewarm=%lums bw_render=%lums display=%lums total=%lums", tPrewarm - t0,
               tBwRender - tPrewarm, tDisplay - tBwRender, tEnd - t0);

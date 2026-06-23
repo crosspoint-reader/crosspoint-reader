@@ -17,6 +17,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
+#include "ProgressFile.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
@@ -375,15 +376,13 @@ void XtcReaderActivity::renderPage() {
 }
 
 void XtcReaderActivity::saveProgress() const {
-  HalFile f;
-  if (Storage.openFileForWrite("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    data[0] = currentPage & 0xFF;
-    data[1] = (currentPage >> 8) & 0xFF;
-    data[2] = (currentPage >> 16) & 0xFF;
-    data[3] = (currentPage >> 24) & 0xFF;
-    f.write(data, 4);
-    f.close();
+  uint8_t data[4];
+  data[0] = currentPage & 0xFF;
+  data[1] = (currentPage >> 8) & 0xFF;
+  data[2] = (currentPage >> 16) & 0xFF;
+  data[3] = (currentPage >> 24) & 0xFF;
+  if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
+    LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
   }
 }
 

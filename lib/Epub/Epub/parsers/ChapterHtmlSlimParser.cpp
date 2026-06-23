@@ -317,6 +317,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
         if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+          // Flush a displaced anchor before overwriting. Consecutive non-block elements
+          // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
+          // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
+          // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
+          // lands at page 0 (section start) instead of the footnote.
+          if (!self->pendingAnchorId.empty()) {
+            self->flushPendingAnchor();
+          }
           self->pendingAnchorId = idValue;
         }
       } else if (strcmp(atts[i], "dir") == 0) {

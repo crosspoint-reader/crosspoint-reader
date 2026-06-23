@@ -254,6 +254,14 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
                          const bool attachToPrevious) {
   if (word.empty()) return;
 
+  // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
+  // (a base letter followed by separate combining accents -- common for Vietnamese,
+  // and used for many EPUB <h1> chapter headings) renders with the marks detached or
+  // misplaced. Compose to NFC here, the single funnel every word passes through, so a
+  // precomposed glyph is used instead. This runs once per word at layout time (the
+  // result is cached in the section file) and is a cheap no-op for mark-free text.
+  word = utf8ComposeNfc(word);
+
   EpdFontFamily::Style baseStyle = fontStyle;
   if (underline) {
     baseStyle = static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::UNDERLINE);
@@ -998,7 +1006,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         int advance =
             renderer.getKerning(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
                                 firstCodepoint(reorderedWordsScratch[wordIdx + 1]), reorderedStylesScratch[wordIdx]);
-        if (reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] &&
+        // wordIdx > 0 mirrors the gap accounting above (which skips index 0): a leading
+        // no-break space must not receive justifyExtra, or the line over-stretches by one
+        // gap and the last word is pushed past the right margin (issue #2185).
+        if (wordIdx > 0 && reorderedWordsScratch[wordIdx] == " " && reorderedContinuesScratch[wordIdx] &&
             effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
           advance += reorderedJustifyExtra;
         }
@@ -1040,7 +1051,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           // Cross-boundary kerning for continuation words
           int advance = renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                             firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
-          if (lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
+          // wordIdx > 0: see the LTR branch — a leading no-break space is not a justifiable gap.
+          if (wordIdx > 0 && lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
               effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             advance += justifyExtra;
           }
@@ -1078,7 +1090,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           int advance = wordWidths[lastBreakAt + wordIdx];
           advance += renderer.getKerning(fontId, lastCodepoint(lineWords[wordIdx]),
                                          firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
-          if (lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
+          // wordIdx > 0 mirrors the gap accounting above (which skips index 0): a leading
+          // no-break space must not receive justifyExtra, or the line over-stretches by one
+          // gap and the last word is pushed past the right margin (issue #2185).
+          if (wordIdx > 0 && lineWords[wordIdx] == " " && continuesVec[lastBreakAt + wordIdx] &&
               effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             advance += justifyExtra;
           }
