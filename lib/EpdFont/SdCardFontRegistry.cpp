@@ -19,6 +19,26 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findClosestReaderSize(const uint
                                                                       const uint8_t style) const {
   if (files.empty()) return nullptr;
 
+  // Collect sizes matching the requested style, sorted ascending.
+  std::vector<uint8_t> sizes;
+  for (const auto& f : files) {
+    if (f.style != style) continue;
+    sizes.push_back(f.pointSize);
+  }
+  if (sizes.empty()) return nullptr;
+  std::sort(sizes.begin(), sizes.end());
+
+  // When the family provides at least 4 sizes, use ordinal (index-based)
+  // selection so custom-built font sets (e.g. 10/12/14/16) map SMALL to
+  // the smallest file, not to a hardcoded 12pt target.
+  if (sizes.size() >= 4) {
+    uint8_t idx = fontSizeEnum;
+    if (idx >= sizes.size()) idx = sizes.size() - 1;
+    return findFile(sizes[idx], style);
+  }
+
+  // Fewer sizes than enum slots (e.g. CJK packs with only 2-3 sizes):
+  // fall back to closest-match against the built-in reader targets.
   uint8_t target = 14;
   switch (fontSizeEnum) {
     case 0:
