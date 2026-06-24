@@ -5,6 +5,10 @@
 #include <Memory.h>
 #include <base64.h>
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <string>
 
@@ -16,6 +20,8 @@ extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("W
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 #endif
+
+#include "util/StringUtils.h"
 
 namespace {
 #if !defined(FREEINK_NET_WOLFSSL)
@@ -39,7 +45,98 @@ struct Sink {
   bool* cancelFlag = nullptr;
   size_t total = 0;
   size_t downloaded = 0;
+  std::string contentDisposition;
+  std::string finalUrl;
 };
+
+#if !defined(FREEINK_NET_WOLFSSL)
+esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
+  if (evt->event_id == HTTP_EVENT_ON_HEADER) {
+    if (strcasecmp(evt->header_key, "Content-Disposition") == 0) {
+      auto* sink = static_cast<Sink*>(evt->user_data);
+      if (sink) {
+        sink->contentDisposition = evt->header_value;
+      }
+    }
+  }
+  return ESP_OK;
+}
+#endif
+
+std::string urlDecode(const std::string& str) {
+  std::string res;
+  res.reserve(str.size());
+
+  for (size_t i = 0; i < str.size(); i++) {
+    // Check if we have a '%' followed by at least two characters
+    if (str[i] == '%' && i + 2 < str.size()) {
+      unsigned char c1 = static_cast<unsigned char>(str[i + 1]);
+      unsigned char c2 = static_cast<unsigned char>(str[i + 2]);
+
+      // Strict verification: Ensure both characters are valid hex digits
+      if (std::isxdigit(c1) && std::isxdigit(c2)) {
+        char hex[3] = {str[i + 1], str[i + 2], '\0'};
+        res += (char)strtol(hex, nullptr, 16);
+        i += 2;  // skip the two hex digits
+      } else {
+        // Not a valid hex sequence (e.g. "%hi"), keep the '%' as literal
+        res += str[i];
+      }
+    } else {
+      // Keep the character exactly as-is (preserves '+' for file paths/headers)
+      res += str[i];
+    }
+  }
+  return res;
+}
+
+std::string parseContentDisposition(const std::string& header) {
+  std::string lowerHeader = header;
+  std::transform(lowerHeader.begin(), lowerHeader.end(), lowerHeader.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+  // Standard  filename=  headers should not be URL decoded, as they are not percent-encoded.
+  bool isRfc5987 = false;
+
+  size_t pos = lowerHeader.find("filename*=");
+  if (pos != std::string::npos) {
+    isRfc5987 = true;
+    pos += 10;
+  } else {
+    pos = lowerHeader.find("filename=");
+    if (pos == std::string::npos) return "";
+    pos += 9;
+  }
+
+  std::string fn = header.substr(pos);
+  while (!fn.empty() && std::isspace(static_cast<unsigned char>(fn.front()))) fn.erase(fn.begin());
+  while (!fn.empty() && std::isspace(static_cast<unsigned char>(fn.back()))) fn.pop_back();
+
+  if (!fn.empty() && fn.front() == '"') {
+    fn = fn.substr(1);
+    size_t q = fn.find('"');
+    if (q != std::string::npos) fn = fn.substr(0, q);
+  } else if (!fn.empty()) {
+    size_t space = fn.find_first_of("; \t\r\n");
+    if (space != std::string::npos) fn = fn.substr(0, space);
+  }
+
+  if (isRfc5987) {
+    // example filename*=UTF-8''%e2%82%ac%20rates.epub
+    size_t lastQuote = fn.find('\'');
+    if (lastQuote != std::string::npos) {
+      // Find the second single quote if it exists (e.g., UTF-8'en'file.epub)
+      size_t secondQuote = fn.find('\'', lastQuote + 1);
+      if (secondQuote != std::string::npos) {
+        fn = fn.substr(secondQuote + 1);
+      } else {
+        fn = fn.substr(lastQuote + 1);
+      }
+    }
+    return urlDecode(fn);
+  }
+  return fn;
+}
 
 bool isRedirect(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
@@ -94,6 +191,8 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       LOG_ERR("HTTP", "wolfSSL unexpected status: %d", status);
       return HttpDownloader::HTTP_ERROR;
     }
+    sink.contentDisposition = http.getHeader("Content-Disposition");
+    sink.finalUrl = url;
     if (http.callbackAborted()) return HttpDownloader::FILE_ERROR;
     if (!http.responseComplete()) {
       LOG_ERR("HTTP", "wolfSSL incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);
@@ -127,6 +226,8 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   // only because Arduino's ssl_client drives mbedtls directly.
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.keep_alive_enable = true;
+  config.event_handler = httpEventHandler;
+  config.user_data = &sink;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) {
@@ -170,6 +271,11 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     LOG_ERR("HTTP", "unexpected status: %d", status);
     esp_http_client_cleanup(client);
     return HttpDownloader::HTTP_ERROR;
+  }
+
+  char url_buf[512] = {0};
+  if (esp_http_client_get_url(client, url_buf, sizeof(url_buf)) == ESP_OK) {
+    sink.finalUrl = url_buf;
   }
 
   // fetch_headers returns 0 for a chunked response (no Content-Length); leave
@@ -257,7 +363,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
-                                                             const std::string& username, const std::string& password) {
+                                                             const std::string& username, const std::string& password,
+                                                             std::string* serverFilename) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   if (Storage.exists(destPath.c_str())) {
@@ -289,5 +396,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return HTTP_ERROR;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
+
+  if (serverFilename) {
+    std::string filename = parseContentDisposition(sink.contentDisposition);
+    LOG_DBG("HTTP", "Got server filename from contentDisposition %s", filename.c_str());
+
+    *serverFilename = std::move(filename);  // Use std::move for efficiency
+  }
+
   return OK;
 }

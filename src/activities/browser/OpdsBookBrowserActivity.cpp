@@ -282,32 +282,34 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
+
   const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
   bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
-    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
-    // existing caller checks exists() before mkdir. On real failure, fall back
-    // to SD root so the download is never lost.
-    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
+  if (haveFolder) {
+    if (!Storage.exists(folder) && !Storage.mkdir(folder)) {
+      LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
+      haveFolder = false;
+    }
   }
 
-  // downloadToFile() needs a std::string, and titles are unbounded (a fixed
-  // char[] would truncate). Cold path (a multi-second download follows), so one
-  // reserve'd, in-place-appended owning string is the right call.
-  std::string filename;
-  filename.reserve(96);
-  if (haveFolder) filename += folder;
-  filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
-  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
+  std::string impliedFilename =
+      opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+
+  const std::string tempPath = "/.crosspoint/tmp/";
+  std::string tempFilePath;
+  tempFilePath.reserve(96);
+  tempFilePath += tempPath;
+  tempFilePath += impliedFilename;
+  tempFilePath += ".tmp";
+  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), tempFilePath.c_str());
+
+  std::string serverFilename;
+  Storage.ensureDirectoryExists(tempPath.c_str());
 
   int lastRenderedPercent = -1;
   unsigned long lastProgressUpdateMs = 0;
   const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
+      downloadUrl, tempFilePath,
       [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
@@ -321,16 +323,40 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
           requestUpdate(true);
         }
       },
-      nullptr, server.username, server.password);
+      nullptr, server.username, server.password, server.keepFilename ? &serverFilename : nullptr);
 
-  if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
-    state = BrowserState::BROWSING;
-  } else {
-    LOG_ERR("OPDS", "Download failed: %d", static_cast<int>(result));
+  if (result != HttpDownloader::OK) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
+    requestUpdate();
+    return;
   }
+
+  std::string finalFilename = (server.keepFilename && !serverFilename.empty())
+                                  ? StringUtils::sanitizeFilename(serverFilename)
+                                  : impliedFilename;
+  std::string finalFilePath;
+  finalFilePath.reserve(96);
+  if (haveFolder) {
+    finalFilePath += folder;
+  }
+  finalFilePath += '/';
+  finalFilePath += finalFilename;
+
+  if (Storage.exists(finalFilePath.c_str())) {
+    Storage.remove(finalFilePath.c_str());
+  }
+
+  if (!Storage.rename(tempFilePath.c_str(), finalFilePath.c_str())) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_DOWNLOAD_FAILED);
+    Storage.remove(tempFilePath.c_str());
+    requestUpdate();
+    return;
+  }
+
+  clearBookCache(finalFilePath);
+  state = BrowserState::BROWSING;
   requestUpdate();
 }
 
