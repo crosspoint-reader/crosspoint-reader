@@ -759,11 +759,16 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
   auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
-  int progressTextWidth = 0;
+
+  const int leftClusterX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
+  const int rightClusterX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight;
+  int leftClusterWidth = 0;
+  int rightClusterWidth = 0;
 
   if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
     // Right aligned text for progress counter
     char progressStr[32];
+    int progressTextWidth = 0;
 
     if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
       snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
@@ -774,10 +779,9 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     }
 
     progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    renderer.drawText(
-        SMALL_FONT_ID,
-        renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight - progressTextWidth, textY,
-        progressStr);
+    renderer.drawText(SMALL_FONT_ID, rightClusterX - progressTextWidth, textY, progressStr);
+
+    rightClusterWidth += progressTextWidth;
   }
 
   // Draw Progress Bar
@@ -801,26 +805,21 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Bookmark
-  const int leftClusterX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
-  const bool showBookmarkIcon = showStatusBarTextLane && isPageBookmarked;
-  const int bookmarkReserveWidth = showBookmarkIcon ? (bookmarkStatusIconWidth + bookmarkStatusIconGap) : 0;
-  if (showBookmarkIcon) {
+  if (showStatusBarTextLane && isPageBookmarked) {
     const int bookmarkY = textY + 5;
     drawBookmarkStatusIcon(renderer, leftClusterX, bookmarkY);
+    leftClusterWidth += bookmarkStatusIconWidth + bookmarkStatusIconGap;
   }
 
   // Draw Battery
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
-  int leftClusterWidth = bookmarkReserveWidth;
-
-  int batteryWidth = 0;
 
   if (SETTINGS.statusBarBattery) {
     GUI.drawBatteryLeft(renderer,
-                        Rect{leftClusterX + bookmarkReserveWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
+                        Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage);
-    batteryWidth = metrics.batteryWidth;
+    int batteryWidth = metrics.batteryWidth;
 
     if (showBatteryPercentage) {
       const uint16_t percentage = powerManager.getBatteryPercentage();
@@ -833,19 +832,18 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Clock (X3 only — DS3231 RTC)
-  int clockTextWidth = 0;
   if (SETTINGS.statusBarClock && halClock.isAvailable()) {
     char timeBuf[9];
     if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-      clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
+      int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
       int clockX = 0;
       // Position to the left or right of the progress text (with a small gap)
       if (SETTINGS.statusBarClock == CrossPointSettings::STATUS_BAR_CLOCK_LEFT) {
-        clockX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1 +
-                 (SETTINGS.statusBarBattery ? batteryWidth + 10 : 0);
+        clockX = leftClusterX + leftClusterWidth + (leftClusterWidth > 0 ? 10 : 0);
+        leftClusterWidth += clockTextWidth + 10;
       } else if (SETTINGS.statusBarClock == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT) {
-        clockX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight -
-                 progressTextWidth - (progressTextWidth > 0 ? 10 : 0) - clockTextWidth;
+        clockX = rightClusterX - rightClusterWidth - (rightClusterWidth > 0 ? 10 : 0) - clockTextWidth;
+        rightClusterWidth += clockTextWidth + 10;
       }
       renderer.drawText(SMALL_FONT_ID, clockX, textY, timeBuf);
     }
@@ -859,12 +857,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     const int rendererableScreenWidth =
         renderer.getScreenWidth() - (metrics.statusBarHorizontalMargin * 2) - orientedMarginLeft - orientedMarginRight;
 
-    const int clockReserve = clockTextWidth > 0 ? (clockTextWidth + 10) : 0;
-
-    int titleMarginLeft =
-        leftClusterWidth + 30 + (SETTINGS.statusBarClock == CrossPointSettings::STATUS_BAR_CLOCK_LEFT ? clockReserve : 0);
-    int titleMarginRight = progressTextWidth + 30 +
-                           (SETTINGS.statusBarClock == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT ? clockReserve : 0);
+    int titleMarginLeft = leftClusterWidth + 30;
+    int titleMarginRight = rightClusterWidth + 30;
 
     // Attempt to center title on the screen, but if title is too wide then later we will center it within the
     // available space.
