@@ -856,8 +856,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     const int rendererableScreenWidth =
         renderer.getScreenWidth() - (metrics.statusBarHorizontalMargin * 2) - orientedMarginLeft - orientedMarginRight;
 
-    int titleMarginLeft = leftClusterWidth + 30;
-    int titleMarginRight = rightClusterWidth + 30;
+    const int titleMarginLeft = leftClusterWidth + 30;
+    const int titleMarginRight = rightClusterWidth + 30;
 
     // Attempt to center title on the screen, but if title is too wide then later we will center it within the
     // available space.
