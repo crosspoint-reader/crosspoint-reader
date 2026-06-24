@@ -1065,6 +1065,21 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // HALF ghost-cleanup path, which drives every pixel to its target
     // regardless of residue.
     pagesUntilFullRefresh = 1;
+  } else if (needsAnyGrayscale) {
+    if (pagesUntilFullRefresh <= 1) {
+      // Cleanup turns still need the stronger HALF pass, but on X3 the
+      // grayscale overlay behaves better if we immediately run the OEM settle
+      // step before writing the gray planes.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.preconditionGrayscale();
+      pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+    } else {
+      // Use the grayscale-aware base waveform so the first visible pass is
+      // closer to the final anti-aliased result instead of flashing overly
+      // dark text first and softening a moment later.
+      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+      pagesUntilFullRefresh--;
+    }
   } else {
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   }
