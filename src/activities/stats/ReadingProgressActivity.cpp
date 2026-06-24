@@ -7,6 +7,7 @@
 
 #include <functional>
 
+#include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -127,11 +128,16 @@ void ReadingProgressActivity::render(RenderLock&&) {
   const int contentBottom = h - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const int contentH = contentBottom - contentTop;
 
+  // Use the reader font for titles: it's whatever the user has selected (e.g. Amiri),
+  // so Arabic and other non-Latin titles render correctly. Fall back to UI font for
+  // the percent label which is always ASCII.
+  const int titleFontId = SETTINGS.getReaderFontId();
+
   if (entries.empty()) {
     renderer.drawCenteredText(UI_10_FONT_ID, contentTop + contentH / 2,
                               tr(STR_NO_RECENT_BOOKS));
   } else {
-    const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+    const int lineH = renderer.getLineHeight(titleFontId);
     // Entry: title line + 4px gap + progress bar + bottom spacing
     const int entryH = lineH + 4 + metrics.progressBarHeight + metrics.verticalSpacing;
     const int pageItems = contentH / entryH;
@@ -145,16 +151,16 @@ void ReadingProgressActivity::render(RenderLock&&) {
       const bool selected = (i == selectedIndex);
       const auto style = selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
 
-      // Title — truncate with ellipsis if it overflows
-      const int maxTitleW = w - sidePad * 2 - 48;  // leave room for "100%"
-      const std::string title = renderer.truncatedText(UI_10_FONT_ID, e.title.c_str(), maxTitleW);
-      renderer.drawText(UI_10_FONT_ID, sidePad, y, title.c_str(), true, style);
-
-      // Percent — right-aligned
+      // Percent label (ASCII) — right-aligned, using UI font for consistent sizing
       char pctBuf[6];
       snprintf(pctBuf, sizeof(pctBuf), "%d%%", e.percent);
       const int pctW = renderer.getTextWidth(UI_10_FONT_ID, pctBuf);
       renderer.drawText(UI_10_FONT_ID, w - sidePad - pctW, y, pctBuf, true);
+
+      // Title — uses reader font so Arabic/non-Latin scripts display correctly
+      const int maxTitleW = w - sidePad * 2 - pctW - metrics.verticalSpacing;
+      const std::string title = renderer.truncatedText(titleFontId, e.title.c_str(), maxTitleW);
+      renderer.drawText(titleFontId, sidePad, y, title.c_str(), true, style);
 
       y += lineH + 4;
 
