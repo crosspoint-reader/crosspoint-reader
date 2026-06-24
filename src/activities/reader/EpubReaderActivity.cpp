@@ -1350,11 +1350,15 @@ void EpubReaderActivity::updateBookmarkFlag() {
     currentPageBookmarked = false;
     return;
   }
-  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
   const ProgressRange pageRange =
       getPageProgressRange(epub, currentSpineIndex, section->currentPage, section->pageCount);
   currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
-    return bookmarkMatchesProgress(b, progress, pageRange);
+    if (b.computedSpineIndex == currentSpineIndex && b.computedChapterPageCount == section->pageCount &&
+        b.computedChapterProgress == section->currentPage) {
+      return true;
+    }
+    const float bp = std::clamp(b.percentage, 0.0f, 1.0f);
+    return bp + bookmarkProgressEpsilon >= pageRange.start && bp - bookmarkProgressEpsilon <= pageRange.end;
   });
 }
 
