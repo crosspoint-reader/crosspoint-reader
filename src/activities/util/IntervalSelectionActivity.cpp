@@ -1,6 +1,7 @@
 #include "IntervalSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -52,8 +53,15 @@ void IntervalSelectionActivity::loop() {
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustValue(-smallStep); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustValue(smallStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { adjustValue(largeStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustValue(-largeStep); });
+
+  // On X3 the side buttons sit on the left/right edges of the screen rather than as a vertical up/down
+  // rocker (X4), so BTN_UP is physically the left button and BTN_DOWN the right one. Flip the large-step
+  // direction there so the left button decreases and the right button increases, matching the layout.
+  const int upDelta = gpio.deviceIsX3() ? -largeStep : largeStep;
+  const int downDelta = gpio.deviceIsX3() ? largeStep : -largeStep;
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustValue(upDelta); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
+                                       [this, downDelta] { adjustValue(downDelta); });
 }
 
 void IntervalSelectionActivity::render(RenderLock&&) {
