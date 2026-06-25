@@ -332,9 +332,9 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     return;
   }
 
-  std::string finalFilename = (server.keepFilename && !serverFilename.empty())
-                                  ? StringUtils::sanitizeFilename(serverFilename)
-                                  : impliedFilename;
+  std::string sanitizedServerFilename = StringUtils::sanitizeFilename(serverFilename);
+  std::string finalFilename =
+      (server.keepFilename && !sanitizedServerFilename.empty()) ? sanitizedServerFilename : impliedFilename;
   std::string finalFilePath;
   finalFilePath.reserve(96);
   if (haveFolder) {
