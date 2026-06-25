@@ -2040,7 +2040,7 @@
           if (fileIsImage) {
             fileTableContent += `<a href="#" onclick="openImagePreview('${filePath.replaceAll("'", "\\'")}', '${file.name.replaceAll("'", "\\'")}'); return false;" class="file-link">${escapeHtml(file.name)}</a>`;
           } else {
-            fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
+            fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="${downloadUrl(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
           }
           fileTableContent += '</td>';
           fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
@@ -2064,11 +2064,16 @@
     return /\.(png|jpe?g|bmp|gif|webp)$/i.test(name);
   }
 
+  function downloadUrl(filePath) {
+    return `/download?path=${encodeURIComponent(filePath)}`;
+  }
+
   function openImagePreview(filePath, name) {
-    const url = `/download?path=${encodeURIComponent(filePath)}`;
+    const url = downloadUrl(filePath);
+    const img = document.getElementById('imagePreviewImg');
     document.getElementById('imagePreviewName').textContent = name;
-    document.getElementById('imagePreviewImg').src = url;
-    document.getElementById('imagePreviewImg').alt = name;
+    img.src = url;
+    img.alt = name;
     document.getElementById('imagePreviewDownload').href = url;
     document.getElementById('imagePreviewModal').classList.add('open');
   }
