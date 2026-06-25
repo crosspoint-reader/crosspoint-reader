@@ -116,10 +116,10 @@ std::string parseContentDisposition(const std::string& header) {
   if (!fn.empty() && fn.front() == '"') {
     fn = fn.substr(1);
     size_t q = fn.find('"');
-    if (q != std::string::npos) fn = fn.substr(0, q);
+    if (q != std::string::npos) fn.resize(q);
   } else if (!fn.empty()) {
     size_t space = fn.find_first_of("; \t\r\n");
-    if (space != std::string::npos) fn = fn.substr(0, space);
+    if (space != std::string::npos) fn.resize(space);
   }
 
   if (isRfc5987) {
