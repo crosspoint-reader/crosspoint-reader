@@ -150,6 +150,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
+  - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
 
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   
@@ -161,6 +162,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
+
+- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (System > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
 
 - **Status Bar**: Configure the status bar displayed while reading:
   
