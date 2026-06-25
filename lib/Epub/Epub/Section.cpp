@@ -157,6 +157,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
 
+  // Keep one ZipFile open for the whole build so the chapter HTML read and every
+  // per-image extraction share a single SD open + central-directory cursor instead of
+  // reopening and re-scanning the ZIP for each.
+  const Epub::ZipSession zipSession(*epub);
+
   // Create cache directory if it doesn't exist
   {
     const auto sectionsDir = epub->getCachePath() + "/sections";

@@ -29,6 +29,10 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // When set (via ZipSession), readItem*/getItemSize reuse this single open ZipFile
+  // instead of constructing a transient one per call. Mutable so the const read methods
+  // can use it.
+  mutable std::unique_ptr<ZipFile> sessionZip;
 
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
@@ -38,11 +42,28 @@ class Epub {
   void parseCssFiles() const;
 
  public:
-  explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
-    // create a cache key based on the filepath
-    cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
-  }
-  ~Epub() = default;
+  // Defined out of line (with the destructor) because the unique_ptr<ZipFile> member
+  // requires a complete ZipFile type, which is only available in the .cpp.
+  explicit Epub(std::string filepath, const std::string& cacheDir);
+  ~Epub();
+
+  // RAII helper: keeps one ZipFile open for its lifetime so a batch of readItem*/
+  // getItemSize calls (e.g. a chapter's HTML plus all its images in createSectionFile)
+  // shares a single SD open + central-directory cursor instead of reopening and
+  // re-scanning the ZIP per read. Nesting is a no-op — only the outermost session owns
+  // the handle. If the open fails, reads transparently fall back to transient ZipFiles.
+  class ZipSession {
+   public:
+    explicit ZipSession(const Epub& epub);
+    ~ZipSession();
+    ZipSession(const ZipSession&) = delete;
+    ZipSession& operator=(const ZipSession&) = delete;
+
+   private:
+    const Epub& epub_;
+    bool owns_ = false;
+  };
+
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool clearCache() const;

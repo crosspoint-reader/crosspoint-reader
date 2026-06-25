@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PngToBmpConverter.h>
 #include <Utf8.h>
 #include <ZipFile.h>
@@ -751,6 +752,33 @@ bool Epub::generateThumbBmp(int height) const {
   return false;
 }
 
+Epub::Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
+  // create a cache key based on the filepath
+  cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
+}
+
+Epub::~Epub() = default;
+
+Epub::ZipSession::ZipSession(const Epub& epub) : epub_(epub) {
+  if (epub_.sessionZip) {
+    return;  // a session is already active; reuse it (nesting is a no-op)
+  }
+  auto zip = makeUniqueNoThrow<ZipFile>(epub_.filepath);
+  if (zip && zip->open()) {
+    epub_.sessionZip = std::move(zip);
+    owns_ = true;
+  }
+  // On allocation/open failure sessionZip stays null and readItem* fall back to
+  // transient ZipFiles — correctness is preserved, just without the batch reuse.
+}
+
+Epub::ZipSession::~ZipSession() {
+  if (owns_) {
+    epub_.sessionZip->close();
+    epub_.sessionZip.reset();
+  }
+}
+
 uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size, const bool trailingNullByte) const {
   if (itemHref.empty()) {
     LOG_DBG("EBP", "Failed to read item, empty href");
@@ -759,7 +787,8 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
   const std::string path = FsHelpers::normalisePath(itemHref);
 
-  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+  const auto content = sessionZip ? sessionZip->readFileToMemory(path.c_str(), size, trailingNullByte)
+                                  : ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
     LOG_DBG("EBP", "Failed to read item %s", path.c_str());
     return nullptr;
@@ -775,12 +804,14 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+  return sessionZip ? sessionZip->readFileToStream(path.c_str(), out, chunkSize)
+                    : ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+  return sessionZip ? sessionZip->getInflatedFileSize(path.c_str(), size)
+                    : ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
 }
 
 int Epub::getSpineItemsCount() const {
