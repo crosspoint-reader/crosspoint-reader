@@ -120,6 +120,16 @@ A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined
 
 ### 3.5.1 Calibre Wireless Transfers
 
+CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
+
+#### Installing the Plugin in Calibre
+
+If you don't already have the plugin installed:
+
+1. Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
+2. Download the zip file.
+3. Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+
 #### Configuring the Crosspoint Plugin in Calibre
 1. In Calibre select Preferences.
 2. In the Preferences dialog select Plugins.
