@@ -410,7 +410,10 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     ctx.readBuf = fileReadBuffer;
     ctx.readBufSize = 1024;
 
-    if (!ctx.reader.init(true)) {
+    // One-shot mode: the entire output is decompressed into `data` in a single read()
+    // call, so back-references resolve against the contiguous output buffer and the 32KB
+    // streaming ring buffer (malloc + memset per call) is unnecessary. See InflateReader.
+    if (!ctx.reader.init(false)) {
       LOG_ERR("ZIP", "Failed to init inflate reader");
       free(fileReadBuffer);
       free(data);
