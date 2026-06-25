@@ -80,11 +80,11 @@
     }
     .breadcrumb-inline .sep {
       margin: 0 6px;
-      color: var(--border-color);
+      color: var(--label-color);
     }
     .breadcrumb-inline .current {
       color: var(--title-color);
-      font-weight: 500;
+      font-weight: 600;
     }
     .nav-links {
       margin: 20px 0;
@@ -960,12 +960,6 @@
       align-items: center;
       margin-bottom: 12px;
     }
-    .contents-title {
-      font-size: 1.1em;
-      font-weight: 600;
-      color: var(--title-color);
-      margin: 0;
-    }
     .summary-inline {
       color: var(--label-color);
       font-size: 0.9em;
@@ -1296,9 +1290,6 @@
         flex-wrap: wrap;
         gap: 4px;
       }
-      .contents-title {
-        font-size: 1em;
-      }
       .summary-inline {
         font-size: 0.8em;
       }
@@ -1501,7 +1492,6 @@
 <div class="page-header">
   <div class="page-header-left">
     <h2>📁 File Manager</h2>
-    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
   </div>
 
   <div class="action-buttons">
@@ -1523,7 +1513,7 @@
 
 <div class="card">
   <div class="contents-header">
-    <h2 class="contents-title">Contents</h2>
+    <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
     <span class="summary-inline" id="folder-summary"></span>
   </div>
 
@@ -1904,16 +1894,16 @@
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
-    let breadcrumbContent = '<span class="sep">/</span>';
+    let breadcrumbContent = '';
     if (currentPath === '/') {
-      breadcrumbContent += '<span class="current">🏠</span>';
+      breadcrumbContent += '<span class="current">🏠 Home</span>';
     } else {
-      breadcrumbContent += '<a href="/files">🏠</a>';
+      breadcrumbContent += '<a href="/files">🏠 Home</a>';
       const pathSegments = currentPath.split('/');
       pathSegments.slice(1, pathSegments.length - 1).forEach(function(segment, index) {
-        breadcrumbContent += '<span class="sep">/</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
+        breadcrumbContent += '<span class="sep">›</span><a href="/files?path=' + encodeURIComponent(pathSegments.slice(0, index + 2).join('/')) + '">' + escapeHtml(segment) + '</a>';
       });
-      breadcrumbContent += '<span class="sep">/</span>';
+      breadcrumbContent += '<span class="sep">›</span>';
       breadcrumbContent += '<span class="current">' + escapeHtml(pathSegments[pathSegments.length - 1]) + '</span>';
     }
     breadcrumbs.innerHTML = breadcrumbContent;
