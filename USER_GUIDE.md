@@ -147,9 +147,10 @@ If you don't already have the plugin installed:
 
 To upload a book using the Crosspoint plugin in Calibre:
 
-1. Select one or more books.
-2. Right click on that selection.
-3. Select "Send to Device" > "Send to main memory"
+1. On the device: File Transfer -> Calibre Wireless, then join a network.
+2. Select one or more books.
+3. Right click on that selection.
+4. Select "Send to Device" > "Send to main memory"
 
 The Crosspoint plugin will connect to the x4, create a folder for the book's author in the root folder (or the folder you configured for the plugin), then copy the book into that folder.
 
