@@ -18,6 +18,7 @@
 
 #include <cstring>
 
+#include "BleInput.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -262,6 +263,10 @@ void enterDeepSleep(bool fromTimeout = false) {
     WiFi.mode(WIFI_OFF);
   }
 
+  // Drop any BLE HID link cleanly so the page-turner sees the disconnect promptly.
+  // bluetoothEnabled persists, so the setting is restored on the next wake.
+  bleinput::stop();
+
   halTiltSensor.deepSleep();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -478,6 +483,30 @@ void setup() {
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
   allowSleepAt = millis() + 2000;
+  // Bluetooth is started lazily by the lifecycle check in loop() once a reader or the
+  // Bluetooth settings screen is on the stack — not here at boot — so home/browser and
+  // WiFi activities keep the ~50 KB the BLE stack would otherwise hold.
+}
+
+// Bring the BLE stack up or down to match the current context. BLE is only resident
+// while a reader (page-turner input) or the Bluetooth settings screen (pairing) is on
+// the stack AND WiFi is off — WiFi and BLE share the one C3 radio and can't both fit in
+// heap. Called every loop; ensureStarted()/stop() are no-ops when already in the right
+// state, so this only does work on a transition.
+void updateBluetoothLifecycle() {
+  const bool wanted =
+      SETTINGS.bluetoothEnabled && activityManager.bluetoothShouldBeActive() && WiFi.getMode() == WIFI_MODE_NULL;
+  if (wanted && !BleHid.isRunning()) {
+    bleinput::ensureStarted();
+    // Single place BLE starts for normal use (reader entry, BT toggled on, etc.), so the
+    // "BT Connecting..." popup shows uniformly. Then clear it with a ghost-cleanup (HALF)
+    // refresh so a grayscale reader page doesn't ghost over the popup.
+    bleinput::showConnectingUntilLinked(renderer, mappedInputManager);
+    activityManager.requestGhostCleanup();
+    activityManager.requestUpdate();
+  } else if (!wanted && BleHid.isRunning()) {
+    bleinput::stop();
+  }
 }
 
 void loop() {
@@ -486,6 +515,9 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+  updateBluetoothLifecycle();    // bring BLE up/down for the current activity context
+  BleHid.poll();                 // drive BLE auto-reconnect + key auto-repeat (no-op when BT off)
+  mappedInputManager.pollBle();  // drain BLE keys -> logical-button overlay for this frame
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
@@ -516,7 +548,7 @@ void loop() {
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
-      activityManager.preventAutoSleep()) {
+      mappedInputManager.bleHadActivityThisFrame() || activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
@@ -597,11 +629,16 @@ void loop() {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
+    // The BLE controller cannot run at the 10 MHz low-power frequency — NimBLE's
+    // controller reset/maintenance hangs the radio and trips the interrupt WDT (the
+    // same reason WiFi force-disables power saving in HalPowerManager). Keep full CPU
+    // speed whenever the BLE stack is actually resident, regardless of input idleness.
+    if (!BleHid.isRunning() && millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
       delay(50);
     } else {
+      if (BleHid.isRunning()) powerManager.setPowerSaving(false);  // keep the BLE radio stable
       // Short delay to prevent tight loop while still being responsive
       delay(10);
     }

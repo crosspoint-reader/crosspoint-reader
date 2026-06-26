@@ -101,12 +101,18 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
+  // True if BLE should be resident for the current context: any reader (page-turner
+  // input) or the Bluetooth settings screen (pairing) is on the stack.
+  bool bluetoothShouldBeActive() const;
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);
+
+  // Ask the current activity to make its next render a ghost-cleanup (HALF) refresh.
+  void requestGhostCleanup();
 
   // Trigger a render and block until it completes.
   // Must NOT be called from the render task or while holding a RenderLock.

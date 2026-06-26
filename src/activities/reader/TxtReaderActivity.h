@@ -49,5 +49,6 @@ class TxtReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  void requestGhostCleanup() override { pagesUntilFullRefresh = 1; }
   ScreenshotInfo getScreenshotInfo() const override;
 };

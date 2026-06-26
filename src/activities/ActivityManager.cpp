@@ -254,6 +254,17 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
+void ActivityManager::requestGhostCleanup() {
+  if (currentActivity) currentActivity->requestGhostCleanup();
+}
+
+bool ActivityManager::bluetoothShouldBeActive() const {
+  const auto wants = [](const auto& activity) {
+    return activity && (activity->isReaderActivity() || activity->keepsBluetoothAlive());
+  };
+  return std::any_of(stackActivities.begin(), stackActivities.end(), wants) || wants(currentActivity);
+}
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 ScreenshotInfo ActivityManager::getScreenshotInfo() const {

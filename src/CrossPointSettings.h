@@ -218,6 +218,22 @@ class CrossPointSettings {
   uint8_t frontButtonConfirm = FRONT_HW_CONFIRM;
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
+  // --- Bluetooth (BLE HID page-turner) ---
+  // Master on/off for the BLE HID host. Persisted; auto-restored on boot/wake.
+  // Managed by BluetoothSettingsActivity and the in-reader "Toggle Bluetooth" menu item.
+  uint8_t bluetoothEnabled = 0;
+  // Remote-button mapping table: each slot binds a decoded BLE key identity to a
+  // logical MappedInputManager::Button. Fixed-capacity POD (no heap), persisted
+  // manually in JsonSettingsIO (like the front-button remap). 0xFF = empty/unassigned.
+  // Headroom for several buttons plus optional presets and rolling-code remotes
+  // (some buttons emit more than one code). Each entry is 3 bytes.
+  static constexpr uint8_t BLE_MAP_CAPACITY = 10;
+  struct BleKeyMapEntry {
+    uint8_t keyKind = 0xFF;  // 0 = SpecialKey, 1 = HID usage code; 0xFF = empty slot
+    uint8_t keyValue = 0;    // (uint8_t)freeink::SpecialKey, or the raw HID usage id
+    uint8_t button = 0xFF;   // (uint8_t)MappedInputManager::Button; 0xFF = unassigned
+  };
+  BleKeyMapEntry bleKeyMap[BLE_MAP_CAPACITY] = {};
   // Reader font settings
   uint8_t fontFamily = NOTOSERIF;
   uint8_t fontSize = MEDIUM;
