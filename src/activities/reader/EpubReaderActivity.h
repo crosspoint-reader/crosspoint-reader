@@ -92,6 +92,7 @@ class EpubReaderActivity final : public Activity {
 #ifdef SIMULATOR
   bool simulatorHasLoadedPage() const;
   void simulatorPageTurnForward();
+  void simulatorSetPosition(int spineIndex, int pageIndex);
   int simulatorCurrentSpineIndex() const;
   int simulatorCurrentPageIndex() const;
   int simulatorCurrentSectionPageCount() const;

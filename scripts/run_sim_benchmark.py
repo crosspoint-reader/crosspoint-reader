@@ -28,6 +28,18 @@ def main() -> int:
         help="Number of forward page turns to benchmark",
     )
     parser.add_argument(
+        "--start-spine",
+        type=int,
+        default=-1,
+        help="Optional spine index to jump to before benchmarking",
+    )
+    parser.add_argument(
+        "--start-page",
+        type=int,
+        default=0,
+        help="Page index within --start-spine to jump to before benchmarking",
+    )
+    parser.add_argument(
         "--heap-bytes",
         type=int,
         default=0,
@@ -52,6 +64,11 @@ def main() -> int:
         "--env",
         default=default_env(),
         help="PlatformIO environment to run. Defaults to simulator_i386 except on macOS, where it falls back to simulator.",
+    )
+    parser.add_argument(
+        "--no-heap-trace",
+        action="store_true",
+        help="Disable heap caller tracking (enabled by default; prints the call sites holding the heap on OOM).",
     )
     args = parser.parse_args()
 
@@ -78,12 +95,18 @@ def main() -> int:
     env["CROSSPOINT_SIM_BENCHMARK"] = "1"
     env["CROSSPOINT_SIM_BENCH_EPUB"] = f"/books/{staged_name}"
     env["CROSSPOINT_SIM_BENCH_PAGES"] = str(args.pages)
+    if args.start_spine >= 0:
+        env["CROSSPOINT_SIM_BENCH_START_SPINE"] = str(args.start_spine)
+        env["CROSSPOINT_SIM_BENCH_START_PAGE"] = str(max(args.start_page, 0))
     env["CROSSPOINT_SIM_SD"] = str(sd_root)
     env["SDL_VIDEODRIVER"] = args.video_driver
     if not args.keep_cache:
         env["CROSSPOINT_SIM_BENCH_CLEAR_CACHE"] = "1"
     if args.heap_bytes > 0:
         env["CROSSPOINT_SIM_HEAP_BYTES"] = str(args.heap_bytes)
+    # Heap caller tracking is on by default so an OOM prints the call sites
+    # holding the arena, not just free/max_alloc totals.
+    env["CROSSPOINT_SIM_HEAP_TRACE"] = "0" if args.no_heap_trace else "1"
 
     cmd = ["python3", "-m", "platformio", "run", "-e", args.env, "-t", "run_simulator"]
     return subprocess.run(cmd, cwd=repo_root, env=env, check=False).returncode

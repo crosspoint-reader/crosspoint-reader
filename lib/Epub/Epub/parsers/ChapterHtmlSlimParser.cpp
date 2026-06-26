@@ -18,6 +18,10 @@
 #include "Epub/converters/ImageToFramebufferDecoder.h"
 #include "Epub/htmlEntities.h"
 
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+#include "simulator/SimulatorHeap.h"
+#endif
+
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
@@ -81,6 +85,15 @@ bool isHeaderOrBlock(const char* name) {
 bool isTableStructuralTag(const char* name) {
   return strcmp(name, "table") == 0 || strcmp(name, "tr") == 0 || strcmp(name, "td") == 0 || strcmp(name, "th") == 0;
 }
+
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+void logParserHeap(const char* phase, const char* path, const std::size_t wordsInBlock, const std::size_t pageCount) {
+  LOG_INF("SIMSEC", "%s path=%s block_words=%zu pages=%zu free=%zu max_alloc=%zu frag=%zu used=%zu peak=%zu", phase,
+          path ? path : "(null)", wordsInBlock, pageCount, SimulatorHeap::freeBytes(),
+          SimulatorHeap::largestFreeBlockBytes(), SimulatorHeap::fragmentationPercent(),
+          SimulatorHeap::currentUsedBytes(), SimulatorHeap::peakUsedBytes());
+}
+#endif
 
 void ChapterHtmlSlimParser::applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css) {
   if (css.hasDirection()) {
@@ -1417,6 +1430,11 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+  logParserHeap("makePages:after_layout", filepath.c_str(), currentTextBlock ? currentTextBlock->size() : 0,
+                completedPageCount);
+#endif
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

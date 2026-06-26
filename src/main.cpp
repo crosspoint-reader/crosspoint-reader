@@ -310,7 +310,6 @@ void setup() {
   t1 = millis();
 
 #ifdef SIMULATOR
-  SimulatorHeap::initializeFromEnv();
   SimulatorBenchmark::initializeFromEnv();
 #endif
 
@@ -489,6 +488,7 @@ void setup() {
   allowSleepAt = millis() + 2000;
 
 #ifdef SIMULATOR
+  SimulatorHeap::activateFromEnv();
   SimulatorBenchmark::startIfConfigured();
 #endif
 }

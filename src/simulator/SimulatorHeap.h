@@ -8,12 +8,36 @@
 namespace SimulatorHeap {
 
 void initializeFromEnv();
-bool isLimited();
-std::size_t heapLimitBytes();
+void activateFromEnv();
+bool isInitialized();
+bool isActive();
+std::size_t totalBytes();
 std::size_t currentUsedBytes();
 std::size_t peakUsedBytes();
 std::size_t freeBytes();
 std::size_t minFreeBytes();
+std::size_t largestFreeBlockBytes();
+std::size_t fragmentationPercent();
+
+// Caller tracking (enabled by CROSSPOINT_SIM_HEAP_TRACE=1). When on, every arena
+// allocation records its call stack; dumpLiveAllocations() prints the live
+// allocations aggregated by call site, largest first. Also fired automatically
+// on an arena OOM. No-op when tracing is disabled or unavailable on the host.
+bool isTraceEnabled();
+void dumpLiveAllocations(const char* reason);
+void dumpFreeList(const char* reason);
+
+inline bool isLimited() { return totalBytes() > 0; }
+inline std::size_t heapLimitBytes() { return totalBytes(); }
+
+#ifdef SIMULATOR_HEAP_TESTING
+bool resetForTests(std::size_t arenaBytes);
+void shutdownForTests();
+void* allocateForTests(std::size_t size);
+void* callocForTests(std::size_t nmemb, std::size_t size);
+void* reallocForTests(void* ptr, std::size_t size);
+void freeForTests(void* ptr);
+#endif
 
 }  // namespace SimulatorHeap
 

@@ -1370,6 +1370,25 @@ void EpubReaderActivity::simulatorPageTurnForward() {
   pageTurn(true);
 }
 
+void EpubReaderActivity::simulatorSetPosition(int spineIndex, int pageIndex) {
+  if (!epub) return;
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) return;
+
+  {
+    RenderLock lock(*this);
+    currentSpineIndex = spineIndex;
+    nextPageNumber = pageIndex < 0 ? 0 : pageIndex;
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = 0;
+    pendingPageJump.reset();
+    pendingAnchor.clear();
+    pendingPercentJump = false;
+    pendingSpineProgress = 0.0f;
+    section.reset();
+  }
+  requestUpdate();
+}
+
 int EpubReaderActivity::simulatorCurrentSpineIndex() const { return currentSpineIndex; }
 
 int EpubReaderActivity::simulatorCurrentPageIndex() const { return section ? section->currentPage : -1; }
