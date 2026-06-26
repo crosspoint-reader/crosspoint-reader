@@ -306,6 +306,10 @@ void ActivityManager::requestUpdateAndWait() {
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
+#ifdef SIMULATOR
+Activity* ActivityManager::getCurrentActivityForSimulator() const { return currentActivity.get(); }
+#endif
+
 // RenderLock
 
 RenderLock::RenderLock() {

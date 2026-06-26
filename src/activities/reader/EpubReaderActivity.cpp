@@ -1360,6 +1360,27 @@ void EpubReaderActivity::updateBookmarkFlag() {
   });
 }
 
+#ifdef SIMULATOR
+bool EpubReaderActivity::simulatorHasLoadedPage() const {
+  return section && section->pageCount > 0 && section->currentPage >= 0 && section->currentPage < section->pageCount;
+}
+
+void EpubReaderActivity::simulatorPageTurnForward() {
+  if (!section) return;
+  pageTurn(true);
+}
+
+int EpubReaderActivity::simulatorCurrentSpineIndex() const { return currentSpineIndex; }
+
+int EpubReaderActivity::simulatorCurrentPageIndex() const { return section ? section->currentPage : -1; }
+
+int EpubReaderActivity::simulatorCurrentSectionPageCount() const { return section ? section->pageCount : 0; }
+
+bool EpubReaderActivity::simulatorAtEndOfBook() const {
+  return epub && currentSpineIndex >= epub->getSpineItemsCount();
+}
+#endif
+
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Epub;

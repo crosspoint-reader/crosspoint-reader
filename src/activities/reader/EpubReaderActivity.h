@@ -88,4 +88,13 @@ class EpubReaderActivity final : public Activity {
   bool isReaderActivity() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;
+
+#ifdef SIMULATOR
+  bool simulatorHasLoadedPage() const;
+  void simulatorPageTurnForward();
+  int simulatorCurrentSpineIndex() const;
+  int simulatorCurrentPageIndex() const;
+  int simulatorCurrentSectionPageCount() const;
+  bool simulatorAtEndOfBook() const;
+#endif
 };
