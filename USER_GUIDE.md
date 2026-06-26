@@ -129,6 +129,7 @@ If you don't already have the plugin installed:
 1. Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
 2. Download the zip file.
 3. Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+4. Restart Calibre.
 
 #### Configuring the Crosspoint Plugin in Calibre
 1. In Calibre select Preferences.
