@@ -157,7 +157,7 @@ The Crosspoint plugin will connect to the x4, create a folder for the book's aut
 
 #### Removing a Book
 
-There does not appear to be a way to remove a book from the x4 from within Calibre, or at least the feature "Remove books" is unable to do so. Books can be removed using the web interface or via USB.
+Books cannot be removed from the x4 through Calibre. Use the web interface instead.
 
 ### 3.6 Settings
 
