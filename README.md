@@ -164,6 +164,23 @@ git submodule update --init --recursive
 pio run --target upload
 ```
 
+### Simulator builds
+
+Default desktop simulator:
+
+```bash
+pio run -e simulator -t run_simulator
+```
+
+32-bit `i386` desktop simulator for ESP-like pointer size and more accurate host memory accounting:
+
+```bash
+pio run -e simulator_i386 -t run_simulator
+```
+
+On Linux, `simulator_i386` needs 32-bit host toolchain and dev libraries in addition to the normal simulator deps:
+`gcc-multilib`, `g++-multilib`, `libsdl2-dev:i386`, and `libssl-dev:i386`.
+
 ### Contributor pre-PR checks
 
 ```bash

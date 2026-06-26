@@ -4,7 +4,14 @@ import argparse
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+
+def default_env() -> str:
+    if sys.platform == "darwin":
+        return "simulator"
+    return "simulator_i386"
 
 
 def main() -> int:
@@ -41,6 +48,11 @@ def main() -> int:
         default="dummy",
         help="SDL_VIDEODRIVER to use. Set to x11/wayland/etc to watch the window.",
     )
+    parser.add_argument(
+        "--env",
+        default=default_env(),
+        help="PlatformIO environment to run. Defaults to simulator_i386 except on macOS, where it falls back to simulator.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
@@ -73,7 +85,7 @@ def main() -> int:
     if args.heap_bytes > 0:
         env["CROSSPOINT_SIM_HEAP_BYTES"] = str(args.heap_bytes)
 
-    cmd = ["python3", "-m", "platformio", "run", "-e", "simulator", "-t", "run_simulator"]
+    cmd = ["python3", "-m", "platformio", "run", "-e", args.env, "-t", "run_simulator"]
     return subprocess.run(cmd, cwd=repo_root, env=env, check=False).returncode
 
 

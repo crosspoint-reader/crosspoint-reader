@@ -13,6 +13,23 @@ pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run
 ```
 
+## Simulator
+
+Use the normal host build when you just need desktop iteration:
+
+```sh
+pio run -e simulator -t run_simulator
+```
+
+Use the 32-bit host build when you want the simulator closer to ESP32-C3 memory layout and pointer width:
+
+```sh
+pio run -e simulator_i386 -t run_simulator
+python3 scripts/run_sim_benchmark.py
+```
+
+On Linux, the `simulator_i386` env requires multilib support plus 32-bit SDL/OpenSSL development packages.
+
 ## Flash and monitor
 
 Flash firmware:
