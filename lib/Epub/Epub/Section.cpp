@@ -38,6 +38,12 @@ constexpr size_t PAGE_LUT_ENTRY_SIZE = sizeof(uint32_t) * 2;
 // inline LUT field can't silently desync it from the write/read sites.
 static_assert(PAGE_LUT_ENTRY_SIZE == sizeof(PageLutEntry::fileOffset) + sizeof(PageLutEntry::searchTextOffset),
               "On-disk page-LUT stride must match the inline offset fields");
+
+// ASCII bytes treated as insignificant during search, dropped from both the
+// query and the scanned record so layout-time hyphenation (a word split across
+// a line break stores "<frag>-" + space + "<frag>") and spacing differences
+// between the query and the rendered text do not block a match.
+constexpr bool isSearchSeparator(const uint8_t b) { return b == ' ' || b == '-'; }
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset) {
@@ -432,6 +438,21 @@ bool Section::isValidSearchQuery(const std::string_view query) {
   return std::any_of(query.begin(), query.end(), [](const unsigned char value) { return std::isspace(value) == 0; });
 }
 
+size_t Section::normalizeSearchQuery(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& out) {
+  size_t len = 0;
+  for (const char c : query) {
+    const uint8_t b = static_cast<uint8_t>(c);
+    if (isSearchSeparator(b)) {
+      continue;
+    }
+    if (len >= out.size()) {
+      break;  // defensive; callers reject query.size() > MAX_SEARCH_QUERY_BYTES
+    }
+    out[len++] = epub::asciiToLower(b);
+  }
+  return len;
+}
+
 bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
   // Always leave the table in a defined (zeroed) state, even on rejection, so a
   // caller that ignores the return value never reads stale prefix bytes.
@@ -440,12 +461,20 @@ bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t
     return false;
   }
 
-  for (size_t i = 1, matched = 0; i < query.size(); ++i) {
-    const uint8_t value = epub::asciiToLower(static_cast<uint8_t>(query[i]));
-    while (matched > 0 && value != epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
+  // Build the table over the normalized pattern (lowercased, spaces/hyphens
+  // dropped) so it matches what pageContainsText() compares against.
+  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> pattern;
+  const size_t patternLen = normalizeSearchQuery(query, pattern);
+  if (patternLen == 0) {
+    return false;
+  }
+
+  for (size_t i = 1, matched = 0; i < patternLen; ++i) {
+    const uint8_t value = pattern[i];
+    while (matched > 0 && value != pattern[matched]) {
       matched = prefix[matched - 1];
     }
-    if (value == epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
+    if (value == pattern[matched]) {
       ++matched;
     }
     prefix[i] = static_cast<uint8_t>(matched);
@@ -492,12 +521,14 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     return std::nullopt;
   }
 
-  // Fold the query to lowercase once here rather than per compared text byte;
-  // it is consistent with the prefix table, which buildSearchPrefix folded the
-  // same way. Only [0, query.size()) is filled and read.
-  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> foldedQuery;
-  for (size_t i = 0; i < query.size(); ++i) {
-    foldedQuery[i] = epub::asciiToLower(static_cast<uint8_t>(query[i]));
+  // Normalize the query once (lowercase, spaces/hyphens dropped), matching how
+  // buildSearchPrefix() built the prefix table. The scan below skips the same
+  // separators in the record, so layout hyphenation and spacing differences
+  // between the query and the rendered text do not block a match.
+  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> pattern;
+  const size_t patternLen = normalizeSearchQuery(query, pattern);
+  if (patternLen == 0) {
+    return std::nullopt;
   }
 
   // KMP keeps overlap handling correct while streaming through a 64-byte SD
@@ -516,13 +547,16 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     remaining -= chunkSize;
 
     for (size_t i = 0; i < chunkSize; ++i) {
+      if (isSearchSeparator(buffer[i])) {
+        continue;  // spaces/hyphens are insignificant on both sides
+      }
       const uint8_t value = epub::asciiToLower(buffer[i]);
-      while (matched > 0 && value != foldedQuery[matched]) {
+      while (matched > 0 && value != pattern[matched]) {
         matched = prefix[matched - 1];
       }
-      if (value == foldedQuery[matched]) {
+      if (value == pattern[matched]) {
         ++matched;
-        if (matched == query.size()) {
+        if (matched == patternLen) {
           return true;
         }
       }
