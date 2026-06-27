@@ -82,6 +82,7 @@ void EpubReaderSearchActivity::advanceSpine() {
   ++currentSpineIndex;
   currentPage = 0;
   sectionLoaded = false;
+  scanMatched = 0;  // spine boundary: don't carry a partial match across chapters
 }
 
 bool EpubReaderSearchActivity::loadCurrentSection() {
@@ -124,6 +125,7 @@ bool EpubReaderSearchActivity::preparePage() {
       currentSpineIndex = 0;
       currentPage = 0;
       sectionLoaded = false;
+      scanMatched = 0;  // wrap is not contiguous reading text
     }
 
     if (reachedWrappedStop()) {
@@ -164,7 +166,7 @@ void EpubReaderSearchActivity::scanNextPage() {
     return;
   }
 
-  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), compiledQuery);
+  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), compiledQuery, scanMatched);
   if (!match.has_value()) {
     setFailure(SearchState::Error);
     return;

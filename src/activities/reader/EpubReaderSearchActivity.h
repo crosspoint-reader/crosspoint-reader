@@ -55,6 +55,11 @@ class EpubReaderSearchActivity final : public Activity {
   SearchState state = SearchState::Searching;
   bool sectionLoaded = false;
   bool wrapped = false;
+  // KMP partial-match length carried across consecutive pages of the same spine
+  // so a query split across a page boundary (line-hyphenated word, or a phrase)
+  // still matches. Reset at every reading-order discontinuity: scan start (0
+  // init), spine change (advanceSpine), and the wrap.
+  size_t scanMatched = 0;
   // Last progress percentage painted to the panel. Repaints are gated on this
   // changing so the e-ink panel is not refreshed per page. Starts at 0 because
   // onEnter() paints the initial 0% screen before the scan begins.

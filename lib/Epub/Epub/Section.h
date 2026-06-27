@@ -106,8 +106,13 @@ class Section {
 
   // Streams the compact text record for one page through a fixed-size buffer,
   // matching the compiled query while skipping spaces and hyphens in the record.
-  // nullopt indicates an invalid/corrupt cache record; false is a valid miss.
-  std::optional<bool> pageContainsText(uint16_t page, const CompiledSearchQuery& query);
+  // `matched` is the KMP partial-match length carried in and out: pass the value
+  // left by the previous adjacent page so a query split across a page boundary
+  // (e.g. a line-hyphenated word, "inter-" then "national") still matches; the
+  // caller must reset it to 0 at any reading-order discontinuity (scan start,
+  // spine change, wrap). An empty record resets it. nullopt indicates an
+  // invalid/corrupt cache record; false is a valid miss.
+  std::optional<bool> pageContainsText(uint16_t page, const CompiledSearchQuery& query, size_t& matched);
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;

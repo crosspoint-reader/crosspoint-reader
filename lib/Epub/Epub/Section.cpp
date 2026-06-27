@@ -491,7 +491,7 @@ bool Section::compileSearchQuery(const std::string_view query, CompiledSearchQue
   return true;
 }
 
-std::optional<bool> Section::pageContainsText(const uint16_t page, const CompiledSearchQuery& query) {
+std::optional<bool> Section::pageContainsText(const uint16_t page, const CompiledSearchQuery& query, size_t& matched) {
   if (query.length == 0 || page >= pageCount) {
     LOG_ERR("SCT", "Invalid page search request (page=%u count=%u patternLen=%u)", page, pageCount,
             static_cast<unsigned>(query.length));
@@ -529,14 +529,22 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const Compile
     return std::nullopt;
   }
 
+  // A page with no searchable text (e.g. image-only) is a content discontinuity,
+  // so drop any carried partial match rather than bridging across it.
+  if (remaining == 0) {
+    matched = 0;
+    return false;
+  }
+
   // KMP keeps overlap handling correct while streaming through a 64-byte SD
   // read buffer. The query's normalized pattern and failure table were compiled
   // once (compileSearchQuery); the scan skips spaces and hyphens in the record
-  // so layout hyphenation and spacing differences do not block a match.
+  // so layout hyphenation and spacing differences do not block a match. `matched`
+  // is carried in from the previous adjacent page so a query split across a page
+  // boundary still matches.
   // Left uninitialized: file.read() fills chunkSize bytes and only [0,chunkSize)
   // is ever read, so the per-page zero-fill would be dead work.
   std::array<uint8_t, 64> buffer;
-  size_t matched = 0;
   while (remaining > 0) {
     const size_t chunkSize = std::min<size_t>(buffer.size(), remaining);
     if (file.read(buffer.data(), chunkSize) != chunkSize) {

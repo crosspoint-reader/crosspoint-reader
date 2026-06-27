@@ -131,7 +131,7 @@ The steady page-scan path has fixed memory use:
 | Saved query | Inline reader/activity arrays | 65 bytes each | Reader/search activity |
 | Compiled query (normalized pattern + KMP table) | Inline search activity arrays | 136 bytes | Search activity (built once) |
 | SD read buffer | Stack | 64 bytes | One page scan |
-| Search activity object | Heap, nothrow | 436 bytes in the target build | Search activity |
+| Search activity object | Heap, nothrow | 440 bytes in the target build | Search activity |
 | Page LUT reservation | Heap | 1,536 bytes | Uncached section layout only |
 
 The display's 52,272-byte framebuffer is not a search allocation. The shared
@@ -152,8 +152,8 @@ repeated allocate-copy-free growth. Chapters larger than that remain supported
 and may grow the vector.
 
 At implementation time, the measured `default` build had unchanged static RAM
-usage at 101,220 bytes. Flash usage increased by 7,520 bytes, from 5,225,869 to
-5,233,389 bytes, for the search behavior, cache handling, UI, and translated
+usage at 101,220 bytes. Flash usage increased by 7,552 bytes, from 5,225,869 to
+5,233,421 bytes, for the search behavior, cache handling, UI, and translated
 fallback strings. These are build snapshots rather than permanent budgets;
 remeasure them when the implementation or toolchain changes.
 
@@ -184,6 +184,16 @@ an unrelated word boundary. This is a deliberate extension of the matcher's
 existing substring behavior (a query already matches inside a longer word) and
 favors finding a half-remembered passage — e.g. a location last read on another
 device or in print — over exact-span precision.
+
+The matcher's KMP partial-match length is carried across consecutive pages of
+the same spine, so a query split across a *page* boundary still matches — for
+example a word the layout hyphenated at the foot of one page (`"…inter-"`) and
+continued at the top of the next (`"national…"`), or any phrase that straddles
+the break. The carried state is reset at every reading-order discontinuity (the
+scan's first page, a spine/chapter change, the single wrap, and any image-only
+page with an empty text record), so it never bridges non-contiguous text. A
+cross-page match is reported on the page where it *completes* (the second page),
+which is where the reader opens.
 
 The return type is `std::optional<bool>`:
 
@@ -283,10 +293,12 @@ searching.
   exactly.
 - Search text is reconstructed from rendered word tokens with single spaces, so
   it can differ from the EPUB source in spacing and in words split by layout-time
-  hyphenation. Matching ignores ASCII spaces and hyphens to absorb both of these
-  (see Matching algorithm), but other punctuation-glyph differences (curly vs
-  straight quotes, em dash, the ellipsis character vs three dots) are not
-  normalized and can still cause a miss.
+  hyphenation. Matching ignores ASCII spaces and hyphens and carries match state
+  across adjacent same-spine pages to absorb these — including hyphenation and
+  phrases split across a page boundary (see Matching algorithm). Other
+  punctuation-glyph differences (curly vs straight quotes, em dash, the ellipsis
+  character vs three dots) are not normalized and can still cause a miss, and a
+  match split across a chapter (spine) boundary is not joined.
 - Search results depend on the current layout settings. Font, viewport,
   orientation, margins, paragraph settings, hyphenation, embedded CSS, image
   mode, or Focus Reading changes can invalidate and rebuild section caches.
@@ -326,6 +338,9 @@ Device testing should cover the core matrix on both X3 and X4:
 11. Move an SD card with an existing section cache between X3 and X4 and verify
     that the first section load rebuilds the viewport-mismatched cache and later
     searches reuse it.
+12. A word hyphenated across a page break (and a phrase straddling a page break)
+    matches and opens the page where it completes; confirm a match is not joined
+    across a chapter (spine) boundary or across an image-only page.
 
 Use `python3 scripts/debugging_monitor.py` and watch `EPS`/`SCT` logs for cache
 builds, I/O errors, or OOM reports. For heap validation, instrument device runs
@@ -351,14 +366,15 @@ heap alone is insufficient to detect fragmentation.
   the likely dominant cost, more directly than any change to the matching
   algorithm.
 - Store a source-faithful (de-hyphenated) search text. Matching already ignores
-  ASCII spaces and hyphens (see Matching algorithm), which absorbs layout-time
-  hyphenation and spacing differences for the common case at no extra storage
-  cost. The remaining gap is *exact-spacing* search: because spaces and hyphens
-  are insignificant, the matcher cannot distinguish `"the cat"` from `"thecat"`,
-  and a query can occasionally match across an unrelated word boundary. Closing
-  that would require the record to store the actual source token stream with
-  correct join/no-join boundaries instead of the rendered tokens. The cost is
-  the reason this is deferred:
+  ASCII spaces and hyphens and carries state across adjacent same-spine pages
+  (see Matching algorithm), which absorbs layout-time hyphenation and spacing
+  differences — including across page boundaries — at no extra storage cost. The
+  remaining gap is *exact-spacing* search: because spaces and hyphens are
+  insignificant, the matcher cannot distinguish `"the cat"` from `"thecat"`, and
+  a query can occasionally match across an unrelated word boundary. Closing that
+  would require the record to store the actual source token stream with correct
+  join/no-join boundaries instead of the rendered tokens. The cost is the reason
+  this is deferred:
   - The metadata needed (`ParsedText::wordContinues` / `wordNoSpaceBefore`, and
     where `hyphenateWordAtIndex()` split a word) exists during layout but is
     discarded at the `TextBlock` boundary — `Page::serializeSearchText()` only
