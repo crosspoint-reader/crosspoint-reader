@@ -49,6 +49,11 @@ class EpubReaderSearchActivity final : public Activity {
   // gated on this changing so the e-ink panel is not refreshed per page. Starts
   // at 0 because onEnter() paints the initial 0% screen before the scan begins.
   int lastProgressPercent = 0;
+  // Fraction (0-1) of the start spine that precedes startPage, captured from the
+  // start spine's own page count the first time it loads. Progress subtracts
+  // this so a scan beginning mid-spine measures work done since it started, not
+  // absolute book position. Negative until captured.
+  float startPageFraction = -1.0f;
 
   bool preparePage();
   bool loadCurrentSection();

@@ -137,6 +137,13 @@ bool EpubReaderSearchActivity::preparePage() {
       return false;
     }
 
+    // Capture the start spine's leading fraction once, using that spine's own
+    // page count, so progress can measure work done since the scan began.
+    if (startPageFraction < 0.0f && !wrapped && currentSpineIndex == startSpineIndex) {
+      startPageFraction =
+          section.pageCount > 0 ? std::min(1.0f, static_cast<float>(startPage) / section.pageCount) : 0.0f;
+    }
+
     if (currentPage >= 0 && currentPage < section.pageCount) {
       return true;
     }
@@ -176,12 +183,17 @@ int EpubReaderSearchActivity::searchProgressPercent() const {
   // Interpolate within the current spine so progress advances per page rather
   // than only at chapter boundaries — for a single/few-spine book the
   // percentage would otherwise sit frozen for the whole scan of a long spine.
-  float pageFraction = 0.0f;
+  float currentFraction = 0.0f;
   if (section.pageCount > 0) {
-    pageFraction = static_cast<float>(std::min<int>(currentPage, section.pageCount)) / section.pageCount;
+    currentFraction = static_cast<float>(std::min<int>(currentPage, section.pageCount)) / section.pageCount;
   }
-  const float linearPos = static_cast<float>(std::max(0, spinePosition)) + pageFraction;
-  return ReaderUtils::clampPercent(static_cast<int>((linearPos * 100.0f) / spineCount));
+  // Measure work done since the scan began, not absolute book position:
+  // subtract the start spine's leading fraction so a scan starting mid-spine
+  // begins at 0% and rises smoothly to 100% across the wrap, instead of
+  // starting high and saturating at 100% while the wrapped pages still scan.
+  const float startOffset = startPageFraction >= 0.0f ? startPageFraction : 0.0f;
+  const float workDone = static_cast<float>(std::max(0, spinePosition)) + currentFraction - startOffset;
+  return ReaderUtils::clampPercent(static_cast<int>((workDone * 100.0f) / spineCount));
 }
 
 void EpubReaderSearchActivity::loop() {
