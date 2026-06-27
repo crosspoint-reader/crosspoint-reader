@@ -441,8 +441,12 @@ bool Section::isValidSearchQuery(const std::string_view query) {
   if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES) {
     return false;
   }
-  // Reject all-whitespace queries: at least one non-whitespace byte is required.
-  return std::any_of(query.begin(), query.end(), [](const unsigned char value) { return std::isspace(value) == 0; });
+  // Require at least one byte that survives normalization. The matcher ignores
+  // ASCII spaces and hyphens (see normalizeSearchQuery), so a query of only
+  // whitespace and/or hyphens normalizes to nothing and can never match; the UI
+  // gate must agree with the matcher on what is searchable.
+  return std::any_of(query.begin(), query.end(),
+                     [](const unsigned char value) { return std::isspace(value) == 0 && !isSearchSeparator(value); });
 }
 
 size_t Section::normalizeSearchQuery(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& out) {
