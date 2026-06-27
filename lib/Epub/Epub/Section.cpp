@@ -33,6 +33,10 @@ static_assert(sizeof(PageLutEntry) == 12, "Unexpected PageLutEntry padding chang
 // On-disk page LUT stride: only pageOffset and searchTextOffset are stored
 // inline; paragraphIndex and listItemIndex are written to separate LUTs.
 constexpr size_t PAGE_LUT_ENTRY_SIZE = sizeof(uint32_t) * 2;
+// Bind the stride to the two inline offset fields so adding or resizing an
+// inline LUT field can't silently desync it from the write/read sites.
+static_assert(PAGE_LUT_ENTRY_SIZE == sizeof(PageLutEntry::fileOffset) + sizeof(PageLutEntry::searchTextOffset),
+              "On-disk page-LUT stride must match the inline offset fields");
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset) {
