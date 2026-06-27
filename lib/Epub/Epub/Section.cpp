@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 
+#include "AsciiCase.h"
 #include "Epub/css/CssParser.h"
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
@@ -31,10 +32,6 @@ static_assert(sizeof(PageLutEntry) == 12, "Unexpected PageLutEntry padding chang
 // On-disk page LUT stride: only pageOffset and searchTextOffset are stored
 // inline; paragraphIndex and listItemIndex are written to separate LUTs.
 constexpr size_t PAGE_LUT_ENTRY_SIZE = sizeof(uint32_t) * 2;
-
-constexpr uint8_t asciiLower(const uint8_t value) {
-  return value >= 'A' && value <= 'Z' ? static_cast<uint8_t>(value + ('a' - 'A')) : value;
-}
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset) {
@@ -408,11 +405,11 @@ bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t
   }
 
   for (size_t i = 1, matched = 0; i < query.size(); ++i) {
-    const uint8_t value = asciiLower(static_cast<uint8_t>(query[i]));
-    while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {
+    const uint8_t value = epub::asciiToLower(static_cast<uint8_t>(query[i]));
+    while (matched > 0 && value != epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
       matched = prefix[matched - 1];
     }
-    if (value == asciiLower(static_cast<uint8_t>(query[matched]))) {
+    if (value == epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
       ++matched;
     }
     prefix[i] = static_cast<uint8_t>(matched);
@@ -473,11 +470,11 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     remaining -= chunkSize;
 
     for (size_t i = 0; i < chunkSize; ++i) {
-      const uint8_t value = asciiLower(buffer[i]);
-      while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {
+      const uint8_t value = epub::asciiToLower(buffer[i]);
+      while (matched > 0 && value != epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
         matched = prefix[matched - 1];
       }
-      if (value == asciiLower(static_cast<uint8_t>(query[matched]))) {
+      if (value == epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
         ++matched;
         if (matched == query.size()) {
           return true;

@@ -10,6 +10,8 @@
 #include <cstring>
 #include <string_view>
 
+#include "../AsciiCase.h"
+
 namespace {
 
 // Stack-allocated string buffer to avoid heap reallocations during parsing
@@ -58,7 +60,9 @@ constexpr std::string_view trimCssWhitespace(std::string_view s) {
   return s;
 }
 
-constexpr char asciiToLower(const char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
+// Thin char wrapper over the shared byte-wise fold so the logic lives in one
+// place; CSS selectors are ASCII so the char<->uint8_t round-trip is exact.
+constexpr char asciiToLower(const char c) { return static_cast<char>(epub::asciiToLower(static_cast<uint8_t>(c))); }
 
 // Case-insensitive equality on ASCII. lowercaseKeyword MUST already be
 // lowercase; CSS keywords are ASCII by spec so byte-wise tolower is safe.
