@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -151,6 +152,19 @@ void EpubReaderSearchActivity::scanNextPage() {
   ++currentPage;
 }
 
+int EpubReaderSearchActivity::searchProgressPercent() const {
+  const int spineCount = epub ? epub->getSpineItemsCount() : 0;
+  if (spineCount <= 0) {
+    return 0;
+  }
+  // Linear position across the whole-book scan: forward to the last spine,
+  // then through the wrapped spines back toward the start position.
+  const int position =
+      wrapped ? (spineCount - startSpineIndex) + currentSpineIndex : currentSpineIndex - startSpineIndex;
+  const int percent = static_cast<int>((static_cast<long>(std::max(0, position)) * 100) / spineCount);
+  return std::min(100, percent);
+}
+
 void EpubReaderSearchActivity::loop() {
   switch (state) {
     case SearchState::Searching:
@@ -159,6 +173,15 @@ void EpubReaderSearchActivity::loop() {
         return;
       }
       scanNextPage();
+      // Repaint only when the spine-derived percentage changes, so a fast warm
+      // scan does not refresh the e-ink panel on every page.
+      if (state == SearchState::Searching) {
+        const int percent = searchProgressPercent();
+        if (percent != lastProgressPercent) {
+          lastProgressPercent = percent;
+          requestUpdate();
+        }
+      }
       return;
 
     case SearchState::NotFound:
@@ -199,6 +222,13 @@ void EpubReaderSearchActivity::render(RenderLock&&) {
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight;
   const int messageY = contentTop + (screen.height - contentTop) / 2;
   UITheme::drawCenteredText(renderer, screen, UI_12_FONT_ID, messageY, message, true, EpdFontFamily::BOLD);
+
+  if (state == SearchState::Searching) {
+    char percentText[8];
+    snprintf(percentText, sizeof(percentText), "%d%%", searchProgressPercent());
+    UITheme::drawCenteredText(renderer, screen, UI_12_FONT_ID, messageY + renderer.getLineHeight(UI_12_FONT_ID),
+                              percentText, true);
+  }
 
   const char* backLabel = state == SearchState::Searching ? tr(STR_CANCEL) : tr(STR_BACK);
   const auto labels = mappedInput.mapLabels(backLabel, "", "", "");
