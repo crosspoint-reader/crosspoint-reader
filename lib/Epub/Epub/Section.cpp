@@ -367,8 +367,12 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
   file.seek(lutOffset + PAGE_LUT_ENTRY_SIZE * currentPage);
-  uint32_t pagePos;
-  serialization::readPod(file, pagePos);
+  uint32_t pagePos = 0;
+  if (file.read(reinterpret_cast<uint8_t*>(&pagePos), sizeof(pagePos)) != sizeof(pagePos)) {
+    LOG_ERR("SCT", "Failed to read page offset");
+    file.close();
+    return nullptr;
+  }
   file.seek(pagePos);
 
   auto page = Page::deserialize(file);
