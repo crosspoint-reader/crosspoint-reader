@@ -486,7 +486,9 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
   // KMP keeps overlap handling correct while streaming through a 64-byte SD
   // read buffer. The prefix table is built once per search by the caller
   // (buildSearchPrefix) and reused across every page rather than rebuilt here.
-  std::array<uint8_t, 64> buffer{};
+  // Left uninitialized: file.read() fills chunkSize bytes and only [0,chunkSize)
+  // is ever read, so the per-page zero-fill would be dead work.
+  std::array<uint8_t, 64> buffer;
   size_t matched = 0;
   while (remaining > 0) {
     const size_t chunkSize = std::min<size_t>(buffer.size(), remaining);

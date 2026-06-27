@@ -723,14 +723,13 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   // Wrap-stop boundary: the page the search is initiated from. A wrapped scan
   // stops before re-examining it so search never re-returns the current page.
   const int searchStopPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
-  int searchStartPage = searchStopPage;
   const bool sameQuery = strcmp(lastSearchQuery.data(), query.c_str()) == 0;
-  if (sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage) {
-    // "Find next": begin one page past the previous match (preparePage() handles
-    // a start beyond the section's page count), but keep the stop boundary at the
-    // previous match so a wrap cannot re-admit it.
-    ++searchStartPage;
-  }
+  // "Find next": repeating the same query while still on the previous match
+  // begins one page past it (preparePage() handles a start beyond the section's
+  // page count) while keeping the stop boundary at the match, so a wrap cannot
+  // re-admit it.
+  const bool isFindNext = sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage;
+  const int searchStartPage = searchStopPage + (isFindNext ? 1 : 0);
 
   const ReaderViewport viewport = calculateReaderViewport(renderer, automaticPageTurnActive);
 
