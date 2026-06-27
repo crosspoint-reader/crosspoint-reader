@@ -352,30 +352,76 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
   return 1;
 }
 
+bool readBigEndianU16(HalFile& file, uint16_t& out) {
+  uint8_t bytes[2];
+  if (file.read(bytes, 2) != 2) return false;
+  out = static_cast<uint16_t>((static_cast<uint16_t>(bytes[0]) << 8) | bytes[1]);
+  return true;
+}
+
+bool tryReadJpegDimensionsFromHeader(const std::string& imagePath, ImageDimensions& out) {
+  HalFile file;
+  if (!Storage.openFileForRead("JPG", imagePath, file)) {
+    LOG_ERR("JPG", "Failed to open JPEG for dimensions: %s", imagePath.c_str());
+    return false;
+  }
+  const ScopedCleanup cleanup{[&file]() { file.close(); }};
+
+  uint8_t soi[2];
+  if (file.read(soi, 2) != 2 || soi[0] != 0xFF || soi[1] != 0xD8) {
+    LOG_ERR("JPG", "Invalid JPEG header: %s", imagePath.c_str());
+    return false;
+  }
+
+  while (file.available() > 0) {
+    uint8_t byte = 0;
+    while (file.read(&byte, 1) == 1 && byte != 0xFF) {
+    }
+    if (byte != 0xFF) break;
+
+    while (file.read(&byte, 1) == 1 && byte == 0xFF) {
+    }
+    if (byte == 0xFF) break;
+
+    if (byte == 0x00) continue;
+    if (byte == 0xD9 || byte == 0xDA) break;
+    if (byte == 0x01 || (byte >= 0xD0 && byte <= 0xD7)) continue;
+
+    uint16_t segmentLength = 0;
+    if (!readBigEndianU16(file, segmentLength) || segmentLength < 2) {
+      LOG_ERR("JPG", "Corrupt JPEG segment length in %s", imagePath.c_str());
+      break;
+    }
+
+    if ((byte & 0xF0) == 0xC0 && byte != 0xC4 && byte != 0xC8 && byte != 0xCC) {
+      uint8_t precision = 0;
+      uint16_t height = 0;
+      uint16_t width = 0;
+      if (segmentLength < 7 || file.read(&precision, 1) != 1 || !readBigEndianU16(file, height) ||
+          !readBigEndianU16(file, width)) {
+        break;
+      }
+      out.width = static_cast<int16_t>(width);
+      out.height = static_cast<int16_t>(height);
+      return true;
+    }
+
+    if (!file.seek(file.position() + segmentLength - 2)) break;
+  }
+
+  LOG_ERR("JPG", "JPEG dimensions not found in header: %s", imagePath.c_str());
+  return false;
+}
+
 }  // namespace
 
 bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
-  size_t freeHeap = ESP.getFreeHeap();
-  if (freeHeap < MIN_FREE_HEAP_FOR_JPEG) {
-    LOG_ERR("JPG", "Not enough heap for JPEG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_JPEG);
+  if (!tryReadJpegDimensionsFromHeader(imagePath, out)) {
     return false;
   }
-
-  std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
-  if (!jpeg) {
-    LOG_ERR("JPG", "Failed to allocate JPEG decoder for dimensions");
+  if (!validateImageDimensions(out.width, out.height, "JPEG")) {
     return false;
   }
-
-  int rc = jpeg->open(imagePath.c_str(), jpegOpen, jpegClose, jpegRead, jpegSeek, nullptr);
-  const ScopedCleanup cleanup{[&jpeg]() { jpeg->close(); }};
-  if (rc != 1) {
-    LOG_ERR("JPG", "Failed to open JPEG for dimensions (err=%d): %s", jpeg->getLastError(), imagePath.c_str());
-    return false;
-  }
-
-  out.width = jpeg->getWidth();
-  out.height = jpeg->getHeight();
   LOG_DBG("JPG", "Image dimensions: %dx%d", out.width, out.height);
 
   return true;
