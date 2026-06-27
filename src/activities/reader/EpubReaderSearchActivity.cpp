@@ -39,10 +39,10 @@ EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, Mapped
     memcpy(this->query.data(), query, length);
     this->query[length] = '\0';
   }
-  // Build the KMP failure function once here; every page scan reuses it. A
-  // rejected query (empty or oversized) means there is nothing to scan, so fail
-  // closed rather than relying solely on the caller having pre-validated it.
-  if (!Section::buildSearchPrefix(this->query.data(), queryPrefix)) {
+  // Compile the query once here; every page scan reuses the pattern + table. A
+  // rejected query (empty/oversized, or only separators) means there is nothing
+  // to scan, so fail closed rather than relying solely on the caller's gate.
+  if (!Section::compileSearchQuery(this->query.data(), compiledQuery)) {
     state = SearchState::NotFound;
   }
 }
@@ -156,7 +156,7 @@ void EpubReaderSearchActivity::scanNextPage() {
     return;
   }
 
-  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), query.data(), queryPrefix);
+  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), compiledQuery);
   if (!match.has_value()) {
     setFailure(SearchState::Error);
     return;

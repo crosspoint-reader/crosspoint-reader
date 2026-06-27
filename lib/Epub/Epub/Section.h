@@ -83,25 +83,31 @@ class Section {
   // before launching a search.
   static bool isValidSearchQuery(std::string_view query);
 
+  // A query compiled once for a whole-book search: the normalized pattern
+  // (lowercase, spaces and hyphens dropped), its length, and the KMP failure
+  // table over it. Built by compileSearchQuery(), consumed by pageContainsText().
+  struct CompiledSearchQuery {
+    std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> pattern{};
+    std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> prefix{};
+    size_t length = 0;
+  };
+
   // Normalize a query for matching: fold ASCII A-Z to lowercase and drop ASCII
   // spaces and hyphens (so layout-time hyphenation and spacing differences do
   // not block a match). Writes the normalized bytes into `out` and returns the
-  // normalized length. Both buildSearchPrefix() and pageContainsText() use this
-  // so the pattern and the prefix table stay consistent.
+  // normalized length.
   static size_t normalizeSearchQuery(std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& out);
 
-  // Precompute the KMP failure function for the normalized query once so a
-  // book-wide search reuses it for every page instead of rebuilding it on each
-  // pageContainsText() call. Returns false for an empty/oversized query or one
-  // that normalizes to nothing (e.g. only spaces or hyphens).
-  static bool buildSearchPrefix(std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix);
+  // Compile a query once for a book-wide search: normalize it and build the KMP
+  // failure table over the result, so every page scan reuses one consistent
+  // pattern + table. Returns false for an empty/oversized query or one that
+  // normalizes to nothing (e.g. only spaces or hyphens).
+  static bool compileSearchQuery(std::string_view query, CompiledSearchQuery& out);
 
   // Streams the compact text record for one page through a fixed-size buffer,
-  // matching the normalized query while skipping spaces and hyphens in the
-  // record. `prefix` must be the table buildSearchPrefix() produced for `query`.
+  // matching the compiled query while skipping spaces and hyphens in the record.
   // nullopt indicates an invalid/corrupt cache record; false is a valid miss.
-  std::optional<bool> pageContainsText(uint16_t page, std::string_view query,
-                                       const std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix);
+  std::optional<bool> pageContainsText(uint16_t page, const CompiledSearchQuery& query);
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;

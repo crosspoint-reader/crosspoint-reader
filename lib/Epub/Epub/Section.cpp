@@ -464,40 +464,38 @@ size_t Section::normalizeSearchQuery(const std::string_view query, std::array<ui
   return len;
 }
 
-bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
-  // Always leave the table in a defined (zeroed) state, even on rejection, so a
-  // caller that ignores the return value never reads stale prefix bytes.
-  prefix.fill(0);
+bool Section::compileSearchQuery(const std::string_view query, CompiledSearchQuery& out) {
+  // Leave the result in a defined (zeroed, length 0) state even on rejection, so
+  // a caller that ignores the return value never matches against stale bytes.
+  out = CompiledSearchQuery{};
   if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES) {
     return false;
   }
 
-  // Build the table over the normalized pattern (lowercased, spaces/hyphens
-  // dropped) so it matches what pageContainsText() compares against.
-  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> pattern;
-  const size_t patternLen = normalizeSearchQuery(query, pattern);
-  if (patternLen == 0) {
+  // Normalize once (lowercase, spaces/hyphens dropped); the KMP table is built
+  // over that same pattern, so pattern and prefix can never disagree.
+  out.length = normalizeSearchQuery(query, out.pattern);
+  if (out.length == 0) {
     return false;
   }
 
-  for (size_t i = 1, matched = 0; i < patternLen; ++i) {
-    const uint8_t value = pattern[i];
-    while (matched > 0 && value != pattern[matched]) {
-      matched = prefix[matched - 1];
+  for (size_t i = 1, matched = 0; i < out.length; ++i) {
+    const uint8_t value = out.pattern[i];
+    while (matched > 0 && value != out.pattern[matched]) {
+      matched = out.prefix[matched - 1];
     }
-    if (value == pattern[matched]) {
+    if (value == out.pattern[matched]) {
       ++matched;
     }
-    prefix[i] = static_cast<uint8_t>(matched);
+    out.prefix[i] = static_cast<uint8_t>(matched);
   }
   return true;
 }
 
-std::optional<bool> Section::pageContainsText(const uint16_t page, const std::string_view query,
-                                              const std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
-  if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES || page >= pageCount) {
-    LOG_ERR("SCT", "Invalid page search request (page=%u count=%u queryBytes=%u)", page, pageCount,
-            static_cast<unsigned>(query.size()));
+std::optional<bool> Section::pageContainsText(const uint16_t page, const CompiledSearchQuery& query) {
+  if (query.length == 0 || page >= pageCount) {
+    LOG_ERR("SCT", "Invalid page search request (page=%u count=%u patternLen=%u)", page, pageCount,
+            static_cast<unsigned>(query.length));
     return std::nullopt;
   }
 
@@ -532,19 +530,10 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     return std::nullopt;
   }
 
-  // Normalize the query once (lowercase, spaces/hyphens dropped), matching how
-  // buildSearchPrefix() built the prefix table. The scan below skips the same
-  // separators in the record, so layout hyphenation and spacing differences
-  // between the query and the rendered text do not block a match.
-  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> pattern;
-  const size_t patternLen = normalizeSearchQuery(query, pattern);
-  if (patternLen == 0) {
-    return std::nullopt;
-  }
-
   // KMP keeps overlap handling correct while streaming through a 64-byte SD
-  // read buffer. The prefix table is built once per search by the caller
-  // (buildSearchPrefix) and reused across every page rather than rebuilt here.
+  // read buffer. The query's normalized pattern and failure table were compiled
+  // once (compileSearchQuery); the scan skips spaces and hyphens in the record
+  // so layout hyphenation and spacing differences do not block a match.
   // Left uninitialized: file.read() fills chunkSize bytes and only [0,chunkSize)
   // is ever read, so the per-page zero-fill would be dead work.
   std::array<uint8_t, 64> buffer;
@@ -562,12 +551,12 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
         continue;  // spaces/hyphens are insignificant on both sides
       }
       const uint8_t value = epub::asciiToLower(buffer[i]);
-      while (matched > 0 && value != pattern[matched]) {
-        matched = prefix[matched - 1];
+      while (matched > 0 && value != query.pattern[matched]) {
+        matched = query.prefix[matched - 1];
       }
-      if (value == pattern[matched]) {
+      if (value == query.pattern[matched]) {
         ++matched;
-        if (matched == patternLen) {
+        if (matched == query.length) {
           return true;
         }
       }
