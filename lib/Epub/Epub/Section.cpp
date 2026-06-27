@@ -513,7 +513,10 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const Compile
     return std::nullopt;
   }
 
-  file.seek(static_cast<size_t>(entryOffset) + sizeof(uint32_t));
+  if (!file.seek(static_cast<size_t>(entryOffset) + sizeof(uint32_t))) {
+    LOG_ERR("SCT", "Search failed: could not seek to page LUT entry");
+    return std::nullopt;
+  }
   uint32_t searchTextOffset = 0;
   if (file.read(reinterpret_cast<uint8_t*>(&searchTextOffset), sizeof(searchTextOffset)) != sizeof(searchTextOffset) ||
       searchTextOffset > fileSize || fileSize - searchTextOffset < sizeof(uint32_t)) {
@@ -521,7 +524,10 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const Compile
     return std::nullopt;
   }
 
-  file.seek(searchTextOffset);
+  if (!file.seek(searchTextOffset)) {
+    LOG_ERR("SCT", "Search failed: could not seek to text record");
+    return std::nullopt;
+  }
   uint32_t remaining = 0;
   if (file.read(reinterpret_cast<uint8_t*>(&remaining), sizeof(remaining)) != sizeof(remaining) ||
       remaining > fileSize - searchTextOffset - sizeof(uint32_t)) {
