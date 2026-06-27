@@ -15,6 +15,9 @@ constexpr unsigned long BOOKMARK_HOLD_MS = 400;
 // Duration any transient reader popup (bookmark added/removed, search match) stays on screen.
 constexpr unsigned long READER_MESSAGE_DURATION_MS = 2500;
 
+// Clamp a progress value to the inclusive 0-100 percent range.
+constexpr int clampPercent(int percent) { return percent < 0 ? 0 : (percent > 100 ? 100 : percent); }
+
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {
     case CrossPointSettings::ORIENTATION::PORTRAIT:

@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -179,8 +180,7 @@ int EpubReaderSearchActivity::searchProgressPercent() const {
     pageFraction = static_cast<float>(std::min<int>(currentPage, section.pageCount)) / section.pageCount;
   }
   const float linearPos = static_cast<float>(std::max(0, spinePosition)) + pageFraction;
-  const int percent = static_cast<int>((linearPos * 100.0f) / spineCount);
-  return std::min(100, percent);
+  return ReaderUtils::clampPercent(static_cast<int>((linearPos * 100.0f) / spineCount));
 }
 
 void EpubReaderSearchActivity::loop() {
