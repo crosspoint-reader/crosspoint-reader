@@ -433,13 +433,15 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
   const uint32_t fileSize = searchFileSize;
   const uint32_t lutOffset = searchLutOffset;
 
-  const uint32_t entryOffset = lutOffset + PAGE_LUT_ENTRY_SIZE * page;
+  // Compute in 64-bit so a corrupt (huge) lutOffset cannot wrap the uint32 sum
+  // into a small in-bounds value that slips past the fileSize bounds check.
+  const uint64_t entryOffset = static_cast<uint64_t>(lutOffset) + static_cast<uint64_t>(PAGE_LUT_ENTRY_SIZE) * page;
   if (lutOffset == 0 || entryOffset > fileSize || fileSize - entryOffset < PAGE_LUT_ENTRY_SIZE) {
     LOG_ERR("SCT", "Search failed: invalid page LUT entry");
     return std::nullopt;
   }
 
-  file.seek(entryOffset + sizeof(uint32_t));
+  file.seek(static_cast<size_t>(entryOffset) + sizeof(uint32_t));
   uint32_t searchTextOffset = 0;
   if (file.read(reinterpret_cast<uint8_t*>(&searchTextOffset), sizeof(searchTextOffset)) != sizeof(searchTextOffset) ||
       searchTextOffset > fileSize || fileSize - searchTextOffset < sizeof(uint32_t)) {
