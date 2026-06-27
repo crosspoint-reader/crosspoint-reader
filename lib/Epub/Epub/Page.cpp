@@ -4,7 +4,6 @@
 #include <Logging.h>
 #include <Serialization.h>
 
-#include <limits>
 #include <new>
 
 namespace {
@@ -145,37 +144,19 @@ bool Page::serialize(HalFile& file) const {
 }
 
 bool Page::serializeSearchText(HalFile& file) const {
+  // Single pass: write a placeholder length, stream the words while counting
+  // the bytes emitted, then seek back and back-patch the real length. Keeping
+  // one walk of the elements/words means the recorded length can never diverge
+  // from the bytes actually written (the file is O_RDWR and seekable). A page
+  // cannot hold anywhere near 4 GB of text, so a uint32 byte count cannot wrap.
+  const uint32_t lengthPos = file.position();
   uint32_t textLength = 0;
-  bool hasWord = false;
-
-  for (const auto& element : elements) {
-    if (element->getTag() != TAG_PageLine) {
-      continue;
-    }
-
-    const auto& line = static_cast<const PageLine&>(*element);
-    if (!line.getBlock()) {
-      continue;
-    }
-
-    for (const auto& word : line.getBlock()->getWords()) {
-      const size_t separatorLength = hasWord ? 1 : 0;
-      if (separatorLength > std::numeric_limits<uint32_t>::max() - textLength ||
-          word.size() > std::numeric_limits<uint32_t>::max() - textLength - separatorLength) {
-        LOG_ERR("PGE", "Search text is too large to serialize");
-        return false;
-      }
-      textLength += static_cast<uint32_t>(word.size() + separatorLength);
-      hasWord = true;
-    }
-  }
-
   if (file.write(reinterpret_cast<const uint8_t*>(&textLength), sizeof(textLength)) != sizeof(textLength)) {
     LOG_ERR("PGE", "Failed to write search text length");
     return false;
   }
 
-  hasWord = false;
+  bool hasWord = false;
   static constexpr uint8_t WORD_SEPARATOR = ' ';
   for (const auto& element : elements) {
     if (element->getTag() != TAG_PageLine) {
@@ -188,18 +169,31 @@ bool Page::serializeSearchText(HalFile& file) const {
     }
 
     for (const auto& word : line.getBlock()->getWords()) {
-      if (hasWord && file.write(&WORD_SEPARATOR, sizeof(WORD_SEPARATOR)) != sizeof(WORD_SEPARATOR)) {
-        LOG_ERR("PGE", "Failed to write search text separator");
-        return false;
+      if (hasWord) {
+        if (file.write(&WORD_SEPARATOR, sizeof(WORD_SEPARATOR)) != sizeof(WORD_SEPARATOR)) {
+          LOG_ERR("PGE", "Failed to write search text separator");
+          return false;
+        }
+        ++textLength;
       }
-      if (!word.empty() && file.write(reinterpret_cast<const uint8_t*>(word.data()), word.size()) != word.size()) {
-        LOG_ERR("PGE", "Failed to write search text word");
-        return false;
+      if (!word.empty()) {
+        if (file.write(reinterpret_cast<const uint8_t*>(word.data()), word.size()) != word.size()) {
+          LOG_ERR("PGE", "Failed to write search text word");
+          return false;
+        }
+        textLength += static_cast<uint32_t>(word.size());
       }
       hasWord = true;
     }
   }
 
+  const uint32_t endPos = file.position();
+  file.seek(lengthPos);
+  if (file.write(reinterpret_cast<const uint8_t*>(&textLength), sizeof(textLength)) != sizeof(textLength)) {
+    LOG_ERR("PGE", "Failed to back-patch search text length");
+    return false;
+  }
+  file.seek(endPos);
   return true;
 }
 
