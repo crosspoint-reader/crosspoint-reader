@@ -579,8 +579,14 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     tipCount = 1 + (inputType == InputType::Url ? 1 : 0) + (!text.empty() ? 1 : 0);
   }
 
-  if (tipCount > 0) {
-    int y = (underlineBottom + keyboardStartY) / 2 - (tipCount + 1) * tipsLh / 2;
+  // The tips are centered in the gap between the input field and the keyboard.
+  // In short layouts (e.g. landscape) that gap can be smaller than the tips
+  // block, which would overlap the input above and the keyboard below; only draw
+  // the tips when the gap can actually hold them. The block is tipCount + 1 lines
+  // (the STR_KB_TIPS header plus the per-mode hints).
+  const int tipsBlockHeight = (tipCount + 1) * tipsLh;
+  if (tipCount > 0 && keyboardStartY - underlineBottom >= tipsBlockHeight) {
+    int y = (underlineBottom + keyboardStartY) / 2 - tipsBlockHeight / 2;
     drawTip(tr(STR_KB_TIPS), y);
     y += tipsLh;
     if (cursorMode) {
