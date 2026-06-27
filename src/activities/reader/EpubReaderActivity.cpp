@@ -720,10 +720,10 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   const int resumePage = section ? section->currentPage : nextPageNumber;
   const int searchStartSpine =
       (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount()) ? currentSpineIndex : 0;
-  // The page the search is initiated from (the wrap stops before re-examining
-  // it). "Find next" — repeating the same query while still on the previous
-  // match — begins one page past it so a wrap cannot re-return it; SearchRoute
-  // owns that whole start/stop/find-next relationship.
+  // The page the search is initiated from (the wrap normally stops before
+  // re-examining it). A fresh search may revisit it only to complete a match
+  // begun on the preceding page. "Find next" begins one page past it so a wrap
+  // cannot re-return it; SearchRoute owns that start/stop relationship.
   const int initiatedFromPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
   const bool sameQuery = strcmp(lastSearchQuery.data(), query.c_str()) == 0;
   const bool isFindNext = sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage;

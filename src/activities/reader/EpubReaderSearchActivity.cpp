@@ -78,6 +78,15 @@ bool EpubReaderSearchActivity::reachedWrappedStop() const {
          (currentSpineIndex == route.startSpineIndex && currentPage >= route.stopPage);
 }
 
+bool EpubReaderSearchActivity::shouldScanWrappedStopContinuation() const {
+  // A fresh search already scanned stopPage from a clean KMP state. Revisit it
+  // only when the preceding page left a partial match; this admits the one
+  // occurrence that crosses the circular route boundary without changing find
+  // next's originating-page exclusion.
+  return wrapped && route.startPage == route.stopPage && currentSpineIndex == route.startSpineIndex &&
+         currentPage == route.stopPage && scanMatched > 0;
+}
+
 void EpubReaderSearchActivity::advanceSpine() {
   ++currentSpineIndex;
   currentPage = 0;
@@ -128,7 +137,7 @@ bool EpubReaderSearchActivity::preparePage() {
       scanMatched = 0;  // wrap is not contiguous reading text
     }
 
-    if (reachedWrappedStop()) {
+    if (reachedWrappedStop() && !shouldScanWrappedStopContinuation()) {
       setFailure(SearchState::NotFound);
       return false;
     }

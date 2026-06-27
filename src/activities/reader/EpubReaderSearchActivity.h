@@ -14,7 +14,9 @@ class EpubReaderSearchActivity final : public Activity {
   // The book-wide scan route, owned as one concept. The scan starts at
   // (startSpineIndex, startPage), runs forward to the end of the book, wraps
   // once, and stops before re-examining stopPage (the page the search was
-  // initiated from). make() encodes the one invariant tying them together:
+  // initiated from). A fresh search may scan stopPage once more only to finish
+  // a partial match that began on its preceding page. make() encodes the one
+  // invariant tying the route together:
   // a repeated "find next" begins one page past stopPage so it cannot re-return
   // the originating page, while a fresh search begins exactly at it.
   struct SearchRoute {
@@ -75,6 +77,7 @@ class EpubReaderSearchActivity final : public Activity {
   bool preparePage();
   bool loadCurrentSection();
   bool reachedWrappedStop() const;
+  bool shouldScanWrappedStopContinuation() const;
   void advanceSpine();
   void scanNextPage();
   // Approximate 0-100 fraction of the scan route completed: the byte-weighted
