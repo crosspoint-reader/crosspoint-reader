@@ -9,6 +9,8 @@
 #include <utility>
 #include <vector>
 
+#include <FlatMap.h>
+
 #include "CssStyle.h"
 
 /**
@@ -138,7 +140,7 @@ class CssParser {
   };
 
   // Storage: maps selector -> style properties. Hash/equal are case-insensitive.
-  std::unordered_map<std::string, CssStyle, SvHash, SvEqual> rulesBySelector_;
+  FlatMap<std::string, CssStyle, SvHash, SvEqual> rulesBySelector_;
 
   std::string cachePath;
 

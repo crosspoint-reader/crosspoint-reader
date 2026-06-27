@@ -801,6 +801,8 @@ bool CssParser::loadFromCache() {
     return false;
   }
 
+  rulesBySelector_.reserve(ruleCount);
+
   auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
     return static_cast<size_t>(file.available()) >= neededBytes;
   };
