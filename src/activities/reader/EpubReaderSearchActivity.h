@@ -11,8 +11,24 @@
 
 class EpubReaderSearchActivity final : public Activity {
  public:
+  // The book-wide scan route, owned as one concept. The scan starts at
+  // (startSpineIndex, startPage), runs forward to the end of the book, wraps
+  // once, and stops before re-examining stopPage (the page the search was
+  // initiated from). make() encodes the one invariant tying them together:
+  // a repeated "find next" begins one page past stopPage so it cannot re-return
+  // the originating page, while a fresh search begins exactly at it.
+  struct SearchRoute {
+    int startSpineIndex;
+    int startPage;
+    int stopPage;
+
+    static SearchRoute make(int spineIndex, int initiatedFromPage, bool findNext) {
+      return SearchRoute{spineIndex, initiatedFromPage + (findNext ? 1 : 0), initiatedFromPage};
+    }
+  };
+
   EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::shared_ptr<Epub>& epub,
-                           const char* query, int startSpineIndex, int startPage, int stopPage, uint16_t viewportWidth,
+                           const char* query, const SearchRoute& route, uint16_t viewportWidth,
                            uint16_t viewportHeight);
 
   void onEnter() override;
@@ -31,13 +47,7 @@ class EpubReaderSearchActivity final : public Activity {
   // `query` compiled once in the constructor (normalized pattern + KMP table)
   // and reused for every page scan instead of being rebuilt per page.
   Section::CompiledSearchQuery compiledQuery{};
-  const int startSpineIndex;
-  const int startPage;
-  // Page in startSpineIndex at which a wrapped scan stops, i.e. the position the
-  // search was initiated from. Distinct from startPage: for a repeated "find
-  // next" the scan starts at startPage (previous match + 1) but must still stop
-  // before re-examining stopPage (the previous match), so it cannot re-return it.
-  const int stopPage;
+  const SearchRoute route;
   int currentSpineIndex;
   int currentPage;
   const uint16_t viewportWidth;

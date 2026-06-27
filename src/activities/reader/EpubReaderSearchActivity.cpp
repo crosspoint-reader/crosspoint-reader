@@ -22,16 +22,14 @@ constexpr int PROGRESS_REPAINT_STEP_PERCENT = 10;
 
 EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                    const std::shared_ptr<Epub>& epub, const char* query,
-                                                   const int startSpineIndex, const int startPage, const int stopPage,
-                                                   const uint16_t viewportWidth, const uint16_t viewportHeight)
+                                                   const SearchRoute& route, const uint16_t viewportWidth,
+                                                   const uint16_t viewportHeight)
     : Activity("EpubReaderSearch", renderer, mappedInput),
       epub(epub),
-      section(this->epub, startSpineIndex, renderer),
-      startSpineIndex(startSpineIndex),
-      startPage(startPage),
-      stopPage(stopPage),
-      currentSpineIndex(startSpineIndex),
-      currentPage(startPage),
+      section(this->epub, route.startSpineIndex, renderer),
+      route(route),
+      currentSpineIndex(route.startSpineIndex),
+      currentPage(route.startPage),
       viewportWidth(viewportWidth),
       viewportHeight(viewportHeight) {
   if (query) {
@@ -76,7 +74,8 @@ bool EpubReaderSearchActivity::reachedWrappedStop() const {
   if (!wrapped) {
     return false;
   }
-  return currentSpineIndex > startSpineIndex || (currentSpineIndex == startSpineIndex && currentPage >= stopPage);
+  return currentSpineIndex > route.startSpineIndex ||
+         (currentSpineIndex == route.startSpineIndex && currentPage >= route.stopPage);
 }
 
 void EpubReaderSearchActivity::advanceSpine() {
@@ -141,10 +140,12 @@ bool EpubReaderSearchActivity::preparePage() {
     // scan's start and stop pages and the resulting route length, so progress
     // reads against the reader's own progress model rather than a spine-count
     // approximation. Done once (scanStartPos stays negative until captured).
-    if (scanStartPos < 0.0f && !wrapped && currentSpineIndex == startSpineIndex && epub) {
+    if (scanStartPos < 0.0f && !wrapped && currentSpineIndex == route.startSpineIndex && epub) {
       const float pc = section.pageCount > 0 ? static_cast<float>(section.pageCount) : 1.0f;
-      scanStartPos = epub->calculateProgress(startSpineIndex, std::min(1.0f, static_cast<float>(startPage) / pc));
-      const float stopPos = epub->calculateProgress(startSpineIndex, std::min(1.0f, static_cast<float>(stopPage) / pc));
+      scanStartPos =
+          epub->calculateProgress(route.startSpineIndex, std::min(1.0f, static_cast<float>(route.startPage) / pc));
+      const float stopPos =
+          epub->calculateProgress(route.startSpineIndex, std::min(1.0f, static_cast<float>(route.stopPage) / pc));
       // Route: forward from start to the end of the book (1.0), wrap, then up to
       // the stop page. For a fresh search start == stop, giving a full route of 1.
       scanRouteLength = (1.0f - scanStartPos) + stopPos;

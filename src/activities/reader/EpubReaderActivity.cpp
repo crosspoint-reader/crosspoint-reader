@@ -720,16 +720,15 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   const int resumePage = section ? section->currentPage : nextPageNumber;
   const int searchStartSpine =
       (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount()) ? currentSpineIndex : 0;
-  // Wrap-stop boundary: the page the search is initiated from. A wrapped scan
-  // stops before re-examining it so search never re-returns the current page.
-  const int searchStopPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
+  // The page the search is initiated from (the wrap stops before re-examining
+  // it). "Find next" — repeating the same query while still on the previous
+  // match — begins one page past it so a wrap cannot re-return it; SearchRoute
+  // owns that whole start/stop/find-next relationship.
+  const int initiatedFromPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
   const bool sameQuery = strcmp(lastSearchQuery.data(), query.c_str()) == 0;
-  // "Find next": repeating the same query while still on the previous match
-  // begins one page past it (preparePage() handles a start beyond the section's
-  // page count) while keeping the stop boundary at the match, so a wrap cannot
-  // re-admit it.
   const bool isFindNext = sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage;
-  const int searchStartPage = searchStopPage + (isFindNext ? 1 : 0);
+  const EpubReaderSearchActivity::SearchRoute route =
+      EpubReaderSearchActivity::SearchRoute::make(searchStartSpine, initiatedFromPage, isFindNext);
 
   const ReaderViewport viewport = calculateReaderViewport(renderer, automaticPageTurnActive);
 
@@ -747,9 +746,8 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   // One activity allocation is required by ActivityManager ownership. Query,
   // matcher state, and the reusable Section live inline in that allocation;
   // no per-page or per-chapter activity allocations are performed.
-  auto searchActivity =
-      makeUniqueNoThrow<EpubReaderSearchActivity>(renderer, mappedInput, epub, query.c_str(), searchStartSpine,
-                                                  searchStartPage, searchStopPage, viewport.width, viewport.height);
+  auto searchActivity = makeUniqueNoThrow<EpubReaderSearchActivity>(renderer, mappedInput, epub, query.c_str(), route,
+                                                                    viewport.width, viewport.height);
   if (!searchActivity) {
     LOG_ERR("ERS", "OOM: EpubReaderSearchActivity (%u bytes)", static_cast<unsigned>(sizeof(EpubReaderSearchActivity)));
     requestUpdate();
