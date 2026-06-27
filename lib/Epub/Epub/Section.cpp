@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 
 #include "AsciiCase.h"
 #include "Epub/css/CssParser.h"
@@ -357,13 +358,26 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   return page;
 }
 
+void Section::rebuildFilePathForSpine() {
+  // Re-append the "<spineIndex>.bin" suffix onto the cached prefix in place.
+  // snprintf into a stack buffer avoids std::to_string's heap temporary, and
+  // resize()+append() reuse filePath's reserved capacity (no reallocation).
+  char numBuf[12];
+  const int len = snprintf(numBuf, sizeof(numBuf), "%d", spineIndex);
+  filePath.resize(sectionPathPrefixLen);
+  if (len > 0) {
+    filePath.append(numBuf, static_cast<size_t>(len));
+  }
+  filePath.append(".bin");
+}
+
 void Section::resetForSpine(const int newSpineIndex) {
   if (file) {
     // Member handle persists across calls, so close before switching paths.
     file.close();
   }
   spineIndex = newSpineIndex;
-  filePath = epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin";
+  rebuildFilePathForSpine();
   pageCount = 0;
   currentPage = 0;
   searchHeaderReady = false;

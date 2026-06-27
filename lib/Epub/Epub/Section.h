@@ -17,6 +17,11 @@ class Section {
   int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
+  // Byte length of the constant "<cachePath>/sections/" prefix within filePath.
+  // resetForSpine() truncates filePath to this length and re-appends only the
+  // numeric suffix, reusing the buffer instead of allocating a new string per
+  // spine transition.
+  size_t sectionPathPrefixLen = 0;
   HalFile file;
 
   // Cached section-header state for the search scan: the file size and page-LUT
@@ -34,6 +39,9 @@ class Section {
   // Lazily open the scan file and cache its size and page-LUT offset. Returns
   // false on open failure or a truncated/corrupt header.
   bool ensureSearchHeader();
+  // Rewrite filePath's numeric suffix in place for the current spineIndex,
+  // reusing the buffer (no per-spine string allocation, no std::to_string).
+  void rebuildFilePathForSpine();
 
  public:
   static constexpr size_t MAX_SEARCH_QUERY_BYTES = 64;
@@ -41,10 +49,15 @@ class Section {
   int currentPage = 0;
 
   explicit Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRenderer& renderer)
-      : epub(epub),
-        spineIndex(spineIndex),
-        renderer(renderer),
-        filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin") {}
+      : epub(epub), spineIndex(spineIndex), renderer(renderer) {
+    // Build the constant "<cachePath>/sections/" prefix once and remember its
+    // length; resetForSpine() then rewrites only the numeric suffix in place.
+    const std::string& cachePath = this->epub->getCachePath();
+    filePath.reserve(cachePath.size() + 32);  // prefix + up to 11 digits + ".bin"
+    filePath.assign(cachePath).append("/sections/");
+    sectionPathPrefixLen = filePath.size();
+    rebuildFilePathForSpine();
+  }
   ~Section() = default;
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
