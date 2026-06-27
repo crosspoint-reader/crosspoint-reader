@@ -20,6 +20,25 @@ namespace {
 constexpr int PROGRESS_REPAINT_STEP_PERCENT = 10;
 }  // namespace
 
+void EpubReaderSearchActivity::SearchRoute::resolvePageCount(const int targetPageCount) {
+  if (sourcePageCount <= 0) {
+    return;
+  }
+
+  const bool findNext = startPage > stopPage;
+  if (targetPageCount <= 0) {
+    startPage = 0;
+    stopPage = 0;
+    sourcePageCount = 0;
+    return;
+  }
+
+  const int64_t remappedPage = static_cast<int64_t>(stopPage) * targetPageCount / sourcePageCount;
+  stopPage = std::min(static_cast<int>(remappedPage), targetPageCount - 1);
+  startPage = stopPage + (findNext ? 1 : 0);
+  sourcePageCount = 0;
+}
+
 EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                    const std::shared_ptr<Epub>& epub, const char* query,
                                                    const SearchRoute& route, const uint16_t viewportWidth,
@@ -145,6 +164,11 @@ bool EpubReaderSearchActivity::preparePage() {
     if (!sectionLoaded && !loadCurrentSection()) {
       setFailure(SearchState::Error);
       return false;
+    }
+
+    if (!wrapped && currentSpineIndex == route.startSpineIndex && route.sourcePageCount > 0) {
+      route.resolvePageCount(section.pageCount);
+      currentPage = route.startPage;
     }
 
     // Once the start spine is loaded, capture the byte-weighted positions of the

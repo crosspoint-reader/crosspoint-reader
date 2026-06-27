@@ -23,10 +23,15 @@ class EpubReaderSearchActivity final : public Activity {
     int startSpineIndex;
     int startPage;
     int stopPage;
+    int sourcePageCount;
 
-    static SearchRoute make(int spineIndex, int initiatedFromPage, bool findNext) {
-      return SearchRoute{spineIndex, initiatedFromPage + (findNext ? 1 : 0), initiatedFromPage};
+    static SearchRoute make(int spineIndex, int initiatedFromPage, bool findNext, int sourcePageCount = 0) {
+      return SearchRoute{spineIndex, initiatedFromPage + (findNext ? 1 : 0), initiatedFromPage, sourcePageCount};
     }
+
+    // Translate page coordinates captured before a viewport reflow into the
+    // loaded section's pagination. A zero source count means no remap is pending.
+    void resolvePageCount(int targetPageCount);
   };
 
   EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::shared_ptr<Epub>& epub,
@@ -49,7 +54,7 @@ class EpubReaderSearchActivity final : public Activity {
   // `query` compiled once in the constructor (normalized pattern + KMP table)
   // and reused for every page scan instead of being rebuilt per page.
   Section::CompiledSearchQuery compiledQuery{};
-  const SearchRoute route;
+  SearchRoute route;
   int currentSpineIndex;
   int currentPage;
   const uint16_t viewportWidth;

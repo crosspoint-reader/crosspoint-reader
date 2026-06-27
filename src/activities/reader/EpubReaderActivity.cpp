@@ -720,15 +720,17 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   const int resumePage = section ? section->currentPage : nextPageNumber;
   const int searchStartSpine =
       (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount()) ? currentSpineIndex : 0;
+  const bool hasPendingPageRemap = !section && cachedChapterTotalPageCount > 0 && cachedSpineIndex == searchStartSpine;
   // The page the search is initiated from (the wrap normally stops before
   // re-examining it). A fresh search may revisit it only to complete a match
   // begun on the preceding page. "Find next" begins one page past it so a wrap
   // cannot re-return it; SearchRoute owns that start/stop relationship.
   const int initiatedFromPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
   const bool sameQuery = strcmp(lastSearchQuery.data(), query.c_str()) == 0;
-  const bool isFindNext = sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage;
-  const EpubReaderSearchActivity::SearchRoute route =
-      EpubReaderSearchActivity::SearchRoute::make(searchStartSpine, initiatedFromPage, isFindNext);
+  const bool isFindNext = !hasPendingPageRemap && sameQuery && lastSearchResultSpine == currentSpineIndex &&
+                          lastSearchResultPage == resumePage;
+  const EpubReaderSearchActivity::SearchRoute route = EpubReaderSearchActivity::SearchRoute::make(
+      searchStartSpine, initiatedFromPage, isFindNext, hasPendingPageRemap ? cachedChapterTotalPageCount : 0);
 
   const ReaderViewport viewport = calculateReaderViewport(renderer, automaticPageTurnActive);
 
@@ -768,6 +770,7 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
       currentSpineIndex = match.spineIndex;
       nextPageNumber = match.page;
       section.reset();
+      cachedChapterTotalPageCount = 0;
       lastSearchResultSpine = match.spineIndex;
       lastSearchResultPage = match.page;
       showTransientMessage(tr(STR_SEARCH_MATCH_FOUND));
