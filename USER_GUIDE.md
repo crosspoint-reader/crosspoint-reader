@@ -590,8 +590,8 @@ Press **Confirm** while reading to open the Reader Menu. From here you can acces
 
 Available options include:
 
+- **Footnotes** – Navigate to the footnotes for the current section. When the page contains more than one footnote this opens the footnote list; when it contains exactly one, the item is labeled **Go to Footnote: N** (or **[link]** for an unnumbered reference) and selecting it jumps straight to that note *(only shown in books that contain footnotes)*.
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
-- **Footnotes** – Navigate to the footnotes for the current section *(only shown in books that contain footnotes)*.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
 - **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
