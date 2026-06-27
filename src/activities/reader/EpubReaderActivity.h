@@ -34,11 +34,14 @@ class EpubReaderActivity final : public Activity {
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
-  bool showBookmarkMessage = false;
   bool ignoreNextConfirmRelease = false;
   bool currentPageBookmarked = false;
-  bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
-  bool showSearchMatchMessage = false;
+  bool bookmarkRemoved = false;  // true when last toggle removed (selects bookmark popup text)
+  // Transient popup shared by the bookmark and search-match messages: the text
+  // to show (null when hidden) and when it was shown. The pointer is from tr(),
+  // which returns stable storage in the static i18n string table.
+  const char* transientMessage = nullptr;
+  unsigned long transientMessageTime = 0UL;
   std::array<char, Section::MAX_SEARCH_QUERY_BYTES + 1> lastSearchQuery{};
   int lastSearchResultSpine = -1;
   int lastSearchResultPage = -1;
@@ -46,8 +49,6 @@ class EpubReaderActivity final : public Activity {
   // Tracks whether this book is currently removed from Recent Books by the
   // removeReadBooksFromRecents feature (set at End-of-Book, cleared if paged back in).
   bool recentsEntryRemoved = false;
-  unsigned long bookmarkMessageTime = 0UL;
-  unsigned long searchMessageTime = 0UL;
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
@@ -72,6 +73,8 @@ class EpubReaderActivity final : public Activity {
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   void launchSearchInput();
   void launchBookSearch(const std::string& query);
+  // Show a transient popup (bookmark or search) for READER_MESSAGE_DURATION_MS.
+  void showTransientMessage(const char* message);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();

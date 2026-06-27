@@ -328,12 +328,8 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
-    showBookmarkMessage = false;
-    requestUpdate();
-  }
-  if (showSearchMatchMessage && (millis() - searchMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
-    showSearchMatchMessage = false;
+  if (transientMessage && (millis() - transientMessageTime) >= ReaderUtils::READER_MESSAGE_DURATION_MS) {
+    transientMessage = nullptr;
     requestUpdate();
   }
 
@@ -372,11 +368,10 @@ void EpubReaderActivity::loop() {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
         // Hold ~0.4s drops a bookmark at the current page.
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showBookmarkMessage) {
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !transientMessage) {
           addBookmark();
-          showBookmarkMessage = true;
+          showTransientMessage(bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
           ignoreNextConfirmRelease = true;  // Prevent accidental menu open after adding bookmark
-          bookmarkMessageTime = millis();
           requestUpdate();
         }
         break;
@@ -785,10 +780,14 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
       section.reset();
       lastSearchResultSpine = match.spineIndex;
       lastSearchResultPage = match.page;
-      showSearchMatchMessage = true;
-      searchMessageTime = millis();
+      showTransientMessage(tr(STR_SEARCH_MATCH_FOUND));
     }
   });
+}
+
+void EpubReaderActivity::showTransientMessage(const char* message) {
+  transientMessage = message;
+  transientMessageTime = millis();
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
@@ -1093,10 +1092,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     ScreenshotUtil::takeScreenshot(renderer);
   }
 
-  if (showBookmarkMessage) {
-    GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
-  } else if (showSearchMatchMessage) {
-    GUI.drawPopup(renderer, tr(STR_SEARCH_MATCH_FOUND));
+  if (transientMessage) {
+    GUI.drawPopup(renderer, transientMessage);
   }
 }
 
