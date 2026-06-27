@@ -22,13 +22,14 @@ constexpr int PROGRESS_REPAINT_STEP_PERCENT = 10;
 
 EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                    const std::shared_ptr<Epub>& epub, const char* query,
-                                                   const int startSpineIndex, const int startPage,
+                                                   const int startSpineIndex, const int startPage, const int stopPage,
                                                    const uint16_t viewportWidth, const uint16_t viewportHeight)
     : Activity("EpubReaderSearch", renderer, mappedInput),
       epub(epub),
       section(this->epub, startSpineIndex, renderer),
       startSpineIndex(startSpineIndex),
       startPage(startPage),
+      stopPage(stopPage),
       currentSpineIndex(startSpineIndex),
       currentPage(startPage),
       viewportWidth(viewportWidth),
@@ -75,7 +76,7 @@ bool EpubReaderSearchActivity::reachedWrappedStop() const {
   if (!wrapped) {
     return false;
   }
-  return currentSpineIndex > startSpineIndex || (currentSpineIndex == startSpineIndex && currentPage >= startPage);
+  return currentSpineIndex > startSpineIndex || (currentSpineIndex == startSpineIndex && currentPage >= stopPage);
 }
 
 void EpubReaderSearchActivity::advanceSpine() {

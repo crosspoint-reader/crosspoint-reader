@@ -720,10 +720,15 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   const int resumePage = section ? section->currentPage : nextPageNumber;
   const int searchStartSpine =
       (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount()) ? currentSpineIndex : 0;
-  int searchStartPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
+  // Wrap-stop boundary: the page the search is initiated from. A wrapped scan
+  // stops before re-examining it so search never re-returns the current page.
+  const int searchStopPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
+  int searchStartPage = searchStopPage;
   const bool sameQuery = strcmp(lastSearchQuery.data(), query.c_str()) == 0;
   if (sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage) {
-    // May exceed section page count; preparePage() handles spine advancement.
+    // "Find next": begin one page past the previous match (preparePage() handles
+    // a start beyond the section's page count), but keep the stop boundary at the
+    // previous match so a wrap cannot re-admit it.
     ++searchStartPage;
   }
 
@@ -743,8 +748,9 @@ void EpubReaderActivity::launchBookSearch(const std::string& query) {
   // One activity allocation is required by ActivityManager ownership. Query,
   // matcher state, and the reusable Section live inline in that allocation;
   // no per-page or per-chapter activity allocations are performed.
-  auto searchActivity = makeUniqueNoThrow<EpubReaderSearchActivity>(
-      renderer, mappedInput, epub, query.c_str(), searchStartSpine, searchStartPage, viewport.width, viewport.height);
+  auto searchActivity =
+      makeUniqueNoThrow<EpubReaderSearchActivity>(renderer, mappedInput, epub, query.c_str(), searchStartSpine,
+                                                  searchStartPage, searchStopPage, viewport.width, viewport.height);
   if (!searchActivity) {
     LOG_ERR("ERS", "OOM: EpubReaderSearchActivity (%u bytes)", static_cast<unsigned>(sizeof(EpubReaderSearchActivity)));
     requestUpdate();

@@ -37,11 +37,12 @@ The user-visible behavior is intentionally narrow:
 - queries are limited to 64 UTF-8 bytes
 - search starts at the current rendered page and moves forward
 - after reaching the end of the spine, it continues through later spines
-- after reaching the end of the book, it wraps once and stops at its starting
-  position
+- after reaching the end of the book, it wraps once and stops at the page the
+  search was initiated from
 - the first matching page is returned immediately
 - repeating the same query from the page returned by search starts at the next
-  page
+  page, and the wrap stops before that originating page, so "find next" advances
+  to a different match or reports no matches rather than re-returning it
 - while searching, the status screen shows an approximate percentage of how far
   through the book the scan has reached
 
@@ -129,7 +130,7 @@ The steady page-scan path has fixed memory use:
 | Saved query | Inline reader/activity arrays | 65 bytes each | Reader/search activity |
 | KMP prefix table | Inline search activity array | 64 bytes | Search activity (built once) |
 | SD read buffer | Stack | 64 bytes | One page scan |
-| Search activity object | Heap, nothrow | 352 bytes in the target build | Search activity |
+| Search activity object | Heap, nothrow | 356 bytes in the target build | Search activity |
 | Page LUT reservation | Heap | 1,536 bytes | Uncached section layout only |
 
 The display's 52,272-byte framebuffer is not a search allocation. The shared
@@ -150,8 +151,8 @@ repeated allocate-copy-free growth. Chapters larger than that remain supported
 and may grow the vector.
 
 At implementation time, the measured `default` build had unchanged static RAM
-usage at 101,220 bytes. Flash usage increased by 6,780 bytes, from 5,225,869 to
-5,232,649 bytes, for the search behavior, cache handling, UI, and translated
+usage at 101,220 bytes. Flash usage increased by 6,802 bytes, from 5,225,869 to
+5,232,671 bytes, for the search behavior, cache handling, UI, and translated
 fallback strings. These are build snapshots rather than permanent budgets;
 remeasure them when the implementation or toolchain changes.
 

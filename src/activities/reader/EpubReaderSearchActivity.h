@@ -12,7 +12,7 @@
 class EpubReaderSearchActivity final : public Activity {
  public:
   EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::shared_ptr<Epub>& epub,
-                           const char* query, int startSpineIndex, int startPage, uint16_t viewportWidth,
+                           const char* query, int startSpineIndex, int startPage, int stopPage, uint16_t viewportWidth,
                            uint16_t viewportHeight);
 
   void onEnter() override;
@@ -33,6 +33,11 @@ class EpubReaderSearchActivity final : public Activity {
   std::array<uint8_t, Section::MAX_SEARCH_QUERY_BYTES> queryPrefix{};
   const int startSpineIndex;
   const int startPage;
+  // Page in startSpineIndex at which a wrapped scan stops, i.e. the position the
+  // search was initiated from. Distinct from startPage: for a repeated "find
+  // next" the scan starts at startPage (previous match + 1) but must still stop
+  // before re-examining stopPage (the previous match), so it cannot re-return it.
+  const int stopPage;
   int currentSpineIndex;
   int currentPage;
   const uint16_t viewportWidth;
