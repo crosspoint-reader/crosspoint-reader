@@ -483,6 +483,14 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     return std::nullopt;
   }
 
+  // Fold the query to lowercase once here rather than per compared text byte;
+  // it is consistent with the prefix table, which buildSearchPrefix folded the
+  // same way. Only [0, query.size()) is filled and read.
+  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> foldedQuery;
+  for (size_t i = 0; i < query.size(); ++i) {
+    foldedQuery[i] = epub::asciiToLower(static_cast<uint8_t>(query[i]));
+  }
+
   // KMP keeps overlap handling correct while streaming through a 64-byte SD
   // read buffer. The prefix table is built once per search by the caller
   // (buildSearchPrefix) and reused across every page rather than rebuilt here.
@@ -500,10 +508,10 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
 
     for (size_t i = 0; i < chunkSize; ++i) {
       const uint8_t value = epub::asciiToLower(buffer[i]);
-      while (matched > 0 && value != epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
+      while (matched > 0 && value != foldedQuery[matched]) {
         matched = prefix[matched - 1];
       }
-      if (value == epub::asciiToLower(static_cast<uint8_t>(query[matched]))) {
+      if (value == foldedQuery[matched]) {
         ++matched;
         if (matched == query.size()) {
           return true;
