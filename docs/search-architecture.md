@@ -42,6 +42,8 @@ The user-visible behavior is intentionally narrow:
 - the first matching page is returned immediately
 - repeating the same query from the page returned by search starts at the next
   page
+- while searching, the status screen shows an approximate percentage of how far
+  through the book the scan has reached
 
 The result is page-granular. The reader opens the matching page and shows a
 short confirmation popup; individual glyphs are not highlighted.
@@ -125,9 +127,9 @@ The steady page-scan path has fixed memory use:
 | Item | Storage | Size | Lifetime |
 | --- | --- | ---: | --- |
 | Saved query | Inline reader/activity arrays | 65 bytes each | Reader/search activity |
-| KMP prefix table | Stack | 64 bytes | One page scan |
+| KMP prefix table | Inline search activity array | 64 bytes | Search activity (built once) |
 | SD read buffer | Stack | 64 bytes | One page scan |
-| Search activity object | Heap, nothrow | 272 bytes in the target build | Search activity |
+| Search activity object | Heap, nothrow | 340 bytes in the target build | Search activity |
 | Page LUT reservation | Heap | 1,536 bytes | Uncached section layout only |
 
 The display's 52,272-byte framebuffer is not a search allocation. The shared
@@ -148,8 +150,8 @@ repeated allocate-copy-free growth. Chapters larger than that remain supported
 and may grow the vector.
 
 At implementation time, the measured `default` build had unchanged static RAM
-usage at 101,220 bytes. Flash usage increased by 6,232 bytes, from 5,225,869 to
-5,232,101 bytes, for the search behavior, cache handling, UI, and translated
+usage at 101,220 bytes. Flash usage increased by 6,612 bytes, from 5,225,869 to
+5,232,481 bytes, for the search behavior, cache handling, UI, and translated
 fallback strings. These are build snapshots rather than permanent budgets;
 remeasure them when the implementation or toolchain changes.
 
@@ -270,9 +272,11 @@ searching.
   orientation, margins, paragraph settings, hyphenation, embedded CSS, image
   mode, or Focus Reading changes can invalidate and rebuild section caches.
 - The X3 display path runs at 16 MHz rather than the X4's 40 MHz SPI rate.
-  Search paints the status screen when entering or changing state, but it does
-  not refresh the e-ink panel for every page scanned; page matching remains an
-  SD/CPU operation.
+  Search paints the status screen when entering, when changing state, and when
+  the spine-derived progress percentage changes, but it does not refresh the
+  e-ink panel for every page scanned; page matching remains an SD/CPU operation.
+  Because progress is spine-granular, a warm scan typically crosses several
+  percentage steps between repaints and coalesces them into a single refresh.
 
 These trade-offs favor stability and predictable RAM use over desktop-style
 search features.
