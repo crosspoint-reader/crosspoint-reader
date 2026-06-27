@@ -110,6 +110,7 @@ void EpubReaderSearchActivity::advanceSpine() {
   ++currentSpineIndex;
   currentPage = 0;
   sectionLoaded = false;
+  sectionCacheRepairAttempted = false;
   scanMatched = 0;  // spine boundary: don't carry a partial match across chapters
 }
 
@@ -136,6 +137,17 @@ bool EpubReaderSearchActivity::loadCurrentSection() {
   return true;
 }
 
+bool EpubReaderSearchActivity::invalidateCurrentSectionCache() {
+  // resetForSpine closes the member HalFile before clearCache removes its path.
+  section.resetForSpine(currentSpineIndex);
+  sectionLoaded = false;
+  if (!section.clearCache()) {
+    LOG_ERR("EPS", "Failed to clear corrupt section %d", currentSpineIndex);
+    return false;
+  }
+  return true;
+}
+
 bool EpubReaderSearchActivity::preparePage() {
   const int spineCount = epub ? epub->getSpineItemsCount() : 0;
   if (spineCount <= 0) {
@@ -153,6 +165,7 @@ bool EpubReaderSearchActivity::preparePage() {
       currentSpineIndex = 0;
       currentPage = 0;
       sectionLoaded = false;
+      sectionCacheRepairAttempted = false;
       scanMatched = 0;  // wrap is not contiguous reading text
     }
 
@@ -199,8 +212,21 @@ void EpubReaderSearchActivity::scanNextPage() {
     return;
   }
 
-  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), compiledQuery, scanMatched);
+  const size_t matchedBeforePage = scanMatched;
+  auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), compiledQuery, scanMatched);
+  if (!match.has_value() && !sectionCacheRepairAttempted) {
+    sectionCacheRepairAttempted = true;
+    scanMatched = matchedBeforePage;
+    if (!invalidateCurrentSectionCache() || !loadCurrentSection()) {
+      setFailure(SearchState::Error);
+      return;
+    }
+    match = section.pageContainsText(static_cast<uint16_t>(currentPage), compiledQuery, scanMatched);
+  }
+
   if (!match.has_value()) {
+    // Do not leave a version-valid but unreadable cache to fail every future search.
+    invalidateCurrentSectionCache();
     setFailure(SearchState::Error);
     return;
   }

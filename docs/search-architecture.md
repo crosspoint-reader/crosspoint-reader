@@ -203,6 +203,10 @@ The return type is `std::optional<bool>`:
 
 This distinction lets an ordinary miss advance to the next page while a cache
 failure moves the activity to its translated error state.
+On the first cache failure in a spine, the activity closes and removes that
+section cache, rebuilds it, restores the matcher state from the start of the
+failed page, and retries once. A second failure removes the cache again and
+surfaces the error rather than entering an unbounded rebuild loop.
 
 ### Alternatives considered
 

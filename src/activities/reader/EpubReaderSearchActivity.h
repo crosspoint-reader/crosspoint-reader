@@ -61,6 +61,7 @@ class EpubReaderSearchActivity final : public Activity {
   const uint16_t viewportHeight;
   SearchState state = SearchState::Searching;
   bool sectionLoaded = false;
+  bool sectionCacheRepairAttempted = false;
   bool wrapped = false;
   // KMP partial-match length carried across consecutive pages of the same spine
   // so a query split across a page boundary (line-hyphenated word, or a phrase)
@@ -81,6 +82,7 @@ class EpubReaderSearchActivity final : public Activity {
 
   bool preparePage();
   bool loadCurrentSection();
+  bool invalidateCurrentSectionCache();
   bool reachedWrappedStop() const;
   bool shouldScanWrappedStopContinuation() const;
   void advanceSpine();
