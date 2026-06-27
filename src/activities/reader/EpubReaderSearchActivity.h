@@ -45,9 +45,9 @@ class EpubReaderSearchActivity final : public Activity {
   SearchState state = SearchState::Searching;
   bool sectionLoaded = false;
   bool wrapped = false;
-  // Last spine-derived progress percentage painted to the panel. Repaints are
-  // gated on this changing so the e-ink panel is not refreshed per page. Starts
-  // at 0 because onEnter() paints the initial 0% screen before the scan begins.
+  // Last progress percentage painted to the panel. Repaints are gated on this
+  // changing so the e-ink panel is not refreshed per page. Starts at 0 because
+  // onEnter() paints the initial 0% screen before the scan begins.
   int lastProgressPercent = 0;
   // Byte-weighted book position (0-1, via Epub::calculateProgress) where the
   // scan began, and the length of its route to the stop page (forward to the end
@@ -62,8 +62,9 @@ class EpubReaderSearchActivity final : public Activity {
   bool reachedWrappedStop() const;
   void advanceSpine();
   void scanNextPage();
-  // Approximate 0-100 progress through the book, measured in spines scanned
-  // from the search start position across the single wrap.
+  // Approximate 0-100 fraction of the scan route completed: the byte-weighted
+  // distance travelled since the search began, over the route length (forward to
+  // the end of the book, wrap, then up to the originating page).
   int searchProgressPercent() const;
   void setFailure(SearchState failureState);
   void cancel();
