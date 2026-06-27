@@ -2079,6 +2079,7 @@
 
   function closeImagePreview() {
     document.getElementById('imagePreviewModal').classList.remove('open');
+    // Clear src to free the decoded image and avoid showing the stale one on reopen.
     document.getElementById('imagePreviewImg').src = '';
   }
 
