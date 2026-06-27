@@ -61,6 +61,11 @@ class Section {
   // allocation. Intended for sequential, book-wide operations such as search.
   void resetForSpine(int newSpineIndex);
 
+  // Single source of truth for whether a query is usable for search: non-empty,
+  // not all-whitespace, and within the byte limit. The UI validates with this
+  // before launching a search.
+  static bool isValidSearchQuery(std::string_view query);
+
   // Precompute the KMP failure function for a query once so a book-wide search
   // reuses it for every page instead of rebuilding it on each pageContainsText()
   // call. Returns false for an empty or oversized query.

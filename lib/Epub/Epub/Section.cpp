@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 
 #include "AsciiCase.h"
 #include "Epub/css/CssParser.h"
@@ -394,6 +395,14 @@ bool Section::ensureSearchHeader() {
   searchLutOffset = lutOffset;
   searchHeaderReady = true;
   return true;
+}
+
+bool Section::isValidSearchQuery(const std::string_view query) {
+  if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES) {
+    return false;
+  }
+  // Reject all-whitespace queries: at least one non-whitespace byte is required.
+  return std::any_of(query.begin(), query.end(), [](const unsigned char value) { return std::isspace(value) == 0; });
 }
 
 bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {

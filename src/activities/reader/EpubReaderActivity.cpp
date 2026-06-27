@@ -13,7 +13,6 @@
 #include <esp_system.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstring>
 #include <functional>
 #include <iterator>
@@ -704,9 +703,7 @@ void EpubReaderActivity::launchSearchInput() {
     }
 
     const auto& query = std::get<KeyboardResult>(result.data).text;
-    const bool onlyWhitespace =
-        std::all_of(query.begin(), query.end(), [](const unsigned char value) { return std::isspace(value) != 0; });
-    if (query.empty() || onlyWhitespace || query.size() > Section::MAX_SEARCH_QUERY_BYTES) {
+    if (!Section::isValidSearchQuery(query)) {
       requestUpdate();
       return;
     }
