@@ -468,16 +468,15 @@ bool Section::compileSearchQuery(const std::string_view query, CompiledSearchQue
   // Leave the result in a defined (zeroed, length 0) state even on rejection, so
   // a caller that ignores the return value never matches against stale bytes.
   out = CompiledSearchQuery{};
-  if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES) {
+  // One validity definition (empty / oversized / no searchable byte) shared with
+  // the UI gate; a query that passes always normalizes to a non-empty pattern.
+  if (!isValidSearchQuery(query)) {
     return false;
   }
 
   // Normalize once (lowercase, spaces/hyphens dropped); the KMP table is built
   // over that same pattern, so pattern and prefix can never disagree.
   out.length = normalizeSearchQuery(query, out.pattern);
-  if (out.length == 0) {
-    return false;
-  }
 
   for (size_t i = 1, matched = 0; i < out.length; ++i) {
     const uint8_t value = out.pattern[i];
