@@ -400,11 +400,13 @@ bool Section::ensureSearchHeader() {
 }
 
 bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
+  // Always leave the table in a defined (zeroed) state, even on rejection, so a
+  // caller that ignores the return value never reads stale prefix bytes.
+  prefix.fill(0);
   if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES) {
     return false;
   }
 
-  prefix.fill(0);
   for (size_t i = 1, matched = 0; i < query.size(); ++i) {
     const uint8_t value = asciiLower(static_cast<uint8_t>(query[i]));
     while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {

@@ -31,8 +31,12 @@ EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, Mapped
     memcpy(this->query.data(), query, length);
     this->query[length] = '\0';
   }
-  // Build the KMP failure function once here; every page scan reuses it.
-  Section::buildSearchPrefix(this->query.data(), queryPrefix);
+  // Build the KMP failure function once here; every page scan reuses it. A
+  // rejected query (empty or oversized) means there is nothing to scan, so fail
+  // closed rather than relying solely on the caller having pre-validated it.
+  if (!Section::buildSearchPrefix(this->query.data(), queryPrefix)) {
+    state = SearchState::NotFound;
+  }
 }
 
 void EpubReaderSearchActivity::onEnter() {
