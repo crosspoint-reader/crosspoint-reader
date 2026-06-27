@@ -188,12 +188,20 @@ bool Page::serializeSearchText(HalFile& file) const {
   }
 
   const uint32_t endPos = file.position();
-  file.seek(lengthPos);
+  if (!file.seek(lengthPos)) {
+    LOG_ERR("PGE", "Failed to seek for search text length back-patch");
+    return false;
+  }
   if (file.write(reinterpret_cast<const uint8_t*>(&textLength), sizeof(textLength)) != sizeof(textLength)) {
     LOG_ERR("PGE", "Failed to back-patch search text length");
     return false;
   }
-  file.seek(endPos);
+  // Restore the write position to the record end so the next page appends
+  // correctly; failing this would corrupt the following page's data.
+  if (!file.seek(endPos)) {
+    LOG_ERR("PGE", "Failed to restore position after search text back-patch");
+    return false;
+  }
   return true;
 }
 
