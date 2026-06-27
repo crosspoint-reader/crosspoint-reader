@@ -360,20 +360,51 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
+  const uint32_t fileSize = file.size();
+  if (fileSize < HEADER_SIZE) {
+    LOG_ERR("SCT", "Section cache header is truncated");
+    file.close();
+    return nullptr;
+  }
+
   uint32_t lutOffset = 0;
   if (!readPageLutOffset(lutOffset)) {
     LOG_ERR("SCT", "Failed to read page LUT offset");
     file.close();
     return nullptr;
   }
-  file.seek(lutOffset + PAGE_LUT_ENTRY_SIZE * currentPage);
+
+  // Validate LUT-derived offsets against the file before trusting them (mirrors
+  // pageContainsText). Compute in 64-bit so a corrupt (huge) lutOffset cannot
+  // wrap the uint32 sum into a small in-bounds value.
+  if (lutOffset == 0 || currentPage < 0) {
+    LOG_ERR("SCT", "Invalid page LUT request");
+    file.close();
+    return nullptr;
+  }
+  const uint64_t entryOffset = static_cast<uint64_t>(lutOffset) +
+                               static_cast<uint64_t>(PAGE_LUT_ENTRY_SIZE) * static_cast<uint32_t>(currentPage);
+  if (entryOffset > fileSize || fileSize - entryOffset < PAGE_LUT_ENTRY_SIZE) {
+    LOG_ERR("SCT", "Invalid page LUT entry");
+    file.close();
+    return nullptr;
+  }
+  if (!file.seek(static_cast<size_t>(entryOffset))) {
+    LOG_ERR("SCT", "Failed to seek to page LUT entry");
+    file.close();
+    return nullptr;
+  }
   uint32_t pagePos = 0;
-  if (file.read(reinterpret_cast<uint8_t*>(&pagePos), sizeof(pagePos)) != sizeof(pagePos)) {
+  if (file.read(reinterpret_cast<uint8_t*>(&pagePos), sizeof(pagePos)) != sizeof(pagePos) || pagePos >= fileSize) {
     LOG_ERR("SCT", "Failed to read page offset");
     file.close();
     return nullptr;
   }
-  file.seek(pagePos);
+  if (!file.seek(pagePos)) {
+    LOG_ERR("SCT", "Failed to seek to page record");
+    file.close();
+    return nullptr;
+  }
 
   auto page = Page::deserialize(file);
   // Explicit close() required: member variable persists beyond function scope
@@ -422,12 +453,16 @@ bool Section::ensureSearchHeader() {
   const uint32_t fileSize = file.size();
   if (fileSize < HEADER_SIZE) {
     LOG_ERR("SCT", "Search failed: section cache header is truncated");
+    // Release the handle so the corrupt cache can be invalidated/rebuilt; the
+    // next call reopens lazily (searchHeaderReady stays false).
+    file.close();
     return false;
   }
 
   uint32_t lutOffset = 0;
   if (!readPageLutOffset(lutOffset)) {
     LOG_ERR("SCT", "Search failed: could not read page LUT offset");
+    file.close();
     return false;
   }
 

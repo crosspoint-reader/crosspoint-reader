@@ -704,6 +704,9 @@ void EpubReaderActivity::launchSearchInput() {
 
     const auto& query = std::get<KeyboardResult>(result.data).text;
     if (!Section::isValidSearchQuery(query)) {
+      // Surface why the search was not accepted (e.g. whitespace/hyphen-only
+      // input) instead of silently repainting, which reads as a no-op.
+      showTransientMessage(tr(STR_INVALID_SEARCH_QUERY));
       requestUpdate();
       return;
     }

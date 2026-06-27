@@ -329,8 +329,12 @@ void EpubReaderSearchActivity::render(RenderLock&&) {
                               percentText, true);
   }
 
-  const char* backLabel = state == SearchState::Searching ? tr(STR_CANCEL) : tr(STR_BACK);
-  const auto labels = mappedInput.mapLabels(backLabel, "", "", "");
+  // While searching, Back cancels. On terminal states (NotFound/Error) both Back
+  // and Confirm dismiss to the reader (see loop()), so advertise both.
+  const bool terminal = state != SearchState::Searching;
+  const char* backLabel = terminal ? tr(STR_BACK) : tr(STR_CANCEL);
+  const char* confirmLabel = terminal ? tr(STR_DONE) : "";
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
