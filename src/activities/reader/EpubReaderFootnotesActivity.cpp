@@ -14,9 +14,10 @@ void EpubReaderFootnotesActivity::onEnter() {
   selectedIndex = 0;
   // If we were opened while a select button is still held (the long-press Menu footnotes shortcut
   // pushes this picker before the user lets go of Confirm), ignore that button's first release so
-  // it doesn't immediately select footnote 0.
-  ignoreFirstSelectRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm) ||
-                             mappedInput.isPressed(MappedInputManager::Button::Power);
+  // it doesn't immediately select footnote 0. Track each button separately so releasing one does
+  // not clear the other's latch.
+  ignoreConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+  ignorePowerRelease = mappedInput.isPressed(MappedInputManager::Button::Power);
   requestUpdate();
 }
 
@@ -31,12 +32,17 @@ void EpubReaderFootnotesActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Power)) {
-    if (ignoreFirstSelectRelease) {
-      // This is the release of the button that was still held when the picker opened; consume it
-      // so the list stays open instead of auto-selecting the first footnote.
-      ignoreFirstSelectRelease = false;
+  const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  const bool powerReleased = mappedInput.wasReleased(MappedInputManager::Button::Power);
+  if (confirmReleased || powerReleased) {
+    // Swallow the opening release of a button that was still held when the picker opened, clearing
+    // only that button's latch so the list stays open instead of auto-selecting the first footnote.
+    if (confirmReleased && ignoreConfirmRelease) {
+      ignoreConfirmRelease = false;
+      return;
+    }
+    if (powerReleased && ignorePowerRelease) {
+      ignorePowerRelease = false;
       return;
     }
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(footnotes.size())) {
