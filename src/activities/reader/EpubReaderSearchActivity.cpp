@@ -30,6 +30,8 @@ EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, Mapped
     memcpy(this->query.data(), query, length);
     this->query[length] = '\0';
   }
+  // Build the KMP failure function once here; every page scan reuses it.
+  Section::buildSearchPrefix(this->query.data(), queryPrefix);
 }
 
 void EpubReaderSearchActivity::onEnter() {
@@ -135,7 +137,7 @@ void EpubReaderSearchActivity::scanNextPage() {
     return;
   }
 
-  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), query.data());
+  const auto match = section.pageContainsText(static_cast<uint16_t>(currentPage), query.data(), queryPrefix);
   if (!match.has_value()) {
     setFailure(SearchState::Error);
     return;

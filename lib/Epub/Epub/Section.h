@@ -1,4 +1,6 @@
 #pragma once
+#include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -48,9 +50,16 @@ class Section {
   // allocation. Intended for sequential, book-wide operations such as search.
   void resetForSpine(int newSpineIndex);
 
+  // Precompute the KMP failure function for a query once so a book-wide search
+  // reuses it for every page instead of rebuilding it on each pageContainsText()
+  // call. Returns false for an empty or oversized query.
+  static bool buildSearchPrefix(std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix);
+
   // Streams the compact text record for one page through a fixed-size buffer.
+  // `prefix` must be the table buildSearchPrefix() produced for `query`.
   // nullopt indicates an invalid/corrupt cache record; false is a valid miss.
-  std::optional<bool> pageContainsText(uint16_t page, std::string_view query);
+  std::optional<bool> pageContainsText(uint16_t page, std::string_view query,
+                                       const std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix);
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;

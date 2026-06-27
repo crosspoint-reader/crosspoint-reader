@@ -366,7 +366,27 @@ void Section::resetForSpine(const int newSpineIndex) {
   currentPage = 0;
 }
 
-std::optional<bool> Section::pageContainsText(const uint16_t page, const std::string_view query) {
+bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
+  if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES) {
+    return false;
+  }
+
+  prefix.fill(0);
+  for (size_t i = 1, matched = 0; i < query.size(); ++i) {
+    const uint8_t value = asciiLower(static_cast<uint8_t>(query[i]));
+    while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {
+      matched = prefix[matched - 1];
+    }
+    if (value == asciiLower(static_cast<uint8_t>(query[matched]))) {
+      ++matched;
+    }
+    prefix[i] = static_cast<uint8_t>(matched);
+  }
+  return true;
+}
+
+std::optional<bool> Section::pageContainsText(const uint16_t page, const std::string_view query,
+                                              const std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
   if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES || page >= pageCount) {
     LOG_ERR("SCT", "Invalid page search request (page=%u count=%u queryBytes=%u)", page, pageCount,
             static_cast<unsigned>(query.size()));
@@ -416,21 +436,9 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     return std::nullopt;
   }
 
-  // KMP keeps overlap handling correct while using 128 bytes total for its
-  // prefix table and SD read buffer. This stays below the 256-byte local-data
-  // budget even with the surrounding scalar state.
-  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> prefix{};
-  for (size_t i = 1, matched = 0; i < query.size(); ++i) {
-    const uint8_t value = asciiLower(static_cast<uint8_t>(query[i]));
-    while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {
-      matched = prefix[matched - 1];
-    }
-    if (value == asciiLower(static_cast<uint8_t>(query[matched]))) {
-      ++matched;
-    }
-    prefix[i] = static_cast<uint8_t>(matched);
-  }
-
+  // KMP keeps overlap handling correct while streaming through a 64-byte SD
+  // read buffer. The prefix table is built once per search by the caller
+  // (buildSearchPrefix) and reused across every page rather than rebuilt here.
   std::array<uint8_t, 64> buffer{};
   size_t matched = 0;
   while (remaining > 0) {

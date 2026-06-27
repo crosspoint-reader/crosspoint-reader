@@ -28,6 +28,9 @@ class EpubReaderSearchActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   Section section;
   std::array<char, Section::MAX_SEARCH_QUERY_BYTES + 1> query{};
+  // KMP failure function for `query`, built once in the constructor and reused
+  // for every page scan instead of being rebuilt on each pageContainsText().
+  std::array<uint8_t, Section::MAX_SEARCH_QUERY_BYTES> queryPrefix{};
   const int startSpineIndex;
   const int startPage;
   int currentSpineIndex;
