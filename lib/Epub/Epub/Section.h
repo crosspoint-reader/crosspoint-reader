@@ -19,10 +19,21 @@ class Section {
   std::string filePath;
   HalFile file;
 
+  // Cached section-header state for the search scan: the file size and page-LUT
+  // offset are invariant per section, so they are read once when the scan file
+  // is lazily opened and reused for every pageContainsText() call. Invalidated
+  // by resetForSpine() (which also closes the file).
+  bool searchHeaderReady = false;
+  uint32_t searchFileSize = 0;
+  uint32_t searchLutOffset = 0;
+
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
   uint32_t onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset);
+  // Lazily open the scan file and cache its size and page-LUT offset. Returns
+  // false on open failure or a truncated/corrupt header.
+  bool ensureSearchHeader();
 
  public:
   static constexpr size_t MAX_SEARCH_QUERY_BYTES = 64;

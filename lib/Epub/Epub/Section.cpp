@@ -364,6 +364,39 @@ void Section::resetForSpine(const int newSpineIndex) {
   filePath = epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin";
   pageCount = 0;
   currentPage = 0;
+  searchHeaderReady = false;
+}
+
+bool Section::ensureSearchHeader() {
+  if (searchHeaderReady) {
+    return true;
+  }
+
+  // Open the member file handle lazily on the first call. It stays open for
+  // all pages in this section; resetForSpine() closes it when advancing.
+  if (!file) {
+    if (!Storage.openFileForRead("SCT", filePath, file)) {
+      return false;
+    }
+  }
+
+  const uint32_t fileSize = file.size();
+  if (fileSize < HEADER_SIZE) {
+    LOG_ERR("SCT", "Search failed: section cache header is truncated");
+    return false;
+  }
+
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  uint32_t lutOffset = 0;
+  if (file.read(reinterpret_cast<uint8_t*>(&lutOffset), sizeof(lutOffset)) != sizeof(lutOffset)) {
+    LOG_ERR("SCT", "Search failed: could not read page LUT offset");
+    return false;
+  }
+
+  searchFileSize = fileSize;
+  searchLutOffset = lutOffset;
+  searchHeaderReady = true;
+  return true;
 }
 
 bool Section::buildSearchPrefix(const std::string_view query, std::array<uint8_t, MAX_SEARCH_QUERY_BYTES>& prefix) {
@@ -393,26 +426,12 @@ std::optional<bool> Section::pageContainsText(const uint16_t page, const std::st
     return std::nullopt;
   }
 
-  // Open the member file handle lazily on the first call. It stays open for
-  // all pages in this section; resetForSpine() closes it when advancing.
-  if (!file) {
-    if (!Storage.openFileForRead("SCT", filePath, file)) {
-      return std::nullopt;
-    }
-  }
-
-  const uint32_t fileSize = file.size();
-  if (fileSize < HEADER_SIZE) {
-    LOG_ERR("SCT", "Search failed: section cache header is truncated");
+  // File size and page-LUT offset are invariant per section; read them once.
+  if (!ensureSearchHeader()) {
     return std::nullopt;
   }
-
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
-  uint32_t lutOffset = 0;
-  if (file.read(reinterpret_cast<uint8_t*>(&lutOffset), sizeof(lutOffset)) != sizeof(lutOffset)) {
-    LOG_ERR("SCT", "Search failed: could not read page LUT offset");
-    return std::nullopt;
-  }
+  const uint32_t fileSize = searchFileSize;
+  const uint32_t lutOffset = searchLutOffset;
 
   const uint32_t entryOffset = lutOffset + PAGE_LUT_ENTRY_SIZE * page;
   if (lutOffset == 0 || entryOffset > fileSize || fileSize - entryOffset < PAGE_LUT_ENTRY_SIZE) {
