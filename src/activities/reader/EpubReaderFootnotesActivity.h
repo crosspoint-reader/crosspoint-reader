@@ -24,5 +24,8 @@ class EpubReaderFootnotesActivity final : public Activity {
   const std::vector<FootnoteEntry>& footnotes;
   int selectedIndex = 0;
   int scrollOffset = 0;
+  // Set when the picker is opened while a select button is still held (e.g. the long-press Menu
+  // footnotes shortcut). Swallows that button's first release so it does not auto-select index 0.
+  bool ignoreFirstSelectRelease = false;
   ButtonNavigator buttonNavigator;
 };

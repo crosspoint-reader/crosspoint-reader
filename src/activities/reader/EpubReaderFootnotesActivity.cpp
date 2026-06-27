@@ -12,6 +12,11 @@
 void EpubReaderFootnotesActivity::onEnter() {
   Activity::onEnter();
   selectedIndex = 0;
+  // If we were opened while a select button is still held (the long-press Menu footnotes shortcut
+  // pushes this picker before the user lets go of Confirm), ignore that button's first release so
+  // it doesn't immediately select footnote 0.
+  ignoreFirstSelectRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm) ||
+                             mappedInput.isPressed(MappedInputManager::Button::Power);
   requestUpdate();
 }
 
@@ -28,6 +33,12 @@ void EpubReaderFootnotesActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
       mappedInput.wasReleased(MappedInputManager::Button::Power)) {
+    if (ignoreFirstSelectRelease) {
+      // This is the release of the button that was still held when the picker opened; consume it
+      // so the list stays open instead of auto-selecting the first footnote.
+      ignoreFirstSelectRelease = false;
+      return;
+    }
     if (selectedIndex >= 0 && selectedIndex < static_cast<int>(footnotes.size())) {
       setResult(FootnoteResult{footnotes[selectedIndex].href});
       finish();
