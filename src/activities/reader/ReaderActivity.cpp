@@ -2,7 +2,10 @@
 
 #include <FsHelpers.h>
 #include <HalStorage.h>
+#include <I18n.h>
 #include <Memory.h>
+
+#include "components/UITheme.h"
 
 #include "CrossPointSettings.h"
 #include "Epub.h"
@@ -34,6 +37,12 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   if (!epub) {
     LOG_ERR("READER", "Failed to allocate EPUB object");
     return nullptr;
+  }
+  // First open: building the spine/TOC index (book.bin) takes a couple of seconds. Show the
+  // indexing popup so it isn't a silent wait on the home screen. The cachePath/hash is known at
+  // construction, so this check is valid before load(); a cached open loads in a blink -> no popup.
+  if (!Storage.exists((epub->getCachePath() + "/book.bin").c_str())) {
+    GUI.drawPopup(renderer, tr(STR_INDEXING));
   }
   if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
     return epub;

@@ -230,7 +230,10 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
       if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
         continue;
       }
-      streamed = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
+      // Larger chunks mean far fewer SD writes inflating the HTML; a 1KB chunk turned a 584KB
+      // single-spine novel into ~570 tiny writes (multi-second). 8KB keeps the transient buffers
+      // small while cutting the write count 8x.
+      streamed = epub->readItemContentsToStream(localPath, tmpHtml, 8192);
       fileSize = tmpHtml.size();
       // Explicitly close() file before calling Storage.remove()
       tmpHtml.close();
@@ -326,6 +329,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     abandonBuild();
     return false;
   }
+  build_->totalBytes = build_->parser->parseTotalBytes();
   return true;
 }
 
@@ -347,9 +351,21 @@ bool Section::buildSomeMore(const int maxPages) {
     }
     // ParseStatus::More: yield once we've laid out the requested number of pages.
     if (maxPages > 0 && (pageCount - startCount) >= maxPages) {
+      build_->bytesConsumed = build_->parser->parseBytesConsumed();
       return true;
     }
   }
+}
+
+uint16_t Section::estimatedTotalPages() const {
+  if (!build_) return pageCount;  // finalized -> exact count
+  const uint32_t consumed = build_->bytesConsumed;
+  const uint32_t total = build_->totalBytes;
+  if (pageCount == 0 || consumed == 0 || total <= consumed) return pageCount;
+  // Scale the pages built so far by the fraction of HTML still unparsed.
+  const uint64_t est = static_cast<uint64_t>(pageCount) * total / consumed;
+  if (est <= pageCount) return pageCount;
+  return est > 60000 ? 60000 : static_cast<uint16_t>(est);
 }
 
 bool Section::finalizeBuild() {

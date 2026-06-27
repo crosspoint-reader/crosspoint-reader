@@ -241,7 +241,8 @@ void EpubReaderActivity::loop() {
   // so a large chapter finishes laying out (and caching) while the reader is on the first page
   // and later pages turn instantly. Skip while the render mutex is busy so we never delay a
   // pending render; re-check isBuilding() under the lock since render() may have just finished it.
-  if (section && section->isBuilding() && !RenderLock::peek()) {
+  if (section && section->isBuilding() && !RenderLock::peek() &&
+      static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) {
     RenderLock lock;
     if (section->isBuilding()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
@@ -777,7 +778,12 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   if (isForwardTurn) {
-    if (section->currentPage < section->pageCount - 1) {
+    // Advance within the section while there are (or may still be) more pages: either a built
+    // page ahead, or the section is still building (windowed), in which case more pages exist
+    // beyond the current watermark and render()'s ensure-built pump will lay them out. Only when
+    // the section is fully built AND we're on its last page do we move to the next spine -- using
+    // the live pageCount alone would mistake the build watermark for the end of a giant spine.
+    if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
     } else {
       // We don't want to delete the section mid-render, so grab the semaphore
@@ -892,17 +898,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           showPendingSyncSaveError();
           return;
         }
-      } else if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                      SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
-        LOG_ERR("ERS", "Failed to start section build");
-        section.reset();
-        showPendingSyncSaveError();
-        return;
       } else {
-        // Lay out just enough to show the landing page; loop() builds the rest behind it.
+        // Lay out just enough to show the landing page; loop() builds the rest behind it. Show the
+        // indexing popup up front only when the build will actually be slow: a large spine (its
+        // whole HTML must be inflated before page 1 can lay out -- the giant single-spine case), or
+        // a deep resume/jump that must lay out many pages to reach the landing page. Tiny sections
+        // build in a blink and stay popup-free.
         const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
+        const size_t spineBytes =
+            epub->getCumulativeSpineItemSize(currentSpineIndex) -
+            (currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
+        if (spineBytes > BUILD_POPUP_BYTE_THRESHOLD || target > BUILD_POPUP_PAGE_THRESHOLD) {
+          GUI.drawPopup(renderer, tr(STR_INDEXING));
+        }
+        if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                                 SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                 viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                 SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+          LOG_ERR("ERS", "Failed to start section build");
+          section.reset();
+          showPendingSyncSaveError();
+          return;
+        }
         while (!section->isBuildComplete() && static_cast<int>(section->pageCount) <= target) {
           if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
             LOG_ERR("ERS", "Failed during incremental section build");
@@ -1024,7 +1041,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
-  silentIndexAheadIfNeeded(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 
   showPendingSyncSaveError();
@@ -1061,51 +1077,6 @@ bool EpubReaderActivity::applyDeferredReposition() {
   }
   cachedChapterTotalPageCount = 0;  // consumed; don't read cached progress again
   return changed;
-}
-
-void EpubReaderActivity::silentIndexAheadIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
-  // Don't prefetch the next sections while the current one is still building incrementally --
-  // a full blocking build of an upcoming spine item would stall the in-progress build.
-  if (!epub || !section || section->isBuilding()) {
-    return;
-  }
-
-  // Only prefetch once we're at/near the end of the current section, so we don't do extra
-  // work while several pages still remain to read in this one. For a single-page section
-  // (pageCount 1, currentPage 0) this is true immediately, which is exactly the case that
-  // used to block on every page turn (front matter built of many one-page spine items).
-  if (section->pageCount > 0 && section->currentPage < section->pageCount - 2) {
-    return;
-  }
-
-  // Keep a window of upcoming sections built ahead of the reader. We're on the render task
-  // with the current page already on screen, so this work is off the page-turn critical
-  // path. Each section is built silently (no popupFn -> no e-ink refresh), one at a time;
-  // already-cached sections are skipped, so steady state only builds the new frontier.
-  const int spineCount = epub->getSpineItemsCount();
-  for (int offset = 1; offset <= PREFETCH_SECTIONS_AHEAD; offset++) {
-    const int nextSpineIndex = currentSpineIndex + offset;
-    if (nextSpineIndex >= spineCount) {
-      break;
-    }
-
-    Section nextSection(epub, nextSpineIndex, renderer);
-    if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                    SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                    viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                    SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
-      continue;  // already cached
-    }
-
-    LOG_DBG("ERS", "Silently indexing ahead: %d", nextSpineIndex);
-    if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                       viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                       SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
-      LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
-      break;  // stop the window on failure
-    }
-  }
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
@@ -1278,9 +1249,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::renderStatusBar() const {
-  // Calculate progress in book
+  // Calculate progress in book. Use the estimated total while a giant spine is still building so
+  // "page X of Y" and the progress bar don't read off the small build watermark.
   const int currentPage = section->currentPage + 1;
-  const float pageCount = section->pageCount;
+  const float pageCount = section->estimatedTotalPages();
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 

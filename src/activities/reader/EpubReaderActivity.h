@@ -61,13 +61,26 @@ class EpubReaderActivity final : public Activity {
   void renderStatusBar() const;
   // Keep a small window of upcoming sections built ahead of the reader (off the
   // page-turn critical path) so navigating forward never blocks on indexing.
-  void silentIndexAheadIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
-  static constexpr int PREFETCH_SECTIONS_AHEAD = 5;
   // Pages laid out per incremental-build pump: on the render path (catching up to the page
   // being shown) and per loop() tick (background build of a large chapter). Kept small so a
   // background build chunk never noticeably delays input or a pending render.
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
-  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 4;
+  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
+  // How many pages to keep laid out ahead of the reader for a still-building section. A page turn
+  // is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder -- a
+  // tiny buffer is enough. The background build stops once the watermark is this far ahead and
+  // resumes as the reader advances, so a giant single-spine book (a whole novel in one spine item)
+  // barely builds ahead at all and lets the device sleep. A chapter smaller than this still builds
+  // fully and caches.
+  static constexpr int BUILD_WINDOW_AHEAD = 5;
+  // Show the indexing popup when an initial build must lay out more than this many pages up front
+  // (a deep resume/jump into a not-yet-built section), so it isn't a silent wait. Kept independent
+  // of the small look-ahead window so ordinary landings stay popup-free.
+  static constexpr int BUILD_POPUP_PAGE_THRESHOLD = 20;
+  // Also show the popup when first building a spine larger than this (uncompressed bytes): its
+  // whole HTML must be inflated before page 1 can lay out (the giant single-spine case), which is
+  // a multi-second wait. Normal chapters are well under this and stay popup-free.
+  static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
   // Remap the cached relative reading position once the section's real page count is known
   // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
   // No-op while the section is still building or when the pagination is unchanged (plain resume).
