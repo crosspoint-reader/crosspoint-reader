@@ -185,6 +185,10 @@ int EpubReaderSearchActivity::searchProgressPercent() const {
 }
 
 void EpubReaderSearchActivity::loop() {
+  // Do NOT poll input here. main.cpp's loop() already calls gpio.update() once
+  // per iteration before dispatching to this activity; a second poll would clear
+  // the just-latched press/release events (InputManager::update zeroes them every
+  // call) before wasReleased() reads them, making Back/Confirm undismissable.
   switch (state) {
     case SearchState::Searching:
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
