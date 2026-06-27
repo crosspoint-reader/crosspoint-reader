@@ -516,11 +516,11 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     // used in this paragraph. Style index is the low two bits (regular/bold/
     // italic/bold-italic); the underline bit is irrelevant to advance metrics.
     uint8_t styleMask = 0;
-    std::vector<std::string> tokenWords;
+    std::vector<const char*> tokenWords;
     tokenWords.reserve(tokens.size());
     for (size_t i = 0; i < tokens.size(); ++i) {
       styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(tokens[i].style) & 0x03));
-      tokenWords.push_back(tokens[i].word);
+      tokenWords.push_back(tokens[i].word.c_str());
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
     renderer.ensureSdCardFontReady(fontId, tokenWords, hyphenationEnabled, styleMask);
