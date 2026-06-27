@@ -294,7 +294,10 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   bool hasFailedLutRecords = false;
   // Write LUT
   for (const auto& entry : lut) {
-    if (entry.fileOffset == 0 || entry.searchTextOffset == 0) {
+    // onPageComplete returns a non-zero page offset only after both the page and
+    // its search text serialized, so fileOffset == 0 already flags every failure;
+    // a successful page is always written past the header, so it is never 0.
+    if (entry.fileOffset == 0) {
       hasFailedLutRecords = true;
       break;
     }
