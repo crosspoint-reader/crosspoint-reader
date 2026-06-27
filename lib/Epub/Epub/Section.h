@@ -36,6 +36,10 @@ class Section {
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
   uint32_t onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset);
+  // Seek to and read the page-LUT offset from the section header (the single
+  // place that knows where that field lives). Requires the member file to be
+  // open; returns false on seek/read failure.
+  bool readPageLutOffset(uint32_t& lutOffset);
   // Lazily open the scan file and cache its size and page-LUT offset. Returns
   // false on open failure or a truncated/corrupt header.
   bool ensureSearchHeader();

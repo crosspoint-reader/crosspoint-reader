@@ -339,14 +339,24 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   return true;
 }
 
+bool Section::readPageLutOffset(uint32_t& lutOffset) {
+  if (!file.seek(HEADER_SIZE - sizeof(uint32_t) * 4)) {
+    return false;
+  }
+  return file.read(reinterpret_cast<uint8_t*>(&lutOffset), sizeof(lutOffset)) == sizeof(lutOffset);
+}
+
 std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
-  uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
+  uint32_t lutOffset = 0;
+  if (!readPageLutOffset(lutOffset)) {
+    LOG_ERR("SCT", "Failed to read page LUT offset");
+    file.close();
+    return nullptr;
+  }
   file.seek(lutOffset + PAGE_LUT_ENTRY_SIZE * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
@@ -402,9 +412,8 @@ bool Section::ensureSearchHeader() {
     return false;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
   uint32_t lutOffset = 0;
-  if (file.read(reinterpret_cast<uint8_t*>(&lutOffset), sizeof(lutOffset)) != sizeof(lutOffset)) {
+  if (!readPageLutOffset(lutOffset)) {
     LOG_ERR("SCT", "Search failed: could not read page LUT offset");
     return false;
   }
