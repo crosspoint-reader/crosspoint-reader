@@ -628,6 +628,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 }
 
                 // Create page for image - only break if image won't fit remaining space
+                bool startedNewPageForImage = false;
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
                      self->viewportHeight)) {
@@ -640,6 +641,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     return;
                   }
                   self->currentPageNextY = 0;
+                  startedNewPageForImage = true;
                 } else if (!self->currentPage) {
                   self->currentPage.reset(new Page());
                   if (!self->currentPage) {
@@ -647,6 +649,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     return;
                   }
                   self->currentPageNextY = 0;
+                }
+
+                // If the image was pushed onto a fresh page, drop the carried
+                // top margin from the previous page; otherwise a viewport-tall
+                // image can become impossible to place and later render out of
+                // bounds.
+                if (startedNewPageForImage) {
+                  imageMarginTop = 0;
                 }
 
                 // Apply top margin from container block
