@@ -260,8 +260,10 @@ void EpubReaderSearchActivity::render(RenderLock&&) {
   UITheme::drawCenteredText(renderer, screen, UI_12_FONT_ID, messageY, message, true, EpdFontFamily::BOLD);
 
   if (state == SearchState::Searching) {
+    // Draw the value loop() already computed and gated the repaint on, rather
+    // than recomputing the progress here.
     char percentText[8];
-    snprintf(percentText, sizeof(percentText), "%d%%", searchProgressPercent());
+    snprintf(percentText, sizeof(percentText), "%d%%", lastProgressPercent);
     UITheme::drawCenteredText(renderer, screen, UI_12_FONT_ID, messageY + renderer.getLineHeight(UI_12_FONT_ID),
                               percentText, true);
   }
