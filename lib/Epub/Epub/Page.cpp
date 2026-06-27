@@ -4,6 +4,7 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <limits>
 #include <new>
 
 namespace {
@@ -137,6 +138,65 @@ bool Page::serialize(HalFile& file) const {
         file.write(fn.href, sizeof(fn.href)) != sizeof(fn.href)) {
       LOG_ERR("PGE", "Failed to write footnote");
       return false;
+    }
+  }
+
+  return true;
+}
+
+bool Page::serializeSearchText(HalFile& file) const {
+  uint32_t textLength = 0;
+  bool hasWord = false;
+
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageLine) {
+      continue;
+    }
+
+    const auto& line = static_cast<const PageLine&>(*element);
+    if (!line.getBlock()) {
+      continue;
+    }
+
+    for (const auto& word : line.getBlock()->getWords()) {
+      const size_t separatorLength = hasWord ? 1 : 0;
+      if (separatorLength > std::numeric_limits<uint32_t>::max() - textLength ||
+          word.size() > std::numeric_limits<uint32_t>::max() - textLength - separatorLength) {
+        LOG_ERR("PGE", "Search text is too large to serialize");
+        return false;
+      }
+      textLength += static_cast<uint32_t>(word.size() + separatorLength);
+      hasWord = true;
+    }
+  }
+
+  if (file.write(reinterpret_cast<const uint8_t*>(&textLength), sizeof(textLength)) != sizeof(textLength)) {
+    LOG_ERR("PGE", "Failed to write search text length");
+    return false;
+  }
+
+  hasWord = false;
+  static constexpr uint8_t WORD_SEPARATOR = ' ';
+  for (const auto& element : elements) {
+    if (element->getTag() != TAG_PageLine) {
+      continue;
+    }
+
+    const auto& line = static_cast<const PageLine&>(*element);
+    if (!line.getBlock()) {
+      continue;
+    }
+
+    for (const auto& word : line.getBlock()->getWords()) {
+      if (hasWord && file.write(&WORD_SEPARATOR, sizeof(WORD_SEPARATOR)) != sizeof(WORD_SEPARATOR)) {
+        LOG_ERR("PGE", "Failed to write search text separator");
+        return false;
+      }
+      if (!word.empty() && file.write(reinterpret_cast<const uint8_t*>(word.data()), word.size()) != word.size()) {
+        LOG_ERR("PGE", "Failed to write search text word");
+        return false;
+      }
+      hasWord = true;
     }
   }
 

@@ -90,6 +90,10 @@ class Page {
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   void renderImages(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(HalFile& file) const;
+  // Persist a compact, display-order text record for bounded-memory page search.
+  // The record is kept separate from Page::serialize() so searching never has
+  // to reconstruct TextBlock vectors on the heap.
+  bool serializeSearchText(HalFile& file) const;
   static std::unique_ptr<Page> deserialize(HalFile& file);
 
   // Check if page contains any images (used to force full refresh)

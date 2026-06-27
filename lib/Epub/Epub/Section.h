@@ -3,6 +3,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "Epub.h"
 
@@ -11,7 +12,7 @@ class GfxRenderer;
 
 class Section {
   std::shared_ptr<Epub> epub;
-  const int spineIndex;
+  int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
   HalFile file;
@@ -19,9 +20,10 @@ class Section {
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
-  uint32_t onPageComplete(std::unique_ptr<Page> page);
+  uint32_t onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset);
 
  public:
+  static constexpr size_t MAX_SEARCH_QUERY_BYTES = 64;
   uint16_t pageCount = 0;
   int currentPage = 0;
 
@@ -41,6 +43,14 @@ class Section {
                          const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
   std::string getTextFromSectionFile();
+
+  // Reuse this Section object for another spine item without another heap
+  // allocation. Intended for sequential, book-wide operations such as search.
+  void resetForSpine(int newSpineIndex);
+
+  // Streams the compact text record for one page through a fixed-size buffer.
+  // nullopt indicates an invalid/corrupt cache record; false is a valid miss.
+  std::optional<bool> pageContainsText(uint16_t page, std::string_view query);
 
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;

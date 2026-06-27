@@ -3,6 +3,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <array>
 #include <optional>
 
 #include "BookmarkEntry.h"
@@ -37,11 +38,16 @@ class EpubReaderActivity final : public Activity {
   bool ignoreNextConfirmRelease = false;
   bool currentPageBookmarked = false;
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
+  bool showSearchMatchMessage = false;
+  std::array<char, Section::MAX_SEARCH_QUERY_BYTES + 1> lastSearchQuery{};
+  int lastSearchResultSpine = -1;
+  int lastSearchResultPage = -1;
   std::vector<BookmarkEntry> cachedBookmarks;
   // Tracks whether this book is currently removed from Recent Books by the
   // removeReadBooksFromRecents feature (set at End-of-Book, cleared if paged back in).
   bool recentsEntryRemoved = false;
   unsigned long bookmarkMessageTime = 0UL;
+  unsigned long searchMessageTime = 0UL;
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
@@ -64,6 +70,8 @@ class EpubReaderActivity final : public Activity {
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  void launchSearchInput();
+  void launchBookSearch(const std::string& query);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();

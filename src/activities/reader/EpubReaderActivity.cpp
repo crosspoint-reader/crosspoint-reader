@@ -13,6 +13,8 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -24,6 +26,7 @@
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
+#include "EpubReaderSearchActivity.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
@@ -32,6 +35,7 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
@@ -69,6 +73,37 @@ struct ProgressRange {
   float start;
   float end;
 };
+
+struct ReaderViewport {
+  int top;
+  int right;
+  int bottom;
+  int left;
+  uint16_t width;
+  uint16_t height;
+};
+
+ReaderViewport calculateReaderViewport(GfxRenderer& renderer, const bool automaticPageTurnActive) {
+  ReaderViewport viewport{};
+  renderer.getOrientedViewableTRBL(&viewport.top, &viewport.right, &viewport.bottom, &viewport.left);
+  viewport.top += SETTINGS.screenMargin;
+  viewport.left += SETTINGS.screenMargin;
+  viewport.right += SETTINGS.screenMargin;
+
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  if (automaticPageTurnActive &&
+      (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
+    viewport.bottom +=
+        std::max(SETTINGS.screenMargin,
+                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+  } else {
+    viewport.bottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+  }
+
+  viewport.width = renderer.getScreenWidth() - viewport.left - viewport.right;
+  viewport.height = renderer.getScreenHeight() - viewport.top - viewport.bottom;
+  return viewport;
+}
 
 ProgressRange getPageProgressRange(const std::shared_ptr<Epub>& epub, const int spineIndex, const int page,
                                    const int pageCount) {
@@ -295,6 +330,10 @@ void EpubReaderActivity::loop() {
 
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showBookmarkMessage = false;
+    requestUpdate();
+  }
+  if (showSearchMatchMessage && (millis() - searchMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showSearchMatchMessage = false;
     requestUpdate();
   }
 
@@ -570,6 +609,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SEARCH: {
+      launchSearchInput();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
       startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
                              [this](const ActivityResult& result) {
@@ -655,6 +698,97 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+void EpubReaderActivity::launchSearchInput() {
+  // KeyboardEntryActivity is already the project's bounded text-input path.
+  // The activity allocation is one-shot and owned by ActivityManager; the
+  // 64-byte limit bounds its internal query string.
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(
+      renderer, mappedInput, tr(STR_SEARCH), lastSearchQuery.data(), Section::MAX_SEARCH_QUERY_BYTES, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("ERS", "OOM: KeyboardEntryActivity (%u bytes)", static_cast<unsigned>(sizeof(KeyboardEntryActivity)));
+    requestUpdate();
+    return;
+  }
+
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    if (result.isCancelled) {
+      requestUpdate();
+      return;
+    }
+
+    const auto& query = std::get<KeyboardResult>(result.data).text;
+    const bool onlyWhitespace =
+        std::all_of(query.begin(), query.end(), [](const unsigned char value) { return std::isspace(value) != 0; });
+    if (query.empty() || onlyWhitespace || query.size() > Section::MAX_SEARCH_QUERY_BYTES) {
+      requestUpdate();
+      return;
+    }
+    launchBookSearch(query);
+  });
+}
+
+void EpubReaderActivity::launchBookSearch(const std::string& query) {
+  if (!epub || epub->getSpineItemsCount() <= 0) {
+    requestUpdate();
+    return;
+  }
+
+  const int resumePage = section ? section->currentPage : nextPageNumber;
+  const int searchStartSpine =
+      (currentSpineIndex >= 0 && currentSpineIndex < epub->getSpineItemsCount()) ? currentSpineIndex : 0;
+  int searchStartPage = searchStartSpine == currentSpineIndex ? std::max(0, resumePage) : 0;
+  const bool sameQuery = strcmp(lastSearchQuery.data(), query.c_str()) == 0;
+  if (sameQuery && lastSearchResultSpine == currentSpineIndex && lastSearchResultPage == resumePage) {
+    // May exceed section page count; preparePage() handles spine advancement.
+    ++searchStartPage;
+  }
+
+  const ReaderViewport viewport = calculateReaderViewport(renderer, automaticPageTurnActive);
+
+  // Release the current page graph before allocating the search activity. It
+  // will be reconstructed from the SD cache on return, while nextPageNumber
+  // preserves the reader position if search is cancelled or misses.
+  {
+    RenderLock lock(*this);
+    if (section) {
+      nextPageNumber = section->currentPage;
+    }
+    section.reset();
+  }
+
+  // One activity allocation is required by ActivityManager ownership. Query,
+  // matcher state, and the reusable Section live inline in that allocation;
+  // no per-page or per-chapter activity allocations are performed.
+  auto searchActivity = makeUniqueNoThrow<EpubReaderSearchActivity>(
+      renderer, mappedInput, epub, query.c_str(), searchStartSpine, searchStartPage, viewport.width, viewport.height);
+  if (!searchActivity) {
+    LOG_ERR("ERS", "OOM: EpubReaderSearchActivity (%u bytes)", static_cast<unsigned>(sizeof(EpubReaderSearchActivity)));
+    requestUpdate();
+    return;
+  }
+
+  memcpy(lastSearchQuery.data(), query.data(), query.size());
+  lastSearchQuery[query.size()] = '\0';
+  if (!sameQuery) {
+    lastSearchResultSpine = -1;
+    lastSearchResultPage = -1;
+  }
+
+  startActivityForResult(std::move(searchActivity), [this](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      const auto& match = std::get<ProgressChangeResult>(result.data);
+      RenderLock lock(*this);
+      currentSpineIndex = match.spineIndex;
+      nextPageNumber = match.page;
+      section.reset();
+      lastSearchResultSpine = match.spineIndex;
+      lastSearchResultPage = match.page;
+      showSearchMatchMessage = true;
+      searchMessageTime = millis();
+    }
+  });
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
@@ -819,33 +953,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
-  // Apply screen viewable areas and additional padding
-  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                   &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
-  orientedMarginLeft += SETTINGS.screenMargin;
-  orientedMarginRight += SETTINGS.screenMargin;
-
-  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-
-  // reserves space for automatic page turn indicator when no status bar or progress bar only
-  if (automaticPageTurnActive &&
-      (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
-    orientedMarginBottom +=
-        std::max(SETTINGS.screenMargin,
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
-  } else {
-    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
-  }
-
-  const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
-  const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+  const ReaderViewport viewport = calculateReaderViewport(renderer, automaticPageTurnActive);
+  const uint16_t viewportWidth = viewport.width;
+  const uint16_t viewportHeight = viewport.height;
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
-    section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
+    section = makeUniqueNoThrow<Section>(epub, currentSpineIndex, renderer);
+    if (!section) {
+      LOG_ERR("ERS", "OOM: Section (%u bytes)", static_cast<unsigned>(sizeof(Section)));
+      showPendingSyncSaveError();
+      return;
+    }
 
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
@@ -960,7 +1080,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     currentPageFootnotes = std::move(p->footnotes);
 
     const auto start = millis();
-    renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+    renderContents(std::move(p), viewport.top, viewport.right, viewport.bottom, viewport.left);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
@@ -975,6 +1095,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  } else if (showSearchMatchMessage) {
+    GUI.drawPopup(renderer, tr(STR_SEARCH_MATCH_FOUND));
   }
 }
 

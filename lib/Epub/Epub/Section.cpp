@@ -4,14 +4,17 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <algorithm>
+#include <array>
+
 #include "Epub/css/CssParser.h"
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// v27: words NFC-composed at layout time; bump invalidates NFD section caches.
-constexpr uint8_t SECTION_FILE_VERSION = 27;
+// v28: page LUT entries include offsets to compact text records used by search.
+constexpr uint8_t SECTION_FILE_VERSION = 28;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
@@ -19,12 +22,22 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
 
 struct PageLutEntry {
   uint32_t fileOffset;
+  uint32_t searchTextOffset;
   uint16_t paragraphIndex;
   uint16_t listItemIndex;
 };
+static_assert(sizeof(PageLutEntry) == 12, "Unexpected PageLutEntry padding changes the transient RAM budget");
+
+// On-disk page LUT stride: only pageOffset and searchTextOffset are stored
+// inline; paragraphIndex and listItemIndex are written to separate LUTs.
+constexpr size_t PAGE_LUT_ENTRY_SIZE = sizeof(uint32_t) * 2;
+
+constexpr uint8_t asciiLower(const uint8_t value) {
+  return value >= 'A' && value <= 'Z' ? static_cast<uint8_t>(value + ('a' - 'A')) : value;
+}
 }  // namespace
 
-uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
+uint32_t Section::onPageComplete(std::unique_ptr<Page> page, uint32_t& searchTextOffset) {
   if (!file) {
     LOG_ERR("SCT", "File not open for writing page %d", pageCount);
     return 0;
@@ -33,6 +46,11 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   const uint32_t position = file.position();
   if (!page->serialize(file)) {
     LOG_ERR("SCT", "Failed to serialize page %d", pageCount);
+    return 0;
+  }
+  searchTextOffset = file.position();
+  if (!page->serializeSearchText(file)) {
+    LOG_ERR("SCT", "Failed to serialize search text for page %d", pageCount);
     return 0;
   }
   LOG_DBG("SCT", "Page %d processed", pageCount);
@@ -206,6 +224,10 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
                          viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled);
   std::vector<PageLutEntry> lut = {};
+  // Reserve 128 * sizeof(PageLutEntry) = 1,536 bytes once on the heap. The
+  // count is data-dependent, so stack/static storage would impose a hard page
+  // cap; reserving avoids the common alloc-copy-free growth cycle.
+  lut.reserve(128);
 
   // Derive the content base directory and image cache path prefix for the parser
   size_t lastSlash = localPath.find_last_of('/');
@@ -239,7 +261,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
       viewportHeight, hyphenationEnabled, focusReadingEnabled,
       [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
-        lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
+        uint32_t searchTextOffset = 0;
+        const uint32_t fileOffset = this->onPageComplete(std::move(page), searchTextOffset);
+        lut.push_back({fileOffset, searchTextOffset, paragraphIndex, listItemIndex});
       },
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
@@ -261,11 +285,12 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   bool hasFailedLutRecords = false;
   // Write LUT
   for (const auto& entry : lut) {
-    if (entry.fileOffset == 0) {
+    if (entry.fileOffset == 0 || entry.searchTextOffset == 0) {
       hasFailedLutRecords = true;
       break;
     }
     serialization::writePod(file, entry.fileOffset);
+    serialization::writePod(file, entry.searchTextOffset);
   }
 
   if (hasFailedLutRecords) {
@@ -319,7 +344,7 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
   uint32_t lutOffset;
   serialization::readPod(file, lutOffset);
-  file.seek(lutOffset + sizeof(uint32_t) * currentPage);
+  file.seek(lutOffset + PAGE_LUT_ENTRY_SIZE * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
   file.seek(pagePos);
@@ -328,6 +353,109 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
   // Explicit close() required: member variable persists beyond function scope
   file.close();
   return page;
+}
+
+void Section::resetForSpine(const int newSpineIndex) {
+  if (file) {
+    // Member handle persists across calls, so close before switching paths.
+    file.close();
+  }
+  spineIndex = newSpineIndex;
+  filePath = epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin";
+  pageCount = 0;
+  currentPage = 0;
+}
+
+std::optional<bool> Section::pageContainsText(const uint16_t page, const std::string_view query) {
+  if (query.empty() || query.size() > MAX_SEARCH_QUERY_BYTES || page >= pageCount) {
+    LOG_ERR("SCT", "Invalid page search request (page=%u count=%u queryBytes=%u)", page, pageCount,
+            static_cast<unsigned>(query.size()));
+    return std::nullopt;
+  }
+
+  // Open the member file handle lazily on the first call. It stays open for
+  // all pages in this section; resetForSpine() closes it when advancing.
+  if (!file) {
+    if (!Storage.openFileForRead("SCT", filePath, file)) {
+      return std::nullopt;
+    }
+  }
+
+  const uint32_t fileSize = file.size();
+  if (fileSize < HEADER_SIZE) {
+    LOG_ERR("SCT", "Search failed: section cache header is truncated");
+    return std::nullopt;
+  }
+
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  uint32_t lutOffset = 0;
+  if (file.read(reinterpret_cast<uint8_t*>(&lutOffset), sizeof(lutOffset)) != sizeof(lutOffset)) {
+    LOG_ERR("SCT", "Search failed: could not read page LUT offset");
+    return std::nullopt;
+  }
+
+  const uint32_t entryOffset = lutOffset + PAGE_LUT_ENTRY_SIZE * page;
+  if (lutOffset == 0 || entryOffset > fileSize || fileSize - entryOffset < PAGE_LUT_ENTRY_SIZE) {
+    LOG_ERR("SCT", "Search failed: invalid page LUT entry");
+    return std::nullopt;
+  }
+
+  file.seek(entryOffset + sizeof(uint32_t));
+  uint32_t searchTextOffset = 0;
+  if (file.read(reinterpret_cast<uint8_t*>(&searchTextOffset), sizeof(searchTextOffset)) != sizeof(searchTextOffset) ||
+      searchTextOffset > fileSize || fileSize - searchTextOffset < sizeof(uint32_t)) {
+    LOG_ERR("SCT", "Search failed: invalid text record offset");
+    return std::nullopt;
+  }
+
+  file.seek(searchTextOffset);
+  uint32_t remaining = 0;
+  if (file.read(reinterpret_cast<uint8_t*>(&remaining), sizeof(remaining)) != sizeof(remaining) ||
+      remaining > fileSize - searchTextOffset - sizeof(uint32_t)) {
+    LOG_ERR("SCT", "Search failed: invalid text record length");
+    return std::nullopt;
+  }
+
+  // KMP keeps overlap handling correct while using 128 bytes total for its
+  // prefix table and SD read buffer. This stays below the 256-byte local-data
+  // budget even with the surrounding scalar state.
+  std::array<uint8_t, MAX_SEARCH_QUERY_BYTES> prefix{};
+  for (size_t i = 1, matched = 0; i < query.size(); ++i) {
+    const uint8_t value = asciiLower(static_cast<uint8_t>(query[i]));
+    while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {
+      matched = prefix[matched - 1];
+    }
+    if (value == asciiLower(static_cast<uint8_t>(query[matched]))) {
+      ++matched;
+    }
+    prefix[i] = static_cast<uint8_t>(matched);
+  }
+
+  std::array<uint8_t, 64> buffer{};
+  size_t matched = 0;
+  while (remaining > 0) {
+    const size_t chunkSize = std::min<size_t>(buffer.size(), remaining);
+    if (file.read(buffer.data(), chunkSize) != chunkSize) {
+      LOG_ERR("SCT", "Search failed: truncated text record");
+      return std::nullopt;
+    }
+    remaining -= chunkSize;
+
+    for (size_t i = 0; i < chunkSize; ++i) {
+      const uint8_t value = asciiLower(buffer[i]);
+      while (matched > 0 && value != asciiLower(static_cast<uint8_t>(query[matched]))) {
+        matched = prefix[matched - 1];
+      }
+      if (value == asciiLower(static_cast<uint8_t>(query[matched]))) {
+        ++matched;
+        if (matched == query.size()) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 std::string Section::getTextFromSectionFile() {
