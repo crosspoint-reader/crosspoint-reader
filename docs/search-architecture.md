@@ -273,10 +273,11 @@ searching.
   mode, or Focus Reading changes can invalidate and rebuild section caches.
 - The X3 display path runs at 16 MHz rather than the X4's 40 MHz SPI rate.
   Search paints the status screen when entering, when changing state, and when
-  the spine-derived progress percentage changes, but it does not refresh the
-  e-ink panel for every page scanned; page matching remains an SD/CPU operation.
-  Because progress is spine-granular, a warm scan typically crosses several
-  percentage steps between repaints and coalesces them into a single refresh.
+  the progress percentage advances a whole repaint step, but it does not refresh
+  the e-ink panel for every page scanned; page matching remains an SD/CPU
+  operation. Progress is interpolated within the current spine so it advances
+  per page (not only at chapter boundaries), and the repaint step bounds total
+  e-ink refreshes regardless of how many spines the book has.
 
 These trade-offs favor stability and predictable RAM use over desktop-style
 search features.

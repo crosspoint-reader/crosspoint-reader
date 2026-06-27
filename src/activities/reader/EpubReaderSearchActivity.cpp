@@ -13,6 +13,12 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+// Repaint the progress screen only once the percentage has advanced this much,
+// keeping e-ink refreshes bounded now that progress moves per page.
+constexpr int PROGRESS_REPAINT_STEP_PERCENT = 10;
+}  // namespace
+
 EpubReaderSearchActivity::EpubReaderSearchActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                    const std::shared_ptr<Epub>& epub, const char* query,
                                                    const int startSpineIndex, const int startPage,
@@ -161,11 +167,19 @@ int EpubReaderSearchActivity::searchProgressPercent() const {
   if (spineCount <= 0) {
     return 0;
   }
-  // Linear position across the whole-book scan: forward to the last spine,
-  // then through the wrapped spines back toward the start position.
-  const int position =
+  // Whole-spine position across the scan: forward to the last spine, then
+  // through the wrapped spines back toward the start position.
+  const int spinePosition =
       wrapped ? (spineCount - startSpineIndex) + currentSpineIndex : currentSpineIndex - startSpineIndex;
-  const int percent = static_cast<int>((static_cast<long>(std::max(0, position)) * 100) / spineCount);
+  // Interpolate within the current spine so progress advances per page rather
+  // than only at chapter boundaries — for a single/few-spine book the
+  // percentage would otherwise sit frozen for the whole scan of a long spine.
+  float pageFraction = 0.0f;
+  if (section.pageCount > 0) {
+    pageFraction = static_cast<float>(std::min<int>(currentPage, section.pageCount)) / section.pageCount;
+  }
+  const float linearPos = static_cast<float>(std::max(0, spinePosition)) + pageFraction;
+  const int percent = static_cast<int>((linearPos * 100.0f) / spineCount);
   return std::min(100, percent);
 }
 
@@ -177,11 +191,12 @@ void EpubReaderSearchActivity::loop() {
         return;
       }
       scanNextPage();
-      // Repaint only when the spine-derived percentage changes, so a fast warm
-      // scan does not refresh the e-ink panel on every page.
+      // Progress is now page-granular, so only repaint once it has advanced a
+      // whole step. This bounds e-ink refreshes to ~100/step over an entire
+      // scan regardless of book structure, instead of one per page.
       if (state == SearchState::Searching) {
         const int percent = searchProgressPercent();
-        if (percent != lastProgressPercent) {
+        if (percent - lastProgressPercent >= PROGRESS_REPAINT_STEP_PERCENT) {
           lastProgressPercent = percent;
           requestUpdate();
         }
