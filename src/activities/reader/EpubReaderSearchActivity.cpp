@@ -137,10 +137,17 @@ bool EpubReaderSearchActivity::preparePage() {
       return false;
     }
 
-    // Capture the start spine's page count once so progress can place startPage
-    // and stopPage as fractions within it and normalize by the route length.
-    if (startSpinePageCount < 0 && !wrapped && currentSpineIndex == startSpineIndex) {
-      startSpinePageCount = section.pageCount;
+    // Once the start spine is loaded, capture the byte-weighted positions of the
+    // scan's start and stop pages and the resulting route length, so progress
+    // reads against the reader's own progress model rather than a spine-count
+    // approximation. Done once (scanStartPos stays negative until captured).
+    if (scanStartPos < 0.0f && !wrapped && currentSpineIndex == startSpineIndex && epub) {
+      const float pc = section.pageCount > 0 ? static_cast<float>(section.pageCount) : 1.0f;
+      scanStartPos = epub->calculateProgress(startSpineIndex, std::min(1.0f, static_cast<float>(startPage) / pc));
+      const float stopPos = epub->calculateProgress(startSpineIndex, std::min(1.0f, static_cast<float>(stopPage) / pc));
+      // Route: forward from start to the end of the book (1.0), wrap, then up to
+      // the stop page. For a fresh search start == stop, giving a full route of 1.
+      scanRouteLength = (1.0f - scanStartPos) + stopPos;
     }
 
     if (currentPage >= 0 && currentPage < section.pageCount) {
@@ -171,39 +178,21 @@ void EpubReaderSearchActivity::scanNextPage() {
 }
 
 int EpubReaderSearchActivity::searchProgressPercent() const {
-  const int spineCount = epub ? epub->getSpineItemsCount() : 0;
-  if (spineCount <= 0) {
-    return 0;
+  if (!epub || scanStartPos < 0.0f) {
+    return 0;  // not yet started / start spine not loaded
   }
-  // Whole-spine position across the scan: forward to the last spine, then
-  // through the wrapped spines back toward the start position.
-  const int spinePosition =
-      wrapped ? (spineCount - startSpineIndex) + currentSpineIndex : currentSpineIndex - startSpineIndex;
-  // Interpolate within the current spine so progress advances per page rather
-  // than only at chapter boundaries — for a single/few-spine book the
-  // percentage would otherwise sit frozen for the whole scan of a long spine.
-  float currentFraction = 0.0f;
-  if (section.pageCount > 0) {
-    currentFraction = static_cast<float>(std::min<int>(currentPage, section.pageCount)) / section.pageCount;
-  }
-  // Place the scan's start and stop pages as fractions within the start spine.
-  float startOffset = 0.0f;
-  float stopOffset = 0.0f;
-  if (startSpinePageCount > 0) {
-    startOffset = std::min(1.0f, static_cast<float>(startPage) / startSpinePageCount);
-    stopOffset = std::min(1.0f, static_cast<float>(stopPage) / startSpinePageCount);
-  }
-  // Work done since the scan began (subtract the start spine's leading fraction
-  // so a mid-spine start begins at 0%), normalized by the actual route length.
-  // A find-next excludes the originating page (startPage = stopPage + 1), so the
-  // route is the whole book minus that gap; dividing by spineCount alone would
-  // cap progress below 100% (e.g. 50% on a one-spine, two-page book).
-  const float workDone = static_cast<float>(std::max(0, spinePosition)) + currentFraction - startOffset;
-  const float routeLength = static_cast<float>(spineCount) + stopOffset - startOffset;
-  if (routeLength <= 0.0f) {
+  if (scanRouteLength <= 0.0f) {
     return 100;  // degenerate route (nothing eligible to scan)
   }
-  return ReaderUtils::clampPercent(static_cast<int>((workDone * 100.0f) / routeLength));
+  // Current byte-weighted book position, using the same model as the reader's
+  // own progress bar (so the percentage tracks the bar rather than approximating
+  // every spine as equal length).
+  const float pc = section.pageCount > 0 ? static_cast<float>(section.pageCount) : 1.0f;
+  const float posNow = epub->calculateProgress(currentSpineIndex, std::min(1.0f, static_cast<float>(currentPage) / pc));
+  // Work done since the scan began: forward distance before the wrap, plus a
+  // full forward lap (1.0 - start) once wrapped.
+  const float workDone = wrapped ? (1.0f - scanStartPos) + posNow : posNow - scanStartPos;
+  return ReaderUtils::clampPercent(static_cast<int>((workDone / scanRouteLength) * 100.0f));
 }
 
 void EpubReaderSearchActivity::loop() {
