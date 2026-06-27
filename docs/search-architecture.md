@@ -152,8 +152,8 @@ repeated allocate-copy-free growth. Chapters larger than that remain supported
 and may grow the vector.
 
 At implementation time, the measured `default` build had unchanged static RAM
-usage at 101,220 bytes. Flash usage increased by 7,424 bytes, from 5,225,869 to
-5,233,293 bytes, for the search behavior, cache handling, UI, and translated
+usage at 101,220 bytes. Flash usage increased by 7,464 bytes, from 5,225,869 to
+5,233,333 bytes, for the search behavior, cache handling, UI, and translated
 fallback strings. These are build snapshots rather than permanent budgets;
 remeasure them when the implementation or toolchain changes.
 
