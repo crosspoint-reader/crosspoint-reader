@@ -131,7 +131,7 @@ The steady page-scan path has fixed memory use:
 | Saved query | Inline reader/activity arrays | 65 bytes each | Reader/search activity |
 | Compiled query (normalized pattern + KMP table) | Inline search activity arrays | 132 bytes | Search activity (built once) |
 | SD read buffer | Stack | 64 bytes | One page scan |
-| Search activity object | Heap, nothrow | 440 bytes in the target build | Search activity |
+| Search activity object | Heap, nothrow | 444 bytes in the target build | Search activity |
 | Page LUT reservation | Heap | 1,536 bytes | Uncached section layout only |
 
 The display's 52,272-byte framebuffer is not a search allocation. The shared
@@ -152,8 +152,8 @@ repeated allocate-copy-free growth. Chapters larger than that remain supported
 and may grow the vector.
 
 At implementation time, the measured `default` build had unchanged static RAM
-usage at 101,220 bytes. Flash usage increased by 7,612 bytes, from 5,225,869 to
-5,233,481 bytes, for the search behavior, cache handling, UI, and translated
+usage at 101,220 bytes. Flash usage increased by 8,174 bytes, from 5,225,869 to
+5,234,043 bytes, for the search behavior, cache handling, UI, and translated
 fallback strings. These are build snapshots rather than permanent budgets;
 remeasure them when the implementation or toolchain changes.
 
