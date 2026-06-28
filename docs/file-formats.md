@@ -92,6 +92,14 @@ if (parsedSize != fileSize) {
 
 ### Version 25
 
+> **Note**: The ImHex pattern below documents the v25 layout for historical reference.
+> The current format is **v28** (see `SECTION_FILE_VERSION` in
+> `lib/Epub/Epub/Section.cpp`). v28 adds one `u8 bilingualViewMode` field to the
+> header (between `focusReadingEnabled` and the `pageCount` placeholder) so that
+> Bilingual View Mode changes invalidate the per-section cache. All other fields are
+> unchanged from v27. See [`docs/bilingual-epub.md`](bilingual-epub.md) for the
+> marker classes that drive the new mode.
+
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.

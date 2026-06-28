@@ -39,6 +39,28 @@ constexpr const char* SKIP_TAGS[] = {"head"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+// Token-based CSS class match: returns true if `classAttr` (whitespace-separated class list)
+// contains `token` as an exact class. Stricter than strstr — "my-cp-original" won't match "cp-original".
+bool hasCssClass(const std::string& classAttr, const char* token) {
+  if (classAttr.empty() || token == nullptr || token[0] == '\0') {
+    return false;
+  }
+  size_t pos = 0;
+  while (pos < classAttr.size()) {
+    while (pos < classAttr.size() && isWhitespace(classAttr[pos])) {
+      pos++;
+    }
+    const size_t start = pos;
+    while (pos < classAttr.size() && !isWhitespace(classAttr[pos])) {
+      pos++;
+    }
+    if (pos > start && classAttr.compare(start, pos - start, token) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool matches(const char* tag_name, const char* const* possible_tags, size_t count) {
   for (size_t i = 0; i < count; i++) {
     if (strcmp(tag_name, possible_tags[i]) == 0) {
@@ -367,6 +389,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   // Skip elements with display:none before all fast paths (tables, links, etc.).
+  // Bilingual override: when the user picks Original-only / Translation-only, paragraphs marked
+  // with the complementary class are treated as display:none here so the existing skip path drops
+  // them. Markers expected: class="cp-original" (source text) and class="cp-translation".
+  // Books without these markers are unaffected (BILINGUAL_BOTH = no-op).
+  if (self->bilingualViewMode != 0 /* != BILINGUAL_BOTH */) {
+    const bool isOriginal = hasCssClass(classAttr, "cp-original");
+    const bool isTranslation = hasCssClass(classAttr, "cp-translation");
+    if (self->bilingualViewMode == 1 /* ORIGINAL_ONLY */ && isTranslation) {
+      cssStyle.display = CssDisplay::None;
+      cssStyle.defined.display = 1;
+    } else if (self->bilingualViewMode == 2 /* TRANSLATION_ONLY */ && isOriginal) {
+      cssStyle.display = CssDisplay::None;
+      cssStyle.defined.display = 1;
+    }
+  }
+
   if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
     self->skipUntilDepth = self->depth;
     self->depth += 1;
