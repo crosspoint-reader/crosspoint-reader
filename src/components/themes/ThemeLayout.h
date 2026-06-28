@@ -120,6 +120,8 @@ struct ThemeHomeWidgetSpec {
 struct ThemeHomeScreenSpec {
   bool enabled = false;
   ThemeHomeNavigationMode navigation = ThemeHomeNavigationMode::Linear;
+  bool hasInitialAction = false;
+  ThemeHomeAction initialAction = ThemeHomeAction::FileBrowser;
   ThemeLayoutNode layout;
   std::vector<ThemeHomeWidgetSpec> widgets;
 };

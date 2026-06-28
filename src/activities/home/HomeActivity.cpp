@@ -145,7 +145,9 @@ void HomeActivity::onEnter() {
           metrics.homeRecentBooksCount);
 
   const auto& actions = refreshHomeActions();
+  const ThemeHomeScreenSpec* homeSpec = UITheme::getInstance().getHomeScreenSpec();
   selectorIndex = 0;
+  bool hasWantedAction = initialMenuItem != HomeMenuItem::NONE;
   const auto wantedAction = [this]() {
     switch (initialMenuItem) {
       case HomeMenuItem::RECENTS:
@@ -162,15 +164,23 @@ void HomeActivity::onEnter() {
         return ThemeHomeAction::FileBrowser;
     }
   }();
-  if (initialMenuItem != HomeMenuItem::NONE) {
+  ThemeHomeAction selectedEntryAction = wantedAction;
+  if (!hasWantedAction && homeSpec != nullptr && homeSpec->hasInitialAction) {
+    hasWantedAction = true;
+    selectedEntryAction = homeSpec->initialAction;
+  }
+  if (hasWantedAction) {
     for (int i = 0; i < static_cast<int>(actions.size()); ++i) {
-      if (actions[i].action == wantedAction) {
+      if (actions[i].action == selectedEntryAction) {
         selectorIndex = i;
         break;
       }
     }
   }
-  coverSelectorIndex = recentBooks.empty() ? 0 : std::min(selectorIndex, static_cast<int>(recentBooks.size()) - 1);
+  coverSelectorIndex = !recentBooks.empty() && selectorIndex < static_cast<int>(actions.size()) &&
+                               actions[selectorIndex].action == ThemeHomeAction::RecentBook
+                           ? actions[selectorIndex].value
+                           : 0;
 
   // Trigger first update
   requestUpdate();

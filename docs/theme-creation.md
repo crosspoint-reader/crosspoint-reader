@@ -217,6 +217,14 @@ Home `navigation` modes:
 - `splitAxis`: front left/right move through launcher actions; side up/down move through recent-book actions. Bottom button hints show Left/Right.
 - `carousel`: front left/right move through recent-book actions; side up/down move through launcher actions. Use this when left/right should stay inside a cover carousel and up/down should enter or leave the launcher menu.
 
+Home `initialAction` can optionally choose the default selected action when entering home normally:
+
+```json
+"initialAction": "reader:recent"
+```
+
+Supported values match launcher `action` values. Explicit firmware navigation, such as returning to Settings from a settings submenu, still overrides this default.
+
 ### Layouts vs widgets
 
 Layouts only create named rectangles. They do not choose whether a screen is a list, cover grid, carousel, or any other presentation.

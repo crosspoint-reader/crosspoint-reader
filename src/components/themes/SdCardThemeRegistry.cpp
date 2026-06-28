@@ -688,6 +688,11 @@ void parseHomeScreenSpec(JsonObjectConst obj, ThemeHomeScreenSpec& out) {
 
   out.enabled = true;
   out.navigation = parseHomeNavigationMode(obj["navigation"].as<const char*>(), out.navigation);
+  const char* initialAction = obj["initialAction"].as<const char*>();
+  if (initialAction != nullptr) {
+    out.hasInitialAction = true;
+    out.initialAction = parseHomeAction(initialAction);
+  }
   out.layout = ThemeLayoutNode{};
   out.layout.id = "root";
   out.layout.sizeType = ThemeLayoutSizeType::Flex;
