@@ -361,16 +361,8 @@ void EpubReaderActivity::loop() {
         // re-renders the current section. The v28 header check invalidates the cached section so
         // the new mode re-parses on next render. No-op on non-bilingual EPUBs (no markers → Both).
         if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !ignoreNextConfirmRelease) {
-          SETTINGS.bilingualViewMode = (SETTINGS.bilingualViewMode + 1) % CrossPointSettings::BILINGUAL_VIEW_MODE_COUNT;
-          SETTINGS.saveToFile();
+          cycleBilingualMode();             // also fires the transient mode-name popup
           ignoreNextConfirmRelease = true;  // Suppress the subsequent Confirm-release menu open
-          // Drop the current section so the next render re-parses with the new mode.
-          {
-            RenderLock lock(*this);
-            section.reset();
-            nextPageNumber = 0;
-          }
-          requestUpdate();
         }
         break;
       case CrossPointSettings::LP_MENU_DISABLED:
