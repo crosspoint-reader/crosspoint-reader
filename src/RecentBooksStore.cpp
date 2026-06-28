@@ -9,10 +9,6 @@
 #include <algorithm>
 #include <iterator>
 
-namespace {
-constexpr int MAX_RECENT_BOOKS = 10;
-}  // namespace
-
 String RecentBooksStore::toJson() const {
   JsonDocument doc;
   JsonArray arr = doc["books"].to<JsonArray>();

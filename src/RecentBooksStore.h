@@ -1,4 +1,7 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <string>
 #include <vector>
 
@@ -11,12 +14,11 @@ struct RecentBook {
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 
-#include <ArduinoJson.h>
-
-#include "PersistableStore.h"
-
 class RecentBooksStore : public PersistableStore<RecentBooksStore> {
+ private:
   std::vector<RecentBook> recentBooks;
+
+  static constexpr int MAX_RECENT_BOOKS = 10;
 
   RecentBooksStore() = default;
   ~RecentBooksStore() = default;

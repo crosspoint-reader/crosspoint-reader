@@ -1,4 +1,7 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <string>
 #include <vector>
 
@@ -6,10 +9,6 @@ struct WifiCredential {
   std::string ssid;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
 };
-
-#include <ArduinoJson.h>
-
-#include "PersistableStore.h"
 
 /**
  * Singleton class for storing WiFi credentials on the SD card.

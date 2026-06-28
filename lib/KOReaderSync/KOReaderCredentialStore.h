@@ -1,4 +1,7 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <cstdint>
 #include <string>
 
@@ -14,9 +17,6 @@ enum class DocumentMatchMethod : uint8_t {
  * and base64-encoded before writing to JSON (not cryptographically secure,
  * but prevents casual reading and ties credentials to the specific device).
  */
-#include <ArduinoJson.h>
-
-#include "../../src/PersistableStore.h"
 
 class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore> {
  private:

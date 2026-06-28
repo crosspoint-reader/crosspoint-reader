@@ -1,6 +1,5 @@
 #include "KOReaderCredentialStore.h"
 
-#include <HalStorage.h>
 #include <Logging.h>
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 #include <HalStorage.h>
+#include <Logging.h>
 #include <ObfuscationUtils.h>
 
 /**
@@ -35,26 +36,34 @@ class PersistableStore {
     Storage.mkdir("/.crosspoint");
     const char* path = T::getFilePath();
     String json = static_cast<const T*>(this)->toJson();
-    return Storage.writeFile(path, json);
+    if (!Storage.writeFile(path, json)) {
+      LOG_ERR("PERSIST", "Failed to write %s", path);
+      return false;
+    }
+    return true;
   }
 
   bool loadFromFile() {
     const char* path = T::getFilePath();
-    if (Storage.exists(path)) {
-      String json = Storage.readFile(path);
-      if (!json.isEmpty()) {
-        return static_cast<T*>(this)->fromJson(json);
-      }
+    if (!Storage.exists(path)) {
+      return false;  // Expected on first boot — not an error.
     }
-    return false;
+    String json = Storage.readFile(path);
+    if (json.isEmpty()) {
+      LOG_ERR("PERSIST", "Failed to read %s (empty)", path);
+      return false;
+    }
+    return static_cast<T*>(this)->fromJson(json);
   }
 
  protected:
   /**
-   * Helper function for extracting an obfuscated password from a JSON document.
+   * Helper function for extracting an obfuscated password from a JSON value.
+   * Accepts JsonVariantConst so callers can pass either a whole JsonDocument
+   * or a JsonObject element (e.g. inside an array iteration).
    * If the decoded password requires a resave (e.g. from plaintext fallback), `needsResave` is set to true.
    */
-  std::string extractPassword(const JsonDocument& doc, bool& needsResave) const {
+  std::string extractPassword(JsonVariantConst doc, bool& needsResave) const {
     bool ok = false;
     std::string pass = obfuscation::deobfuscateFromBase64(doc["password_obf"] | "", &ok);
     if (!ok || pass.empty()) {

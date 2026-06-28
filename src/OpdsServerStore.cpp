@@ -1,6 +1,5 @@
 #include "OpdsServerStore.h"
 
-#include <HalStorage.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
