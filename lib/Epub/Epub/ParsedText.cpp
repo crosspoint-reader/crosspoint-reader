@@ -25,6 +25,10 @@ constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // before giving up. 64 is a hedge for pathological cases like long numeric tokens.
 constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
 constexpr size_t MIN_JUSTIFY_GAPS = 1;
+// Avoid pathological "ten spaces between words" justification on sparse lines.
+// If every visible gap would need to stretch beyond this multiple of its natural
+// width, leave the line at natural spacing instead.
+constexpr int MAX_JUSTIFY_EXTRA_MULTIPLE_OF_NATURAL_GAP = 2;
 
 // Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
 bool mayContainRtlBytes(const char* str) {
@@ -176,14 +180,22 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   return allowedOffsets;
 }
 
-int computeJustifyExtra(const int spareSpace, const size_t gapCount) {
+int computeJustifyExtra(const int spareSpace, const size_t gapCount, const int naturalGapWidthSum) {
   if (gapCount < MIN_JUSTIFY_GAPS || spareSpace <= 0) return 0;
-  // Distribute the spare space evenly across gaps. Do NOT bail out to 0 when the
-  // per-gap stretch is large: a sparse line (few words on a wide page) legitimately
-  // needs big gaps to reach the margin. Returning 0 there disables justification for
-  // that line, leaving it right-aligned (RTL) / left-aligned (LTR) — the mismatched
-  // alignment bug. Match the un-capped behavior of the old code.
-  return spareSpace / static_cast<int>(gapCount);
+  const int extraPerGap = spareSpace / static_cast<int>(gapCount);
+
+  // Latin prose with only a few short words can leave enough spare width that
+  // full justification turns one source space into a visually huge gap. Treat
+  // that as a ragged line. CJK no-space gaps have naturalGapWidthSum == 0, so
+  // they keep the old behavior.
+  if (naturalGapWidthSum > 0) {
+    const int averageNaturalGap = std::max(1, naturalGapWidthSum / static_cast<int>(gapCount));
+    if (extraPerGap > averageNaturalGap * MAX_JUSTIFY_EXTRA_MULTIPLE_OF_NATURAL_GAP) {
+      return 0;
+    }
+  }
+
+  return extraPerGap;
 }
 
 // Removes every soft hyphen in-place so rendered glyphs match measured widths.
@@ -564,6 +576,10 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     }
   }
 
+  if (isNaturalAlign) {
+    return computeGreedyLineBreaks(renderer, fontId, pageWidth, wordWidths, continuesVec, noSpaceBeforeVec);
+  }
+
   const size_t totalWordCount = words.size();
 
   // DP table to store the minimum badness (cost) of lines starting at index i
@@ -654,6 +670,63 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
     lineBreakIndices.push_back(nextBreakIndex);
     currentWordIndex = nextBreakIndex;
+  }
+
+  return lineBreakIndices;
+}
+
+std::vector<size_t> ParsedText::computeGreedyLineBreaks(const GfxRenderer& renderer, const int fontId,
+                                                        const int pageWidth,
+                                                        const std::vector<uint16_t>& wordWidths,
+                                                        const std::vector<bool>& continuesVec,
+                                                        const std::vector<bool>& noSpaceBeforeVec) {
+  const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
+
+  std::vector<size_t> lineBreakIndices;
+  size_t currentIndex = 0;
+  bool isFirstLine = true;
+
+  while (currentIndex < wordWidths.size()) {
+    const size_t lineStart = currentIndex;
+    int lineWidth = 0;
+    const int effectivePageWidth = isFirstLine ? pageWidth - firstLineIndent : pageWidth;
+
+    while (currentIndex < wordWidths.size()) {
+      const bool isFirstWord = currentIndex == lineStart;
+      int spacing = 0;
+      if (!isFirstWord && noSpaceBeforeVec[currentIndex]) {
+        spacing = 0;
+      } else if (!isFirstWord && !continuesVec[currentIndex]) {
+        spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
+                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+      } else if (!isFirstWord && continuesVec[currentIndex]) {
+        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
+                                      firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+      }
+
+      const int candidateWidth = spacing + wordWidths[currentIndex];
+      if (lineWidth + candidateWidth <= effectivePageWidth) {
+        lineWidth += candidateWidth;
+        ++currentIndex;
+        continue;
+      }
+
+      if (currentIndex == lineStart) {
+        ++currentIndex;
+      }
+      break;
+    }
+
+    while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() && continuesVec[currentIndex]) {
+      --currentIndex;
+    }
+
+    if (currentIndex <= lineStart) {
+      currentIndex = lineStart + 1;
+    }
+
+    lineBreakIndices.push_back(currentIndex);
+    isFirstLine = false;
   }
 
   return lineBreakIndices;
@@ -891,7 +964,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // For justified text, compute per-gap extra to distribute remaining space evenly
   const int spareSpace = effectivePageWidth - lineWordWidthSum - totalNaturalGaps;
   const int justifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                               ? computeJustifyExtra(spareSpace, actualGapCount)
+                               ? computeJustifyExtra(spareSpace, actualGapCount, totalNaturalGaps)
                                : 0;
 
   // BiDi processing: reorder words with UAX#9 in full-line context.
@@ -972,7 +1045,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
     const int reorderedSpare = effectivePageWidth - reorderedWordWidthSum - reorderedNaturalGaps;
     const int reorderedJustifyExtra = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
-                                          ? computeJustifyExtra(reorderedSpare, reorderedGapCount)
+                                          ? computeJustifyExtra(reorderedSpare, reorderedGapCount, reorderedNaturalGaps)
                                           : 0;
 
     const int justifyContribution = (effectiveAlignment == CssTextAlign::Justify && !isLastLine)
