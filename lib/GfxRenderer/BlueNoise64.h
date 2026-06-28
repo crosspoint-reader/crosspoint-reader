@@ -208,7 +208,11 @@ inline constexpr uint8_t BLUE_NOISE_64[64][64] = {
 // val 3 never inks. Keyed to PHYSICAL coords so the pattern tiles seamlessly
 // and stays stable across orientation changes.
 inline bool blueNoiseInk(const uint8_t val, const int phyX, const int phyY) {
-  static constexpr uint8_t kInkThreshold[4] = {255, 255, 96, 0};
-  static_assert(kInkThreshold[0] == 255 && kInkThreshold[3] == 0, "val 0 must always ink, val 3 must never ink");
-  return BLUE_NOISE_64[phyY & 63][phyX & 63] < kInkThreshold[val];
+  if (val <= 1) {
+    return true;
+  }
+  if (val >= 3) {
+    return false;
+  }
+  return BLUE_NOISE_64[phyY & 63][phyX & 63] < 96;
 }
