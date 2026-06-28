@@ -292,7 +292,7 @@ for i_start, i_end in intervals:
                     px = (v >> 4)
                 else:
                     px = px | (v & 0xF0)
-                    pixels4g.append(px);
+                    pixels4g.append(px)
                     px = 0
                 # eol
                 if x == bitmap.width - 1 and bitmap.width % 2 > 0:
