@@ -174,6 +174,11 @@ class CrossPointSettings {
     QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
+  // How smooth content (anti-aliased text + images) is put on the e-ink panel.
+  // QUALITY = true 4-level grayscale planes (slow refresh). FAST = single BW
+  // pass with blue-noise ordered dither (much faster perceived page turn).
+  enum GRAYSCALE_RENDER_MODE { GR_QUALITY = 0, GR_FAST = 1, GRAYSCALE_RENDER_MODE_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -203,6 +208,7 @@ class CrossPointSettings {
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
+  uint8_t grayscaleRenderMode = GR_QUALITY;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings

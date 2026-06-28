@@ -9,6 +9,7 @@
 
 #include <algorithm>
 
+#include "BlueNoise64.h"
 #include "FontCacheManager.h"
 
 namespace {
@@ -281,9 +282,14 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
           // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
           const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
 
-          if (renderMode == GfxRenderer::BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            renderer.drawPixel(screenX, screenY, pixelState);
+          if (renderMode == GfxRenderer::BW) {
+            // Fast mode dithers the 4-level alpha into the single BW pass;
+            // otherwise threshold-ink any non-white pixel (legacy behavior).
+            if (renderer.isDitherBwActive() && pixelState) {
+              renderer.drawPixelBlueNoise(screenX, screenY, bmpVal);
+            } else if (bmpVal < 3) {
+              renderer.drawPixel(screenX, screenY, pixelState);
+            }
           } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
             // Light gray (also mark the MSB if it's going to be a dark gray too)
             // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
@@ -356,6 +362,17 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     target[byteIndex] &= ~(1 << bitPosition);  // Clear bit
   } else {
     target[byteIndex] |= 1 << bitPosition;  // Set bit
+  }
+}
+
+void GfxRenderer::drawPixelBlueNoise(const int x, const int y, const uint8_t val) const {
+  // Blue-noise lookup is keyed to PHYSICAL coords so the pattern stays stable
+  // across orientation; reuse drawPixel for the actual write (bounds + strip).
+  int phyX = 0;
+  int phyY = 0;
+  rotateCoordinates(orientation, x, y, &phyX, &phyY, panelWidth, panelHeight);
+  if (blueNoiseInk(val, phyX, phyY)) {
+    drawPixel(x, y, true);
   }
 }
 

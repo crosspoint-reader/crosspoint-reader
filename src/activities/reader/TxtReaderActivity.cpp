@@ -400,13 +400,19 @@ void TxtReaderActivity::renderPage() {
   renderLines();  // scan pass — text accumulated, no drawing
   scope.endScanAndPrewarm();
 
-  // BW rendering
+  // BW rendering. Fast mode dithers the body text straight into the single BW
+  // pass (no grayscale planes); status bar stays crisp threshold. Quality keeps
+  // the grayscale AA pass below unchanged.
+  const bool fast = SETTINGS.textAntiAliasing && SETTINGS.grayscaleRenderMode == CrossPointSettings::GR_FAST;
+
+  if (fast) renderer.setDitherBw(true);
   renderLines();
+  if (fast) renderer.setDitherBw(false);
   renderStatusBar();
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
-  if (SETTINGS.textAntiAliasing) {
+  if (SETTINGS.textAntiAliasing && !fast) {
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   }
   // scope destructor clears font cache via FontCacheManager

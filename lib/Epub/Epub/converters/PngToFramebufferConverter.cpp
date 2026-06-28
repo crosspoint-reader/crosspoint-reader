@@ -194,6 +194,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   int outXBase = ctx->config->x;
   int screenWidth = ctx->screenWidth;
   bool useDithering = ctx->config->useDithering;
+  bool ditherBw = ctx->config->ditherBlueNoise;
   bool caching = ctx->caching;
 
   // Pre-compute orientation and render-mode state once per row
@@ -224,13 +225,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
     if (outX < screenWidth) {
       uint8_t gray = ctx->grayLineBuffer[srcX];
 
-      uint8_t ditheredGray;
-      if (useDithering) {
-        ditheredGray = applyBayerDither4Level(gray, outX, outY);
-      } else {
-        ditheredGray = gray / 85;
-        if (ditheredGray > 3) ditheredGray = 3;
-      }
+      uint8_t ditheredGray = quantizeGrayTo2Bit(gray, outX, outY, useDithering, ditherBw);
       pw.writePixel(outX, ditheredGray);
       if (caching) cw.writePixel(outX, ditheredGray);
     }

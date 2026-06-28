@@ -1037,6 +1037,36 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     }
   };
 
+  // Fast render mode: dither the smooth content (text when AA is on, images
+  // always) straight into the single BW framebuffer and flush once. No
+  // storeBwBuffer, no LSB/MSB grayscale planes, no grayscale waveform — far
+  // faster perceived page turn. Self-contained; the Quality path below is
+  // untouched.
+  if (SETTINGS.grayscaleRenderMode == CrossPointSettings::GR_FAST && needsAnyGrayscale) {
+    if (needsTextGrayscale) {
+      // AA on: one dithered pass covers text and images together.
+      renderer.setDitherBw(true);
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      renderer.setDitherBw(false);
+      renderStatusBar();
+    } else {
+      // AA off: keep threshold text, dither images only. Blank the image box
+      // first so the threshold ink from the main pass doesn't bleed through.
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      renderStatusBar();
+      int16_t imgX, imgY, imgW, imgH;
+      if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
+        renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
+        renderer.setDitherBw(true);
+        page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+        renderer.setDitherBw(false);
+      }
+    }
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+    LOG_DBG("ERS", "Page render (fast dither): prewarm=%lums total=%lums", tPrewarm - t0, millis() - t0);
+    return;
+  }
+
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderStatusBar();
   const auto tBwRender = millis();

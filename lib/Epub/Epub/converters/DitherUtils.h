@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BlueNoise64.h>
 #include <stdint.h>
 
 // 4x4 Bayer matrix for ordered dithering
@@ -24,4 +25,21 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   if (adjusted < 128) return 1;
   if (adjusted < 192) return 2;
   return 3;
+}
+
+// Quantize an 8-bit gray to the 2-bit value the pixel writers consume.
+// - ditherBw (Fast mode): blue-noise threshold straight from the 8-bit gray to a
+//   pure BW value (0 = ink, 3 = white). A single ordered pattern with full tonal
+//   range — avoids stacking blue-noise on top of an already-Bayer'd 4-level value.
+// - else useDithering: Bayer 4-level (the Quality grayscale path).
+// - else: plain nearest 4-level.
+inline uint8_t quantizeGrayTo2Bit(uint8_t gray, int x, int y, bool useDithering, bool ditherBw) {
+  if (ditherBw) {
+    return gray < BLUE_NOISE_64[y & 63][x & 63] ? 0 : 3;
+  }
+  if (useDithering) {
+    return applyBayerDither4Level(gray, x, y);
+  }
+  uint8_t v = gray / 85;
+  return v > 3 ? 3 : v;
 }

@@ -74,6 +74,13 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
+  // Fast (dithered BW) render path. While true, BW-mode glyph and image writes
+  // map their 4-level intensity onto a single BW pass via blue-noise ordered
+  // dither (drawPixelBlueNoise / DirectPixelWriter) instead of threshold-inking
+  // or rendering the slow LSB/MSB grayscale planes. Mutable because the render
+  // path is const; toggled by the readers around the content render.
+  mutable bool _ditherBwActive = false;
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
@@ -168,6 +175,14 @@ class GfxRenderer {
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;
+  // Blue-noise ordered-dithered BW ink for the Fast render path. `val` is the
+  // 4-level glyph/image intensity (0=darkest .. 3=white); inks via blueNoiseInk
+  // (BlueNoise64.h) so AA edges approximate grayscale in a single BW pass.
+  void drawPixelBlueNoise(int x, int y, uint8_t val) const;
+
+  // Fast (dithered BW) render path toggle. See _ditherBwActive.
+  void setDitherBw(bool active) const { _ditherBwActive = active; }
+  bool isDitherBwActive() const { return _ditherBwActive; }
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
   void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
