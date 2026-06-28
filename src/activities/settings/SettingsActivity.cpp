@@ -21,6 +21,7 @@
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
+#include "ThemeDownloadActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -38,8 +39,9 @@ void SettingsActivity::rebuildSettingsLists() {
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
+  UITheme::getInstance().refreshRegistry();
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
+  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &UITheme::getInstance().registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
@@ -55,6 +57,11 @@ void SettingsActivity::rebuildSettingsLists() {
       systemSettings.push_back(setting);
     }
   }
+  // getSettingsList copies the SD theme names/ids into the UI theme setting.
+  // Keeping the full parsed SD theme registry alive while child activities
+  // like the font downloader run leaves less contiguous heap for TLS/header
+  // parsing.
+  UITheme::getInstance().registry().clear();
 
   // Append device-only ACTION items
   controlsSettings.insert(controlsSettings.begin(),
@@ -66,6 +73,10 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  auto themeSettingIt = std::find_if(displaySettings.begin(), displaySettings.end(),
+                                     [](const SettingInfo& setting) { return setting.nameId == StrId::STR_UI_THEME; });
+  displaySettings.insert(themeSettingIt == displaySettings.end() ? displaySettings.end() : themeSettingIt + 1,
+                         SettingInfo::Action(StrId::STR_MANAGE_THEMES, SettingAction::DownloadThemes));
   // Insert "Manage Fonts" right after the font family setting so users discover it naturally
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
@@ -87,6 +98,19 @@ void SettingsActivity::rebuildSettingsLists() {
       break;
   }
   settingsCount = static_cast<int>(currentSettings->size());
+}
+
+void SettingsActivity::releaseSettingsLists() {
+  displaySettings.clear();
+  readerSettings.clear();
+  controlsSettings.clear();
+  systemSettings.clear();
+  displaySettings.shrink_to_fit();
+  readerSettings.shrink_to_fit();
+  controlsSettings.shrink_to_fit();
+  systemSettings.shrink_to_fit();
+  currentSettings = nullptr;
+  settingsCount = 0;
 }
 
 void SettingsActivity::onEnter() {
@@ -191,6 +215,7 @@ void SettingsActivity::toggleCurrentSetting() {
   const auto& setting = (*currentSettings)[selectedSetting];
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
   const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
+  const bool themeChanged = setting.nameId == StrId::STR_UI_THEME;
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
@@ -255,9 +280,22 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
+        releaseSettingsLists();
+        UITheme::getInstance().releaseSdThemeAssetMemory();
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
+                                 UITheme::getInstance().reload();
+                                 rebuildSettingsLists();
+                               });
+        break;
+      case SettingAction::DownloadThemes:
+        releaseSettingsLists();
+        UITheme::getInstance().releaseSdThemeAssetMemory();
+        startActivityForResult(std::make_unique<ThemeDownloadActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 UITheme::getInstance().reload();
                                  rebuildSettingsLists();
                                });
         break;
@@ -275,8 +313,14 @@ void SettingsActivity::toggleCurrentSetting() {
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
+  if (themeChanged) {
+    UITheme::getInstance().reload();
+  }
   rebuildSettingsLists();
   selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
+  if (themeChanged) {
+    requestUpdate();
+  }
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
@@ -326,58 +370,90 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+  const ThemeScreenSpec* screenSpec = UITheme::getInstance().getScreenSpec(ThemeScreenKind::Settings);
+  ThemeLayoutSlots slots;
+  Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  Rect tabsRect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight};
+  Rect listRect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing,
+                pageWidth,
+                pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                              metrics.buttonHintsHeight + metrics.verticalSpacing * 2)};
+  Rect buttonsRect{0, pageHeight - metrics.buttonHintsHeight, pageWidth, metrics.buttonHintsHeight};
+
+  if (screenSpec != nullptr) {
+    layoutThemeSlots(screenSpec->layout, Rect{0, 0, pageWidth, pageHeight}, metrics, slots);
+    headerRect = normalizeThemeHeaderSlot(findThemeSlot(slots, "header"), metrics);
+    tabsRect = findThemeSlot(slots, "tabs");
+    listRect = findThemeSlot(slots, "list");
+    buttonsRect = findThemeSlot(slots, "buttons");
+    if (listRect.width <= 0 || listRect.height <= 0) {
+      LOG_ERR("Settings", "Invalid SD settings layout: slots=%d; using built-in layout",
+              static_cast<int>(slots.size()));
+      screenSpec = nullptr;
+    }
+  }
+  if (screenSpec == nullptr) {
+    headerRect = Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+    tabsRect = Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight};
+    listRect =
+        Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
+             pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                           metrics.buttonHintsHeight + metrics.verticalSpacing * 2)};
+    buttonsRect = Rect{0, pageHeight - metrics.buttonHintsHeight, pageWidth, metrics.buttonHintsHeight};
+  }
+
+  if (headerRect.width > 0 && headerRect.height > 0) {
+    GUI.drawHeader(renderer, headerRect, tr(STR_SETTINGS_TITLE), CROSSPOINT_VERSION);
+  }
 
   std::vector<TabInfo> tabs;
   tabs.reserve(categoryCount);
   for (int i = 0; i < categoryCount; i++) {
     tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
   }
-  GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
+  if (tabsRect.width > 0 && tabsRect.height > 0) {
+    GUI.drawTabBar(renderer, tabsRect, tabs, selectedSettingIndex == 0);
+  }
 
   const auto& settings = *currentSettings;
-  GUI.drawList(
-      renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
-      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
-      [&settings](int i) {
-        const auto& setting = settings[i];
-        std::string valueText = "";
-        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-          const bool value = SETTINGS.*(setting.valuePtr);
-          valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-        } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-          const uint8_t value = SETTINGS.*(setting.valuePtr);
-          valueText = I18N.get(setting.enumValues[value]);
-        } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
-          const uint8_t value = setting.valueGetter();
-          if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
-            valueText = setting.enumStringValues[value];
-          } else if (value < setting.enumValues.size()) {
+  if (listRect.width > 0 && listRect.height > 0) {
+    GUI.drawList(
+        renderer, listRect, settingsCount, selectedSettingIndex - 1,
+        [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
+        [&settings](int i) {
+          const auto& setting = settings[i];
+          std::string valueText = "";
+          if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+            const bool value = SETTINGS.*(setting.valuePtr);
+            valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+          } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+            const uint8_t value = SETTINGS.*(setting.valuePtr);
             valueText = I18N.get(setting.enumValues[value]);
-          }
-        } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
-            char valueBuffer[32];
-            if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
-              valueText = tr(STR_SLEEP_NEVER);
-            } else {
-              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
-                       static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
-              valueText = valueBuffer;
+          } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
+            const uint8_t value = setting.valueGetter();
+            if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
+              valueText = setting.enumStringValues[value];
+            } else if (value < setting.enumValues.size()) {
+              valueText = I18N.get(setting.enumValues[value]);
             }
-          } else {
-            valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+            if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
+              char valueBuffer[32];
+              if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
+                valueText = tr(STR_SLEEP_NEVER);
+              } else {
+                snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
+                         static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
+                valueText = valueBuffer;
+              }
+            } else {
+              valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+            }
           }
-        }
-        return valueText;
-      },
-      true);
+          return valueText;
+        },
+        true);
+  }
 
   // Draw help text
   const auto confirmLabel =
@@ -387,7 +463,9 @@ void SettingsActivity::render(RenderLock&&) {
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (buttonsRect.width > 0 && buttonsRect.height > 0) {
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   // Always use standard refresh for settings screen
   renderer.displayBuffer();

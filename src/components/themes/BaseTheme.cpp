@@ -1,5 +1,6 @@
 #include "BaseTheme.h"
 
+#include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalPowerManager.h>
@@ -14,6 +15,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
+#include "components/themes/ThemeLayout.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -43,6 +45,71 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
   }
 }
 
+std::string readerProgressText(const float bookProgress, const int currentPage, const int pageCount) {
+  char progressStr[32];
+  if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
+    snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
+  } else if (SETTINGS.statusBarBookProgressPercentage) {
+    snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
+  } else if (SETTINGS.statusBarChapterPageCount) {
+    snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
+  } else {
+    progressStr[0] = '\0';
+  }
+  return progressStr;
+}
+
+freeink::ui::BatteryBarTrack toFreeInkBatteryTrack(ThemeBatteryBarTrack value) {
+  switch (value) {
+    case ThemeBatteryBarTrack::Hairline:
+      return freeink::ui::BatteryBarTrack::Hairline;
+    case ThemeBatteryBarTrack::Outline:
+      return freeink::ui::BatteryBarTrack::Outline;
+    case ThemeBatteryBarTrack::Dither:
+      return freeink::ui::BatteryBarTrack::Dither;
+    case ThemeBatteryBarTrack::None:
+    default:
+      return freeink::ui::BatteryBarTrack::None;
+  }
+}
+
+freeink::ui::BatteryBarFill toFreeInkBatteryFill(ThemeBatteryBarFill value) {
+  switch (value) {
+    case ThemeBatteryBarFill::Dither:
+      return freeink::ui::BatteryBarFill::Dither;
+    case ThemeBatteryBarFill::Segments:
+      return freeink::ui::BatteryBarFill::Segments;
+    case ThemeBatteryBarFill::Solid:
+    default:
+      return freeink::ui::BatteryBarFill::Solid;
+  }
+}
+
+freeink::ui::BatteryBarDirection toFreeInkBatteryDirection(ThemeBatteryBarDirection value) {
+  switch (value) {
+    case ThemeBatteryBarDirection::RightToLeft:
+      return freeink::ui::BatteryBarDirection::RightToLeft;
+    case ThemeBatteryBarDirection::CenterOut:
+      return freeink::ui::BatteryBarDirection::CenterOut;
+    case ThemeBatteryBarDirection::BottomToTop:
+      return freeink::ui::BatteryBarDirection::BottomToTop;
+    case ThemeBatteryBarDirection::TopToBottom:
+      return freeink::ui::BatteryBarDirection::TopToBottom;
+    case ThemeBatteryBarDirection::LeftToRight:
+    default:
+      return freeink::ui::BatteryBarDirection::LeftToRight;
+  }
+}
+
+freeink::ui::BatteryBarCaps toFreeInkBatteryCaps(ThemeBatteryBarCaps value) {
+  return value == ThemeBatteryBarCaps::Pixel ? freeink::ui::BatteryBarCaps::Pixel : freeink::ui::BatteryBarCaps::Square;
+}
+
+freeink::ui::BatteryBarOrientation toFreeInkBatteryOrientation(ThemeBatteryBarOrientation value) {
+  return value == ThemeBatteryBarOrientation::Vertical ? freeink::ui::BatteryBarOrientation::Vertical
+                                                       : freeink::ui::BatteryBarOrientation::Horizontal;
+}
+
 }  // namespace
 
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
@@ -56,7 +123,7 @@ void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, in
   renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
   renderer.drawPixel(x + battWidth - 1, y + 3);
   renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
+  renderer.drawLine(x + battWidth - 1, y + 4, x + battWidth - 1, y + rectHeight - 5);
 }
 
 void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY) {
@@ -435,10 +502,12 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
 // Draw the "Recent Book" cover card on the home screen
 // TODO: Refactor method to make it cleaner, split into smaller methods
 void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
-                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
-                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
+                                    const int coverSelectorIndex, bool& coverRendered, bool& coverBufferStored,
+                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer,
+                                    bool coverStripSelected) const {
+  (void)coverSelectorIndex;
   const bool hasContinueReading = !recentBooks.empty();
-  const bool bookSelected = hasContinueReading && selectorIndex == 0;
+  const bool bookSelected = hasContinueReading && coverStripSelected;
 
   // --- Top "book" card for the current title (selectorIndex == 0) ---
   // When there's no cover image, use fixed size (half screen)
@@ -691,6 +760,113 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   }
 }
 
+void drawReaderBattery(const GfxRenderer& renderer, Rect rect, const bool showPercentage) {
+  const ThemeReaderChromeSpec* chrome = UITheme::getInstance().getReaderChromeSpec();
+  if (chrome == nullptr || chrome->battery.style == ThemeBatteryIndicatorStyle::Icon) {
+    const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+    const bool effectiveShowPercentage = showPercentage && (chrome == nullptr || chrome->battery.showPercentage);
+    const int iconWidth = chrome != nullptr && chrome->battery.width > 0 ? chrome->battery.width : metrics.batteryWidth;
+    const int iconHeight =
+        chrome != nullptr && chrome->battery.height > 0 ? chrome->battery.height : metrics.batteryHeight;
+    const int offsetY = chrome != nullptr ? chrome->battery.offsetY : 0;
+    GUI.drawBatteryLeft(renderer, Rect{rect.x, rect.y + offsetY, iconWidth, iconHeight}, effectiveShowPercentage);
+    return;
+  }
+
+#if FREEINK_HAVE_GFX_RENDERER
+  const int barWidth = chrome->battery.width > 0 ? chrome->battery.width : rect.width;
+  const int barHeight = chrome->battery.height > 0 ? chrome->battery.height : std::max(3, rect.height / 3);
+  const uint16_t percentage = powerManager.getBatteryPercentage();
+  const bool effectiveShowPercentage = showPercentage && chrome->battery.showPercentage;
+  freeink::ui::GfxRendererFrame<> ui(renderer, SMALL_FONT_ID, UI_10_FONT_ID, UI_12_FONT_ID);
+  freeink::ui::BatteryIndicatorProps props;
+  props.percent = static_cast<uint8_t>(std::min<uint16_t>(percentage, 100));
+  props.charging = gpio.isUsbConnected();
+  props.style = freeink::ui::BatteryIndicatorStyle::Bar;
+  props.glyphWidth = freeink::ui::clampI16(barWidth);
+  props.glyphHeight = freeink::ui::clampI16(barHeight);
+  props.barTrack = toFreeInkBatteryTrack(chrome->battery.track);
+  props.barFill = toFreeInkBatteryFill(chrome->battery.fill);
+  props.barDirection = toFreeInkBatteryDirection(chrome->battery.direction);
+  props.barCaps = toFreeInkBatteryCaps(chrome->battery.caps);
+  props.barOrientation = toFreeInkBatteryOrientation(chrome->battery.orientation);
+  props.barSegments = static_cast<uint8_t>(std::max(0, std::min(24, chrome->battery.segments)));
+  props.barSegmentGap = freeink::ui::clampI16(chrome->battery.segmentGap);
+  props.barRadius = freeink::ui::clampRadius(chrome->battery.radius);
+
+  const Rect barRect{rect.x, rect.y + std::max(0, (rect.height - barHeight) / 2) + chrome->battery.offsetY, barWidth,
+                     barHeight};
+  freeink::ui::batteryIndicator(ui.frame, freeink::ui::makeRect(barRect.x, barRect.y, barRect.width, barRect.height),
+                                props);
+  if (effectiveShowPercentage) {
+    const auto percentageText = std::to_string(percentage) + "%";
+    renderer.drawText(SMALL_FONT_ID, rect.x + barWidth + BaseTheme::batteryPercentSpacing, rect.y,
+                      percentageText.c_str());
+  }
+#else
+  GUI.drawBatteryLeft(renderer, rect, showPercentage);
+#endif
+}
+
+bool drawThemedReaderStatusLane(const GfxRenderer& renderer, Rect laneRect, const float bookProgress,
+                                const int currentPage, const int pageCount, const std::string& title,
+                                const int textYOffset, const bool isPageBookmarked) {
+  const ThemeScreenSpec* readerSpec = UITheme::getInstance().getScreenSpec(ThemeScreenKind::Reader);
+  if (readerSpec == nullptr || !readerSpec->enabled) return false;
+
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  ThemeLayoutSlots slots;
+  layoutThemeSlots(readerSpec->layout, laneRect, metrics, slots);
+
+  const auto progress = readerProgressText(bookProgress, currentPage, pageCount);
+  const bool showBatteryPercentage =
+      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
+
+  Rect bookmarkRect = findThemeSlot(slots, "bookmark");
+  if (isPageBookmarked && bookmarkRect.width > 0 && bookmarkRect.height > 0) {
+    drawBookmarkStatusIcon(renderer, bookmarkRect.x,
+                           bookmarkRect.y + std::max(0, (bookmarkRect.height - bookmarkStatusIconHeight) / 2));
+  }
+
+  Rect batteryRect = findThemeSlot(slots, "battery");
+  if (SETTINGS.statusBarBattery && batteryRect.width > 0 && batteryRect.height > 0) {
+    drawReaderBattery(renderer, batteryRect, showBatteryPercentage);
+  }
+
+  Rect clockRect = findThemeSlot(slots, "clock");
+  if (SETTINGS.statusBarClock && halClock.isAvailable() && clockRect.width > 0 && clockRect.height > 0) {
+    char timeBuf[9];
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+      auto clockText = renderer.truncatedText(SMALL_FONT_ID, timeBuf, clockRect.width);
+      const int clockWidth = renderer.getTextWidth(SMALL_FONT_ID, clockText.c_str());
+      renderer.drawText(SMALL_FONT_ID, clockRect.x + std::max(0, (clockRect.width - clockWidth) / 2),
+                        clockRect.y + std::max(0, (clockRect.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2),
+                        clockText.c_str());
+    }
+  }
+
+  Rect progressRect = findThemeSlot(slots, "progress");
+  if (!progress.empty() && progressRect.width > 0 && progressRect.height > 0) {
+    auto progressText = renderer.truncatedText(SMALL_FONT_ID, progress.c_str(), progressRect.width);
+    const int progressWidth = renderer.getTextWidth(SMALL_FONT_ID, progressText.c_str());
+    renderer.drawText(SMALL_FONT_ID, progressRect.x + std::max(0, progressRect.width - progressWidth),
+                      progressRect.y + std::max(0, (progressRect.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2),
+                      progressText.c_str());
+  }
+
+  Rect titleRect = findThemeSlot(slots, "title");
+  if (!title.empty() && titleRect.width > 0 && titleRect.height > 0) {
+    titleRect.y -= textYOffset;
+    const auto titleText = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), titleRect.width);
+    const int titleWidth = renderer.getTextWidth(SMALL_FONT_ID, titleText.c_str());
+    renderer.drawText(SMALL_FONT_ID, titleRect.x + std::max(0, (titleRect.width - titleWidth) / 2),
+                      titleRect.y + std::max(0, (titleRect.height - renderer.getLineHeight(SMALL_FONT_ID)) / 2),
+                      titleText.c_str());
+  }
+
+  return true;
+}
+
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int marginX = metrics.popupMarginX;
@@ -764,21 +940,15 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   const int rightClusterX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight;
   int leftClusterWidth = 0;
   int rightClusterWidth = 0;
+  const ThemeScreenSpec* readerSpec = UITheme::getInstance().getScreenSpec(ThemeScreenKind::Reader);
+  const bool hasThemedLane = readerSpec != nullptr && readerSpec->enabled;
 
-  if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
+  if (!hasThemedLane && (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount)) {
     // Right aligned text for progress counter
-    char progressStr[32];
+    const auto progressStr = readerProgressText(bookProgress, currentPage, pageCount);
 
-    if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
-    } else if (SETTINGS.statusBarBookProgressPercentage) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
-    } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
-    }
-
-    int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    renderer.drawText(SMALL_FONT_ID, rightClusterX - progressTextWidth, textY, progressStr);
+    int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr.c_str());
+    renderer.drawText(SMALL_FONT_ID, rightClusterX - progressTextWidth, textY, progressStr.c_str());
 
     rightClusterWidth += progressTextWidth;
   }
@@ -803,17 +973,26 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
   }
 
+  const Rect themedLaneRect{leftClusterX, textY, std::max(0, rightClusterX - leftClusterX),
+                            std::max(renderer.getLineHeight(SMALL_FONT_ID), metrics.statusBarVerticalMargin)};
+  if (hasThemedLane && drawThemedReaderStatusLane(renderer, themedLaneRect, bookProgress, currentPage, pageCount, title,
+                                                  textYOffset, isPageBookmarked)) {
+    return;
+  }
+
   // Draw Battery
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
 
   if (SETTINGS.statusBarBattery) {
-    GUI.drawBatteryLeft(renderer,
-                        Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
-                        showBatteryPercentage);
-    int batteryWidth = metrics.batteryWidth;
+    const ThemeReaderChromeSpec* chrome = UITheme::getInstance().getReaderChromeSpec();
+    const int batteryVisualWidth =
+        chrome != nullptr && chrome->battery.width > 0 ? chrome->battery.width : metrics.batteryWidth;
+    drawReaderBattery(renderer, Rect{leftClusterX + leftClusterWidth, textY, batteryVisualWidth, metrics.batteryHeight},
+                      showBatteryPercentage);
+    int batteryWidth = batteryVisualWidth;
 
-    if (showBatteryPercentage) {
+    if (showBatteryPercentage && (chrome == nullptr || chrome->battery.showPercentage)) {
       const uint16_t percentage = powerManager.getBatteryPercentage();
       // width of icon + spacing + text for layout purposes
       batteryWidth +=

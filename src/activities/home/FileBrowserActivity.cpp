@@ -7,6 +7,7 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -355,30 +356,60 @@ void FileBrowserActivity::render(RenderLock&&) {
       (mode == Mode::PickFirmware)
           ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
           : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
+
+  const ThemeScreenSpec* screenSpec = UITheme::getInstance().getScreenSpec(ThemeScreenKind::FileBrowser);
+  ThemeLayoutSlots slots;
+  Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+  Rect listRect;
+  Rect pathRect;
+  Rect buttonsRect{0, pageHeight - metrics.buttonHintsHeight, pageWidth, metrics.buttonHintsHeight};
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int pathReserved = pathLineHeight + metrics.verticalSpacing;
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
-  if (files.empty()) {
+  if (screenSpec != nullptr) {
+    layoutThemeSlots(screenSpec->layout, Rect{0, 0, pageWidth, pageHeight}, metrics, slots);
+    headerRect = normalizeThemeHeaderSlot(findThemeSlot(slots, "header"), metrics);
+    listRect = findThemeSlot(slots, "list");
+    pathRect = findThemeSlot(slots, "path");
+    buttonsRect = findThemeSlot(slots, "buttons");
+    if (listRect.width <= 0 || listRect.height <= 0) {
+      LOG_ERR("FileBrowser", "Invalid SD file layout: slots=%d; using built-in layout", static_cast<int>(slots.size()));
+      screenSpec = nullptr;
+    }
+  }
+  if (screenSpec == nullptr) {
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight =
+        pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+    headerRect = Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+    listRect = Rect{0, contentTop, pageWidth, contentHeight};
+    pathRect = Rect{metrics.contentSidePadding,
+                    pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight,
+                    pageWidth - metrics.contentSidePadding * 2, pathLineHeight};
+    buttonsRect = Rect{0, pageHeight - metrics.buttonHintsHeight, pageWidth, metrics.buttonHintsHeight};
+  }
+
+  if (headerRect.width > 0 && headerRect.height > 0) {
+    GUI.drawHeader(renderer, headerRect, folderName.c_str());
+  }
+  if (listRect.width <= 0 || listRect.height <= 0) {
+    // Malformed theme layout: no list slot to draw into.
+  } else if (files.empty()) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, listRect.y + 20, emptyMsg);
   } else {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
+        renderer, listRect, files.size(), selectorIndex, [this](int index) { return getFileName(files[index]); },
+        nullptr, [this](int index) { return UITheme::getFileIcon(files[index]); },
         [this](int index) { return getFileExtension(files[index]); }, false);
   }
 
   // Full path display
-  {
-    const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
-    const int separatorY = pathY - metrics.verticalSpacing / 2;
+  if (pathRect.width > 0 && pathRect.height > 0) {
+    const int pathY = pathRect.y;
+    const int separatorY = pathRect.y - metrics.verticalSpacing / 2;
     renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
-    const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;
+    const int pathMaxWidth = pathRect.width;
     // Left-truncate so the deepest directory is always visible
     const char* pathStr = basepath.c_str();
     const char* pathDisplay = pathStr;
@@ -397,7 +428,7 @@ void FileBrowserActivity::render(RenderLock&&) {
       snprintf(leftTruncBuf, sizeof(leftTruncBuf), "%s%s", ellipsis, p);
       pathDisplay = leftTruncBuf;
     }
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, pathY, pathDisplay);
+    renderer.drawText(SMALL_FONT_ID, pathRect.x, pathY, pathDisplay);
   }
 
   // Help text
@@ -408,7 +439,9 @@ void FileBrowserActivity::render(RenderLock&&) {
   const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (buttonsRect.width > 0 && buttonsRect.height > 0) {
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   renderer.displayBuffer();
 }
