@@ -29,6 +29,7 @@ TEST_F(SimulatorHeapTest, FreshArenaReportsConstantTotalAndInitialFreeHeadroom) 
 TEST_F(SimulatorHeapTest, AllocateAndFreeRestoresFreeBytes) {
   ASSERT_TRUE(SimulatorHeap::resetForTests(4096));
   const std::size_t baselineFree = SimulatorHeap::freeBytes();
+  const std::size_t baselineMaxAlloc = SimulatorHeap::largestFreeBlockBytes();
 
   void* ptr = SimulatorHeap::allocateForTests(128);
   ASSERT_NE(ptr, nullptr);
@@ -37,7 +38,7 @@ TEST_F(SimulatorHeapTest, AllocateAndFreeRestoresFreeBytes) {
 
   SimulatorHeap::freeForTests(ptr);
   EXPECT_EQ(SimulatorHeap::freeBytes(), baselineFree);
-  EXPECT_EQ(SimulatorHeap::largestFreeBlockBytes(), baselineFree);
+  EXPECT_EQ(SimulatorHeap::largestFreeBlockBytes(), baselineMaxAlloc);
 }
 
 TEST_F(SimulatorHeapTest, SplittingAndCoalescingAffectsLargestFreeBlock) {
@@ -93,7 +94,7 @@ TEST_F(SimulatorHeapTest, ReallocShrinkAndGrowPreservesContent) {
 
   const std::size_t freeAfterAlloc = SimulatorHeap::freeBytes();
   auto* shrunk = static_cast<std::uint8_t*>(SimulatorHeap::reallocForTests(ptr, 128));
-  ASSERT_EQ(shrunk, ptr);
+  ASSERT_NE(shrunk, nullptr);
   EXPECT_GT(SimulatorHeap::freeBytes(), freeAfterAlloc);
   for (std::size_t i = 0; i < 128; ++i) {
     EXPECT_EQ(shrunk[i], 0xAB);
@@ -108,11 +109,14 @@ TEST_F(SimulatorHeapTest, ReallocShrinkAndGrowPreservesContent) {
 
 TEST_F(SimulatorHeapTest, FragmentationCanBlockLargeAllocationEvenWhenFreeBytesRemain) {
   ASSERT_TRUE(SimulatorHeap::resetForTests(4096));
+  const std::size_t baselineMaxAlloc = SimulatorHeap::largestFreeBlockBytes();
+  const std::size_t chunkSize = baselineMaxAlloc / 5U;
+  const std::size_t largeRequest = chunkSize * 2U;
 
-  void* a = SimulatorHeap::allocateForTests(880);
-  void* b = SimulatorHeap::allocateForTests(880);
-  void* c = SimulatorHeap::allocateForTests(880);
-  void* d = SimulatorHeap::allocateForTests(880);
+  void* a = SimulatorHeap::allocateForTests(chunkSize);
+  void* b = SimulatorHeap::allocateForTests(chunkSize);
+  void* c = SimulatorHeap::allocateForTests(chunkSize);
+  void* d = SimulatorHeap::allocateForTests(chunkSize);
   ASSERT_NE(a, nullptr);
   ASSERT_NE(b, nullptr);
   ASSERT_NE(c, nullptr);
@@ -121,12 +125,12 @@ TEST_F(SimulatorHeapTest, FragmentationCanBlockLargeAllocationEvenWhenFreeBytesR
   SimulatorHeap::freeForTests(a);
   SimulatorHeap::freeForTests(c);
 
-  EXPECT_GT(SimulatorHeap::freeBytes(), 1024U);
-  EXPECT_LT(SimulatorHeap::largestFreeBlockBytes(), 1024U);
-  EXPECT_EQ(SimulatorHeap::allocateForTests(1024), nullptr);
+  EXPECT_GT(SimulatorHeap::freeBytes(), largeRequest);
+  EXPECT_LT(SimulatorHeap::largestFreeBlockBytes(), largeRequest);
+  EXPECT_EQ(SimulatorHeap::allocateForTests(largeRequest), nullptr);
 
   SimulatorHeap::freeForTests(b);
-  void* merged = SimulatorHeap::allocateForTests(1024);
+  void* merged = SimulatorHeap::allocateForTests(largeRequest);
   EXPECT_NE(merged, nullptr);
   SimulatorHeap::freeForTests(merged);
   SimulatorHeap::freeForTests(d);

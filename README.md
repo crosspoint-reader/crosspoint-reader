@@ -178,9 +178,9 @@ pio run -e simulator -t run_simulator
 pio run -e simulator_i386 -t run_simulator
 ```
 
-The simulator heap uses a fixed `380 KiB` arena by default, matching the larger documented usable RAM budget for the
-XT3/XT4 class hardware. Set `CROSSPOINT_SIM_HEAP_BYTES` to a byte count to run with an exact heap size and
-XT4-comparable `Free`, `Total`, `Min Free`, and `MaxAlloc` metrics.
+The simulator heap uses a fixed `153,371` byte arena by default, matching the current `gh_release` firmware's
+remaining DRAM budget from the ESP-IDF size report. Set `CROSSPOINT_SIM_HEAP_BYTES` to a byte count to run with an
+exact heap size and device-comparable `Free`, `Total`, `Min Free`, and `MaxAlloc` metrics.
 
 On Linux, `simulator_i386` needs 32-bit host toolchain and dev libraries in addition to the normal simulator deps:
 `gcc-multilib`, `g++-multilib`, `libsdl2-dev:i386`, and `libssl-dev:i386`.

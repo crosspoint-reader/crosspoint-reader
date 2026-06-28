@@ -28,7 +28,7 @@ pio run -e simulator_i386 -t run_simulator
 python3 scripts/run_sim_benchmark.py
 ```
 
-The simulator always runs with a fixed heap arena. Override the default `380 KiB` arena with
+The simulator always runs with a fixed heap arena. Override the default `153,371` byte arena with
 `CROSSPOINT_SIM_HEAP_BYTES=<bytes>` when you want deterministic exhaustion or fragmentation behavior.
 
 On Linux, the `simulator_i386` env requires multilib support plus 32-bit SDL/OpenSSL development packages.

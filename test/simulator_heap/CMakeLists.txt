@@ -13,6 +13,7 @@ target_compile_definitions(simulator_heap_test PRIVATE
 target_link_libraries(simulator_heap_test PRIVATE
   GTest::gtest_main
   crosspoint_test_common
+  espressif_tlsf
 )
 
 gtest_discover_tests(simulator_heap_test)

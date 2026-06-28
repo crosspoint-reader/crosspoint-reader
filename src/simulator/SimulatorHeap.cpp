@@ -16,7 +16,10 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
+
+#include "tlsf.h"
 
 // Caller tracking is a host-only debugging aid. Capture uses glibc's
 // backtrace() (libc, always present on Linux/macOS); symbol/line resolution
@@ -47,32 +50,16 @@ extern "C" void __real_free(void* ptr);
 
 namespace {
 
-constexpr std::size_t kDefaultArenaBytes = 380U * 1024U;
+// Match the current gh_release firmware's remaining DRAM budget reported by
+// the ESP-IDF size summary (`pio run -e gh_release`): 153,371 bytes free.
+constexpr std::size_t kDefaultArenaBytes = 153371U;
 constexpr std::size_t kAlignment = alignof(std::max_align_t);
-constexpr std::uint64_t kAllocationMagic = 0x4350484541503032ULL;
 
 std::size_t alignUp(const std::size_t value, const std::size_t alignment) {
   if (alignment == 0) return value;
   const std::size_t remainder = value % alignment;
   return remainder == 0 ? value : value + (alignment - remainder);
 }
-
-struct alignas(std::max_align_t) BlockHeader {
-  std::size_t size;
-  std::size_t prevSize;
-  BlockHeader* prevFree;
-  BlockHeader* nextFree;
-  bool isFree;
-};
-
-struct alignas(std::max_align_t) AllocationHeader {
-  std::uint64_t magic;
-  BlockHeader* block;
-  std::size_t requested;
-};
-
-static_assert(sizeof(BlockHeader) % kAlignment == 0);
-static_assert(sizeof(AllocationHeader) % kAlignment == 0);
 
 // ---------------------------------------------------------------------------
 // Caller tracking (heap profiler)
@@ -85,7 +72,8 @@ static_assert(sizeof(AllocationHeader) % kAlignment == 0);
 //
 // Two invariants keep this from perturbing what it measures:
 //   1. All bookkeeping (the side table, backtrace internals, backward-cpp) uses
-//      the *real* host heap, never the 380KB arena, so the reported numbers are
+//      the *real* host heap, never the fixed simulator arena, so the reported
+//      numbers are
 //      unchanged whether tracing is on or off.
 //   2. A thread-local reentrancy guard routes any allocation made *inside* the
 //      tracer to the real heap. The arena runs under a non-recursive mutex and
@@ -139,6 +127,9 @@ struct TraceRecord {
 template <class K, class V>
 using RealMap = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, RealAllocator<std::pair<const K, V>>>;
 
+template <class T>
+using RealSet = std::unordered_set<T, std::hash<T>, std::equal_to<T>, RealAllocator<T>>;
+
 class TraceRegistry {
  public:
   void setEnabled(const bool enabled) { enabled_ = enabled; }
@@ -191,23 +182,21 @@ class ArenaAllocator {
     if (initialized_) return true;
 
     const std::size_t alignedBytes = alignUp(requestedBytes, kAlignment);
-    if (alignedBytes < minimumArenaBytes()) {
+    void* slab = __real_malloc(alignedBytes);
+    if (!slab) return false;
+
+    tlsf_t tlsf = tlsf_create_with_pool(slab, alignedBytes, 0);
+    if (!tlsf) {
+      __real_free(slab);
       errno = ENOMEM;
       return false;
     }
 
-    void* slab = __real_malloc(alignedBytes);
-    if (!slab) return false;
-
     slab_ = static_cast<std::byte*>(slab);
     slabBytes_ = alignedBytes;
-    freeList_ = reinterpret_cast<BlockHeader*>(slab_);
-    freeList_->size = slabBytes_;
-    freeList_->prevSize = 0;
-    freeList_->prevFree = nullptr;
-    freeList_->nextFree = nullptr;
-    freeList_->isFree = true;
-    minFreeBytes_ = allocatableBytes(freeList_, kAlignment);
+    tlsf_ = tlsf;
+    freeBytes_ = alignedBytes - tlsf_size(tlsf_);
+    minFreeBytes_ = freeBytes_;
     initialized_ = true;
 
     if (logInit) {
@@ -271,9 +260,7 @@ class ArenaAllocator {
     std::lock_guard<std::mutex> lock(mutex_);
     if (!initialized_ || !ptr) return false;
     const auto* bytes = static_cast<const std::byte*>(ptr);
-    if (bytes <= slab_ || bytes > slab_ + slabBytes_) return false;
-    const AllocationHeader* allocation = static_cast<const AllocationHeader*>(ptr) - 1;
-    return allocation->magic == kAllocationMagic;
+    return bytes >= slab_ && bytes < slab_ + slabBytes_;
   }
 
   void* allocate(std::size_t size, std::size_t alignment = kAlignment) {
@@ -307,46 +294,48 @@ class ArenaAllocator {
       return nullptr;
     }
 
-    AllocationHeader* allocation = allocationHeaderFromUser(ptr);
-    if (!allocation || allocation->magic != kAllocationMagic) {
+    if (livePointers_.find(ptr) == livePointers_.end()) {
       errno = EINVAL;
       return nullptr;
     }
 
-    BlockHeader* block = allocation->block;
-    const std::size_t oldRequested = allocation->requested;
-    const std::size_t newUsedBytes = allocationBytesFor(block, size, alignment);
-    if (newUsedBytes == 0) {
-      errno = ENOMEM;
-      return nullptr;
-    }
+    const std::size_t effectiveAlignment = normalizedAlignment(alignment);
+    if (effectiveAlignment == 0) return nullptr;
 
-    if (newUsedBytes <= block->size) {
-      allocation->requested = size;
-      splitBlockLocked(block, newUsedBytes);
+    if (effectiveAlignment <= kTlsfBaseAlignment || size <= tlsf_block_size(ptr)) {
+      const std::size_t previousBlockSize = tlsf_block_size(ptr);
+      void* result = tlsf_realloc(tlsf_, ptr, size);
+      if (!result) {
+        errno = ENOMEM;
+        return nullptr;
+      }
+
+      if ((reinterpret_cast<std::uintptr_t>(result) & (effectiveAlignment - 1U)) != 0) {
+        void* alignedResult = allocateLocked(size, effectiveAlignment);
+        if (!alignedResult) return nullptr;
+        std::memcpy(alignedResult, result, std::min(size, tlsf_block_size(result)));
+        freeLocked(result);
+        return alignedResult;
+      }
+
+      freeBytes_ += previousBlockSize;
+      freeBytes_ -= tlsf_block_size(result);
       updateMinFreeLocked();
-      gTraceRegistry.updateSize(ptr, size);
-      return ptr;
+
+      if (result != ptr) {
+        livePointers_.erase(ptr);
+        livePointers_.insert(result);
+        gTraceRegistry.forget(ptr);
+        gTraceRegistry.record(result, size);
+      } else {
+        gTraceRegistry.updateSize(result, size);
+      }
+      return result;
     }
 
-    BlockHeader* next = nextBlock(block);
-    if (next && next->isFree && block->size + next->size >= newUsedBytes) {
-      removeFreeBlock(next);
-      block->size += next->size;
-      BlockHeader* afterNext = nextBlock(block);
-      if (afterNext) afterNext->prevSize = block->size;
-      allocation->requested = size;
-      splitBlockLocked(block, newUsedBytes);
-      updateMinFreeLocked();
-      gTraceRegistry.updateSize(ptr, size);
-      return ptr;
-    }
-
-    void* newPtr = allocateLocked(size, alignment);
+    void* newPtr = allocateLocked(size, effectiveAlignment);
     if (!newPtr) return nullptr;
-
-    std::memcpy(newPtr, ptr, oldRequested < size ? oldRequested : size);
-    allocation->requested = oldRequested;
+    std::memcpy(newPtr, ptr, std::min(size, tlsf_block_size(ptr)));
     freeLocked(ptr);
     return newPtr;
   }
@@ -358,140 +347,41 @@ class ArenaAllocator {
   }
 
  private:
-  static constexpr std::size_t minimumArenaBytes() {
-    return sizeof(BlockHeader) + sizeof(AllocationHeader) + kAlignment + 1;
-  }
+  static constexpr std::size_t kTlsfBaseAlignment = 4;
 
-  static AllocationHeader* allocationHeaderFromUser(void* userPtr) {
-    return static_cast<AllocationHeader*>(userPtr) - 1;
-  }
-
-  static const AllocationHeader* allocationHeaderFromUser(const void* userPtr) {
-    return static_cast<const AllocationHeader*>(userPtr) - 1;
-  }
-
-  static std::size_t allocatableBytes(const BlockHeader* block, const std::size_t alignment) {
-    const uintptr_t blockStart = reinterpret_cast<uintptr_t>(block);
-    const uintptr_t payloadStart = blockStart + sizeof(BlockHeader);
-    const uintptr_t alignedUser =
-        alignUp(payloadStart + sizeof(AllocationHeader), alignment);
-    if (alignedUser < payloadStart + sizeof(AllocationHeader)) return 0;
-    const uintptr_t usedStart = alignedUser - sizeof(AllocationHeader);
-    if (usedStart < payloadStart) return 0;
-    const std::size_t overhead = static_cast<std::size_t>((usedStart - blockStart) + sizeof(AllocationHeader));
-    return block->size > overhead ? block->size - overhead : 0;
-  }
-
-  static std::size_t allocationBytesFor(const BlockHeader* block, const std::size_t requested,
-                                        const std::size_t alignment) {
-    const uintptr_t blockStart = reinterpret_cast<uintptr_t>(block);
-    const uintptr_t payloadStart = blockStart + sizeof(BlockHeader);
-    const uintptr_t alignedUser = alignUp(payloadStart + sizeof(AllocationHeader), alignment);
-    if (alignedUser < payloadStart + sizeof(AllocationHeader)) return 0;
-    if (requested > std::numeric_limits<std::size_t>::max() - alignedUser) return 0;
-    const uintptr_t rawEnd = alignedUser + (requested == 0 ? 1 : requested);
-    const std::size_t used = static_cast<std::size_t>(rawEnd - blockStart);
-    return alignUp(used, kAlignment);
-  }
-
-  static std::size_t usedBytesFor(const BlockHeader* block, const AllocationHeader* header,
-                                  const std::size_t requested) {
-    const uintptr_t blockStart = reinterpret_cast<uintptr_t>(block);
-    const uintptr_t user = reinterpret_cast<uintptr_t>(header + 1);
-    const uintptr_t rawEnd = user + (requested == 0 ? 1 : requested);
-    return alignUp(static_cast<std::size_t>(rawEnd - blockStart), kAlignment);
-  }
-
-  BlockHeader* nextBlock(BlockHeader* block) const {
-    if (!block) return nullptr;
-    std::byte* next = reinterpret_cast<std::byte*>(block) + block->size;
-    return next >= slab_ + slabBytes_ ? nullptr : reinterpret_cast<BlockHeader*>(next);
-  }
-
-  BlockHeader* prevBlock(BlockHeader* block) const {
-    if (!block || block->prevSize == 0) return nullptr;
-    return reinterpret_cast<BlockHeader*>(reinterpret_cast<std::byte*>(block) - block->prevSize);
-  }
-
-  void addFreeBlock(BlockHeader* block) {
-    block->isFree = true;
-    block->prevFree = nullptr;
-    block->nextFree = freeList_;
-    if (freeList_) freeList_->prevFree = block;
-    freeList_ = block;
-  }
-
-  void removeFreeBlock(BlockHeader* block) {
-    if (block->prevFree) {
-      block->prevFree->nextFree = block->nextFree;
-    } else if (freeList_ == block) {
-      freeList_ = block->nextFree;
+  static std::size_t normalizedAlignment(const std::size_t alignment) {
+    const std::size_t effectiveAlignment = alignment < kAlignment ? kAlignment : alignment;
+    if ((effectiveAlignment & (effectiveAlignment - 1U)) != 0) {
+      errno = EINVAL;
+      return 0;
     }
-    if (block->nextFree) block->nextFree->prevFree = block->prevFree;
-    block->prevFree = nullptr;
-    block->nextFree = nullptr;
-    block->isFree = false;
-  }
-
-  void splitBlockLocked(BlockHeader* block, const std::size_t usedBytes) {
-    if (block->size <= usedBytes) return;
-
-    const std::size_t remainder = block->size - usedBytes;
-    if (remainder < minimumArenaBytes()) return;
-
-    block->size = usedBytes;
-    BlockHeader* remainderBlock = reinterpret_cast<BlockHeader*>(reinterpret_cast<std::byte*>(block) + usedBytes);
-    remainderBlock->size = remainder;
-    remainderBlock->prevSize = usedBytes;
-    remainderBlock->prevFree = nullptr;
-    remainderBlock->nextFree = nullptr;
-    remainderBlock->isFree = true;
-    BlockHeader* after = nextBlock(remainderBlock);
-    if (after) after->prevSize = remainder;
-    addFreeBlock(remainderBlock);
-  }
-
-  BlockHeader* coalesceLocked(BlockHeader* block) {
-    BlockHeader* next = nextBlock(block);
-    if (next && next->isFree) {
-      removeFreeBlock(next);
-      block->size += next->size;
-      BlockHeader* after = nextBlock(block);
-      if (after) after->prevSize = block->size;
-    }
-
-    BlockHeader* prev = prevBlock(block);
-    if (prev && prev->isFree) {
-      removeFreeBlock(prev);
-      prev->size += block->size;
-      BlockHeader* after = nextBlock(prev);
-      if (after) after->prevSize = prev->size;
-      block = prev;
-    }
-
-    return block;
+    return effectiveAlignment;
   }
 
   void updateMinFreeLocked() {
-    const std::size_t currentFree = freeBytesLocked();
+    const std::size_t currentFree = freeBytes_;
     if (currentFree < minFreeBytes_) minFreeBytes_ = currentFree;
   }
 
   std::size_t freeBytesLocked() const {
-    std::size_t total = 0;
-    for (BlockHeader* block = freeList_; block; block = block->nextFree) {
-      total += allocatableBytes(block, kAlignment);
-    }
-    return total;
+    return freeBytes_;
   }
 
   std::size_t largestFreeBlockBytesLocked() const {
-    std::size_t largest = 0;
-    for (BlockHeader* block = freeList_; block; block = block->nextFree) {
-      const std::size_t candidate = allocatableBytes(block, kAlignment);
-      if (candidate > largest) largest = candidate;
-    }
-    return largest;
+    if (!tlsf_) return 0;
+    struct LargestFreeBlockState {
+      std::size_t largest = 0;
+    } state;
+    tlsf_walk_pool(tlsf_get_pool(tlsf_),
+                   [](void*, std::size_t size, int used, void* user) {
+                     if (!used) {
+                       auto& state = *static_cast<LargestFreeBlockState*>(user);
+                       if (size > state.largest) state.largest = size;
+                     }
+                     return true;
+                   },
+                   &state);
+    return tlsf_fit_size(tlsf_, state.largest);
   }
 
   std::size_t fragmentationPercentLocked() const {
@@ -506,28 +396,39 @@ class ArenaAllocator {
     constexpr std::size_t kMaxBlocks = 1024;
     std::array<std::size_t, kMaxBlocks> blocks;
     std::size_t numBlocks = 0;
-    std::size_t totalFree = 0;
     std::array<std::size_t, 5> histogram = {0, 0, 0, 0, 0};
 
-    for (BlockHeader* block = freeList_; block; block = block->nextFree) {
-      const std::size_t bytes = allocatableBytes(block, kAlignment);
-      if (numBlocks < kMaxBlocks) {
-        blocks[numBlocks++] = bytes;
-      } else {
-        numBlocks++;
-      }
-      totalFree += bytes;
-      if (bytes < 1024) {
-        histogram[0]++;
-      } else if (bytes < 4096) {
-        histogram[1]++;
-      } else if (bytes < 16384) {
-        histogram[2]++;
-      } else if (bytes < 65536) {
-        histogram[3]++;
-      } else {
-        histogram[4]++;
-      }
+    if (tlsf_) {
+      struct DumpState {
+        const ArenaAllocator* self;
+        std::array<std::size_t, kMaxBlocks>* blocks;
+        std::size_t* numBlocks;
+        std::array<std::size_t, 5>* histogram;
+      } state{this, &blocks, &numBlocks, &histogram};
+
+      tlsf_walk_pool(tlsf_get_pool(tlsf_),
+                     [](void*, std::size_t size, int used, void* user) {
+                       if (used) return true;
+                       auto& state = *static_cast<DumpState*>(user);
+                       const std::size_t bytes = tlsf_fit_size(state.self->tlsf_, size);
+                       if (*state.numBlocks < kMaxBlocks) {
+                         (*state.blocks)[*state.numBlocks] = bytes;
+                       }
+                       ++(*state.numBlocks);
+                       if (bytes < 1024) {
+                         (*state.histogram)[0]++;
+                       } else if (bytes < 4096) {
+                         (*state.histogram)[1]++;
+                       } else if (bytes < 16384) {
+                         (*state.histogram)[2]++;
+                       } else if (bytes < 65536) {
+                         (*state.histogram)[3]++;
+                       } else {
+                         (*state.histogram)[4]++;
+                       }
+                       return true;
+                     },
+                     &state);
     }
 
     const std::size_t sortCount = std::min(numBlocks, kMaxBlocks);
@@ -536,7 +437,7 @@ class ArenaAllocator {
     std::fprintf(stderr,
                  "[SIM] free list%s%s: blocks=%zu free=%zu max_alloc=%zu fragmentation=%zu%% histogram(<1K=%zu "
                  "1-4K=%zu 4-16K=%zu 16-64K=%zu 64K+=%zu)\n",
-                 reason ? " " : "", reason ? reason : "", numBlocks, totalFree, largestFreeBlockBytesLocked(),
+                 reason ? " " : "", reason ? reason : "", numBlocks, freeBytes_, largestFreeBlockBytesLocked(),
                  fragmentationPercentLocked(), histogram[0], histogram[1], histogram[2], histogram[3], histogram[4]);
 
     std::fprintf(stderr, "[SIM] largest free blocks:");
@@ -557,54 +458,48 @@ class ArenaAllocator {
       return nullptr;
     }
 
-    const std::size_t effectiveAlignment = alignment < kAlignment ? kAlignment : alignment;
-    if ((effectiveAlignment & (effectiveAlignment - 1U)) != 0) {
-      errno = EINVAL;
+    if (requestedSize == 0) {
+      errno = ENOMEM;
       return nullptr;
     }
 
-    for (BlockHeader* block = freeList_; block; block = block->nextFree) {
-      const std::size_t usedBytes = allocationBytesFor(block, requestedSize, effectiveAlignment);
-      if (usedBytes == 0 || usedBytes > block->size) continue;
+    const std::size_t effectiveAlignment = normalizedAlignment(alignment);
+    if (effectiveAlignment == 0) return nullptr;
 
-      removeFreeBlock(block);
-      splitBlockLocked(block, usedBytes);
-
-      const uintptr_t blockStart = reinterpret_cast<uintptr_t>(block);
-      const uintptr_t payloadStart = blockStart + sizeof(BlockHeader);
-      const uintptr_t alignedUser = alignUp(payloadStart + sizeof(AllocationHeader), effectiveAlignment);
-      AllocationHeader* allocation = reinterpret_cast<AllocationHeader*>(alignedUser - sizeof(AllocationHeader));
-      allocation->magic = kAllocationMagic;
-      allocation->block = block;
-      allocation->requested = requestedSize;
-
-      updateMinFreeLocked();
-      void* userPtr = static_cast<void*>(allocation + 1);
-      gTraceRegistry.record(userPtr, requestedSize);
-      return userPtr;
+    void* ptr = effectiveAlignment <= kTlsfBaseAlignment ? tlsf_malloc(tlsf_, requestedSize)
+                                                         : tlsf_memalign(tlsf_, effectiveAlignment, requestedSize);
+    if (!ptr) {
+      errno = ENOMEM;
+      return nullptr;
     }
 
-    errno = ENOMEM;
-    return nullptr;
+    freeBytes_ -= tlsf_block_size(ptr);
+    freeBytes_ -= tlsf_alloc_overhead();
+    updateMinFreeLocked();
+    livePointers_.insert(ptr);
+    gTraceRegistry.record(ptr, requestedSize);
+    return ptr;
   }
 
   void freeLocked(void* ptr) {
-    AllocationHeader* allocation = allocationHeaderFromUser(ptr);
-    if (!allocation || allocation->magic != kAllocationMagic) return;
+    const auto it = livePointers_.find(ptr);
+    if (it == livePointers_.end()) return;
 
     gTraceRegistry.forget(ptr);
-    BlockHeader* block = allocation->block;
-    allocation->magic = 0;
-    block = coalesceLocked(block);
-    addFreeBlock(block);
+    freeBytes_ += tlsf_block_size(ptr);
+    freeBytes_ += tlsf_alloc_overhead();
+    livePointers_.erase(it);
+    tlsf_free(tlsf_, ptr);
   }
 
   void shutdownLocked() {
     if (!initialized_) return;
+    livePointers_.clear();
+    tlsf_ = nullptr;
     __real_free(slab_);
     slab_ = nullptr;
     slabBytes_ = 0;
-    freeList_ = nullptr;
+    freeBytes_ = 0;
     minFreeBytes_ = 0;
     initialized_ = false;
   }
@@ -612,8 +507,10 @@ class ArenaAllocator {
   mutable std::mutex mutex_;
   std::byte* slab_ = nullptr;
   std::size_t slabBytes_ = 0;
-  BlockHeader* freeList_ = nullptr;
+  tlsf_t tlsf_ = nullptr;
+  std::size_t freeBytes_ = 0;
   std::size_t minFreeBytes_ = 0;
+  RealSet<void*> livePointers_;
   bool initialized_ = false;
 };
 
@@ -634,7 +531,7 @@ bool isAllocatorFrame(const char* text) {
 // System headers (STL internals, libstdc++) resolve to /usr/include and are
 // noise in a heap trace: the snippet is unhelpful and often the source isn't
 // even installed. We keep the frame but suppress its source context.
-bool isSystemFile(const std::string& file) { return file.find("/usr/include") != std::string::npos; }
+[[maybe_unused]] bool isSystemFile(const std::string& file) { return file.find("/usr/include") != std::string::npos; }
 
 #if SIM_HEAP_TRACE_BACKWARD
 // Resolve a stored allocation stack with backward-cpp and render it through
