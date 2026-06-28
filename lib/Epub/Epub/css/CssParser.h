@@ -1,5 +1,6 @@
 #pragma once
 
+#include <FlatMap.h>
 #include <HalStorage.h>
 
 #include <initializer_list>
@@ -8,8 +9,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#include <FlatMap.h>
 
 #include "CssStyle.h"
 
@@ -35,7 +34,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 6;
+  static constexpr uint8_t CSS_CACHE_VERSION = 7;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 
 // Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
 enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
@@ -9,40 +12,118 @@ enum class CssTextDirection : uint8_t { Ltr = 0, Rtl = 1 };
 
 // Represents a CSS length value with its unit, allowing deferred resolution to pixels
 struct CssLength {
-  float value = 0.0f;
-  CssUnit unit = CssUnit::Pixels;
+  // Compact 32-bit layout:
+  //   - low 3 bits store CssUnit
+  //   - upper 29 bits store a signed decimal fixed-point value at 1e-4 precision
+  //
+  // The previous float+unit representation consumed 8 bytes per field. This
+  // packed form cuts CssLength to 4 bytes and shrinks CssStyle substantially,
+  // while keeping common EPUB values (integer and 0.01-step decimals) stable
+  // under the integer/truncating pixel math used by layout.
+  uint32_t packed = 0;
 
   CssLength() = default;
-  CssLength(const float v, const CssUnit u) : value(v), unit(u) {}
+  CssLength(const float v, const CssUnit u) : packed(pack(v, u)) {}
 
   // Convenience constructor for pixel values (most common case)
-  explicit CssLength(const float pixels) : value(pixels) {}
+  explicit CssLength(const float pixels) : packed(pack(pixels, CssUnit::Pixels)) {}
+
+  [[nodiscard]] float value() const { return static_cast<float>(scaledValue()) * kInvScale; }
+  [[nodiscard]] CssUnit unit() const { return unpackUnit(packed); }
+  [[nodiscard]] uint32_t rawPacked() const { return packed; }
+  [[nodiscard]] int32_t scaledValue() const { return unpackScaled(packed); }
+
+  void setValue(const float v) { packed = pack(v, unit()); }
+  void setUnit(const CssUnit u) { packed = packScaled(scaledValue(), u); }
+  void setRawPacked(const uint32_t raw) { packed = raw; }
 
   // Returns true if this length can be resolved to pixels with the given context.
   // Percentage units require a non-zero containerWidth to resolve.
   [[nodiscard]] bool isResolvable(const float containerWidth = 0) const {
-    return unit != CssUnit::Percent || containerWidth > 0;
+    return unit() != CssUnit::Percent || containerWidth > 0;
   }
 
   // Resolve to pixels given the current em size (font line height)
   // containerWidth is needed for percentage units (e.g. viewport width)
   [[nodiscard]] float toPixels(const float emSize, const float containerWidth = 0) const {
-    switch (unit) {
+    const int32_t scaled = scaledValue();
+    switch (unit()) {
       case CssUnit::Em:
       case CssUnit::Rem:
-        return value * emSize;
+        return static_cast<float>(static_cast<double>(scaled) * static_cast<double>(emSize) / kScale);
       case CssUnit::Points:
-        return value * 1.33f;  // Approximate pt to px conversion
+        return static_cast<float>((static_cast<int64_t>(scaled) * 133.0) / (kScale * 100.0));  // Approximate pt to px
       case CssUnit::Percent:
-        return value * containerWidth / 100.0f;
+        return static_cast<float>(static_cast<double>(scaled) * static_cast<double>(containerWidth) / (kScale * 100.0));
       default:
-        return value;
+        return static_cast<float>(scaled) * kInvScale;
     }
   }
 
   // Resolve to int16_t pixels (for BlockStyle fields)
   [[nodiscard]] int16_t toPixelsInt16(const float emSize, const float containerWidth = 0) const {
-    return static_cast<int16_t>(toPixels(emSize, containerWidth));
+    const int32_t scaled = scaledValue();
+    if (scaled == 0) {
+      return 0;
+    }
+    const int32_t emPixels = static_cast<int32_t>(emSize);
+    const int32_t containerPixels = static_cast<int32_t>(containerWidth);
+
+    switch (unit()) {
+      case CssUnit::Em:
+      case CssUnit::Rem: {
+        return clampToInt16((scaled * emPixels) / kScale);
+      }
+      case CssUnit::Points: {
+        return clampToInt16((scaled * 133) / (kScale * 100));
+      }
+      case CssUnit::Percent: {
+        return clampToInt16((scaled * containerPixels) / (kScale * 100));
+      }
+      default:
+        return clampToInt16(scaled / kScale);
+    }
+  }
+
+ private:
+  static constexpr uint32_t kUnitBits = 3;
+  static constexpr uint32_t kUnitMask = (1u << kUnitBits) - 1u;
+  // Decimal scale preserves 0.01-style CSS inputs exactly and also keeps
+  // common 3-4 decimal values stable without reintroducing float drift.
+  static constexpr int32_t kScale = 10000;
+  static constexpr float kInvScale = 1.0f / static_cast<float>(kScale);
+  static constexpr uint32_t kPayloadBits = 32u - kUnitBits;
+  static constexpr uint32_t kPayloadMask = ~kUnitMask;
+  static constexpr uint32_t kPayloadSignBit = 1u << (kPayloadBits - 1u);
+  static constexpr uint32_t kSignExtendMask = ~((1u << kPayloadBits) - 1u);
+  static constexpr int64_t kMinScaled = -(int64_t{1} << (kPayloadBits - 1u));
+  static constexpr int64_t kMaxScaled = (int64_t{1} << (kPayloadBits - 1u)) - 1;
+
+  static uint32_t pack(const float v, const CssUnit u) {
+    const int64_t scaled = static_cast<int64_t>(std::llround(static_cast<double>(v) * static_cast<double>(kScale)));
+    return packScaled(static_cast<int32_t>(std::clamp(scaled, kMinScaled, kMaxScaled)), u);
+  }
+
+  static uint32_t packScaled(const int32_t scaled, const CssUnit u) {
+    const uint32_t payload = (static_cast<uint32_t>(scaled) << kUnitBits) & kPayloadMask;
+    return payload | (static_cast<uint32_t>(u) & kUnitMask);
+  }
+
+  static int32_t unpackScaled(const uint32_t raw) {
+    // The payload is stored as a signed 29-bit integer, so recover the sign by
+    // extending bit 28 after shifting the unit tag away.
+    uint32_t payload = raw >> kUnitBits;
+    if ((payload & kPayloadSignBit) != 0) {
+      payload |= kSignExtendMask;
+    }
+    return static_cast<int32_t>(payload);
+  }
+
+  static CssUnit unpackUnit(const uint32_t raw) { return static_cast<CssUnit>(raw & kUnitMask); }
+
+  static int16_t clampToInt16(const int32_t value) {
+    return static_cast<int16_t>(std::clamp(value, static_cast<int32_t>(std::numeric_limits<int16_t>::min()),
+                                           static_cast<int32_t>(std::numeric_limits<int16_t>::max())));
   }
 };
 
