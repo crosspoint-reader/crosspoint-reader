@@ -26,6 +26,7 @@ std::size_t fragmentationPercent();
 bool isTraceEnabled();
 void dumpLiveAllocations(const char* reason);
 void dumpFreeList(const char* reason);
+void dumpVisualization(const char* reason);
 
 inline bool isLimited() { return totalBytes() > 0; }
 inline std::size_t heapLimitBytes() { return totalBytes(); }
@@ -37,6 +38,7 @@ void* allocateForTests(std::size_t size);
 void* callocForTests(std::size_t nmemb, std::size_t size);
 void* reallocForTests(void* ptr, std::size_t size);
 void freeForTests(void* ptr);
+void dumpVisualizationForTests(const char* reason);
 #endif
 
 }  // namespace SimulatorHeap

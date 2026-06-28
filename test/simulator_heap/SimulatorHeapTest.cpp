@@ -4,12 +4,18 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+
+namespace fs = std::filesystem;
 
 namespace {
 
 class SimulatorHeapTest : public ::testing::Test {
  protected:
+  void SetUp() override { unsetenv("CROSSPOINT_SIM_HEAP_VIZ"); }
   void TearDown() override { SimulatorHeap::shutdownForTests(); }
 };
 
@@ -151,6 +157,61 @@ TEST_F(SimulatorHeapTest, CallocZeroesAndTotalRemainsConstant) {
 
   SimulatorHeap::freeForTests(ptr);
   EXPECT_EQ(SimulatorHeap::totalBytes(), total);
+}
+
+TEST_F(SimulatorHeapTest, ManualVisualizationDumpWritesSvgFile) {
+  const fs::path outputDir = fs::temp_directory_path() / "crosspoint-sim-heap-viz-test-manual";
+  fs::remove_all(outputDir);
+  setenv("CROSSPOINT_SIM_HEAP_VIZ", outputDir.c_str(), 1);
+
+  ASSERT_TRUE(SimulatorHeap::resetForTests(4096));
+  ASSERT_NE(SimulatorHeap::allocateForTests(128), nullptr);
+
+  SimulatorHeap::dumpVisualizationForTests("manual_test");
+
+  std::size_t svgCount = 0;
+  fs::path svgPath;
+  for (const auto& entry : fs::directory_iterator(outputDir)) {
+    if (entry.path().extension() == ".svg") {
+      ++svgCount;
+      if (entry.path().filename().string().find("manual_test") != std::string::npos) {
+        svgPath = entry.path();
+      }
+    }
+  }
+  EXPECT_GE(svgCount, 1U);
+  ASSERT_FALSE(svgPath.empty());
+
+  std::ifstream svg(svgPath);
+  const std::string content((std::istreambuf_iterator<char>(svg)), std::istreambuf_iterator<char>());
+  EXPECT_NE(content.find("reason: manual_test"), std::string::npos);
+  EXPECT_NE(content.find("<pre class=\"detail\" id=\"detail\""), std::string::npos);
+  fs::remove_all(outputDir);
+}
+
+TEST_F(SimulatorHeapTest, VisualizationDimensionsUseSquareRootArenaWidth) {
+  const fs::path outputDir = fs::temp_directory_path() / "crosspoint-sim-heap-viz-test-geometry";
+  fs::remove_all(outputDir);
+  setenv("CROSSPOINT_SIM_HEAP_VIZ", outputDir.c_str(), 1);
+
+  ASSERT_TRUE(SimulatorHeap::resetForTests(1024));
+  ASSERT_NE(SimulatorHeap::allocateForTests(64), nullptr);
+  SimulatorHeap::dumpVisualizationForTests("geometry");
+
+  fs::path svgPath;
+  for (const auto& entry : fs::directory_iterator(outputDir)) {
+    if (entry.path().extension() == ".svg") {
+      svgPath = entry.path();
+      break;
+    }
+  }
+  ASSERT_FALSE(svgPath.empty());
+
+  std::ifstream svg(svgPath);
+  const std::string content((std::istreambuf_iterator<char>(svg)), std::istreambuf_iterator<char>());
+  EXPECT_NE(content.find("width=\"96\" height=\"96\""), std::string::npos);
+  EXPECT_NE(content.find("<pre class=\"detail\" id=\"detail\""), std::string::npos);
+  fs::remove_all(outputDir);
 }
 
 }  // namespace

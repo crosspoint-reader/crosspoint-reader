@@ -198,6 +198,8 @@ void tick() {
     std::_Exit(2);
   }
 
+  SimulatorHeap::dumpVisualization("benchmark_tick");
+
   gState.pageTurns++;
   gState.totalPageTurnMs += elapsed;
   gState.maxPageTurnMs = std::max(gState.maxPageTurnMs, elapsed);

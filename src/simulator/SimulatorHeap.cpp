@@ -1,10 +1,13 @@
 #ifdef SIMULATOR
 
 #include "SimulatorHeap.h"
+#include "SimulatorHeapViz.h"
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -118,11 +121,58 @@ struct RealAllocator {
 
 constexpr int kMaxTraceFrames = 32;
 
+struct TraceRecord;
+std::uint64_t hashTraceRecord(const TraceRecord& rec);
+
 struct TraceRecord {
   std::size_t requested;
+  std::uint64_t sequence;
+  std::uint64_t runMillis;
   int frameCount;
   void* frames[kMaxTraceFrames];
 };
+
+std::atomic<std::uint64_t> gAllocationTraceSequence{0};
+const auto gAllocationTraceStart = std::chrono::steady_clock::now();
+
+std::uint64_t currentRunMillis() {
+  const auto now = std::chrono::steady_clock::now();
+  return static_cast<std::uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(now - gAllocationTraceStart).count());
+}
+
+struct TraceCacheKey {
+  int frameCount = 0;
+  std::array<void*, kMaxTraceFrames> frames = {};
+
+  bool operator==(const TraceCacheKey& other) const {
+    if (frameCount != other.frameCount) return false;
+    for (int i = 0; i < frameCount; ++i) {
+      if (frames[i] != other.frames[i]) return false;
+    }
+    return true;
+  }
+};
+
+struct TraceCacheKeyHash {
+  std::size_t operator()(const TraceCacheKey& key) const {
+    std::uint64_t hash = 1469598103934665603ULL;
+    for (int i = 0; i < key.frameCount; ++i) {
+      hash ^= reinterpret_cast<std::uintptr_t>(key.frames[i]);
+      hash *= 1099511628211ULL;
+    }
+    return static_cast<std::size_t>(hash);
+  }
+};
+
+[[maybe_unused]] TraceCacheKey makeTraceCacheKey(const TraceRecord& trace) {
+  TraceCacheKey key;
+  key.frameCount = trace.frameCount;
+  for (int i = 0; i < trace.frameCount && i < kMaxTraceFrames; ++i) {
+    key.frames[static_cast<std::size_t>(i)] = trace.frames[i];
+  }
+  return key;
+}
 
 template <class K, class V>
 using RealMap = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, RealAllocator<std::pair<const K, V>>>;
@@ -140,6 +190,8 @@ class TraceRegistry {
     if (!enabled_ || !ptr) return;
     TraceRecord rec;
     rec.requested = size;
+    rec.sequence = gAllocationTraceSequence.fetch_add(1) + 1;
+    rec.runMillis = currentRunMillis();
     {
       TracerGuard guard;  // backtrace() may lazily malloc (libgcc unwinder init)
       rec.frameCount = backtrace(rec.frames, kMaxTraceFrames);
@@ -166,14 +218,19 @@ class TraceRegistry {
   }
 
   void dump(const char* reason);
+  bool tryGet(void* ptr, TraceRecord* out) const;
 
  private:
   bool enabled_ = false;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   RealMap<void*, TraceRecord> live_;
 };
 
 TraceRegistry gTraceRegistry;
+std::mutex gTraceRenderCacheMutex;
+std::unordered_map<TraceCacheKey, std::string, TraceCacheKeyHash> gTraceRenderCache;
+
+struct RawVisualizationSnapshot;
 
 class ArenaAllocator {
  public:
@@ -239,6 +296,9 @@ class ArenaAllocator {
     std::lock_guard<std::mutex> lock(mutex_);
     return fragmentationPercentLocked();
   }
+
+  bool captureVisualizationSnapshot(SimulatorHeapViz::Snapshot* out) const;
+  bool captureRawVisualizationSnapshot(RawVisualizationSnapshot* out) const;
 
   void dumpFreeList(const char* reason) const {
     std::lock_guard<std::mutex> lock(mutex_);
@@ -517,6 +577,24 @@ class ArenaAllocator {
 ArenaAllocator gAllocator;
 bool gArenaActive = false;
 
+std::uint64_t hashTraceRecord(const TraceRecord& rec) {
+  std::uint64_t hash = 1469598103934665603ULL;
+  for (int i = 0; i < rec.frameCount; ++i) {
+    hash ^= reinterpret_cast<std::uintptr_t>(rec.frames[i]);
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+bool TraceRegistry::tryGet(void* ptr, TraceRecord* out) const {
+  if (!out) return false;
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto it = live_.find(ptr);
+  if (it == live_.end()) return false;
+  *out = it->second;
+  return true;
+}
+
 #if SIM_HEAP_TRACE_AVAILABLE
 // True for allocator-internal frames we hide so the first printed frame is the
 // actual caller, not operator new / the arena plumbing.
@@ -537,7 +615,7 @@ bool isAllocatorFrame(const char* text) {
 // Resolve a stored allocation stack with backward-cpp and render it through
 // backward's Printer (function + file:line + source snippet), skipping the
 // leading allocator frames. Runs under the caller's TracerGuard.
-void printSiteStack(const TraceRecord& rec) {
+std::string formatSiteStackBackward(const TraceRecord& rec, const backward::ColorMode::type colorMode) {
   static backward::TraceResolver resolver;
 
   std::vector<backward::ResolvedTrace> resolved;
@@ -559,10 +637,9 @@ void printSiteStack(const TraceRecord& rec) {
   backward::Printer printer;
   printer.address = true;  // show the raw address too
   printer.object = false;  // skip the object/section noise
-  // We buffer each frame below (see loop), which defeats color_mode::automatic's
-  // tty probe on the buffer, so decide color once from the real stderr instead.
-  printer.color_mode = isatty(fileno(stderr)) ? backward::ColorMode::always : backward::ColorMode::never;
+  printer.color_mode = colorMode;
 
+  std::ostringstream rendered;
   // Print frame-by-frame so the source snippet can be toggled per frame: keep it
   // for application code, drop it for /usr/include STL frames (no useful context,
   // source often absent). backward's Printer has no header toggle and re-emits
@@ -577,8 +654,17 @@ void printSiteStack(const TraceRecord& rec) {
     printer.print(it, next, oss);
     const std::string frame = oss.str();
     const std::size_t bodyStart = frame.find('\n');  // skip backward's repeated header line
-    std::fputs(bodyStart == std::string::npos ? frame.c_str() : frame.c_str() + bodyStart + 1, stderr);
+    rendered << (bodyStart == std::string::npos ? frame : frame.substr(bodyStart + 1));
   }
+  return rendered.str();
+}
+
+void printSiteStack(const TraceRecord& rec) {
+  // We buffer each frame below, which defeats color_mode::automatic's tty probe
+  // on the buffer, so decide color once from the real stderr instead.
+  const auto colorMode = isatty(fileno(stderr)) ? backward::ColorMode::always : backward::ColorMode::never;
+  const std::string rendered = formatSiteStackBackward(rec, colorMode);
+  std::fputs(rendered.c_str(), stderr);
 }
 #else
 // No DWARF backend compiled in: degrade to libc symbol names (no file:line, no
@@ -610,7 +696,173 @@ void printCurrentStack() {
   rec.frameCount = backtrace(rec.frames, kMaxTraceFrames);
   printSiteStack(rec);
 }
+
+TraceRecord captureCurrentTrace() {
+  TraceRecord rec{};
+  TracerGuard guard;
+  rec.frameCount = backtrace(rec.frames, kMaxTraceFrames);
+  return rec;
+}
 #endif  // SIM_HEAP_TRACE_AVAILABLE
+
+std::string formatContextTraceForVisualization(const TraceRecord* trace) {
+  if (!trace) return "stack unavailable";
+#if SIM_HEAP_TRACE_AVAILABLE
+#if SIM_HEAP_TRACE_BACKWARD
+  const TraceCacheKey cacheKey = makeTraceCacheKey(*trace);
+  {
+    std::lock_guard<std::mutex> lock(gTraceRenderCacheMutex);
+    const auto it = gTraceRenderCache.find(cacheKey);
+    if (it != gTraceRenderCache.end()) return it->second;
+  }
+  const std::string rendered = formatSiteStackBackward(*trace, backward::ColorMode::never);
+  {
+    std::lock_guard<std::mutex> lock(gTraceRenderCacheMutex);
+    gTraceRenderCache.emplace(cacheKey, rendered);
+  }
+  return rendered;
+#else
+  char** symbols = backtrace_symbols(trace->frames, trace->frameCount);
+  bool reachedCaller = false;
+  std::ostringstream body;
+  for (int i = 0; i < trace->frameCount; ++i) {
+    const char* text = symbols ? symbols[i] : "??";
+    if (!reachedCaller) {
+      if (isAllocatorFrame(text)) continue;
+      reachedCaller = true;
+    }
+    body << text << "\n";
+  }
+  free(symbols);
+  return body.str();
+#endif
+#else
+  return "stack unavailable";
+#endif
+}
+
+std::string formatAllocationDetailHeader(const TraceRecord* trace, const std::uintptr_t pointerValue,
+                                         const std::size_t offset, const std::size_t requestedBytes,
+                                         const std::size_t payloadBytes, const std::size_t headerBytes) {
+  std::ostringstream oss;
+  oss << "ptr=0x" << std::hex << pointerValue << std::dec << "\n";
+  oss << "offset=" << offset << " bytes\n";
+  oss << "requested=" << requestedBytes << " bytes\n";
+  oss << "arena_payload=" << payloadBytes << " bytes\n";
+  oss << "arena_total=" << (payloadBytes + headerBytes) << " bytes";
+  if (trace) {
+    oss << "\nalloc_seq=" << trace->sequence;
+    oss << "\nalloc_run_ms=" << trace->runMillis;
+  }
+  return oss.str();
+}
+
+struct RawVisualizationAllocation {
+  std::size_t offset = 0;
+  std::size_t payloadBytes = 0;
+  std::size_t headerBytes = 0;
+  std::size_t requestedBytes = 0;
+  std::uintptr_t pointerValue = 0;
+  std::uint64_t siteHash = 0;
+  bool hasTrace = false;
+  TraceRecord trace = {};
+};
+
+struct RawVisualizationSnapshot {
+  std::size_t arenaBytes = 0;
+  std::size_t controlBytes = 0;
+  std::size_t sentinelBytes = 0;
+  std::size_t freeBytes = 0;
+  std::size_t currentUsedBytes = 0;
+  std::size_t peakUsedBytes = 0;
+  std::size_t minFreeBytes = 0;
+  std::size_t largestFreeBlockBytes = 0;
+  std::size_t fragmentationPercent = 0;
+  std::vector<RawVisualizationAllocation> allocations;
+};
+
+std::mutex gPendingVisualizationMutex;
+bool gPendingPeakVisualizationValid = false;
+RawVisualizationSnapshot gPendingPeakVisualization;
+const char* gPendingPeakVisualizationReason = nullptr;
+TraceRecord gPendingPeakVisualizationTrace{};
+bool gPendingPeakVisualizationHasTrace = false;
+
+bool materializeVisualizationSnapshot(const RawVisualizationSnapshot& rawSnapshot, SimulatorHeapViz::Snapshot* out) {
+  if (!out) return false;
+  out->arenaBytes = rawSnapshot.arenaBytes;
+  out->controlBytes = rawSnapshot.controlBytes;
+  out->sentinelBytes = rawSnapshot.sentinelBytes;
+  out->freeBytes = rawSnapshot.freeBytes;
+  out->peakUsedBytes = rawSnapshot.peakUsedBytes;
+  out->minFreeBytes = rawSnapshot.minFreeBytes;
+  out->largestFreeBlockBytes = rawSnapshot.largestFreeBlockBytes;
+  out->fragmentationPercent = rawSnapshot.fragmentationPercent;
+  out->allocations.clear();
+  out->allocations.reserve(rawSnapshot.allocations.size());
+
+  for (std::size_t i = 0; i < rawSnapshot.allocations.size(); ++i) {
+    const RawVisualizationAllocation& raw = rawSnapshot.allocations[i];
+    SimulatorHeapViz::AllocationSnapshot allocation;
+    allocation.offset = raw.offset;
+    allocation.payloadBytes = raw.payloadBytes;
+    allocation.headerBytes = raw.headerBytes;
+    allocation.requestedBytes = raw.requestedBytes;
+    allocation.pointerValue = raw.pointerValue;
+    allocation.siteHash = raw.siteHash;
+    allocation.titleText =
+        "alloc " + std::to_string(i) + " (" + std::to_string(raw.requestedBytes) + " requested, " +
+        std::to_string(raw.payloadBytes + raw.headerBytes) + " arena total)";
+    allocation.detailHeaderText =
+        formatAllocationDetailHeader(raw.hasTrace ? &raw.trace : nullptr, raw.pointerValue, raw.offset,
+                                     raw.requestedBytes, raw.payloadBytes, raw.headerBytes);
+    allocation.stackText = raw.hasTrace ? formatContextTraceForVisualization(&raw.trace) : "stack unavailable";
+    out->allocations.push_back(std::move(allocation));
+  }
+  std::sort(out->allocations.begin(), out->allocations.end(),
+            [](const SimulatorHeapViz::AllocationSnapshot& a, const SimulatorHeapViz::AllocationSnapshot& b) {
+              return a.offset < b.offset;
+            });
+  return true;
+}
+
+bool ArenaAllocator::captureRawVisualizationSnapshot(RawVisualizationSnapshot* out) const {
+  if (!out) return false;
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!initialized_ || !tlsf_) return false;
+
+  out->arenaBytes = slabBytes_;
+  out->controlBytes = tlsf_size(tlsf_);
+  out->sentinelBytes = tlsf_pool_overhead() > tlsf_alloc_overhead() ? tlsf_pool_overhead() - tlsf_alloc_overhead() : 0;
+  out->freeBytes = freeBytes_;
+  out->currentUsedBytes = slabBytes_ > freeBytes_ ? slabBytes_ - freeBytes_ : 0;
+  out->peakUsedBytes = slabBytes_ > minFreeBytes_ ? slabBytes_ - minFreeBytes_ : 0;
+  out->minFreeBytes = minFreeBytes_;
+  out->largestFreeBlockBytes = largestFreeBlockBytesLocked();
+  out->fragmentationPercent = fragmentationPercentLocked();
+  out->allocations.clear();
+  out->allocations.reserve(livePointers_.size());
+
+  for (void* ptr : livePointers_) {
+    RawVisualizationAllocation allocation;
+    allocation.offset = static_cast<std::size_t>(static_cast<std::byte*>(ptr) - slab_);
+    allocation.payloadBytes = tlsf_block_size(ptr);
+    allocation.headerBytes = tlsf_alloc_overhead();
+    allocation.pointerValue = reinterpret_cast<std::uintptr_t>(ptr);
+    allocation.hasTrace = gTraceRegistry.tryGet(ptr, &allocation.trace);
+    allocation.requestedBytes = allocation.hasTrace ? allocation.trace.requested : allocation.payloadBytes;
+    allocation.siteHash = allocation.hasTrace ? hashTraceRecord(allocation.trace) : allocation.pointerValue;
+    out->allocations.push_back(allocation);
+  }
+  return true;
+}
+
+bool ArenaAllocator::captureVisualizationSnapshot(SimulatorHeapViz::Snapshot* out) const {
+  if (!out) return false;
+  RawVisualizationSnapshot rawSnapshot;
+  if (!captureRawVisualizationSnapshot(&rawSnapshot)) return false;
+  return materializeVisualizationSnapshot(rawSnapshot, out);
+}
 
 void TraceRegistry::dump(const char* reason) {
 #if SIM_HEAP_TRACE_AVAILABLE
@@ -631,11 +883,7 @@ void TraceRegistry::dump(const char* reason) {
   std::size_t liveBytes = 0;
   std::size_t liveCount = 0;
   for (const auto& [ptr, rec] : live_) {
-    std::uint64_t hash = 1469598103934665603ULL;  // FNV-1a over the frame addresses
-    for (int i = 0; i < rec.frameCount; i++) {
-      hash ^= reinterpret_cast<std::uintptr_t>(rec.frames[i]);
-      hash *= 1099511628211ULL;
-    }
+    const std::uint64_t hash = hashTraceRecord(rec);
     Site& site = sites[hash];
     site.bytes += rec.requested;
     site.count += 1;
@@ -668,6 +916,103 @@ void TraceRegistry::dump(const char* reason) {
 #endif
 }
 
+void dumpVisualizationSnapshot(const char* reason) {
+  if (!SimulatorHeapViz::enabled()) return;
+  TracerGuard guard;
+  SimulatorHeapViz::Snapshot snapshot;
+  if (!gAllocator.captureVisualizationSnapshot(&snapshot)) return;
+  if (reason && std::strcmp(reason, "benchmark_tick") != 0) {
+#if SIM_HEAP_TRACE_AVAILABLE
+    const TraceRecord trace = captureCurrentTrace();
+    snapshot.contextTitle = reason;
+    snapshot.contextText = formatContextTraceForVisualization(&trace);
+#else
+    snapshot.contextTitle = reason;
+    snapshot.contextText = "stack unavailable";
+#endif
+  }
+  SimulatorHeapViz::writeSnapshot(snapshot, reason ? reason : "manual");
+}
+
+const char* thresholdReason(const unsigned flags) {
+  if ((flags & SimulatorHeapViz::kPeakUsedIncreased) != 0 &&
+      (flags & SimulatorHeapViz::kLargestFreeBlockDecreased) != 0) {
+    return "peak_used_and_min_largest_free_block";
+  }
+  if ((flags & SimulatorHeapViz::kPeakUsedIncreased) != 0) return "peak_used";
+  if ((flags & SimulatorHeapViz::kLargestFreeBlockDecreased) != 0) return "min_largest_free_block";
+  return "manual";
+}
+
+void storePendingPeakVisualization(const unsigned flags) {
+  RawVisualizationSnapshot snapshot;
+  if (!gAllocator.captureRawVisualizationSnapshot(&snapshot)) return;
+  std::lock_guard<std::mutex> lock(gPendingVisualizationMutex);
+  gPendingPeakVisualization = std::move(snapshot);
+  gPendingPeakVisualizationReason = thresholdReason(flags);
+#if SIM_HEAP_TRACE_AVAILABLE
+  gPendingPeakVisualizationTrace = captureCurrentTrace();
+  gPendingPeakVisualizationHasTrace = true;
+#else
+  gPendingPeakVisualizationHasTrace = false;
+#endif
+  gPendingPeakVisualizationValid = true;
+}
+
+void clearPendingPeakVisualization() {
+  std::lock_guard<std::mutex> lock(gPendingVisualizationMutex);
+  gPendingPeakVisualizationValid = false;
+  gPendingPeakVisualizationReason = nullptr;
+  gPendingPeakVisualizationHasTrace = false;
+  gPendingPeakVisualizationTrace = TraceRecord{};
+  gPendingPeakVisualization = RawVisualizationSnapshot{};
+}
+
+void flushPendingPeakVisualizationIfUsageDropped() {
+  RawVisualizationSnapshot snapshot;
+  const char* reason = nullptr;
+  TraceRecord trace{};
+  bool hasTrace = false;
+  {
+    std::lock_guard<std::mutex> lock(gPendingVisualizationMutex);
+    if (!gPendingPeakVisualizationValid) return;
+    const std::size_t currentUsedBytes = gAllocator.currentUsedBytes();
+    if (currentUsedBytes >= gPendingPeakVisualization.currentUsedBytes) return;
+    snapshot = gPendingPeakVisualization;
+    reason = gPendingPeakVisualizationReason;
+    trace = gPendingPeakVisualizationTrace;
+    hasTrace = gPendingPeakVisualizationHasTrace;
+    gPendingPeakVisualizationValid = false;
+    gPendingPeakVisualizationReason = nullptr;
+    gPendingPeakVisualizationHasTrace = false;
+    gPendingPeakVisualizationTrace = TraceRecord{};
+  }
+
+  SimulatorHeapViz::Snapshot materialized;
+  if (!materializeVisualizationSnapshot(snapshot, &materialized)) return;
+  materialized.contextTitle = reason ? reason : "peak_used";
+  materialized.contextText = hasTrace ? formatContextTraceForVisualization(&trace) : "stack unavailable";
+  SimulatorHeapViz::writeSnapshot(materialized, reason ? reason : "peak_used");
+}
+
+void maybeDumpVisualizationForThreshold() {
+  TracerGuard guard;
+  const unsigned flags =
+      SimulatorHeapViz::updateThresholdState(gAllocator.peakUsedBytes(), gAllocator.largestFreeBlockBytes());
+  if (flags == SimulatorHeapViz::kNoThresholdChange) {
+    flushPendingPeakVisualizationIfUsageDropped();
+    return;
+  }
+
+  if ((flags & SimulatorHeapViz::kPeakUsedIncreased) != 0) {
+    storePendingPeakVisualization(flags);
+  } else if ((flags & SimulatorHeapViz::kLargestFreeBlockDecreased) != 0) {
+    dumpVisualizationSnapshot(thresholdReason(flags));
+  }
+
+  flushPendingPeakVisualizationIfUsageDropped();
+}
+
 [[maybe_unused]] void logHeapFailure(const char* operation, const std::size_t requestedSize,
                                      const std::size_t alignment, const int errorCode) {
   // Lead with the stack of the failing allocation: the culprit's call site is
@@ -677,6 +1022,8 @@ void TraceRegistry::dump(const char* reason) {
   std::fprintf(stderr, "\n[SIM] heap %s failed for %zu bytes; failing allocation stack:\n", operation, requestedSize);
   printCurrentStack();
 #endif
+  char failureReason[128];
+  std::snprintf(failureReason, sizeof(failureReason), "%s failure (%zu bytes requested)", operation, requestedSize);
   std::fprintf(stderr,
                "[SIM] heap %s failed: requested=%zu alignment=%zu free=%zu total=%zu min_free=%zu peak_used=%zu max_alloc=%zu "
                "frag=%zu%% used=%zu errno=%d\n",
@@ -687,6 +1034,20 @@ void TraceRegistry::dump(const char* reason) {
   // free-list dump can recurse back into the wrapped allocator while the arena
   // mutex is held and wedge before printing the rest of the report.
   TracerGuard guard;
+  if (SimulatorHeapViz::enabled()) {
+    SimulatorHeapViz::Snapshot snapshot;
+    if (gAllocator.captureVisualizationSnapshot(&snapshot)) {
+#if SIM_HEAP_TRACE_AVAILABLE
+      const TraceRecord trace = captureCurrentTrace();
+      snapshot.contextTitle = failureReason;
+      snapshot.contextText = formatContextTraceForVisualization(&trace);
+#else
+      snapshot.contextTitle = failureReason;
+      snapshot.contextText = "stack unavailable";
+#endif
+      SimulatorHeapViz::writeSnapshot(snapshot, failureReason);
+    }
+  }
   gAllocator.dumpFreeList(operation);
   gTraceRegistry.dump(operation);
   std::fflush(stderr);
@@ -753,6 +1114,7 @@ void ensureInitialized() {
     std::fprintf(stderr, "[SIM] heap caller tracking requested but unavailable on this host\n");
 #endif
   }
+  SimulatorHeapViz::configureFromEnv();
 }
 
 }  // namespace
@@ -788,25 +1150,55 @@ std::size_t fragmentationPercent() { return gAllocator.fragmentationPercent(); }
 
 bool isTraceEnabled() { return gTraceRegistry.enabled(); }
 
-void dumpLiveAllocations(const char* reason) { gTraceRegistry.dump(reason ? reason : "manual"); }
+void dumpLiveAllocations(const char* reason) {
+  dumpVisualizationSnapshot(reason ? reason : "manual");
+  gTraceRegistry.dump(reason ? reason : "manual");
+}
 
-void dumpFreeList(const char* reason) { gAllocator.dumpFreeList(reason ? reason : "manual"); }
+void dumpFreeList(const char* reason) {
+  dumpVisualizationSnapshot(reason ? reason : "manual");
+  gAllocator.dumpFreeList(reason ? reason : "manual");
+}
+
+void dumpVisualization(const char* reason) { dumpVisualizationSnapshot(reason ? reason : "manual"); }
 
 #ifdef SIMULATOR_HEAP_TESTING
 bool resetForTests(const std::size_t arenaBytes) {
   gAllocator.shutdown();
+  clearPendingPeakVisualization();
+  SimulatorHeapViz::configureFromEnv();
   return gAllocator.initialize(arenaBytes, false);
 }
 
-void shutdownForTests() { gAllocator.shutdown(); }
+void shutdownForTests() {
+  gAllocator.shutdown();
+  clearPendingPeakVisualization();
+}
 
-void* allocateForTests(const std::size_t size) { return gAllocator.allocate(size); }
+void* allocateForTests(const std::size_t size) {
+  void* ptr = gAllocator.allocate(size);
+  if (ptr) maybeDumpVisualizationForThreshold();
+  return ptr;
+}
 
-void* callocForTests(const std::size_t nmemb, const std::size_t size) { return gAllocator.calloc(nmemb, size); }
+void* callocForTests(const std::size_t nmemb, const std::size_t size) {
+  void* ptr = gAllocator.calloc(nmemb, size);
+  if (ptr) maybeDumpVisualizationForThreshold();
+  return ptr;
+}
 
-void* reallocForTests(void* ptr, const std::size_t size) { return gAllocator.reallocate(ptr, size); }
+void* reallocForTests(void* ptr, const std::size_t size) {
+  void* result = gAllocator.reallocate(ptr, size);
+  if (result || size == 0) maybeDumpVisualizationForThreshold();
+  return result;
+}
 
-void freeForTests(void* ptr) { gAllocator.deallocate(ptr); }
+void freeForTests(void* ptr) {
+  gAllocator.deallocate(ptr);
+  maybeDumpVisualizationForThreshold();
+}
+
+void dumpVisualizationForTests(const char* reason) { dumpVisualization(reason); }
 #endif
 
 }  // namespace SimulatorHeap
@@ -820,6 +1212,7 @@ extern "C" void* __wrap_malloc(std::size_t size) {
   if (!gArenaActive || gTracerDepth > 0) return __real_malloc(size);
   void* ptr = gAllocator.allocate(size);
   if (!ptr) logHeapFailure("malloc", size, kAlignment, errno);
+  else maybeDumpVisualizationForThreshold();
   return ptr;
 }
 
@@ -829,7 +1222,7 @@ extern "C" void* __wrap_calloc(std::size_t nmemb, std::size_t size) {
   if (!ptr) {
     const std::size_t requested = (nmemb != 0 && size > std::numeric_limits<std::size_t>::max() / nmemb) ? 0 : nmemb * size;
     logHeapFailure("calloc", requested, kAlignment, errno);
-  }
+  } else maybeDumpVisualizationForThreshold();
   return ptr;
 }
 
@@ -838,6 +1231,7 @@ extern "C" void* __wrap_realloc(void* ptr, std::size_t size) {
   if (ptr && !arenaOwnsPointer(ptr)) return __real_realloc(ptr, size);
   void* newPtr = gAllocator.reallocate(ptr, size);
   if (!newPtr && size != 0) logHeapFailure("realloc", size, kAlignment, errno);
+  else maybeDumpVisualizationForThreshold();
   return newPtr;
 }
 
@@ -848,6 +1242,7 @@ extern "C" void __wrap_free(void* ptr) {
     return;
   }
   gAllocator.deallocate(ptr);
+  maybeDumpVisualizationForThreshold();
 }
 
 void* operator new(std::size_t size) {
@@ -870,7 +1265,10 @@ void* operator new(std::size_t size, std::align_val_t alignment) {
     if (void* ptr = hostAlignedAllocate(size, requestedAlignment)) return ptr;
     throw std::bad_alloc();
   }
-  if (void* ptr = gAllocator.allocate(size, requestedAlignment)) return ptr;
+  if (void* ptr = gAllocator.allocate(size, requestedAlignment)) {
+    maybeDumpVisualizationForThreshold();
+    return ptr;
+  }
   logHeapFailure("aligned operator new", size, requestedAlignment, errno);
   throw std::bad_alloc();
 }
@@ -881,7 +1279,10 @@ void* operator new[](std::size_t size, std::align_val_t alignment) {
     if (void* ptr = hostAlignedAllocate(size, requestedAlignment)) return ptr;
     throw std::bad_alloc();
   }
-  if (void* ptr = gAllocator.allocate(size, requestedAlignment)) return ptr;
+  if (void* ptr = gAllocator.allocate(size, requestedAlignment)) {
+    maybeDumpVisualizationForThreshold();
+    return ptr;
+  }
   logHeapFailure("aligned operator new[]", size, requestedAlignment, errno);
   throw std::bad_alloc();
 }
@@ -891,6 +1292,7 @@ void* operator new(std::size_t size, std::align_val_t alignment, const std::noth
   if (!gArenaActive || gTracerDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
   void* ptr = gAllocator.allocate(size, requestedAlignment);
   if (!ptr) logHeapFailure("aligned operator new nothrow", size, requestedAlignment, errno);
+  else maybeDumpVisualizationForThreshold();
   return ptr;
 }
 
@@ -899,6 +1301,7 @@ void* operator new[](std::size_t size, std::align_val_t alignment, const std::no
   if (!gArenaActive || gTracerDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
   void* ptr = gAllocator.allocate(size, requestedAlignment);
   if (!ptr) logHeapFailure("aligned operator new[] nothrow", size, requestedAlignment, errno);
+  else maybeDumpVisualizationForThreshold();
   return ptr;
 }
 

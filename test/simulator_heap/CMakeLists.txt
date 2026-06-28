@@ -2,6 +2,7 @@ add_executable(simulator_heap_test
   SimulatorHeapTest.cpp
   SimulatorHeapTestShim.cpp
   ${REPO_ROOT}/src/simulator/SimulatorHeap.cpp
+  ${REPO_ROOT}/src/simulator/SimulatorHeapViz.cpp
 )
 
 target_compile_definitions(simulator_heap_test PRIVATE
