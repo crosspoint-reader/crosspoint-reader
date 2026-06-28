@@ -84,13 +84,14 @@ std::size_t alignUp(const std::size_t value, const std::size_t alignment) {
 //      deadlock or recurse.
 // ---------------------------------------------------------------------------
 
-// Depth incremented while we are inside tracer bookkeeping. The malloc wrappers
-// and operator new check it and fall back to the real heap when it is non-zero.
-thread_local int gTracerDepth = 0;
+// Depth incremented while a host-only code path should bypass the simulator
+// arena. The malloc wrappers and operator new check it and fall back to the
+// real heap when it is non-zero.
+thread_local int gHostHeapScopeDepth = 0;
 
 struct TracerGuard {
-  TracerGuard() { ++gTracerDepth; }
-  ~TracerGuard() { --gTracerDepth; }
+  TracerGuard() { ++gHostHeapScopeDepth; }
+  ~TracerGuard() { --gHostHeapScopeDepth; }
   TracerGuard(const TracerGuard&) = delete;
   TracerGuard& operator=(const TracerGuard&) = delete;
 };
@@ -1121,6 +1122,10 @@ void ensureInitialized() {
 
 namespace SimulatorHeap {
 
+HostHeapScope::HostHeapScope() { ++gHostHeapScopeDepth; }
+
+HostHeapScope::~HostHeapScope() { --gHostHeapScopeDepth; }
+
 void initializeFromEnv() { ensureInitialized(); }
 
 void activateFromEnv() {
@@ -1207,9 +1212,10 @@ void dumpVisualizationForTests(const char* reason) { dumpVisualization(reason); 
 extern "C" void __wrap_free(void* ptr);
 
 extern "C" void* __wrap_malloc(std::size_t size) {
-  // gTracerDepth > 0: allocation made from inside the heap tracer itself; route
-  // to the real heap so it neither consumes nor deadlocks on the arena.
-  if (!gArenaActive || gTracerDepth > 0) return __real_malloc(size);
+  // gHostHeapScopeDepth > 0: allocation made from host-only code (the heap
+  // tracer or a bypassed library like SDL); route to the real heap so it
+  // neither consumes nor deadlocks on the arena.
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return __real_malloc(size);
   void* ptr = gAllocator.allocate(size);
   if (!ptr) logHeapFailure("malloc", size, kAlignment, errno);
   else maybeDumpVisualizationForThreshold();
@@ -1217,7 +1223,7 @@ extern "C" void* __wrap_malloc(std::size_t size) {
 }
 
 extern "C" void* __wrap_calloc(std::size_t nmemb, std::size_t size) {
-  if (!gArenaActive || gTracerDepth > 0) return __real_calloc(nmemb, size);
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return __real_calloc(nmemb, size);
   void* ptr = gAllocator.calloc(nmemb, size);
   if (!ptr) {
     const std::size_t requested = (nmemb != 0 && size > std::numeric_limits<std::size_t>::max() / nmemb) ? 0 : nmemb * size;
@@ -1227,7 +1233,7 @@ extern "C" void* __wrap_calloc(std::size_t nmemb, std::size_t size) {
 }
 
 extern "C" void* __wrap_realloc(void* ptr, std::size_t size) {
-  if (!gArenaActive || gTracerDepth > 0) return __real_realloc(ptr, size);
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return __real_realloc(ptr, size);
   if (ptr && !arenaOwnsPointer(ptr)) return __real_realloc(ptr, size);
   void* newPtr = gAllocator.reallocate(ptr, size);
   if (!newPtr && size != 0) logHeapFailure("realloc", size, kAlignment, errno);
@@ -1261,7 +1267,7 @@ void* operator new[](std::size_t size, const std::nothrow_t&) noexcept { return 
 
 void* operator new(std::size_t size, std::align_val_t alignment) {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gTracerDepth > 0) {
+  if (!gArenaActive || gHostHeapScopeDepth > 0) {
     if (void* ptr = hostAlignedAllocate(size, requestedAlignment)) return ptr;
     throw std::bad_alloc();
   }
@@ -1275,7 +1281,7 @@ void* operator new(std::size_t size, std::align_val_t alignment) {
 
 void* operator new[](std::size_t size, std::align_val_t alignment) {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gTracerDepth > 0) {
+  if (!gArenaActive || gHostHeapScopeDepth > 0) {
     if (void* ptr = hostAlignedAllocate(size, requestedAlignment)) return ptr;
     throw std::bad_alloc();
   }
@@ -1289,7 +1295,7 @@ void* operator new[](std::size_t size, std::align_val_t alignment) {
 
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gTracerDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
   void* ptr = gAllocator.allocate(size, requestedAlignment);
   if (!ptr) logHeapFailure("aligned operator new nothrow", size, requestedAlignment, errno);
   else maybeDumpVisualizationForThreshold();
@@ -1298,7 +1304,7 @@ void* operator new(std::size_t size, std::align_val_t alignment, const std::noth
 
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gTracerDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
   void* ptr = gAllocator.allocate(size, requestedAlignment);
   if (!ptr) logHeapFailure("aligned operator new[] nothrow", size, requestedAlignment, errno);
   else maybeDumpVisualizationForThreshold();

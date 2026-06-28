@@ -7,6 +7,15 @@
 
 namespace SimulatorHeap {
 
+class HostHeapScope {
+ public:
+  HostHeapScope();
+  ~HostHeapScope();
+
+  HostHeapScope(const HostHeapScope&) = delete;
+  HostHeapScope& operator=(const HostHeapScope&) = delete;
+};
+
 void initializeFromEnv();
 void activateFromEnv();
 bool isInitialized();
