@@ -66,10 +66,12 @@ class PersistableStore {
   std::string extractPassword(JsonVariantConst doc, bool& needsResave) const {
     bool ok = false;
     std::string pass = obfuscation::deobfuscateFromBase64(doc["password_obf"] | "", &ok);
-    if (!ok || pass.empty()) {
+    if (!ok) {
+      // Deobfuscation failed — fall back to legacy plaintext password.
       pass = doc["password"] | std::string("");
       if (!pass.empty()) needsResave = true;
     }
+    // A successfully decoded empty string is a legitimate value; preserve as-is.
     return pass;
   }
 };

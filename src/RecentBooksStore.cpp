@@ -33,6 +33,10 @@ bool RecentBooksStore::fromJson(const String& json) {
     return false;
   }
 
+  if (!doc["books"].is<JsonArray>()) {
+    LOG_ERR("RBS", "Invalid JSON: 'books' missing or not an array");
+    return false;
+  }
   recentBooks.clear();
   JsonArray arr = doc["books"].as<JsonArray>();
   for (JsonObject obj : arr) {

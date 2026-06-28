@@ -30,6 +30,10 @@ bool OpdsServerStore::fromJson(const String& json) {
     return false;
   }
 
+  if (!doc["servers"].is<JsonArray>()) {
+    LOG_ERR("OPS", "Invalid JSON: 'servers' missing or not an array");
+    return false;
+  }
   servers.clear();
   JsonArray arr = doc["servers"].as<JsonArray>();
   bool needsResave = false;

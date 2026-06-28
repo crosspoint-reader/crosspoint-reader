@@ -27,6 +27,11 @@ bool WifiCredentialStore::fromJson(const String& json) {
     return false;
   }
 
+  if (!doc["credentials"].is<JsonArray>()) {
+    LOG_ERR("WCS", "Invalid JSON: 'credentials' missing or not an array");
+    return false;
+  }
+
   lastConnectedSsid = doc["lastConnectedSsid"] | std::string("");
 
   credentials.clear();
