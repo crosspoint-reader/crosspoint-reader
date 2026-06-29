@@ -57,6 +57,7 @@ set(GENERATED_DICTS
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-fail-decompress/prep-fail-decompress.dict.dz"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-gen-idx/prep-gen-idx.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-gen-syn/prep-gen-syn.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-long/prep-long.dict.dz"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-mini/prep-mini.dict.dz"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-syn-two-step/prep-syn-two-step.dict"
 )
@@ -83,3 +84,4 @@ add_subdirectory(utf8_compose)
 add_subdirectory(dict-engine)
 add_subdirectory(dict-layout)
 add_subdirectory(dict-html-renderer)
+add_subdirectory(dict-word-select-nav)
