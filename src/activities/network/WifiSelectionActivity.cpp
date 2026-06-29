@@ -551,6 +551,19 @@ void WifiSelectionActivity::loop() {
         selectNetwork(selectedNetworkIndex);
         return;
       }
+
+      const int pageItems = std::max(1, contentHeight / std::max(1, metrics.listRowHeight));
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up) {
+        selectedNetworkIndex = ButtonNavigator::nextPageIndex(selectedNetworkIndex, networks.size(), pageItems);
+        requestUpdate();
+        return;
+      }
+      if (swipe == MappedInputManager::SwipeDir::Down) {
+        selectedNetworkIndex = ButtonNavigator::previousPageIndex(selectedNetworkIndex, networks.size(), pageItems);
+        requestUpdate();
+        return;
+      }
     }
 
     // Handle navigation
