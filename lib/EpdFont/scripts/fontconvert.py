@@ -22,6 +22,7 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--no-default-intervals", dest="no_default_intervals", action="store_true", help="Skip the built-in codepoint interval list; export only the intervals supplied via --additional-intervals.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
@@ -244,7 +245,7 @@ def load_glyph(code_point):
         face_index += 1
     return None
 
-unmerged_intervals = sorted(intervals + add_ints)
+unmerged_intervals = sorted(([] if args.no_default_intervals else intervals) + add_ints)
 intervals = []
 unvalidated_intervals = []
 for i_start, i_end in unmerged_intervals:
@@ -359,6 +360,11 @@ for i_start, i_end in intervals:
 
         # Build output data
         packed = bytes(pixels)
+        # Tweak U+261E (☞) to render 3px higher to align with cap height
+        top_offset = face.glyph.bitmap_top
+        if code_point == 0x261E:
+            top_offset += 3
+
         glyph = GlyphProps(
             width = bitmap.width,
             height = bitmap.rows,
@@ -366,7 +372,7 @@ for i_start, i_end in intervals:
             # advance.x (26.6 fixed-point, grid-fitted to whole pixels by hinter)
             advance_x = fp4_from_ft16_16(face.glyph.linearHoriAdvance),
             left = face.glyph.bitmap_left,
-            top = face.glyph.bitmap_top,
+            top = top_offset,
             data_length = len(packed),
             data_offset = total_size,
             code_point = code_point,
@@ -375,7 +381,10 @@ for i_start, i_end in intervals:
         all_glyphs.append((glyph, packed))
 
 # pipe seems to be a good heuristic for the "real" descender
+# Fall back to the first available interval codepoint when | is not in the font (e.g. IPA-only subset)
 face = load_glyph(ord('|'))
+if face is None and intervals:
+    face = load_glyph(intervals[0][0])
 
 glyph_data = []
 glyph_props = []
