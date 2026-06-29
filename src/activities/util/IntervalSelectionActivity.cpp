@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <utility>
 
 #include "components/UITheme.h"
@@ -96,7 +97,22 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int knobX = std::max(barX + 2, barX + 2 + fillWidth - 2);
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
-  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, I18N.get(stepHintId), true);
+  // Step hint. On X3 the hint names "Front buttons / Side buttons" and is split onto two centered
+  // lines on its "  " separator; X4 keeps its shorter single-line wording.
+  const char* hint = I18N.get(stepHintId);
+  const char* sep = gpio.deviceIsX3() ? strstr(hint, "  ") : nullptr;
+  if (sep != nullptr) {
+    char line1[64];
+    const size_t len1 = std::min(sizeof(line1) - 1, static_cast<size_t>(sep - hint));
+    memcpy(line1, hint, len1);
+    line1[len1] = '\0';
+    const char* line2 = sep + 2;
+    while (*line2 == ' ') ++line2;
+    renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, line1, true);
+    renderer.drawCenteredText(SMALL_FONT_ID, barY + 52, line2, true);
+  } else {
+    renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, hint, true);
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

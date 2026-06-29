@@ -4,6 +4,9 @@
 #include <HalGPIO.h>
 #include <I18n.h>
 
+#include <cstdio>
+#include <cstring>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -97,9 +100,21 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
   // Hint text for step sizes. The X3's side buttons are on the left/right edges (not an up/down
-  // rocker), so it gets a device-specific wording matching the flipped large-step direction.
+  // rocker), so it gets device-specific wording matching the flipped large-step direction, split
+  // onto two centered lines on its "  " separator; X4 keeps its shorter single-line wording.
   const StrId stepHintId = gpio.deviceIsX3() ? StrId::STR_PERCENT_STEP_HINT_X3 : StrId::STR_PERCENT_STEP_HINT;
-  UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, I18N.get(stepHintId), true);
+  const char* hint = I18N.get(stepHintId);
+  const char* sep = gpio.deviceIsX3() ? strstr(hint, "  ") : nullptr;
+  if (sep != nullptr) {
+    char line1[64];
+    snprintf(line1, sizeof(line1), "%.*s", static_cast<int>(sep - hint), hint);
+    const char* line2 = sep + 2;
+    while (*line2 == ' ') ++line2;
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, line1, true);
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 52, line2, true);
+  } else {
+    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, hint, true);
+  }
 
   // Button hints follow the current front button layout.
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
