@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Rtc.h>
 #include <Wire.h>
 
 #include "HalGPIO.h"
@@ -10,6 +11,8 @@ extern HalClock halClock;  // Singleton
 
 class HalClock {
   bool _available = false;
+  bool _usesSdkRtc = false;
+  mutable Rtc _sdkRtc;
   mutable uint8_t _cachedHour = 0;
   mutable uint8_t _cachedMinute = 0;
   mutable bool _hasCachedTime = false;

@@ -7,6 +7,7 @@ class GfxRenderer;
 class MappedInputManager {
  public:
   enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward, NavNext, NavPrevious };
+  enum class SwipeDir { None, Left, Right, Up, Down };
 
   struct Labels {
     const char* btn1;
@@ -21,6 +22,15 @@ class MappedInputManager {
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
+  bool hasTouch() const;
+  bool wasScreenTapped(int& x, int& y) const;
+  bool wasScreenTouchDown(int& x, int& y) const;
+  bool wasTapInRect(int x, int y, int width, int height) const;
+  bool wasListItemTapped(int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
+                         bool hasSubtitle) const;
+  bool wasListItemTouchedDown(int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
+                              bool hasSubtitle) const;
+  SwipeDir wasSwipe() const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
@@ -44,4 +54,12 @@ class MappedInputManager {
   const GfxRenderer& renderer;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
+  bool wasBackGesture() const;
+  bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
+                         bool hasSubtitle) const;
+  void rememberTouchHeldTime() const;
+
+  mutable bool touchHeldOverrideValid = false;
+  mutable unsigned long touchHeldOverrideMs = 0;
+  mutable unsigned long touchHeldOverrideAt = 0;
 };

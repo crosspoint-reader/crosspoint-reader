@@ -115,6 +115,24 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   bool hasChangedCategory = false;
 
+  auto applyCategorySelection = [this] {
+    switch (selectedCategoryIndex) {
+      case 0:
+        currentSettings = &displaySettings;
+        break;
+      case 1:
+        currentSettings = &readerSettings;
+        break;
+      case 2:
+        currentSettings = &controlsSettings;
+        break;
+      case 3:
+        currentSettings = &systemSettings;
+        break;
+    }
+    settingsCount = static_cast<int>(currentSettings->size());
+  };
+
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selectedSettingIndex == 0) {
@@ -139,7 +157,92 @@ void SettingsActivity::loop() {
     return;
   }
 
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int tx = 0;
+  int ty = 0;
+  const int tabTop = metrics.topPadding + metrics.headerHeight;
+  const int listTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  const int listHeight =
+      renderer.getScreenHeight() - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                                    metrics.buttonHintsHeight + metrics.verticalSpacing * 2);
+  auto settingIndexFromPoint = [&](const int x, const int y, int& settingIndex) {
+    (void)x;
+    if (settingsCount <= 0 || y < listTop || y >= listTop + listHeight) return false;
+    const int rowHeight = metrics.listRowHeight;
+    if (rowHeight <= 0) return false;
+    const int pageItems = std::max(1, listHeight / rowHeight);
+    const int selectedRow = std::max(0, selectedSettingIndex - 1);
+    const int pageStart = selectedRow / pageItems * pageItems;
+    const int row = (y - listTop) / rowHeight;
+    const int touched = pageStart + row;
+    if (row < 0 || row >= pageItems || touched < 0 || touched >= settingsCount) return false;
+    settingIndex = touched + 1;
+    return true;
+  };
+
+  if (mappedInput.wasScreenTouchDown(tx, ty)) {
+    if (ty >= tabTop && ty < tabTop + metrics.tabBarHeight) {
+      const int tabWidth = std::max(1, renderer.getScreenWidth() / categoryCount);
+      const int touchedCategory = std::min(categoryCount - 1, std::max(0, tx / tabWidth));
+      if (selectedCategoryIndex != touchedCategory || selectedSettingIndex != 0) {
+        selectedCategoryIndex = touchedCategory;
+        selectedSettingIndex = 0;
+        applyCategorySelection();
+        requestUpdate();
+      }
+      return;
+    }
+
+    int touchedSetting = -1;
+    if (settingIndexFromPoint(tx, ty, touchedSetting)) {
+      if (selectedSettingIndex != touchedSetting) {
+        selectedSettingIndex = touchedSetting;
+        requestUpdate();
+      }
+      return;
+    }
+  }
+
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    if (ty >= tabTop && ty < tabTop + metrics.tabBarHeight) {
+      const int tabWidth = std::max(1, renderer.getScreenWidth() / categoryCount);
+      selectedCategoryIndex = std::min(categoryCount - 1, std::max(0, tx / tabWidth));
+      selectedSettingIndex = 0;
+      applyCategorySelection();
+      requestUpdate();
+      return;
+    }
+
+    int tappedSetting = -1;
+    if (settingIndexFromPoint(tx, ty, tappedSetting)) {
+      selectedSettingIndex = tappedSetting;
+      toggleCurrentSetting();
+      requestUpdate();
+      return;
+    }
+  }
+
   // Handle navigation
+  const auto& navMetrics = UITheme::getInstance().getMetrics();
+  const int settingsPageItems = std::max(
+      1, (renderer.getScreenHeight() - (navMetrics.topPadding + navMetrics.headerHeight + navMetrics.tabBarHeight +
+                                        navMetrics.buttonHintsHeight + navMetrics.verticalSpacing * 2)) /
+             std::max(1, navMetrics.listRowHeight));
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectedSettingIndex = selectedSettingIndex == 0 ? 1
+                                                     : ButtonNavigator::nextPageIndex(
+                                                           selectedSettingIndex, settingsCount + 1, settingsPageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectedSettingIndex =
+        ButtonNavigator::previousPageIndex(selectedSettingIndex, settingsCount + 1, settingsPageItems);
+    requestUpdate();
+    return;
+  }
+
   buttonNavigator.onNextRelease([this] {
     selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
@@ -164,21 +267,7 @@ void SettingsActivity::loop() {
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
-    switch (selectedCategoryIndex) {
-      case 0:
-        currentSettings = &displaySettings;
-        break;
-      case 1:
-        currentSettings = &readerSettings;
-        break;
-      case 2:
-        currentSettings = &controlsSettings;
-        break;
-      case 3:
-        currentSettings = &systemSettings;
-        break;
-    }
-    settingsCount = static_cast<int>(currentSettings->size());
+    applyCategorySelection();
   }
 }
 

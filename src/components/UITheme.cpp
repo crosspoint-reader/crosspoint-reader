@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 
 #include <memory>
@@ -50,9 +51,17 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
   }
 }
 
+ThemeMetrics UITheme::getMetrics() const {
+  ThemeMetrics metrics = *currentMetrics;
+  if (gpio.hasTouch()) {
+    metrics.buttonHintsHeight = 0;
+  }
+  return metrics;
+}
+
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle, int extraReservedHeight) {
-  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
   auto orientation = renderer.getOrientation();
   int reservedHeight = metrics.topPadding;
   if (hasHeader) {
@@ -76,27 +85,28 @@ Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButton
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
   Rect safeArea = Rect{0, 0, screenWidth, screenHeight};
+  const ThemeMetrics metrics = getMetrics();
   switch (orientation) {
     case GfxRenderer::Orientation::Portrait:
       if (hasFrontButtonHints) {
-        safeArea.height -= currentMetrics->buttonHintsHeight;
+        safeArea.height -= metrics.buttonHintsHeight;
       }
       break;
     case GfxRenderer::Orientation::LandscapeClockwise:
       if (hasFrontButtonHints) {
-        safeArea.x += currentMetrics->buttonHintsHeight;
-        safeArea.width -= currentMetrics->buttonHintsHeight;
+        safeArea.x += metrics.buttonHintsHeight;
+        safeArea.width -= metrics.buttonHintsHeight;
       }
       break;
     case GfxRenderer::Orientation::PortraitInverted:
       if (hasFrontButtonHints) {
-        safeArea.y += currentMetrics->buttonHintsHeight;
-        safeArea.height -= currentMetrics->buttonHintsHeight;
+        safeArea.y += metrics.buttonHintsHeight;
+        safeArea.height -= metrics.buttonHintsHeight;
       }
       break;
     case GfxRenderer::Orientation::LandscapeCounterClockwise:
       if (hasFrontButtonHints) {
-        safeArea.width -= currentMetrics->buttonHintsHeight;
+        safeArea.width -= metrics.buttonHintsHeight;
       }
       break;
   }
@@ -128,7 +138,7 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 }
 
 int UITheme::getStatusBarHeight() {
-  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
 
   // Add status bar margin
   const bool showStatusBar =
@@ -142,7 +152,7 @@ int UITheme::getStatusBarHeight() {
 }
 
 int UITheme::getProgressBarHeight() {
-  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
   const bool showProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);

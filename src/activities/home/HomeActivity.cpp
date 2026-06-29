@@ -168,6 +168,34 @@ void HomeActivity::freeCoverBuffer() {
 
 void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+
+  auto activateSelection = [this] {
+    if (selectorIndex < recentBooks.size()) {
+      onSelectBook(recentBooks[selectorIndex].path);
+      return;
+    }
+    const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
+    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+      case HomeMenuItem::FILE_BROWSER:
+        onFileBrowserOpen();
+        break;
+      case HomeMenuItem::RECENTS:
+        onRecentsOpen();
+        break;
+      case HomeMenuItem::OPDS_BROWSER:
+        onOpdsBrowserOpen();
+        break;
+      case HomeMenuItem::FILE_TRANSFER:
+        onFileTransferOpen();
+        break;
+      case HomeMenuItem::SETTINGS_MENU:
+        onSettingsOpen();
+        break;
+      default:
+        break;
+    }
+  };
 
   buttonNavigator.onNext([this, menuCount] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
@@ -179,31 +207,71 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectorIndex < recentBooks.size()) {
-      onSelectBook(recentBooks[selectorIndex].path);
-    } else {
-      const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
-        case HomeMenuItem::FILE_BROWSER:
-          onFileBrowserOpen();
-          break;
-        case HomeMenuItem::RECENTS:
-          onRecentsOpen();
-          break;
-        case HomeMenuItem::OPDS_BROWSER:
-          onOpdsBrowserOpen();
-          break;
-        case HomeMenuItem::FILE_TRANSFER:
-          onFileTransferOpen();
-          break;
-        case HomeMenuItem::SETTINGS_MENU:
-          onSettingsOpen();
-          break;
-        default:
-          break;
-      }
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    requestUpdate();
+    return;
+  }
+
+  int tx = 0;
+  int ty = 0;
+  if (!recentBooks.empty() && mappedInput.wasScreenTouchDown(tx, ty) && tx >= 0 && tx < renderer.getScreenWidth() &&
+      ty >= metrics.homeTopPadding && ty < metrics.homeTopPadding + metrics.homeCoverTileHeight) {
+    if (selectorIndex != 0) {
+      selectorIndex = 0;
+      requestUpdate();
     }
+    return;
+  }
+
+  if (!recentBooks.empty() && mappedInput.wasTapInRect(0, metrics.homeTopPadding, renderer.getScreenWidth(),
+                                                      metrics.homeCoverTileHeight)) {
+    selectorIndex = 0;
+    activateSelection();
+    return;
+  }
+
+  const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+  const int menuHeight =
+      renderer.getScreenHeight() - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
+                                    metrics.homeMenuTopOffset + metrics.buttonHintsHeight);
+  const int renderedMenuSelection =
+      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size();
+  const int renderedMenuCount =
+      menuCount - (metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
+  if (mappedInput.wasScreenTouchDown(tx, ty) && ty >= menuTop && ty < menuTop + menuHeight) {
+    const int rowStep = metrics.menuRowHeight + metrics.menuSpacing;
+    const int touchedMenu = rowStep > 0 ? (ty - menuTop) / rowStep : -1;
+    if (touchedMenu >= 0 && touchedMenu < renderedMenuCount && (ty - menuTop) % rowStep < metrics.menuRowHeight) {
+      const int touchedIndex =
+          metrics.homeContinueReadingInMenu ? touchedMenu : touchedMenu + static_cast<int>(recentBooks.size());
+      if (selectorIndex != touchedIndex) {
+        selectorIndex = touchedIndex;
+        requestUpdate();
+      }
+      return;
+    }
+  }
+
+  if (mappedInput.wasScreenTapped(tx, ty) && ty >= menuTop && ty < menuTop + menuHeight) {
+    const int rowStep = metrics.menuRowHeight + metrics.menuSpacing;
+    const int tappedMenu = rowStep > 0 ? (ty - menuTop) / rowStep : -1;
+    if (tappedMenu >= 0 && tappedMenu < renderedMenuCount && (ty - menuTop) % rowStep < metrics.menuRowHeight) {
+      selectorIndex =
+          metrics.homeContinueReadingInMenu ? tappedMenu : tappedMenu + static_cast<int>(recentBooks.size());
+      activateSelection();
+      return;
+    }
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    activateSelection();
   }
 }
 

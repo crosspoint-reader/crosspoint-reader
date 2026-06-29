@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <Imu.h>
 #include <Wire.h>
 
 #include "HalGPIO.h"
@@ -18,8 +19,12 @@ class HalTiltSensor;
 extern HalTiltSensor halTiltSensor;  // Singleton
 
 class HalTiltSensor {
+  enum class Backend : uint8_t { None, Qmi8658, SdkImu };
+
   bool _available = false;
+  Backend _backend = Backend::None;
   uint8_t _i2cAddr = 0;
+  mutable Imu _sdkImu;
 
   // Tilt gesture state machine
   bool _tiltForwardEvent = false;  // Consumed by wasTiltedForward()

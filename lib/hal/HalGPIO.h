@@ -58,6 +58,7 @@ class HalGPIO {
   // Inline device type helpers for cleaner downstream checks
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
+  bool isXteinkDevice() const;
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
@@ -71,6 +72,14 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+  bool hasTouch() const;
+  bool wasTouchTap(float& nx, float& ny) const;
+  bool wasTouchDown(float& nx, float& ny) const;
+  bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
+  unsigned long lastTouchHeldMs() const;
+  bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
+  bool wasTouchActivity() const;
+  void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
   // Setup wake up GPIO and enter deep sleep
   void startDeepSleep();

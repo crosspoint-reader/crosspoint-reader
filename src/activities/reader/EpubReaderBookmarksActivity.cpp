@@ -65,6 +65,16 @@ int EpubReaderBookmarksActivity::getListHeight(const GfxRenderer& renderer) {
 }
 
 void EpubReaderBookmarksActivity::loop() {
+  auto openBookmark = [this] {
+    if (bookmarks.empty()) {
+      return;
+    }
+    auto bookmark = bookmarks.at(selectorIndex);
+    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
+    setResult(ProgressChangeResult{pos.spineIndex, pos.pageNumber});
+    finish();
+  };
+
   // Delete confirmation mode
   if (confirmingDelete >= DELETE_MODE_DISPLAY) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -103,20 +113,50 @@ void EpubReaderBookmarksActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
-    if (bookmarks.empty()) {
-      return;
-    }
-    auto bookmark = bookmarks.at(selectorIndex);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
-    setResult(ProgressChangeResult{pos.spineIndex, pos.pageNumber});
-    finish();
-    return;
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
+    return;
+  }
+
+  const auto orientation = renderer.getOrientation();
+  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int contentY = isPortraitInverted ? 50 : 0;
+  const int listY = contentY + LINE_HEIGHT;
+  const int listHeight = getListHeight(renderer);
+  int tapped = 0;
+  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(bookmarks.size()), selectorIndex, listY, listHeight,
+                                         true)) {
+    if (selectorIndex != tapped) {
+      selectorIndex = tapped;
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(bookmarks.size()), selectorIndex, listY, listHeight,
+                                    true)) {
+    selectorIndex = tapped;
+    openBookmark();
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up && !bookmarks.empty()) {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, bookmarks.size(), GUI.getListPageItems(listHeight, true));
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down && !bookmarks.empty()) {
+    selectorIndex =
+        ButtonNavigator::previousPageIndex(selectorIndex, bookmarks.size(), GUI.getListPageItems(listHeight, true));
+    requestUpdate();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
+    openBookmark();
     return;
   }
 

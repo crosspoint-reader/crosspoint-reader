@@ -26,6 +26,15 @@ bool HalTiltSensor::readReg(uint8_t reg, uint8_t* val) const {
 }
 
 bool HalTiltSensor::readGyro(float& gx, float& gy, float& gz) const {
+  if (_backend == Backend::SdkImu) {
+    Imu::Sample sample;
+    if (!_sdkImu.read(sample)) return false;
+    gx = sample.gx;
+    gy = sample.gy;
+    gz = sample.gz;
+    return true;
+  }
+
   Wire.beginTransmission(_i2cAddr);
   Wire.write(REG_GX_L);  // Start reading at Gyro X Low
   if (Wire.endTransmission(false) != 0) {
@@ -52,10 +61,21 @@ bool HalTiltSensor::readGyro(float& gx, float& gy, float& gz) const {
 }
 
 void HalTiltSensor::begin() {
+  _backend = Backend::None;
   if (!gpio.deviceIsX3()) {
-    _available = false;
+    _available = _sdkImu.begin();
+    if (!_available) {
+      LOG_ERR("GYR", "SDK IMU not found");
+      return;
+    }
+    _backend = Backend::SdkImu;
+    _initMs = millis();
+    _lastPollMs = millis();
+    LOG_INF("GYR", "SDK IMU initialized");
     return;
   }
+
+  _backend = Backend::Qmi8658;
 
   // Try primary address, then alternate
   uint8_t whoami = 0;
@@ -89,6 +109,14 @@ bool HalTiltSensor::wake() {
     return false;
   }
 
+  if (_backend == Backend::SdkImu) {
+    _lastPollMs = millis();
+    _lastTiltMs = millis();
+    _wakeMs = millis();
+    _isAwake = true;
+    return true;
+  }
+
   // Wait for init to complete before waking
   if ((millis() - _initMs) < SLEEP_STABILIZE_MS) {
     return false;
@@ -109,6 +137,13 @@ bool HalTiltSensor::wake() {
 bool HalTiltSensor::deepSleep() {
   if (!_available) {
     return false;
+  }
+
+  if (_backend == Backend::SdkImu) {
+    clearPendingEvents();
+    _inTilt = false;
+    _isAwake = false;
+    return true;
   }
 
   if ((millis() - _wakeMs) < SLEEP_STABILIZE_MS) {

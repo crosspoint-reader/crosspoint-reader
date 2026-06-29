@@ -178,6 +178,7 @@ void verifyPowerButtonDuration() {
   const uint16_t calibratedPressDuration =
       (calibration < SETTINGS.getPowerButtonDuration()) ? SETTINGS.getPowerButtonDuration() - calibration : 1;
 
+  gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
   // Needed because inputManager.isPressed() may take up to ~500ms to return the correct state
   while (!gpio.isPressed(HalGPIO::BTN_POWER) && millis() - start < 1000) {
@@ -313,7 +314,9 @@ void setup() {
   // worked without the delay because USB was already enumerated.
   delay(250);
   Serial.begin(115200);
+#if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
+#endif
 #endif
 
   HalSystem::begin();
@@ -485,6 +488,7 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
+  gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
@@ -515,7 +519,7 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
       activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity

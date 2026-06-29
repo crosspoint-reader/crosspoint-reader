@@ -38,6 +38,11 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
     __real_panic_print_backtrace(frame, core);
     return;
   }
+
+#if !__riscv
+  __real_panic_print_backtrace(frame, core);
+  return;
+#else
   for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH; i++) {
     panicStack[i].sp = 0;
   }
@@ -65,6 +70,7 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   }
 
   __real_panic_print_backtrace(frame, core);
+#endif
 }
 }
 

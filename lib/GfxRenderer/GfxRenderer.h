@@ -134,6 +134,7 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
+  void tapToLogical(float nx, float ny, int& outX, int& outY) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
