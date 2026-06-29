@@ -114,26 +114,27 @@ void ActivityManager::loop() {
 
     } else if (pendingActivity) {
       // Current activity has requested a new activity to be launched
-      RenderLock lock;
-
       if (pendingAction == PendingAction::Replace) {
-        // Destroy the current activity
+        // Replace needs lock because it calls onExit() which may render
+        RenderLock lock;
         exitActivity(lock);
-        // Clear the stack
         while (!stackActivities.empty()) {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
+        pendingAction = PendingAction::None;
+        currentActivity = std::move(pendingActivity);
+        lock.unlock();  // onEnter may acquire its own lock
+        currentActivity->onEnter();
       } else if (pendingAction == PendingAction::Push) {
-        // Move current activity to stack
+        RenderLock lock;
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());
+        pendingAction = PendingAction::None;
+        currentActivity = std::move(pendingActivity);
+        lock.unlock();  // onEnter may acquire its own lock
+        currentActivity->onEnter();
       }
-      pendingAction = PendingAction::None;
-      currentActivity = std::move(pendingActivity);
-
-      lock.unlock();  // onEnter may acquire its own lock
-      currentActivity->onEnter();
 
       // onEnter may request another pending action, we will handle it in the next loop iteration
       continue;
@@ -254,6 +255,14 @@ bool ActivityManager::isReaderActivity() const {
   return std::any_of(stackActivities.begin(), stackActivities.end(),
                      [](const auto& activity) { return activity->isReaderActivity(); }) ||
          (currentActivity && currentActivity->isReaderActivity());
+}
+
+bool ActivityManager::isInReaderContext() const {
+  if (currentActivity && currentActivity->isReaderActivity()) {
+    return true;
+  }
+  return std::any_of(stackActivities.begin(), stackActivities.end(),
+                     [](const auto& activity) { return activity && activity->isReaderActivity(); });
 }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }

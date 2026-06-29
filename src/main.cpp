@@ -32,6 +32,8 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
+#include "util/DictionaryRegistry.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -39,6 +41,7 @@ MappedInputManager mappedInputManager(gpio, renderer);
 ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
+DictionaryRegistry dictionaryRegistry;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
 
@@ -347,6 +350,17 @@ void setup() {
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();
+
+  // Clamp lookup history cap to valid range
+  if (SETTINGS.lookupHistoryCap < CrossPointSettings::HIST_CAP_MIN ||
+      SETTINGS.lookupHistoryCap > CrossPointSettings::HIST_CAP_MAX ||
+      SETTINGS.lookupHistoryCap % CrossPointSettings::HIST_CAP_STEP != 0) {
+    SETTINGS.lookupHistoryCap = CrossPointSettings::HIST_CAP_DEFAULT;
+  }
+  // Validate the stored dictionary path still exists on the SD card.
+  Dictionary::isValidDictionary();
+  // Discover installed dictionaries for the settings UI (device + web). Mirrors sdFontSystem.begin().
+  dictionaryRegistry.discover();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();

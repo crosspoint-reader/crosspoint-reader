@@ -26,6 +26,10 @@ class UITheme {
   void setTheme(CrossPointSettings::UI_THEME type);
   static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle, int extraReservedHeight = 0);
+  // Standard header Rect: {0, topPadding, pageWidth, headerHeight}.
+  static Rect headerRect(const GfxRenderer& renderer);
+  // Standard content Rect: the area between the header and button hints.
+  static Rect contentRect(const GfxRenderer& renderer);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();
