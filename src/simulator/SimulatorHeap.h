@@ -44,9 +44,15 @@ inline std::size_t heapLimitBytes() { return totalBytes(); }
 bool resetForTests(std::size_t arenaBytes);
 void shutdownForTests();
 void* allocateForTests(std::size_t size);
+void* allocateAlignedForTests(std::size_t size, std::size_t alignment);
 void* callocForTests(std::size_t nmemb, std::size_t size);
 void* reallocForTests(void* ptr, std::size_t size);
+void* reallocAlignedForTests(void* ptr, std::size_t size, std::size_t alignment);
 void freeForTests(void* ptr);
+void* cppNewForTests(std::size_t size);
+void* cppNewNoThrowForTests(std::size_t size) noexcept;
+void* cppAlignedNewForTests(std::size_t size, std::size_t alignment);
+void* cppAlignedNewNoThrowForTests(std::size_t size, std::size_t alignment) noexcept;
 void dumpVisualizationForTests(const char* reason);
 #endif
 

@@ -27,11 +27,7 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
-
-FetchContent_GetProperties(espressif_tlsf_src)
-if(NOT espressif_tlsf_src_POPULATED)
-  FetchContent_Populate(espressif_tlsf_src)
-endif()
+FetchContent_MakeAvailable(espressif_tlsf_src)
 
 set(REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 

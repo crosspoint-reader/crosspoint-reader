@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <new>
 
 namespace fs = std::filesystem;
 
@@ -113,6 +114,49 @@ TEST_F(SimulatorHeapTest, ReallocShrinkAndGrowPreservesContent) {
   }
 }
 
+TEST_F(SimulatorHeapTest, ReallocMovePreservesContentAndReleasesOldBlock) {
+  ASSERT_TRUE(SimulatorHeap::resetForTests(8192));
+  const std::size_t baselineFree = SimulatorHeap::freeBytes();
+
+  auto* a = static_cast<std::uint8_t*>(SimulatorHeap::allocateForTests(1024));
+  auto* b = static_cast<std::uint8_t*>(SimulatorHeap::allocateForTests(1024));
+  auto* c = static_cast<std::uint8_t*>(SimulatorHeap::allocateForTests(1024));
+  ASSERT_NE(a, nullptr);
+  ASSERT_NE(b, nullptr);
+  ASSERT_NE(c, nullptr);
+
+  std::memset(b, 0x5A, 1024);
+
+  SimulatorHeap::freeForTests(c);
+  auto* moved = static_cast<std::uint8_t*>(SimulatorHeap::reallocForTests(b, 1536));
+  ASSERT_NE(moved, nullptr);
+  EXPECT_NE(moved, b);
+  for (std::size_t i = 0; i < 1024; ++i) {
+    EXPECT_EQ(moved[i], 0x5A);
+  }
+
+  SimulatorHeap::freeForTests(a);
+  SimulatorHeap::freeForTests(moved);
+  EXPECT_EQ(SimulatorHeap::freeBytes(), baselineFree);
+}
+
+TEST_F(SimulatorHeapTest, ReallocAlignedFallbackPreservesContentAndAlignment) {
+  ASSERT_TRUE(SimulatorHeap::resetForTests(8192));
+
+  auto* ptr = static_cast<std::uint8_t*>(SimulatorHeap::allocateForTests(512));
+  ASSERT_NE(ptr, nullptr);
+  std::memset(ptr, 0xC3, 512);
+
+  auto* realigned = static_cast<std::uint8_t*>(SimulatorHeap::reallocAlignedForTests(ptr, 256, 64));
+  ASSERT_NE(realigned, nullptr);
+  EXPECT_EQ(reinterpret_cast<std::uintptr_t>(realigned) % 64U, 0U);
+  for (std::size_t i = 0; i < 256; ++i) {
+    EXPECT_EQ(realigned[i], 0xC3);
+  }
+
+  SimulatorHeap::freeForTests(realigned);
+}
+
 TEST_F(SimulatorHeapTest, FragmentationCanBlockLargeAllocationEvenWhenFreeBytesRemain) {
   ASSERT_TRUE(SimulatorHeap::resetForTests(4096));
   const std::size_t baselineMaxAlloc = SimulatorHeap::largestFreeBlockBytes();
@@ -157,6 +201,38 @@ TEST_F(SimulatorHeapTest, CallocZeroesAndTotalRemainsConstant) {
 
   SimulatorHeap::freeForTests(ptr);
   EXPECT_EQ(SimulatorHeap::totalBytes(), total);
+}
+
+TEST_F(SimulatorHeapTest, ZeroSizeAllocationApisAreRejected) {
+  ASSERT_TRUE(SimulatorHeap::resetForTests(4096));
+
+  EXPECT_EQ(SimulatorHeap::allocateForTests(0), nullptr);
+  EXPECT_EQ(SimulatorHeap::allocateAlignedForTests(0, 64), nullptr);
+  EXPECT_EQ(SimulatorHeap::reallocForTests(nullptr, 0), nullptr);
+  EXPECT_EQ(SimulatorHeap::reallocAlignedForTests(nullptr, 0, 64), nullptr);
+}
+
+TEST_F(SimulatorHeapTest, ZeroSizeCppNewAllocatesMinimumObject) {
+  ASSERT_TRUE(SimulatorHeap::resetForTests(4096));
+
+  void* plain = SimulatorHeap::cppNewForTests(0);
+  ASSERT_NE(plain, nullptr);
+
+  void* plainNoThrow = SimulatorHeap::cppNewNoThrowForTests(0);
+  ASSERT_NE(plainNoThrow, nullptr);
+
+  void* aligned = SimulatorHeap::cppAlignedNewForTests(0, 64);
+  ASSERT_NE(aligned, nullptr);
+  EXPECT_EQ(reinterpret_cast<std::uintptr_t>(aligned) % 64U, 0U);
+
+  void* alignedNoThrow = SimulatorHeap::cppAlignedNewNoThrowForTests(0, 64);
+  ASSERT_NE(alignedNoThrow, nullptr);
+  EXPECT_EQ(reinterpret_cast<std::uintptr_t>(alignedNoThrow) % 64U, 0U);
+
+  SimulatorHeap::freeForTests(plain);
+  SimulatorHeap::freeForTests(plainNoThrow);
+  SimulatorHeap::freeForTests(aligned);
+  SimulatorHeap::freeForTests(alignedNoThrow);
 }
 
 TEST_F(SimulatorHeapTest, ManualVisualizationDumpWritesSvgFile) {

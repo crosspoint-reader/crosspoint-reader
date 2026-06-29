@@ -219,7 +219,7 @@ class TraceRegistry {
   }
 
   void dump(const char* reason);
-  bool tryGet(void* ptr, TraceRecord* out) const;
+  void fillSnapshotAllocations(std::vector<struct RawVisualizationAllocation>* allocations) const;
 
  private:
   bool enabled_ = false;
@@ -231,6 +231,7 @@ TraceRegistry gTraceRegistry;
 std::mutex gTraceRenderCacheMutex;
 std::unordered_map<TraceCacheKey, std::string, TraceCacheKeyHash> gTraceRenderCache;
 
+struct RawVisualizationAllocation;
 struct RawVisualizationSnapshot;
 
 class ArenaAllocator {
@@ -325,8 +326,13 @@ class ArenaAllocator {
   }
 
   void* allocate(std::size_t size, std::size_t alignment = kAlignment) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return allocateLocked(size, alignment);
+    void* ptr = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      ptr = allocateLocked(size, alignment);
+    }
+    if (ptr) gTraceRegistry.record(ptr, size);
+    return ptr;
   }
 
   void* calloc(std::size_t nmemb, std::size_t size) {
@@ -349,62 +355,81 @@ class ArenaAllocator {
       return nullptr;
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (!initialized_) {
-      errno = ENOMEM;
-      return nullptr;
-    }
-
-    if (livePointers_.find(ptr) == livePointers_.end()) {
-      errno = EINVAL;
-      return nullptr;
-    }
-
-    const std::size_t effectiveAlignment = normalizedAlignment(alignment);
-    if (effectiveAlignment == 0) return nullptr;
-
-    if (effectiveAlignment <= kTlsfBaseAlignment || size <= tlsf_block_size(ptr)) {
-      const std::size_t previousBlockSize = tlsf_block_size(ptr);
-      void* result = tlsf_realloc(tlsf_, ptr, size);
-      if (!result) {
+    void* result = nullptr;
+    void* forgetPtr = nullptr;
+    void* recordPtr = nullptr;
+    void* updatePtr = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (!initialized_) {
         errno = ENOMEM;
         return nullptr;
       }
 
-      if ((reinterpret_cast<std::uintptr_t>(result) & (effectiveAlignment - 1U)) != 0) {
-        void* alignedResult = allocateLocked(size, effectiveAlignment);
-        if (!alignedResult) return nullptr;
-        std::memcpy(alignedResult, result, std::min(size, tlsf_block_size(result)));
-        freeLocked(result);
-        return alignedResult;
+      if (livePointers_.find(ptr) == livePointers_.end()) {
+        errno = EINVAL;
+        return nullptr;
       }
 
-      freeBytes_ += previousBlockSize;
-      freeBytes_ -= tlsf_block_size(result);
-      updateMinFreeLocked();
+      const std::size_t effectiveAlignment = normalizedAlignment(alignment);
+      if (effectiveAlignment == 0) return nullptr;
 
-      if (result != ptr) {
-        livePointers_.erase(ptr);
-        livePointers_.insert(result);
-        gTraceRegistry.forget(ptr);
-        gTraceRegistry.record(result, size);
+      if (effectiveAlignment <= kTlsfBaseAlignment || size <= tlsf_block_size(ptr)) {
+        const std::size_t previousBlockSize = tlsf_block_size(ptr);
+        result = tlsf_realloc(tlsf_, ptr, size);
+        if (!result) {
+          errno = ENOMEM;
+          return nullptr;
+        }
+
+        freeBytes_ += previousBlockSize;
+        freeBytes_ -= tlsf_block_size(result);
+        updateMinFreeLocked();
+
+        if (result != ptr) {
+          livePointers_.erase(ptr);
+          livePointers_.insert(result);
+        }
+
+        if ((reinterpret_cast<std::uintptr_t>(result) & (effectiveAlignment - 1U)) != 0) {
+          void* alignedResult = allocateLocked(size, effectiveAlignment);
+          if (!alignedResult) return nullptr;
+          std::memcpy(alignedResult, result, std::min(size, tlsf_block_size(result)));
+          freeLocked(result);
+          result = alignedResult;
+          forgetPtr = ptr;
+          recordPtr = alignedResult;
+        } else {
+          if (result != ptr) {
+            forgetPtr = ptr;
+            recordPtr = result;
+          } else {
+            updatePtr = result;
+          }
+        }
       } else {
-        gTraceRegistry.updateSize(result, size);
+        result = allocateLocked(size, effectiveAlignment);
+        if (!result) return nullptr;
+        std::memcpy(result, ptr, std::min(size, tlsf_block_size(ptr)));
+        freeLocked(ptr);
+        forgetPtr = ptr;
+        recordPtr = result;
       }
-      return result;
     }
-
-    void* newPtr = allocateLocked(size, effectiveAlignment);
-    if (!newPtr) return nullptr;
-    std::memcpy(newPtr, ptr, std::min(size, tlsf_block_size(ptr)));
-    freeLocked(ptr);
-    return newPtr;
+    if (forgetPtr) gTraceRegistry.forget(forgetPtr);
+    if (recordPtr) gTraceRegistry.record(recordPtr, size);
+    if (updatePtr) gTraceRegistry.updateSize(updatePtr, size);
+    return result;
   }
 
   void deallocate(void* ptr) {
     if (!ptr) return;
-    std::lock_guard<std::mutex> lock(mutex_);
-    freeLocked(ptr);
+    bool freed = false;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      freed = freeLocked(ptr);
+    }
+    if (freed) gTraceRegistry.forget(ptr);
   }
 
  private:
@@ -538,19 +563,18 @@ class ArenaAllocator {
     freeBytes_ -= tlsf_alloc_overhead();
     updateMinFreeLocked();
     livePointers_.insert(ptr);
-    gTraceRegistry.record(ptr, requestedSize);
     return ptr;
   }
 
-  void freeLocked(void* ptr) {
+  bool freeLocked(void* ptr) {
     const auto it = livePointers_.find(ptr);
-    if (it == livePointers_.end()) return;
+    if (it == livePointers_.end()) return false;
 
-    gTraceRegistry.forget(ptr);
     freeBytes_ += tlsf_block_size(ptr);
     freeBytes_ += tlsf_alloc_overhead();
     livePointers_.erase(it);
     tlsf_free(tlsf_, ptr);
+    return true;
   }
 
   void shutdownLocked() {
@@ -585,15 +609,6 @@ std::uint64_t hashTraceRecord(const TraceRecord& rec) {
     hash *= 1099511628211ULL;
   }
   return hash;
-}
-
-bool TraceRegistry::tryGet(void* ptr, TraceRecord* out) const {
-  if (!out) return false;
-  std::lock_guard<std::mutex> lock(mutex_);
-  const auto it = live_.find(ptr);
-  if (it == live_.end()) return false;
-  *out = it->second;
-  return true;
 }
 
 #if SIM_HEAP_TRACE_AVAILABLE
@@ -782,6 +797,19 @@ struct RawVisualizationSnapshot {
   std::vector<RawVisualizationAllocation> allocations;
 };
 
+void TraceRegistry::fillSnapshotAllocations(std::vector<RawVisualizationAllocation>* allocations) const {
+  if (!allocations) return;
+  std::lock_guard<std::mutex> lock(mutex_);
+  for (RawVisualizationAllocation& allocation : *allocations) {
+    const auto it = live_.find(reinterpret_cast<void*>(allocation.pointerValue));
+    if (it == live_.end()) continue;
+    allocation.hasTrace = true;
+    allocation.trace = it->second;
+    allocation.requestedBytes = allocation.trace.requested;
+    allocation.siteHash = hashTraceRecord(allocation.trace);
+  }
+}
+
 std::mutex gPendingVisualizationMutex;
 bool gPendingPeakVisualizationValid = false;
 RawVisualizationSnapshot gPendingPeakVisualization;
@@ -829,32 +857,35 @@ bool materializeVisualizationSnapshot(const RawVisualizationSnapshot& rawSnapsho
 
 bool ArenaAllocator::captureRawVisualizationSnapshot(RawVisualizationSnapshot* out) const {
   if (!out) return false;
-  std::lock_guard<std::mutex> lock(mutex_);
-  if (!initialized_ || !tlsf_) return false;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!initialized_ || !tlsf_) return false;
 
-  out->arenaBytes = slabBytes_;
-  out->controlBytes = tlsf_size(tlsf_);
-  out->sentinelBytes = tlsf_pool_overhead() > tlsf_alloc_overhead() ? tlsf_pool_overhead() - tlsf_alloc_overhead() : 0;
-  out->freeBytes = freeBytes_;
-  out->currentUsedBytes = slabBytes_ > freeBytes_ ? slabBytes_ - freeBytes_ : 0;
-  out->peakUsedBytes = slabBytes_ > minFreeBytes_ ? slabBytes_ - minFreeBytes_ : 0;
-  out->minFreeBytes = minFreeBytes_;
-  out->largestFreeBlockBytes = largestFreeBlockBytesLocked();
-  out->fragmentationPercent = fragmentationPercentLocked();
-  out->allocations.clear();
-  out->allocations.reserve(livePointers_.size());
+    out->arenaBytes = slabBytes_;
+    out->controlBytes = tlsf_size(tlsf_);
+    out->sentinelBytes =
+        tlsf_pool_overhead() > tlsf_alloc_overhead() ? tlsf_pool_overhead() - tlsf_alloc_overhead() : 0;
+    out->freeBytes = freeBytes_;
+    out->currentUsedBytes = slabBytes_ > freeBytes_ ? slabBytes_ - freeBytes_ : 0;
+    out->peakUsedBytes = slabBytes_ > minFreeBytes_ ? slabBytes_ - minFreeBytes_ : 0;
+    out->minFreeBytes = minFreeBytes_;
+    out->largestFreeBlockBytes = largestFreeBlockBytesLocked();
+    out->fragmentationPercent = fragmentationPercentLocked();
+    out->allocations.clear();
+    out->allocations.reserve(livePointers_.size());
 
-  for (void* ptr : livePointers_) {
-    RawVisualizationAllocation allocation;
-    allocation.offset = static_cast<std::size_t>(static_cast<std::byte*>(ptr) - slab_);
-    allocation.payloadBytes = tlsf_block_size(ptr);
-    allocation.headerBytes = tlsf_alloc_overhead();
-    allocation.pointerValue = reinterpret_cast<std::uintptr_t>(ptr);
-    allocation.hasTrace = gTraceRegistry.tryGet(ptr, &allocation.trace);
-    allocation.requestedBytes = allocation.hasTrace ? allocation.trace.requested : allocation.payloadBytes;
-    allocation.siteHash = allocation.hasTrace ? hashTraceRecord(allocation.trace) : allocation.pointerValue;
-    out->allocations.push_back(allocation);
+    for (void* ptr : livePointers_) {
+      RawVisualizationAllocation allocation;
+      allocation.offset = static_cast<std::size_t>(static_cast<std::byte*>(ptr) - slab_);
+      allocation.payloadBytes = tlsf_block_size(ptr);
+      allocation.headerBytes = tlsf_alloc_overhead();
+      allocation.requestedBytes = allocation.payloadBytes;
+      allocation.pointerValue = reinterpret_cast<std::uintptr_t>(ptr);
+      allocation.siteHash = allocation.pointerValue;
+      out->allocations.push_back(allocation);
+    }
   }
+  gTraceRegistry.fillSnapshotAllocations(&out->allocations);
   return true;
 }
 
@@ -872,23 +903,32 @@ void TraceRegistry::dump(const char* reason) {
   // Everything below allocates (aggregation maps, strings, backward-cpp). The
   // arena is full at OOM time, so route all of it to the real heap.
   TracerGuard guard;
-  std::lock_guard<std::mutex> lock(mutex_);
 
   struct Site {
     std::size_t bytes = 0;
     std::size_t count = 0;
-    const TraceRecord* sample = nullptr;
+    TraceRecord sample = {};
   };
+
+  std::vector<TraceRecord> liveRecords;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    liveRecords.reserve(live_.size());
+    for (const auto& [ptr, rec] : live_) {
+      (void)ptr;
+      liveRecords.push_back(rec);
+    }
+  }
 
   std::unordered_map<std::uint64_t, Site> sites;
   std::size_t liveBytes = 0;
   std::size_t liveCount = 0;
-  for (const auto& [ptr, rec] : live_) {
+  for (const TraceRecord& rec : liveRecords) {
     const std::uint64_t hash = hashTraceRecord(rec);
     Site& site = sites[hash];
     site.bytes += rec.requested;
     site.count += 1;
-    site.sample = &rec;
+    site.sample = rec;
     liveBytes += rec.requested;
     liveCount += 1;
   }
@@ -909,7 +949,7 @@ void TraceRegistry::dump(const char* reason) {
     const std::size_t avg = site.count ? site.bytes / site.count : 0;
     std::fprintf(stderr, "[SIM] --- #%zu: %zu bytes (%zu allocations, avg %zu bytes) ---\n", i + 1, site.bytes,
                  site.count, avg);
-    printSiteStack(*site.sample);
+    printSiteStack(site.sample);
   }
   std::fprintf(stderr, "[SIM] ===== end heap allocation trace =====\n\n");
 #else
@@ -1090,6 +1130,29 @@ bool parseBoolEnv(const char* name) {
   return std::strcmp(raw, "0") != 0;
 }
 
+[[maybe_unused]] void* cppAllocateNoThrow(const std::size_t size) noexcept {
+  const std::size_t requestedSize = size == 0 ? 1 : size;
+
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return __real_malloc(requestedSize);
+
+  void* ptr = gAllocator.allocate(requestedSize);
+  if (!ptr) logHeapFailure("operator new nothrow", requestedSize, kAlignment, errno);
+  else maybeDumpVisualizationForThreshold();
+  return ptr;
+}
+
+[[maybe_unused]] void* cppAlignedAllocateNoThrow(const std::size_t size,
+                                                 const std::size_t requestedAlignment) noexcept {
+  const std::size_t requestedSize = size == 0 ? 1 : size;
+
+  if (!gArenaActive || gHostHeapScopeDepth > 0) return hostAlignedAllocate(requestedSize, requestedAlignment);
+
+  void* ptr = gAllocator.allocate(requestedSize, requestedAlignment);
+  if (!ptr) logHeapFailure("aligned operator new nothrow", requestedSize, requestedAlignment, errno);
+  else maybeDumpVisualizationForThreshold();
+  return ptr;
+}
+
 void ensureInitialized() {
   if (gAllocator.isInitialized()) return;
   const std::size_t heapBytes = parseByteEnv("CROSSPOINT_SIM_HEAP_BYTES");
@@ -1186,6 +1249,12 @@ void* allocateForTests(const std::size_t size) {
   return ptr;
 }
 
+void* allocateAlignedForTests(const std::size_t size, const std::size_t alignment) {
+  void* ptr = gAllocator.allocate(size, alignment);
+  if (ptr) maybeDumpVisualizationForThreshold();
+  return ptr;
+}
+
 void* callocForTests(const std::size_t nmemb, const std::size_t size) {
   void* ptr = gAllocator.calloc(nmemb, size);
   if (ptr) maybeDumpVisualizationForThreshold();
@@ -1198,9 +1267,31 @@ void* reallocForTests(void* ptr, const std::size_t size) {
   return result;
 }
 
+void* reallocAlignedForTests(void* ptr, const std::size_t size, const std::size_t alignment) {
+  void* result = gAllocator.reallocate(ptr, size, alignment);
+  if (result || size == 0) maybeDumpVisualizationForThreshold();
+  return result;
+}
+
 void freeForTests(void* ptr) {
   gAllocator.deallocate(ptr);
   maybeDumpVisualizationForThreshold();
+}
+
+void* cppNewForTests(const std::size_t size) {
+  if (void* ptr = cppAllocateNoThrow(size)) return ptr;
+  throw std::bad_alloc();
+}
+
+void* cppNewNoThrowForTests(const std::size_t size) noexcept { return cppAllocateNoThrow(size); }
+
+void* cppAlignedNewForTests(const std::size_t size, const std::size_t alignment) {
+  if (void* ptr = cppAlignedAllocateNoThrow(size, alignment)) return ptr;
+  throw std::bad_alloc();
+}
+
+void* cppAlignedNewNoThrowForTests(const std::size_t size, const std::size_t alignment) noexcept {
+  return cppAlignedAllocateNoThrow(size, alignment);
 }
 
 void dumpVisualizationForTests(const char* reason) { dumpVisualization(reason); }
@@ -1252,63 +1343,39 @@ extern "C" void __wrap_free(void* ptr) {
 }
 
 void* operator new(std::size_t size) {
-  if (void* ptr = __wrap_malloc(size)) return ptr;
+  if (void* ptr = cppAllocateNoThrow(size)) return ptr;
   throw std::bad_alloc();
 }
 
 void* operator new[](std::size_t size) {
-  if (void* ptr = __wrap_malloc(size)) return ptr;
+  if (void* ptr = cppAllocateNoThrow(size)) return ptr;
   throw std::bad_alloc();
 }
 
-void* operator new(std::size_t size, const std::nothrow_t&) noexcept { return __wrap_malloc(size); }
+void* operator new(std::size_t size, const std::nothrow_t&) noexcept { return cppAllocateNoThrow(size); }
 
-void* operator new[](std::size_t size, const std::nothrow_t&) noexcept { return __wrap_malloc(size); }
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept { return cppAllocateNoThrow(size); }
 
 void* operator new(std::size_t size, std::align_val_t alignment) {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gHostHeapScopeDepth > 0) {
-    if (void* ptr = hostAlignedAllocate(size, requestedAlignment)) return ptr;
-    throw std::bad_alloc();
-  }
-  if (void* ptr = gAllocator.allocate(size, requestedAlignment)) {
-    maybeDumpVisualizationForThreshold();
-    return ptr;
-  }
-  logHeapFailure("aligned operator new", size, requestedAlignment, errno);
+  if (void* ptr = cppAlignedAllocateNoThrow(size, requestedAlignment)) return ptr;
   throw std::bad_alloc();
 }
 
 void* operator new[](std::size_t size, std::align_val_t alignment) {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gHostHeapScopeDepth > 0) {
-    if (void* ptr = hostAlignedAllocate(size, requestedAlignment)) return ptr;
-    throw std::bad_alloc();
-  }
-  if (void* ptr = gAllocator.allocate(size, requestedAlignment)) {
-    maybeDumpVisualizationForThreshold();
-    return ptr;
-  }
-  logHeapFailure("aligned operator new[]", size, requestedAlignment, errno);
+  if (void* ptr = cppAlignedAllocateNoThrow(size, requestedAlignment)) return ptr;
   throw std::bad_alloc();
 }
 
 void* operator new(std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gHostHeapScopeDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
-  void* ptr = gAllocator.allocate(size, requestedAlignment);
-  if (!ptr) logHeapFailure("aligned operator new nothrow", size, requestedAlignment, errno);
-  else maybeDumpVisualizationForThreshold();
-  return ptr;
+  return cppAlignedAllocateNoThrow(size, requestedAlignment);
 }
 
 void* operator new[](std::size_t size, std::align_val_t alignment, const std::nothrow_t&) noexcept {
   const std::size_t requestedAlignment = static_cast<std::size_t>(alignment);
-  if (!gArenaActive || gHostHeapScopeDepth > 0) return hostAlignedAllocate(size, requestedAlignment);
-  void* ptr = gAllocator.allocate(size, requestedAlignment);
-  if (!ptr) logHeapFailure("aligned operator new[] nothrow", size, requestedAlignment, errno);
-  else maybeDumpVisualizationForThreshold();
-  return ptr;
+  return cppAlignedAllocateNoThrow(size, requestedAlignment);
 }
 
 void operator delete(void* ptr) noexcept { __wrap_free(ptr); }
