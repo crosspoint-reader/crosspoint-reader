@@ -22,13 +22,12 @@ YAML schemas:
       compress:        bool — default for dict and syn compression (default false)
       compress_dict:   bool — override dict compression (default: compress)
       compress_syn:    bool — override syn compression (default: compress)
-      generate_oft:    bool — default for idx.oft and syn.oft generation (default false)
-      generate_idx_oft: bool — override idx.oft generation (default: generate_oft)
-      generate_syn_oft: bool — override syn.oft generation (default: generate_oft)
-      generate_cspt:    bool — write .idx.oft.cspt (default false; requires generate_idx_oft)
-      generate_syn_cspt: bool — write .syn.oft.cspt (default false; requires generate_syn_oft)
+
+      generate_fpi:     bool — default for idx.fpi and syn.fpi generation (default false)
+      generate_idx_fpi: bool — override idx.fpi generation (default: generate_fpi)
+      generate_syn_fpi: bool — override syn.fpi generation (default: generate_fpi)
       generate_ifo:    bool — write .ifo file (default true)
-      generate_idx:    bool — write .idx (and .idx.oft) (default true)
+      generate_idx:    bool — write .idx (default true)
       corrupt_dict:    bool — write invalid bytes as .dict.dz instead of real content
       base_entries:    name of another JSON in test/data/dictionary-sources/ to load entries from
       extra_ifo_files: list of {stem, bookname, ifo_version?} for extra .ifo files
@@ -39,23 +38,17 @@ YAML schemas:
   Synthetic (algorithmically generated):
     meta: { ... same as above (base_entries/extra_ifo_files not supported) ... }
     synthetic:
-      word_prefix:       selects definition template and word name format
-      syn_prefix:        synonym name prefix
+      word_prefix:       selects definition template
+      syn_prefix:        synonym name prefix for sequential mode
       word_count:        int
       synonyms_per_word: int (default 0)
+      word_style:        "sequential" (default) or "englishish"
+      seed:              optional deterministic RNG seed
 
 Format references:
   .ifo   : key=value text; version=stardict-2.4.2 (or 2.4.2)
   .idx   : [word\\0][uint32 offset BE][uint32 size BE], sorted lexicographically
   .syn   : [synonym\\0][uint32 idx_ordinal BE], sorted lexicographically
-  .oft   : 38-byte header + LE uint32 offsets at stride=32, plus sentinel
-           header = b"StarDict's Cache, Version: 0.2" (30 bytes)
-                  + b"\\xc1\\xd1\\xa4\\x51\\x00\\x00\\x00\\x00" (8 bytes)
-           offset[0]   = byte offset of entry 32 in .idx (or .syn)
-           offset[1]   = byte offset of entry 64
-           ...
-           offset[N-1] = byte offset of entry N*32
-           offset[N]   = total byte size of the .idx (or .syn) file  ← sentinel
   sametypesequence=m : plain text; size from .idx (no null terminator)
   sametypesequence=h : HTML;       size from .idx (no null terminator)
 """
@@ -64,10 +57,12 @@ import argparse
 import gzip
 import io
 import os
+import random
 import struct
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import json
 
@@ -76,104 +71,191 @@ import json
 # Constants
 # ---------------------------------------------------------------------------
 
-OFT_HEADER = b"StarDict's Cache, Version: 0.2" + b"\xc1\xd1\xa4\x51\x00\x00\x00\x00"
-assert len(OFT_HEADER) == 38
-STRIDE = 32
+
 
 # Written as .dict.dz when corrupt_dict: true — starts with \x00\x00 (invalid gzip magic)
 _CORRUPT_DICT_DATA = b"\x00\x00This is not a gzip file. Invalid magic bytes."
+
+_ENGLISHISH_LETTER_POOL = (
+    "eeeeeeeeeeeeeeeeeeee"
+    "tttttttttttttttt"
+    "aaaaaaaaaaaaaaa"
+    "oooooooooooooo"
+    "iiiiiiiiiiii"
+    "nnnnnnnnnnnn"
+    "sssssssssss"
+    "rrrrrrrrrr"
+    "hhhhhhhhh"
+    "llllllll"
+    "ddddddd"
+    "cccccc"
+    "uuuuuu"
+    "mmmmmm"
+    "wwwww"
+    "fffff"
+    "ggggg"
+    "yyyyy"
+    "pppp"
+    "bbbb"
+    "vvvv"
+    "kkkk"
+    "jj"
+    "xx"
+    "qq"
+    "zz"
+)
+
+_ENGLISHISH_LENGTH_CDF = [
+    (2, 2),
+    (3, 8),
+    (4, 19),
+    (5, 34),
+    (6, 50),
+    (7, 65),
+    (8, 77),
+    (9, 87),
+    (10, 93),
+    (11, 97),
+    (12, 99),
+    (13, 100),
+]
 
 
 # ---------------------------------------------------------------------------
 # StarDict binary helpers
 # ---------------------------------------------------------------------------
 
-def _build_oft(binary: bytes, skip_bytes_after_null: int) -> bytes:
-    """Build .oft bytes for idx (skip_bytes=8) or syn (skip_bytes=4)."""
-    offsets = []
-    entry_count = 0
-    pos = 0
-    while pos < len(binary):
-        null = binary.index(b"\x00", pos)
-        pos = null + 1 + skip_bytes_after_null
-        entry_count += 1
-        if entry_count % STRIDE == 0:
-            offsets.append(pos)
-    offsets.append(len(binary))  # sentinel: total byte size of the source file
-    data = OFT_HEADER
-    for off in offsets:
-        data += struct.pack("<I", off)
-    return data
 
 
-def build_idx_oft(idx_bytes: bytes) -> bytes:
-    return _build_oft(idx_bytes, skip_bytes_after_null=8)
+
+# ---------------------------------------------------------------------------
+# .fpi — the Fenced Prefix Index sidecar (tuning: fencep_6 + tab1_3), which minimizes
+# SD sector reads for exact-match lookup; see the "Fenced Prefix Index" section of
+# docs/dictionary-development.md for the motivation and the benchmark that picked
+# this tuning. Supersedes .cspt for exact-match lookup. Mirrors
+# Dictionary::generateFpi (src/util/Dictionary.cpp) and scripts/dictionary_tools.py's
+# _build_fpi byte-for-byte — one of the three producers that must stay in sync.
+# ---------------------------------------------------------------------------
+
+_FPI_SECTOR_SIZE = 512
+_FPI_VERSION = 0
+_FPI_HEADER_SIZE = 1
+_FPI_TAB_PREFIX_LEN = 3
+_FPI_TAB_ENTRY_CAP = (_FPI_SECTOR_SIZE - _FPI_HEADER_SIZE) // _FPI_TAB_PREFIX_LEN  # 170
+_FPI_FENCEP_PREFIX_LEN = 6
+_FPI_GROUP_SECTORS = 8
+_FPI_GROUP_ORDINAL_OFFSET = 9 + _FPI_GROUP_SECTORS * _FPI_FENCEP_PREFIX_LEN  # 57
+_FPI_ORDINAL_SIZE = 4
+_FPI_GROUP_SIZE = _FPI_GROUP_ORDINAL_OFFSET + _FPI_ORDINAL_SIZE  # 61
+_FPI_GROUPS_PER_SIDECAR_SECTOR = _FPI_SECTOR_SIZE // _FPI_GROUP_SIZE  # 8
+_FPI_MAX_COMMON_LEN = 127
 
 
-def build_syn_oft(syn_bytes: bytes) -> bytes:
-    return _build_oft(syn_bytes, skip_bytes_after_null=4)
+def _fpi_sampled_sector(i: int, entry_count: int, sector_count: int) -> int:
+    if entry_count <= 1 or sector_count <= 1:
+        return 0
+    return (i * (sector_count - 1)) // (entry_count - 1)
 
 
-_CSPT_MAGIC = b"CSPT"
-_CSPT_PREFIX_LEN = 16
-_CSPT_STRIDE = 16
-_CSPT_HEADER_SIZE = 12
+def build_fpi(src_bytes: bytes, skip_per_entry: int = 8) -> bytes:
+    """Build .fpi bytes for .idx (skip=8) or .syn (skip=4).
 
-
-def build_cspt(src_bytes: bytes, oft_bytes: bytes, skip_per_entry: int = 8) -> bytes:
-    """Build .cspt from .idx/.syn and matching .oft data.
-
-    skip_per_entry: bytes after the null-terminated word in src_bytes
-    (8 for .idx = offset+size; 4 for .syn = original_word_index).
+    Single combined sidecar: sector 0 = a version byte + a "tab" table of up to
+    170 3-byte lowercase prefixes, evenly sampled across source-file 512-byte
+    sectors; sectors 1..N = a "fencep" sidecar of front-coded 6-byte prefixes, one
+    per source-file sector, grouped 8 sectors at a time, plus a per-group 4-byte LE
+    cumulative-ordinal field (the local==0 sector's fence word's 0-based entry
+    ordinal, or the total entry count as a sentinel past the last entry) consumed
+    by Dictionary::binarySearchFpiOrdinal.
     """
-    table_bytes = oft_bytes[len(OFT_HEADER):]
-    num_oft_entries = len(table_bytes) // 4
-    if num_oft_entries > 0:
-        num_oft_entries -= 1  # exclude sentinel
+    import bisect
 
-    page_offsets = [0]
-    for i in range(num_oft_entries):
-        off = struct.unpack_from("<I", table_bytes, i * 4)[0]
-        page_offsets.append(off)
+    src_len = len(src_bytes)
+    sector_count = 0 if src_len == 0 else (src_len + _FPI_SECTOR_SIZE - 1) // _FPI_SECTOR_SIZE
+    tab_entry_count = min(_FPI_TAB_ENTRY_CAP, sector_count)
 
-    entries = []
-    for page_off in page_offsets:
-        pos = page_off
-        if pos >= len(src_bytes):
-            break
-        try:
-            null = src_bytes.index(b"\x00", pos)
-        except ValueError:
-            break
-        word = src_bytes[pos:null]
-        prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
-        entries.append(prefix + struct.pack("<I", pos))
+    entries = []  # [(lowercased_word, entry_start), ...] in file order
+    pos = 0
+    while pos < src_len:
+        null = src_bytes.index(b"\x00", pos)
+        entries.append((src_bytes[pos:null].lower(), pos))
+        pos = null + 1 + skip_per_entry
+    starts = [e[1] for e in entries]
 
-        scan_pos = pos
-        for _ in range(16):
-            try:
-                null = src_bytes.index(b"\x00", scan_pos)
-            except ValueError:
-                scan_pos = len(src_bytes)
+    fence_word = [b""] * sector_count
+    fence_start = [0] * sector_count
+    fence_ordinal = [len(entries)] * sector_count
+    for sector in range(sector_count):
+        i = bisect.bisect_left(starts, sector * _FPI_SECTOR_SIZE)
+        if i < len(entries):
+            fence_word[sector], fence_start[sector] = entries[i]
+            fence_ordinal[sector] = i
+
+    tab = bytearray(_FPI_SECTOR_SIZE - _FPI_HEADER_SIZE)
+    for i in range(tab_entry_count):
+        sector = _fpi_sampled_sector(i, tab_entry_count, sector_count)
+        w = fence_word[sector][:_FPI_TAB_PREFIX_LEN]
+        off = i * _FPI_TAB_PREFIX_LEN
+        tab[off:off + len(w)] = w
+
+    group_count = (sector_count + _FPI_GROUP_SECTORS - 1) // _FPI_GROUP_SECTORS
+    fencep = bytearray()
+    sidecar_buf = bytearray()
+    groups_in_sector = 0
+    for group in range(group_count):
+        buf = bytearray(_FPI_GROUP_SIZE)
+        prev = b""
+        for local in range(_FPI_GROUP_SECTORS):
+            sector = group * _FPI_GROUP_SECTORS + local
+            if sector >= sector_count:
                 break
-            scan_pos = null + 1 + skip_per_entry
-        if scan_pos >= len(src_bytes):
-            continue
-        try:
-            null = src_bytes.index(b"\x00", scan_pos)
-        except ValueError:
-            continue
-        word = src_bytes[scan_pos:null]
-        prefix = word[:_CSPT_PREFIX_LEN].ljust(_CSPT_PREFIX_LEN, b"\x00")
-        entries.append(prefix + struct.pack("<I", scan_pos))
+            word = fence_word[sector]
+            rel = 0
+            if word:
+                rel = (fence_start[sector] - sector * _FPI_SECTOR_SIZE) & 0x1ff
+            buf[local] = rel & 0xff
+            if rel & 0x100:
+                buf[8] |= 1 << local
+            if local == 0:
+                buf[_FPI_GROUP_ORDINAL_OFFSET:_FPI_GROUP_ORDINAL_OFFSET + _FPI_ORDINAL_SIZE] = struct.pack(
+                    "<I", fence_ordinal[sector])
 
-    entry_count = len(entries)
-    hdr = _CSPT_MAGIC
-    hdr += struct.pack("<B", 1)  # version
-    hdr += struct.pack("<B", _CSPT_PREFIX_LEN)
-    hdr += struct.pack("<H", _CSPT_STRIDE)
-    hdr += struct.pack("<I", entry_count)
-    return hdr + b"".join(entries)
+            common = 0
+            if local != 0:
+                n = min(len(prev), len(word))
+                while common < n and prev[common] == word[common]:
+                    common += 1
+                common = min(common, _FPI_MAX_COMMON_LEN)
+
+            slot_off = 9 + local * _FPI_FENCEP_PREFIX_LEN
+            if local != 0 and common > 0:
+                suffix = word[common:common + _FPI_FENCEP_PREFIX_LEN - 1]
+                suffix = suffix.ljust(_FPI_FENCEP_PREFIX_LEN - 1, b"\x00")
+                buf[slot_off] = 0x80 | common
+                buf[slot_off + 1:slot_off + _FPI_FENCEP_PREFIX_LEN] = suffix
+                prev = prev[:common] + suffix
+            else:
+                pfx = word[:_FPI_FENCEP_PREFIX_LEN].ljust(_FPI_FENCEP_PREFIX_LEN, b"\x00")
+                buf[slot_off:slot_off + _FPI_FENCEP_PREFIX_LEN] = pfx
+                prev = pfx
+        sidecar_buf += buf
+        groups_in_sector += 1
+        if groups_in_sector == _FPI_GROUPS_PER_SIDECAR_SECTOR:
+            fencep += sidecar_buf.ljust(_FPI_SECTOR_SIZE, b"\x00")
+            sidecar_buf = bytearray()
+            groups_in_sector = 0
+    if groups_in_sector > 0:
+        fencep += sidecar_buf.ljust(_FPI_SECTOR_SIZE, b"\x00")
+
+    return bytes([_FPI_VERSION]) + bytes(tab) + bytes(fencep)
+
+
+def build_idx_fpi(idx_bytes: bytes) -> bytes:
+    return build_fpi(idx_bytes, skip_per_entry=8)
+
+
+def build_syn_fpi(syn_bytes: bytes) -> bytes:
+    return build_fpi(syn_bytes, skip_per_entry=4)
 
 
 def build_idx_dict(entries: list) -> tuple:
@@ -283,10 +365,9 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
     # Compression and generation flags
     compress_dict = meta.get("compress_dict", meta.get("compress", False))
     compress_syn = meta.get("compress_syn", meta.get("compress", False))
-    generate_idx_oft = meta.get("generate_idx_oft", meta.get("generate_oft", False))
-    generate_syn_oft = meta.get("generate_syn_oft", meta.get("generate_oft", False))
-    generate_cspt = meta.get("generate_cspt", False)
-    generate_syn_cspt = meta.get("generate_syn_cspt", False)
+
+    generate_idx_fpi = meta.get("generate_idx_fpi", meta.get("generate_fpi", False))
+    generate_syn_fpi = meta.get("generate_syn_fpi", meta.get("generate_fpi", False))
     generate_ifo = meta.get("generate_ifo", True)
     generate_idx = meta.get("generate_idx", True)
     corrupt_dict = meta.get("corrupt_dict", False)
@@ -341,30 +422,22 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
     else:
         write_or_compress(stem + ".dict", dict_bytes, compress_dict)
 
-    # Write .idx and optionally .idx.oft
+    # Write .idx and optionally .idx.oft.cspt / .idx.fpi
     if generate_idx:
         with open(stem + ".idx", "wb") as f:
             f.write(idx_bytes)
-        if generate_idx_oft:
-            with open(stem + ".idx.oft", "wb") as f:
-                f.write(build_idx_oft(idx_bytes))
-        if generate_cspt and generate_idx_oft:
-            oft_path = stem + ".idx.oft"
-            with open(oft_path, "rb") as f:
-                oft_data = f.read()
-            with open(stem + ".idx.oft.cspt", "wb") as f:
-                f.write(build_cspt(idx_bytes, oft_data, skip_per_entry=8))
 
-    # Write .syn and optionally .syn.oft (+ .syn.oft.cspt)
+        if generate_idx_fpi:
+            with open(stem + ".idx.fpi", "wb") as f:
+                f.write(build_idx_fpi(idx_bytes))
+
+    # Write .syn and optionally .syn.oft.cspt / .syn.fpi
     if syn_bytes:
         write_or_compress(stem + ".syn", syn_bytes, compress_syn)
-        if generate_syn_oft:
-            syn_oft_bytes = build_syn_oft(syn_bytes)
-            with open(stem + ".syn.oft", "wb") as f:
-                f.write(syn_oft_bytes)
-            if generate_syn_cspt:
-                with open(stem + ".syn.oft.cspt", "wb") as f:
-                    f.write(build_cspt(syn_bytes, syn_oft_bytes, skip_per_entry=4))
+
+        if generate_syn_fpi:
+            with open(stem + ".syn.fpi", "wb") as f:
+                f.write(build_syn_fpi(syn_bytes))
 
     # Write primary .ifo
     if generate_ifo:
@@ -401,16 +474,12 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
         exts.append(".dict" + (".dz" if compress_dict else ""))
     if generate_idx:
         exts.append(".idx")
-        if generate_idx_oft:
-            exts.append(".idx.oft")
-            if generate_cspt:
-                exts.append(".idx.oft.cspt")
+        if generate_idx_fpi:
+            exts.append(".idx.fpi")
     if syn_bytes:
         exts.append(".syn" + (".dz" if compress_syn else ""))
-        if generate_syn_oft:
-            exts.append(".syn.oft")
-            if generate_syn_cspt:
-                exts.append(".syn.oft.cspt")
+        if generate_syn_fpi:
+            exts.append(".syn.fpi")
     if generate_ifo:
         exts.append(".ifo")
     _print_summary(out_dir, stem_name, exts)
@@ -430,7 +499,8 @@ def build_data_driven(cfg: dict, out_dir: str, yaml_dir: str) -> None:
 # Synthetic definition templates
 # ---------------------------------------------------------------------------
 
-def _make_def_chain_stress(n: int, word_prefix: str, word_count: int) -> bytes:
+def _make_def_chain_stress(n: int, word_prefix: str, word_count: int,
+                           headword: Optional[str] = None) -> bytes:
     """Large, style-dense HTML definition for the chained-OOM stress dict.
 
     Two stress properties on purpose:
@@ -463,12 +533,15 @@ def _make_def_chain_stress(n: int, word_prefix: str, word_count: int) -> bytes:
     return "".join(out).encode("utf-8")
 
 
-def _make_def_all_prep(n: int, word_prefix: str, word_count: int = 0) -> bytes:
+def _make_def_all_prep(n: int, word_prefix: str, word_count: int = 0,
+                       headword: Optional[str] = None) -> bytes:
     """~900-byte definition for all_prep_word dicts."""
+    if headword is None:
+        headword = f"{word_prefix}_{n:05d}"
     parts = [
         f"Entry {n:05d}.",
         f"This is test word number {n} in the CrossPoint pre-processing stress test dictionary.",
-        f"Word {word_prefix}_{n:05d} occupies ordinal {n - 1} in the sorted index.",
+        f"Word {headword} occupies ordinal {n - 1} in the sorted index.",
         f"Arithmetic block A: {n*7+13} {n*11+17} {n*13+19} {n*17+23} {n*19+29} {n*23+31}.",
         f"Arithmetic block B: {n*29+37} {n*31+41} {n*37+43} {n*41+47} {n*43+53} {n*47+59}.",
         f"Arithmetic block C: {n*53+61} {n*59+67} {n*61+71} {n*67+73} {n*71+79} {n*73+83}.",
@@ -485,11 +558,14 @@ def _make_def_all_prep(n: int, word_prefix: str, word_count: int = 0) -> bytes:
     return " ".join(parts).encode("utf-8")
 
 
-def _make_def_long_prep(n: int, word_prefix: str, word_count: int = 0) -> bytes:
+def _make_def_long_prep(n: int, word_prefix: str, word_count: int = 0,
+                        headword: Optional[str] = None) -> bytes:
     """~200-byte definition for long_prep_word dicts."""
+    if headword is None:
+        headword = f"{word_prefix}_{n:05d}"
     parts = [
         f"Entry {n:05d}.",
-        f"Test word {word_prefix}_{n:05d} at ordinal {n - 1}.",
+        f"Test word {headword} at ordinal {n - 1}.",
         f"Block A: {n*7+13} {n*11+17} {n*13+19} {n*17+23} {n*19+29} {n*23+31}.",
         f"Block B: {n*29+37} {n*31+41} {n*37+43} {n*41+47} {n*43+53} {n*47+59}.",
         f"Residue: m97={n%97} m89={n%89} m83={n%83} m79={n%79} m73={n%73}.",
@@ -499,11 +575,12 @@ def _make_def_long_prep(n: int, word_prefix: str, word_count: int = 0) -> bytes:
     return " ".join(parts).encode("utf-8")
 
 
-def _make_def_fuzzy(n: int, word_prefix: str, word_count: int = 0) -> bytes:
+def _make_def_fuzzy(n: int, word_prefix: str, word_count: int = 0,
+                    headword: Optional[str] = None) -> bytes:
     """Tiny definition for fuzzy_word dicts. Keeps the committed fixture small
-    while still producing thousands of headwords (many .idx.oft pages) so the
-    OFT binary search in Dictionary::findSimilar is exercised on a window that
-    starts well past offset 0."""
+    while still producing thousands of headwords (many .idx.fpi fence groups) so
+    the .fpi-bracket binary search in Dictionary::findSimilar is exercised on a
+    window that starts well past offset 0."""
     return f"def {n:05d}".encode("ascii")
 
 
@@ -515,6 +592,37 @@ _DEFINITION_FN = {
 }
 
 
+def _sample_englishish_length(rng: random.Random) -> int:
+    roll = rng.randrange(100)
+    for length, cutoff in _ENGLISHISH_LENGTH_CDF:
+        if roll < cutoff:
+            return length
+    return _ENGLISHISH_LENGTH_CDF[-1][0]
+
+
+def _make_englishish_word(rng: random.Random) -> str:
+    length = _sample_englishish_length(rng)
+    return "".join(
+        _ENGLISHISH_LETTER_POOL[rng.randrange(len(_ENGLISHISH_LETTER_POOL))]
+        for _ in range(length)
+    )
+
+
+def _generate_englishish_words(count: int, rng: random.Random,
+                               used: Optional[set[str]] = None) -> list[str]:
+    if used is None:
+        used = set()
+    words: list[str] = []
+    while len(words) < count:
+        word = _make_englishish_word(rng)
+        if word in used:
+            continue
+        used.add(word)
+        words.append(word)
+    words.sort()
+    return words
+
+
 # ---------------------------------------------------------------------------
 # Synthetic builder
 # ---------------------------------------------------------------------------
@@ -524,12 +632,12 @@ def build_synthetic(cfg: dict, out_dir: str) -> None:
     syn_cfg = cfg["synthetic"]
     stem_name = meta["name"]
     compress = meta.get("compress", False)
-    generate_oft = meta.get("generate_oft", False)
 
     word_prefix = syn_cfg["word_prefix"]
     syn_prefix = syn_cfg["syn_prefix"]
     word_count = syn_cfg["word_count"]
     synonyms_per_word = syn_cfg.get("synonyms_per_word", 0)
+    word_style = syn_cfg.get("word_style", "sequential")
 
     if word_prefix not in _DEFINITION_FN:
         print(f"ERROR: unknown word_prefix '{word_prefix}'. "
@@ -539,46 +647,51 @@ def build_synthetic(cfg: dict, out_dir: str) -> None:
 
     os.makedirs(out_dir, exist_ok=True)
     stem = os.path.join(out_dir, stem_name)
+    rng = random.Random(syn_cfg.get("seed", f"{stem_name}:{word_count}:{synonyms_per_word}:{word_style}"))
 
     total_synonyms = word_count * synonyms_per_word
     print(f"Generating {word_count:,} headwords, {total_synonyms:,} synonyms...")
 
     t0 = time.monotonic()
 
-    dict_buf = io.BytesIO()
-    idx_buf = io.BytesIO()
+    if word_style == "englishish":
+        headwords = _generate_englishish_words(word_count, rng)
+    elif word_style == "sequential":
+        headwords = [f"{word_prefix}_{n:05d}" for n in range(1, word_count + 1)]
+    else:
+        print(f"ERROR: unknown word_style '{word_style}'. Known: sequential, englishish",
+              file=sys.stderr)
+        sys.exit(1)
 
-    for n in range(1, word_count + 1):
-        word = f"{word_prefix}_{n:05d}"
-        defn = make_def(n, word_prefix, word_count)
-        off = dict_buf.tell()
-        size = len(defn)
-        dict_buf.write(defn)
-        idx_buf.write(word.encode("ascii") + b"\x00")
-        idx_buf.write(struct.pack(">II", off, size))
+    entries = []
+    for n, word in enumerate(headwords, start=1):
+        entries.append((word, make_def(n, word_prefix, word_count, word).decode("utf-8")))
         if n % 10000 == 0:
             print(f"  words: {n:,}/{word_count:,}  ({time.monotonic() - t0:.1f}s)")
 
-    dict_bytes = dict_buf.getvalue()
-    idx_bytes = idx_buf.getvalue()
+    idx_bytes, dict_bytes = build_idx_dict(entries)
     print(f"dict raw: {len(dict_bytes) / 1024 / 1024:.2f} MB  "
           f"idx: {len(idx_bytes) / 1024 / 1024:.2f} MB")
 
     syn_bytes = b""
     if synonyms_per_word > 0:
-        syn_buf = io.BytesIO()
-        for n in range(1, word_count + 1):
-            ordinal = n - 1
+        headword_ordinals = {word: ordinal for ordinal, word in enumerate(headwords)}
+        synonym_pairs = []
+        used_synonyms = set(headwords)
+        for n, word in enumerate(headwords, start=1):
             for k in range(synonyms_per_word):
-                suffix = (n * 31 + k * 97) % 10000
-                syn_word = f"{syn_prefix}_{n:05d}_v{k}_{suffix:04d}"
-                syn_buf.write(syn_word.encode("ascii") + b"\x00")
-                syn_buf.write(struct.pack(">I", ordinal))
+                if word_style == "englishish":
+                    syn_word = _generate_englishish_words(1, rng, used_synonyms)[0]
+                else:
+                    suffix = (n * 31 + k * 97) % 10000
+                    syn_word = f"{syn_prefix}_{n:05d}_v{k}_{suffix:04d}"
+                synonym_pairs.append((syn_word, word))
             if n % 10000 == 0:
                 elapsed = time.monotonic() - t0
                 print(f"  synonyms: {n * synonyms_per_word:,}/{total_synonyms:,}"
                       f"  ({elapsed:.1f}s)")
-        syn_bytes = syn_buf.getvalue()
+        synonym_pairs.sort(key=lambda item: item[0])
+        syn_bytes, _ = build_syn(synonym_pairs, headword_ordinals)
         print(f"syn raw: {len(syn_bytes) / 1024 / 1024:.2f} MB")
 
     # Write .dict / .dict.dz
@@ -594,31 +707,24 @@ def build_synthetic(cfg: dict, out_dir: str) -> None:
                       file=sys.stderr)
     del dict_bytes
 
-    # Write .idx (always uncompressed) and, when requested, the CrossPoint
-    # accelerator indexes (.idx.oft and .idx.oft.cspt).
+    # Write .idx (always uncompressed) and the CrossPoint
+    # accelerator index (.idx.fpi).
     with open(stem + ".idx", "wb") as f:
         f.write(idx_bytes)
-    generate_cspt = meta.get("generate_cspt", False)
-    if generate_oft:
-        idx_oft_bytes = build_idx_oft(idx_bytes)
-        with open(stem + ".idx.oft", "wb") as f:
-            f.write(idx_oft_bytes)
-        if generate_cspt:
-            with open(stem + ".idx.oft.cspt", "wb") as f:
-                f.write(build_cspt(idx_bytes, idx_oft_bytes, skip_per_entry=8))
+    generate_idx_fpi = meta.get("generate_idx_fpi", meta.get("generate_fpi", False))
+    if generate_idx_fpi:
+        with open(stem + ".idx.fpi", "wb") as f:
+            f.write(build_idx_fpi(idx_bytes))
 
-    # Write .syn / .syn.dz (+ optional .syn.oft / .syn.oft.cspt)
+    # Write .syn / .syn.dz (+ optional .syn.oft.cspt / .syn.fpi)
     syn_count = None
+    generate_syn_fpi = meta.get("generate_syn_fpi", meta.get("generate_fpi", False))
     if syn_bytes:
         print("Compressing .syn.dz ..." if compress else "Writing .syn ...")
         write_or_compress(stem + ".syn", syn_bytes, compress)
-        if generate_oft:
-            syn_oft_bytes = build_syn_oft(syn_bytes)
-            with open(stem + ".syn.oft", "wb") as f:
-                f.write(syn_oft_bytes)
-            if meta.get("generate_syn_cspt", False):
-                with open(stem + ".syn.oft.cspt", "wb") as f:
-                    f.write(build_cspt(syn_bytes, syn_oft_bytes, skip_per_entry=4))
+        if generate_syn_fpi:
+            with open(stem + ".syn.fpi", "wb") as f:
+                f.write(build_syn_fpi(syn_bytes))
         del syn_bytes
         syn_count = total_synonyms
 
@@ -627,15 +733,11 @@ def build_synthetic(cfg: dict, out_dir: str) -> None:
     exts = [".ifo",
             ".dict" + (".dz" if compress else ""),
             ".idx",
-            ".idx.oft" if generate_oft else None,
-            ".idx.oft.cspt" if (generate_oft and generate_cspt) else None,
+            ".idx.fpi" if generate_idx_fpi else None,
             (".syn" + (".dz" if compress else "")) if syn_count else None,
-            ".syn.oft" if (generate_oft and syn_count) else None,
-            ".syn.oft.cspt" if (generate_oft and syn_count and meta.get("generate_syn_cspt", False)) else None]
+            ".syn.fpi" if (generate_syn_fpi and syn_count) else None]
     _print_summary(out_dir, stem_name, exts)
     print(f"\nTotal generation time: {time.monotonic() - t0:.1f}s")
-    if not generate_oft:
-        print("Note: .idx.oft and .syn.oft intentionally absent — device generates them.")
 
 
 # ---------------------------------------------------------------------------

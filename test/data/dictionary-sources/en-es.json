@@ -7,9 +7,7 @@
     "description": "Common English words with Spanish translations. Includes British/American spelling synonyms and alternate word forms.",
     "entry_format": "m",
     "compress": false,
-    "generate_oft": true,
-    "generate_cspt": true,
-    "generate_syn_cspt": true,
+    "generate_fpi": true,
     "ifo_version": "stardict-2.4.2"
   },
   "entries": [

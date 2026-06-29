@@ -64,6 +64,11 @@ class InflateReader {
   // Call this once before the first read() when input is zlib-wrapped (e.g. PNG IDAT).
   void skipZlibHeader();
 
+  // Parse and consume the gzip header from the input stream via uzlib_gzip_parse_header().
+  // Call this once before read()/readAtMost() when input is a .dict.dz gzip file.
+  // Returns true if the header is valid, false if the stream is not a valid gzip file.
+  bool skipGzipHeader();
+
   // Decompress exactly len bytes into dest.
   // Returns false if the stream ends before producing len bytes, or on error.
   bool read(uint8_t* dest, size_t len);

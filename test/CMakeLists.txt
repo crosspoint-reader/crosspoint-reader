@@ -40,6 +40,22 @@ file(GLOB DICTIONARY_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/data/dictionary-source
 
 set(GENERATED_DICTS
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/en-es/en-es.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/english-full/english-full.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/english-no-syn/english-no-syn.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/fuzzy-fpi/fuzzy-fpi.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/html-definitions/html-definitions.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/ipa-phonetic/ipa-phonetic.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/macos-metadata/macos-metadata.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/multi-idx/multi-idx.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/multi-ifo/multi-ifo.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/no-ifo/no-ifo.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/only-dict/only-dict.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/overflow-fields/overflow-fields.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/phrase/phrase.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-fpi-prefix-collision/prep-fpi-prefix-collision.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-extract-dict/prep-extract-dict.dict.dz"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-gen-idx/prep-gen-idx.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-mini/prep-mini.dict.dz"
 )
 
 add_custom_command(

@@ -7,6 +7,7 @@ target_include_directories(DictEngineTest PRIVATE
   ${REPO_ROOT}/test/stubs  # overrides HalStorage.h / Logging.h (device-only)
   ${REPO_ROOT}
   ${REPO_ROOT}/lib
+  ${REPO_ROOT}/lib/Memory  # Dictionary.cpp uses makeUniqueNoThrow (Memory.h, flat include like PlatformIO's per-lib root)
   ${REPO_ROOT}/src
 )
 

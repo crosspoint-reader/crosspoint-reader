@@ -13,6 +13,8 @@ struct DictPaths {
   std::string idx() const { return folder + ".idx"; }
   std::string dict() const { return folder + ".dict"; }
   std::string ifo() const { return folder + ".ifo"; }
+  std::string idxFpi() const { return folder + ".idx.fpi"; }
+  std::string synFpi() const { return folder + ".syn.fpi"; }
   std::string dictDz() const { return folder + ".dict.dz"; }
 };
 
@@ -71,20 +73,36 @@ class Dictionary {
   // Also checks for .syn and .dict.dz presence.
   static DictInfo readInfo(const char* folderPath);
 
-  // Search .idx for word. Returns file location without reading content.
+  // Search .idx for word (via .idx.fpi if present). Returns file location without reading content.
   static DictLocation locate(const std::string& word, const DictLookupCallbacks& cbs = {},
                              const char* cachePath = nullptr);
 
-  // Look up word in .idx. Returns definition or empty string.
+  // Look up word in .idx (via .idx.fpi if present). Returns definition or empty string.
   static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {},
                             const char* cachePath = nullptr);
+
+  // Look up word in .syn (via .syn.fpi if present).
+  // Returns the canonical headword from .idx, or empty string if not found.
+  static std::string resolveAltForm(const std::string& word, const char* cachePath = nullptr);
 
   static std::string cleanWord(const std::string& word);
   static std::vector<std::string> getStemVariants(const std::string& word);
 
   // Returns up to maxResults words from .idx that are close in edit distance to word.
-  // Requires .idx to be accessible; the minimal engine scans the full index.
+  // Requires .idx to be accessible; uses .idx.fpi if present for neighbourhood search.
   static std::vector<std::string> findSimilar(const std::string& word, int maxResults, const char* cachePath = nullptr);
+
+  // Build a .fpi sidecar (Fenced Prefix Index) for srcPath (.idx or .syn)
+  // into fpiPath, in a single streaming pass (no full in-RAM parse). skipPerEntry is the
+  // fixed-size suffix following each null-terminated word: 8 for .idx (offset+size),
+  // 4 for .syn (original_word_index). onProgress/shouldCancel are optional plain-function
+  // callbacks (no std::function — see CLAUDE.md template/std::function bloat rule);
+  // onProgress reports bytes of srcPath consumed so far out of the total. Returns false
+  // (after LOG_ERR) on I/O failure; fpiPath is left in an undefined state and should be
+  // removed by the caller on failure.
+  static bool generateFpi(const char* srcPath, const char* fpiPath, uint8_t skipPerEntry,
+                          void (*onProgress)(void* ctx, uint32_t bytesDone, uint32_t bytesTotal) = nullptr,
+                          bool (*shouldCancel)(void* ctx) = nullptr, void* ctx = nullptr);
 
  private:
   // Shared word read buffer. Lookup functions are single-threaded; this avoids
@@ -95,7 +113,26 @@ class Dictionary {
   // Returns the number of characters read (excluding null), or -1 on error.
   static int readWordInto(HalFile& file, char* buf, size_t bufSize);
 
+  // Read the word at ordinal `ordinal` in .idx, via .idx.fpi's per-group cumulative
+  // ordinal field for a fast approximate seek (falls back to a full linear scan if
+  // .idx.fpi is absent/invalid). folderPath is the dictionary base path (e.g.
+  // /dictionary/dict-en-en/dict-data).
+  static std::string wordAtOrdinal(const std::string& folderPath, uint32_t ordinal);
+
   static std::string readDefinition(const std::string& folderPath, uint32_t offset, uint32_t size);
+
+  // Binary search .fpi (Fenced Prefix Index) to find the scan range in src containing target.
+  // Returns true if .fpi was valid and bounds were set, false to fall back to a full scan.
+  static bool binarySearchFpi(HalFile& fpi, const char* target, uint32_t srcFileSize, uint32_t* startByte,
+                              uint32_t* endByte, uint32_t sectorMargin = 0);
+
+  // Binary search .fpi's per-group cumulative-ordinal field (direct random-access seeks,
+  // no front-coded prefix decoding) to find the fence word whose ordinal is the largest
+  // value <= targetOrdinal. On success, *fenceByteOffset/*fenceOrdinal give a (byte
+  // offset, ordinal) pair the caller can linear-scan forward from to reach targetOrdinal.
+  // Returns false if fpi is invalid/empty or targetOrdinal is out of range.
+  static bool binarySearchFpiOrdinal(HalFile& fpi, uint32_t srcFileSize, uint32_t targetOrdinal,
+                                     uint32_t* fenceByteOffset, uint32_t* fenceOrdinal);
 
   static int editDistance(const std::string& a, const std::string& b, int maxDist);
 };
