@@ -709,6 +709,26 @@ TEST(WordSelectNavigator, RenderHighlightHyphenatedFromSecondHalf) {
   EXPECT_EQ(renderer.drawTextCallCount, 2) << "second half: 2 drawTexts (both halves via continuationOf)";
 }
 
+// renderHighlightDifferential returns nullopt: stub readFramebufferRegion returns 0
+// (capture fails), and hyphenated words are always rejected by the fast path.
+TEST(WordSelectNavigator, RenderHighlightDifferentialFallback) {
+  WordSelectNavigator nav = makeHyphenatedFixture();
+  MappedInputManager input;
+  GfxRenderer renderer;
+
+  // Non-hyphenated word (wordD, flat index 4): capture fails because stub returns 0 bytes.
+  navigateTo(nav, input, renderer, "wordD");
+  const int wordDIdx = nav.getCurrentFlatIndex();
+  auto result = nav.renderHighlightDifferential(renderer, 16, -1, wordDIdx);
+  EXPECT_FALSE(result.has_value()) << "non-hyphenated: nullopt when readFramebufferRegion returns 0";
+
+  // Hyphenated first half (under-, flat index 2): always nullopt (fast path rejected).
+  navigateTo(nav, input, renderer, "under-");
+  const int underIdx = nav.getCurrentFlatIndex();
+  auto result2 = nav.renderHighlightDifferential(renderer, 16, -1, underIdx);
+  EXPECT_FALSE(result2.has_value()) << "hyphenated word: nullopt (fast path not supported)";
+}
+
 // Multi-select highlight: continuation half outside [lo,hi] is still drawn.
 // Anchor on wordB (index 1), cursor on under- (index 2, first half).
 // The second half 'stand' (index 3) lies outside [1,2] and must also be drawn.

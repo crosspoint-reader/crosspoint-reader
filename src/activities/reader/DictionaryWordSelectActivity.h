@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "../Activity.h"
+#include "util/DiffRepaintState.h"
 #include "util/WordSelectNavigator.h"
 
 class DictionaryWordSelectActivity final : public Activity {
@@ -38,6 +39,7 @@ class DictionaryWordSelectActivity final : public Activity {
   std::string nextPageFirstWord;
 
   WordSelectNavigator navigator;
+  DiffRepaintState diffRepaint_;
 
   bool framebufferContainsPage_ = false;
   int reservedBottomHeight_ = 0;

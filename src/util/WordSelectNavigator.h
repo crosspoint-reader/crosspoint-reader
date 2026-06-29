@@ -139,6 +139,89 @@ class WordSelectNavigator {
   // In single-select: highlights the cursor word (+ hyphenated continuation if any).
   void renderHighlight(const GfxRenderer& renderer, int lineHeight) const;
 
+  // Compute the union of the previous and current highlight bounding rectangles,
+  // padded by 2 px on every side to cover renderHighlight's fillRect border.
+  // When prevWordIdx is -1 (no previous highlight), returns just the current
+  // highlight's padded bounds.
+  Rect computeDirtyRect(int prevWordIdx, int currWordIdx, int lineHeight) const;
+
+  // Differential repaint: restore pixels under the previous highlight, snapshot
+  // pixels under the new highlight, then draw the new highlight. The caller
+  // pushes via GfxRenderer::displayBuffer (full panel) — the savings come from
+  // skipping page->render, not from a smaller push. The returned dirty rect is
+  // unused by current callers; only the optional's .has_value() distinguishes
+  // success from fallback.
+  //
+  // Returns std::nullopt when the caller must fall back to a full repaint:
+  //   - the new highlight is too large for HighlightSnapshot's buffer
+  //   - the selection has a hyphenated continuation (multi-word fallback for now)
+  //   - the navigator is in multi-select mode
+  //   - the snapshot capture is rejected by the renderer (e.g. out of bounds)
+  //
+  // Mutates internal snapshot state, so this method is non-const.
+  std::optional<Rect> renderHighlightDifferential(GfxRenderer& renderer, int lineHeight, int prevWordIdx,
+                                                  int currWordIdx);
+
+  // Pixel snapshot for one rectangular framebuffer region. The pixel buffer is
+  // inline (a fixed-size array member), so the snapshot does no heap allocation
+  // — but it lives wherever its enclosing WordSelectNavigator lives, which in
+  // practice is on the heap inside DictionaryWordSelectActivity /
+  // DictionaryDefinitionActivity. Used by renderHighlightDifferential to
+  // capture pixels under a highlight before it is drawn, so a later cursor move
+  // can restore them and wipe the old highlight without re-rendering the page.
+  //
+  // Relationship to GfxRenderer::storeBwBuffer / restoreBwBuffer: that pair
+  // captures the *entire* framebuffer to a heap-allocated buffer for grayscale
+  // rendering. HighlightSnapshot is region-scoped (one word's bounding rect)
+  // and stays out of the heap, so it can run on every cursor move without
+  // fragmentation pressure.
+  //
+  // Safety: the renderer byte-aligns the captured rectangle along the
+  // panel-memory x-axis, expanding the captured region by up to 7 pixels per
+  // side along that axis. In Landscape orientations this is the screen
+  // horizontal axis (extra pixels on the left/right of the highlight); in
+  // Portrait orientations the memory x-axis is the screen vertical axis, so
+  // the extra pixels sit above and below the highlight in screen space.
+  // restore() pastes those back unchanged, which is correct only as long as
+  // nothing else writes to the framebuffer between capture() and restore().
+  // In word-select that holds: the page is drawn once on entry and the only
+  // other framebuffer writer is the highlight itself. Adding a path that
+  // draws over those neighboring pixels (e.g. an overlay layered above this
+  // one) would invalidate that assumption.
+  //
+  // Sizing: 4096 bytes covers a worst-case ~800 x 40 px region (e.g., a single
+  // wide word's bounding rect in landscape). When the requested region exceeds
+  // capacity, capture() returns false and the caller falls back to a full
+  // repaint instead.
+  struct HighlightSnapshot {
+    static constexpr size_t MAX_SNAPSHOT_BYTES = 4096;
+
+    // Capture the framebuffer rectangle into the internal buffer.
+    // Returns true on success; false if the region exceeds capacity, is empty,
+    // is out of bounds, or the renderer rejects it.
+    bool capture(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const GfxRenderer& renderer);
+
+    // Paste the captured pixels back into the framebuffer at the original
+    // coordinates. No-op if the snapshot is not valid.
+    void restore(GfxRenderer& renderer) const;
+
+    bool valid() const { return bytes_ > 0; }
+    void clear() { bytes_ = 0; }
+
+    uint16_t x() const { return x_; }
+    uint16_t y() const { return y_; }
+    uint16_t w() const { return w_; }
+    uint16_t h() const { return h_; }
+
+   private:
+    uint16_t x_ = 0;
+    uint16_t y_ = 0;
+    uint16_t w_ = 0;
+    uint16_t h_ = 0;
+    size_t bytes_ = 0;
+    uint8_t buf_[MAX_SNAPSHOT_BYTES] = {};
+  };
+
   void reset();
 
  private:
@@ -165,10 +248,20 @@ class WordSelectNavigator {
   // Cleared by horizontal navigation.
   int preferredRowNavX = -1;
 
-  // Single-word highlight draw. Used by renderHighlight.
+  // Snapshot of pixels under the most recently drawn highlight. Used by
+  // renderHighlightDifferential to restore the framebuffer before drawing the
+  // next highlight, so a cursor move repaints only the affected regions.
+  HighlightSnapshot snapshot_;
+
+  // Single-word highlight draw. Used by both renderHighlight (for each word it
+  // chooses to highlight) and renderHighlightDifferential.
   void drawSingleHighlight(const GfxRenderer& renderer, int lineHeight, int wordIndex) const;
 
   // Draw the hyphenated continuation partner(s) of w when they fall outside [lo, hi].
   // No-op when w is nullptr or w has no continuation links.
   void drawContinuationsIfOutside(const GfxRenderer& renderer, int lineHeight, const WordInfo* w, int lo, int hi) const;
+
+  // Padded bounding rectangle for one word, matching renderHighlight's ±2 padding.
+  // Returns Rect{0,0,0,0} when wordIndex is invalid.
+  Rect boundsForWord(int wordIndex, int lineHeight) const;
 };

@@ -258,6 +258,7 @@ void DictionaryWordSelectActivity::loop() {
                 setResult(ActivityResult{});
                 finish();
               } else {
+                diffRepaint_.reset();
                 requestUpdate();
               }
             });
@@ -270,6 +271,55 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   const int lineHeight = renderer.getLineHeight(SETTINGS.getReaderFontId());
   const int currIdx = navigator.getCurrentFlatIndex();
 
+  // Differential fast path. Only valid when:
+  //   - we set it up on the previous frame (Mode::Differential),
+  //   - we have a current selection.
+  if (diffRepaint_.canDifferential() && currIdx >= 0) {
+    prewarmHighlightGlyphs(currIdx);
+    auto dirty = navigator.renderHighlightDifferential(renderer, lineHeight, diffRepaint_.prevHighlightIdx, currIdx);
+    if (dirty.has_value()) {
+      // Push full panel — the SDK's windowed-refresh path produces alternating black→white
+      // transition failures on consecutive fast partial refreshes, so it's intentionally not
+      // wired up here. The savings come from skipping page->render, which dominates the
+      // pre-optimization cost; the full push at the end is a hardware floor (~444ms).
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      diffRepaint_.recordDifferentialPush(currIdx);
+      return;
+    }
+    // Fall through to full repaint.
+  }
+
+  // Skip-initial-render fast path. Fires at most once per activity instance,
+  // when the caller signalled the framebuffer already contains the page at
+  // our margins (currently only EpubReaderActivity's hold-to-lookup path).
+  if (framebufferContainsPage_) {
+    framebufferContainsPage_ = false;
+    if (currIdx >= 0) {
+      if (reservedBottomHeight_ > 0) {
+        int bezelTop, bezelRight, bezelBottom, bezelLeft;
+        renderer.getOrientedViewableTRBL(&bezelTop, &bezelRight, &bezelBottom, &bezelLeft);
+        const int clearY = renderer.getScreenHeight() - bezelBottom - reservedBottomHeight_;
+        const int clearW = renderer.getScreenWidth() - bezelLeft - bezelRight;
+        renderer.clearRect(bezelLeft, clearY, clearW, reservedBottomHeight_);
+      }
+
+      prewarmHighlightGlyphs(currIdx);
+
+      auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
+      bool snapshotPrimed = setup.has_value();
+      if (!snapshotPrimed) {
+        navigator.renderHighlight(renderer, lineHeight);
+      }
+      const auto labels =
+          mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP_SHORT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      diffRepaint_.primeAfterFullRepaint(currIdx, snapshotPrimed);
+      return;
+    }
+  }
+
+  // Full repaint path.
   renderer.clearScreen();
 
   auto* fcm = renderer.getFontCacheManager();
@@ -278,11 +328,18 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   page->render(renderer, SETTINGS.getReaderFontId(), marginLeft, marginTop);
 
+  bool snapshotPrimed = false;
   if (currIdx >= 0) {
+    auto setup = navigator.renderHighlightDifferential(renderer, lineHeight, /*prevWordIdx=*/-1, currIdx);
+    snapshotPrimed = setup.has_value();
+  }
+  if (!snapshotPrimed) {
     navigator.renderHighlight(renderer, lineHeight);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP_SHORT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+  diffRepaint_.primeAfterFullRepaint(currIdx, snapshotPrimed);
 }
