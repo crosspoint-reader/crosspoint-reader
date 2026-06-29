@@ -24,7 +24,7 @@ constexpr int HEADER_Y = 15;
 constexpr int HEADER_X = 16;
 constexpr int SEARCH_ICON_SIZE = 24;
 constexpr int SEARCH_ICON_MARGIN = 14;
-constexpr int SEARCH_ICON_Y = 12;
+constexpr int SEARCH_ICON_Y = 15;
 
 Rect searchIconRect(const GfxRenderer& renderer) {
   return Rect{renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN, SEARCH_ICON_Y, SEARCH_ICON_SIZE + 8,
