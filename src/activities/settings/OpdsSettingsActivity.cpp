@@ -55,8 +55,8 @@ void OpdsSettingsActivity::loop() {
   const int menuItems = getMenuItemCount();
 
   int touched = -1;
-  if (mappedInput.wasListItemTouchedDown(touched, menuItems, static_cast<int>(selectedIndex), contentTop,
-                                         contentHeight, false)) {
+  if (mappedInput.wasListItemTouchedDown(touched, menuItems, static_cast<int>(selectedIndex), contentTop, contentHeight,
+                                         false)) {
     if (selectedIndex != static_cast<size_t>(touched)) {
       selectedIndex = static_cast<size_t>(touched);
       requestUpdate();

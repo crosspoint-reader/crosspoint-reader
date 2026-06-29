@@ -465,8 +465,8 @@ void FontDownloadActivity::loop() {
     if (!families_.empty()) {
       const auto& metrics = UITheme::getInstance().getMetrics();
       const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-      const int contentHeight = renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight -
-                                metrics.verticalSpacing;
+      const int contentHeight =
+          renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
       int touched = -1;
       if (mappedInput.wasListItemTouchedDown(touched, listSize, selectedIndex_, contentTop, contentHeight, true)) {
         if (selectedIndex_ != touched) {

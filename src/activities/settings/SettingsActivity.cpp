@@ -1,7 +1,7 @@
 #include "SettingsActivity.h"
 
-#include <GfxRenderer.h>
 #include <BoardConfig.h>
+#include <GfxRenderer.h>
 #include <Logging.h>
 
 #include <algorithm>

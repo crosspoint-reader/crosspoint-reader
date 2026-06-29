@@ -424,7 +424,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     }
 
     file.close();
-    yield();               // Yield to allow WiFi and other tasks to process during long scans
+    yield();                          // Yield to allow WiFi and other tasks to process during long scans
     resetTaskWatchdogIfSubscribed();  // Reset watchdog to prevent timeout on large directories
     file = root.openNextFile();
   }

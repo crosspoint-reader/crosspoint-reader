@@ -230,8 +230,8 @@ void HomeActivity::loop() {
     return;
   }
 
-  if (!recentBooks.empty() && mappedInput.wasTapInRect(0, metrics.homeTopPadding, renderer.getScreenWidth(),
-                                                      metrics.homeCoverTileHeight)) {
+  if (!recentBooks.empty() &&
+      mappedInput.wasTapInRect(0, metrics.homeTopPadding, renderer.getScreenWidth(), metrics.homeCoverTileHeight)) {
     selectorIndex = 0;
     activateSelection();
     return;

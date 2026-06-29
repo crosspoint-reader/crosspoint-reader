@@ -144,7 +144,8 @@ void EpubReaderBookmarksActivity::loop() {
 
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up && !bookmarks.empty()) {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, bookmarks.size(), GUI.getListPageItems(listHeight, true));
+    selectorIndex =
+        ButtonNavigator::nextPageIndex(selectorIndex, bookmarks.size(), GUI.getListPageItems(listHeight, true));
     requestUpdate();
     return;
   }

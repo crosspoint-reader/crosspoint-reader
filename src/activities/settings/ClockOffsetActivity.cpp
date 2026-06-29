@@ -142,7 +142,9 @@ bool ClockOffsetActivity::fieldFromPoint(const int x, const int y, Field& field)
       labelWidth + labelGap + signBoxW + fieldGap + hoursBoxW + colonGap + colonWidth + colonGap + minutesBoxW;
 
   int boxX = (pageWidth - totalWidth) / 2 + labelWidth + labelGap;
-  auto hit = [&](const int width) { return x >= boxX && x < boxX + width && y >= centreY && y < centreY + fieldHeight; };
+  auto hit = [&](const int width) {
+    return x >= boxX && x < boxX + width && y >= centreY && y < centreY + fieldHeight;
+  };
   if (hit(signBoxW)) {
     field = FIELD_SIGN;
     return true;

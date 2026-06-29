@@ -148,8 +148,7 @@ bool MappedInputManager::wasListItemTapped(int& index, const int itemCount, cons
 }
 
 bool MappedInputManager::wasListItemTouchedDown(int& index, const int itemCount, const int selectedIndex,
-                                                const int listTop, const int listHeight,
-                                                const bool hasSubtitle) const {
+                                                const int listTop, const int listHeight, const bool hasSubtitle) const {
   int tx = 0;
   int ty = 0;
   return wasScreenTouchDown(tx, ty) &&
