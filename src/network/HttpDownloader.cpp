@@ -8,6 +8,7 @@
 #include <esp_http_client.h>
 
 #include <cctype>
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -164,7 +165,8 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       std::string name = line.substr(0, colon);
       std::string value = line.substr(colon + 1);
       while (!value.empty() && value.front() == ' ') value.erase(value.begin());
-      for (char& c : name) c = static_cast<char>(tolower(c));
+      std::transform(name.begin(), name.end(), name.begin(),
+                     [](unsigned char c) { return static_cast<char>(tolower(c)); });
       if (name == "content-length") contentLength = static_cast<size_t>(strtoul(value.c_str(), nullptr, 10));
       if (name == "location") location = value;
     }
