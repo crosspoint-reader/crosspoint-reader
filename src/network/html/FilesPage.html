@@ -390,6 +390,11 @@
     .convert-settings span {
       display: inline-block;
     }
+    .convert-checkboxes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
     /* Convert row - compact layout with checkbox and advanced options toggle */
     .convert-row {
       display: flex;
@@ -1543,16 +1548,24 @@
       </div>
       <div class="picker-columns" id="pickerColumns">
         <div class="convert-options" id="convertOptions" style="display:none;">
-          <div class="convert-row">
-            <label class="convert-checkbox">
-              <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
-              <span>Optimize EPUB</span>
-            </label>
-            <span class="convert-separator">—</span>
-            <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
-              <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
-              <span class="advanced-options-text">Advanced Mode</span>
-            </span>
+          <div class="convert-checkboxes">
+            <div class="convert-row" id="fb2ConvertRow" style="display:none;">
+              <label class="convert-checkbox">
+                <input type="checkbox" id="convertFb2BeforeUpload" onchange="toggleFb2ConvertOptions()">
+                <span>Convert FB2 to EPUB</span>
+              </label>
+            </div>
+            <div class="convert-row" id="epubOptimizeRow" style="display:none;">
+              <label class="convert-checkbox">
+                <input type="checkbox" id="convertBeforeUpload" onchange="toggleConvertOptions()">
+                <span>Optimize EPUB</span>
+              </label>
+              <span class="convert-separator">—</span>
+              <span class="advanced-options-toggle" id="advancedOptionsToggle" onclick="toggleAdvancedOptions()">
+                <span class="advanced-options-arrow" id="advancedOptionsArrow">▶</span>
+                <span class="advanced-options-text">Advanced Mode</span>
+              </span>
+            </div>
           </div>
 
           <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
@@ -2095,6 +2108,7 @@
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
     document.getElementById('convertBeforeUpload').checked = false;
+    document.getElementById('convertFb2BeforeUpload').checked = false;
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
     // Clear image picker cache and reset layout
@@ -2135,23 +2149,67 @@
     if (overlapRow) overlapRow.style.display = isBatch ? 'none' : '';
   }
 
-  function toggleConvertOptions() {
-    const checked = document.getElementById('convertBeforeUpload').checked;
+  function updateConvertRowsVisibility() {
+    const fileInput = document.getElementById('fileInput');
+    const files = fileInput ? fileInput.files : [];
+    const hasEpub = Array.from(files).some(f => f.name.toLowerCase().endsWith('.epub'));
+    const hasFb2 = Array.from(files).some(f => isFb2File(f.name));
+    const fb2ConvertChecked = document.getElementById('convertFb2BeforeUpload')?.checked;
+
+    const fb2ConvertRow = document.getElementById('fb2ConvertRow');
+    const epubOptimizeRow = document.getElementById('epubOptimizeRow');
+    const convertSettings = document.getElementById('convertSettings');
+
+    if (fb2ConvertRow) fb2ConvertRow.style.display = hasFb2 ? 'flex' : 'none';
+
+    const showEpubOptimize = hasEpub || (hasFb2 && fb2ConvertChecked);
+    if (epubOptimizeRow) epubOptimizeRow.style.display = showEpubOptimize ? 'flex' : 'none';
+    if (convertSettings) convertSettings.style.display = showEpubOptimize ? 'block' : 'none';
+
+    if (!showEpubOptimize) {
+      const cb = document.getElementById('convertBeforeUpload');
+      if (cb && cb.checked) {
+        cb.checked = false;
+        toggleConvertOptions();
+      }
+    }
+  }
+
+  function updateUploadButtonText() {
+    const fb2Checked = document.getElementById('convertFb2BeforeUpload')?.checked;
+    const epubChecked = document.getElementById('convertBeforeUpload')?.checked;
     const uploadBtn = document.getElementById('uploadBtn');
-    document.getElementById('convertWarning').style.display = checked ? 'block' : 'none';
-    document.getElementById('convertInfo').style.display = checked ? 'block' : 'none';
-    // Update button text and style
-    if (checked) {
+    const anyConvert = fb2Checked || epubChecked;
+
+    document.getElementById('convertWarning').style.display = anyConvert ? 'block' : 'none';
+    document.getElementById('convertInfo').style.display = epubChecked ? 'block' : 'none';
+
+    if (fb2Checked && epubChecked) {
+      uploadBtn.textContent = 'Convert & Optimize & Upload';
+      uploadBtn.classList.add('optimize');
+    } else if (fb2Checked) {
+      uploadBtn.textContent = 'Convert & Upload';
+      uploadBtn.classList.add('optimize');
+    } else if (epubChecked) {
       uploadBtn.textContent = 'Optimize & Upload';
       uploadBtn.classList.add('optimize');
     } else {
       uploadBtn.textContent = 'Upload';
       uploadBtn.classList.remove('optimize');
-      // Clear image picker when unchecking
-      clearImagePicker();
     }
+  }
+
+  function toggleFb2ConvertOptions() {
+    updateConvertRowsVisibility();
+    updateUploadButtonText();
+  }
+
+  function toggleConvertOptions() {
+    const checked = document.getElementById('convertBeforeUpload').checked;
+    updateUploadButtonText();
     // Reset advanced options when toggling off
     if (!checked) {
+      clearImagePicker();
       const advancedSettingsContent = document.getElementById('advancedSettingsContent');
       if (advancedSettingsContent) advancedSettingsContent.classList.remove('visible');
       document.getElementById('advancedOptionsArrow').classList.remove('expanded');
@@ -2895,6 +2953,10 @@
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityInput = document.getElementById('qualityInput');
 
+    // Browsers may restore checkbox state on reload; reset to a clean default.
+    document.getElementById('convertFb2BeforeUpload').checked = false;
+    document.getElementById('convertBeforeUpload').checked = false;
+
     // Initialize advanced mode toggle state based on Optimize EPUB checkbox
     const convertCheckbox = document.getElementById('convertBeforeUpload');
     const advancedToggle = document.getElementById('advancedOptionsToggle');
@@ -3135,20 +3197,34 @@
     const convertOptions = document.getElementById('convertOptions');
     fileInput.classList.toggle('has-files', files.length > 0);
 
-    // Show convert options only when at least one selected file is an EPUB.
     const hasEpub = Array.from(files).some(f => f.name.toLowerCase().endsWith('.epub'));
-    if (files.length > 0 && hasEpub) {
+    const hasFb2 = Array.from(files).some(f => isFb2File(f.name));
+
+    if (files.length > 0 && (hasEpub || hasFb2)) {
       convertOptions.style.display = 'block';
     } else {
       convertOptions.style.display = 'none';
-      // Clear stale checkbox state so the "Optimize & Upload" button doesn't linger
-      // when the user re-picks a non-EPUB after having ticked Optimize for an EPUB.
       const cb = document.getElementById('convertBeforeUpload');
       if (cb && cb.checked) {
         cb.checked = false;
         toggleConvertOptions();
       }
+      const fb2cb = document.getElementById('convertFb2BeforeUpload');
+      if (fb2cb && fb2cb.checked) {
+        fb2cb.checked = false;
+        toggleFb2ConvertOptions();
+      }
       if (files.length === 0) clearImagePicker();
+    }
+
+    updateConvertRowsVisibility();
+
+    if (!hasFb2) {
+      const fb2cb = document.getElementById('convertFb2BeforeUpload');
+      if (fb2cb && fb2cb.checked) {
+        fb2cb.checked = false;
+        toggleFb2ConvertOptions();
+      }
     }
 
     if (files.length > 0) {
@@ -3669,7 +3745,10 @@ function decodeHref(href) {
  */
 async function safeReadText(fileObj) {
   const raw = await fileObj.async('uint8array');
+  return decodeXmlBytes(raw);
+}
 
+function decodeXmlBytes(raw) {
   // Detect and strip UTF-8 BOM (EF BB BF)
   let offset = 0;
   if (raw.length >= 3 && raw[0] === 0xEF && raw[1] === 0xBB && raw[2] === 0xBF) {
@@ -4637,6 +4716,755 @@ async function processImage(data, imageState = 0, imagePath = '') {
   });
 }
 
+// Convert FB2 file to EPUB - returns converted blob
+const FB2_EPUB_CSS = [
+  'body{margin:0;padding:1em;line-height:1.6;}',
+  '.cover{text-align:center;}',
+  '.illustration{text-align:center;margin:1em 0;}',
+  '.illustration img{max-width:100%;}',
+  'h1{font-size:1.5em;font-weight:bold;text-align:center;margin:1em 0;}',
+  'h2{font-size:1.3em;font-weight:bold;margin:0.8em 0;}',
+  'h3{font-size:1.1em;font-weight:bold;margin:0.6em 0;}',
+  'h4,h5,h6{font-weight:bold;margin:0.5em 0;}',
+  'p{text-indent:1.5em;}',
+  'blockquote.epigraph p{text-indent:0;text-align:right;margin:0 0 0 1em;font-style:italic;}',
+  'blockquote.cite{margin:0.8em 1em;padding-left:0.8em;border-left:3px solid #ccc;font-style:italic;}',
+  '.poem{margin-left:2em;}',
+  '.stanza{margin:0.5em 0;}',
+  'p.verses{margin:0;padding:0;text-indent:0;}',
+  '.text-author{text-align:right;font-style:italic;text-indent:0;margin:0.5em 0;}',
+  'p.annotation,.annotation{font-size:0.9em;margin:1em 0;text-indent:0;}',
+  '.section{margin:0;}',
+].join('\n');
+
+function escapeXmlText(s) {
+  return String(s)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeXmlAttr(s) {
+  return escapeXmlText(s).replace(/"/g, '&quot;');
+}
+
+async function extractFb2Bytes(file) {
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith('.fb2.zip')) {
+    const zip = await JSZip.loadAsync(file);
+    for (const [path, entry] of Object.entries(zip.files)) {
+      if (!entry.dir && path.toLowerCase().endsWith('.fb2')) {
+        return entry.async('uint8array');
+      }
+    }
+    throw new Error('No .fb2 file found in archive');
+  }
+  return file.arrayBuffer().then(buf => new Uint8Array(buf));
+}
+
+function fb2ByLocalName(parent, name) {
+  return Array.from(parent.children || []).filter(el => el.localName === name);
+}
+
+function fb2AllByLocalName(root, name) {
+  const out = [];
+  const walk = (node) => {
+    if (node.nodeType === 1) {
+      if (node.localName === name) out.push(node);
+      for (const c of node.children) walk(c);
+    }
+  };
+  walk(root);
+  return out;
+}
+
+function fb2XlinkHref(el) {
+  return el.getAttributeNS('http://www.w3.org/1999/xlink', 'href') || el.getAttribute('href') || '';
+}
+
+function parseFb2Section(node) {
+  const id = node.getAttribute('id') || '';
+  const title = fb2ByLocalName(node, 'title')[0] || null;
+  const epigraphs = fb2ByLocalName(node, 'epigraph');
+  const sections = fb2ByLocalName(node, 'section').map(parseFb2Section);
+  return { id, node, title, epigraphs, sections };
+}
+
+function parseFb2Body(node) {
+  const name = node.getAttribute('name') || '';
+  const title = fb2ByLocalName(node, 'title')[0] || null;
+  const epigraphs = fb2ByLocalName(node, 'epigraph');
+  const sections = fb2ByLocalName(node, 'section').map(parseFb2Section);
+  let image = null;
+  for (const img of fb2ByLocalName(node, 'image')) {
+    const href = fb2XlinkHref(img).replace(/^#/, '');
+    if (href) { image = href; break; }
+  }
+  return { node, name, title, epigraphs, sections, image };
+}
+
+function parseFb2Document(doc) {
+  const root = doc.documentElement;
+  const titleInfo = fb2ByLocalName(root, 'description')[0];
+  const ti = titleInfo ? fb2ByLocalName(titleInfo, 'title-info')[0] : null;
+  const title = ti ? (fb2ByLocalName(ti, 'book-title')[0]?.textContent || '') : '';
+  const authors = [];
+  if (ti) {
+    for (const author of fb2ByLocalName(ti, 'author')) {
+      const firstName = fb2ByLocalName(author, 'first-name')[0]?.textContent || null;
+      const middleName = fb2ByLocalName(author, 'middle-name')[0]?.textContent || null;
+      const lastName = fb2ByLocalName(author, 'last-name')[0]?.textContent || null;
+      const nickname = fb2ByLocalName(author, 'nickname')[0]?.textContent || null;
+      let fullName = firstName || '';
+      if (middleName) fullName += ' ' + middleName;
+      if (nickname) fullName += ' "' + nickname + '"';
+      if (lastName) fullName += ' ' + lastName;
+      authors.push(fullName.trim());
+    }
+  }
+  const coverPages = [];
+  if (ti) {
+    for (const cover of fb2ByLocalName(ti, 'coverpage')) {
+      for (const img of fb2ByLocalName(cover, 'image')) {
+        const href = fb2XlinkHref(img).replace(/^#/, '');
+        if (href) coverPages.push(href);
+      }
+    }
+  }
+  const languages = ti ? fb2ByLocalName(ti, 'lang').map(el => el.textContent) : [];
+  let bookAnnotation = null;
+  if (ti) {
+    bookAnnotation = fb2ByLocalName(ti, 'annotation')[0] || null;
+  }
+  if (!bookAnnotation && titleInfo) {
+    const srcTitleInfo = fb2ByLocalName(titleInfo, 'src-title-info')[0];
+    if (srcTitleInfo) bookAnnotation = fb2ByLocalName(srcTitleInfo, 'annotation')[0] || null;
+  }
+  const bodies = fb2ByLocalName(root, 'body').map(parseFb2Body);
+  const binaries = new Map();
+  let imageCounter = 0;
+  for (const bin of fb2AllByLocalName(root, 'binary')) {
+    const id = bin.getAttribute('id');
+    let contentType = (bin.getAttribute('content-type') || 'image/jpeg').split(';')[0].trim().toLowerCase();
+    if (!id) continue;
+    const b64 = (bin.textContent || '').replace(/\s/g, '');
+    if (!b64) continue;
+    let bytes;
+    try { bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); } catch (e) { continue; }
+    let ext = 'gif';
+    if (contentType.includes('jpeg') || contentType.includes('jpg')) { ext = 'jpg'; contentType = 'image/jpeg'; }
+    else if (contentType.includes('png')) ext = 'png';
+    else if (contentType.includes('svg')) ext = 'svg';
+    const filename = 'pic' + String(imageCounter++).padStart(4, '0') + '.' + ext;
+    binaries.set(id, { id, contentType, filename, data: bytes });
+  }
+  return { title, authors, languages, coverPages, bodies, binaries, bookAnnotation };
+}
+
+function Fb2Chapter(filename) {
+  this.filename = filename;
+  this.parts = [];
+}
+Fb2Chapter.prototype.append = function(html) { this.parts.push(html); };
+Fb2Chapter.prototype.finish = function() {
+  return '<?xml version="1.0" encoding="utf-8"?>\n<html xmlns="http://www.w3.org/1999/xhtml"><head><title></title>'
+    + '<link rel="stylesheet" href="style.css" type="text/css"/></head><body>'
+    + this.parts.join('') + '</body></html>';
+};
+
+function fb2CoverFilename(contentType) {
+  if (contentType.includes('png')) return 'cover.png';
+  if (contentType.includes('gif')) return 'cover.gif';
+  if (contentType.includes('svg')) return 'cover.svg';
+  return 'cover.jpg';
+}
+
+function fb2CoverPageHtml(src) {
+  return '<div class="cover"><img style="max-width:100%;height:auto" alt="Cover" src="'
+    + escapeXmlAttr(src) + '"/></div>';
+}
+
+function fb2SectionContentNodes(section) {
+  return Array.from(section.node.childNodes).filter(n => {
+    if (n.nodeType !== 1) return n.nodeType === 3 || n.nodeType === 4;
+    const t = n.localName;
+    return t !== 'title' && t !== 'epigraph' && t !== 'section';
+  });
+}
+
+function fb2SerializeChildrenInline(node, ctx) {
+  let s = '';
+  for (const kid of node.childNodes) s += fb2SerializeInline(kid, ctx);
+  return s;
+}
+
+function fb2TitleInline(titleNode, ctx) {
+  const paragraphs = fb2ByLocalName(titleNode, 'p');
+  if (paragraphs.length > 0) {
+    return paragraphs.map(p => fb2SerializeChildrenInline(p, ctx)).join(' ');
+  }
+  const inline = fb2SerializeChildrenInline(titleNode, ctx).trim();
+  return inline || escapeXmlText(titleNode.textContent.trim());
+}
+
+function fb2IdAttr(node) {
+  const id = node.getAttribute('id');
+  return id ? ' id="' + escapeXmlAttr(id) + '"' : '';
+}
+
+function fb2WrapInline(node, tag, ctx, className) {
+  let s = '<' + tag;
+  if (className) s += ' class="' + escapeXmlAttr(className) + '"';
+  s += fb2IdAttr(node);
+  s += '>';
+  for (const kid of node.childNodes) s += fb2SerializeInline(kid, ctx);
+  return s + '</' + tag + '>';
+}
+
+function fb2SerializeInline(node, ctx) {
+  if (node.nodeType === 3 || node.nodeType === 4) return escapeXmlText(node.textContent);
+  if (node.nodeType !== 1) return '';
+  const tag = node.localName.toLowerCase();
+  switch (tag) {
+    case 'emphasis': return fb2WrapInline(node, 'em', ctx);
+    case 'strong': return fb2WrapInline(node, 'strong', ctx);
+    case 'sub': return fb2WrapInline(node, 'sub', ctx);
+    case 'sup': return fb2WrapInline(node, 'sup', ctx);
+    case 'strikethrough': return fb2WrapInline(node, 'del', ctx);
+    case 'code': return fb2WrapInline(node, 'code', ctx);
+    case 'style': return fb2WrapInline(node, 'span', ctx, 'style');
+    case 'a': return fb2AnchorElement(node, ctx);
+    case 'image': return fb2ImageElement(node, ctx);
+    default:
+      let s = '';
+      for (const kid of node.childNodes) s += fb2SerializeInline(kid, ctx);
+      return s;
+  }
+}
+
+function fb2SerializeVerseLine(vNode, ctx) {
+  const inner = fb2SerializeChildrenInline(vNode, ctx);
+  const id = vNode.getAttribute('id');
+  return id ? '<span' + fb2IdAttr(vNode) + '>' + inner + '</span>' : inner;
+}
+
+function fb2FlushVerses(lines) {
+  if (lines.length === 0) return '';
+  return '<p class="verses">' + lines.join('<br/>') + '</p>\n';
+}
+
+function fb2SerializeStanza(node, ctx) {
+  let html = '<div class="stanza"' + fb2IdAttr(node) + '>';
+  let verseLines = [];
+  const flushVerses = () => {
+    if (verseLines.length > 0) {
+      html += fb2FlushVerses(verseLines);
+      verseLines = [];
+    }
+  };
+  for (const kid of node.childNodes) {
+    if (kid.nodeType !== 1) continue;
+    if (kid.localName.toLowerCase() === 'v') {
+      verseLines.push(fb2SerializeVerseLine(kid, ctx));
+    } else {
+      flushVerses();
+      html += fb2SerializeBlock(kid, ctx);
+    }
+  }
+  flushVerses();
+  return html + '</div>';
+}
+
+function fb2SerializePoem(node, ctx) {
+  let html = '<div class="poem"' + fb2IdAttr(node) + '>';
+  for (const kid of node.childNodes) {
+    if (kid.nodeType !== 1) continue;
+    const t = kid.localName.toLowerCase();
+    if (t === 'title') {
+      html += '<h3>' + fb2TitleInline(kid, ctx) + '</h3>\n';
+    } else if (t === 'stanza') {
+      html += fb2SerializeStanza(kid, ctx);
+    } else if (t === 'text-author') {
+      html += '<p class="text-author">' + fb2SerializeChildrenInline(kid, ctx) + '</p>\n';
+    } else {
+      html += fb2SerializeBlock(kid, ctx);
+    }
+  }
+  return html + '</div>';
+}
+
+function fb2SerializeBlock(node, ctx) {
+  if (node.nodeType === 3 || node.nodeType === 4) {
+    const t = node.textContent;
+    return t.trim() ? '<p>' + escapeXmlText(t) + '</p>\n' : '';
+  }
+  if (node.nodeType !== 1) return '';
+  const tag = node.localName.toLowerCase();
+  if (tag === 'section') {
+    let s = '';
+    for (const kid of node.childNodes) s += fb2SerializeBlock(kid, ctx);
+    return s;
+  }
+  if (tag === 'p') {
+    return '<p' + fb2IdAttr(node) + '>' + fb2SerializeChildrenInline(node, ctx) + '</p>\n';
+  }
+  if (tag === 'subtitle') {
+    return '<h3' + fb2IdAttr(node) + '>' + fb2SerializeChildrenInline(node, ctx) + '</h3>\n';
+  }
+  if (tag === 'epigraph') {
+    let inner = '';
+    for (const kid of node.childNodes) {
+      inner += (kid.nodeType === 1) ? fb2SerializeBlock(kid, ctx) : fb2SerializeInline(kid, ctx);
+    }
+    return '<blockquote class="epigraph"' + fb2IdAttr(node) + '>' + inner + '</blockquote>\n';
+  }
+  if (tag === 'cite') {
+    let inner = '';
+    for (const kid of node.childNodes) {
+      inner += (kid.nodeType === 1) ? fb2SerializeBlock(kid, ctx) : fb2SerializeInline(kid, ctx);
+    }
+    return '<blockquote class="cite"' + fb2IdAttr(node) + '>' + inner + '</blockquote>\n';
+  }
+  if (tag === 'poem') return fb2SerializePoem(node, ctx);
+  if (tag === 'stanza') return fb2SerializeStanza(node, ctx);
+  if (tag === 'v') {
+    return '<p class="verses"' + fb2IdAttr(node) + '>' + fb2SerializeChildrenInline(node, ctx) + '</p>\n';
+  }
+  if (tag === 'empty-line') return '<p' + fb2IdAttr(node) + '>&#160;</p>\n';
+  if (tag === 'annotation') {
+    let inner = '';
+    for (const kid of node.childNodes) {
+      inner += (kid.nodeType === 1) ? fb2SerializeBlock(kid, ctx) : fb2SerializeInline(kid, ctx);
+    }
+    return inner.trim() ? '<div class="annotation"' + fb2IdAttr(node) + '>' + inner + '</div>\n' : '';
+  }
+  if (tag === 'text-author') {
+    return '<p class="text-author">' + fb2SerializeChildrenInline(node, ctx) + '</p>\n';
+  }
+  if (tag === 'title') {
+    return '<h3' + fb2IdAttr(node) + '>' + fb2TitleInline(node, ctx) + '</h3>\n';
+  }
+  if (tag === 'image') return fb2ImageElement(node, ctx);
+  const inline = fb2SerializeChildrenInline(node, ctx);
+  return inline ? '<p' + fb2IdAttr(node) + '>' + inline + '</p>\n' : '';
+}
+
+function fb2AnchorElement(node, ctx) {
+  const hrefRaw = fb2XlinkHref(node) || '';
+  let s = '<a' + fb2IdAttr(node);
+  if (hrefRaw) {
+    if (hrefRaw.startsWith('#')) {
+      const id = hrefRaw.slice(1);
+      if (ctx.idsMap.has(id)) {
+        s += ' href="' + escapeXmlAttr(ctx.idsMap.get(id) + '#' + id) + '"';
+      } else {
+        s += ' href="' + escapeXmlAttr(hrefRaw) + '"';
+      }
+    } else if (/^(https?:|mailto:|tel:)/i.test(hrefRaw.trim())) {
+      s += ' href="' + escapeXmlAttr(hrefRaw) + '"';
+    }
+  }
+  s += '>';
+  for (const kid of node.childNodes) s += fb2SerializeInline(kid, ctx);
+  return s + '</a>';
+}
+
+function fb2ImageElement(node, ctx) {
+  let inline = true;
+  const parent = node.parentNode;
+  if (parent && parent.nodeType === 1) {
+    const pname = parent.localName.toLowerCase();
+    if (pname === 'body' || pname === 'section') inline = false;
+  }
+  let href = fb2XlinkHref(node).replace(/^#/, '');
+  if (!href || !ctx.imagesFilenamesMap.has(href)) return '';
+  const filename = ctx.imagesFilenamesMap.get(href);
+  let s = '';
+  if (!inline) s += '<div class="illustration">';
+  s += '<img' + fb2IdAttr(node) + ' src="' + escapeXmlAttr(filename) + '" alt="' + escapeXmlAttr(filename) + '"/>';
+  if (!inline) s += '</div>';
+  return s;
+}
+
+function fb2MapIds(node, filename, ctx) {
+  if (node.nodeType === 1) {
+    const id = node.getAttribute('id');
+    if (id) ctx.idsMap.set(id, filename);
+    for (const c of node.childNodes) fb2MapIds(c, filename, ctx);
+  }
+}
+
+function fb2CollectIds(node, set) {
+  if (node.nodeType === 1) {
+    const id = node.getAttribute('id');
+    if (id) set.add(id);
+    for (const c of node.childNodes) fb2CollectIds(c, set);
+  }
+}
+
+function fb2NextChapter(ctx) {
+  const ch = new Fb2Chapter('ch' + String(ctx.pageCounter++).padStart(4, '0') + '.xhtml');
+  ctx.chapters.push(ch);
+  ctx.currentChapter = ch;
+  return ch;
+}
+
+function fb2MapSection(section, fixedChapter, ctx, depth, childIndex) {
+  if (depth === undefined) depth = 0;
+  if (childIndex === undefined) childIndex = 0;
+  if (!section.id) {
+    section.id = fb2NextSectionId(ctx);
+    section.node.setAttribute('id', section.id);
+  }
+
+  let target;
+  if (fixedChapter) {
+    target = fixedChapter;
+  } else {
+    // First direct subsection of a top-level section stays with its parent.
+    const splitChapter = depth > 0 && !(depth === 1 && childIndex === 0);
+    if (splitChapter) fb2NextChapter(ctx);
+    target = ctx.currentChapter;
+  }
+
+  ctx.filesMap.set(section, target);
+  fb2MapIds(section.node, target.filename, ctx);
+  for (let i = 0; i < section.sections.length; i++) {
+    fb2MapSection(section.sections[i], fixedChapter, ctx, depth + 1, i);
+  }
+  if (!fixedChapter && depth === 0) {
+    fb2NextChapter(ctx);
+  }
+}
+
+function fb2NextSectionId(ctx) {
+  let id;
+  do {
+    id = 'sec' + String(ctx.sectionCounter++).padStart(4, '0');
+  } while (ctx.usedIds.has(id));
+  ctx.usedIds.add(id);
+  return id;
+}
+
+function fb2WriteBodyCover(body, chapter, ctx, bookAnnotation) {
+  let html = '<div class="cover">';
+  if (body.image && ctx.imagesFilenamesMap.has(body.image)) {
+    const src = ctx.imagesFilenamesMap.get(body.image);
+    html += '<div class="illustration"><img src="' + escapeXmlAttr(src) + '" alt="' + escapeXmlAttr(src) + '"/></div>';
+  }
+  if (body.title) {
+    html += '<h1>' + fb2TitleInline(body.title, ctx) + '</h1>\n';
+  }
+  if (bookAnnotation) {
+    let inner = '';
+    for (const kid of bookAnnotation.childNodes) inner += fb2SerializeBlock(kid, ctx);
+    if (inner.trim()) html += '<div class="annotation">' + inner + '</div>';
+  }
+  for (const ep of body.epigraphs) html += fb2SerializeBlock(ep, ctx);
+  html += '</div>';
+  chapter.append(html);
+}
+
+function fb2WriteSection(section, level, ctx) {
+  if (!ctx.filesMap.has(section)) return;
+  const chapter = ctx.filesMap.get(section);
+  let html = '<div id="' + escapeXmlAttr(section.id) + '" class="section">';
+  if (section.title) {
+    const headingTag = 'h' + Math.min(level + 1, 6);
+    html += '<' + headingTag + '>' + fb2TitleInline(section.title, ctx) + '</' + headingTag + '>\n';
+  }
+  for (const ep of section.epigraphs) html += fb2SerializeBlock(ep, ctx);
+  for (const n of fb2SectionContentNodes(section)) html += fb2SerializeBlock(n, ctx);
+  html += '</div>';
+  chapter.append(html);
+  for (const sub of section.sections) fb2WriteSection(sub, level + 1, ctx);
+}
+
+function fb2AddNavPoint(ncx, id, url, label, playOrder) {
+  const np = { id, url, label, playOrder, children: [] };
+  ncx.push(np);
+  return np;
+}
+
+function fb2SectionNavLabel(sec) {
+  const label = sec.title ? sec.title.textContent.replace(/\r/g, ' ').replace(/\n/g, ' ').replace(/ +/g, ' ').trim() : '';
+  return label || sec.id || 'Section';
+}
+
+function fb2AddSubNav(section, parentNp, ctx) {
+  for (const sec of section.sections) {
+    const label = fb2SectionNavLabel(sec);
+    const chapter = ctx.filesMap.get(sec);
+    if (!chapter) continue;
+    const np = { id: sec.id, url: chapter.filename + '#' + sec.id, label, playOrder: ctx.playOrder++, children: [] };
+    parentNp.children.push(np);
+    fb2AddSubNav(sec, np, ctx);
+  }
+}
+
+function buildFb2EpubState(fb2) {
+  const ctx = {
+    pageCounter: 1,
+    sectionCounter: 1,
+    playOrder: 1,
+    chapters: [],
+    filesMap: new Map(),
+    idsMap: new Map(),
+    usedIds: new Set(),
+    imagesFilenamesMap: new Map(),
+    notesChapter: null,
+    currentChapter: null
+  };
+  const uuid = fb2GenerateUuid();
+  const manifest = [{ id: 'ncx', href: 'toc.ncx', mediaType: 'application/x-dtbncx+xml' }];
+  const spine = [];
+  const idCounters = {};
+  const nextId = (prefix) => {
+    idCounters[prefix] = (idCounters[prefix] || 0) + 1;
+    return prefix + idCounters[prefix];
+  };
+  const addManifest = (id, href, mediaType) => manifest.push({ id, href, mediaType });
+  const addSpine = (idref, linear) => spine.push({ idref, linear });
+  const addXhtml = (name, linear) => {
+    const fileId = nextId('xhtml');
+    addManifest(fileId, name, 'application/xhtml+xml');
+    addSpine(fileId, linear);
+    return fileId;
+  };
+
+  fb2NextChapter(ctx);
+  addManifest(nextId('css'), 'style.css', 'text/css');
+
+  const primaryCoverBinaryId = fb2.coverPages[0] || null;
+  const coverImageIds = [];
+  for (const [, bin] of fb2.binaries) {
+    const isPrimaryCover = primaryCoverBinaryId && bin.id === primaryCoverBinaryId;
+    let imgId, href;
+    if (isPrimaryCover) {
+      imgId = 'cover';
+      href = fb2CoverFilename(bin.contentType);
+      bin.filename = href;
+      coverImageIds.push('cover');
+    } else {
+      imgId = nextId('img');
+      href = bin.filename;
+    }
+    addManifest(imgId, href, bin.contentType);
+    ctx.imagesFilenamesMap.set(bin.id, href);
+  }
+
+  for (const coverId of fb2.coverPages) {
+    if (ctx.imagesFilenamesMap.has(coverId)) {
+      const src = ctx.imagesFilenamesMap.get(coverId);
+      ctx.currentChapter.append(fb2CoverPageHtml(src));
+      fb2NextChapter(ctx);
+    }
+  }
+
+  for (const body of fb2.bodies) fb2CollectIds(body.node, ctx.usedIds);
+  if (fb2.bookAnnotation) fb2CollectIds(fb2.bookAnnotation, ctx.usedIds);
+
+  for (const body of fb2.bodies) {
+    const isNotes = body.name && body.name.toLowerCase() === 'notes';
+    if (isNotes) {
+      ctx.notesChapter = new Fb2Chapter('notes.xhtml');
+      ctx.filesMap.set(body, ctx.notesChapter);
+      for (const sec of body.sections) fb2MapSection(sec, ctx.notesChapter, ctx);
+    } else {
+      ctx.filesMap.set(body, ctx.currentChapter);
+      fb2NextChapter(ctx);
+      for (const sec of body.sections) fb2MapSection(sec, null, ctx);
+    }
+  }
+
+  let bookAnnotationWritten = false;
+  for (const body of fb2.bodies) {
+    const isNotes = body.name && body.name.toLowerCase() === 'notes';
+    if (isNotes) {
+      fb2WriteBodyCover(body, ctx.notesChapter, ctx);
+      for (const sec of body.sections) fb2WriteSection(sec, 1, ctx);
+    } else {
+      const chapter = ctx.filesMap.get(body);
+      fb2WriteBodyCover(body, chapter, ctx, !bookAnnotationWritten ? fb2.bookAnnotation : null);
+      if (!bookAnnotationWritten && fb2.bookAnnotation) bookAnnotationWritten = true;
+      for (const sec of body.sections) fb2WriteSection(sec, 1, ctx);
+    }
+  }
+
+  const ncxPoints = [];
+  for (const body of fb2.bodies) {
+    if (body.name && body.name.toLowerCase() === 'notes') continue;
+    for (const sec of body.sections) {
+      const label = fb2SectionNavLabel(sec);
+      const chapter = ctx.filesMap.get(sec);
+      if (!chapter) continue;
+      const np = fb2AddNavPoint(ncxPoints, sec.id, chapter.filename + '#' + sec.id, label, ctx.playOrder++);
+      fb2AddSubNav(sec, np, ctx);
+    }
+  }
+
+  const xhtmlOutputs = new Map();
+  for (const ch of ctx.chapters) {
+    if (ch.parts.length > 0) xhtmlOutputs.set(ch.filename, ch.finish());
+  }
+  if (ctx.notesChapter && ctx.notesChapter.parts.length > 0) {
+    xhtmlOutputs.set(ctx.notesChapter.filename, ctx.notesChapter.finish());
+  }
+
+  for (const ch of ctx.chapters) {
+    if (ch.parts.length > 0) addXhtml(ch.filename, true);
+  }
+  if (ctx.notesChapter && ctx.notesChapter.parts.length > 0) {
+    addXhtml(ctx.notesChapter.filename, false);
+  }
+
+  return { uuid, title: fb2.title, authors: fb2.authors, languages: fb2.languages, coverImageIds,
+    manifest, spine, binaries: fb2.binaries, xhtmlOutputs, ncxPoints };
+}
+
+function fb2SerializeNavPoint(np) {
+  let s = '<navPoint id="' + escapeXmlAttr(np.id) + '" playOrder="' + np.playOrder + '">'
+    + '<navLabel><text>' + escapeXmlText(np.label) + '</text></navLabel>'
+    + '<content src="' + escapeXmlAttr(np.url) + '"/>';
+  for (const child of np.children) s += fb2SerializeNavPoint(child);
+  return s + '</navPoint>';
+}
+
+function fb2NcxDepth(points) {
+  let maxDepth = 0;
+  const walk = (items, depth) => {
+    for (const item of items) {
+      maxDepth = Math.max(maxDepth, depth);
+      walk(item.children, depth + 1);
+    }
+  };
+  walk(points, 1);
+  return maxDepth || 1;
+}
+
+function fb2GenerateNcx(state) {
+  const depth = fb2NcxDepth(state.ncxPoints);
+  let s = '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE ncx PUBLIC "-//NISO//DTD ncx 2005-1//EN" "http://www.daisy.org/z3986/2005/ncx-2005-1.dtd">\n'
+    + '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head>'
+    + '<meta name="dtb:uid" content="urn:uuid:' + escapeXmlAttr(state.uuid) + '"/>'
+    + '<meta name="dtb:depth" content="' + depth + '"/><meta name="dtb:totalPageCount" content="0"/>'
+    + '<meta name="dtb:maxPageNumber" content="0"/></head>';
+  if (state.title) s += '<docTitle><text>' + escapeXmlText(state.title) + '</text></docTitle>';
+  for (const a of state.authors) s += '<docAuthor><text>' + escapeXmlText(a) + '</text></docAuthor>';
+  s += '<navMap>';
+  for (const np of state.ncxPoints) s += fb2SerializeNavPoint(np);
+  return s + '</navMap></ncx>';
+}
+
+function fb2GenerateContainerXml() {
+  return '<?xml version="1.0" encoding="utf-8"?>\n<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">'
+    + '<rootfiles><rootfile full-path="OPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>';
+}
+
+function fb2GenerateOpf(state) {
+  let s = '<?xml version="1.0" encoding="utf-8"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="BookId">'
+    + '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">';
+  if (state.title) s += '<dc:title>' + escapeXmlText(state.title) + '</dc:title>';
+  for (const a of state.authors) s += '<dc:creator opf:role="aut">' + escapeXmlText(a) + '</dc:creator>';
+  for (const l of state.languages) s += '<dc:language>' + escapeXmlText(l) + '</dc:language>';
+  for (const c of state.coverImageIds) s += '<meta name="cover" content="' + escapeXmlAttr(c) + '"/>';
+  s += '<dc:identifier id="BookId">urn:uuid:' + escapeXmlText(state.uuid) + '</dc:identifier></metadata><manifest>';
+  for (const item of state.manifest) {
+    s += '<item id="' + escapeXmlAttr(item.id) + '" href="' + escapeXmlAttr(item.href) + '" media-type="' + escapeXmlAttr(item.mediaType) + '"/>';
+  }
+  s += '</manifest><spine toc="ncx">';
+  for (const item of state.spine) {
+    s += '<itemref idref="' + escapeXmlAttr(item.idref) + '"' + (item.linear ? '' : ' linear="no"') + '/>';
+  }
+  return s + '</spine></package>';
+}
+
+async function buildFb2EpubZip(state) {
+  const out = new JSZip();
+  out.file('mimetype', 'application/epub+zip', { compression: 'STORE', createFolders: false });
+  out.file('META-INF/container.xml', fb2GenerateContainerXml(), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
+  out.file('OPS/toc.ncx', fb2GenerateNcx(state), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
+  out.file('OPS/content.opf', fb2GenerateOpf(state), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
+  out.file('OPS/style.css', FB2_EPUB_CSS, { compression: 'DEFLATE', compressionOptions: { level: 8 } });
+  for (const [name, content] of state.xhtmlOutputs) {
+    out.file('OPS/' + name, content, { compression: 'DEFLATE', compressionOptions: { level: 8 } });
+  }
+  for (const [, bin] of state.binaries) {
+    out.file('OPS/' + bin.filename, bin.data, { compression: 'STORE', createFolders: false });
+  }
+  return out.generateAsync({ type: 'blob', mimeType: 'application/epub+zip' });
+}
+
+async function convertFb2File(file, progressCallback) {
+  const startTime = Date.now();
+  const originalSize = file.size;
+  clearLog();
+  showLog();
+  log('<strong>' + escapeHtml(file.name) + '</strong> <span class="log-detail">(' + formatBytes(originalSize) + ')</span>', '', 'INFO');
+
+  if (progressCallback) progressCallback(5);
+  if (operationCancelled) throw new Error('Cancelled by user');
+
+  const raw = await extractFb2Bytes(file);
+  const xmlText = decodeXmlBytes(raw);
+  if (progressCallback) progressCallback(15);
+
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('Failed to parse FB2 XML');
+  if (doc.documentElement?.localName !== 'FictionBook') {
+    throw new Error('Not an FB2 FictionBook document');
+  }
+  const fb2 = parseFb2Document(doc);
+  if (fb2.bodies.length === 0) {
+    throw new Error('FB2 document has no body');
+  }
+  if (progressCallback) progressCallback(35);
+
+  const state = buildFb2EpubState(fb2);
+  if (progressCallback) progressCallback(70);
+  if (operationCancelled) throw new Error('Cancelled by user');
+
+  const blob = await buildFb2EpubZip(state);
+  const newSize = blob.size;
+  const timeElapsed = (Date.now() - startTime) / 1000;
+  if (progressCallback) progressCallback(100);
+
+  log('FB2 conversion complete!', 'success', 'DONE');
+  logSummary(originalSize, newSize, timeElapsed);
+  return blob;
+}
+
+// crypto.randomUUID() is unavailable in non-secure contexts (e.g. http://<device-ip>),
+// which is exactly how File Transfer mode serves this page. Fall back accordingly.
+function fb2GenerateUuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10
+  const hex = [];
+  for (let i = 0; i < 16; i++) hex.push(bytes[i].toString(16).padStart(2, '0'));
+  return hex[0] + hex[1] + hex[2] + hex[3] + '-' + hex[4] + hex[5] + '-' + hex[6] + hex[7]
+    + '-' + hex[8] + hex[9] + '-' + hex[10] + hex[11] + hex[12] + hex[13] + hex[14] + hex[15];
+}
+
+function isFb2File(filename) {
+  const lower = filename.toLowerCase();
+  return lower.endsWith('.fb2') || lower.endsWith('.fb2.zip');
+}
+
+function fb2ToEpubFilename(filename) {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.fb2.zip')) return filename.slice(0, -8) + '.epub';
+  if (lower.endsWith('.fb2')) return filename.slice(0, -4) + '.epub';
+  return filename;
+}
+
 // Convert EPUB file - returns converted blob
 async function convertEpubFile(file, progressCallback) {
   const startTime = Date.now();
@@ -4986,7 +5814,6 @@ async function convertEpubFile(file, progressCallback) {
   return newBlob;
 }
 
-// Get WebSocket URL based on current page location
 function getWsUrl() {
   const host = window.location.hostname;
   return `ws://${host}:${WS_PORT}/`;
@@ -5151,6 +5978,7 @@ function uploadFile() {
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+  const fb2ConvertEnabled = document.getElementById('convertFb2BeforeUpload').checked;
 
   if (files.length === 0) {
     alert('Please select at least one file!');
@@ -5241,16 +6069,18 @@ function uploadFile() {
     // Re-enable transition after a brief delay
     setTimeout(() => progressFill.classList.remove('no-transition'), 50);
 
-    // Check if file is an EPUB and conversion is enabled
-    const isEpub = file.name.toLowerCase().endsWith('.epub');
-    const needsConversion = isEpub && convertEnabled;
+    // Check if file needs FB2 or EPUB conversion
+    let isEpub = file.name.toLowerCase().endsWith('.epub');
+    const needsFb2Conversion = isFb2File(file.name) && fb2ConvertEnabled;
+    let needsConversion = isEpub && convertEnabled;
     let conversionSucceeded = false;
     let conversionFailed = false;  // Track if conversion actually failed
     let convOriginalSize = 0;      // Picked-file size; 0 unless conversion succeeded
     let convNewSize = 0;           // Generated blob size; 0 unless conversion succeeded
 
     const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
-    const stageText = needsConversion ? 'Converting & uploading' : 'Uploading';
+    const actionVerb = 'uploading';
+    const stageText = (needsFb2Conversion || needsConversion) ? ('Converting & ' + actionVerb) : 'Uploading';
     progressText.style.color = '';
     progressText.textContent = `${stageText} ${file.name} (${currentIndex + 1}/${files.length})${methodText}`;
 
@@ -5259,7 +6089,7 @@ function uploadFile() {
       // If conversion succeeded, display goes from 50-100%, otherwise 0-100%
       const displayPercent = conversionSucceeded ? 50 + Math.round(uploadPercent / 2) : uploadPercent;
       progressFill.style.width = displayPercent + '%';
-      const prefix = conversionSucceeded ? 'Converting & uploading' : 'Uploading';
+      const prefix = conversionSucceeded ? ('Converting & ' + actionVerb) : 'Uploading';
       progressText.textContent = `${prefix} ${file.name} (${currentIndex + 1}/${files.length})${methodText} — ${uploadPercent}%`;
     };
 
@@ -5315,6 +6145,50 @@ function uploadFile() {
     };
 
     try {
+      // Convert FB2 to EPUB if needed (before EPUB optimization)
+      if (needsFb2Conversion) {
+        progressFill.style.backgroundColor = '#9b59b6'; // Purple for conversion
+        progressText.textContent = `Converting ${file.name} (${currentIndex + 1}/${files.length})...`;
+
+        if (!useBatchLog) {
+          clearLog();
+          showLog();
+        }
+
+        const origFileSize = file.size;
+
+        try {
+          const convertedBlob = await convertFb2File(file, (percent) => {
+            progressFill.style.width = (percent * 0.5) + '%';
+          });
+
+          const epubName = fb2ToEpubFilename(file.name);
+          file = new File([convertedBlob], epubName, { type: 'application/epub+zip' });
+          progressFill.style.backgroundColor = '#27ae60';
+          conversionSucceeded = true;
+          convOriginalSize = origFileSize;
+          convNewSize = convertedBlob.size;
+          isEpub = true;
+          needsConversion = convertEnabled;
+        } catch (convError) {
+          if (operationCancelled) { if (uploadGeneration === myGeneration) restoreAfterCancel(); return; }
+          console.error('FB2 conversion error:', convError);
+          logError(`Conversion failed: ${convError.message}`);
+          log('Uploading original file instead...', 'warning', 'INFO');
+          conversionFailed = true;
+
+          if (!useBatchLog && exportLogCheckbox && exportLogCheckbox.checked) {
+            setTimeout(() => {
+              exportLogToFile(null, false);
+            }, 100);
+          }
+
+          progressText.textContent = `Conversion failed, uploading original ${file.name}...`;
+          progressFill.style.backgroundColor = '#e67e22';
+          progressFill.style.width = '0%';
+        }
+      }
+
       // Convert EPUB if needed
       if (needsConversion) {
         progressFill.style.backgroundColor = '#9b59b6'; // Purple for conversion
