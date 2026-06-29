@@ -35,6 +35,24 @@ target_compile_options(crosspoint_test_common INTERFACE
   -pedantic
 )
 
+# Automatically regenerate test dictionaries if JSON sources/generator script change, or if files are missing.
+file(GLOB DICTIONARY_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/data/dictionary-sources/*.json")
+
+set(GENERATED_DICTS
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/en-es/en-es.dict"
+)
+
+add_custom_command(
+  OUTPUT ${GENERATED_DICTS}
+  COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/data/generate_dictionaries.py" --all >/dev/null
+  DEPENDS ${DICTIONARY_SOURCES} "${CMAKE_CURRENT_SOURCE_DIR}/data/generate_dictionaries.py"
+  COMMENT "Regenerating test dictionaries..."
+)
+
+add_custom_target(generate_test_dictionaries ALL
+  DEPENDS ${GENERATED_DICTS}
+)
+
 enable_testing()
 include(GoogleTest)
 
@@ -43,3 +61,4 @@ add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
 add_subdirectory(utf8_compose)
+add_subdirectory(dict-engine)
