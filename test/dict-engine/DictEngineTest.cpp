@@ -322,6 +322,36 @@ TEST(DictLookupFpi, ExhaustiveOrdinalRoundTripAgainstPrepAll) {
   EXPECT_EQ(misses, 0u) << "first miss: " << firstMiss << " (" << misses << "/" << entries.size() << " total)";
 }
 
+TEST(DictResolveAltForm, HasAltFormsReturnsCorrectStatus) {
+  const std::string cache = cacheDirPointingAtFixture();
+  EXPECT_TRUE(Dictionary::hasAltForms(cache.c_str()));
+
+  const std::string stem = fixtureCopyStem("dict_engine_without_syn");
+  std::filesystem::remove(stem + ".syn.fpi");
+  std::filesystem::remove(stem + ".syn");
+  const std::string cache_no_syn = cacheDirPointingAt(stem, "dict_engine_without_syn_cache");
+  EXPECT_FALSE(Dictionary::hasAltForms(cache_no_syn.c_str()));
+}
+
+TEST(DictResolveAltForm, ResolvesSynonymToHeadword) {
+  const std::string cache = cacheDirPointingAtFixture();
+  EXPECT_EQ(Dictionary::resolveAltForm("automobile", cache.c_str()), "car");
+  EXPECT_EQ(Dictionary::resolveAltForm("auto", cache.c_str()), "car");
+}
+
+TEST(DictResolveAltForm, ReturnsEmptyForUnknownWord) {
+  const std::string cache = cacheDirPointingAtFixture();
+  EXPECT_EQ(Dictionary::resolveAltForm("not_a_synonym", cache.c_str()), "");
+}
+
+TEST(DictResolveAltForm, FallsBackToLinearScanWhenFpiMissing) {
+  const std::string stem = fixtureCopyStem("dict_engine_without_syn_accel");
+  std::filesystem::remove(stem + ".idx.fpi");
+  std::filesystem::remove(stem + ".syn.fpi");
+  const std::string cache = cacheDirPointingAt(stem, "dict_engine_without_syn_accel_cache");
+  EXPECT_EQ(Dictionary::resolveAltForm("automobile", cache.c_str()), "car");
+}
+
 // The .fpi bracket search (binarySearchFpi on .idx.fpi) narrows findSimilar's scan
 // window around scanStart. For a word deep in a multi-page dictionary, scanStart is
 // well past offset 0, so the candidates findSimilar returns are exactly those

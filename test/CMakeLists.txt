@@ -54,8 +54,11 @@ set(GENERATED_DICTS
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/phrase/phrase.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-fpi-prefix-collision/prep-fpi-prefix-collision.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-extract-dict/prep-extract-dict.dict.dz"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-fail-decompress/prep-fail-decompress.dict.dz"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-gen-idx/prep-gen-idx.dict"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-gen-syn/prep-gen-syn.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-mini/prep-mini.dict.dz"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/prep-syn-two-step/prep-syn-two-step.dict"
 )
 
 add_custom_command(

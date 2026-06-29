@@ -127,6 +127,12 @@ bool Dictionary::exists(const char* cachePath) {
   return Storage.exists(dp.dict().c_str());
 }
 
+bool Dictionary::hasAltForms(const char* cachePath) {
+  std::string folderPath = readDictPath(cachePath);
+  if (folderPath.empty()) return false;
+  return Storage.exists(DictPaths(folderPath).syn().c_str());
+}
+
 bool Dictionary::isValidDictionary() {
   std::string folderPath = readDictPath(nullptr);
   if (folderPath.empty()) return false;
@@ -225,6 +231,10 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
         } else if (strcmp(keyBuf, "idxfilesize") == 0) {
           isNumField = true;
           valNum = &info.idxfilesize;
+        } else if (strcmp(keyBuf, "synwordcount") == 0) {
+          isNumField = true;
+          valNum = &info.altFormCount;
+          info.hasAltForms = true;
         }
         readingVal = true;
       } else if (keyLen < static_cast<int>(sizeof(keyBuf) - 1)) {

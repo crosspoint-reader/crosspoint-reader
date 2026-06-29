@@ -123,6 +123,8 @@ void DictPrepareActivity::detectSteps() {
   DictPaths dp(folderPath);
   const bool dictExists = Storage.exists(dp.dict().c_str());
   const bool dzExists = Storage.exists(dp.dictDz().c_str());
+  const bool synExists = Storage.exists(dp.syn().c_str());
+  const bool synDzExists = Storage.exists(dp.synDz().c_str());
   const bool idxExists = Storage.exists(dp.idx().c_str());
 
   if (!dictExists && dzExists) steps[stepCount++].type = StepType::EXTRACT_DICT;

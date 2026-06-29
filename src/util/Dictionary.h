@@ -12,10 +12,12 @@ struct DictPaths {
 
   std::string idx() const { return folder + ".idx"; }
   std::string dict() const { return folder + ".dict"; }
+  std::string syn() const { return folder + ".syn"; }
   std::string ifo() const { return folder + ".ifo"; }
   std::string idxFpi() const { return folder + ".idx.fpi"; }
   std::string synFpi() const { return folder + ".syn.fpi"; }
   std::string dictDz() const { return folder + ".dict.dz"; }
+  std::string synDz() const { return folder + ".syn.dz"; }
 };
 
 // Plain-function-pointer callbacks for Dictionary::lookup.
@@ -34,7 +36,9 @@ struct DictInfo {
   char description[256] = "";
   char sametypesequence[16] = "";
   uint32_t wordcount = 0;
+  uint32_t altFormCount = 0;
   uint32_t idxfilesize = 0;
+  bool hasAltForms = false;
   bool isCompressed = false;  // .dict.dz present but no .dict
   char lang[32] = "";         // e.g. "en-en", "el-el"
   bool valid = false;
@@ -64,6 +68,10 @@ class Dictionary {
 
   // Returns true if a dictionary is configured and all required files exist.
   static bool exists(const char* cachePath = nullptr);
+
+  // Returns true if a .syn file exists for the active dictionary.
+  // Gates all alternate-form UI — checked at runtime against the physical file.
+  static bool hasAltForms(const char* cachePath = nullptr);
 
   // Validates the dictionary path stored in /.crosspoint/dictionary.bin against the SD card.
   // If the path is missing or the required files are gone, clears the file. Returns true if valid.
