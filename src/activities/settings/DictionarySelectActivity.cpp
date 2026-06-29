@@ -174,13 +174,23 @@ void DictionarySelectActivity::loop() {
         requestUpdate();
       }
     } else {
-      // Parsed metadata view: Back exits to picker; Confirm switches to raw view.
+      // Parsed metadata view: Back exits to picker; Confirm switches to raw view; Left force-rebuilds.
       if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
         showingInfo = false;
         requestUpdate();
       } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
         showingRaw = true;
         requestUpdate();
+      } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+        std::string folder = folderForIndex(selectedIndex);
+        showingInfo = false;
+        startActivityForResult(std::make_unique<DictPrepareActivity>(renderer, mappedInput, folder, true),
+                               [this](const ActivityResult& result) {
+                                 if (!result.isCancelled) {
+                                   applySelection();
+                                   finish();
+                                 }
+                               });
       }
     }
     return;
@@ -409,7 +419,7 @@ void DictionarySelectActivity::render(RenderLock&&) {
         }
       }
 
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DICT_VIEW_RAW), "", "");
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DICT_VIEW_RAW), tr(STR_DICT_REBUILD), "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
 

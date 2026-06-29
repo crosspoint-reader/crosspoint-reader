@@ -44,6 +44,17 @@ static int dictPrepReadCallback(struct uzlib_uncomp* u) {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Formats elapsed milliseconds as "M:SS.cc" into buf. Returns buf.
+static char* fmtElapsed(char* buf, size_t bufSize, unsigned long ms) {
+  const unsigned long totalSec = ms / 1000;
+  const unsigned long cs = (ms % 1000) / 10;
+  if (totalSec < 60)
+    snprintf(buf, bufSize, "%lu.%02lus", totalSec, cs);
+  else
+    snprintf(buf, bufSize, "%lu:%02lu.%02lu", totalSec / 60, totalSec % 60, cs);
+  return buf;
+}
+
 const char* DictPrepareActivity::stepLabel(StepType type) {
   switch (type) {
     case StepType::EXTRACT_DICT:
@@ -104,6 +115,16 @@ void DictPrepareActivity::onEnter() {
     }
     const char* nameStart = prevSlash ? prevSlash + 1 : path;
     snprintf(dictName, sizeof(dictName), "%.*s", (int)(end - nameStart), nameStart);
+  }
+
+  if (forceRebuild) {
+    DictPaths dp(folderPath);
+    if (Storage.exists(dp.dictDz().c_str())) Storage.remove(dp.dict().c_str());
+    if (Storage.exists(dp.synDz().c_str())) Storage.remove(dp.syn().c_str());
+
+    Storage.remove(dp.idxFpi().c_str());
+    Storage.remove(dp.synFpi().c_str());
+    LOG_DBG("DictPrepare", "forceRebuild: removed generated files for %s", folderPath.c_str());
   }
 
   detectSteps();
@@ -171,6 +192,7 @@ void DictPrepareActivity::loop() {
         steps[i].progress = 0;
         steps[i].total = 0;
       }
+      prepareStartMs = millis();
       requestUpdateAndWait();
       task = makeUniqueNoThrow<DictPrepareTask>(*this);
       if (!task) {
@@ -187,6 +209,7 @@ void DictPrepareActivity::loop() {
 
   if (state == State::PROCESSING) {
     if (prepareDone) {
+      prepareElapsedMs = millis() - prepareStartMs;
       state = cancelRequested ? State::CANCELLED : (prepareSucceeded ? State::SUCCESS : State::FAILED);
       requestUpdate();
     } else if (!cancelRequested && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -221,6 +244,7 @@ void DictPrepareActivity::runSteps() {
     if (cancelRequested) break;
 
     currentStep = i;
+    steps[i].startMs = millis();
     steps[i].status = StepStatus::IN_PROGRESS;
     requestUpdate(true);
 
@@ -248,6 +272,7 @@ void DictPrepareActivity::runSteps() {
         break;
     }
 
+    steps[i].elapsedMs = millis() - steps[i].startMs;
     steps[i].status = ok ? StepStatus::COMPLETE : StepStatus::FAILED;
     requestUpdate(true);
 
@@ -462,8 +487,14 @@ void DictPrepareActivity::render(RenderLock&&) {
     const char* prefix = complete ? "[OK] " : (failed ? "[!!] " : (inProgress ? "[ > ] " : "[   ] "));
     const EpdFontFamily::Style style = (inProgress || failed) ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
 
-    char labelBuf[64];
-    snprintf(labelBuf, sizeof(labelBuf), "%s%s", prefix, stepLabel(step.type));
+    char labelBuf[80];
+    if (complete && step.elapsedMs > 0) {
+      char timeBuf[16];
+      snprintf(labelBuf, sizeof(labelBuf), "%s%s (%s)", prefix, stepLabel(step.type),
+               fmtElapsed(timeBuf, sizeof(timeBuf), step.elapsedMs));
+    } else {
+      snprintf(labelBuf, sizeof(labelBuf), "%s%s", prefix, stepLabel(step.type));
+    }
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, labelBuf, true, style);
     y += lineHeight;
 

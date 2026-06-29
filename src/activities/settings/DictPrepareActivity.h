@@ -24,7 +24,8 @@ class DictPrepareActivity final : public Activity {
   friend class DictPrepareTask;
 
  public:
-  explicit DictPrepareActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string folderPath);
+  explicit DictPrepareActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string folderPath,
+                               bool forceRebuild = false);
   ~DictPrepareActivity() override;
 
   void onEnter() override;
@@ -46,10 +47,13 @@ class DictPrepareActivity final : public Activity {
     std::atomic<StepStatus> status = StepStatus::PENDING;
     std::atomic<size_t> progress = 0;
     std::atomic<size_t> total = 0;
+    std::atomic<unsigned long> startMs = 0;
+    std::atomic<unsigned long> elapsedMs = 0;
   };
 
   State state = State::CONFIRM;
   std::string folderPath;
+  bool forceRebuild = false;
   char dictName[64] = {};
 
   // Set by loop() when the user presses Cancel during PROCESSING.
@@ -63,6 +67,9 @@ class DictPrepareActivity final : public Activity {
   // Completion flags set by the task, polled by loop().
   std::atomic<bool> prepareDone = false;
   std::atomic<bool> prepareSucceeded = false;
+
+  unsigned long prepareStartMs = 0;
+  unsigned long prepareElapsedMs = 0;
 
   std::unique_ptr<DictPrepareTask> task;
 
