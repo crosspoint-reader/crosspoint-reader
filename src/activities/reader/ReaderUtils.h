@@ -13,6 +13,7 @@ constexpr unsigned long GO_HOME_MS = 1000;
 constexpr unsigned long SKIP_HOLD_MS = 700;
 constexpr unsigned long BOOKMARK_HOLD_MS = 400;
 constexpr unsigned long BOOKMARK_MESSAGE_DURATION_MS = 2500;
+constexpr unsigned long DICTIONARY_MESSAGE_DURATION_MS = 1500;
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {
@@ -57,6 +58,16 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
                                           : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
                                              input.wasReleased(nextButton)));
   return {prev, next, tiltPrev || tiltNext};
+}
+
+inline bool shortPowerButtonActionTriggered(const MappedInputManager& input, CrossPointSettings::SHORT_PWRBTN action) {
+  return SETTINGS.shortPwrBtn == action && input.wasReleased(MappedInputManager::Button::Power) &&
+         !input.wasReleased(MappedInputManager::Button::Down);
+}
+
+inline uint8_t rotatedOrientationForNavigation(bool nextTriggered) {
+  return nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
+                       : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
 }
 
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
