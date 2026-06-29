@@ -17,9 +17,11 @@
 #include <iterator>
 #include <limits>
 
+#include "../settings/DictionarySelectActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
@@ -27,6 +29,7 @@
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "LookedUpWordsActivity.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -35,6 +38,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
+#include "util/Dictionary.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -293,39 +297,60 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Hold-Confirm dispatch — mutually exclusive based on user setting.
+  // Dictionary uses 600 ms (Dictionary::LONG_PRESS_MS); Bookmark uses 400 ms (ReaderUtils::BOOKMARK_HOLD_MS).
+  if (section && mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    if (SETTINGS.holdConfirmAction == CrossPointSettings::HOLD_CONFIRM_DICTIONARY &&
+        mappedInput.getHeldTime() >= Dictionary::LONG_PRESS_MS) {
+      if (Dictionary::exists(epub->getCachePath().c_str())) {
+        ignoreNextConfirmRelease = true;
+        openWordSelect(/*framebufferContainsPage=*/true);
+        return;
+      }
+      if (!showNoDictionaryMessage) {
+        showNoDictionaryMessage = true;
+        ignoreNextConfirmRelease = true;
+        noDictionaryMessageTime = millis();
+        requestUpdate();
+      }
+    }
+    if (SETTINGS.holdConfirmAction == CrossPointSettings::HOLD_CONFIRM_BOOKMARK &&
+        mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showBookmarkMessage) {
+      addBookmark();
+      showBookmarkMessage = true;
+      ignoreNextConfirmRelease = true;
+      bookmarkMessageTime = millis();
+      requestUpdate();
+    }
+  }
+
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showBookmarkMessage = false;
     requestUpdate();
   }
 
-  // Enter reader menu activity on short-press Confirm. A long-press that fired a bound
+  if (showNoDictionaryMessage && (millis() - noDictionaryMessageTime) >= ReaderUtils::DICTIONARY_MESSAGE_DURATION_MS) {
+    showNoDictionaryMessage = false;
+    requestUpdate();
+  }
+
+  // Enter reader menu on short-press Confirm. A long-press that fired a bound
   // function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
     } else {
-      const int currentPage = section ? section->currentPage + 1 : 0;
-      const int totalPages = section ? section->pageCount : 0;
-      float bookProgress = 0.0f;
-      if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-        bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
-      }
-      const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-      startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                                 renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                                 SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
-                             [this](const ActivityResult& result) {
-                               // Always apply orientation change even if the menu was cancelled
-                               const auto& menu = std::get<MenuResult>(result.data);
-                               applyOrientation(menu.orientation);
-                               toggleAutoPageTurn(menu.pageTurnOption);
-                               if (!result.isCancelled) {
-                                 onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                               }
-                             });
+      openReaderMenu();
     }
+  }
+
+  // Suppress Back bleed-through after dictionary chain exit. Capture the flag BEFORE
+  // updating it so the release frame itself is gated — otherwise the flag clears and
+  // wasReleased(Back) fires onGoHome() on the same tick the user lets go.
+  const bool suppressBack = ignoreBackUntilRelease;
+  if (ignoreBackUntilRelease && !mappedInput.isPressed(MappedInputManager::Button::Back)) {
+    ignoreBackUntilRelease = false;
   }
 
   // Long-press Confirm runs the user-selected function (SETTINGS.longPressMenuFunction).
@@ -358,13 +383,14 @@ void EpubReaderActivity::loop() {
   }
 
   // Long press BACK (1s+) goes to file selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+  if (!suppressBack && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!suppressBack && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
@@ -377,9 +403,7 @@ void EpubReaderActivity::loop() {
   // auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
 
   // Handle short power button press for footnotes
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
-      !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  if (ReaderUtils::shortPowerButtonActionTriggered(mappedInput, CrossPointSettings::SHORT_PWRBTN::FOOTNOTES)) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
     } else {
@@ -396,6 +420,19 @@ void EpubReaderActivity::loop() {
               requestUpdate();
             });
       }
+    }
+    return;
+  }
+
+  if (ReaderUtils::shortPowerButtonActionTriggered(mappedInput, CrossPointSettings::SHORT_PWRBTN::LOOKUP)) {
+    if (Dictionary::exists(epub->getCachePath().c_str())) {
+      openWordSelect(/*framebufferContainsPage=*/true);
+      return;
+    }
+    if (!showNoDictionaryMessage) {
+      showNoDictionaryMessage = true;
+      noDictionaryMessageTime = millis();
+      requestUpdate();
     }
     return;
   }
@@ -448,9 +485,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
-    const uint8_t newOrientation =
-        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
-                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
+    const uint8_t newOrientation = ReaderUtils::rotatedOrientationForNavigation(nextTriggered);
     applyOrientation(newOrientation);
     requestUpdate();
     return;
@@ -530,6 +565,102 @@ void EpubReaderActivity::jumpToPercent(int percent) {
     pendingPercentJump = true;
     section.reset();
   }
+}
+
+void EpubReaderActivity::openReaderMenu() {
+  const int currentPage = section ? section->currentPage + 1 : 0;
+  const int totalPages = section ? section->pageCount : 0;
+  float bookProgress = 0.0f;
+  if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
+    const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+  }
+  const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+
+  // Extract the folder name from the active dictionary path for display in the menu.
+  // Path format: /dictionary/<folder>/<stem> — we want <folder>.
+  std::string activeDictName;
+  {
+    const std::string rawDictPath = Dictionary::readDictPath(epub->getCachePath().c_str());
+    if (rawDictPath.empty()) {
+      activeDictName = tr(STR_DICT_NONE);
+    } else {
+      const size_t lastSlash = rawDictPath.rfind('/');
+      if (lastSlash != std::string::npos && lastSlash > 0) {
+        const size_t prevSlash = rawDictPath.rfind('/', lastSlash - 1);
+        activeDictName = (prevSlash != std::string::npos) ? rawDictPath.substr(prevSlash + 1, lastSlash - prevSlash - 1)
+                                                          : rawDictPath.substr(0, lastSlash);
+      } else {
+        activeDictName = rawDictPath;
+      }
+    }
+  }
+
+  auto menuActivity = std::make_unique<EpubReaderMenuActivity>(
+      renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, SETTINGS.orientation,
+      !currentPageFootnotes.empty(), !cachedBookmarks.empty(), Dictionary::exists(epub->getCachePath().c_str()),
+      std::move(activeDictName));
+  auto onMenuResult = [this](const ActivityResult& result) {
+    // Always apply orientation change even if the menu was cancelled
+    const auto& menu = std::get<MenuResult>(result.data);
+    applyOrientation(menu.orientation);
+    toggleAutoPageTurn(menu.pageTurnOption);
+    if (!result.isCancelled) {
+      onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+    }
+  };
+  startActivityForResult(std::move(menuActivity), onMenuResult);
+}
+
+void EpubReaderActivity::openWordSelect(bool framebufferContainsPage) {
+  auto pageForLookup = section ? section->loadPageFromSectionFile() : nullptr;
+  if (!pageForLookup) {
+    requestUpdate();
+    return;
+  }
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+
+  // Bottom reserved-area height (matches renderContents() at line 695-703). The
+  // word-select activity uses this to clear exactly the strip we drew the
+  // status-bar / auto-turn label into, so its first frame matches the menu
+  // path which wipes everything via clearScreen + page->render.
+  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  const int reservedBottomHeight =
+      (automaticPageTurnActive &&
+       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()))
+          ? std::max(
+                SETTINGS.screenMargin,
+                static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin))
+          : std::max(SETTINGS.screenMargin, statusBarHeight);
+  std::string nextPageFirstWord;
+  if (section && section->currentPage < section->pageCount - 1) {
+    int savedPage = section->currentPage;
+    section->currentPage = savedPage + 1;
+    auto nextPage = section->loadPageFromSectionFile();
+    section->currentPage = savedPage;
+    if (nextPage && !nextPage->elements.empty()) {
+      const auto it = std::find_if(nextPage->elements.begin(), nextPage->elements.end(),
+                                   [](const auto& el) { return el->getTag() == TAG_PageLine; });
+      if (it != nextPage->elements.end()) {
+        const auto* firstLine = static_cast<const PageLine*>(it->get());
+        if (firstLine->getBlock() && !firstLine->getBlock()->getWords().empty()) {
+          nextPageFirstWord = firstLine->getBlock()->getWords().front();
+        }
+      }
+    }
+  }
+  const std::string bookCachePath = epub->getCachePath();
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(pageForLookup), orientedMarginLeft, orientedMarginTop,
+                             bookCachePath, nextPageFirstWord, framebufferContainsPage, reservedBottomHeight),
+                         [this](const ActivityResult&) {
+                           ignoreBackUntilRelease = true;
+                           requestUpdate();
+                         });
 }
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
@@ -642,6 +773,25 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::SYNC: {
       launchKOReaderSync();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP: {
+      // Menu activity rendered over the page; the framebuffer no longer
+      // matches what DictionaryWordSelectActivity expects.
+      openWordSelect(/*framebufferContainsPage=*/false);
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::LOOKUP_HISTORY: {
+      startActivityForResult(std::make_unique<LookedUpWordsActivity>(renderer, mappedInput, epub->getCachePath()),
+                             [this](const ActivityResult&) {
+                               ignoreBackUntilRelease = true;
+                               requestUpdate();
+                             });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::SET_BOOK_DICTIONARY: {
+      startActivityForResult(std::make_unique<DictionarySelectActivity>(renderer, mappedInput, epub->getCachePath()),
+                             [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
@@ -975,6 +1125,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  }
+
+  if (showNoDictionaryMessage) {
+    GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
 }
 

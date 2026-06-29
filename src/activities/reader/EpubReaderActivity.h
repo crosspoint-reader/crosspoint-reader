@@ -33,8 +33,10 @@ class EpubReaderActivity final : public Activity {
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  bool ignoreBackUntilRelease = false;    // Suppress Back bleed-through after dictionary chain exit
+  bool ignoreNextConfirmRelease = false;  // Suppress menu open after hold-Confirm gesture fires
   bool showBookmarkMessage = false;
-  bool ignoreNextConfirmRelease = false;
+  bool showNoDictionaryMessage = false;
   bool currentPageBookmarked = false;
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;
@@ -42,6 +44,7 @@ class EpubReaderActivity final : public Activity {
   // removeReadBooksFromRecents feature (set at End-of-Book, cleared if paged back in).
   bool recentsEntryRemoved = false;
   unsigned long bookmarkMessageTime = 0UL;
+  unsigned long noDictionaryMessageTime = 0UL;
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
@@ -63,6 +66,14 @@ class EpubReaderActivity final : public Activity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
+  void openReaderMenu();
+  // framebufferContainsPage = true means the caller guarantees the framebuffer
+  // currently shows the page at the renderer's oriented page margins. The
+  // DictionaryWordSelectActivity will skip its initial clearScreen +
+  // page->render in that case. Only the hold-to-lookup path can pass true;
+  // the reader-menu → Lookup path must pass false because the menu has
+  // overwritten the framebuffer.
+  void openWordSelect(bool framebufferContainsPage);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.

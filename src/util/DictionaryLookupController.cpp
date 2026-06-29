@@ -32,13 +32,16 @@ void DictionaryLookupController::startLookup(const std::string& word, bool recor
   lookupCancelRequested = false;
   recordHistory_ = recordHistory;
   state = LookupState::LookingUp;
-  // Toast overlay: draw popup directly over whatever the user is currently viewing.
-  // RenderLock serializes against the render task — without it, a prior requestUpdate()
-  // (e.g. from navigation) may still be mid-refresh, and concurrent framebuffer / SPI
-  // access from two tasks crashes the e-ink driver.
-  RenderLock lock;
-  GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  // CLEANUP: on Auto-only commit, delete only this line (gate below stays — it's the Auto check)
+  if (true) {
+    // Toast overlay: draw popup directly over whatever the user is currently viewing.
+    // RenderLock serializes against the render task — without it, a prior requestUpdate()
+    // (e.g. from navigation) may still be mid-refresh, and concurrent framebuffer / SPI
+    // access from two tasks crashes the e-ink driver.
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_DICT_LOOKING_UP));
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
   task = makeUniqueNoThrow<DictLookupTask>(*this);
   if (!task) {
     LOG_ERR("DICT", "OOM: DictLookupTask");

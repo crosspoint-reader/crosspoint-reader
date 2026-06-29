@@ -39,6 +39,7 @@ target_compile_options(crosspoint_test_common INTERFACE
 file(GLOB DICTIONARY_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/data/dictionary-sources/*.json")
 
 set(GENERATED_DICTS
+  "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/chain-stress/chain-stress.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/en-es/en-es.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/english-full/english-full.dict"
   "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/english-no-syn/english-no-syn.dict"
@@ -81,7 +82,8 @@ add_subdirectory(release_json_parser)
 add_subdirectory(differential_rounding)
 add_subdirectory(hyphenation_eval)
 add_subdirectory(utf8_compose)
+add_subdirectory(lookup-chain)
 add_subdirectory(dict-engine)
 add_subdirectory(dict-layout)
-add_subdirectory(dict-html-renderer)
 add_subdirectory(dict-word-select-nav)
+add_subdirectory(dict-html-renderer)
