@@ -52,18 +52,16 @@ void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 void EpubReaderMenuActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
-    requestUpdate();
-  });
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+    setResult(std::move(result));
+    finish();
+    return;
+  }
 
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
-    requestUpdate();
-  });
-
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  auto activateSelected = [this] {
     const auto selectedAction = menuItems[selectedIndex].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
@@ -87,13 +85,54 @@ void EpubReaderMenuActivity::loop() {
 
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
     finish();
+  };
+
+  auto metrics = UITheme::getInstance().getMetrics();
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int contentTop =
+      screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+  int tapped = 0;
+  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(menuItems.size()), selectedIndex, contentTop,
+                                         contentHeight, false)) {
+    if (selectedIndex != tapped) {
+      selectedIndex = tapped;
+      requestUpdate();
+    }
     return;
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
-    setResult(std::move(result));
-    finish();
+  }
+  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(menuItems.size()), selectedIndex, contentTop,
+                                    contentHeight, false)) {
+    selectedIndex = tapped;
+    activateSelected();
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    requestUpdate();
+    return;
+  }
+
+  // Handle navigation
+  buttonNavigator.onNext([this] {
+    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    requestUpdate();
+  });
+
+  buttonNavigator.onPrevious([this] {
+    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    requestUpdate();
+  });
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    activateSelected();
     return;
   }
 }

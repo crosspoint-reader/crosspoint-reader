@@ -11,6 +11,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/search24.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
@@ -19,7 +20,21 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
+constexpr int HEADER_Y = 15;
+constexpr int HEADER_X = 16;
+constexpr int SEARCH_ICON_SIZE = 24;
+constexpr int SEARCH_ICON_MARGIN = 14;
+constexpr int SEARCH_ICON_Y = 15;
+
+Rect searchIconRect(const GfxRenderer& renderer) {
+  return Rect{renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN, SEARCH_ICON_Y, SEARCH_ICON_SIZE + 8,
+              SEARCH_ICON_SIZE + 8};
 }
+
+bool contains(const Rect& rect, const int x, const int y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+}  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   Activity::onEnter();
@@ -91,18 +106,66 @@ void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::DOWNLOADING) return;
 
   if (state == BrowserState::BROWSING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    auto activateSelected = [this] {
       if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
         entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
       }
+    };
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      activateSelected();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
     }
 
+    int tx = 0;
+    int ty = 0;
+    if (!searchTemplate.empty() && mappedInput.wasScreenTapped(tx, ty) && contains(searchIconRect(renderer), tx, ty)) {
+      launchSearch();
+      return;
+    }
+
     if (!entries.empty()) {
+      auto entryFromPoint = [&](int y, int& index) {
+        constexpr int listTop = 60;
+        constexpr int rowHeight = 30;
+        if (y < listTop) return false;
+        const int row = (y - listTop) / rowHeight;
+        const int pageStart = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
+        const int touched = pageStart + row;
+        if (row < 0 || row >= PAGE_ITEMS || touched < 0 || touched >= static_cast<int>(entries.size())) return false;
+        index = touched;
+        return true;
+      };
+      int touched = -1;
+      if (mappedInput.wasScreenTouchDown(tx, ty) && entryFromPoint(ty, touched)) {
+        if (selectorIndex != touched) {
+          selectorIndex = touched;
+          requestUpdate();
+        }
+        return;
+      }
+      if (mappedInput.wasScreenTapped(tx, ty) && entryFromPoint(ty, touched)) {
+        selectorIndex = touched;
+        activateSelected();
+        return;
+      }
+
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up) {
+        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        requestUpdate();
+        return;
+      }
+      if (swipe == MappedInputManager::SwipeDir::Down) {
+        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        requestUpdate();
+        return;
+      }
+
       buttonNavigator.onNextRelease([this] {
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
         requestUpdate();
@@ -130,7 +193,14 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
   // Show server name in header if available, otherwise generic title
   const char* headerTitle = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
+  const int headerRightInset = searchTemplate.empty() ? HEADER_X : (SEARCH_ICON_SIZE + SEARCH_ICON_MARGIN * 2 + 8);
+  const auto clippedHeader =
+      renderer.truncatedText(UI_12_FONT_ID, headerTitle, pageWidth - HEADER_X - headerRightInset, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, HEADER_X, HEADER_Y, clippedHeader.c_str(), true, EpdFontFamily::BOLD);
+  if (!searchTemplate.empty()) {
+    const auto rect = searchIconRect(renderer);
+    renderer.drawIcon(Search24Icon.bits, rect.x + 4, rect.y + 4, Search24Icon.w);
+  }
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());

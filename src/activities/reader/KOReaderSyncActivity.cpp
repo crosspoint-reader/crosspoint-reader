@@ -397,6 +397,47 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == SHOWING_RESULT) {
+    auto chooseSelected = [this] {
+      if (selectedOption == 0) {
+        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+      } else if (selectedOption == 1) {
+        performUpload();
+      }
+    };
+
+    auto optionFromPoint = [this](int y, int& option) {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+      const int optionY = top + 230;
+      const int optionHeight = 30;
+      if (y >= optionY - 2 && y < optionY - 2 + optionHeight) {
+        option = 0;
+        return true;
+      }
+      if (y >= optionY + optionHeight - 2 && y < optionY + optionHeight - 2 + optionHeight) {
+        option = 1;
+        return true;
+      }
+      return false;
+    };
+
+    int tx = 0;
+    int ty = 0;
+    int touchedOption = -1;
+    if (mappedInput.wasScreenTouchDown(tx, ty) && optionFromPoint(ty, touchedOption)) {
+      if (selectedOption != touchedOption) {
+        selectedOption = touchedOption;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasScreenTapped(tx, ty) && optionFromPoint(ty, touchedOption)) {
+      selectedOption = touchedOption;
+      chooseSelected();
+      return;
+    }
+
     // Navigate options
     if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
         mappedInput.wasReleased(MappedInputManager::Button::Left)) {
@@ -409,12 +450,7 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (selectedOption == 0) {
-        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
-      } else if (selectedOption == 1) {
-        // Upload local progress
-        performUpload();
-      }
+      chooseSelected();
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -424,6 +460,21 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty) && ty > renderer.getScreenHeight() / 3 &&
+        ty < renderer.getScreenHeight() * 2 / 3) {
+      if (documentHash.empty()) {
+        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
+          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
+        } else {
+          documentHash = KOReaderDocumentId::calculate(epubPath);
+        }
+      }
+      performUpload();
+      return;
+    }
+
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {

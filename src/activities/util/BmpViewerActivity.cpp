@@ -180,8 +180,34 @@ void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
 
+  auto openSibling = [this](const int delta) {
+    if (currentImageIndex < 0) {
+      return false;
+    }
+    const int nextIndex = currentImageIndex + delta;
+    if (siblingImages.size() <= 1 || nextIndex < 0 || nextIndex >= static_cast<int>(siblingImages.size())) {
+      return false;
+    }
+    currentImageIndex = nextIndex;
+    std::string dirPath = FsHelpers::extractFolderPath(filePath);
+    if (dirPath.back() != '/') dirPath += "/";
+    filePath = dirPath + siblingImages[currentImageIndex];
+    onEnter();
+    return true;
+  };
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     activityManager.goToFileBrowser(filePath);
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Left) {
+    openSibling(1);
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Right) {
+    openSibling(-1);
     return;
   }
 
@@ -192,26 +218,13 @@ void BmpViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
       mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (siblingImages.size() > 1 && currentImageIndex > 0) {
-      currentImageIndex--;
-      std::string dirPath = FsHelpers::extractFolderPath(filePath);
-      if (dirPath.back() != '/') dirPath += "/";
-      filePath = dirPath + siblingImages[currentImageIndex];
-      onEnter();
-    }
+    openSibling(-1);
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
       mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (siblingImages.size() > 1 && currentImageIndex != -1 &&
-        currentImageIndex < static_cast<int>(siblingImages.size()) - 1) {
-      currentImageIndex++;
-      std::string dirPath = FsHelpers::extractFolderPath(filePath);
-      if (dirPath.back() != '/') dirPath += "/";
-      filePath = dirPath + siblingImages[currentImageIndex];
-      onEnter();
-    }
+    openSibling(1);
     return;
   }
 }

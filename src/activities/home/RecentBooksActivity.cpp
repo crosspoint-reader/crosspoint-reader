@@ -43,6 +43,10 @@ void RecentBooksActivity::onExit() {
 
 void RecentBooksActivity::loop() {
   const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, true);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
   // After a long-press has fired, swallow input until Confirm is physically released
   // (so the release doesn't also open the book; re-arm only once the button is up).
@@ -71,11 +75,39 @@ void RecentBooksActivity::loop() {
     }
   }
 
+  int tapped = -1;
+  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(recentBooks.size()), static_cast<int>(selectorIndex),
+                                         contentTop, contentHeight, true)) {
+    if (selectorIndex != static_cast<size_t>(tapped)) {
+      selectorIndex = tapped;
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(recentBooks.size()), static_cast<int>(selectorIndex),
+                                    contentTop, contentHeight, true)) {
+    selectorIndex = tapped;
+    LOG_DBG("RBA", "Tapped recent book: %s", recentBooks[selectorIndex].path.c_str());
+    onSelectBook(recentBooks[selectorIndex].path);
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
   }
 
   int listSize = static_cast<int>(recentBooks.size());
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
 
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);

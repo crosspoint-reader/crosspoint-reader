@@ -24,6 +24,16 @@ void NetworkModeSelectionActivity::onEnter() {
 void NetworkModeSelectionActivity::onExit() { Activity::onExit(); }
 
 void NetworkModeSelectionActivity::loop() {
+  auto selectCurrent = [this] {
+    NetworkMode mode = NetworkMode::JOIN_NETWORK;
+    if (selectedIndex == 1) {
+      mode = NetworkMode::CONNECT_CALIBRE;
+    } else if (selectedIndex == 2) {
+      mode = NetworkMode::CREATE_HOTSPOT;
+    }
+    onModeSelected(mode);
+  };
+
   // Handle back button - cancel
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onCancel();
@@ -32,13 +42,25 @@ void NetworkModeSelectionActivity::loop() {
 
   // Handle confirm button - select current option
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    NetworkMode mode = NetworkMode::JOIN_NETWORK;
-    if (selectedIndex == 1) {
-      mode = NetworkMode::CONNECT_CALIBRE;
-    } else if (selectedIndex == 2) {
-      mode = NetworkMode::CREATE_HOTSPOT;
+    selectCurrent();
+    return;
+  }
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  int touched = -1;
+  if (mappedInput.wasListItemTouchedDown(touched, MENU_ITEM_COUNT, selectedIndex, contentTop, contentHeight, true)) {
+    if (selectedIndex != touched) {
+      selectedIndex = touched;
+      requestUpdate();
     }
-    onModeSelected(mode);
+    return;
+  }
+  if (mappedInput.wasListItemTapped(touched, MENU_ITEM_COUNT, selectedIndex, contentTop, contentHeight, true)) {
+    selectedIndex = touched;
+    selectCurrent();
     return;
   }
 

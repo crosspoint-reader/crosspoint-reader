@@ -16,7 +16,7 @@ class UITheme {
   UITheme();
   static UITheme& getInstance() { return instance; }
 
-  const ThemeMetrics& getMetrics() const { return *currentMetrics; }
+  ThemeMetrics getMetrics() const;
   const BaseTheme& getTheme() const { return *currentTheme; }
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);

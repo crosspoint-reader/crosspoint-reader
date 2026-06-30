@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -39,6 +41,33 @@ void EpubReaderPercentSelectionActivity::loop() {
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
+    return;
+  }
+
+  auto& theme = UITheme::getInstance();
+  auto metrics = theme.getMetrics();
+  Rect screen = theme.getScreenSafeArea(renderer, true, false);
+  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
+  constexpr int barWidth = 360;
+  constexpr int barHeight = 16;
+  const int barX = screen.x + (screen.width - barWidth) / 2;
+  const int barY = contentTop + metrics.verticalSpacing * 2;
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTapped(tx, ty) && tx >= barX - 20 && tx < barX + barWidth + 20 && ty >= barY - 24 &&
+      ty < barY + barHeight + 24) {
+    percent = std::clamp((tx - barX) * 100 / barWidth, 0, 100);
+    requestUpdate();
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Right) {
+    adjustPercent(kLargeStep);
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Left) {
+    adjustPercent(-kLargeStep);
     return;
   }
 

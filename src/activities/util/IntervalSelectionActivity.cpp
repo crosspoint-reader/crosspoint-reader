@@ -50,6 +50,34 @@ void IntervalSelectionActivity::loop() {
     return;
   }
 
+  int tx = 0;
+  int ty = 0;
+  const int screenWidth = renderer.getScreenWidth();
+  const int barWidth = std::min(360, std::max(0, screenWidth - 40));
+  constexpr int barHeight = 16;
+  const int barX = std::max(0, (screenWidth - barWidth) / 2);
+  const int barY = 140;
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    if (ty >= barY - 20 && ty < barY + barHeight + 20 && tx >= barX && tx < barX + barWidth) {
+      const int range = std::max(1, maxValue - minValue);
+      value = clampedValue(minValue + (tx - barX) * range / std::max(1, barWidth - 1));
+      requestUpdate();
+      return;
+    }
+    if (ty >= renderer.getScreenHeight() - 80) {
+      if (tx < renderer.getScreenWidth() / 3) {
+        ActivityResult result;
+        result.isCancelled = true;
+        setResult(std::move(result));
+        finish();
+      } else if (tx > renderer.getScreenWidth() * 2 / 3) {
+        setResult(IntervalResult{static_cast<uint32_t>(value)});
+        finish();
+      }
+      return;
+    }
+  }
+
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustValue(-smallStep); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustValue(smallStep); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { adjustValue(largeStep); });

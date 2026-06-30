@@ -56,6 +56,16 @@ void ConfirmationActivity::render(RenderLock&& lock) {
 }
 
 void ConfirmationActivity::loop() {
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTapped(tx, ty) && ty >= renderer.getScreenHeight() - 80) {
+    ActivityResult res;
+    res.isCancelled = tx < renderer.getScreenWidth() / 2;
+    setResult(std::move(res));
+    finish();
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     ActivityResult res;
     res.isCancelled = false;

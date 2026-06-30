@@ -48,6 +48,28 @@ void OpdsSettingsActivity::onEnter() {
 void OpdsSettingsActivity::onExit() { Activity::onExit(); }
 
 void OpdsSettingsActivity::loop() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  const int menuItems = getMenuItemCount();
+
+  int touched = -1;
+  if (mappedInput.wasListItemTouchedDown(touched, menuItems, static_cast<int>(selectedIndex), contentTop, contentHeight,
+                                         false)) {
+    if (selectedIndex != static_cast<size_t>(touched)) {
+      selectedIndex = static_cast<size_t>(touched);
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasListItemTapped(touched, menuItems, static_cast<int>(selectedIndex), contentTop, contentHeight,
+                                    false)) {
+    selectedIndex = static_cast<size_t>(touched);
+    handleSelection();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
@@ -58,7 +80,6 @@ void OpdsSettingsActivity::loop() {
     return;
   }
 
-  const int menuItems = getMenuItemCount();
   buttonNavigator.onNext([this, menuItems] {
     selectedIndex = (selectedIndex + 1) % menuItems;
     requestUpdate();

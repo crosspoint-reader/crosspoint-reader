@@ -318,6 +318,47 @@ void WifiSelectionActivity::loop() {
 
   // Handle save prompt state
   if (state == WifiSelectionState::SAVE_PROMPT) {
+    int tx = 0;
+    int ty = 0;
+    auto savePromptOptionFromPoint = [&](int x, int y, int& option) {
+      Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const auto top = screen.y + (screen.height - height * 3) / 2;
+      const int buttonY = top + 80;
+      constexpr int buttonWidth = 60;
+      constexpr int buttonSpacing = 30;
+      constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
+      const int startX = screen.x + (screen.width - totalWidth) / 2;
+      if (y < buttonY - 8 || y >= buttonY + height + 8) return false;
+      if (x >= startX - 8 && x < startX + buttonWidth + 8) {
+        option = 0;
+        return true;
+      }
+      const int noX = startX + buttonWidth + buttonSpacing;
+      if (x >= noX - 8 && x < noX + buttonWidth + 8) {
+        option = 1;
+        return true;
+      }
+      return false;
+    };
+    int touchedOption = -1;
+    if (mappedInput.wasScreenTouchDown(tx, ty) && savePromptOptionFromPoint(tx, ty, touchedOption)) {
+      if (savePromptSelection != touchedOption) {
+        savePromptSelection = touchedOption;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasScreenTapped(tx, ty) && savePromptOptionFromPoint(tx, ty, touchedOption)) {
+      savePromptSelection = touchedOption;
+      if (savePromptSelection == 0) {
+        RenderLock lock(*this);
+        WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+      }
+      onComplete(true);
+      return;
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (savePromptSelection > 0) {
@@ -347,6 +388,52 @@ void WifiSelectionActivity::loop() {
 
   // Handle forget prompt state (connection failed with saved credentials)
   if (state == WifiSelectionState::FORGET_PROMPT) {
+    int tx = 0;
+    int ty = 0;
+    auto forgetPromptOptionFromPoint = [&](int x, int y, int& option) {
+      Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const auto top = screen.y + (screen.height - height * 3) / 2;
+      const int buttonY = top + 80;
+      constexpr int buttonWidth = 120;
+      constexpr int buttonSpacing = 30;
+      constexpr int totalWidth = buttonWidth * 2 + buttonSpacing;
+      const int startX = screen.x + (screen.width - totalWidth) / 2;
+      if (y < buttonY - 8 || y >= buttonY + height + 8) return false;
+      if (x >= startX - 8 && x < startX + buttonWidth + 8) {
+        option = 0;
+        return true;
+      }
+      const int forgetX = startX + buttonWidth + buttonSpacing;
+      if (x >= forgetX - 8 && x < forgetX + buttonWidth + 8) {
+        option = 1;
+        return true;
+      }
+      return false;
+    };
+    int touchedOption = -1;
+    if (mappedInput.wasScreenTouchDown(tx, ty) && forgetPromptOptionFromPoint(tx, ty, touchedOption)) {
+      if (forgetPromptSelection != touchedOption) {
+        forgetPromptSelection = touchedOption;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasScreenTapped(tx, ty) && forgetPromptOptionFromPoint(tx, ty, touchedOption)) {
+      forgetPromptSelection = touchedOption;
+      if (forgetPromptSelection == 1) {
+        RenderLock lock(*this);
+        WIFI_STORE.removeCredential(selectedSSID);
+        const auto network = find_if(networks.begin(), networks.end(),
+                                     [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
+        if (network != networks.end()) {
+          network->hasSavedPassword = false;
+        }
+      }
+      startWifiScan();
+      return;
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (forgetPromptSelection > 0) {
@@ -437,6 +524,43 @@ void WifiSelectionActivity::loop() {
         selectedSSID = networks[selectedNetworkIndex].ssid;
         state = WifiSelectionState::FORGET_PROMPT;
         forgetPromptSelection = 0;  // Default to "Cancel"
+        requestUpdate();
+        return;
+      }
+    }
+
+    if (!networks.empty()) {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int contentTop =
+          screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+      const int contentHeight = screen.height - contentTop - metrics.verticalSpacing * 2;
+      int touched = -1;
+      if (mappedInput.wasListItemTouchedDown(touched, static_cast<int>(networks.size()),
+                                             static_cast<int>(selectedNetworkIndex), contentTop, contentHeight,
+                                             false)) {
+        if (selectedNetworkIndex != static_cast<size_t>(touched)) {
+          selectedNetworkIndex = touched;
+          requestUpdate();
+        }
+        return;
+      }
+      if (mappedInput.wasListItemTapped(touched, static_cast<int>(networks.size()),
+                                        static_cast<int>(selectedNetworkIndex), contentTop, contentHeight, false)) {
+        selectedNetworkIndex = touched;
+        selectNetwork(selectedNetworkIndex);
+        return;
+      }
+
+      const int pageItems = GUI.getListPageItems(contentHeight, false);
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up) {
+        selectedNetworkIndex = ButtonNavigator::nextPageIndex(selectedNetworkIndex, networks.size(), pageItems);
+        requestUpdate();
+        return;
+      }
+      if (swipe == MappedInputManager::SwipeDir::Down) {
+        selectedNetworkIndex = ButtonNavigator::previousPageIndex(selectedNetworkIndex, networks.size(), pageItems);
         requestUpdate();
         return;
       }

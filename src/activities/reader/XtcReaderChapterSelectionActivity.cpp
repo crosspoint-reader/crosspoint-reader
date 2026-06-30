@@ -56,17 +56,71 @@ void XtcReaderChapterSelectionActivity::loop() {
   const int pageItems = getPageItems();
   const int totalItems = static_cast<int>(xtc->getChapters().size());
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+    return;
+  }
+
+  auto selectChapter = [this] {
     const auto& chapters = xtc->getChapters();
     if (!chapters.empty() && selectorIndex >= 0 && selectorIndex < static_cast<int>(chapters.size())) {
       setResult(PageResult{chapters[selectorIndex].startPage});
       finish();
     }
-  } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
+  };
+
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
+  const int contentY = isPortraitInverted ? 50 : 0;
+  const int listTop = 60 + contentY;
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTouchDown(tx, ty) && tx >= contentX && tx < contentX + contentWidth && ty >= listTop) {
+    const int row = (ty - listTop) / 30;
+    const int pageStartIndex = selectorIndex / pageItems * pageItems;
+    const int touched = pageStartIndex + row;
+    if (row >= 0 && row < pageItems && touched >= 0 && touched < totalItems) {
+      if (selectorIndex != touched) {
+        selectorIndex = touched;
+        requestUpdate();
+      }
+      return;
+    }
+  }
+
+  if (mappedInput.wasScreenTapped(tx, ty) && tx >= contentX && tx < contentX + contentWidth && ty >= listTop) {
+    const int row = (ty - listTop) / 30;
+    const int pageStartIndex = selectorIndex / pageItems * pageItems;
+    const int tapped = pageStartIndex + row;
+    if (row >= 0 && row < pageItems && tapped >= 0 && tapped < totalItems) {
+      selectorIndex = tapped;
+      selectChapter();
+      return;
+    }
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
+    requestUpdate();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    selectChapter();
   }
 
   buttonNavigator.onNextRelease([this, totalItems] {

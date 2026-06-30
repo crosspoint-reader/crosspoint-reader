@@ -205,8 +205,12 @@ void FileBrowserActivity::loop() {
 
   const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  auto activateSelected = [this] {
     if (lockNextConfirmRelease) {
       lockNextConfirmRelease = false;
       return;
@@ -273,6 +277,27 @@ void FileBrowserActivity::loop() {
       }
     }
     return;
+  };
+
+  int tapped = -1;
+  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(files.size()), static_cast<int>(selectorIndex),
+                                         contentTop, contentHeight, false)) {
+    if (selectorIndex != static_cast<size_t>(tapped)) {
+      selectorIndex = tapped;
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(files.size()), static_cast<int>(selectorIndex), contentTop,
+                                    contentHeight, false)) {
+    selectorIndex = tapped;
+    activateSelected();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    activateSelected();
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -303,6 +328,18 @@ void FileBrowserActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();

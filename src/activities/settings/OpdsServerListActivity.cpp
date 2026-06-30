@@ -32,6 +32,8 @@ void OpdsServerListActivity::onEnter() {
 void OpdsServerListActivity::onExit() { Activity::onExit(); }
 
 void OpdsServerListActivity::loop() {
+  auto activateSelected = [this] { handleSelection(); };
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (pickerMode) {
       activityManager.goHome(HomeMenuItem::OPDS_BROWSER);
@@ -42,12 +44,43 @@ void OpdsServerListActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleSelection();
+    activateSelected();
     return;
   }
 
   const int itemCount = getItemCount();
   if (itemCount > 0) {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    const int contentHeight =
+        renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+    int touched = -1;
+    if (mappedInput.wasListItemTouchedDown(touched, itemCount, selectedIndex, contentTop, contentHeight, true)) {
+      if (selectedIndex != touched) {
+        selectedIndex = touched;
+        requestUpdate();
+      }
+      return;
+    }
+    if (mappedInput.wasListItemTapped(touched, itemCount, selectedIndex, contentTop, contentHeight, true)) {
+      selectedIndex = touched;
+      activateSelected();
+      return;
+    }
+
+    const int pageItems = GUI.getListPageItems(contentHeight, true);
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Up) {
+      selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, itemCount, pageItems);
+      requestUpdate();
+      return;
+    }
+    if (swipe == MappedInputManager::SwipeDir::Down) {
+      selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, itemCount, pageItems);
+      requestUpdate();
+      return;
+    }
+
     buttonNavigator.onNext([this, itemCount] {
       selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);
       requestUpdate();

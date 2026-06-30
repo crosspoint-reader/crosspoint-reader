@@ -1,6 +1,7 @@
 #include "RoundedRaffTheme.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -110,6 +111,18 @@ void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const 
 
   // Full-width divider between tabs and setting rows.
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
+}
+
+bool RoundedRaffTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
+                                         const int x, const int y, int& index) const {
+  (void)renderer;
+  if (tabs.empty() || y < rect.y || y >= rect.y + rect.height || x < rect.x || x >= rect.x + rect.width) {
+    return false;
+  }
+
+  const int slotWidth = std::max(1, rect.width / static_cast<int>(tabs.size()));
+  index = std::min(static_cast<int>(tabs.size()) - 1, (x - rect.x) / slotWidth);
+  return true;
 }
 
 void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -301,6 +314,16 @@ void RoundedRaffTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, c
   }
 }
 
+int RoundedRaffTheme::getListRowStep(bool hasSubtitle) const {
+  const int rowHeight =
+      hasSubtitle ? RoundedRaffMetrics::values.listWithSubtitleRowHeight : RoundedRaffMetrics::values.listRowHeight;
+  return rowHeight + kSelectableRowGap;
+}
+
+int RoundedRaffTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
+  return std::max(1, contentHeight / getListRowStep(hasSubtitle));
+}
+
 void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                                 const std::function<std::string(int index)>& rowTitle,
                                 const std::function<std::string(int index)>& rowSubtitle,
@@ -383,6 +406,10 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
 
 void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                        const char* btn4) const {
+  if (gpio.hasTouch()) {
+    return;
+  }
+
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 

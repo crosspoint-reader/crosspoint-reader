@@ -29,6 +29,11 @@ void KeyboardEntryActivity::onEnter() {
   rightLongHandled = false;
   savedCursorPos = 0;
   rightStartCursorPos = 0;
+  touchKeyHeld = false;
+  touchKeyLongHandled = false;
+  touchKeyStart = 0;
+  touchKeyRow = -1;
+  touchKeyCol = -1;
   requestUpdate();
 }
 
@@ -188,8 +193,136 @@ void KeyboardEntryActivity::mapColContentBottom(int& col, bool goingUp) const {
   }
 }
 
+bool KeyboardEntryActivity::keyFromPoint(const int x, const int y, int& row, int& col) const {
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+
+  const int inputStartY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
+                          metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int contentCols = getContentColCount();
+  const int keyHeight = metrics.keyboardKeyHeight;
+  const int bottomKeyHeight = metrics.keyboardBottomKeyHeight;
+  const int keySpacing = metrics.keyboardKeySpacing;
+  const int keyboardWidth = pageWidth * metrics.keyboardWidthPercent / 100;
+  const int keyWidth = (keyboardWidth - (contentCols - 1) * keySpacing) / contentCols;
+  const int leftMargin = (pageWidth - (contentCols * keyWidth + (contentCols - 1) * keySpacing)) / 2;
+  const int bottomRowGap = metrics.keyboardBottomKeySpacing > 0 ? 4 : 0;
+  const int keyboardStartY = metrics.keyboardBottomAligned
+                                 ? pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing -
+                                       (keyHeight + keySpacing) * getContentRowCount() - bottomKeyHeight -
+                                       bottomRowGap + metrics.keyboardVerticalOffset
+                                 : inputStartY + lineHeight + metrics.verticalSpacing;
+  const int bkSpacing = metrics.keyboardBottomKeySpacing;
+  const int abcKeyWidth = (keyboardWidth - (COLS - 1) * keySpacing) / COLS;
+  const int contentTotalWidth = COLS * abcKeyWidth + (COLS - 1) * keySpacing;
+  const int bottomKeyWidth = (contentTotalWidth - (BOTTOM_KEY_COUNT - 1) * bkSpacing) / BOTTOM_KEY_COUNT;
+  const int bottomLeftMargin =
+      (pageWidth - (BOTTOM_KEY_COUNT * bottomKeyWidth + (BOTTOM_KEY_COUNT - 1) * bkSpacing)) / 2;
+
+  int rowLeftMargin = leftMargin;
+  if (urlMode) {
+    const int urlTotalWidth = 3 * keyWidth + 2 * keySpacing;
+    const int urlCenterX =
+        bottomLeftMargin + static_cast<int>(SpecialKeyType::Space) * (bottomKeyWidth + bkSpacing) + bottomKeyWidth / 2;
+    rowLeftMargin = urlCenterX - urlTotalWidth / 2;
+  }
+
+  const int contentRows = getContentRowCount();
+  for (int r = 0; r < contentRows; r++) {
+    const int keyY = keyboardStartY + r * (keyHeight + keySpacing);
+    if (y < keyY || y >= keyY + keyHeight) continue;
+    for (int c = 0; c < contentCols; c++) {
+      const int keyX = rowLeftMargin + c * (keyWidth + keySpacing);
+      if (x >= keyX && x < keyX + keyWidth) {
+        row = r;
+        col = c;
+        return true;
+      }
+    }
+  }
+
+  const int bottomRowY = keyboardStartY + contentRows * (keyHeight + keySpacing) + bottomRowGap;
+  if (y >= bottomRowY && y < bottomRowY + bottomKeyHeight) {
+    for (int c = 0; c < BOTTOM_KEY_COUNT; c++) {
+      const int keyX = bottomLeftMargin + c * (bottomKeyWidth + bkSpacing);
+      if (x >= keyX && x < keyX + bottomKeyWidth) {
+        row = contentRows;
+        col = c;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+bool KeyboardEntryActivity::handleLongPressOnSelectedKey() {
+  if (isBottomRow(selectedRow) && selectedCol == static_cast<int>(SpecialKeyType::Del)) {
+    text.clear();
+    cursorPos = 0;
+    return true;
+  }
+
+  char alt = getAlternativeChar();
+  if (alt != '\0') {
+    insertChar(alt);
+    return true;
+  }
+
+  return false;
+}
+
 void KeyboardEntryActivity::loop() {
   const int totalRows = getTotalRowCount();
+
+  int tx = 0;
+  int ty = 0;
+  int touchedRow = -1;
+  int touchedCol = -1;
+  if (!cursorMode && mappedInput.wasScreenTouchDown(tx, ty) && keyFromPoint(tx, ty, touchedRow, touchedCol)) {
+    if (!touchKeyHeld || touchKeyRow != touchedRow || touchKeyCol != touchedCol) {
+      touchKeyHeld = true;
+      touchKeyLongHandled = false;
+      touchKeyStart = millis();
+      touchKeyRow = touchedRow;
+      touchKeyCol = touchedCol;
+    }
+    if (selectedRow != touchedRow || selectedCol != touchedCol) {
+      selectedRow = touchedRow;
+      selectedCol = touchedCol;
+      requestUpdate();
+    }
+    const unsigned long longPressMs = isBottomRow(selectedRow) && selectedCol == static_cast<int>(SpecialKeyType::Del)
+                                          ? TOUCH_DEL_LONG_PRESS_MS
+                                          : TOUCH_LONG_PRESS_MS;
+    if (!touchKeyLongHandled && millis() - touchKeyStart >= longPressMs && handleLongPressOnSelectedKey()) {
+      touchKeyLongHandled = true;
+      requestUpdate();
+    }
+    return;
+  }
+  if (!cursorMode && mappedInput.wasScreenTapped(tx, ty) && keyFromPoint(tx, ty, touchedRow, touchedCol)) {
+    selectedRow = touchedRow;
+    selectedCol = touchedCol;
+    if (!touchKeyLongHandled && handleKeyPress()) {
+      requestUpdate();
+    }
+    touchKeyHeld = false;
+    touchKeyLongHandled = false;
+    touchKeyStart = 0;
+    touchKeyRow = -1;
+    touchKeyCol = -1;
+    return;
+  }
+  if (touchKeyHeld) {
+    touchKeyHeld = false;
+    touchKeyLongHandled = false;
+    touchKeyStart = 0;
+    touchKeyRow = -1;
+    touchKeyCol = -1;
+  }
 
   if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     upHeld = true;
@@ -322,17 +455,15 @@ void KeyboardEntryActivity::loop() {
   if (confirmHeld && !confirmLongHandled && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() > DEL_LONG_PRESS_MS && isBottomRow(selectedRow) &&
       selectedCol == static_cast<int>(SpecialKeyType::Del)) {
-    text.clear();
-    cursorPos = 0;
+    handleLongPressOnSelectedKey();
     confirmLongHandled = true;
     requestUpdate();
   }
 
   if (confirmHeld && !confirmLongHandled && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() > LONG_PRESS_MS) {
-    char alt = getAlternativeChar();
-    if (alt != '\0') {
-      insertChar(alt);
+    const bool selectedDel = isBottomRow(selectedRow) && selectedCol == static_cast<int>(SpecialKeyType::Del);
+    if (!selectedDel && handleLongPressOnSelectedKey()) {
       requestUpdate();
       confirmLongHandled = true;
     }

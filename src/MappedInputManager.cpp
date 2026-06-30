@@ -2,7 +2,11 @@
 
 #include <GfxRenderer.h>
 
+#include <algorithm>
+#include <cstdlib>
+
 #include "CrossPointSettings.h"
+#include "components/UITheme.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
@@ -74,9 +78,146 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   return false;
 }
 
-bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
+namespace {
+constexpr float BACK_GESTURE_FRAC_X = 0.22f;
+constexpr float BACK_GESTURE_FRAC_Y = 0.12f;
+constexpr float BOTTOM_EDGE_BACK_GESTURE_FRAC_Y = 0.14f;
+constexpr unsigned long TOUCH_DOWN_SELECT_DELAY_MS = 90;
+constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
+}  // namespace
 
-bool MappedInputManager::wasReleased(const Button button) const { return mapButton(button, &HalGPIO::wasReleased); }
+bool MappedInputManager::hasTouch() const { return gpio.hasTouch(); }
+
+void MappedInputManager::rememberTouchHeldTime() const {
+  touchHeldOverrideValid = true;
+  touchHeldOverrideMs = gpio.lastTouchHeldMs();
+  touchHeldOverrideAt = millis();
+}
+
+bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (!gpio.wasTouchTap(nx, ny)) return false;
+  renderer.tapToLogical(nx, ny, x, y);
+  rememberTouchHeldTime();
+  return true;
+}
+
+bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  unsigned long heldMs = 0;
+  if (!gpio.isTouchTapCandidate(nx, ny, heldMs)) return false;
+  if (heldMs < TOUCH_DOWN_SELECT_DELAY_MS) return false;
+  renderer.tapToLogical(nx, ny, x, y);
+  return true;
+}
+
+bool MappedInputManager::wasTapInRect(const int x, const int y, const int width, const int height) const {
+  int tx = 0;
+  int ty = 0;
+  return wasScreenTapped(tx, ty) && tx >= x && tx < x + width && ty >= y && ty < y + height;
+}
+
+bool MappedInputManager::listItemFromPoint(const int x, const int y, int& index, const int itemCount,
+                                           const int selectedIndex, const int listTop, const int listHeight,
+                                           const bool hasSubtitle) const {
+  (void)x;
+  if (itemCount <= 0) return false;
+  if (y < listTop || y >= listTop + listHeight) return false;
+
+  const auto& theme = UITheme::getInstance().getTheme();
+  const int rowStep = theme.getListRowStep(hasSubtitle);
+  if (rowStep <= 0) return false;
+
+  const int pageItems = theme.getListPageItems(listHeight, hasSubtitle);
+  if (pageItems <= 0) return false;
+  const int pageStart = std::max(0, selectedIndex / pageItems) * pageItems;
+  const int row = (y - listTop) / rowStep;
+  const int tapped = pageStart + row;
+  if (row < 0 || row >= pageItems || tapped >= itemCount) return false;
+  index = tapped;
+  return true;
+}
+
+bool MappedInputManager::wasListItemTapped(int& index, const int itemCount, const int selectedIndex, const int listTop,
+                                           const int listHeight, const bool hasSubtitle) const {
+  int tx = 0;
+  int ty = 0;
+  return wasScreenTapped(tx, ty) &&
+         listItemFromPoint(tx, ty, index, itemCount, selectedIndex, listTop, listHeight, hasSubtitle);
+}
+
+bool MappedInputManager::wasListItemTouchedDown(int& index, const int itemCount, const int selectedIndex,
+                                                const int listTop, const int listHeight, const bool hasSubtitle) const {
+  int tx = 0;
+  int ty = 0;
+  return wasScreenTouchDown(tx, ty) &&
+         listItemFromPoint(tx, ty, index, itemCount, selectedIndex, listTop, listHeight, hasSubtitle);
+}
+
+MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
+  float nxs = 0.0f;
+  float nys = 0.0f;
+  float nxe = 0.0f;
+  float nye = 0.0f;
+  if (!gpio.wasSwipe(nxs, nys, nxe, nye)) return SwipeDir::None;
+
+  int sx = 0;
+  int sy = 0;
+  int ex = 0;
+  int ey = 0;
+  renderer.tapToLogical(nxs, nys, sx, sy);
+  renderer.tapToLogical(nxe, nye, ex, ey);
+  const int dx = ex - sx;
+  const int dy = ey - sy;
+  if (std::abs(dx) >= std::abs(dy)) {
+    return dx < 0 ? SwipeDir::Left : SwipeDir::Right;
+  }
+  return dy < 0 ? SwipeDir::Up : SwipeDir::Down;
+}
+
+bool MappedInputManager::wasBackGesture() const {
+  float nxs = 0.0f;
+  float nys = 0.0f;
+  float nxe = 0.0f;
+  float nye = 0.0f;
+  if (gpio.wasSwipe(nxs, nys, nxe, nye)) {
+    int sx = 0;
+    int sy = 0;
+    int ex = 0;
+    int ey = 0;
+    renderer.tapToLogical(nxs, nys, sx, sy);
+    renderer.tapToLogical(nxe, nye, ex, ey);
+    const int bottomEdgeTop =
+        renderer.getScreenHeight() - static_cast<int>(renderer.getScreenHeight() * BOTTOM_EDGE_BACK_GESTURE_FRAC_Y);
+    if (sy >= bottomEdgeTop && ey < sy && std::abs(ey - sy) > std::abs(ex - sx)) {
+      rememberTouchHeldTime();
+      return true;
+    }
+  }
+
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (!gpio.wasTouchTap(nx, ny)) return false;
+  int lx = 0;
+  int ly = 0;
+  renderer.tapToLogical(nx, ny, lx, ly);
+  const bool hit =
+      lx <= renderer.getScreenWidth() * BACK_GESTURE_FRAC_X && ly <= renderer.getScreenHeight() * BACK_GESTURE_FRAC_Y;
+  if (hit) rememberTouchHeldTime();
+  return hit;
+}
+
+bool MappedInputManager::wasPressed(const Button button) const {
+  if (button == Button::Back && wasBackGesture()) return true;
+  return mapButton(button, &HalGPIO::wasPressed);
+}
+
+bool MappedInputManager::wasReleased(const Button button) const {
+  if (button == Button::Back && wasBackGesture()) return true;
+  return mapButton(button, &HalGPIO::wasReleased);
+}
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
@@ -84,7 +225,14 @@ bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 
 bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
 
-unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(); }
+unsigned long MappedInputManager::getHeldTime() const {
+  if (!gpio.wasAnyPressed() && !gpio.wasAnyReleased() && touchHeldOverrideValid &&
+      millis() - touchHeldOverrideAt <= TOUCH_HELD_OVERRIDE_WINDOW_MS) {
+    return touchHeldOverrideMs;
+  }
+  touchHeldOverrideValid = false;
+  return gpio.getHeldTime();
+}
 
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {
