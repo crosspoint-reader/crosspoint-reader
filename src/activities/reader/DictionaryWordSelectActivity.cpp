@@ -281,14 +281,10 @@ void DictionaryWordSelectActivity::loop() {
   if (controller.isActive()) {
     switch (controller.handleInput()) {
       case DictionaryLookupController::LookupEvent::FoundDefinition: {
-        startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(
-                                   renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(),
-                                   true, cachePath, controller.getRecordHistory(), controller.getLookupWord(),
-                                   DictionaryLookupController::toHistStatus(controller.getFoundStatus())),
-                               [this](const ActivityResult&) {
-                                 setResult(ActivityResult{});
-                                 finish();
-                               });
+        replaceActivityKeepingStack(std::make_unique<DictionaryDefinitionActivity>(
+            renderer, mappedInput, controller.getFoundWord(), controller.getFoundLocation(), true, cachePath,
+            controller.getRecordHistory(), controller.getLookupWord(),
+            DictionaryLookupController::toHistStatus(controller.getFoundStatus())));
         break;
       }
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:

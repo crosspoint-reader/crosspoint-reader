@@ -126,6 +126,13 @@ void ActivityManager::loop() {
         currentActivity = std::move(pendingActivity);
         lock.unlock();  // onEnter may acquire its own lock
         currentActivity->onEnter();
+      } else if (pendingAction == PendingAction::ReplaceCurrent) {
+        RenderLock lock;
+        exitActivity(lock);
+        pendingAction = PendingAction::None;
+        currentActivity = std::move(pendingActivity);
+        lock.unlock();  // onEnter may acquire its own lock
+        currentActivity->onEnter();
       } else if (pendingAction == PendingAction::Push) {
         RenderLock lock;
         stackActivities.push_back(std::move(currentActivity));
@@ -238,6 +245,16 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
   }
   pendingActivity = std::move(activity);
   pendingAction = PendingAction::Push;
+}
+
+void ActivityManager::replaceCurrentActivity(std::unique_ptr<Activity>&& activity) {
+  if (pendingActivity) {
+    // Should never happen in practice
+    LOG_ERR("ACT", "pendingActivity while replaceCurrentActivity is not expected");
+    pendingActivity.reset();
+  }
+  pendingActivity = std::move(activity);
+  pendingAction = PendingAction::ReplaceCurrent;
 }
 
 void ActivityManager::popActivity() {
