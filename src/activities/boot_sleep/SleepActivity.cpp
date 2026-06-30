@@ -242,28 +242,60 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
   return true;
 }
 
-bool renderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const char* pathForLog) {
+enum class AlphaOverlayResult : uint8_t { Rendered, NotAlphaOverlay, Error };
+enum class AlphaScanResult : uint8_t { Useful, NotUseful, Error };
+
+AlphaScanResult scanForUsefulAlpha(HalFile& file, const OverlayBmpInfo& info, uint8_t* row) {
+  if (!file.seek(info.dataOffset)) {
+    LOG_ERR("SLP", "Failed to seek transparent overlay pixel data");
+    return AlphaScanResult::Error;
+  }
+
+  bool hasVisiblePixel = false;
+  bool hasNonOpaquePixel = false;
+  for (int bmpY = 0; bmpY < info.height; bmpY++) {
+    if (file.read(row, info.rowBytes) != static_cast<int>(info.rowBytes)) {
+      LOG_ERR("SLP", "Short read while checking transparent overlay row %d", bmpY);
+      return AlphaScanResult::Error;
+    }
+
+    for (int bmpX = 0; bmpX < info.width; bmpX++) {
+      const uint8_t alpha = row[static_cast<size_t>(bmpX) * 4u + 3u];
+      hasVisiblePixel |= alpha >= MIN_VISIBLE_ALPHA;
+      hasNonOpaquePixel |= alpha < 255;
+      if (hasVisiblePixel && hasNonOpaquePixel) return AlphaScanResult::Useful;
+    }
+  }
+
+  return AlphaScanResult::NotUseful;
+}
+
+AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const char* pathForLog) {
   OverlayBmpInfo info;
-  if (!parseOverlayBmpHeader(file, info, true)) return false;
+  if (!parseOverlayBmpHeader(file, info, false)) return AlphaOverlayResult::NotAlphaOverlay;
 
   const auto placement = calculateBitmapPlacement(info.width, info.height, renderer);
   auto row = makeUniqueNoThrow<uint8_t[]>(info.rowBytes);
   if (!row) {
     LOG_ERR("SLP", "OOM: transparent overlay row (%u bytes)", static_cast<unsigned>(info.rowBytes));
-    return false;
+    return AlphaOverlayResult::Error;
   }
+
+  const auto alphaScanResult = scanForUsefulAlpha(file, info, row.get());
+  if (alphaScanResult == AlphaScanResult::Error) return AlphaOverlayResult::Error;
+  if (alphaScanResult == AlphaScanResult::NotUseful) return AlphaOverlayResult::NotAlphaOverlay;
 
   LOG_DBG("SLP", "Rendering transparent overlay: %s (%dx%d)", pathForLog, info.width, info.height);
 
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
-    return false;
+    return AlphaOverlayResult::Error;
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    return false;
+    return AlphaOverlayResult::Error;
   }
   renderer.copyGrayscaleLsbBuffers();
 
@@ -271,13 +303,13 @@ bool renderTransparentOverlayBmp(HalFile& file, GfxRenderer& renderer, const cha
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleMsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    return false;
+    return AlphaOverlayResult::Error;
   }
   renderer.copyGrayscaleMsbBuffers();
 
   renderer.displayGrayBuffer();
   renderer.setRenderMode(GfxRenderer::BW);
-  return true;
+  return AlphaOverlayResult::Rendered;
 }
 
 using SleepFileValidator = bool (*)(HalFile& file, const char* name);
@@ -293,10 +325,10 @@ bool validateCustomSleepBmp(HalFile& file, const char* name) {
   return true;
 }
 
-bool validateTransparentSleepBmp(HalFile& file, const char* name) {
-  OverlayBmpInfo info;
-  if (!parseOverlayBmpHeader(file, info, false)) {
-    LOG_DBG("SLP", "Skipping invalid transparent overlay BMP: %s", name);
+bool validateSleepOverlayBmp(HalFile& file, const char* name) {
+  Bitmap bitmap(file);
+  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+    LOG_DBG("SLP", "Skipping invalid sleep overlay BMP: %s", name);
     return false;
   }
   return true;
@@ -493,7 +525,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -504,14 +536,16 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
 
   LOG_DBG("SLP", "bitmap %d x %d, screen %d x %d", bitmap.getWidth(), bitmap.getHeight(), pageWidth, pageHeight);
   LOG_DBG("SLP", "drawing to %d x %d", x, y);
-  renderer.clearScreen();
+  if (!preserveBackground) renderer.clearScreen();
 
-  const bool hasGreyscale = bitmap.hasGreyscale() &&
-                            SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+  const bool hasGreyscale =
+      bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
+                                                          CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 
-  if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
+  if (!preserveBackground &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
   }
 
@@ -543,25 +577,43 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   }
 }
 
+bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog) const {
+  const auto alphaResult = tryRenderTransparentOverlayBmp(file, renderer, pathForLog);
+  if (alphaResult == AlphaOverlayResult::Rendered) return true;
+  if (alphaResult == AlphaOverlayResult::Error) return false;
+
+  Bitmap bitmap(file, true);
+  const auto parseResult = bitmap.parseHeaders();
+  if (parseResult != BmpReaderError::Ok) {
+    LOG_ERR("SLP", "Invalid sleep overlay BMP %s: %s", pathForLog, Bitmap::errorToString(parseResult));
+    return false;
+  }
+
+  LOG_DBG("SLP", "Rendering regular BMP sleep overlay: %s (%dx%d)", pathForLog, bitmap.getWidth(), bitmap.getHeight());
+  // drawBitmap leaves white pixels untouched; skipping the initial clear makes
+  // them transparent while retaining the existing grayscale pipeline.
+  renderBitmapSleepScreen(bitmap, true);
+  return true;
+}
+
 void SleepActivity::renderTransparentCustomSleepScreen() const {
   {
     HalFile rootFile;
     if (Storage.openFileForRead("SLP", TRANSPARENT_SLEEP_ROOT, rootFile)) {
-      if (renderTransparentOverlayBmp(rootFile, renderer, TRANSPARENT_SLEEP_ROOT)) return;
+      if (renderSleepOverlayFile(rootFile, TRANSPARENT_SLEEP_ROOT)) return;
     }
   }
 
   std::string selectedPath;
-  if (!selectRandomSleepFile(TRANSPARENT_SLEEP_DIR, validateTransparentSleepBmp, SleepRecentKind::Overlay,
-                             selectedPath)) {
-    selectRandomSleepFile(TRANSPARENT_SLEEP_LEGACY_DIR, validateTransparentSleepBmp, SleepRecentKind::Overlay,
+  if (!selectRandomSleepFile(TRANSPARENT_SLEEP_DIR, validateSleepOverlayBmp, SleepRecentKind::Overlay, selectedPath)) {
+    selectRandomSleepFile(TRANSPARENT_SLEEP_LEGACY_DIR, validateSleepOverlayBmp, SleepRecentKind::Overlay,
                           selectedPath);
   }
 
   if (!selectedPath.empty()) {
     HalFile overlayFile;
     if (Storage.openFileForRead("SLP", selectedPath, overlayFile) &&
-        renderTransparentOverlayBmp(overlayFile, renderer, selectedPath.c_str())) {
+        renderSleepOverlayFile(overlayFile, selectedPath.c_str())) {
       return;
     }
   }
