@@ -47,6 +47,11 @@ class Section {
     // HTML byte progress, for estimating the section's total page count while it's still building.
     uint32_t bytesConsumed = 0;
     uint32_t totalBytes = 0;
+    // Exponentially-smoothed page-count estimate (0 = not yet seeded) and the bytesConsumed at its
+    // last update. The raw byte-ratio estimate jitters as the build crosses dense/sparse regions;
+    // the EMA is stepped once per build advance (not per redraw) to damp that wobble.
+    float smoothedEstimate = 0;
+    uint32_t smoothedAtConsumed = 0;
   };
   std::unique_ptr<BuildContext> build_;
   bool buildComplete_ = false;
@@ -82,9 +87,9 @@ class Section {
   bool buildSomeMore(int maxPages);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }
-  // Best-known total page count: the exact pageCount once finalized, or a byte-based estimate
-  // (pages so far scaled by totalBytes/bytesConsumed) while a giant spine is still building, so
-  // "page X of Y" / progress don't read off the small build watermark.
+  // Best-known total page count: the exact pageCount once finalized, or a smoothed byte-based
+  // estimate (pages so far scaled by totalBytes/bytesConsumed, damped by an EMA) while a giant spine
+  // is still building, so "page X of Y" / progress don't read off the small build watermark.
   uint16_t estimatedTotalPages() const;
   void abandonBuild();
   // Read a page already laid out by the in-progress build (page < pageCount), from

@@ -388,9 +388,26 @@ uint16_t Section::estimatedTotalPages() const {
   const uint32_t consumed = build_->bytesConsumed;
   const uint32_t total = build_->totalBytes;
   if (pageCount == 0 || consumed == 0 || total <= consumed) return pageCount;
-  // Scale the pages built so far by the fraction of HTML still unparsed.
-  const uint64_t est = static_cast<uint64_t>(pageCount) * total / consumed;
-  if (est <= pageCount) return pageCount;
+
+  // Raw extrapolation: scale the pages built so far by the fraction of HTML still unparsed. This
+  // re-derives from a growing, non-uniform sample, so it jitters up and down as the build crosses
+  // dense vs sparse regions of the chapter.
+  const uint64_t raw = static_cast<uint64_t>(pageCount) * total / consumed;
+
+  // Damp that jitter with an exponential moving average. Step it once per build advance (keyed on
+  // bytesConsumed) rather than per status-bar redraw, so the smoothing rate doesn't depend on how
+  // often we repaint. As the build nears the end, consumed -> total and raw -> pageCount, so the
+  // average settles onto the true count (and finalizeBuild then returns the exact pageCount).
+  constexpr float ALPHA = 0.25f;  // weight of each new sample; lower = steadier but slower to settle
+  if (build_->smoothedEstimate <= 0) {
+    build_->smoothedEstimate = static_cast<float>(raw);  // seed on the first estimate
+  } else if (consumed != build_->smoothedAtConsumed) {
+    build_->smoothedEstimate += ALPHA * (static_cast<float>(raw) - build_->smoothedEstimate);
+  }
+  build_->smoothedAtConsumed = consumed;
+
+  const uint64_t est = static_cast<uint64_t>(build_->smoothedEstimate + 0.5f);
+  if (est <= pageCount) return pageCount;  // never fewer than the pages already built
   return est > 60000 ? 60000 : static_cast<uint16_t>(est);
 }
 
