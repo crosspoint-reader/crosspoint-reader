@@ -99,12 +99,10 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   const int knobX = barX + 2 + fillWidth - 2;
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
-  // Hint text for step sizes. The X3's side buttons are on the left/right edges (not an up/down
-  // rocker), so it gets device-specific wording matching the flipped large-step direction, split
-  // onto two centered lines on its "  " separator; X4 keeps its shorter single-line wording.
-  const StrId stepHintId = gpio.deviceIsX3() ? StrId::STR_PERCENT_STEP_HINT_X3 : StrId::STR_PERCENT_STEP_HINT;
-  const char* hint = I18N.get(stepHintId);
-  const char* sep = gpio.deviceIsX3() ? strstr(hint, "  ") : nullptr;
+  // Hint text for step sizes ("Front buttons / Side buttons"), split onto two centered lines on
+  // its "  " separator.
+  const char* hint = I18N.get(StrId::STR_PERCENT_STEP_HINT);
+  const char* sep = strstr(hint, "  ");
   if (sep != nullptr) {
     char line1[64];
     snprintf(line1, sizeof(line1), "%.*s", static_cast<int>(sep - hint), hint);

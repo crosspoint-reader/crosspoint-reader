@@ -97,10 +97,9 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int knobX = std::max(barX + 2, barX + 2 + fillWidth - 2);
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
-  // Step hint. On X3 the hint names "Front buttons / Side buttons" and is split onto two centered
-  // lines on its "  " separator; X4 keeps its shorter single-line wording.
+  // Step hint ("Front buttons / Side buttons"), split onto two centered lines on its "  " separator.
   const char* hint = I18N.get(stepHintId);
-  const char* sep = gpio.deviceIsX3() ? strstr(hint, "  ") : nullptr;
+  const char* sep = strstr(hint, "  ");
   if (sep != nullptr) {
     char line1[64];
     const size_t len1 = std::min(sizeof(line1) - 1, static_cast<size_t>(sep - hint));
