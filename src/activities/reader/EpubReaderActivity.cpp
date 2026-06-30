@@ -447,10 +447,19 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
-    const uint8_t newOrientation =
-        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
-                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
+  if (longPress && (SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE ||
+                    SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_FLIP_180)) {
+    uint8_t newOrientation;
+    if (SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_FLIP_180) {
+      // Both buttons flip 180° (Portrait<->Inverted, LandscapeCW<->CCW).
+      newOrientation = SETTINGS.orientation ^ 2;
+    } else if (nextTriggered) {
+      // Forward button: cycle 90° clockwise.
+      newOrientation = (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT;
+    } else {
+      // Back button: flip 180° (instant, no re-layout).
+      newOrientation = SETTINGS.orientation ^ 2;
+    }
     applyOrientation(newOrientation);
     requestUpdate();
     return;
@@ -711,10 +720,16 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     return;
   }
 
-  // Preserve current reading position so we can restore after reflow.
+  // A 180° flip (Portrait<->Inverted, LandscapeCW<->CCW) preserves viewport dimensions,
+  // so the existing page layout and reading position remain valid — no re-layout or
+  // re-index needed. Detect this by XOR: 180° pairs are 0<->2 and 1<->3, i.e. differ by 2.
+  const bool flip180 = (SETTINGS.orientation ^ orientation) == 2;
+
   {
     RenderLock lock(*this);
-    if (section) {
+
+    // Preserve reading position only when the layout will be discarded (non-180° change).
+    if (!flip180 && section) {
       cachedSpineIndex = currentSpineIndex;
       cachedChapterTotalPageCount = section->pageCount;
       nextPageNumber = section->currentPage;
@@ -727,8 +742,11 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     // Update renderer orientation to match the new logical coordinate system.
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-    // Reset section to force re-layout in the new orientation.
-    section.reset();
+    // A 180° flip does not change viewport dimensions, so the cached layout is still
+    // valid. Skip the section reset to avoid an unnecessary disk reload.
+    if (!flip180) {
+      section.reset();
+    }
   }
 }
 
