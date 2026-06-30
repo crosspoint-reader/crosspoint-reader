@@ -5,7 +5,6 @@
 #include <I18n.h>
 
 #include <cstdio>
-#include <cstring>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -99,20 +98,13 @@ void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
   const int knobX = barX + 2 + fillWidth - 2;
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
-  // Hint text for step sizes ("Front buttons / Side buttons"), split onto two centered lines on
-  // its "  " separator.
-  const char* hint = I18N.get(StrId::STR_PERCENT_STEP_HINT);
-  const char* sep = strstr(hint, "  ");
-  if (sep != nullptr) {
-    char line1[64];
-    snprintf(line1, sizeof(line1), "%.*s", static_cast<int>(sep - hint), hint);
-    const char* line2 = sep + 2;
-    while (*line2 == ' ') ++line2;
-    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, line1, true);
-    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 52, line2, true);
-  } else {
-    UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, hint, true);
-  }
+  // Two-line step hint built from separate label + value strings (front buttons = fine step, side
+  // buttons = coarse step), so the layout doesn't depend on a separator hidden in translated text.
+  char line[64];
+  snprintf(line, sizeof(line), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_FRONT), kSmallStep);
+  UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 30, line, true);
+  snprintf(line, sizeof(line), "%s %d%%", I18N.get(StrId::STR_STEP_HINT_SIDE), kLargeStep);
+  UITheme::drawCenteredText(renderer, screen, SMALL_FONT_ID, barY + 52, line, true);
 
   // Button hints follow the current front button layout.
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");

@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 #include <utility>
 
 #include "components/UITheme.h"
@@ -25,6 +24,18 @@ void IntervalSelectionActivity::onEnter() {
 void IntervalSelectionActivity::adjustValue(const int delta) {
   value = clampedValue(value + delta);
   requestUpdate();
+}
+
+void IntervalSelectionActivity::drawStepHintLine(const int y, const StrId labelId, const int step) {
+  char value[24];
+  if (valueFormatId != StrId::STR_NONE_OPT) {
+    snprintf(value, sizeof(value), I18N.get(valueFormatId), static_cast<unsigned int>(step));
+  } else {
+    snprintf(value, sizeof(value), "%d", step);
+  }
+  char line[64];
+  snprintf(line, sizeof(line), "%s %s", I18N.get(labelId), value);
+  renderer.drawCenteredText(SMALL_FONT_ID, y, line, true);
 }
 
 void IntervalSelectionActivity::loop() {
@@ -97,21 +108,11 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int knobX = std::max(barX + 2, barX + 2 + fillWidth - 2);
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
-  // Step hint ("Front buttons / Side buttons"), split onto two centered lines on its "  " separator.
-  const char* hint = I18N.get(stepHintId);
-  const char* sep = strstr(hint, "  ");
-  if (sep != nullptr) {
-    char line1[64];
-    const size_t len1 = std::min(sizeof(line1) - 1, static_cast<size_t>(sep - hint));
-    memcpy(line1, hint, len1);
-    line1[len1] = '\0';
-    const char* line2 = sep + 2;
-    while (*line2 == ' ') ++line2;
-    renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, line1, true);
-    renderer.drawCenteredText(SMALL_FONT_ID, barY + 52, line2, true);
-  } else {
-    renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, hint, true);
-  }
+  // Two-line step hint: front buttons do the small step, side buttons the large step. Built from
+  // separate label + value strings (rather than splitting one localized sentence) so the layout
+  // doesn't depend on translators preserving a hidden separator.
+  drawStepHintLine(barY + 30, StrId::STR_STEP_HINT_FRONT, smallStep);
+  drawStepHintLine(barY + 52, StrId::STR_STEP_HINT_SIDE, largeStep);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
