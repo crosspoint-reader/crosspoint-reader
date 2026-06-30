@@ -432,20 +432,66 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    if (!nextTriggered && section && section->currentPage > 0) {
+    int currentTocIndex = section ? section->getTocIndexForPage(section->currentPage) : -1;
+
+    // When navigating backwards, first jump to the beginning of the *current* chapter
+    // before actually jumping to the *previous* chapter.
+    if (!nextTriggered && section && currentTocIndex != -1) {
+      const auto currentTocEntry = epub->getTocItem(currentTocIndex);
+      bool isAtStartOfChapter = false;
+
+      // We check the spine index and anchor to handle multi-chapter spines where
+      // the chapter might start in the middle of a spine file.
+      if (currentTocEntry.spineIndex == currentSpineIndex) {
+        int startPage = 0;
+        if (!currentTocEntry.anchor.empty()) {
+          startPage = section->getPageForAnchor(currentTocEntry.anchor).value_or(0);
+        }
+        isAtStartOfChapter = (section->currentPage == startPage);
+      }
+
+      if (!isAtStartOfChapter) {
+        // We aren't at the start of the chapter yet, so jump to the start of it.
+        // We set currentSpineIndex/pendingAnchor to seamlessly handle cases where
+        // the current chapter spans backwards into a previous spine file.
+        RenderLock lock(*this);
+        currentSpineIndex = currentTocEntry.spineIndex;
+        pendingAnchor = currentTocEntry.anchor;
+        nextPageNumber = 0;
+        section.reset();
+        requestUpdate();
+        return;
+      }
+    } else if (!nextTriggered && section && section->currentPage > 0) {
+      // Fallback for pages before the first TOC entry (front matter)
       section->currentPage = 0;
       requestUpdate();
       return;
+    }
+
+    int targetTocIndex = currentTocIndex;
+    if (nextTriggered) {
+      if (targetTocIndex != -1) targetTocIndex++;
+    } else {
+      if (targetTocIndex != -1) targetTocIndex--;
     }
 
     // We don't want to delete the section mid-render, so grab the semaphore
     {
       RenderLock lock(*this);
       nextPageNumber = 0;
-      if (nextTriggered) {
-        currentSpineIndex++;
-      } else if (currentSpineIndex > 0) {
-        currentSpineIndex--;
+
+      if (targetTocIndex >= 0 && targetTocIndex < epub->getTocItemsCount()) {
+        const auto targetEntry = epub->getTocItem(targetTocIndex);
+        currentSpineIndex = targetEntry.spineIndex;
+        pendingAnchor = targetEntry.anchor;
+      } else {
+        // Fallback to spine navigation if we can't navigate to the TOC item
+        if (nextTriggered) {
+          currentSpineIndex++;
+        } else if (currentSpineIndex > 0) {
+          currentSpineIndex--;
+        }
       }
       section.reset();
     }
