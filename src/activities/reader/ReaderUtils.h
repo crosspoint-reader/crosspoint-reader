@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalTiltSensor.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include "MappedInputManager.h"
 
@@ -86,6 +87,43 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
 template <typename RenderFn>
 void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
+  if (renderer.supportsStripGrayscale()) {
+    constexpr int STRIP_ROWS = 80;
+    const int displayHeight = renderer.getDisplayHeight();
+    const int displayWidthBytes = renderer.getDisplayWidthBytes();
+    auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(displayWidthBytes) * STRIP_ROWS);
+    if (!scratch) {
+      LOG_ERR("READER", "OOM: grayscale strip scratch (%d bytes); skipping anti-aliasing",
+              displayWidthBytes * STRIP_ROWS);
+      return;
+    }
+
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    for (int y = 0; y < displayHeight; y += STRIP_ROWS) {
+      const int rows = (displayHeight - y < STRIP_ROWS) ? (displayHeight - y) : STRIP_ROWS;
+      renderer.beginStripTarget(scratch.get(), y, rows);
+      renderer.clearScreen(0x00);
+      renderFn();
+      renderer.endStripTarget();
+      renderer.writeGrayscalePlaneStrip(true, scratch.get(), y, rows);
+    }
+
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    for (int y = 0; y < displayHeight; y += STRIP_ROWS) {
+      const int rows = (displayHeight - y < STRIP_ROWS) ? (displayHeight - y) : STRIP_ROWS;
+      renderer.beginStripTarget(scratch.get(), y, rows);
+      renderer.clearScreen(0x00);
+      renderFn();
+      renderer.endStripTarget();
+      renderer.writeGrayscalePlaneStrip(false, scratch.get(), y, rows);
+    }
+
+    renderer.setRenderMode(GfxRenderer::BW);
+    renderer.displayGrayBuffer();
+    renderer.cleanupGrayscaleWithFrameBuffer();
+    return;
+  }
+
   if (!renderer.storeBwBuffer()) {
     LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
     return;
