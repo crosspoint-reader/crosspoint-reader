@@ -5,11 +5,13 @@
 #include <string>
 
 #include "Epub.h"
+#include "TocBoundaryCache.h"
 
 class Page;
 class GfxRenderer;
 
 class Section {
+ private:
   std::shared_ptr<Epub> epub;
   const int spineIndex;
   GfxRenderer& renderer;
@@ -21,6 +23,8 @@ class Section {
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
+  mutable TocBoundaryCache tocBoundaryCache;
+
  public:
   uint16_t pageCount = 0;
   int currentPage = 0;
@@ -29,7 +33,8 @@ class Section {
       : epub(epub),
         spineIndex(spineIndex),
         renderer(renderer),
-        filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin") {}
+        filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin"),
+        tocBoundaryCache(epub, spineIndex, [this](const std::string& anchor) { return getPageForAnchor(anchor); }) {}
   ~Section() = default;
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
@@ -48,7 +53,10 @@ class Section {
   // Look up the best TOC index for a given page within this section. This
   // accounts for sections with multiple chapters, or chapters that span
   // multiple sections.
-  int getTocIndexForPage(int page) const;
+  int getTocIndexForPage(int pageInSpine) const;
+
+  // Look up the start page of a TOC entry within this section using the boundary cache.
+  std::optional<uint16_t> getTocStartPage(int tocIndex) const;
 
   // Calculates the true chapter page number (0-indexed) and total pages in the chapter.
   // It properly handles multi-spine chapters by aggregating page counts across

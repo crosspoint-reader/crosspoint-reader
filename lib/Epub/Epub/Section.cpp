@@ -397,58 +397,16 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   return std::nullopt;
 }
 
+std::optional<uint16_t> Section::getTocStartPage(int tocIndex) const {
+  return tocBoundaryCache.getTocStartPage(tocIndex);
+}
+
 // For better performance, this method assumes TOC entries belonging to the
 // same spine are contiguous in the TOC list and are strictly in reading (page)
 // order. This is not guaranteed to be true in epubs but assuming this avoids
 // scanning the entire TOC.
-int Section::getTocIndexForPage(const int page) const {
-  const int firstTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
-  if (firstTocIndex < 0) {
-    LOG_DBG("SCT", "No TOC entry found for spine index %d", spineIndex);
-    return -1;
-  }
-
-  const auto firstTocEntry = epub->getTocItem(firstTocIndex);
-  if (firstTocEntry.spineIndex == spineIndex) {
-    int firstTocPage = 0;
-    if (!firstTocEntry.anchor.empty()) {
-      if (const auto p = getPageForAnchor(firstTocEntry.anchor)) {
-        firstTocPage = *p;
-      }
-    }
-
-    if (page < firstTocPage) {
-      // The current page belongs to a chapter that started in the prev spine
-      // and continued into this one. If there is no previous TOC entry, it's
-      // the front-matter of the book before the first chapter.
-      return firstTocIndex > 0 ? firstTocIndex - 1 : -1;
-    }
-  }
-
-  // Spines may have multiple chapters, find the closest one.
-  int bestTocIndex = firstTocIndex;
-
-  for (int i = firstTocIndex + 1; i < epub->getTocItemsCount(); i++) {
-    const auto tocEntry = epub->getTocItem(i);
-    if (tocEntry.spineIndex != spineIndex) {
-      break;
-    }
-
-    int tocEntryPageInSpine = 0;
-    if (!tocEntry.anchor.empty()) {
-      if (const auto p = getPageForAnchor(tocEntry.anchor)) {
-        tocEntryPageInSpine = *p;
-      }
-    }
-
-    if (tocEntryPageInSpine <= page) {
-      bestTocIndex = i;
-    } else {
-      break;
-    }
-  }
-
-  return bestTocIndex;
+int Section::getTocIndexForPage(const int pageInSpine) const {
+  return tocBoundaryCache.getTocIndexForPage(pageInSpine);
 }
 
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
@@ -581,6 +539,14 @@ void Section::getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) 
     return;
   }
 
+  if (auto entry = tocBoundaryCache.getEntry(tocIndex)) {
+    if (entry->metrics) {
+      chapterPageOut = currentPage + entry->metrics->offset;
+      chapterPageCountOut = entry->metrics->totalPages;
+      return;
+    }
+  }
+
   // Convenience methods to get data from either this section or the requested spine.
   auto getSpinePageCount = [&](int s) -> int {
     if (s == spineIndex) return pageCount;
@@ -588,10 +554,10 @@ void Section::getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) 
     return tempSec.getCachedPageCount().value_or(1);
   };
 
-  auto getSpineAnchorPage = [&](int s, const std::string& anchor) -> int {
-    if (s == spineIndex) return getPageForAnchor(anchor).value_or(0);
+  auto getSpineAnchorPage = [&](int s, int tIdx) -> int {
+    if (s == spineIndex) return getTocStartPage(tIdx).value_or(0);
     Section tempSec(epub, s, renderer);
-    return tempSec.getPageForAnchor(anchor).value_or(0);
+    return tempSec.getTocStartPage(tIdx).value_or(0);
   };
 
   // --- 1. Find the bounds of the chapter ---
@@ -600,7 +566,7 @@ void Section::getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) 
   // be in a later spine).
   const auto startTocEntry = epub->getTocItem(tocIndex);
   const int startSpine = startTocEntry.spineIndex;
-  const int startPageInSpine = startTocEntry.anchor.empty() ? 0 : getSpineAnchorPage(startSpine, startTocEntry.anchor);
+  const int startPageInSpine = getSpineAnchorPage(startSpine, tocIndex);
 
   int endSpine = epub->getSpineItemsCount() - 1;
   int endPageInSpine = 0;
@@ -608,9 +574,7 @@ void Section::getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) 
   if (tocIndex + 1 < epub->getTocItemsCount()) {
     const auto nextTocEntry = epub->getTocItem(tocIndex + 1);
     endSpine = nextTocEntry.spineIndex;
-    if (!nextTocEntry.anchor.empty()) {
-      endPageInSpine = getSpineAnchorPage(endSpine, nextTocEntry.anchor);
-    }
+    endPageInSpine = getSpineAnchorPage(endSpine, tocIndex + 1);
   } else {
     endPageInSpine = getSpinePageCount(endSpine);
   }
@@ -649,6 +613,10 @@ void Section::getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) 
       }
     }
     totalPages += endPageInSpine;
+  }
+
+  if (auto entry = tocBoundaryCache.getEntry(tocIndex)) {
+    entry->metrics = TocBoundaryCache::ChapterMetrics{offset, std::max(1, totalPages)};
   }
 
   chapterPageOut = offset + currentPage;

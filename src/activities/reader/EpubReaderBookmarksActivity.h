@@ -3,6 +3,8 @@
 
 #include <memory>
 
+class Section;
+
 #include "../../BookmarkEntry.h"
 #include "../Activity.h"
 #include "util/ButtonNavigator.h"
@@ -13,6 +15,7 @@ class EpubReaderBookmarksActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   std::vector<BookmarkEntry> bookmarks;
+  std::vector<std::pair<int, std::unique_ptr<Section>>> sectionCache;
   int confirmingDelete = 0;  // 0 = hide dialog, 1 = show dialog, 2 = allow confirmation to delete
 
  public:
