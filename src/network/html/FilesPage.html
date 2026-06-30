@@ -426,6 +426,97 @@
     .advanced-options-text {
       font-weight: 500;
     }
+    .fb2-css-edit-link {
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+      font-size: 0.85em;
+      color: var(--label-color);
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.2s;
+      font-weight: 500;
+    }
+    .fb2-css-edit-link:not(:disabled):hover {
+      color: var(--accent-color);
+    }
+    .fb2-css-edit-link:disabled {
+      color: var(--label-color);
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+    .fb2-css-edited-label {
+      font-style: italic;
+      opacity: 0.85;
+    }
+    .modal-overlay.fb2-css-modal-overlay {
+      z-index: 300;
+    }
+    .modal.fb2-css-modal {
+      max-width: 640px;
+      width: 95%;
+    }
+    .fb2-css-textarea {
+      width: 100%;
+      min-height: 280px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.85em;
+      line-height: 1.4;
+      padding: 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .fb2-css-modal-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+    }
+    .fb2-css-reset-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.25em;
+      line-height: 1;
+      padding: 6px 8px;
+      color: var(--label-color);
+      border-radius: 4px;
+    }
+    .fb2-css-reset-btn:hover {
+      color: var(--accent-color);
+      background: rgba(0, 0, 0, 0.05);
+    }
+    .fb2-css-footer-right {
+      display: flex;
+      gap: 8px;
+    }
+    .fb2-css-ok-btn {
+      background-color: #27ae60;
+      color: white;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+    .fb2-css-ok-btn:hover {
+      background-color: #219a52;
+    }
+    .fb2-css-cancel-btn {
+      background-color: #95a5a6;
+      color: white;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+    .fb2-css-cancel-btn:hover {
+      background-color: var(--label-color);
+    }
     /* Advanced Options */
     .advanced-options-arrow {
       font-size: 0.7em;
@@ -1554,6 +1645,9 @@
                 <input type="checkbox" id="convertFb2BeforeUpload" onchange="toggleFb2ConvertOptions()">
                 <span>Convert FB2 to EPUB</span>
               </label>
+              <button type="button" class="fb2-css-edit-link" id="fb2CssEditLink" onclick="openFb2CssEditor()" title="Edit EPUB stylesheet for FB2 conversion">
+                Edit css<span class="fb2-css-edited-label" id="fb2CssEditedLabel" style="display:none;"> (edited)</span>
+              </button>
             </div>
             <div class="convert-row" id="epubOptimizeRow" style="display:none;">
               <label class="convert-checkbox">
@@ -1732,6 +1826,23 @@
   </div>
 </div>
 
+<!-- FB2 EPUB CSS Editor Modal -->
+<div class="modal-overlay fb2-css-modal-overlay" id="fb2CssModal">
+  <div class="modal fb2-css-modal">
+    <button class="modal-close" onclick="cancelFb2CssEditor()">&times;</button>
+    <h3>FB2 → EPUB stylesheet</h3>
+    <p class="file-info" style="margin-bottom:10px;">Custom CSS embedded as <code>OPS/style.css</code> in converted EPUBs.</p>
+    <textarea id="fb2CssTextarea" class="fb2-css-textarea" spellcheck="false"></textarea>
+    <div class="fb2-css-modal-footer">
+      <button type="button" class="fb2-css-reset-btn" onclick="resetFb2CssEditor()" title="Reset to default">⟲</button>
+      <div class="fb2-css-footer-right">
+        <button type="button" class="fb2-css-cancel-btn" onclick="cancelFb2CssEditor()">Cancel</button>
+        <button type="button" class="fb2-css-ok-btn" onclick="confirmFb2CssEditor()">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- New Folder Modal -->
 <div class="modal-overlay" id="folderModal">
   <div class="modal">
@@ -1899,6 +2010,7 @@
           if (overlay.id === 'deleteModal') return closeDeleteModal();
           if (overlay.id === 'renameModal') return closeRenameModal();
           if (overlay.id === 'moveModal') return closeMoveModal();
+          if (overlay.id === 'fb2CssModal') return cancelFb2CssEditor();
           overlay.classList.remove('open');
         }
       });
@@ -2131,6 +2243,8 @@
       advancedOptionsToggle.style.opacity = '0.5';
       advancedOptionsToggle.style.pointerEvents = 'none';
     }
+    updateFb2CssEditLinkState();
+    cancelFb2CssEditor();
     // Reset to defaults
     document.getElementById('qualitySlider').value = 85;
     document.getElementById('qualityInput').value = 85;
@@ -2173,6 +2287,7 @@
         toggleConvertOptions();
       }
     }
+    updateFb2CssEditLinkState();
   }
 
   function updateUploadButtonText() {
@@ -2200,8 +2315,11 @@
   }
 
   function toggleFb2ConvertOptions() {
+    const checked = document.getElementById('convertFb2BeforeUpload').checked;
     updateConvertRowsVisibility();
     updateUploadButtonText();
+    if (!checked) cancelFb2CssEditor();
+    updateFb2CssEditLinkState();
   }
 
   function toggleConvertOptions() {
@@ -2965,6 +3083,10 @@
       advancedToggle.style.opacity = isOptimizeEnabled ? '1' : '0.5';
       advancedToggle.style.pointerEvents = isOptimizeEnabled ? 'auto' : 'none';
     }
+
+    loadFb2EpubCssFromStorage();
+    updateFb2CssEditLabel();
+    updateFb2CssEditLinkState();
 
     if (qualitySlider && qualityInput) {
       // Initialize converter variables with UI default values
@@ -4737,6 +4859,91 @@ const FB2_EPUB_CSS = [
   '.section{margin:0;}',
 ].join('\n');
 
+const FB2_CSS_STORAGE_KEY = 'crosspoint.fb2Epub.css';
+let fb2EpubCss = FB2_EPUB_CSS;
+
+function normalizeFb2CssText(text) {
+  return (text || '').replace(/\r\n/g, '\n').trim();
+}
+
+function loadFb2EpubCssFromStorage() {
+  try {
+    const saved = localStorage.getItem(FB2_CSS_STORAGE_KEY);
+    if (saved !== null && normalizeFb2CssText(saved) !== normalizeFb2CssText(FB2_EPUB_CSS)) {
+      fb2EpubCss = saved;
+    }
+  } catch (e) {}
+}
+
+function persistFb2EpubCssToStorage() {
+  try {
+    if (normalizeFb2CssText(fb2EpubCss) === normalizeFb2CssText(FB2_EPUB_CSS)) {
+      localStorage.removeItem(FB2_CSS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(FB2_CSS_STORAGE_KEY, fb2EpubCss);
+    }
+  } catch (e) {}
+}
+
+function getFb2EpubCss() {
+  return fb2EpubCss;
+}
+
+function hasCustomFb2EpubCss() {
+  return normalizeFb2CssText(fb2EpubCss) !== normalizeFb2CssText(FB2_EPUB_CSS);
+}
+
+function updateFb2CssEditLabel() {
+  const label = document.getElementById('fb2CssEditedLabel');
+  if (label) label.style.display = hasCustomFb2EpubCss() ? '' : 'none';
+}
+
+function updateFb2CssEditLinkState() {
+  const checked = document.getElementById('convertFb2BeforeUpload')?.checked;
+  const link = document.getElementById('fb2CssEditLink');
+  if (link) {
+    link.disabled = !checked;
+    link.setAttribute('aria-disabled', checked ? 'false' : 'true');
+  }
+}
+
+function openFb2CssEditor() {
+  if (!document.getElementById('convertFb2BeforeUpload')?.checked) return;
+  const textarea = document.getElementById('fb2CssTextarea');
+  const modal = document.getElementById('fb2CssModal');
+  if (!textarea || !modal) return;
+  textarea.value = fb2EpubCss;
+  modal.classList.add('open');
+  setTimeout(() => textarea.focus(), 50);
+}
+
+function closeFb2CssEditor() {
+  const modal = document.getElementById('fb2CssModal');
+  if (modal) modal.classList.remove('open');
+}
+
+function confirmFb2CssEditor() {
+  const textarea = document.getElementById('fb2CssTextarea');
+  if (!textarea) return;
+  if (normalizeFb2CssText(textarea.value) === normalizeFb2CssText(FB2_EPUB_CSS)) {
+    fb2EpubCss = FB2_EPUB_CSS;
+  } else {
+    fb2EpubCss = textarea.value;
+  }
+  persistFb2EpubCssToStorage();
+  updateFb2CssEditLabel();
+  closeFb2CssEditor();
+}
+
+function resetFb2CssEditor() {
+  const textarea = document.getElementById('fb2CssTextarea');
+  if (textarea) textarea.value = FB2_EPUB_CSS;
+}
+
+function cancelFb2CssEditor() {
+  closeFb2CssEditor();
+}
+
 function escapeXmlText(s) {
   return String(s)
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
@@ -5384,7 +5591,7 @@ async function buildFb2EpubZip(state) {
   out.file('META-INF/container.xml', fb2GenerateContainerXml(), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
   out.file('OPS/toc.ncx', fb2GenerateNcx(state), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
   out.file('OPS/content.opf', fb2GenerateOpf(state), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
-  out.file('OPS/style.css', FB2_EPUB_CSS, { compression: 'DEFLATE', compressionOptions: { level: 8 } });
+  out.file('OPS/style.css', getFb2EpubCss(), { compression: 'DEFLATE', compressionOptions: { level: 8 } });
   for (const [name, content] of state.xhtmlOutputs) {
     out.file('OPS/' + name, content, { compression: 'DEFLATE', compressionOptions: { level: 8 } });
   }
