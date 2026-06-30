@@ -305,8 +305,14 @@ void EpubReaderActivity::loop() {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
     } else {
-      const int currentPage = section ? section->currentPage + 1 : 0;
-      const int totalPages = section ? section->pageCount : 0;
+      int currentPage = 0;
+      int totalPages = 0;
+      if (section) {
+        int chapterPage, chapterPageCount;
+        section->getChapterProgress(chapterPage, chapterPageCount);
+        currentPage = chapterPage + 1;
+        totalPages = chapterPageCount;
+      }
       float bookProgress = 0.0f;
       if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
         const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
@@ -1190,8 +1196,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
 void EpubReaderActivity::renderStatusBar() const {
   // Calculate progress in book
-  const int currentPage = section->currentPage + 1;
-  const float pageCount = section->pageCount;
+  int chapterPage, chapterPageCount;
+  section->getChapterProgress(chapterPage, chapterPageCount);
+  const int currentPage = chapterPage + 1;
+  const float pageCount = chapterPageCount;
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
 

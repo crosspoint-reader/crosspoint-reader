@@ -50,6 +50,12 @@ class Section {
   // multiple sections.
   int getTocIndexForPage(int page) const;
 
+  // Calculates the true chapter page number (0-indexed) and total pages in the chapter.
+  // It properly handles multi-spine chapters by aggregating page counts across
+  // intermediate spines, and multi-chapter spines by correctly bounding the
+  // page count to the nearest TOC entries.
+  void getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) const;
+
   // Get the page count from the section cache file without fully loading it.
   std::optional<uint16_t> getCachedPageCount() const;
 
