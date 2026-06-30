@@ -45,6 +45,11 @@ class Section {
   // Look up the page number for an anchor id from the section cache file.
   std::optional<uint16_t> getPageForAnchor(const std::string& anchor) const;
 
+  // Look up the best TOC index for a given page within this section. This
+  // accounts for sections with multiple chapters, or chapters that span
+  // multiple sections.
+  int getTocIndexForPage(int page) const;
+
   // Get the page count from the section cache file without fully loading it.
   std::optional<uint16_t> getCachedPageCount() const;
 

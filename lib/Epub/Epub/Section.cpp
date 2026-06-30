@@ -397,6 +397,60 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   return std::nullopt;
 }
 
+// For better performance, this method assumes TOC entries belonging to the
+// same spine are contiguous in the TOC list and are strictly in reading (page)
+// order. This is not guaranteed to be true in epubs but assuming this avoids
+// scanning the entire TOC.
+int Section::getTocIndexForPage(const int page) const {
+  const int firstTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
+  if (firstTocIndex < 0) {
+    LOG_DBG("SCT", "No TOC entry found for spine index %d", spineIndex);
+    return -1;
+  }
+
+  const auto firstTocEntry = epub->getTocItem(firstTocIndex);
+  if (firstTocEntry.spineIndex == spineIndex) {
+    int firstTocPage = 0;
+    if (!firstTocEntry.anchor.empty()) {
+      if (const auto p = getPageForAnchor(firstTocEntry.anchor)) {
+        firstTocPage = *p;
+      }
+    }
+
+    if (page < firstTocPage) {
+      // The current page belongs to a chapter that started in the prev spine
+      // and continued into this one. If there is no previous TOC entry, it's
+      // the front-matter of the book before the first chapter.
+      return firstTocIndex > 0 ? firstTocIndex - 1 : -1;
+    }
+  }
+
+  // Spines may have multiple chapters, find the closest one.
+  int bestTocIndex = firstTocIndex;
+
+  for (int i = firstTocIndex + 1; i < epub->getTocItemsCount(); i++) {
+    const auto tocEntry = epub->getTocItem(i);
+    if (tocEntry.spineIndex != spineIndex) {
+      break;
+    }
+
+    int tocEntryPageInSpine = 0;
+    if (!tocEntry.anchor.empty()) {
+      if (const auto p = getPageForAnchor(tocEntry.anchor)) {
+        tocEntryPageInSpine = *p;
+      }
+    }
+
+    if (tocEntryPageInSpine <= page) {
+      bestTocIndex = i;
+    } else {
+      break;
+    }
+  }
+
+  return bestTocIndex;
+}
+
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {

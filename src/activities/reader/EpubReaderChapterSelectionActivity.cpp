@@ -1,5 +1,6 @@
 #include "EpubReaderChapterSelectionActivity.h"
 
+#include <Epub/Section.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -16,7 +17,8 @@ void EpubReaderChapterSelectionActivity::onEnter() {
     return;
   }
 
-  selectorIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  Section tempSection(epub, currentSpineIndex, renderer);
+  selectorIndex = tempSection.getTocIndexForPage(currentPage);
   if (selectorIndex == -1) {
     selectorIndex = 0;
   }

@@ -549,25 +549,26 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
+      const int currentPage = section ? section->currentPage : 0;
       const std::string path = epub->getPath();
-      startActivityForResult(
-          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, path, spineIdx),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              const auto& chapterResult = std::get<ChapterResult>(result.data);
-              RenderLock lock(*this);
+      startActivityForResult(std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, path,
+                                                                                  spineIdx, currentPage),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 const auto& chapterResult = std::get<ChapterResult>(result.data);
+                                 RenderLock lock(*this);
 
-              currentSpineIndex = chapterResult.spineIndex;
+                                 currentSpineIndex = chapterResult.spineIndex;
 
-              // If anchor is not empty, it will be used later to calculate the page number.
-              pendingAnchor = chapterResult.anchor;
+                                 // If anchor is not empty, it will be used later to calculate the page number.
+                                 pendingAnchor = chapterResult.anchor;
 
-              // Otherwise page 0 will be used.
-              nextPageNumber = 0;
+                                 // Otherwise page 0 will be used.
+                                 nextPageNumber = 0;
 
-              section.reset();
-            }
-          });
+                                 section.reset();
+                               }
+                             });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {
@@ -674,7 +675,15 @@ bool EpubReaderActivity::launchKOReaderSync() {
   // Pre-compute local KO position and chapter name while Epub is still in RAM.
   CrossPointPosition localPos = getCurrentPosition();
   SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
-  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+
+  int tocIdx = -1;
+  if (section) {
+    tocIdx = section->getTocIndexForPage(currentPage);
+  } else {
+    Section tempSection(epub, currentSpineIndex, renderer);
+    tocIdx = tempSection.getTocIndexForPage(currentPage);
+  }
+
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
 
@@ -1203,7 +1212,7 @@ void EpubReaderActivity::renderStatusBar() const {
 
   } else if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = tr(STR_UNNAMED);
-    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+    const int tocIndex = section->getTocIndexForPage(section->currentPage);
     if (tocIndex != -1) {
       const auto tocItem = epub->getTocItem(tocIndex);
       title = tocItem.title;
