@@ -425,8 +425,15 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    if (!nextTriggered && section && section->currentPage > 0) {
+  // Long-press is keyed to the physical button (Right/Down vs Left/Up), independent of the
+  // orientation auto-swap. Otherwise frontButtonFollowOrientation flips the logical direction
+  // after each orientation change and the same button alternates behaviors.
+  const bool lpForward = mappedInput.wasReleased(MappedInputManager::Button::PageForward) ||
+                         mappedInput.wasReleased(MappedInputManager::Button::Right);
+  const uint8_t lpBehavior = lpForward ? SETTINGS.longPressButtonBehavior : SETTINGS.longPressBackButtonBehavior;
+
+  if (longPress && lpBehavior == SETTINGS.CHAPTER_SKIP) {
+    if (!lpForward && section && section->currentPage > 0) {
       section->currentPage = 0;
       requestUpdate();
       return;
@@ -436,7 +443,7 @@ void EpubReaderActivity::loop() {
     {
       RenderLock lock(*this);
       nextPageNumber = 0;
-      if (nextTriggered) {
+      if (lpForward) {
         currentSpineIndex++;
       } else if (currentSpineIndex > 0) {
         currentSpineIndex--;
@@ -447,18 +454,17 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  if (longPress && (SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE ||
-                    SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_FLIP_180)) {
+  if (longPress && (lpBehavior == SETTINGS.ORIENTATION_CHANGE || lpBehavior == SETTINGS.ORIENTATION_FLIP_180)) {
     uint8_t newOrientation;
-    if (SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_FLIP_180) {
-      // Both buttons flip 180° (Portrait<->Inverted, LandscapeCW<->CCW).
+    if (lpBehavior == SETTINGS.ORIENTATION_FLIP_180) {
+      // Flip 180° (Portrait<->Inverted, LandscapeCW<->CCW) — instant, no re-layout.
       newOrientation = SETTINGS.orientation ^ 2;
-    } else if (nextTriggered) {
-      // Forward button: cycle 90° clockwise.
+    } else if (lpForward) {
+      // Right/Down button: rotate 90° clockwise.
       newOrientation = (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT;
     } else {
-      // Back button: flip 180° (instant, no re-layout).
-      newOrientation = SETTINGS.orientation ^ 2;
+      // Left/Up button: rotate 90° counter-clockwise.
+      newOrientation = (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
     }
     applyOrientation(newOrientation);
     requestUpdate();

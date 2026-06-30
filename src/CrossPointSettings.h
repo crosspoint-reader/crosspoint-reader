@@ -245,8 +245,11 @@ class CrossPointSettings {
   char opdsPassword[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
-  // Long-press page turn button behavior
+  // Long-press behavior, keyed to the physical page-turn buttons (set independently):
+  //   longPressButtonBehavior     -> Right + side Down
+  //   longPressBackButtonBehavior -> Left + side Up
   uint8_t longPressButtonBehavior = OFF;
+  uint8_t longPressBackButtonBehavior = OFF;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
