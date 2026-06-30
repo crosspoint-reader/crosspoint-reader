@@ -6,14 +6,26 @@
 // either half.
 //
 
+#include <Epub/FocusReading.h>
 #include <GfxRenderer.h>
 #include <MappedInputManager.h>
 #include <gtest/gtest.h>
 
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "util/TextPool.h"
 #include "util/WordSelectNavigator.h"
+
+// Stubs to link WordSelectNavigator.cpp on the host
+CrossPointSettings CrossPointSettings::instance;
+
+namespace FocusReading {
+void drawText(const GfxRenderer& renderer, int fontId, int x, int y, const char* text, bool black,
+              EpdFontFamily::Style style, bool, const Annotation*, BidiUtils::BidiBaseDir baseDir) {
+  renderer.drawText(fontId, x, y, text, black, static_cast<uint8_t>(style), baseDir);
+}
+}  // namespace FocusReading
 
 // --------------------------------------------------------------------------
 // Helpers

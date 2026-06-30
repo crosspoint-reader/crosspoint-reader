@@ -10,6 +10,7 @@ target_include_directories(DictWordSelectNavigatorTest PRIVATE
   ${REPO_ROOT}/lib
   ${REPO_ROOT}/lib/EpdFont
   ${REPO_ROOT}/lib/Utf8
+  ${REPO_ROOT}/lib/Epub
 )
 
 target_link_libraries(DictWordSelectNavigatorTest PRIVATE

@@ -33,6 +33,8 @@ class WordSelectNavigator {
     EpdFontFamily::Style style = EpdFontFamily::REGULAR;
     bool isDictFont = false;
     int fontId = 0;  // resolved at extraction time; used by renderHighlight()
+    uint8_t focusBoundary = 0;
+    uint16_t focusSuffixX = 0;
   };
 
   struct Row {
@@ -92,7 +94,8 @@ class WordSelectNavigator {
   // mergeHyphenatedPairs.
   static void appendWord(std::vector<WordInfo>& words, std::string& pool, const char* display, size_t displayLen,
                          const char* lookup, size_t lookupLen, int16_t screenX, int16_t screenY, int16_t width,
-                         EpdFontFamily::Style style, int fontId, bool isDictFont);
+                         EpdFontFamily::Style style, int fontId, bool isDictFont, uint8_t focusBoundary = 0,
+                         uint16_t focusSuffixX = 0);
 
   // Process navigation input for the current screen orientation.
   // Returns true if the selection changed (caller should requestUpdate).

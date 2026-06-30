@@ -7,6 +7,8 @@
 
 #include <cstring>
 
+#include "../FocusReading.h"
+
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   // Focus annotations are optional: empty vectors mean no word in this block has a split.
   // When present, they must be sized in lockstep with words[].
@@ -39,25 +41,9 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       wordY += ascender / 4;
     }
 
-    if (boundary > 0) {
-      // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
-      // The bold prefix is bounded to 9 codepoints by the clamp on targetBoldChars in
-      // ParsedText::addWord; 9 UTF-8 codepoints occupy at most 9 * 4 = 36 bytes, +1 for null = 37.
-      // suffixX is computed at cache-creation time to avoid font metric lookups at render time.
-      static constexpr size_t MAX_FOCUS_PREFIX_BYTES = 9 * 4 + 1;
-      char boldBuf[40];
-      static_assert(sizeof(boldBuf) >= MAX_FOCUS_PREFIX_BYTES,
-                    "boldBuf too small for max focus prefix (9 codepoints * 4 UTF-8 bytes + null)");
-      const auto boldStyle = static_cast<EpdFontFamily::Style>(currentStyle | EpdFontFamily::BOLD);
-      const size_t boldLen = std::min<size_t>({static_cast<size_t>(boundary), words[i].size(), sizeof(boldBuf) - 1});
-      memcpy(boldBuf, words[i].c_str(), boldLen);
-      boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle, baseDir);
-      const int suffixX = wordX + wordFocusSuffixX[i];
-      renderer.drawText(fontId, suffixX, wordY, words[i].c_str() + boldLen, true, currentStyle, baseDir);
-    } else {
-      renderer.drawText(fontId, wordX, wordY, words[i].c_str(), true, currentStyle, baseDir);
-    }
+    const FocusReading::Annotation focus{boundary, hasFocus ? wordFocusSuffixX[i] : 0};
+    FocusReading::drawText(renderer, fontId, wordX, wordY, words[i].c_str(), true, currentStyle,
+                           /*focusReadingEnabled=*/false, boundary > 0 ? &focus : nullptr, baseDir);
 
     if (!scanning && (currentStyle & EpdFontFamily::UNDERLINE) != 0) {
       const std::string& w = words[i];

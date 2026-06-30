@@ -1,6 +1,7 @@
 #include "DictionaryDefinitionActivity.h"
 
 #include <DictHtmlRenderer.h>
+#include <Epub/FocusReading.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -147,7 +148,8 @@ int DictionaryDefinitionActivity::measureWidthAdapter(void* ctx, const char* tex
   auto* self = static_cast<DictionaryDefinitionActivity*>(ctx);
   const int fontId = isDictFont ? DICT_FONT_ID : SETTINGS.getDefinitionFontId();
   if (!isDictFont && text[0] == ' ' && text[1] == '\0') return self->renderer.getSpaceWidth(fontId, style);
-  return self->renderer.getTextAdvanceX(fontId, text, style);
+  return FocusReading::getTextAdvanceX(self->renderer, fontId, text, style,
+                                       SETTINGS.focusReadingEnabled && !isDictFont);
 }
 
 void DictionaryDefinitionActivity::wrapHtml() {
@@ -300,8 +302,15 @@ void DictionaryDefinitionActivity::extractWordsFromLayout() {
         const size_t tokLen = static_cast<size_t>(p - tokStart);
         std::string tok(tokStart, tokLen);
 
-        const int tokVisualWidth = renderer.getTextWidth(segFontId, tok.c_str(), seg.style);
-        const int tokAdvanceX = renderer.getTextAdvanceX(segFontId, tok.c_str(), seg.style);
+        const bool focusEnabled = SETTINGS.focusReadingEnabled && !seg.isDictFont;
+        const int tokAdvanceX =
+            FocusReading::getTextAdvanceX(renderer, segFontId, tok.c_str(), seg.style, focusEnabled);
+        // Visual width = focus-aware advance + any italic overhang of the last glyph.
+        // getTextWidth tracks glyph bitmap extents (left+width), getTextAdvanceX tracks
+        // cursor advance; the difference is the overhang past the advance point.
+        const int overhang = std::max(0, renderer.getTextWidth(segFontId, tok.c_str(), seg.style) -
+                                             renderer.getTextAdvanceX(segFontId, tok.c_str(), seg.style));
+        const int tokVisualWidth = tokAdvanceX + overhang;
         std::string cleaned = Dictionary::cleanWord(tok);
         if (!cleaned.empty()) {
           WordSelectNavigator::appendWord(words, textPool, tok.c_str(), tok.size(), cleaned.c_str(), cleaned.size(),
@@ -535,13 +544,14 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       for (const auto& seg : line.segments) {
         const int segFontId = seg.isDictFont ? DICT_FONT_ID : SETTINGS.getDefinitionFontId();
         const char* segText = pagePool_.data() + seg.offset;
-        renderer.drawText(segFontId, x, y, segText, true, seg.style);
+        const bool focusEnabled = SETTINGS.focusReadingEnabled && !seg.isDictFont;
+        FocusReading::drawText(renderer, segFontId, x, y, segText, true, seg.style, focusEnabled);
         if ((seg.style & EpdFontFamily::UNDERLINE) != 0) {
-          const int segWidth = renderer.getTextWidth(segFontId, segText, seg.style);
+          const int segWidth = FocusReading::getTextAdvanceX(renderer, segFontId, segText, seg.style, focusEnabled);
           const int underlineY = y + renderer.getFontAscenderSize(segFontId) + 2;
           renderer.drawLine(x, underlineY, x + segWidth, underlineY, true);
         }
-        x += renderer.getTextAdvanceX(segFontId, segText, seg.style);
+        x += FocusReading::getTextAdvanceX(renderer, segFontId, segText, seg.style, focusEnabled);
       }
     }
   };

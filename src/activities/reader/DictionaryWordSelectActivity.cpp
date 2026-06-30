@@ -1,5 +1,6 @@
 #include "DictionaryWordSelectActivity.h"
 
+#include <Epub/FocusReading.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -28,16 +29,18 @@ constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 constexpr size_t SOFT_HYPHEN_BYTES = 2;
 
 int16_t measureWordAdvanceX(const GfxRenderer& renderer, int fontId, const std::string& word,
-                            EpdFontFamily::Style style) {
+                            EpdFontFamily::Style style, const FocusReading::Annotation* focus = nullptr) {
   if (word.find(SOFT_HYPHEN_UTF8) == std::string::npos) {
-    return static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.c_str(), style));
+    return static_cast<int16_t>(
+        FocusReading::getTextAdvanceX(renderer, fontId, word.c_str(), style, SETTINGS.focusReadingEnabled, focus));
   }
   std::string sanitized = word;
   size_t pos = 0;
   while ((pos = sanitized.find(SOFT_HYPHEN_UTF8, pos)) != std::string::npos) {
     sanitized.erase(pos, SOFT_HYPHEN_BYTES);
   }
-  return static_cast<int16_t>(renderer.getTextAdvanceX(fontId, sanitized.c_str(), style));
+  return static_cast<int16_t>(
+      FocusReading::getTextAdvanceX(renderer, fontId, sanitized.c_str(), style, SETTINGS.focusReadingEnabled, focus));
 }
 
 // Single-style prewarm/advance-table bitmask: bit 0 = REGULAR, 1 = BOLD,
@@ -120,11 +123,6 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
   // below takes the fast in-RAM path.
   prebuildAdvanceTable();
 
-  // Fallback used by blocks where we can't derive a per-line gap
-  // (single-word blocks, degenerate first-word measurements).
-  const int16_t naturalSpaceWidth =
-      static_cast<int16_t>(renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), " ", EpdFontFamily::REGULAR));
-
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageLine) continue;
     const auto* line = static_cast<const PageLine*>(element.get());
@@ -134,34 +132,22 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
     const auto& wordList = block->getWords();
     const auto& xPosList = block->getWordXpos();
     const auto& styleList = block->getWordStyles();
-
-    // Per-line gap = xPos[1] - xPos[0] - firstWordWidth. Justified blocks
-    // stretch the gap (ParsedText.cpp:514-553 adds justifyExtra), so a
-    // global space-width can't be reused — we measure per-block.
-    int16_t lineGapWidth = naturalSpaceWidth;
-    if (wordList.size() >= 2 && xPosList.size() >= 2 && !wordList[0].empty()) {
-      const EpdFontFamily::Style firstStyle = (!styleList.empty()) ? styleList[0] : EpdFontFamily::REGULAR;
-      const int16_t firstWidth = measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), wordList[0], firstStyle);
-      const int16_t derivedGap = static_cast<int16_t>(xPosList[1] - xPosList[0] - firstWidth);
-      // When wordList[1] is a continuation (attached punctuation etc., ParsedText.cpp:537-544)
-      // the layout inserts no inter-word gap, so derivedGap collapses to the kerning offset
-      // (~1-3 px). Real gaps are always >= getSpaceAdvance(...), so a half-space threshold
-      // cleanly separates a real gap from a continuation kerning without needing Block to
-      // expose continuesVec. Without the threshold, an undersized lineGapWidth propagates as
-      // a per-word width overestimate (~4-6 px) — the highlight rectangle bleeds past the
-      // word into the inter-word space.
-      if (derivedGap > naturalSpaceWidth / 2) lineGapWidth = derivedGap;
-    }
+    const auto& focusBoundaryList = block->getWordFocusBoundary();
+    const auto& focusSuffixXList = block->getWordFocusSuffixX();
 
     auto wordIt = wordList.begin();
     auto xIt = xPosList.begin();
     auto styleIt = styleList.begin();
 
     while (wordIt != wordList.end() && xIt != xPosList.end()) {
+      const size_t wordIndex = static_cast<size_t>(wordIt - wordList.begin());
       int16_t screenX = line->xPos + static_cast<int16_t>(*xIt) + marginLeft;
       int16_t screenY = line->yPos + marginTop;
       const std::string& wordText = *wordIt;
       const EpdFontFamily::Style wordStyle = (styleIt != styleList.end()) ? *styleIt : EpdFontFamily::REGULAR;
+      const bool hasFocus = wordIndex < focusBoundaryList.size() && wordIndex < focusSuffixXList.size();
+      const FocusReading::Annotation focus{hasFocus ? focusBoundaryList[wordIndex] : 0,
+                                           hasFocus ? focusSuffixXList[wordIndex] : 0};
 
       // Skip tokens with no alphanumeric characters (bullets, punctuation, etc.)
       if (!std::any_of(wordText.begin(), wordText.end(), [](unsigned char c) { return std::isalnum(c); })) {
@@ -189,25 +175,21 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
       if (partStart < wordText.size()) splitStarts.push_back(partStart);
 
       if (splitStarts.size() <= 1 && partStart == 0) {
-        // width = (xPos[i+1] - xPos[i]) - lineGapWidth, which is the layout's
-        // xpos diff with the trailing inter-word gap removed. Punctuation
-        // tokens skipped above kept their xpos entries as boundary markers,
-        // so this works regardless of what the next token is.
-        // Last word per block has no next xpos; fall back to direct
-        // measurement. Clamp to 1 to guard pathological cases (continuation
-        // negative kerning, short words where the entire xpos diff is the
-        // gap).
-        int16_t wordWidth;
-        const auto nextXIt = xIt + 1;
-        if (nextXIt != xPosList.end()) {
-          const int16_t raw = static_cast<int16_t>(*nextXIt - *xIt);
-          wordWidth = std::max(static_cast<int16_t>(1), static_cast<int16_t>(raw - lineGapWidth));
-        } else {
-          wordWidth = measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), wordText, wordStyle);
-        }
+        const int16_t measuredWidth =
+            measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), wordText, wordStyle, hasFocus ? &focus : nullptr);
+        // Use the focus-aware advance (measuredWidth) as the base, then add any italic
+        // overhang: getTextWidth() tracks bitmap extents (left+width per glyph) while
+        // getTextAdvanceX() tracks cursor advance; the difference is the overhang past
+        // the advance point. This avoids the old xpos-derivation path
+        // (nextXPos - currentXPos - lineGapWidth), which was inflated on justified lines
+        // when lineGapWidth fell back to naturalSpaceWidth due to a continuation first pair.
+        const int overhang =
+            std::max(0, renderer.getTextWidth(SETTINGS.getReaderFontId(), wordText.c_str(), wordStyle) -
+                            renderer.getTextAdvanceX(SETTINGS.getReaderFontId(), wordText.c_str(), wordStyle));
+        const int16_t wordWidth = static_cast<int16_t>(measuredWidth + overhang);
         WordSelectNavigator::appendWord(words, textPool, wordText.c_str(), wordText.size(), /*lookup=*/nullptr, 0,
                                         screenX, screenY, wordWidth, wordStyle, SETTINGS.getReaderFontId(),
-                                        /*isDictFont=*/false);
+                                        /*isDictFont=*/false, focus.boundary, focus.suffixX);
       } else {
         for (size_t si = 0; si < splitStarts.size(); si++) {
           size_t start = splitStarts[si];
@@ -232,7 +214,8 @@ void DictionaryWordSelectActivity::extractWords(std::vector<WordSelectNavigator:
           // extractWords and matches layout's preprocessor.
           int16_t offsetX =
               prefix.empty() ? 0 : measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), prefix, wordStyle);
-          int16_t partWidth = measureWordAdvanceX(renderer, SETTINGS.getReaderFontId(), part, wordStyle);
+          int16_t partWidth =
+              static_cast<int16_t>(renderer.getTextWidth(SETTINGS.getReaderFontId(), part.c_str(), wordStyle));
           WordSelectNavigator::appendWord(words, textPool, part.c_str(), part.size(), /*lookup=*/nullptr, 0,
                                           static_cast<int16_t>(screenX + offsetX), screenY, partWidth, wordStyle,
                                           SETTINGS.getReaderFontId(), /*isDictFont=*/false);

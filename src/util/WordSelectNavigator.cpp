@@ -1,10 +1,12 @@
 #include "WordSelectNavigator.h"
 
+#include <Epub/FocusReading.h>
 #include <GfxRenderer.h>
 #include <Utf8.h>
 
 #include <cstdlib>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "TextPool.h"
 
@@ -79,7 +81,7 @@ uint16_t WordSelectNavigator::poolAppend(std::string& pool, const char* s, size_
 void WordSelectNavigator::appendWord(std::vector<WordInfo>& words, std::string& pool, const char* display,
                                      size_t displayLen, const char* lookup, size_t lookupLen, int16_t screenX,
                                      int16_t screenY, int16_t width, EpdFontFamily::Style style, int fontId,
-                                     bool isDictFont) {
+                                     bool isDictFont, uint8_t focusBoundary, uint16_t focusSuffixX) {
   const uint16_t textOff = poolAppend(pool, display, displayLen);
   // lookup == nullptr: display text is also the lookup key; reuse its offset
   // instead of appending a duplicate copy to the pool.
@@ -101,6 +103,8 @@ void WordSelectNavigator::appendWord(std::vector<WordInfo>& words, std::string& 
   wi.style = style;
   wi.fontId = fontId;
   wi.isDictFont = isDictFont;
+  wi.focusBoundary = focusBoundary;
+  wi.focusSuffixX = focusSuffixX;
   words.push_back(wi);
 }
 
@@ -452,7 +456,9 @@ void WordSelectNavigator::drawSingleHighlight(const GfxRenderer& renderer, int l
   const auto* w = getWordAt(wordIndex);
   if (!w) return;
   renderer.fillRect(w->screenX - 2, w->screenY - 2, w->width + 4, lineHeight + 4, true);
-  renderer.drawText(w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style);
+  const FocusReading::Annotation focus{w->focusBoundary, w->focusSuffixX};
+  FocusReading::drawText(renderer, w->fontId, w->screenX, w->screenY, getDisplay(*w), false, w->style,
+                         SETTINGS.focusReadingEnabled && !w->isDictFont, w->focusBoundary > 0 ? &focus : nullptr);
 }
 
 void WordSelectNavigator::drawContinuationsIfOutside(const GfxRenderer& renderer, int lineHeight, const WordInfo* w,
