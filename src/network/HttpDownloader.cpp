@@ -22,11 +22,13 @@ extern "C" void wolfSSL_Arduino_Serial_Print(const char* const) {}
 #endif
 
 namespace {
+#if !defined(FREEINK_NET_WOLFSSL)
 // RX holds the response headers. Smaller buffers leave enough contiguous heap
 // for mbedTLS on redirect-heavy OPDS feeds while still preserving the headers
 // we read directly (Location, Content-Length).
 constexpr int HTTP_RX_BUF = 2048;
 constexpr int HTTP_TX_BUF = 512;
+#endif
 // Per-socket-op timeout. Some OPDS download endpoints are slow to send headers
 // (>15s) and chunked catalogs stall mid-body, so 15s killed them. 60s gives
 // slow servers room. esp_http_client's timeout_ms is uint32, so unlike Arduino
@@ -118,6 +120,74 @@ bool readLine(Client& client, std::string& line, const unsigned long deadline) {
   return false;
 }
 
+// Streams exactly `count` body bytes from the TLS client to the sink, READ_CHUNK
+// at a time. Returns OK, or ABORTED/FILE_ERROR/HTTP_ERROR on cancel, sink failure,
+// or timeout/early close. `readDeadline` is advanced on every successful read.
+HttpDownloader::DownloadError readBodyExact(Client& client, uint8_t* buf, size_t count, Sink& sink,
+                                            unsigned long& readDeadline) {
+  size_t remaining = count;
+  while (remaining > 0) {
+    if (sink.cancelFlag && *sink.cancelFlag) return HttpDownloader::ABORTED;
+    const size_t want = remaining < READ_CHUNK ? remaining : READ_CHUNK;
+    const int read = client.read(buf, want);
+    if (read <= 0) {
+      // Non-positive means wolfSSL WANT_READ or a closed connection; keep polling
+      // until data, close, or timeout (mirrors the identity read loop below).
+      if (!client.connected() && client.available() == 0) {
+        LOG_ERR("HTTP", "wolfSSL truncated body: %zu of %zu chunk bytes", count - remaining, count);
+        return HttpDownloader::HTTP_ERROR;
+      }
+      if (static_cast<int32_t>(millis() - readDeadline) >= 0) {
+        LOG_ERR("HTTP", "wolfSSL read timeout after %zu bytes", sink.downloaded);
+        return HttpDownloader::HTTP_ERROR;
+      }
+      delay(2);
+      continue;
+    }
+    readDeadline = millis() + HTTP_TIMEOUT_MS;
+    if (!sink.write(buf, static_cast<size_t>(read))) return HttpDownloader::FILE_ERROR;
+    sink.downloaded += static_cast<size_t>(read);
+    remaining -= static_cast<size_t>(read);
+    if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+  }
+  return HttpDownloader::OK;
+}
+
+// Decodes an HTTP/1.1 chunked transfer-encoded body, streaming the data to the
+// sink. Each chunk is "<hex-size>[;ext]\r\n<data>\r\n"; a zero-size chunk followed
+// by optional trailers and a blank line ends the body. The total length is
+// unknown, so sink.total stays 0 and no progress percentage is reported. OPDS
+// feeds served via a reverse proxy commonly arrive chunked rather than with a
+// Content-Length.
+HttpDownloader::DownloadError readChunkedBody(Client& client, uint8_t* buf, Sink& sink) {
+  for (;;) {
+    if (sink.cancelFlag && *sink.cancelFlag) return HttpDownloader::ABORTED;
+    std::string line;
+    if (!readLine(client, line, millis() + HTTP_TIMEOUT_MS)) {
+      LOG_ERR("HTTP", "wolfSSL chunk size read failed after %zu bytes", sink.downloaded);
+      return HttpDownloader::HTTP_ERROR;
+    }
+    // Strip any chunk extension (";name=value") before parsing the hex size.
+    const size_t ext = line.find(';');
+    const unsigned long chunkSize =
+        strtoul((ext == std::string::npos ? line : line.substr(0, ext)).c_str(), nullptr, 16);
+    if (chunkSize == 0) {
+      // Last chunk: consume optional trailers up to the terminating blank line.
+      while (readLine(client, line, millis() + HTTP_TIMEOUT_MS) && !line.empty()) {
+      }
+      return HttpDownloader::OK;
+    }
+    unsigned long readDeadline = millis() + HTTP_TIMEOUT_MS;
+    const HttpDownloader::DownloadError result = readBodyExact(client, buf, chunkSize, sink, readDeadline);
+    if (result != HttpDownloader::OK) return result;
+    // Each chunk's data is followed by a bare CRLF; consume it before the next size.
+    if (!readLine(client, line, millis() + HTTP_TIMEOUT_MS)) {
+      LOG_ERR("HTTP", "wolfSSL chunk trailer read failed");
+      return HttpDownloader::HTTP_ERROR;
+    }
+  }
+}
+
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
                                          const std::string& password, Sink& sink) {
   std::string url = startUrl;
@@ -201,10 +271,20 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       client->stop();
       return HttpDownloader::HTTP_ERROR;
     }
-    if (!transferEncoding.empty() && transferEncoding != "identity") {
+    const bool chunked = transferEncoding == "chunked";
+    if (!transferEncoding.empty() && transferEncoding != "identity" && !chunked) {
       LOG_ERR("HTTP", "wolfSSL unsupported transfer encoding: %s", transferEncoding.c_str());
       client->stop();
       return HttpDownloader::HTTP_ERROR;
+    }
+
+    if (chunked) {
+      // A chunked body carries no Content-Length; the zero-size chunk terminates
+      // it, so leave sink.total at 0 (skips the size check and progress percent).
+      sink.total = 0;
+      const HttpDownloader::DownloadError result = readChunkedBody(*client, buf.get(), sink);
+      client->stop();
+      return result;
     }
 
     sink.total = contentLength;
@@ -257,6 +337,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
 }
 #endif
 
+#if !defined(FREEINK_NET_WOLFSSL)
 // Streams a GET body through sink.write in READ_CHUNK pieces. Uses the manual
 // open/fetch_headers/read path rather than esp_http_client_perform(): perform()
 // pushes the whole body through an event callback and reports a chunked body
@@ -361,6 +442,20 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
   return HttpDownloader::OK;
 }
+#endif  // !FREEINK_NET_WOLFSSL
+
+// All HTTP(S) fetches go through wolfSSL when it is the active TLS stack: it
+// speaks TLS 1.3 and reads large bodies from servers where the esp_http_client/
+// mbedTLS path fails to connect or stalls mid-stream. Plain-http URLs still use a
+// WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
+HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
+                                           const std::string& password, Sink& sink) {
+#if defined(FREEINK_NET_WOLFSSL)
+  return runGetWolf(url, username, password, sink);
+#else
+  return runGet(url, username, password, sink);
+#endif
+}
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
@@ -368,7 +463,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const 
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
-  return runGet(url, username, password, sink) == OK;
+  return runGetSecure(url, username, password, sink) == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
@@ -380,7 +475,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
     outContent.append(reinterpret_cast<const char*>(data), len);
     return true;
   };
-  return runGet(url, username, password, sink) == OK;
+  return runGetSecure(url, username, password, sink) == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
@@ -388,7 +483,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = onData;
-  return runGet(url, username, password, sink) == OK;
+  return runGetSecure(url, username, password, sink) == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
@@ -410,12 +505,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
 
-  const DownloadError result =
-#if defined(FREEINK_NET_WOLFSSL)
-      runGetWolf(url, username, password, sink);
-#else
-      runGet(url, username, password, sink);
-#endif
+  const DownloadError result = runGetSecure(url, username, password, sink);
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();
