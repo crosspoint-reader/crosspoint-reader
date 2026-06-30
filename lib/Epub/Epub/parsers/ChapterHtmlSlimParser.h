@@ -32,6 +32,8 @@ class ChapterHtmlSlimParser {
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
   int italicUntilDepth = INT_MAX;
+  int underlineUntilDepth = INT_MAX;
+  int preDepth = INT_MAX;  // depth of the open <pre> element; INT_MAX when not inside one
   // buffer for building up words from characters, will auto break if longer than this
   // leave one char at end for null pointer
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
@@ -69,6 +71,26 @@ class ChapterHtmlSlimParser {
   };
   std::vector<StyleStackEntry> inlineStyleStack;
   std::vector<BlockStyle> blockStyleStack;  // accumulated block styles from open ancestor elements
+
+  // List nesting context: tracks whether each open <ol>/<ul> is ordered and its running
+  // item counter, so <li> can emit "1. " (ordered) or "•" (unordered). back() is the
+  // nearest enclosing list.
+  struct ListCtx {
+    bool ordered = false;
+    int counter = 0;
+  };
+  std::vector<ListCtx> listStack;
+
+  // MathML layout context for msub/msup/msubsup/mfrac. Each entry tracks the layout
+  // element kind, the index of the next direct child to be styled, and the depth at which
+  // the layout element opened (so direct children can be detected as depth == depth+1).
+  enum class MathKind : uint8_t { Msub, Msup, Msubsup, Mfrac };
+  struct MathCtx {
+    MathKind kind = MathKind::Msub;
+    int childIndex = 0;
+    int depth = 0;
+  };
+  std::vector<MathCtx> mathStack;
   CssStyle currentCssStyle;
   bool effectiveBold = false;
   bool effectiveItalic = false;

@@ -36,7 +36,10 @@ constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr const char* LINETHROUGH_TAGS[] = {"del", "s", "strike"};
 constexpr const char* IMAGE_TAGS[] = {"img"};
-constexpr const char* SKIP_TAGS[] = {"head"};
+// "annotation" drops the raw LaTeX/text alternative that pandoc emits alongside
+// presentation MathML (<annotation encoding="application/x-tex">i_1+i_2=0</annotation>),
+// so only the rendered MathML glyphs remain instead of doubled garbage.
+constexpr const char* SKIP_TAGS[] = {"head", "annotation"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
@@ -75,8 +78,14 @@ bool isInternalEpubLink(const char* href) {
   return true;
 }
 
+// <pre> is treated as a block element (left-aligned, whitespace-preserved). It is not in
+// BLOCK_TAGS because its character handling differs, but it must push/pop the blockStyleStack
+// like any block, so it is folded into isHeaderOrBlock for the endElement block-pop path.
+bool isPre(const char* name) { return strcmp(name, "pre") == 0; }
+
 bool isHeaderOrBlock(const char* name) {
-  return matches(name, HEADER_TAGS, std::size(HEADER_TAGS)) || matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS));
+  return matches(name, HEADER_TAGS, std::size(HEADER_TAGS)) || matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS)) ||
+         isPre(name);
 }
 
 bool isTableStructuralTag(const char* name) {
@@ -822,6 +831,79 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
   }
 
+  // --- Inline MathML layout (msub/msup/msubsup/mfrac) ---------------------------------
+  // Presentation MathML flows through characterData as transparent inline text (mi/mn/mo/
+  // mtext/mrow hit the inline catch-all below). The only structural elements that change a
+  // child's appearance are msub/msup/msubsup (subscript/superscript) and mfrac (a/b). We
+  // style each direct child's whole subtree by pushing one inline StyleStackEntry at the
+  // child's open depth, which auto-pops at the child's close via the existing pop logic.
+  //
+  // If this element is a direct child of an open layout element, apply the role-derived
+  // style. mi/mn/mo/mrow carry no CSS, so the inline catch-all never pushes its own entry
+  // at the same depth — no double-push. (If a child ever did carry CSS, two entries would
+  // be pushed at this depth and only one popped at close; presentation MathML does not.)
+  if (!self->mathStack.empty() && self->mathStack.back().depth == self->depth - 1) {
+    MathCtx& parent = self->mathStack.back();
+    const int idx = parent.childIndex;
+    bool wantSub = false;
+    bool wantSup = false;
+    switch (parent.kind) {
+      case MathKind::Msub:
+        wantSub = (idx == 1);  // child0 base, child1 subscript
+        break;
+      case MathKind::Msup:
+        wantSup = (idx == 1);  // child0 base, child1 superscript
+        break;
+      case MathKind::Msubsup:
+        wantSub = (idx == 1);  // child0 base, child1 subscript, child2 superscript
+        wantSup = (idx == 2);
+        break;
+      case MathKind::Mfrac:
+        // child0 numerator, "/" separator, child1 denominator — no sub/sup styling.
+        if (idx == 1) {
+          if (self->partWordBufferIndex > 0) {
+            self->flushPartWordBuffer();
+          }
+          if (self->currentTextBlock) {
+            self->currentTextBlock->addWord("/", EpdFontFamily::REGULAR);
+          }
+        }
+        break;
+    }
+
+    StyleStackEntry mathEntry;
+    mathEntry.depth = self->depth;
+    if (wantSub) {
+      mathEntry.hasSub = true;
+      mathEntry.sub = true;
+    }
+    if (wantSup) {
+      mathEntry.hasSup = true;
+      mathEntry.sup = true;
+    }
+    // Flush so the preceding text keeps its current style before the child subtree begins.
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
+    self->inlineStyleStack.push_back(mathEntry);
+    self->updateEffectiveInlineStyle();
+    parent.childIndex += 1;
+  }
+
+  // If this element is itself a math layout container, push a context so its direct children
+  // get role-based styling (handled by the block above on their open). Falls through to the
+  // inline catch-all + single depth increment below — does NOT self-increment depth.
+  if (strcmp(name, "msub") == 0) {
+    self->mathStack.push_back({MathKind::Msub, 0, self->depth});
+  } else if (strcmp(name, "msup") == 0) {
+    self->mathStack.push_back({MathKind::Msup, 0, self->depth});
+  } else if (strcmp(name, "msubsup") == 0) {
+    self->mathStack.push_back({MathKind::Msubsup, 0, self->depth});
+  } else if (strcmp(name, "mfrac") == 0) {
+    self->mathStack.push_back({MathKind::Mfrac, 0, self->depth});
+  }
+
   const float emSize = static_cast<float>(self->renderer.getFontAscenderSize(self->fontId));
   const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
@@ -881,7 +963,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        // Ordered list: emit a running "N. " counter. Otherwise (unordered list, or a
+        // stray <li> with no enclosing list) emit a bullet. back() is the nearest list.
+        if (!self->listStack.empty() && self->listStack.back().ordered) {
+          self->listStack.back().counter += 1;
+          const std::string marker = std::to_string(self->listStack.back().counter) + ". ";
+          self->currentTextBlock->addWord(marker.c_str(), EpdFontFamily::REGULAR);
+        } else {
+          self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        }
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -954,6 +1044,29 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
+  } else if (isPre(name)) {
+    // <pre> is a left-aligned block whose whitespace (indentation + line breaks) is
+    // preserved verbatim by characterData while preDepth is set (see below). The default
+    // alignment is Justify, so we force Left here.
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->currentCssStyle = cssStyle;
+    auto preBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
+    preBlockStyle.textAlignDefined = true;
+    preBlockStyle.alignment = CssTextAlign::Left;
+    const auto accumulated =
+        self->blockStyleStack.back().getCombinedBlockStyle(preBlockStyle, BlockStyle::CombineAxis::Horizontal);
+    self->blockStyleStack.push_back(accumulated);
+    self->startNewTextBlock(accumulated.withoutBottom());
+    self->updateEffectiveInlineStyle();
+    self->preDepth = self->depth;
+  } else if (strcmp(name, "ol") == 0) {
+    // List context only — no block style, no text. <li> reads listStack.back() to decide
+    // between an ordered "N. " prefix and an unordered bullet.
+    self->listStack.push_back({true, 0});
+  } else if (strcmp(name, "ul") == 0) {
+    self->listStack.push_back({false, 0});
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
@@ -1034,7 +1147,48 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->currentFootnote.number[self->currentFootnoteLinkTextLen] = '\0';
   }
 
+  // Number of visible spaces a tab expands to inside <pre> content.
+  constexpr int PRE_TAB_WIDTH = 4;
+
   for (int i = 0; i < len; i++) {
+    // Inside a <pre> subtree, preserve whitespace verbatim instead of collapsing it:
+    // newlines become real line breaks, tabs expand to spaces, and each space is emitted
+    // as a visible non-breaking-space token (same recipe as the U+00A0 path below).
+    // Non-whitespace falls through to normal word accumulation.
+    if (self->preDepth != INT_MAX && self->depth > self->preDepth) {
+      const char c = s[i];
+      if (c == '\n') {
+        // Real line break: flush, start a fresh line, and reset continuation.
+        if (self->partWordBufferIndex > 0) {
+          self->flushPartWordBuffer();
+        }
+        self->startNewTextBlock(self->blockStyleStack.back().withoutBottom());
+        self->nextWordContinues = false;
+        continue;
+      }
+      if (c == '\r') {
+        // Part of a CRLF pair — the '\n' handles the break; drop the '\r'.
+        continue;
+      }
+      if (c == ' ' || c == '\t') {
+        const int spaces = (c == '\t') ? PRE_TAB_WIDTH : 1;
+        for (int sp = 0; sp < spaces; sp++) {
+          // Emit one visible space as its own non-breaking token (preserves indentation).
+          if (self->partWordBufferIndex > 0) {
+            self->flushPartWordBuffer();
+          }
+          self->partWordBuffer[0] = ' ';
+          self->partWordBuffer[1] = '\0';
+          self->partWordBufferIndex = 1;
+          self->nextWordContinues = true;
+          self->flushPartWordBuffer();
+          self->nextWordContinues = true;
+        }
+        continue;
+      }
+      // Non-whitespace: fall through to normal accumulation below.
+    }
+
     if (isWhitespace(s[i])) {
       // Currently looking at whitespace, if there's anything in the partWordBuffer, flush it
       if (self->partWordBufferIndex > 0) {
@@ -1263,6 +1417,28 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   // Leaving italic tag
   if (self->italicUntilDepth == self->depth) {
     self->italicUntilDepth = INT_MAX;
+  }
+
+  // Leaving underline tag
+  if (self->underlineUntilDepth == self->depth) {
+    self->underlineUntilDepth = INT_MAX;
+  }
+
+  // Leaving <pre> — stop preserving whitespace. The blockStyleStack pop is handled by the
+  // headerOrBlock path below (isHeaderOrBlock("pre") is true).
+  if (isPre(name) && self->preDepth == self->depth) {
+    self->preDepth = INT_MAX;
+  }
+
+  // Leaving a list — drop its context so the counter/bullet state of the parent list resumes.
+  if ((strcmp(name, "ol") == 0 || strcmp(name, "ul") == 0) && !self->listStack.empty()) {
+    self->listStack.pop_back();
+  }
+
+  // Leaving a MathML layout container — drop its child-styling context. Matched by the depth
+  // recorded when it opened (now equal to self->depth after the decrement above).
+  if (!self->mathStack.empty() && self->mathStack.back().depth == self->depth) {
+    self->mathStack.pop_back();
   }
 
   // Pop from inline style stack if we pushed an entry at this depth
