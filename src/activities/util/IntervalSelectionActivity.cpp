@@ -27,14 +27,14 @@ void IntervalSelectionActivity::adjustValue(const int delta) {
 }
 
 void IntervalSelectionActivity::drawStepHintLine(const int y, const StrId labelId, const int step) {
-  char value[24];
+  char stepText[24];
   if (valueFormatId != StrId::STR_NONE_OPT) {
-    snprintf(value, sizeof(value), I18N.get(valueFormatId), static_cast<unsigned int>(step));
+    snprintf(stepText, sizeof(stepText), I18N.get(valueFormatId), static_cast<unsigned int>(step));
   } else {
-    snprintf(value, sizeof(value), "%d", step);
+    snprintf(stepText, sizeof(stepText), "%d", step);
   }
   char line[64];
-  snprintf(line, sizeof(line), "%s %s", I18N.get(labelId), value);
+  snprintf(line, sizeof(line), "%s %s", I18N.get(labelId), stepText);
   renderer.drawCenteredText(SMALL_FONT_ID, y, line, true);
 }
 

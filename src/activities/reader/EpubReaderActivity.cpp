@@ -83,9 +83,10 @@ ProgressRange getPageProgressRange(const std::shared_ptr<Epub>& epub, const int 
   return {epub->calculateProgress(spineIndex, start), epub->calculateProgress(spineIndex, end)};
 }
 
-bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const SavedProgressPosition& progress,
+bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex, const int page, const int pageCount,
                              const ProgressRange& pageRange) {
-  if (bookmark.xpath == progress.xpath) {
+  if (bookmark.computedSpineIndex == spineIndex && bookmark.computedChapterPageCount == pageCount &&
+      bookmark.computedChapterProgress == page) {
     return true;
   }
 
@@ -1311,10 +1312,12 @@ void EpubReaderActivity::addBookmark() {
   const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, currentPage, pageCount);
 
   const size_t bookmarkCountBeforeToggle = cachedBookmarks.size();
-  cachedBookmarks.erase(
-      std::remove_if(cachedBookmarks.begin(), cachedBookmarks.end(),
-                     [&](const BookmarkEntry& b) { return bookmarkMatchesProgress(b, progress, pageRange); }),
-      cachedBookmarks.end());
+  cachedBookmarks.erase(std::remove_if(cachedBookmarks.begin(), cachedBookmarks.end(),
+                                       [&](const BookmarkEntry& b) {
+                                         return bookmarkMatchesProgress(b, currentSpineIndex, currentPage, pageCount,
+                                                                        pageRange);
+                                       }),
+                        cachedBookmarks.end());
   if (cachedBookmarks.size() != bookmarkCountBeforeToggle) {
     bookmarkRemoved = true;
     currentPageBookmarked = false;
@@ -1350,11 +1353,10 @@ void EpubReaderActivity::updateBookmarkFlag() {
     currentPageBookmarked = false;
     return;
   }
-  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
   const ProgressRange pageRange =
       getPageProgressRange(epub, currentSpineIndex, section->currentPage, section->pageCount);
   currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
-    return bookmarkMatchesProgress(b, progress, pageRange);
+    return bookmarkMatchesProgress(b, currentSpineIndex, section->currentPage, section->pageCount, pageRange);
   });
 }
 
