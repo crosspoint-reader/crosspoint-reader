@@ -72,13 +72,10 @@ class HalGPIO {
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
 
-  // Setup wake up GPIO and enter deep sleep
-  void startDeepSleep();
-
   // Verify power button was held long enough after wakeup.
-  // If verification fails, enters deep sleep and does not return.
+  // Returns true if verification succeeded, false if device should return to sleep.
   // Should only be called when wakeup reason is PowerButton.
-  void verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
+  bool verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
 
   // Check if USB is connected
   bool isUsbConnected() const;
