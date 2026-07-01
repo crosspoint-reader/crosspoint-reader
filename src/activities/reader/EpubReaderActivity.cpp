@@ -964,7 +964,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
   silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
-  saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  // Only persist when the position actually changed. render() also runs on menu,
+  // bookmark and screenshot re-renders, and writeAtomic is several FAT ops for 6 bytes.
+  // Every real page turn changes currentPage, so progress durability is unaffected.
+  if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
+      section->pageCount != lastSavedPageCount) {
+    saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+    lastSavedSpineIndex = currentSpineIndex;
+    lastSavedPage = section->currentPage;
+    lastSavedPageCount = section->pageCount;
+  }
 
   showPendingSyncSaveError();
 
