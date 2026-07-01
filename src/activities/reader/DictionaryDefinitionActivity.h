@@ -48,6 +48,9 @@ class DictionaryDefinitionActivity final : public Activity {
  private:
   std::string headword;
   DictLocation foundLocation;
+  uint32_t sourceOffset = 0;
+  uint32_t sourceSize = 0;
+  bool sourceInTempFile = false;
   bool showLookupButton;
   std::string cachePath;
   bool recordHistory;
@@ -115,7 +118,10 @@ class DictionaryDefinitionActivity final : public Activity {
 
   bool skipLoopDelay() override { return controller.skipLoopDelay(); }
 
+  void restoreBackNavPage(const LookupChain::Entry& entry);
+  bool restoreFromHistoryEntry(const LookupHistory::Entry& entry, const LookupChain::Entry& backEntry);
   void wrapText();
+  void refreshEntrySource();
   // Re-parse the definition and lay out ONLY page `page` into layoutLines,
   // discarding other pages as they are produced; also recomputes totalPages.
   void loadPage(int page);

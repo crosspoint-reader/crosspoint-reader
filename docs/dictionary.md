@@ -20,6 +20,7 @@ Minimum requirement: `.dict` (or `.dict.dz`) and `.idx`. Without `.ifo`, the dic
 1. Copy your dictionary folder(s) to one of these directories on the SD card:
    - `/.dictionaries/` (checked first)
    - `/dictionaries/`
+  a. Optional: decompress the .dict.dz (gzip -d) to save ~0.1s per word lookup.
 2. Open **Settings -> Dictionary** on the device.
 3. Select a dictionary from the list.
 

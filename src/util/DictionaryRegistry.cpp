@@ -52,8 +52,8 @@ bool DictionaryRegistry::discover() {
       continue;
     }
 
-    // Scan the subdirectory for .idx and .ifo files.
-    // Folders with multiple .idx or multiple .ifo files are ambiguous and skipped.
+    // Scan the subdirectory for .idx/.idx.gz and .ifo files.
+    // Folders with multiple stems or multiple .ifo files are ambiguous and skipped.
     std::string subPath = root_ + "/" + name;
     entry.close();
 
@@ -80,18 +80,20 @@ bool DictionaryRegistry::discover() {
 
       const size_t subLen = strlen(subName);
       const bool isIdx = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".idx") == 0;
+      const bool isIdxGz = !subEntry.isDirectory() && subLen > 7 && strcmp(subName + subLen - 7, ".idx.gz") == 0;
       const bool isIfo = !subEntry.isDirectory() && subLen > 4 && strcmp(subName + subLen - 4, ".ifo") == 0;
       subEntry.close();
 
       if (isIfo) ifoCount++;
-      if (isIdx) {
-        if (foundStem[0] != '\0') {
-          // Second .idx found — folder is ambiguous, skip it.
+      if (isIdx || isIdxGz) {
+        const size_t stemLen = isIdx ? (subLen - 4) : (subLen - 7);
+        subName[stemLen] = '\0';
+        if (foundStem[0] != '\0' && strcmp(foundStem, subName) != 0) {
+          // Second distinct index stem found — folder is ambiguous, skip it.
           ambiguous = true;
-          LOG_DBG("DREG", "Skipping %s: multiple .idx files found", name);
+          LOG_DBG("DREG", "Skipping %s: multiple index stems found", name);
           break;
         }
-        subName[subLen - 4] = '\0';  // strip ".idx" to get stem
         strncpy(foundStem, subName, sizeof(foundStem) - 1);
       }
     }

@@ -421,3 +421,16 @@ TEST(DictStemVariants, NoDuplicates) {
   EXPECT_EQ(std::adjacent_find(sorted.begin(), sorted.end()), sorted.end())
       << "getStemVariants must not return duplicate variants";
 }
+
+TEST(DictZipTest, LookupPrepMiniDefinitions) {
+  const std::string stem = std::string(DICT_FIXTURE_DIR) + "/prep-mini/prep-mini";
+  const std::string cache = cacheDirPointingAt(stem, "dict_engine_prep_mini");
+
+  const auto entries = parseIdxFile(stem + ".idx");
+  ASSERT_FALSE(entries.empty());
+
+  for (const auto& e : entries) {
+    std::string def = Dictionary::lookup(e.word, {}, cache.c_str());
+    EXPECT_FALSE(def.empty()) << "Failed to lookup definition for " << e.word;
+  }
+}

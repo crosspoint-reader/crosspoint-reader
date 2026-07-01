@@ -1,10 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
 // Per-book lookup history. Stored as <cachePath>/dictionary_history.txt.
-// Format: one entry per line, "word|STATUS\n" where STATUS is a single char.
 // Oldest entry at top; newest at bottom. No deduplication.
 class LookupHistory {
  public:
@@ -12,15 +12,23 @@ class LookupHistory {
 
   struct Entry {
     std::string word;
+    std::string headword;
     Status status = Status::NotFound;
+    uint32_t sourceOffset = 0;
+    uint32_t sourceSize = 0;
+    bool sourceInTempFile = false;
   };
 
   // Append word+status. Evicts oldest entries if over cap. Returns new entry count.
-  static int addWord(const std::string& cachePath, const std::string& word, Status status);
+  static int addWord(const std::string& cachePath, const std::string& word, Status status,
+                     const std::string& headword = "", bool sourceInTempFile = false, uint32_t sourceOffset = 0,
+                     uint32_t sourceSize = 0);
 
   // Conditional addWord: short-circuits if disabled, word empty, or cachePath empty.
   // Single guarded entry point used by all dictionary lookup recording sites.
-  static void addWordIf(const std::string& cachePath, const std::string& word, Status status, bool enabled);
+  static void addWordIf(const std::string& cachePath, const std::string& word, Status status, bool enabled,
+                        const std::string& headword = "", bool sourceInTempFile = false, uint32_t sourceOffset = 0,
+                        uint32_t sourceSize = 0);
 
   // Load all entries in most-recent-first order.
   static std::vector<Entry> load(const std::string& cachePath);

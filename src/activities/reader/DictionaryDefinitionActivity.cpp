@@ -25,15 +25,21 @@
 #include "util/TextPool.h"
 
 static constexpr char kBullet[] = "- ";
+static int gActiveDictionaryDefinitionActivities = 0;
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
+  if (gActiveDictionaryDefinitionActivities++ == 0) {
+    Dictionary::resetStagedEntryFile();
+  }
   LOG_DBG("DICT", "open word='%s' dict='%s' offset=%lu size=%lu", headword.c_str(), foundLocation.folderPath.c_str(),
           (unsigned long)foundLocation.offset, (unsigned long)foundLocation.size);
+  refreshEntrySource();
   wrapText();
   requestUpdate();
   // SD write overlaps the e-ink refresh kicked by requestUpdate() on the render task.
-  LookupHistory::addWordIf(cachePath, historyWord, historyStatus, recordHistory);
+  LookupHistory::addWordIf(cachePath, historyWord, historyStatus, recordHistory, headword, sourceInTempFile,
+                           sourceOffset, sourceSize);
 
   // Seed the back-nav chain. The initial word is the newest history entry iff it
   // was just logged (same condition addWordIf applies internally).
@@ -44,7 +50,15 @@ void DictionaryDefinitionActivity::onEnter() {
 
 void DictionaryDefinitionActivity::onExit() {
   controller.onExit();
+  if (gActiveDictionaryDefinitionActivities > 0) gActiveDictionaryDefinitionActivities--;
   Activity::onExit();
+}
+
+void DictionaryDefinitionActivity::refreshEntrySource() {
+  const DictEntrySource entrySource = Dictionary::prepareEntrySource(foundLocation, headword.c_str());
+  sourceOffset = entrySource.offset;
+  sourceSize = entrySource.size;
+  sourceInTempFile = entrySource.staged;
 }
 
 int DictionaryDefinitionActivity::getLineHeight() const {
@@ -169,9 +183,10 @@ void DictionaryDefinitionActivity::wrapHtml() {
   // Renderer is a reused activity member (3.1-A): renderFromFileStreaming resets
   // it each call (XML_ParserReset, not free+create), so no per-turn object/parser
   // churn. Streaming means it never materializes the whole-definition buffers.
-  const std::string dictPath = foundLocation.folderPath + ".dict";
   const DictHtmlRenderer::SpanSink spanSink{&wrapper, &DictionaryDefinitionActivity::feedSpanToWrapper};
-  htmlRenderer_.renderFromFileStreaming(dictPath.c_str(), foundLocation.offset, foundLocation.size, spanSink);
+  const std::string dictPath = sourceInTempFile ? "" : DictPaths(foundLocation.folderPath).dict();
+  const char* sourcePath = sourceInTempFile ? Dictionary::stagedEntryFilePath() : dictPath.c_str();
+  htmlRenderer_.renderFromFileStreaming(sourcePath, sourceOffset, sourceSize, spanSink);
   wrapper.finish();
   // Only the kept page's span text was ever copied into layoutLines.
 }
@@ -230,12 +245,13 @@ void DictionaryDefinitionActivity::wrapPlain() {
   };
 
   // Stream from .dict file — the full definition is never held in RAM.
-  const std::string dictPath = foundLocation.folderPath + ".dict";
   HalFile dictFile;
-  if (!Storage.openFileForRead("DICT", dictPath.c_str(), dictFile)) return;
-  dictFile.seekSet(foundLocation.offset);
+  const std::string dictPath = sourceInTempFile ? "" : DictPaths(foundLocation.folderPath).dict();
+  const char* sourcePath = sourceInTempFile ? Dictionary::stagedEntryFilePath() : dictPath.c_str();
+  if (!Storage.openFileForRead("DICT", sourcePath, dictFile)) return;
+  dictFile.seekSet(sourceOffset);
 
-  uint32_t remaining = foundLocation.size;
+  uint32_t remaining = sourceSize;
   char chunk[512];
 
   while (remaining > 0) {
@@ -340,6 +356,31 @@ bool DictionaryDefinitionActivity::handleLongPressExitAll(bool enabled) {
   return false;
 }
 
+void DictionaryDefinitionActivity::restoreBackNavPage(const LookupChain::Entry& entry) {
+  chain_.setCurrentHistIndex(entry.histIndex);
+  currentPage = (entry.page < totalPages) ? entry.page : (totalPages - 1);
+  if (currentPage < 0) currentPage = 0;
+  if (currentPage > 0) loadPage(currentPage);
+}
+
+bool DictionaryDefinitionActivity::restoreFromHistoryEntry(const LookupHistory::Entry& entry,
+                                                           const LookupChain::Entry& backEntry) {
+  if (entry.sourceSize == 0) return false;
+
+  headword = entry.headword.empty() ? entry.word : entry.headword;
+  foundLocation.offset = entry.sourceOffset;
+  foundLocation.size = entry.sourceSize;
+  foundLocation.found = true;
+  sourceOffset = entry.sourceOffset;
+  sourceSize = entry.sourceSize;
+  sourceInTempFile = entry.sourceInTempFile;
+  currentPage = 0;
+  wrapText();
+  restoreBackNavPage(backEntry);
+  requestUpdate();
+  return true;
+}
+
 void DictionaryDefinitionActivity::loop() {
   const bool shortLookupPressed =
       ReaderUtils::shortPowerButtonActionTriggered(mappedInput, CrossPointSettings::SHORT_PWRBTN::LOOKUP);
@@ -360,19 +401,17 @@ void DictionaryDefinitionActivity::loop() {
         chainBackNavInProgress = false;
         headword = controller.getFoundWord();
         foundLocation = controller.getFoundLocation();
+        refreshEntrySource();
         wrapText();  // resets currentPage to 0 and loads page 0
         if (wasBackNav) {
-          // Re-derive the now-current word's history position and restore its page.
-          chain_.setCurrentHistIndex(pendingBack_.histIndex);
-          currentPage = (pendingBack_.page < totalPages) ? pendingBack_.page : (totalPages - 1);
-          if (currentPage < 0) currentPage = 0;
-          if (currentPage > 0) loadPage(currentPage);
+          restoreBackNavPage(pendingBack_);
         }
         isWordSelectMode = false;
         requestUpdate();
         // Chain-forward records; chain-back-nav does not.
         LookupHistory::addWordIf(cachePath, controller.getLookupWord(),
-                                 DictionaryLookupController::toHistStatus(controller.getFoundStatus()), willLog);
+                                 DictionaryLookupController::toHistStatus(controller.getFoundStatus()), willLog,
+                                 headword, sourceInTempFile, sourceOffset, sourceSize);
         break;
       }
       case DictionaryLookupController::LookupEvent::NotFoundDismissedBack:
@@ -475,8 +514,10 @@ void DictionaryDefinitionActivity::loop() {
       // Resolve the prior headword from the persisted history by distance-from-newest.
       const auto hist = LookupHistory::load(cachePath);  // newest-first
       if (pendingBack_.histIndex < hist.size()) {
+        const auto& entry = hist[pendingBack_.histIndex];
+        if (restoreFromHistoryEntry(entry, pendingBack_)) return;
         chainBackNavInProgress = true;
-        controller.startLookup(hist[pendingBack_.histIndex].word, false);
+        controller.startLookup(entry.word, false);
         return;
       }
       // Unresolvable (should not happen under the depth cap) — fall through to exit.

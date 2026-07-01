@@ -3,7 +3,7 @@
 dict_tools.py — Offline StarDict dictionary tools for CrossPoint Reader.
 
 Subcommands:
-  prep   — Pre-process a dictionary (decompress, generate offset files)
+  prep   — Pre-process a dictionary (validate dictzip, extract index/synonym data, generate offset files)
   lookup — Look up a word in a prepared dictionary
   merge  — Merge multiple StarDict dictionaries into one
 
@@ -220,6 +220,47 @@ def _decompress(src: Path, dst: Path) -> None:
         shutil.copyfileobj(f_in, f_out)
 
 
+def _validate_dictzip(path: Path) -> tuple[int, int]:
+    """Validate a dictzip RA table. Returns (chunk_len, chunk_count)."""
+    data = path.read_bytes()
+    if len(data) < 18 or data[:3] != b"\x1f\x8b\x08":
+        raise ValueError("not a gzip file")
+    flg = data[3]
+    if (flg & 0x04) == 0:
+        raise ValueError("missing FEXTRA")
+
+    pos = 10
+    xlen = struct.unpack_from("<H", data, pos)[0]
+    pos += 2
+    extra = data[pos:pos + xlen]
+    if len(extra) != xlen:
+        raise ValueError("truncated extra field")
+
+    i = 0
+    while i + 4 <= len(extra):
+        si1 = extra[i]
+        si2 = extra[i + 1]
+        sub_len = struct.unpack_from("<H", extra, i + 2)[0]
+        i += 4
+        sub = extra[i:i + sub_len]
+        if len(sub) != sub_len:
+            raise ValueError("truncated subfield")
+        if si1 == ord("R") and si2 == ord("A"):
+            if sub_len < 6:
+                raise ValueError("short RA subfield")
+            version, chunk_len, chunk_count = struct.unpack_from("<HHH", sub, 0)
+            if version != 1:
+                raise ValueError(f"unsupported RA version {version}")
+            if chunk_len == 0 or chunk_count == 0:
+                raise ValueError("empty RA table")
+            if sub_len != 6 + chunk_count * 2:
+                raise ValueError("RA table length mismatch")
+            return chunk_len, chunk_count
+        i += sub_len
+
+    raise ValueError("missing RA subfield")
+
+
 # ---------------------------------------------------------------------------
 # prep subcommand
 # ---------------------------------------------------------------------------
@@ -236,16 +277,28 @@ def prep(source_folder: Path) -> None:
 
     steps_run = 0
 
-    # Step 1: Extract .dict.dz -> .dict
+    # Step 1: Validate .dict.dz
     dz    = out_dir / f"{stem}.dict.dz"
     dict_ = out_dir / f"{stem}.dict"
     if dz.exists() and not dict_.exists():
-        print(f"  Extracting {dz.name} -> {dict_.name} ...", end=" ", flush=True)
-        _decompress(dz, dict_)
-        print(f"{dict_.stat().st_size / 1024 / 1024:.2f} MB")
+        try:
+            chunk_len, chunk_count = _validate_dictzip(dz)
+        except ValueError as exc:
+            print(f"ERROR: invalid dictzip file {dz}: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(f"  Validated {dz.name} ({chunk_count} chunks @ {chunk_len} bytes)")
         steps_run += 1
 
-    # Step 2: Extract .syn.dz -> .syn
+    # Step 2: Extract .idx.gz -> .idx
+    idx_gz = out_dir / f"{stem}.idx.gz"
+    idx = out_dir / f"{stem}.idx"
+    if idx_gz.exists() and not idx.exists():
+        print(f"  Extracting {idx_gz.name} -> {idx.name} ...", end=" ", flush=True)
+        _decompress(idx_gz, idx)
+        print(f"{idx.stat().st_size / 1024 / 1024:.2f} MB")
+        steps_run += 1
+
+    # Step 3: Extract .syn.dz -> .syn
     syn_dz = out_dir / f"{stem}.syn.dz"
     syn    = out_dir / f"{stem}.syn"
     if syn_dz.exists() and not syn.exists():
@@ -254,9 +307,7 @@ def prep(source_folder: Path) -> None:
         print(f"{syn.stat().st_size / 1024 / 1024:.2f} MB")
         steps_run += 1
 
-    idx = out_dir / f"{stem}.idx"
-
-    # Step 3: Generate .idx.fpi (Fenced Prefix Index — the exact-match
+    # Step 4: Generate .idx.fpi (Fenced Prefix Index — the exact-match
     # lookup fast path, plus a per-group ordinal field consumed by
     # Dictionary::wordAtOrdinal/findSimilar).
     idx_fpi = out_dir / f"{stem}.idx.fpi"
@@ -266,7 +317,7 @@ def prep(source_folder: Path) -> None:
         print(f"{idx_fpi.stat().st_size} bytes")
         steps_run += 1
 
-    # Step 4: Generate .syn.fpi.
+    # Step 5: Generate .syn.fpi.
     syn_fpi = out_dir / f"{stem}.syn.fpi"
     if syn.exists() and not syn_fpi.exists():
         print(f"  Generating {syn_fpi.name} ...", end=" ", flush=True)

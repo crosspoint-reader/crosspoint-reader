@@ -10,9 +10,10 @@
 class DictPrepareTask;
 
 // Activity that performs one or more dictionary preparation steps:
-//   1. Extract .dict.dz → .dict  (if .dict.dz present and .dict absent)
-//   2. Extract .syn.dz  → .syn   (if .syn.dz  present and .syn  absent)
-//   3. Generate .idx.fpi from .idx  (Fenced Prefix Index — the exact-match
+//   1. Validate .dict.dz dictzip metadata (if .dict.dz present and .dict absent)
+//   2. Extract .idx.gz   → .idx   (if .idx.gz  present and .idx  absent)
+//   3. Extract .syn.dz   → .syn   (if .syn.dz  present and .syn  absent)
+//   4. Generate .idx.fpi from .idx  (Fenced Prefix Index — the exact-match
 //      lookup fast path, plus a per-group ordinal field used by
 //      Dictionary::wordAtOrdinal/findSimilar).
 //   4. Generate .syn.fpi from .syn
@@ -38,7 +39,7 @@ class DictPrepareActivity final : public Activity {
  private:
   enum class State { CONFIRM, PROCESSING, SUCCESS, FAILED, CANCELLED };
 
-  enum class StepType { EXTRACT_DICT, EXTRACT_SYN, GEN_FPI, GEN_SYN_FPI };
+  enum class StepType { VALIDATE_DICTZIP, EXTRACT_IDX_GZ, EXTRACT_SYN, GEN_FPI, GEN_SYN_FPI };
 
   enum class StepStatus { PENDING, IN_PROGRESS, COMPLETE, FAILED };
 
@@ -60,7 +61,7 @@ class DictPrepareActivity final : public Activity {
   // Checked by the FreeRTOS task at each vTaskDelay(1) yield point.
   std::atomic<bool> cancelRequested = false;
 
-  Step steps[4];
+  Step steps[5];
   int stepCount = 0;
   std::atomic<int> currentStep = 0;
 
@@ -81,6 +82,9 @@ class DictPrepareActivity final : public Activity {
 
   // Decompress a gzip-compressed file. Returns true on success.
   bool extractFile(const char* dzPath, const char* outPath, Step& step);
+
+  // Validate a .dict.dz file's dictzip RA table. Returns true on success.
+  bool validateDictzip(const char* dictDzPath, Step& step);
 
   // Wraps Dictionary::generateFpi with this activity's Step progress/cancellation
   // plumbing. skipPerEntry: 8 for .idx, 4 for .syn (see Dictionary::generateFpi).

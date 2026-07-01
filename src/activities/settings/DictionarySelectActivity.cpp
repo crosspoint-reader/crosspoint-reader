@@ -212,7 +212,7 @@ void DictionarySelectActivity::loop() {
     return;
   }
 
-  // Short press Confirm: apply selection (or decompress if compressed) and exit.
+  // Short press Confirm: apply selection (or prepare if needed) and exit.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() < VIEW_INFO_MS) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
@@ -415,7 +415,7 @@ void DictionarySelectActivity::render(RenderLock&&) {
         drawWrapped("Description", currentInfo.description);
         drawLine("Type", currentInfo.sametypesequence);
         if (currentInfo.isCompressed) {
-          drawWrapped("Status", "Compressed (.dict.dz) -- extract before use");
+          drawWrapped(tr(STR_DICT_METADATA_STATUS), tr(STR_DICT_METADATA_COMPRESSED));
         }
       }
 

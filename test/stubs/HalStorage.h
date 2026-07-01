@@ -7,7 +7,14 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <filesystem>
 #include <string>
+
+#define O_RDONLY 0x01
+#define O_WRITE 0x02
+#define O_CREAT 0x04
+#define O_AT_END 0x08
+#define O_TRUNC 0x10
 
 class HalFile {
  public:
@@ -16,17 +23,28 @@ class HalFile {
   HalFile(const HalFile&) = delete;
   HalFile& operator=(const HalFile&) = delete;
 
-  bool openForRead(const char* path) {
+  HalFile(HalFile&& other) noexcept {
+    fp_ = other.fp_;
+    other.fp_ = nullptr;
+  }
+  HalFile& operator=(HalFile&& other) noexcept {
+    if (this != &other) {
+      close();
+      fp_ = other.fp_;
+      other.fp_ = nullptr;
+    }
+    return *this;
+  }
+
+  bool openMode(const char* path, const char* mode) {
     close();
-    fp_ = std::fopen(path, "rb");
+    fp_ = std::fopen(path, mode);
     return fp_ != nullptr;
   }
 
-  bool openForWrite(const char* path) {
-    close();
-    fp_ = std::fopen(path, "wb");
-    return fp_ != nullptr;
-  }
+  bool openForRead(const char* path) { return openMode(path, "rb"); }
+
+  bool openForWrite(const char* path) { return openMode(path, "wb"); }
 
   size_t write(const void* buf, size_t n) {
     if (!fp_ || n == 0) return 0;
@@ -76,27 +94,58 @@ class HalFile {
     return true;
   }
 
+  operator bool() const { return fp_ != nullptr; }
+
  private:
   std::FILE* fp_ = nullptr;
 };
 
 class HalStorage {
+ private:
+  std::string resolvePath(const std::string& path) {
+    if (path.rfind("/.crosspoint", 0) == 0) {
+      std::string dir = "/tmp/.crosspoint";
+      std::error_code ec;
+      std::filesystem::create_directories(dir);
+      return "/tmp" + path;
+    }
+    return path;
+  }
+
  public:
   static HalStorage& getInstance() {
     static HalStorage instance;
     return instance;
   }
-  bool openFileForRead(const char* /*module*/, const char* path, HalFile& file) { return file.openForRead(path); }
+  bool openFileForRead(const char* /*module*/, const char* path, HalFile& file) {
+    return file.openForRead(resolvePath(path).c_str());
+  }
   bool openFileForRead(const char* /*module*/, const std::string& path, HalFile& file) {
-    return file.openForRead(path.c_str());
+    return file.openForRead(resolvePath(path).c_str());
   }
   bool exists(const char* path) {
-    std::FILE* f = std::fopen(path, "rb");
+    std::FILE* f = std::fopen(resolvePath(path).c_str(), "rb");
     if (!f) return false;
     std::fclose(f);
     return true;
   }
-  bool openFileForWrite(const char* /*module*/, const char* path, HalFile& file) { return file.openForWrite(path); }
+  bool openFileForWrite(const char* /*module*/, const char* path, HalFile& file) {
+    return file.openForWrite(resolvePath(path).c_str());
+  }
+
+  HalFile open(const char* path, int oflag = O_RDONLY) {
+    HalFile file;
+    const char* mode = "rb";
+    if (oflag & O_AT_END) {
+      mode = "ab";
+    } else if (oflag & O_TRUNC) {
+      mode = "wb";
+    } else if (oflag & O_WRITE) {
+      mode = "wb";
+    }
+    file.openMode(resolvePath(path).c_str(), mode);
+    return file;
+  }
 };
 
 #define Storage HalStorage::getInstance()

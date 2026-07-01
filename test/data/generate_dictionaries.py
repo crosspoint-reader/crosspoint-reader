@@ -61,6 +61,7 @@ import random
 import struct
 import sys
 import time
+import zlib
 from pathlib import Path
 from typing import Optional
 
@@ -119,6 +120,8 @@ _ENGLISHISH_LENGTH_CDF = [
     (12, 99),
     (13, 100),
 ]
+
+_DICTZIP_CHUNK_LEN = 58315
 
 
 # ---------------------------------------------------------------------------
@@ -295,14 +298,51 @@ def build_syn(synonym_pairs: list, headword_ordinals: dict) -> tuple:
     return buf.getvalue(), valid_count
 
 
+def _build_dictzip(data: bytes, member_name: str, chunk_len: int = _DICTZIP_CHUNK_LEN) -> bytes:
+    if chunk_len <= 0 or chunk_len > 0xFFFF:
+        raise ValueError(f"invalid dictzip chunk_len {chunk_len}")
+
+    chunk_payloads: list[bytes] = []
+    chunk_sizes: list[int] = []
+    for start in range(0, len(data), chunk_len):
+        chunk = data[start:start + chunk_len]
+        compressor = zlib.compressobj(level=6, wbits=-15)
+        payload = compressor.compress(chunk) + compressor.flush()
+        chunk_payloads.append(payload)
+        chunk_sizes.append(len(payload))
+
+    chunk_count = len(chunk_payloads)
+    if chunk_count == 0:
+        chunk_payloads.append(b"\x03\x00")
+        chunk_sizes.append(2)
+        chunk_count = 1
+
+    ra_data = struct.pack("<HHH", 1, chunk_len, chunk_count)
+    ra_data += struct.pack("<" + "H" * chunk_count, *chunk_sizes)
+    extra = b"RA" + struct.pack("<H", len(ra_data)) + ra_data
+
+    out = io.BytesIO()
+    out.write(b"\x1f\x8b")          # ID1, ID2
+    out.write(b"\x08")              # CM = deflate
+    out.write(b"\x0c")              # FLG = FEXTRA | FNAME
+    out.write(struct.pack("<I", 0)) # MTIME = 0 for stable output
+    out.write(b"\x02")              # XFL = max compression
+    out.write(b"\x03")              # OS = Unix
+    out.write(struct.pack("<H", len(extra)))
+    out.write(extra)
+    out.write(member_name.encode("utf-8") + b"\x00")
+    for payload in chunk_payloads:
+        out.write(payload)
+    out.write(struct.pack("<I", zlib.crc32(data) & 0xFFFFFFFF))
+    out.write(struct.pack("<I", len(data) & 0xFFFFFFFF))
+    return out.getvalue()
+
+
 def write_or_compress(path: str, data: bytes, compress: bool) -> None:
     if compress:
+        member_name = os.path.basename(path)
         with open(path + ".dz", "wb") as f:
-            # mtime=0 produces byte-stable gzip output across regenerations.
-            compressed = gzip.compress(data, compresslevel=6, mtime=0)
-            if len(compressed) >= 10:
-                compressed = compressed[:9] + b"\x03" + compressed[10:]
-            f.write(compressed)
+            f.write(_build_dictzip(data, member_name))
     else:
         with open(path, "wb") as f:
             f.write(data)

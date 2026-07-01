@@ -11,6 +11,7 @@ struct DictPaths {
   explicit DictPaths(const std::string& f) : folder(f) {}
 
   std::string idx() const { return folder + ".idx"; }
+  std::string idxGz() const { return folder + ".idx.gz"; }
   std::string dict() const { return folder + ".dict"; }
   std::string syn() const { return folder + ".syn"; }
   std::string ifo() const { return folder + ".ifo"; }
@@ -52,6 +53,14 @@ struct DictLocation {
   bool found = false;
 };
 
+struct DictEntrySource {
+  std::string path;  // source file path (.dict or staged temp file)
+  uint32_t offset = 0;
+  uint32_t size = 0;
+  bool staged = false;
+  bool valid = false;
+};
+
 class Dictionary {
  public:
   static constexpr unsigned long LONG_PRESS_MS = 600;
@@ -81,6 +90,10 @@ class Dictionary {
   // Also checks for .syn and .dict.dz presence.
   static DictInfo readInfo(const char* folderPath);
 
+  // Validate that folderPath's .dict.dz is a readable dictzip file with a usable
+  // RA offset table. Returns true for plain .dict dictionaries as well.
+  static bool validateDictData(const char* folderPath);
+
   // Search .idx for word (via .idx.fpi if present). Returns file location without reading content.
   static DictLocation locate(const std::string& word, const DictLookupCallbacks& cbs = {},
                              const char* cachePath = nullptr);
@@ -88,6 +101,16 @@ class Dictionary {
   // Look up word in .idx (via .idx.fpi if present). Returns definition or empty string.
   static std::string lookup(const std::string& word, const DictLookupCallbacks& cbs = {},
                             const char* cachePath = nullptr);
+
+  // Resolve the definition bytes for a located entry to either the physical .dict
+  // path or a staged temp file when the backing store is .dict.dz only.
+  static DictEntrySource prepareEntrySource(const DictLocation& location, const char* debugWord = nullptr);
+
+  // Shared temp file path used for lazily extracted dictzip entries.
+  static const char* stagedEntryFilePath();
+
+  // Truncate the shared temp file used for lazily extracted dictzip entries.
+  static void resetStagedEntryFile();
 
   // Look up word in .syn (via .syn.fpi if present).
   // Returns the canonical headword from .idx, or empty string if not found.

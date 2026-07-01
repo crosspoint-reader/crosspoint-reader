@@ -57,8 +57,10 @@ static char* fmtElapsed(char* buf, size_t bufSize, unsigned long ms) {
 
 const char* DictPrepareActivity::stepLabel(StepType type) {
   switch (type) {
-    case StepType::EXTRACT_DICT:
-      return tr(STR_DICT_STEP_EXTRACT_DICT);
+    case StepType::VALIDATE_DICTZIP:
+      return tr(STR_DICT_STEP_VALIDATE_DICTZIP);
+    case StepType::EXTRACT_IDX_GZ:
+      return tr(STR_DICT_STEP_EXTRACT_IDX_GZ);
     case StepType::EXTRACT_SYN:
       return tr(STR_DICT_STEP_EXTRACT_SYN);
 
@@ -119,7 +121,7 @@ void DictPrepareActivity::onEnter() {
 
   if (forceRebuild) {
     DictPaths dp(folderPath);
-    if (Storage.exists(dp.dictDz().c_str())) Storage.remove(dp.dict().c_str());
+    if (Storage.exists(dp.idxGz().c_str())) Storage.remove(dp.idx().c_str());
     if (Storage.exists(dp.synDz().c_str())) Storage.remove(dp.syn().c_str());
 
     Storage.remove(dp.idxFpi().c_str());
@@ -144,20 +146,23 @@ void DictPrepareActivity::detectSteps() {
   DictPaths dp(folderPath);
   const bool dictExists = Storage.exists(dp.dict().c_str());
   const bool dzExists = Storage.exists(dp.dictDz().c_str());
+  const bool idxExists = Storage.exists(dp.idx().c_str());
+  const bool idxGzExists = Storage.exists(dp.idxGz().c_str());
   const bool synExists = Storage.exists(dp.syn().c_str());
   const bool synDzExists = Storage.exists(dp.synDz().c_str());
-  const bool idxExists = Storage.exists(dp.idx().c_str());
 
-  if (!dictExists && dzExists) steps[stepCount++].type = StepType::EXTRACT_DICT;
+  if (!dictExists && dzExists) steps[stepCount++].type = StepType::VALIDATE_DICTZIP;
+  if (!idxExists && idxGzExists) steps[stepCount++].type = StepType::EXTRACT_IDX_GZ;
   if (!synExists && synDzExists) steps[stepCount++].type = StepType::EXTRACT_SYN;
   const bool synWillExist = synExists || synDzExists;
+  const bool idxWillExist = idxExists || idxGzExists;
 
   // .idx.fpi / .syn.fpi supersede .idx.oft/.idx.oft.cspt and .syn.oft/.syn.oft.cspt —
   // neither .oft nor .cspt is generated anymore. Each .fpi's per-group ordinal field
   // also covers Dictionary::wordAtOrdinal (resolveAltForm) / findSimilar's
   // ordinal/neighbourhood access, which used to require .oft.
   const bool idxFpiExists = Storage.exists(dp.idxFpi().c_str());
-  if (idxExists && !idxFpiExists) steps[stepCount++].type = StepType::GEN_FPI;
+  if (idxWillExist && !idxFpiExists) steps[stepCount++].type = StepType::GEN_FPI;
 
   const bool synFpiExists = Storage.exists(dp.synFpi().c_str());
   if (synWillExist && !synFpiExists) steps[stepCount++].type = StepType::GEN_SYN_FPI;
@@ -251,9 +256,13 @@ void DictPrepareActivity::runSteps() {
     bool ok = false;
 
     switch (steps[i].type) {
-      case StepType::EXTRACT_DICT:
-        ok = extractFile(dp.dictDz().c_str(), dp.dict().c_str(), steps[i]);
-        if (!ok) Storage.remove(dp.dict().c_str());
+      case StepType::VALIDATE_DICTZIP:
+        ok = validateDictzip(dp.dictDz().c_str(), steps[i]);
+        break;
+
+      case StepType::EXTRACT_IDX_GZ:
+        ok = extractFile(dp.idxGz().c_str(), dp.idx().c_str(), steps[i]);
+        if (!ok) Storage.remove(dp.idx().c_str());
         break;
 
       case StepType::EXTRACT_SYN:
@@ -396,6 +405,25 @@ bool DictPrepareActivity::extractFile(const char* dzPath, const char* outPath, S
   return true;
 }
 
+bool DictPrepareActivity::validateDictzip(const char* dictDzPath, Step& step) {
+  HalFile file;
+  if (!Storage.openFileForRead("DICT_PREP", dictDzPath, file)) {
+    LOG_ERR("DICT_PREP", "Failed to open: %s", dictDzPath);
+    return false;
+  }
+
+  step.total = file.fileSize();
+  step.progress = 0;
+  const bool ok = Dictionary::validateDictData(folderPath.c_str());
+  file.close();
+  if (!ok) {
+    LOG_ERR("DICT_PREP", "Invalid dictzip file: %s", dictDzPath);
+    return false;
+  }
+  step.progress = step.total.load();
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // .fpi (Fenced Prefix Index) generation — thin Step/cancellation wrapper around the
 // shared single-pass implementation in Dictionary::generateFpi.
@@ -458,11 +486,6 @@ void DictPrepareActivity::render(RenderLock&&) {
       renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, y, stepLabel(steps[i].type));
       y += lineHeight + STEP_SPACING;
     }
-
-    y += metrics.verticalSpacing;
-    renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_DICT_PREPARE_WARN_1));
-    y += lineHeight + STEP_SPACING;
-    renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_DICT_PREPARE_WARN_2));
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CONFIRM), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

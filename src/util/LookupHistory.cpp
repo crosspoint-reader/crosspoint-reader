@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <array>
+
 #include "CrossPointSettings.h"
 
 // ---------------------------------------------------------------------------
@@ -27,24 +29,24 @@ static LookupHistory::Status parseStatusCode(char code) {
   }
 }
 
-// Parse a line buffer into an Entry.
+// Parse a TSV line into an Entry.
 static LookupHistory::Entry parseLine(const char* lineBuf, int lineLen) {
   LookupHistory::Entry e;
-  int sepIdx = -1;
-  for (int i = lineLen - 1; i >= 0; i--) {
-    if (lineBuf[i] == '|') {
-      sepIdx = i;
-      break;
-    }
+  std::array<int, 5> tabs{};
+  int foundTabs = 0;
+  for (int i = 0; i < lineLen && foundTabs < static_cast<int>(tabs.size()); i++) {
+    if (lineBuf[i] == '\t') tabs[foundTabs++] = i;
   }
-  if (sepIdx >= 0 && sepIdx + 1 < lineLen) {
-    e.word = std::string(lineBuf, sepIdx);
-    e.status = parseStatusCode(lineBuf[sepIdx + 1]);
-  } else {
-    // No separator — legacy line, treat as not-found status
-    e.word = std::string(lineBuf, lineLen);
-    e.status = LookupHistory::Status::NotFound;
-  }
+  if (foundTabs != static_cast<int>(tabs.size()) || tabs[0] <= 0 || tabs[0] + 1 >= lineLen) return e;
+
+  e.word = std::string(lineBuf, tabs[0]);
+  e.status = parseStatusCode(lineBuf[tabs[0] + 1]);
+  e.headword = std::string(lineBuf + tabs[1] + 1, tabs[2] - tabs[1] - 1);
+  e.sourceInTempFile = tabs[2] + 1 < lineLen && lineBuf[tabs[2] + 1] == 'T';
+  e.sourceOffset =
+      static_cast<uint32_t>(strtoul(std::string(lineBuf + tabs[3] + 1, tabs[4] - tabs[3] - 1).c_str(), nullptr, 10));
+  e.sourceSize =
+      static_cast<uint32_t>(strtoul(std::string(lineBuf + tabs[4] + 1, lineLen - tabs[4] - 1).c_str(), nullptr, 10));
   return e;
 }
 
@@ -102,10 +104,21 @@ bool LookupHistory::writeAll(const std::string& path, const std::vector<Entry>& 
   }
   for (const auto& e : entries) {
     file.write(e.word.c_str(), e.word.size());
-    const char pipe = '|';
-    file.write(&pipe, 1);
+    const char tab = '\t';
+    file.write(&tab, 1);
     const char code = static_cast<char>(e.status);
     file.write(&code, 1);
+    file.write(&tab, 1);
+    file.write(e.headword.c_str(), e.headword.size());
+    file.write(&tab, 1);
+    const char sourceKind = e.sourceInTempFile ? 'T' : 'D';
+    file.write(&sourceKind, 1);
+    file.write(&tab, 1);
+    const std::string offset = std::to_string(e.sourceOffset);
+    file.write(offset.c_str(), offset.size());
+    file.write(&tab, 1);
+    const std::string size = std::to_string(e.sourceSize);
+    file.write(size.c_str(), size.size());
     const char nl = '\n';
     file.write(&nl, 1);
   }
@@ -117,7 +130,9 @@ bool LookupHistory::writeAll(const std::string& path, const std::vector<Entry>& 
 // Public API
 // ---------------------------------------------------------------------------
 
-int LookupHistory::addWord(const std::string& cachePath, const std::string& word, Status status) {
+int LookupHistory::addWord(const std::string& cachePath, const std::string& word, Status status,
+                           const std::string& headword, bool sourceInTempFile, uint32_t sourceOffset,
+                           uint32_t sourceSize) {
   if (word.empty()) return 0;
 
   const std::string path = filePath(cachePath);
@@ -127,7 +142,11 @@ int LookupHistory::addWord(const std::string& cachePath, const std::string& word
 
   Entry e;
   e.word = word;
+  e.headword = headword;
   e.status = status;
+  e.sourceInTempFile = sourceInTempFile;
+  e.sourceOffset = sourceOffset;
+  e.sourceSize = sourceSize;
   entries.push_back(std::move(e));
 
   // Evict oldest entries if over cap
@@ -140,9 +159,11 @@ int LookupHistory::addWord(const std::string& cachePath, const std::string& word
   return static_cast<int>(entries.size());
 }
 
-void LookupHistory::addWordIf(const std::string& cachePath, const std::string& word, Status status, bool enabled) {
+void LookupHistory::addWordIf(const std::string& cachePath, const std::string& word, Status status, bool enabled,
+                              const std::string& headword, bool sourceInTempFile, uint32_t sourceOffset,
+                              uint32_t sourceSize) {
   if (!enabled || word.empty() || cachePath.empty()) return;
-  addWord(cachePath, word, status);
+  addWord(cachePath, word, status, headword, sourceInTempFile, sourceOffset, sourceSize);
 }
 
 std::vector<LookupHistory::Entry> LookupHistory::load(const std::string& cachePath) {

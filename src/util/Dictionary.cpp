@@ -1,5 +1,6 @@
 #include "Dictionary.h"
 
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -8,6 +9,7 @@
 #include <cctype>
 #include <cstring>
 
+#include "DictZip.h"
 #include "StringUtils.h"
 #include "TextPool.h"
 
@@ -17,6 +19,7 @@ char Dictionary::wordBuf[256] = "";
 namespace {
 constexpr char DICT_BIN[] = "dictionary.bin";
 constexpr char GLOBAL_DICT_DIR[] = "/.crosspoint";
+constexpr char DICT_ENTRY_FILE[] = "/.crosspoint/dict.tmp";
 constexpr int MAX_DICT_PATH_BYTES = 512;
 }  // namespace
 
@@ -124,7 +127,7 @@ bool Dictionary::exists(const char* cachePath) {
   if (folderPath.empty()) return false;
   DictPaths dp(folderPath);
   if (!Storage.exists(dp.idx().c_str())) return false;
-  return Storage.exists(dp.dict().c_str());
+  return Storage.exists(dp.dict().c_str()) || validateDictData(folderPath.c_str());
 }
 
 bool Dictionary::hasAltForms(const char* cachePath) {
@@ -138,7 +141,7 @@ bool Dictionary::isValidDictionary() {
   if (folderPath.empty()) return false;
   DictPaths dp(folderPath);
   const bool idxExists = Storage.exists(dp.idx().c_str());
-  const bool valid = idxExists && Storage.exists(dp.dict().c_str());
+  const bool valid = idxExists && (Storage.exists(dp.dict().c_str()) || validateDictData(folderPath.c_str()));
   if (!valid) {
     LOG_DBG("DICT", "Stored dictionary path no longer valid, resetting");
     saveGlobalDictPath("");
@@ -262,6 +265,21 @@ DictInfo Dictionary::readInfo(const char* folderPath) {
 
   info.valid = true;
   return info;
+}
+
+bool Dictionary::validateDictData(const char* folderPath) {
+  if (!folderPath || folderPath[0] == '\0') return false;
+  const std::string folder(folderPath);
+  DictPaths dp(folder);
+  if (Storage.exists(dp.dict().c_str())) return true;
+  if (!Storage.exists(dp.dictDz().c_str())) return false;
+
+  HalFile dictDz;
+  if (!Storage.openFileForRead("DICT", dp.dictDz().c_str(), dictDz)) return false;
+  DictZip::Info info;
+  const bool ok = DictZip::parse(dictDz, &info);
+  dictDz.close();
+  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -875,21 +893,82 @@ bool Dictionary::binarySearchFpiOrdinal(HalFile& fpi, uint32_t srcFileSize, uint
 // Reading helpers
 // ---------------------------------------------------------------------------
 
+DictEntrySource Dictionary::prepareEntrySource(const DictLocation& location, const char* debugWord) {
+  DictEntrySource source;
+  if (!location.found || location.folderPath.empty()) return source;
+
+  DictPaths dp(location.folderPath);
+  if (Storage.exists(dp.dict().c_str())) {
+    source.path = dp.dict();
+    source.offset = location.offset;
+    source.size = location.size;
+    source.valid = true;
+    return source;
+  }
+
+  HalFile out = Storage.open(DICT_ENTRY_FILE, O_WRITE | O_CREAT | O_AT_END);
+  if (!out) {
+    LOG_ERR("DICT", "Failed to open staged entry output: %s", DICT_ENTRY_FILE);
+    return source;
+  }
+  const uint32_t stagedOffset = static_cast<uint32_t>(out.fileSize());
+
+  const unsigned long startMs = millis();
+  uint32_t compressedBytesRead = 0;
+  uint32_t uncompressedBytesDecompressed = 0;
+  if (!DictZip::extractEntry(dp.dictDz().c_str(), location.offset, location.size, out, &compressedBytesRead,
+                             &uncompressedBytesDecompressed)) {
+    LOG_ERR("DICT", "Failed to stage dictzip entry from %s", location.folderPath.c_str());
+    out.close();
+    return source;
+  }
+  out.close();
+
+  source.path = DICT_ENTRY_FILE;
+  source.offset = stagedOffset;
+  source.size = location.size;
+  source.staged = true;
+  source.valid = true;
+  LOG_DBG("DICT", "lazy dict decompress '%s' read %lu bytes, decompressed %lu bytes, and wrote %lu bytes in %lu ms",
+          debugWord ? debugWord : "", static_cast<unsigned long>(compressedBytesRead),
+          static_cast<unsigned long>(uncompressedBytesDecompressed), static_cast<unsigned long>(location.size),
+          millis() - startMs);
+  (void)startMs;
+  (void)debugWord;
+  return source;
+}
+
+const char* Dictionary::stagedEntryFilePath() { return DICT_ENTRY_FILE; }
+
+void Dictionary::resetStagedEntryFile() {
+  HalFile out = Storage.open(DICT_ENTRY_FILE, O_WRITE | O_CREAT | O_TRUNC);
+  if (out) out.close();
+}
+
 std::string Dictionary::readDefinition(const std::string& folderPath, uint32_t offset, uint32_t size) {
+  DictLocation location;
+  location.folderPath = folderPath;
+  location.offset = offset;
+  location.size = size;
+  location.found = true;
+
+  DictEntrySource source = prepareEntrySource(location);
+  if (!source.valid) return "";
+
   HalFile dict;
-  if (!Storage.openFileForRead("DICT", DictPaths(folderPath).dict().c_str(), dict)) return "";
+  if (!Storage.openFileForRead("DICT", source.path.c_str(), dict)) return "";
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 256 * 1024;
   const uint32_t dictSize = static_cast<uint32_t>(dict.fileSize());
-  if (offset > dictSize || size > dictSize - offset || size > MAX_DEFINITION_BYTES) {
+  if (source.offset > dictSize || source.size > dictSize - source.offset || source.size > MAX_DEFINITION_BYTES) {
     dict.close();
     return "";
   }
 
-  dict.seekSet(offset);
+  dict.seekSet(source.offset);
 
-  std::string def(size, '\0');
-  int bytesRead = dict.read(reinterpret_cast<uint8_t*>(&def[0]), size);
+  std::string def(source.size, '\0');
+  int bytesRead = dict.read(reinterpret_cast<uint8_t*>(&def[0]), source.size);
   dict.close();
 
   if (bytesRead < 0) return "";
