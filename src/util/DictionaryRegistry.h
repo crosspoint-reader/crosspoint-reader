@@ -8,7 +8,7 @@
 struct DictionaryEntry {
   std::string name;      // folder name, e.g. "dict-en-en"
   std::string stem;      // file stem (".idx"/".ifo" base), e.g. "dict-data"
-  std::string basePath;  // <root>/<name>/<stem>, e.g. "/.dictionaries/dict-en-en/dict-data"
+  std::string basePath;  // <root>/<name>/<stem>, e.g. "/dictionaries/dict-en-en/dict-data"
 };
 
 // Discovers installed dictionaries on the SD card. Mirrors SdCardFontRegistry:

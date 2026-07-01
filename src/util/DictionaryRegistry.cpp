@@ -8,25 +8,19 @@
 
 #include "StringUtils.h"
 
-// Candidate SD card root directories for dictionaries, checked in priority order.
-// The first directory found on the SD card is used; the rest are ignored.
-static constexpr const char* DICT_ROOT_CANDIDATES[] = {
-    "/.dictionaries",
-    "/dictionaries",
-};
+// SD card root directory for dictionaries.
+static constexpr const char* DICT_ROOT = "/dictionaries";
 
 bool DictionaryRegistry::discover() {
   entries_.clear();
   entries_.reserve(16);
   root_.clear();
 
-  for (const auto* candidate : DICT_ROOT_CANDIDATES) {
-    auto dir = Storage.open(candidate);
-    if (dir && dir.isDirectory()) {
-      root_ = candidate;
-      dir.close();
-      break;
-    }
+  auto dir = Storage.open(DICT_ROOT);
+  if (dir && dir.isDirectory()) {
+    root_ = DICT_ROOT;
+    dir.close();
+  } else {
     if (dir) dir.close();
   }
 
