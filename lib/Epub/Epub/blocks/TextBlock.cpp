@@ -40,7 +40,6 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   DecorationLineTracker decorationLines[] = {
       {EpdFontFamily::UNDERLINE, ascender + 2},
       {EpdFontFamily::STRIKETHROUGH, ascender * 4 / 5},
-      {EpdFontFamily::OVERLINE, ascender / 5},
   };
 
   const auto flushDecoration = [&](DecorationLineTracker& line) {

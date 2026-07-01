@@ -256,8 +256,6 @@ CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
       result = result | CssTextDecoration::Underline;
     } else if (iequalsAscii(token, "line-through")) {
       result = result | CssTextDecoration::LineThrough;
-    } else if (iequalsAscii(token, "overline")) {
-      result = result | CssTextDecoration::Overline;
     }
   });
   return explicitNone ? CssTextDecoration::None : result;

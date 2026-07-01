@@ -10,7 +10,7 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// v28: text decoration bits now include line-through and overline in serialized wordStyles.
+// v28: text decoration bits now include line-through in serialized wordStyles.
 constexpr uint8_t SECTION_FILE_VERSION = 28;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +

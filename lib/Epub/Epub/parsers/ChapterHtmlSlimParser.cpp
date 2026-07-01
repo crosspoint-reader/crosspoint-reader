@@ -98,9 +98,6 @@ EpdFontFamily::Style ChapterHtmlSlimParser::fontStyleForTextDecoration(const Css
   if ((decoration & CssTextDecoration::LineThrough) != CssTextDecoration::None) {
     style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::STRIKETHROUGH);
   }
-  if ((decoration & CssTextDecoration::Overline) != CssTextDecoration::None) {
-    style = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::OVERLINE);
-  }
   return style;
 }
 

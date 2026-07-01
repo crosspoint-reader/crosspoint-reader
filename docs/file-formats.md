@@ -105,8 +105,8 @@ Version 28 includes:
 - paragraph and list-item LUTs used by KOReader sync page refinement
 - optional per-word Focus Reading split metadata
 - per-page footnote entries
-- serialized word style bits for underline, strikethrough, superscript,
-  subscript, and overline text decorations
+- serialized word style bits for underline, strikethrough, superscript, and
+  subscript
 
 ImHex pattern:
 
@@ -146,8 +146,7 @@ enum WordStyle : u8 {
     UNDERLINE = 4,
     STRIKETHROUGH = 8,
     SUP = 16,
-    SUB = 32,
-    OVERLINE = 64
+    SUB = 32
 };
 
 enum TextAlign : u8 {
