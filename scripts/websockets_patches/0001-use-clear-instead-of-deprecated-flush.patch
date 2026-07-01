@@ -1,0 +1,29 @@
+From 0d27554ac3aad0b59d2f2c15363a542ebf6cb79f Mon Sep 17 00:00:00 2001
+From: patch <patch@local>
+Date: Mon, 1 Jun 2026 14:21:53 +0000
+Subject: [PATCH] Use clear() instead of deprecated NetworkClient::flush() in
+ clientDisconnect
+
+---
+ src/WebSocketsClient.cpp | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/WebSocketsClient.cpp b/src/WebSocketsClient.cpp
+index 713e344..379a447 100644
+--- a/src/WebSocketsClient.cpp
++++ b/src/WebSocketsClient.cpp
+@@ -570,7 +570,10 @@ void WebSocketsClient::clientDisconnect(WSclient_t * client, const char * reason
+     if(client->tcp) {
+         if(client->tcp->connected()) {
+ #if (WEBSOCKETS_NETWORK_TYPE != NETWORK_ESP8266_ASYNC)
+-            client->tcp->flush();
++            // CrossPoint patch: NetworkClient::flush() is deprecated on
++            // arduino-esp32 ("Use clear() instead."). clear() drops any
++            // unread RX bytes, which is the intent right before stop().
++            client->tcp->clear();
+ #endif
+             client->tcp->stop();
+         }
+-- 
+2.43.0
+
