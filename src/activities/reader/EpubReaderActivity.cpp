@@ -298,6 +298,11 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showBilingualMessage && (millis() - bilingualMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showBilingualMessage = false;
+    requestUpdate();
+  }
+
   // Enter reader menu activity on short-press Confirm. A long-press that fired a bound
   // function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
@@ -351,8 +356,28 @@ void EpubReaderActivity::loop() {
           }
         }
         break;
+      case CrossPointSettings::LP_MENU_BILINGUAL_TOGGLE:
+        // Hold ~0.4s cycles bilingual view mode (Both → Original → Translation → Both) and
+        // re-renders the current section. The v28 header check invalidates the cached section so
+        // the new mode re-parses on next render. No-op on non-bilingual EPUBs (no markers → Both).
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !ignoreNextConfirmRelease) {
+          cycleBilingualMode();             // also fires the transient mode-name popup
+          ignoreNextConfirmRelease = true;  // Suppress the subsequent Confirm-release menu open
+        }
+        break;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
+        // Migration: pre-bilingual-toggle firmwares shipped with DISABLED as the
+        // default. Rather than force existing users to find the new setting,
+        // treat a long-press Confirm as Bilingual Toggle when no other function
+        // is bound. Users who explicitly want KOReader Sync or Bookmark can still
+        // pick those in Settings → Controls → Long-press Menu. On non-bilingual
+        // EPUBs (no cp-original/cp-translation markers) the cycle is a no-op for
+        // rendering but the popup still fires for button-press feedback.
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !ignoreNextConfirmRelease) {
+          cycleBilingualMode();
+          ignoreNextConfirmRelease = true;
+        }
         break;
     }
   }
@@ -757,6 +782,22 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   }
 }
 
+void EpubReaderActivity::cycleBilingualMode() {
+  SETTINGS.bilingualViewMode = (SETTINGS.bilingualViewMode + 1) % CrossPointSettings::BILINGUAL_VIEW_MODE_COUNT;
+  SETTINGS.saveToFile();
+  showBilingualMessage = true;
+  bilingualMessageTime = millis();
+  // Drop the current section so the next render re-parses with the new mode. The v28
+  // header check invalidates the on-disk cache, so re-opening the chapter later still
+  // works without another manual reset.
+  {
+    RenderLock lock(*this);
+    section.reset();
+    nextPageNumber = 0;
+  }
+  requestUpdate();
+}
+
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   if (isForwardTurn) {
     if (section->currentPage < section->pageCount - 1) {
@@ -850,7 +891,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.bilingualViewMode)) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       GUI.drawPopup(renderer, tr(STR_INDEXING));
@@ -860,7 +901,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                       viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                      SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, popupFn)) {
+                                      SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.bilingualViewMode,
+                                      popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
         showPendingSyncSaveError();
@@ -976,6 +1018,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
   }
+
+  if (showBilingualMessage) {
+    // Index matches CrossPointSettings::BILINGUAL_VIEW_MODE enum order (Both/Original/Translation).
+    static constexpr StrId bilingualModeLabels[CrossPointSettings::BILINGUAL_VIEW_MODE_COUNT] = {
+        StrId::STR_BILINGUAL_BOTH, StrId::STR_BILINGUAL_ORIGINAL_ONLY, StrId::STR_BILINGUAL_TRANSLATION_ONLY};
+    const uint8_t mode = SETTINGS.bilingualViewMode;
+    GUI.drawPopup(renderer, I18N.get(bilingualModeLabels[mode]));
+  }
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
@@ -997,15 +1047,15 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.bilingualViewMode)) {
     return;
   }
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d", nextSpineIndex);
-  if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                     SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                     viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                     SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+  if (!nextSection.createSectionFile(
+          SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+          SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
+          SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.bilingualViewMode)) {
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
   }
 }

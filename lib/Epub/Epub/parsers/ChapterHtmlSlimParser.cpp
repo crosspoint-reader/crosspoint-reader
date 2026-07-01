@@ -39,6 +39,28 @@ constexpr const char* SKIP_TAGS[] = {"head"};
 
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
+// Token-based CSS class match: returns true if `classAttr` (whitespace-separated class list)
+// contains `token` as an exact class. Stricter than strstr — "my-cp-original" won't match "cp-original".
+bool hasCssClass(const std::string& classAttr, const char* token) {
+  if (classAttr.empty() || token == nullptr || token[0] == '\0') {
+    return false;
+  }
+  size_t pos = 0;
+  while (pos < classAttr.size()) {
+    while (pos < classAttr.size() && isWhitespace(classAttr[pos])) {
+      pos++;
+    }
+    const size_t start = pos;
+    while (pos < classAttr.size() && !isWhitespace(classAttr[pos])) {
+      pos++;
+    }
+    if (pos > start && classAttr.compare(start, pos - start, token) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool matches(const char* tag_name, const char* const* possible_tags, size_t count) {
   for (size_t i = 0; i < count; i++) {
     if (strcmp(tag_name, possible_tags[i]) == 0) {
@@ -54,6 +76,25 @@ const char* getAttribute(const XML_Char** atts, const char* attrName) {
     if (strcmp(atts[i], attrName) == 0) return atts[i + 1];
   }
   return nullptr;
+}
+
+// ASCII-only lowercase (BCP 47 language subtags are ASCII); avoids locale-dependent tolower.
+inline char asciiLower(char c) { return (c >= 'A' && c <= 'Z') ? static_cast<char>(c + 32) : c; }
+
+// Case-insensitive comparison of the primary language subtag (the part before the first '-')
+// of two BCP 47 tags. Tags are case-insensitive per BCP 47, so "EN", "en", and "en-US" all
+// share the primary subtag "en". Operates on the raw C strings with no heap allocation, which
+// matters in the parse hot path (see String Policy in CLAUDE.md). Returns false if either
+// primary subtag is empty.
+bool primarySubtagEqualsIgnoreCase(const char* a, const char* b) {
+  if (!a || !b || !*a || !*b || *a == '-' || *b == '-') return false;
+  while (*a && *a != '-' && *b && *b != '-') {
+    if (asciiLower(*a) != asciiLower(*b)) return false;
+    ++a;
+    ++b;
+  }
+  // Equal only if both primary subtags terminated at the same point.
+  return (*a == '\0' || *a == '-') && (*b == '\0' || *b == '-');
 }
 
 // Returns true if the HTML element is a purely inline, non-navigable wrapper.
@@ -367,6 +408,51 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   // Skip elements with display:none before all fast paths (tables, links, etc.).
+  // Bilingual override: when the user picks Original-only / Translation-only, paragraphs marked
+  // as the complementary role are treated as display:none here so the existing skip path drops
+  // them. Marker resolution is a hybrid so the reader is interoperable with standard-conscious
+  // producers (bookfere, etc.) AND with explicit cp-* markers:
+  //
+  //   1. Explicit class tokens win first — class="cp-original" / class="cp-translation"
+  //      (token-exact, see hasCssClass). This is the unambiguous path used by the reference generator.
+  //   2. Otherwise, fall back to the W3C/DAISY standard xml:lang attribute. A paragraph whose
+  //      primary language subtag matches the publication's dc:language is the source; any other
+  //      language is treated as the translation. This makes EPUBs that only carry xml:lang work
+  //      without a post-processing pass.
+  //   3. Books with neither marker are unaffected (BILINGUAL_BOTH = no-op).
+  //
+  // Edge case (documented limitation): a foreign-language quotation inside a monolingual book
+  // (e.g. a French passage in an English novel, marked xml:lang="fr") will be classified as a
+  // translation and hidden in Translation-only mode. cp-* override avoids this for our pipeline.
+  if (self->bilingualViewMode != 0 /* != BILINGUAL_BOTH */) {
+    bool isOriginal = hasCssClass(classAttr, "cp-original");
+    bool isTranslation = hasCssClass(classAttr, "cp-translation");
+    if (!isOriginal && !isTranslation) {
+      // Standard xml:lang / lang fallback.
+      const char* lang = getAttribute(atts, "xml:lang");
+      if (!lang || lang[0] == '\0') lang = getAttribute(atts, "lang");
+      // Guard lang[0] != '-' so a malformed tag with an empty primary subtag ("-x") is ignored.
+      if (lang && lang[0] != '\0' && lang[0] != '-') {
+        const std::string& sourceLang = self->epub->getLanguage();
+        if (!sourceLang.empty()) {
+          // Case-insensitive primary-subtag match ("en-US" vs "EN" → match), no allocation.
+          if (primarySubtagEqualsIgnoreCase(lang, sourceLang.c_str())) {
+            isOriginal = true;
+          } else {
+            isTranslation = true;
+          }
+        }
+      }
+    }
+    if (self->bilingualViewMode == 1 /* ORIGINAL_ONLY */ && isTranslation) {
+      cssStyle.display = CssDisplay::None;
+      cssStyle.defined.display = 1;
+    } else if (self->bilingualViewMode == 2 /* TRANSLATION_ONLY */ && isOriginal) {
+      cssStyle.display = CssDisplay::None;
+      cssStyle.defined.display = 1;
+    }
+  }
+
   if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
     self->skipUntilDepth = self->depth;
     self->depth += 1;
