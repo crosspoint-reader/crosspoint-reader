@@ -59,6 +59,13 @@ void OpdsServerListActivity::loop() {
 
 void OpdsServerListActivity::handleSelection() {
   const auto serverCount = static_cast<int>(OPDS_STORE.getCount());
+  auto resultHandler = [this](const ActivityResult&) {
+    OPDS_STORE.loadFromFile();
+    selectedIndex = 0;
+  };
+  auto openServerEditor = [this, resultHandler](int serverIndex) {
+    startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, serverIndex), resultHandler);
+  };
 
   if (pickerMode) {
     // Picker mode: selecting a server navigates to the OPDS browser; selecting the virtual item opens add-server.
@@ -68,26 +75,16 @@ void OpdsServerListActivity::handleSelection() {
         activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
       }
     } else {
-      auto resultHandler = [this](const ActivityResult&) {
-        OPDS_STORE.loadFromFile();
-        selectedIndex = 0;
-      };
-      startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, -1), resultHandler);
+      openServerEditor(-1);
     }
     return;
   }
 
   // Settings mode: open editor for selected server, or create a new one
-  auto resultHandler = [this](const ActivityResult&) {
-    // Reload server list when returning from editor
-    OPDS_STORE.loadFromFile();
-    selectedIndex = 0;
-  };
-
   if (selectedIndex < serverCount) {
-    startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, selectedIndex), resultHandler);
+    openServerEditor(selectedIndex);
   } else {
-    startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, -1), resultHandler);
+    openServerEditor(-1);
   }
 }
 
