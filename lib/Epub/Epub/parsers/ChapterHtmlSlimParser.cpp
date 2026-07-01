@@ -140,7 +140,7 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   }
 }
 
-void ChapterHtmlSlimParser::flushPendingAnchor() {
+void ChapterHtmlSlimParser::flushPendingAnchor(const BlockStyle& anchoredBlockStyle) {
   if (pendingAnchorId.empty()) return;
 
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
@@ -154,8 +154,29 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     }
   }
 
-  // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+  // Record deferred anchor after previous block is flushed (and any TOC page break).
+  //
+  // The anchor target is the page where the content *following* the anchor begins. If the
+  // current page is already full, the next line will overflow onto a fresh page (see
+  // addLineToPage), so the anchor must point there. Without this, an anchor whose preceding
+  // content exactly fills a page resolves one page early (e.g. footnote n_2 landing on n_1's
+  // page when note 1 fills the page exactly).
+  //
+  // Include the anchored block's top spacing: makePages() applies marginTop/paddingTop
+  // before the first line (positive values only), which can push content onto the next page.
+  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  int topSpacing = 0;
+  if (anchoredBlockStyle.marginTop > 0) {
+    topSpacing += anchoredBlockStyle.marginTop;
+  }
+  if (anchoredBlockStyle.paddingTop > 0) {
+    topSpacing += anchoredBlockStyle.paddingTop;
+  }
+  uint16_t anchorPage = static_cast<uint16_t>(completedPageCount);
+  if (currentPage && !currentPage->elements.empty() && currentPageNextY + topSpacing + lineHeight > viewportHeight) {
+    anchorPage = static_cast<uint16_t>(completedPageCount + 1);
+  }
+  anchorData.push_back({std::move(pendingAnchorId), anchorPage});
   pendingAnchorId.clear();
 }
 
@@ -204,7 +225,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       const auto style = currentTextBlock->getBlockStyle();
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
 
-      flushPendingAnchor();
+      flushPendingAnchor(currentTextBlock->getBlockStyle());
       return;
     }
 
@@ -212,7 +233,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   }
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
-  flushPendingAnchor();
+  flushPendingAnchor(blockStyle);
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
@@ -1120,7 +1141,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                         : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+        [self](const std::shared_ptr<TextBlock>& textBlock, const ExtractedLineMeta lineMeta) {
+          self->addLineToPage(textBlock, lineMeta);
+        },
+        false);
   }
 }
 
@@ -1193,8 +1217,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
-      int wordIndex =
-          self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
+      int wordIndex = self->wordsExtractedInBlock +
+                      (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->originalWordCount()) : 0);
       self->pendingFootnotes.push_back({wordIndex, entry});
     }
     self->insideFootnoteLink = false;
@@ -1357,7 +1381,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return true;
 }
 
-void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
+void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const ExtractedLineMeta lineMeta) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
@@ -1372,8 +1396,10 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
-  wordsExtractedInBlock += line->wordCount();
+  // Track cumulative ORIGINAL words to assign footnotes to the page containing their anchor.
+  // Counting original words (not laid-out words) keeps the index aligned with the footnote
+  // word index captured at parse time, even when hyphenation splits words across lines.
+  wordsExtractedInBlock += static_cast<int>(lineMeta.originalWordCount);
   auto footnoteIt = pendingFootnotes.begin();
   while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
     currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
@@ -1416,7 +1442,9 @@ void ChapterHtmlSlimParser::makePages() {
 
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+      [this](const std::shared_ptr<TextBlock>& textBlock, const ExtractedLineMeta lineMeta) {
+        addLineToPage(textBlock, lineMeta);
+      });
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches
