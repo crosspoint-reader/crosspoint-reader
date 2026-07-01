@@ -136,6 +136,50 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
 
 enum class TextRotation { None, Rotated90CW };
 
+// Render a glyph upscaled by an integer factor, anchoring its bitmap's top-left
+// corner at (xLeft, yTop). Used for drop caps. Mirror of renderCharScaled below
+// but in the opposite direction: every source pixel that carries ink is painted
+// as a solid `scale`x`scale` block so the enlarged glyph has no gaps.
+static void renderGlyphUpscaled(const GfxRenderer& renderer, const EpdFontFamily& fontFamily, const uint32_t cp,
+                                const uint8_t scale, const int xLeft, const int yTop, const bool pixelState,
+                                const EpdFontFamily::Style style) {
+  if (scale == 0) return;
+  const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
+  if (!glyph) return;
+
+  const EpdFontData* fontData = fontFamily.getData(style);
+  const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  if (!bitmap) return;
+
+  const int srcW = glyph->width;
+  const int srcH = glyph->height;
+  // Preserve the glyph's left bearing (scaled); pin the bitmap's top edge to yTop.
+  const int baseX = xLeft + glyph->left * scale;
+
+  for (int sy = 0; sy < srcH; sy++) {
+    for (int sx = 0; sx < srcW; sx++) {
+      const int pos = sy * srcW + sx;
+      bool hasInk;
+      if (fontData->is2Bit) {
+        // 2-bit packed: 4 px/byte, raw 0=white .. 3=black. Any non-white => ink.
+        const uint8_t byte = bitmap[pos >> 2];
+        hasInk = ((byte >> ((3 - (pos & 3)) * 2)) & 0x3) != 0;
+      } else {
+        // 1-bit packed: 8 px/byte, MSB first.
+        hasInk = ((bitmap[pos >> 3] >> (7 - (pos & 7))) & 1) != 0;
+      }
+      if (!hasInk) continue;
+      const int blockX = baseX + sx * scale;
+      const int blockY = yTop + sy * scale;
+      for (int dy = 0; dy < scale; dy++) {
+        for (int dx = 0; dx < scale; dx++) {
+          renderer.drawPixel(blockX + dx, blockY + dy, pixelState);
+        }
+      }
+    }
+  }
+}
+
 // Shared glyph rendering logic for normal and rotated text.
 // Coordinate mapping and cursor advance direction are selected at compile time via the template parameter.
 // Render a glyph at 50% scale. Used for SUP/SUB style bits.
@@ -377,6 +421,39 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
   return w;
+}
+
+bool GfxRenderer::getGlyphBox(const int fontId, const uint32_t cp, const EpdFontFamily::Style style, int& width,
+                              int& height, int& top, int& advanceX) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    return false;
+  }
+  const EpdGlyph* glyph = fontIt->second.getGlyph(cp, style);
+  if (!glyph) {
+    return false;
+  }
+  width = glyph->width;
+  height = glyph->height;
+  top = glyph->top;
+  advanceX = fp4::toPixel(glyph->advanceX);
+  return true;
+}
+
+void GfxRenderer::drawScaledGlyph(const int fontId, const uint32_t cp, const EpdFontFamily::Style style,
+                                  const uint8_t scale, const int x, const int yTop, const bool black) const {
+  if (scale == 0) return;
+  // During a font-cache scan we don't paint; the same glyph is requested again at
+  // real render time (and SD-card fonts load it on demand via getGlyphBitmap).
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    return;
+  }
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return;
+  }
+  renderGlyphUpscaled(*this, fontIt->second, cp, scale, x, yTop, black, style);
 }
 
 void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* text, const bool black,

@@ -17,6 +17,7 @@ static uint8_t fontSizeEnumFromSettings() {
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   registry_.discover();
+  dropCapRegistry_.discoverDropCaps();
 
   // Register this system as the SD font ID resolver in settings.
   // Uses a static trampoline since CrossPointSettings stores a plain function pointer.
@@ -41,7 +42,64 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
     }
   }
 
+  ensureDropCapLoaded(renderer);
+
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
+}
+
+void SdCardFontSystem::ensureDropCapLoaded(GfxRenderer& renderer) {
+  // The drop-cap face is the user-selected font from the standalone /.dropcap
+  // registry (SETTINGS.dropCapFontName), independent of the reader font. When
+  // drop caps are off or no font is selected, load nothing (id 0) and the reader
+  // integer-scales the body glyph instead.
+  const char* name = (SETTINGS.dropCapsEnabled && SETTINGS.dropCapFontName[0] != '\0') ? SETTINGS.dropCapFontName : "";
+  loadDropCapFamily(renderer, name);
+}
+
+int SdCardFontSystem::loadDropCapFamily(GfxRenderer& renderer, const char* name) {
+  const SdCardFontFamilyInfo* family = (name && name[0] != '\0') ? dropCapRegistry_.findFamily(name) : nullptr;
+  if (!family || family->files.empty()) {
+    if (!dropCapManager_.currentFamilyName().empty()) {
+      dropCapManager_.unloadAll(renderer);
+    }
+    renderer.setDropCapFontId(0);
+    return 0;
+  }
+
+  // Drop-cap faces are large (e.g. 60-76pt), so map the reader's size enum
+  // ordinally onto the family's available sizes rather than by nearest reading
+  // size (which would always collapse to the smallest face).
+  const uint8_t sizeEnum = fontSizeEnumFromSettings();
+  const auto sizes = family->availableSizes();  // ascending
+  uint8_t idx = sizeEnum;
+  if (idx >= sizes.size()) idx = sizes.empty() ? 0 : static_cast<uint8_t>(sizes.size() - 1);
+  const uint8_t wantedPt = sizes.empty() ? 0 : sizes[idx];
+
+  // Already loaded for this family at the right size — just (re)publish the id.
+  if (dropCapManager_.currentFamilyName() == family->name && wantedPt == dropCapManager_.currentPointSize()) {
+    const int id = dropCapManager_.getFontId(family->name);
+    renderer.setDropCapFontId(id);
+    return id;
+  }
+
+  // Constrain a synthetic family to the single ordinal-selected file so
+  // loadFamily() (which picks the nearest reading size) loads exactly that face.
+  SdCardFontFamilyInfo one;
+  one.name = family->name;
+  if (const auto* f = family->findFile(wantedPt)) one.files.push_back(*f);
+
+  if (!dropCapManager_.currentFamilyName().empty()) {
+    dropCapManager_.unloadAll(renderer);
+  }
+  if (!one.files.empty() && dropCapManager_.loadFamily(one, renderer, sizeEnum)) {
+    const int id = dropCapManager_.getFontId(one.name);
+    renderer.setDropCapFontId(id);
+    LOG_DBG("SDFS", "Loaded drop-cap face %s (pt %u)", one.name.c_str(), dropCapManager_.currentPointSize());
+    return id;
+  }
+  renderer.setDropCapFontId(0);
+  LOG_ERR("SDFS", "Failed to load drop-cap face %s", name);
+  return 0;
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
@@ -53,7 +111,12 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   if (registryWasDirty) {
     LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
     registry_.discover();
+    dropCapRegistry_.discoverDropCaps();
   }
+
+  // Keep the drop-cap face in step regardless of which body font is selected.
+  // Done before the body-font early-returns below so it always runs.
+  ensureDropCapLoaded(renderer);
 
   const char* wantedFamily = SETTINGS.sdFontFamilyName;
   const std::string& currentFamily = manager_.currentFamilyName();

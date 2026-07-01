@@ -10,6 +10,7 @@
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "DropCapFontSelectionActivity.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -39,7 +40,7 @@ void SettingsActivity::rebuildSettingsLists() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
+  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &sdFontSystem.dropCapRegistry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
@@ -212,6 +213,16 @@ void SettingsActivity::toggleCurrentSetting() {
                                SETTINGS.saveToFile();
                                rebuildSettingsLists();
                              });
+      return;
+    }
+    if (setting.nameId == StrId::STR_DROP_CAP_FONT) {
+      // Launch the drop-cap font picker (preview + list) instead of cycling.
+      startActivityForResult(
+          std::make_unique<DropCapFontSelectionActivity>(renderer, mappedInput, &sdFontSystem.dropCapRegistry()),
+          [this](const ActivityResult&) {
+            SETTINGS.saveToFile();
+            rebuildSettingsLists();
+          });
       return;
     }
     const uint8_t totalValues = setting.enumStringValues.empty()

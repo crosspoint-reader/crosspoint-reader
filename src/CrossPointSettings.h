@@ -252,8 +252,13 @@ class CrossPointSettings {
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
+  // Drop Caps - enlarged decorative initial on the first paragraph of each chapter
+  uint8_t dropCapsEnabled = 1;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
+  // Drop-cap font family name, loaded from the standalone /.dropcap folder on the
+  // SD card. Empty = no dedicated face (integer-scale the body glyph instead).
+  char dropCapFontName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)

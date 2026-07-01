@@ -462,12 +462,131 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
   }
   return 0;
 }
+
+int ParsedText::lineLeftInset(const size_t lineOrdinal, const GfxRenderer& renderer, const int fontId) const {
+  if (dropCap_ && lineOrdinal < dropCap_->lineSpan) {
+    return dropCap_->insetWidth;
+  }
+  return resolveFirstLineIndent(lineOrdinal == 0, renderer, fontId);
+}
+
+namespace {
+// Opening punctuation that should be enlarged together with the drop-cap letter when a
+// paragraph begins with it (e.g. a line of dialogue opening with a quotation mark).
+bool isLeadingCapPunct(const uint32_t cp) {
+  switch (cp) {
+    case 0x0022:  // "  straight double quote
+    case 0x0027:  // '  straight single quote
+    case 0x2018:  // ‘  left single quote
+    case 0x2019:  // ’  right single quote (used as opener in some texts)
+    case 0x201C:  // “  left double quote
+    case 0x201D:  // ”  right double quote
+    case 0x00AB:  // «  left guillemet
+    case 0x2039:  // ‹  single left guillemet
+    case 0x00BF:  // ¿  inverted question mark
+    case 0x00A1:  // ¡  inverted exclamation mark
+    case 0x0028:  // (
+    case 0x005B:  // [
+    case 0x007B:  // {
+      return true;
+    default:
+      return false;
+  }
+}
+}  // namespace
+
+bool ParsedText::buildDropCapPrefix(std::string& outText, uint32_t& letterCp, EpdFontFamily::Style& letterStyle) const {
+  outText.clear();
+  constexpr int MAX_LEADING_PUNCT = 2;
+  int punctCount = 0;
+  // Walk the leading glued token: word 0 plus any continuation words that attach to it
+  // without an intervening space (inline style boundaries split a single visual word).
+  for (size_t wi = 0; wi < words.size(); ++wi) {
+    if (wi > 0 && !wordContinues[wi]) break;  // a space boundary ends the leading token
+    const auto* p = reinterpret_cast<const unsigned char*>(words[wi].c_str());
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(&p)) != 0) {
+      if (cp == 0x00AD) continue;  // skip soft hyphens
+      if (isLeadingCapPunct(cp) && punctCount < MAX_LEADING_PUNCT) {
+        utf8AppendCodepoint(cp, outText);
+        ++punctCount;
+        continue;
+      }
+      // First non-leading-punctuation codepoint is the cap letter; the caller validates
+      // it is actually an alphabetic initial via isDropCapInitial().
+      utf8AppendCodepoint(cp, outText);
+      letterCp = cp;
+      letterStyle = wordStyles[wi];
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string ParsedText::getPlainText() const {
+  std::string out;
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (i > 0 && !wordContinues[i]) {
+      out.push_back(' ');
+    }
+    out += words[i];
+  }
+  return out;
+}
+
+void ParsedText::stripLeadingCodepoints(size_t count) {
+  while (count > 0 && !words.empty()) {
+    std::string& w = words[0];
+    const auto* base = reinterpret_cast<const unsigned char*>(w.c_str());
+    const auto* p = base;
+    while (count > 0 && *p != 0) {
+      utf8NextCodepoint(&p);
+      --count;
+    }
+    w.erase(0, static_cast<size_t>(p - base));
+    if (w.empty()) {
+      words.erase(words.begin());
+      wordStyles.erase(wordStyles.begin());
+      wordContinues.erase(wordContinues.begin());
+      wordIsFocusSuffix.erase(wordIsFocusSuffix.begin());
+      continue;  // keep consuming from the next (continuation) word if any remain
+    }
+    break;  // the cap prefix ended mid-word; the rest of this word stays in the flow
+  }
+  if (!words.empty()) {
+    wordContinues[0] = false;  // the new first word starts the line
+  }
+}
+
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
                                        const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
-                                       const bool includeLastLine) {
+                                       const bool includeLastLine, const DropCapSpec* dropCap) {
   if (words.empty()) {
     return;
+  }
+
+  // Drop cap: pull the cap prefix (the enlarged initial, plus any leading opening quote)
+  // out of the leading words so it is not drawn twice — the cap is rendered separately by
+  // TextBlock::render. The first `lineSpan` lines are then inset so the body text wraps
+  // around the cap. A spec with empty text is a wrap-only request from a following
+  // paragraph (no glyph to strip or draw): it just insets the leading lines.
+  dropCap_ = dropCap;
+  std::string capText;
+  if (dropCap_) {
+    capText = dropCap_->text;
+    size_t capCodepoints = 0;
+    const auto* cp = reinterpret_cast<const unsigned char*>(capText.c_str());
+    while (utf8NextCodepoint(&cp) != 0) {
+      ++capCodepoints;
+    }
+    if (capCodepoints > 0) {
+      stripLeadingCodepoints(capCodepoints);
+    }
+    if (words.empty()) {
+      dropCap_ = nullptr;  // paragraph was just the initial; nothing left to flow
+      return;
+    }
   }
 
   // Per-paragraph RTL auto-detection: only when CSS/HTML didn't explicitly set direction.
@@ -508,7 +627,12 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   auto wordWidths = calculateWordWidths(renderer, fontId);
 
   std::vector<size_t> lineBreakIndices;
-  if (hyphenationEnabled) {
+  if (dropCap_) {
+    // Drop-cap paragraphs need a per-line-ordinal inset, which the DP breaker can't
+    // express (it only varies width on the first line). Use the greedy breaker.
+    lineBreakIndices =
+        computeDropCapLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, hyphenationEnabled);
+  } else if (hyphenationEnabled) {
     // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
     lineBreakIndices =
         computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
@@ -517,9 +641,18 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
+  // Attach the drop cap to the first emitted line so it renders the enlarged initial.
+  size_t emittedLines = 0;
+  const auto emit = [&](std::shared_ptr<TextBlock> line) {
+    if (dropCap_ && emittedLines == 0 && line) {
+      line->setDropcap(capText, dropCap_->style, dropCap_->scale);
+    }
+    ++emittedLines;
+    processLine(std::move(line));
+  };
+
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices, processLine, renderer,
-                fontId);
+    extractLine(i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices, emit, renderer, fontId);
   }
 
   // Remove consumed words so size() reflects only remaining words
@@ -531,6 +664,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
   }
+  dropCap_ = nullptr;
 }
 
 std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {
@@ -733,6 +867,71 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   return lineBreakIndices;
 }
 
+// Greedy line breaking for drop-cap paragraphs. Identical in spirit to the hyphenated
+// greedy breaker, but the available width is taken per line ordinal via lineLeftInset()
+// (so the first `lineSpan` lines are inset around the cap), and word splitting only
+// happens when allowHyphenation is set.
+std::vector<size_t> ParsedText::computeDropCapLineBreaks(const GfxRenderer& renderer, const int fontId,
+                                                         const int pageWidth, std::vector<uint16_t>& wordWidths,
+                                                         std::vector<bool>& continuesVec, const bool allowHyphenation) {
+  std::vector<size_t> lineBreakIndices;
+  size_t currentIndex = 0;
+  size_t lineOrdinal = 0;
+
+  while (currentIndex < wordWidths.size()) {
+    const size_t lineStart = currentIndex;
+    int lineWidth = 0;
+    const int effectivePageWidth = pageWidth - lineLeftInset(lineOrdinal, renderer, fontId);
+
+    while (currentIndex < wordWidths.size()) {
+      const bool isFirstWord = currentIndex == lineStart;
+      int spacing = 0;
+      if (!isFirstWord && !continuesVec[currentIndex]) {
+        spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
+                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+      } else if (!isFirstWord && continuesVec[currentIndex]) {
+        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
+                                      firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+      }
+      const int candidateWidth = spacing + wordWidths[currentIndex];
+
+      if (lineWidth + candidateWidth <= effectivePageWidth) {
+        lineWidth += candidateWidth;
+        ++currentIndex;
+        continue;
+      }
+
+      if (allowHyphenation) {
+        const int availableWidth = effectivePageWidth - lineWidth - spacing;
+        const bool allowFallbackBreaks = isFirstWord;
+        if (availableWidth > 0 &&
+            hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
+          lineWidth += spacing + wordWidths[currentIndex];
+          ++currentIndex;
+          break;
+        }
+      }
+
+      // Force at least one word per line to avoid an infinite loop on an oversized word.
+      if (currentIndex == lineStart) {
+        lineWidth += candidateWidth;
+        ++currentIndex;
+      }
+      break;
+    }
+
+    // Don't break before a continuation word; pull the whole group to the next line.
+    while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() && continuesVec[currentIndex]) {
+      --currentIndex;
+    }
+
+    lineBreakIndices.push_back(currentIndex);
+    ++lineOrdinal;
+  }
+
+  return lineBreakIndices;
+}
+
 // Splits words[wordIndex] into prefix (adding a hyphen only when needed) and remainder when a legal breakpoint fits the
 // available width.
 bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
@@ -831,7 +1030,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
-  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
+  // Left inset for this line: first-line text-indent normally, or the drop-cap inset
+  // for the leading lines that wrap around the enlarged initial.
+  const int firstLineIndent = lineLeftInset(breakIndex, renderer, fontId);
 
   // Build line data by moving from the original vectors using index range
   std::vector<std::string> lineWords;

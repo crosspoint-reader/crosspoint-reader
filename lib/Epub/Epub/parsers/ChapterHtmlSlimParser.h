@@ -48,6 +48,23 @@ class ChapterHtmlSlimParser {
   uint16_t viewportHeight;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
+  bool dropCapsEnabled;
+  // Drop-cap state: armed when the chapter's first <p> opens, consumed when its text
+  // block is created (so only that paragraph gets the enlarged initial).
+  bool dropCapArmed = false;
+  bool dropCapDone = false;
+  // Cross-paragraph wrap: a cap can be taller than its own (short) paragraph, so the
+  // leading lines of following paragraphs that fall within the cap's vertical span are
+  // inset too. Activated when the cap line is placed; cleared once cleared on the page.
+  bool dropCapWrapActive = false;
+  int dropCapWrapInsetWidth = 0;  // px to inset following lines around the cap
+  int dropCapWrapBottomY = 0;     // page Y (px) at which the cap's vertical span ends
+  // Chapter title (from the first heading) and whether a body paragraph repeating it has
+  // already been dropped. Some books print the title as an <h*> AND repeat it as the first
+  // <p>; the duplicate is removed so the drop cap lands on the real opening line.
+  std::string chapterTitle;
+  bool chapterTitleConsumed = false;
+  bool currentBlockIsHeading = false;
   const CssParser* cssParser;
   bool embeddedStyle;
   uint8_t imageRendering;
@@ -98,6 +115,7 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  void consumeDropCapArm();
   void flushPendingAnchor();
   void flushPartWordBuffer();
   void makePages();
@@ -114,7 +132,7 @@ class ChapterHtmlSlimParser {
                                  const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
-                                 const bool focusReadingEnabled,
+                                 const bool focusReadingEnabled, const bool dropCapsEnabled,
                                  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
@@ -132,6 +150,7 @@ class ChapterHtmlSlimParser {
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
+        dropCapsEnabled(dropCapsEnabled),
         completePageFn(completePageFn),
         popupFn(popupFn),
         cssParser(cssParser),

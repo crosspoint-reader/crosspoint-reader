@@ -37,7 +37,61 @@ constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr const char* IMAGE_TAGS[] = {"img"};
 constexpr const char* SKIP_TAGS[] = {"head"};
 
+// Number of leading lines a drop cap spans (and that wrap around it).
+constexpr int DROPCAP_LINE_SPAN = 3;
+
+// A drop cap is only drawn for an alphabetic initial; opening quotes, punctuation,
+// digits, etc. are left in the flowed text and the paragraph renders normally.
+bool isDropCapInitial(const uint32_t cp) {
+  return ((cp | 0x20) >= 'a' && (cp | 0x20) <= 'z')  // ASCII letters
+         || (cp >= 0x00C0 && cp <= 0x024F)           // Latin-1 Supplement + Latin Extended-A/B
+         || (cp >= 0x0370 && cp <= 0x03FF)           // Greek
+         || (cp >= 0x0400 && cp <= 0x04FF)           // Cyrillic
+         || (cp >= 0x1E00 && cp <= 0x1EFF);          // Latin Extended Additional (Vietnamese)
+}
+
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
+
+// Lowercases a codepoint across the Latin ranges used by EPUB chapter titles, so a body
+// paragraph in sentence case ("Tình trạng") matches a title-case heading ("Tình Trạng").
+// Latin Extended-A / Additional encode upper/lower as even/odd pairs (e.g. Ạ=0x1EA0,
+// ạ=0x1EA1; Đ=0x0110, đ=0x0111).
+uint32_t titleFoldCp(const uint32_t cp) {
+  if (cp >= 'A' && cp <= 'Z') return cp + 0x20;
+  if (cp >= 0x00C0 && cp <= 0x00DE && cp != 0x00D7) return cp + 0x20;  // Latin-1 uppercase
+  if (cp >= 0x0100 && cp <= 0x017F) return (cp % 2 == 0) ? cp + 1 : cp;
+  if (cp >= 0x1E00 && cp <= 0x1EFF) return (cp % 2 == 0) ? cp + 1 : cp;
+  if (cp >= 0x0391 && cp <= 0x03A9) return cp + 0x20;  // Greek uppercase
+  if (cp >= 0x0410 && cp <= 0x042F) return cp + 0x20;  // Cyrillic uppercase
+  return cp;
+}
+
+// True when two strings are equal ignoring case (Latin/Greek/Cyrillic), after trimming
+// surrounding whitespace and trailing sentence punctuation. Used to detect a body
+// paragraph that merely repeats the chapter title (often with a trailing '.').
+bool titlesMatch(const std::string& a, const std::string& b) {
+  auto trimmed = [](const std::string& s) {
+    size_t begin = 0, end = s.size();
+    while (begin < end && isWhitespace(s[begin])) ++begin;
+    while (end > begin && (isWhitespace(s[end - 1]) || s[end - 1] == '.' || s[end - 1] == ',' || s[end - 1] == ':' ||
+                           s[end - 1] == ';' || s[end - 1] == '!' || s[end - 1] == '?')) {
+      --end;
+    }
+    return s.substr(begin, end - begin);
+  };
+  const std::string sa = trimmed(a);
+  const std::string sb = trimmed(b);
+  if (sa.empty() || sb.empty()) return false;
+  const auto* pa = reinterpret_cast<const unsigned char*>(sa.c_str());
+  const auto* pb = reinterpret_cast<const unsigned char*>(sb.c_str());
+  uint32_t ca, cb;
+  do {
+    ca = utf8NextCodepoint(&pa);
+    cb = utf8NextCodepoint(&pb);
+    if (titleFoldCp(ca) != titleFoldCp(cb)) return false;
+  } while (ca != 0 && cb != 0);
+  return ca == 0 && cb == 0;
+}
 
 bool matches(const char* tag_name, const char* const* possible_tags, size_t count) {
   for (size_t i = 0; i < count; i++) {
@@ -205,6 +259,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
 
       flushPendingAnchor();
+      consumeDropCapArm();
       return;
     }
 
@@ -215,6 +270,18 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   flushPendingAnchor();
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
+  consumeDropCapArm();
+}
+
+// If a drop cap was armed by an opening <p>, mark the just-assigned text block as the
+// drop-cap candidate. dropCapDone is NOT set here: makePages only commits the cap once a
+// paragraph is long enough to host it, so a short title-repeat paragraph falls through to
+// the first substantial paragraph.
+void ChapterHtmlSlimParser::consumeDropCapArm() {
+  if (dropCapArmed && currentTextBlock) {
+    currentTextBlock->setDropCapCandidate(true);
+    dropCapArmed = false;
+  }
 }
 
 void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
@@ -290,6 +357,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   if (strcmp(name, "p") == 0) {
     self->xpathParagraphIndex++;
+    // Arm the drop cap for the chapter's first paragraph only. Consumed (and the block
+    // marked) in startNewTextBlock when this <p>'s text block is created.
+    if (self->dropCapsEnabled && !self->dropCapDone) {
+      self->dropCapArmed = true;
+    }
   }
   if (strcmp(name, "li") == 0) {
     self->xpathListItemIndex++;
@@ -810,6 +882,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
     self->startNewTextBlock(accumulated.withoutBottom());
+    self->currentBlockIsHeading = true;  // capture this block's text as the chapter title
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
@@ -825,6 +898,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                                                                                   BlockStyle::CombineAxis::Horizontal);
       self->blockStyleStack.push_back(accumulated);
       self->startNewTextBlock(accumulated.withoutBottom());
+      self->currentBlockIsHeading = false;  // a body block, not the chapter heading
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
@@ -1365,11 +1439,29 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  if (currentPageNextY + lineHeight > viewportHeight) {
+  // Keep-together: a drop-cap line draws an enlarged initial that descends across the
+  // lines it wraps, so require the whole span to fit (only when the page isn't empty —
+  // never force-break an already-empty page).
+  int requiredHeight = lineHeight;
+  if (line->getDropcapScale() > 0 && !currentPage->elements.empty()) {
+    requiredHeight = DROPCAP_LINE_SPAN * lineHeight;
+  }
+  if (currentPageNextY + requiredHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     currentPage.reset(new Page());
     currentPageNextY = 0;
+    // The cap (if any) lived on the page we just closed; following lines on the fresh
+    // page must not wrap around it.
+    dropCapWrapActive = false;
+  }
+
+  // When the enlarged cap line is placed, record the vertical span it occupies so the
+  // following paragraphs' leading lines wrap around it (the cap is usually taller than
+  // its own paragraph). insetWidth was stashed by makePages at commit time.
+  if (line->getDropcapScale() > 0) {
+    dropCapWrapBottomY = currentPageNextY + DROPCAP_LINE_SPAN * lineHeight;
+    dropCapWrapActive = true;
   }
 
   // Track cumulative words to assign footnotes to the page containing their anchor
@@ -1398,6 +1490,21 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY = 0;
   }
 
+  // Chapter title handling (drop-cap feature): remember the first heading's text, and drop
+  // a body paragraph that merely repeats it so the drop cap lands on the real opening line.
+  if (dropCapsEnabled) {
+    if (currentBlockIsHeading) {
+      if (chapterTitle.empty()) {
+        chapterTitle = currentTextBlock->getPlainText();
+      }
+      // fall through: the heading itself is still laid out and rendered
+    } else if (!chapterTitleConsumed && !chapterTitle.empty() &&
+               titlesMatch(currentTextBlock->getPlainText(), chapterTitle)) {
+      chapterTitleConsumed = true;
+      return;  // remove the duplicated title paragraph entirely (no lines emitted)
+    }
+  }
+
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   // Apply top spacing before the paragraph (stored in pixels)
@@ -1414,9 +1521,83 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
+  // Drop cap: for the chapter's first paragraph, compute the enlarged initial's scale
+  // and the horizontal inset the body text must wrap around.
+  DropCapSpec dropCapSpec;
+  DropCapSpec dropCapWrapSpec;
+  const DropCapSpec* dropCapPtr = nullptr;
+  if (currentTextBlock->isDropCapCandidate() && !dropCapDone) {
+    std::string capText;
+    uint32_t letterCp = 0;
+    EpdFontFamily::Style letterStyle = EpdFontFamily::REGULAR;
+    int gw = 0, gh = 0, gtop = 0, gadv = 0;
+    // The cap always lands on the chapter's first real paragraph (the duplicated-title
+    // paragraph, if any, was already dropped above) — even a one-character line — as long
+    // as its initial is a letter (a leading quote is enlarged with it; pure punctuation is
+    // not capped). Cross-paragraph wrap handles a cap taller than its own short paragraph.
+    // Prefer a dedicated large drop-cap face (e.g. BookerlyDropcap on SD) drawn at
+    // native size — far crisper than integer-scaling the small body glyph. It is
+    // regular-only by design, so the cap is always roman. Fall back to scaling the
+    // body glyph when no drop-cap face is loaded (id 0) or it lacks this initial.
+    const int dropCapFontId = renderer.getDropCapFontId();
+    if (currentTextBlock->buildDropCapPrefix(capText, letterCp, letterStyle) && isDropCapInitial(letterCp)) {
+      // Font ids are content-hash based and may be negative; 0 means "none loaded".
+      const bool useFace = dropCapFontId != 0 &&
+                           renderer.getGlyphBox(dropCapFontId, letterCp, EpdFontFamily::REGULAR, gw, gh, gtop, gadv) &&
+                           gh > 0 && gadv > 0;
+      const int measureFontId = useFace ? dropCapFontId : fontId;
+      const EpdFontFamily::Style measureStyle = useFace ? EpdFontFamily::REGULAR : letterStyle;
+      // scale==1 is the sentinel "draw the prefix natively with the drop-cap face";
+      // otherwise an integer upscale (2..4) of the body glyph (~DROPCAP_LINE_SPAN lines tall).
+      int scale = 1;
+      if (useFace || (renderer.getGlyphBox(fontId, letterCp, letterStyle, gw, gh, gtop, gadv) && gh > 0 && gadv > 0)) {
+        if (!useFace) {
+          scale = std::clamp((DROPCAP_LINE_SPAN * lineHeight + gh / 2) / gh, 2, 4);
+        }
+        // Reserve the full prefix width (a leading quote, when present, plus the letter)
+        // measured in the same face that will draw it.
+        int capAdvance = 0;
+        const auto* cpPtr = reinterpret_cast<const unsigned char*>(capText.c_str());
+        uint32_t prefixCp;
+        while ((prefixCp = utf8NextCodepoint(&cpPtr)) != 0) {
+          int pw = 0, ph = 0, pt = 0, pa = 0;
+          if (renderer.getGlyphBox(measureFontId, prefixCp, measureStyle, pw, ph, pt, pa)) {
+            capAdvance += pa;
+          }
+        }
+        const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+        dropCapSpec.text = capText;
+        dropCapSpec.style = measureStyle;
+        dropCapSpec.scale = static_cast<uint8_t>(scale);
+        dropCapSpec.lineSpan = DROPCAP_LINE_SPAN;
+        dropCapSpec.insetWidth = static_cast<uint16_t>(capAdvance * scale + spaceWidth);
+        dropCapPtr = &dropCapSpec;
+        dropCapWrapInsetWidth = dropCapSpec.insetWidth;  // for wrapping the following paragraphs
+        dropCapDone = true;                              // committed; later paragraphs won't re-arm
+      }
+    }
+  } else if (dropCapWrapActive) {
+    // A previously committed cap is taller than its own paragraph: inset the leading lines
+    // of this following paragraph that still fall within the cap's vertical span.
+    if (currentPageNextY >= dropCapWrapBottomY) {
+      dropCapWrapActive = false;
+    } else {
+      const int remaining = dropCapWrapBottomY - currentPageNextY;
+      const int remainingLines = (remaining + lineHeight - 1) / std::max(1, lineHeight);
+      if (remainingLines > 0) {
+        dropCapWrapSpec.text.clear();  // no glyph to draw — this paragraph only wraps
+        dropCapWrapSpec.style = EpdFontFamily::REGULAR;
+        dropCapWrapSpec.scale = 0;
+        dropCapWrapSpec.lineSpan = static_cast<uint8_t>(std::min(remainingLines, 255));
+        dropCapWrapSpec.insetWidth = static_cast<uint16_t>(dropCapWrapInsetWidth);
+        dropCapPtr = &dropCapWrapSpec;
+      }
+    }
+  }
+
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); }, true, dropCapPtr);
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

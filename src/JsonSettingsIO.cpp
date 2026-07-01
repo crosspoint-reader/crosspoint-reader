@@ -148,6 +148,10 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
   }
+  // Drop-cap font name — dynamic getter/setter in SettingsList (device-only), save manually
+  if (s.dropCapFontName[0] != '\0') {
+    doc["dropCapFontName"] = s.dropCapFontName;
+  }
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -250,6 +254,10 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
+  // Drop-cap font name — dynamic getter/setter in SettingsList, load manually
+  const char* dcf = doc["dropCapFontName"] | "";
+  strncpy(s.dropCapFontName, dcf, sizeof(s.dropCapFontName) - 1);
+  s.dropCapFontName[sizeof(s.dropCapFontName) - 1] = '\0';
   if (storedFontFamily == CrossPointSettings::LEGACY_OPENDYSLEXIC && s.sdFontFamilyName[0] == '\0') {
     s.fontFamily = CrossPointSettings::NOTOSERIF;
     strncpy(s.sdFontFamilyName, "OpenDyslexic", sizeof(s.sdFontFamilyName) - 1);

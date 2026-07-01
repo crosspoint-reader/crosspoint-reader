@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
+#include <Utf8.h>
 
 #include <cstring>
 
@@ -21,6 +22,43 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
+
+  // Drop cap: draw the enlarged prefix (the initial, plus a leading opening quote when the
+  // line begins with one) at the block's left origin, with its top pinned to the top of
+  // this (first) line. The line's words were already laid out inset to the right, so the
+  // cap descends across the inset lines without overlap.
+  if (dropcapScale > 0 && !dropcapText.empty()) {
+    // scale==1 is the sentinel for "draw the prefix natively with the dedicated
+    // drop-cap face" (BookerlyDropcap); scale>=2 integer-scales the body glyph
+    // (the fallback chosen at layout time when no face was loaded). The face is
+    // regular-only by design. Layout measured the inset in this same face, and the
+    // section cache is keyed so the face-present state matches what we render here.
+    int capFontId = fontId;
+    EpdFontFamily::Style capStyle = dropcapStyle;
+    uint8_t capScale = dropcapScale;
+    if (dropcapScale == 1) {
+      capFontId = renderer.getDropCapFontId();
+      capStyle = EpdFontFamily::REGULAR;
+      if (capFontId == 0) {  // 0 = no face loaded; ids are hash-based and may be negative
+        // Face unloaded since layout (rare; cache normally prevents this). Avoid a
+        // tiny native body glyph — coarsely scale the body face instead.
+        capFontId = fontId;
+        capStyle = dropcapStyle;
+        capScale = 3;
+      }
+    }
+    const auto* p = reinterpret_cast<const uint8_t*>(dropcapText.c_str());
+    int penX = x;
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(&p)) != 0) {
+      renderer.drawScaledGlyph(capFontId, cp, capStyle, capScale, penX, y, true);
+      int gw = 0, gh = 0, gtop = 0, gadv = 0;
+      if (renderer.getGlyphBox(capFontId, cp, capStyle, gw, gh, gtop, gadv)) {
+        penX += gadv * capScale;
+      }
+    }
+  }
+
   for (size_t i = 0; i < words.size(); i++) {
     const int wordX = wordXpos[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyles[i];
@@ -99,6 +137,16 @@ bool TextBlock::serialize(HalFile& file) const {
     for (auto sx : wordFocusSuffixX) serialization::writePod(file, sx);
   }
 
+  // Drop cap block: 1-byte presence flag, then initial text + style + scale only when
+  // present. Zero cost on the common (non-dropcap) line.
+  const bool hasDropcap = dropcapScale > 0 && !dropcapText.empty();
+  serialization::writePod(file, static_cast<uint8_t>(hasDropcap ? 1 : 0));
+  if (hasDropcap) {
+    serialization::writeString(file, dropcapText);
+    serialization::writePod(file, static_cast<uint8_t>(dropcapStyle));
+    serialization::writePod(file, dropcapScale);
+  }
+
   // Style (alignment + margins/padding/indent)
   serialization::writePod(file, blockStyle.alignment);
   serialization::writePod(file, blockStyle.textAlignDefined);
@@ -154,6 +202,18 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
     for (auto& sx : wordFocusSuffixX) serialization::readPod(file, sx);
   }
 
+  // Drop cap block (presence flag, then data if present). Mirrors serialize().
+  std::string dropcapText;
+  uint8_t dropcapStyle = EpdFontFamily::REGULAR;
+  uint8_t dropcapScale = 0;
+  uint8_t hasDropcap;
+  serialization::readPod(file, hasDropcap);
+  if (hasDropcap) {
+    serialization::readString(file, dropcapText);
+    serialization::readPod(file, dropcapStyle);
+    serialization::readPod(file, dropcapScale);
+  }
+
   // Style (alignment + margins/padding/indent)
   serialization::readPod(file, blockStyle.alignment);
   serialization::readPod(file, blockStyle.textAlignDefined);
@@ -170,7 +230,11 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
 
-  return std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
-                                                  std::move(wordFocusBoundary), std::move(wordFocusSuffixX),
-                                                  blockStyle));
+  auto block =
+      std::unique_ptr<TextBlock>(new TextBlock(std::move(words), std::move(wordXpos), std::move(wordStyles),
+                                               std::move(wordFocusBoundary), std::move(wordFocusSuffixX), blockStyle));
+  if (dropcapScale > 0) {
+    block->setDropcap(std::move(dropcapText), static_cast<EpdFontFamily::Style>(dropcapStyle), dropcapScale);
+  }
+  return block;
 }

@@ -27,6 +27,13 @@ class TextBlock final : public Block {
   // Empty in lockstep with wordFocusBoundary.
   std::vector<uint16_t> wordFocusSuffixX;
   BlockStyle blockStyle;
+  // Drop cap: when dropcapScale > 0, this line is the first line of a chapter's
+  // opening paragraph and renders an enlarged initial. dropcapText holds the single
+  // initial codepoint (UTF-8); the text of the line was already laid out inset to the
+  // right of the cap (see ParsedText::layoutAndExtractLines / DropCapSpec).
+  std::string dropcapText;
+  EpdFontFamily::Style dropcapStyle = EpdFontFamily::REGULAR;
+  uint8_t dropcapScale = 0;
 
  public:
   explicit TextBlock(std::vector<std::string> words, std::vector<int16_t> word_xpos,
@@ -41,6 +48,12 @@ class TextBlock final : public Block {
   ~TextBlock() override = default;
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  void setDropcap(std::string text, const EpdFontFamily::Style style, const uint8_t scale) {
+    dropcapText = std::move(text);
+    dropcapStyle = style;
+    dropcapScale = scale;
+  }
+  uint8_t getDropcapScale() const { return dropcapScale; }
   const std::vector<std::string>& getWords() const { return words; }
   bool isEmpty() override { return words.empty(); }
   size_t wordCount() const { return words.size(); }

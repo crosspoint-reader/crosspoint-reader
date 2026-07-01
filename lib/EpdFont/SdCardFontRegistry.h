@@ -30,6 +30,12 @@ class SdCardFontRegistry {
   // when creating new installs; both are read from if present.
   static constexpr const char* FONTS_DIR_HIDDEN = "/.fonts";
   static constexpr const char* FONTS_DIR_VISIBLE = "/fonts";
+  // Standalone drop-cap font roots. A drop-cap font is an enlarged decorative
+  // initial face (regular-only, large point sizes), picked independently of the
+  // reader font. Same on-disk layout as the reading roots:
+  // "/<root>/<Family>/<Family>_<size>.cpfont".
+  static constexpr const char* DROPCAP_DIR_HIDDEN = "/.dropcap";
+  static constexpr const char* DROPCAP_DIR_VISIBLE = "/dropcap";
 
   // Returns the existing root for `familyName` (the one that contains
   // /<root>/<familyName>/), or nullptr if the family is not installed in
@@ -41,8 +47,13 @@ class SdCardFontRegistry {
   // the two roots exists, otherwise the hidden root.
   static const char* defaultWriteRoot();
 
-  // Scan SD card, populate families_. Returns true if any families found.
+  // Scan the reading-font roots (/.fonts, /fonts), populate families_.
+  // Returns true if any families found.
   bool discover();
+
+  // Scan the standalone drop-cap roots (/.dropcap, /dropcap), populate families_.
+  // Returns true if any families found.
+  bool discoverDropCaps();
 
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
@@ -53,7 +64,12 @@ class SdCardFontRegistry {
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 
   static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
-  static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
+  // Append the .cpfont files in dirPath (non-recursive) to `out`, de-duplicating
+  // by (pointSize, style).
+  static void scanDirectory(const char* dirPath, std::vector<SdCardFontFileInfo>& out);
   // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
   static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);
+  // Shared body of discover()/discoverDropCaps(): scan the hidden root then the
+  // visible root (hidden wins on name collisions), sort, and cap.
+  bool discoverRoots(const char* hiddenRoot, const char* visibleRoot);
 };

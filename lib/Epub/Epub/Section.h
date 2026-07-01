@@ -18,7 +18,8 @@ class Section {
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
+                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled,
+                              bool dropCapsEnabled);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
  public:
@@ -33,11 +34,11 @@ class Section {
   ~Section() = default;
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled);
+                       uint8_t imageRendering, bool focusReadingEnabled, bool dropCapsEnabled);
   bool clearCache() const;
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled,
+                         uint8_t imageRendering, bool focusReadingEnabled, bool dropCapsEnabled,
                          const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
   std::string getTextFromSectionFile();

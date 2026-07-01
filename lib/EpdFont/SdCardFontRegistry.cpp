@@ -130,7 +130,7 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
   return true;
 }
 
-void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
+void SdCardFontRegistry::scanDirectory(const char* dirPath, std::vector<SdCardFontFileInfo>& out) {
   HalFile dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return;
 
@@ -157,7 +157,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     // two files at the same size in the same family would silently shadow
     // each other in findFile(). Skip the duplicate and warn.
     bool duplicate = false;
-    for (const auto& existing : family.files) {
+    for (const auto& existing : out) {
       if (existing.pointSize == size && existing.style == style) {
         duplicate = true;
         break;
@@ -172,7 +172,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     info.path = std::string(dirPath) + "/" + nameBuffer;
     info.pointSize = size;
     info.style = style;
-    family.files.push_back(std::move(info));
+    out.push_back(std::move(info));
   }
 }
 
@@ -214,7 +214,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       SdCardFontFamilyInfo family;
       family.name = nameBuffer;
       std::string subDirPath = std::string(rootPath) + "/" + nameBuffer;
-      SdCardFontRegistry::scanDirectory(subDirPath.c_str(), family);
+      SdCardFontRegistry::scanDirectory(subDirPath.c_str(), family.files);
 
       if (!family.files.empty()) {
         out.push_back(std::move(family));
@@ -227,14 +227,14 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
   }
 }
 
-bool SdCardFontRegistry::discover() {
+bool SdCardFontRegistry::discoverRoots(const char* hiddenRoot, const char* visibleRoot) {
   families_.clear();
   families_.reserve(MAX_SD_FAMILIES);
 
   // Hidden root is scanned first so it wins on name collisions, matching the
   // sleep-folder pattern (/.sleep preferred over /sleep).
-  scanRoot(FONTS_DIR_HIDDEN, families_);
-  scanRoot(FONTS_DIR_VISIBLE, families_);
+  scanRoot(hiddenRoot, families_);
+  scanRoot(visibleRoot, families_);
 
   // Sort families alphabetically
   std::sort(families_.begin(), families_.end(),
@@ -245,9 +245,14 @@ bool SdCardFontRegistry::discover() {
     families_.resize(MAX_SD_FAMILIES);
   }
 
-  LOG_DBG("SDREG", "Discovery complete: %d families", static_cast<int>(families_.size()));
+  LOG_DBG("SDREG", "Discovery complete: %d families (%s, %s)", static_cast<int>(families_.size()), hiddenRoot,
+          visibleRoot);
   return !families_.empty();
 }
+
+bool SdCardFontRegistry::discover() { return discoverRoots(FONTS_DIR_HIDDEN, FONTS_DIR_VISIBLE); }
+
+bool SdCardFontRegistry::discoverDropCaps() { return discoverRoots(DROPCAP_DIR_HIDDEN, DROPCAP_DIR_VISIBLE); }
 
 const char* SdCardFontRegistry::findFamilyRoot(const char* familyName) {
   if (!familyName || !*familyName) return nullptr;

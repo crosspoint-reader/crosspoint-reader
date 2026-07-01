@@ -62,6 +62,12 @@ class GfxRenderer {
   // as before, concentrated in a single pointer instead of four fields.
   mutable FontCacheManager* fontCacheManager_ = nullptr;
 
+  // Render context: the font id of the loaded drop-cap face (e.g. BookerlyDropcap
+  // from the SD card), or 0 when none is loaded. Set by SdCardFontSystem when the
+  // dropcap family is (un)loaded; read by the EPUB layout (to measure the cap) and
+  // TextBlock::render (to draw it at native size instead of scaling the body glyph).
+  int dropCapFontId_ = 0;
+
   // Tiled grayscale strip target. When active, drawPixel()/clearScreen()
   // operate on a caller-owned scratch holding one horizontal band of physical
   // rows [_stripY0, _stripY0 + _stripRows) (panelWidthBytes wide) instead of
@@ -117,6 +123,11 @@ class GfxRenderer {
   void clearSdCardFonts() { sdCardFonts_.clear(); }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
+  // Drop-cap face: a separate large font used to render a chapter's enlarged
+  // initial at native size. 0 = none loaded (layout/render fall back to integer-
+  // scaling the body glyph). Managed by SdCardFontSystem.
+  void setDropCapFontId(int fontId) { dropCapFontId_ = fontId; }
+  int getDropCapFontId() const { return dropCapFontId_; }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
@@ -198,6 +209,14 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  // Drop caps: draw a single glyph upscaled by an integer factor with its bitmap's
+  // top-left corner anchored at (x, yTop). getGlyphBox returns the unscaled glyph
+  // metrics (pixels; advanceX snapped from 12.4 fixed-point) so callers can size the
+  // enlarged cap and the text inset around it. Returns false if the glyph is missing.
+  bool getGlyphBox(int fontId, uint32_t cp, EpdFontFamily::Style style, int& width, int& height, int& top,
+                   int& advanceX) const;
+  void drawScaledGlyph(int fontId, uint32_t cp, EpdFontFamily::Style style, uint8_t scale, int x, int yTop,
+                       bool black = true) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
