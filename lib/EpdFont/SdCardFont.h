@@ -225,6 +225,11 @@ class SdCardFont {
   // Bounded to ADVANCE_CACHE_LIMIT entries; persists across layout passes
   // (across calls to clearCache()) so repeated indexing of the same font
   // amortizes SD reads. Cleared only on font unload or clearPersistentCache().
+  //
+  // The cap was originally sized for Latin-script books. CJK text routinely
+  // exceeds 768 unique codepoints; once full, codepoints that don't fit are
+  // routed through the per-call overflow table below, and any remaining
+  // pathological misses fall through to a one-shot SD read in getAdvance().
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 768;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
@@ -232,6 +237,26 @@ class SdCardFont {
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
   void mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
+
+  // Per-call overflow table for advances that did not fit in the persistent
+  // ADVANCE_CACHE_LIMIT-capped table. Replaced (not merged) on each
+  // fetchAdvancesForCodepoints call — sized to exactly the codepoints this
+  // pass needs that the persistent table couldn't hold. Typical Chinese
+  // paragraph adds <100 bytes per style after the persistent cache fills.
+  // Sorted by codepoint for binary lookup.
+  AdvanceEntry* overflowAdvance_[MAX_STYLES] = {};
+  uint32_t overflowAdvanceSize_[MAX_STYLES] = {};
+  bool overflowAdvanceLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
+  // Free any existing overflow for styleIdx, then take ownership of a fresh
+  // copy of sortedNew[0..newCount). newCount==0 clears the slot.
+  void replaceOverflowAdvance(uint8_t styleIdx, const AdvanceEntry* sortedNew, uint32_t newCount);
+
+  // Last-resort path for getAdvance(): read advanceX for one glyph directly
+  // from SD without caching. Triggered only when both persistent and overflow
+  // tables miss — i.e., the codepoint was never collected by
+  // buildAdvanceTableRange (paragraph exceeded MAX_UNIQUE_CODEPOINTS) or a
+  // batch SD read failed mid-flight. Returns false on I/O error.
+  bool readSingleAdvanceFromSd(uint8_t styleIdx, int32_t globalGlyphIndex, uint16_t* outAdvance) const;
 
   Stats stats_;
   uint32_t contentHash_ = 0;
