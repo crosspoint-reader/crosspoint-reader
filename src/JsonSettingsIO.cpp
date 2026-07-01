@@ -224,6 +224,14 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     }
   }
 
+  // Pre-split migration: one long-press setting used to drive both page buttons.
+  // If the back-button key is absent, seed it from the forward value so behavior
+  // is unchanged on both buttons after upgrade.
+  if (doc["longPressBackButtonBehavior"].isNull()) {
+    s.longPressBackButtonBehavior = s.longPressButtonBehavior;
+    if (needsResave) *needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)CrossPointSettings::SLEEP_10_MIN, CrossPointSettings::SLEEP_TIMEOUT_COUNT,
