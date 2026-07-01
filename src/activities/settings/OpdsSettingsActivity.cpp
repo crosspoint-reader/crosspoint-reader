@@ -13,9 +13,9 @@
 #include "fontIds.h"
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
+// Editable fields: Name, URL, Username, Password, Keep server filename.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int BASE_ITEMS = 5;
 }  // namespace
 
 int OpdsSettingsActivity::getMenuItemCount() const {
@@ -156,7 +156,12 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (selectedIndex == 4 && !isNewServer) {
+  } else if (selectedIndex == 4) {
+    // Keep server filename
+    editServer.keepFilename = !editServer.keepFilename;
+    saveServer();
+    requestUpdate();
+  } else if (selectedIndex == 5 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -191,8 +196,11 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
       [this, &fieldNames](int index) {
-        if (index < BASE_ITEMS) {
+        if (index < BASE_ITEMS - 1) {
           return std::string(I18N.get(fieldNames[index]));
+        }
+        if (index == BASE_ITEMS - 1) {
+          return std::string(tr(STR_OPDS_KEEP_FILENAME));
         }
         return std::string(tr(STR_DELETE_SERVER));
       },
@@ -206,6 +214,8 @@ void OpdsSettingsActivity::render(RenderLock&&) {
           return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
         } else if (index == 3) {
           return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
+        } else if (index == 4) {
+          return std::string(editServer.keepFilename ? tr(STR_STATE_ON) : tr(STR_STATE_OFF));
         }
         return std::string("");
       },

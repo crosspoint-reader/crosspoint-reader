@@ -269,26 +269,51 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
-  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
+  std::string libraryPath = "/";
+  std::string tempPath = "/.crosspoint/tmp/";
+  std::string sanitizedImpliedFilename =
+      StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+  std::string tempFilePath = tempPath + sanitizedImpliedFilename + ".tmp";
+  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), tempFilePath.c_str());
 
+  std::string serverFilename;
+  Storage.ensureDirectoryExists(tempPath.c_str());
   const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
+      downloadUrl, tempFilePath,
       [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);
       },
-      nullptr, server.username, server.password);
+      nullptr, server.username, server.password, server.keepFilename ? &serverFilename : nullptr);
 
-  if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
-    state = BrowserState::BROWSING;
-  } else {
+  if (result != HttpDownloader::OK) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
+    requestUpdate();
+    return;
   }
+
+  std::string sanitizedServerFilename = StringUtils::sanitizeFilename(serverFilename);
+  std::string finalFilename =
+      (server.keepFilename && !sanitizedServerFilename.empty()) ? sanitizedServerFilename : sanitizedImpliedFilename;
+  std::string finalFilePath = libraryPath + finalFilename;
+
+  if (Storage.exists(finalFilePath.c_str())) {
+    Storage.remove(finalFilePath.c_str());
+  }
+
+  Storage.ensureDirectoryExists(libraryPath.c_str());
+  if (!Storage.rename(tempFilePath.c_str(), finalFilePath.c_str())) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_DOWNLOAD_FAILED);
+    Storage.remove(tempFilePath.c_str());
+    requestUpdate();
+    return;
+  }
+
+  clearBookCache(finalFilePath);
+  state = BrowserState::BROWSING;
   requestUpdate();
 }
 

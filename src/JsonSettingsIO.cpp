@@ -373,6 +373,7 @@ bool JsonSettingsIO::saveOpds(const OpdsServerStore& store, const char* path) {
     obj["url"] = server.url;
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+    if (server.keepFilename) obj["keepFilename"] = true;
   }
 
   String json;
@@ -405,6 +406,7 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
       server.password = obj["password"] | std::string("");
       if (!server.password.empty() && needsResave) *needsResave = true;
     }
+    server.keepFilename = obj["keepFilename"] | false;
     store.servers.push_back(std::move(server));
   }
 
