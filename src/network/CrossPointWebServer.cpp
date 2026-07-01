@@ -376,7 +376,7 @@ void CrossPointWebServer::handleStatus() const {
   if (esp_efuse_read_field_blob(ESP_EFUSE_USER_DATA, snBuf, 256) == ESP_OK) {
     valid = snBuf[0] != '\0' && snBuf[0] != (char)0xFF;
     for (int i = 0; i < 32 && snBuf[i] != '\0'; i++) {
-      if (!std::isprint(snBuf[i])) {
+      if (!std::isprint(static_cast<unsigned char>(snBuf[i]))) {
         valid = false;
         break;
       }
