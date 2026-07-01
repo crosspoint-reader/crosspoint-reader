@@ -77,8 +77,14 @@ bool OtaUpdater::isUpdateNewer() const {
   const auto currentVersion = CROSSPOINT_VERSION;
 
   // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+  if (sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch) != 3) {
+    LOG_ERR("OTA", "Invalid latest version format: %s", latestVersion.c_str());
+    return false;
+  }
+  if (sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch) != 3) {
+    LOG_ERR("OTA", "Invalid current version format: %s", currentVersion);
+    return false;
+  }
 
   /*
    * Compare major versions.
