@@ -171,7 +171,7 @@ class ChapterHtmlSlimParser {
   bool finishParse();  // flush the trailing page and tear down; returns true
   void abortParse();   // tear down without flushing (error / abandon)
 
-  void addLineToPage(std::shared_ptr<TextBlock> line);
+  void addLineToPage(std::shared_ptr<TextBlock> line, ExtractedLineMeta lineMeta);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page
