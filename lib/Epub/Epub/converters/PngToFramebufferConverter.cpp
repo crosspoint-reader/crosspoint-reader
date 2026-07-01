@@ -99,9 +99,7 @@ int bytesPerPixelFromType(int pixelType) {
   }
 }
 
-int packedRowBytes(int srcWidth, int bitsPerSample) {
-  return (srcWidth * bitsPerSample + 7) / 8;
-}
+int packedRowBytes(int srcWidth, int bitsPerSample) { return (srcWidth * bitsPerSample + 7) / 8; }
 
 int requiredPngInternalBufferBytes(int srcWidth, int pixelType, int bitsPerSample) {
   // +1 filter byte per scanline, *2 for current+previous lines, +32 for alignment margin.
@@ -387,9 +385,10 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   const int requiredInternal = requiredPngInternalBufferBytes(ctx.srcWidth, pixelType, bitsPerSample);
   if (requiredInternal > PNG_MAX_BUFFERED_PIXELS) {
-    LOG_ERR("PNG",
-            "PNG row buffer too small: need %d bytes for width=%d type=%d bpp=%d, configured PNG_MAX_BUFFERED_PIXELS=%d",
-            requiredInternal, ctx.srcWidth, pixelType, bitsPerSample, PNG_MAX_BUFFERED_PIXELS);
+    LOG_ERR(
+        "PNG",
+        "PNG row buffer too small: need %d bytes for width=%d type=%d bpp=%d, configured PNG_MAX_BUFFERED_PIXELS=%d",
+        requiredInternal, ctx.srcWidth, pixelType, bitsPerSample, PNG_MAX_BUFFERED_PIXELS);
     LOG_ERR("PNG", "Aborting decode to avoid PNGdec internal buffer overflow");
     return false;
   }
@@ -406,8 +405,8 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   constexpr size_t MAX_GRAY_LINE_BUFFER_BYTES = PNG_MAX_BUFFERED_PIXELS / 2;
   const size_t grayBufSize = static_cast<size_t>(ctx.srcWidth);
   if (grayBufSize > MAX_GRAY_LINE_BUFFER_BYTES) {
-    LOG_ERR("PNG", "Expanded gray row too wide: need %u bytes for width=%d, max=%u",
-            static_cast<unsigned>(grayBufSize), ctx.srcWidth, static_cast<unsigned>(MAX_GRAY_LINE_BUFFER_BYTES));
+    LOG_ERR("PNG", "Expanded gray row too wide: need %u bytes for width=%d, max=%u", static_cast<unsigned>(grayBufSize),
+            ctx.srcWidth, static_cast<unsigned>(MAX_GRAY_LINE_BUFFER_BYTES));
     return false;
   }
 
