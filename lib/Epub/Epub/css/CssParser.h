@@ -1,5 +1,6 @@
 #pragma once
 
+#include <FlatMap.h>
 #include <HalStorage.h>
 
 #include <initializer_list>
@@ -33,7 +34,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 6;
+  static constexpr uint8_t CSS_CACHE_VERSION = 7;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -138,7 +139,7 @@ class CssParser {
   };
 
   // Storage: maps selector -> style properties. Hash/equal are case-insensitive.
-  std::unordered_map<std::string, CssStyle, SvHash, SvEqual> rulesBySelector_;
+  FlatMap<std::string, CssStyle, SvHash, SvEqual> rulesBySelector_;
 
   std::string cachePath;
 

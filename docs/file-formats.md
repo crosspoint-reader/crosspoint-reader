@@ -90,13 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 25
+### Version 28
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 25 includes:
+Version 28 includes:
 
 - cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
   image rendering mode, and Focus Reading
@@ -239,7 +239,7 @@ struct Page {
 };
 
 struct AnchorEntry {
-    String anchor;
+    u64 anchorHash;
     u16 page;
 };
 
