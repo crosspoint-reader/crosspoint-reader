@@ -14,6 +14,11 @@ std::string ensureProtocol(const std::string& url);
 std::string extractHost(const std::string& url);
 
 /**
+ * Percent-encode raw characters that esp_http_client rejects in a URL.
+ */
+std::string encodeUnsafeUrlChars(const std::string& url);
+
+/**
  * Build full URL from server URL and path.
  * If path starts with /, it's an absolute path from the host root.
  * Otherwise, it's relative to the server URL.

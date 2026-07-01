@@ -5,12 +5,25 @@
 
 #include <cstring>
 
+namespace {
+constexpr size_t ENTRY_STORAGE_CAPACITY = 64;
+constexpr size_t MAX_ENTRIES = ENTRY_STORAGE_CAPACITY - 2;
+constexpr size_t MAX_TITLE_CHARS = 160;
+constexpr size_t MAX_AUTHOR_CHARS = 120;
+constexpr size_t MAX_ID_CHARS = 128;
+constexpr size_t MAX_HREF_CHARS = 768;
+constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
+constexpr size_t MAX_PAGE_URL_CHARS = 768;
+}  // namespace
+
 OpdsParser::OpdsParser() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
     errorOccured = true;
     LOG_DBG("OPDS", "Couldn't allocate memory for parser");
+    return;
   }
+  entries.reserve(ENTRY_STORAGE_CAPACITY);
 }
 
 OpdsParser::~OpdsParser() { destroyXmlParser(parser); }
@@ -70,6 +83,8 @@ void OpdsParser::clear() {
   currentEntry = OpdsEntry{};
   currentText.clear();
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
+  collectCurrentEntry = false;
+  feedTruncated = false;
 }
 
 std::vector<OpdsEntry> OpdsParser::getBooks() const {
@@ -87,8 +102,32 @@ const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
   return nullptr;
 }
 
+void OpdsParser::assignBounded(std::string& target, const char* value, const size_t maxLen) {
+  if (!value) {
+    target.clear();
+    return;
+  }
+  target.assign(value, strnlen(value, maxLen));
+}
+
+void OpdsParser::appendBounded(std::string& target, const char* value, const size_t len, const size_t maxLen) {
+  if (target.size() >= maxLen) return;
+  const size_t remaining = maxLen - target.size();
+  target.append(value, len < remaining ? len : remaining);
+}
+
 void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<OpdsParser*>(userData);
+
+  if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
+    self->inEntry = true;
+    self->collectCurrentEntry = self->entries.size() < MAX_ENTRIES;
+    self->feedTruncated = self->feedTruncated || !self->collectCurrentEntry;
+    self->currentEntry = OpdsEntry{};
+    self->currentText.clear();
+    self->inTitle = self->inAuthor = self->inAuthorName = self->inId = false;
+    return;
+  }
 
   if (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr) {
     const char* href = findAttribute(atts, "href");
@@ -97,17 +136,16 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       const char* type = findAttribute(atts, "type");
 
       if (rel && strcmp(rel, "search") == 0) {
-        std::string sHref(href);
-        if (sHref.find("{searchTerms}") != std::string::npos) {
-          self->searchTemplate = sHref;
+        if (strstr(href, "{searchTerms}") != nullptr) {
+          assignBounded(self->searchTemplate, href, MAX_SEARCH_TEMPLATE_CHARS);
         }
       } else if (rel && strcmp(rel, "next") == 0 && !self->inEntry) {
-        self->nextPageUrl = href;
+        assignBounded(self->nextPageUrl, href, MAX_PAGE_URL_CHARS);
       } else if (rel && strcmp(rel, "previous") == 0 && !self->inEntry) {
-        self->prevPageUrl = href;
+        assignBounded(self->prevPageUrl, href, MAX_PAGE_URL_CHARS);
       }
 
-      if (self->inEntry) {
+      if (self->inEntry && self->collectCurrentEntry) {
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
           // Prefer plain EPUB links over derived formats when multiple
@@ -118,25 +156,19 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
                                             self->currentEntry.href.find("/epub/") != std::string::npos);
           if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
             self->currentEntry.type = OpdsEntryType::BOOK;
-            self->currentEntry.href = href;
+            assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
             self->currentEntry.type = OpdsEntryType::NAVIGATION;
-            self->currentEntry.href = href;
+            assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
           }
         }
       }
     }
   }
 
-  if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
-    self->inEntry = true;
-    self->currentEntry = OpdsEntry{};
-    return;
-  }
-
-  if (!self->inEntry) return;
+  if (!self->inEntry || !self->collectCurrentEntry) return;
 
   if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
     self->inTitle = true;
@@ -156,10 +188,11 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<OpdsParser*>(userData);
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
-    if (!self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
+    if (self->collectCurrentEntry && !self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
       self->entries.push_back(self->currentEntry);
     }
     self->inEntry = false;
+    self->collectCurrentEntry = false;
   } else if (self->inEntry) {
     if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
       if (self->inTitle) self->currentEntry.title = self->currentText;
@@ -178,7 +211,12 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
 
 void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<OpdsParser*>(userData);
-  if (self->inTitle || self->inAuthorName || self->inId) {
-    self->currentText.append(s, len);
+  if (!self->collectCurrentEntry) return;
+  if (self->inTitle) {
+    appendBounded(self->currentText, s, len, MAX_TITLE_CHARS);
+  } else if (self->inAuthorName) {
+    appendBounded(self->currentText, s, len, MAX_AUTHOR_CHARS);
+  } else if (self->inId) {
+    appendBounded(self->currentText, s, len, MAX_ID_CHARS);
   }
 }
