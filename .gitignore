@@ -16,6 +16,8 @@ build
 /.venv
 *.local*
 *.cpfont
+# Generated on-demand by: python3 test/data/generate_dictionaries.py --all
+test/dictionaries/
 lib/EpdFont/scripts/downloaded_fonts/
 lib/EpdFont/scripts/instanced_fonts/
 lib/EpdFont/scripts/output/

@@ -10,6 +10,7 @@
 #include <limits>
 #include <vector>
 
+#include "FocusReading.h"
 #include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
@@ -217,37 +218,6 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
-// Checks if a UTF-8 codepoint should be counted as part of a word for Focus Reading
-bool isWordCharacter(uint32_t cp) {
-  // ASCII range (Catches 95%+ of characters immediately)
-  if (cp < 128) {
-    // Bitwise trick: (cp | 0x20) converts uppercase ASCII to lowercase.
-    // This checks for A-Z and a-z mathematically, avoiding memory lookups and <cctype>
-    return ((cp | 0x20) >= 'a' && (cp | 0x20) <= 'z') || cp == '\'';
-  }
-
-  // General Punctuation Block, Currency, Math, Arrows, & Symbols (0x2000 - 0x2BFF)
-  if (cp >= 0x2000 && cp <= 0x2BFF) {
-    // Explicitly allow smart quotes, reject all other general punctuation (em-dashes, etc.)
-    return cp == 0x2018 || cp == 0x2019;
-  }
-
-  // Latin-1 Punctuation Block (0x00A1 - 0x00BF)
-  if (cp >= 0x00A1 && cp <= 0x00BF) {
-    // Allow ordinal indicators and micro sign, reject the rest (¡, ¿, «, », etc.)
-    return cp == 0x00AA || cp == 0x00B5 || cp == 0x00BA;
-  }
-
-  // Rejects Two-em dash, Three-em dash, Double oblique hyphen, etc.
-  if (cp >= 0x2E00 && cp <= 0x2E7F) return false;
-
-  // Rejects Modifier Minus (0x02D7), Small Hyphen (0xFE63), and Fullwidth Hyphen (0xFF0D)
-  if (cp == 0x02D7 || cp == 0xFE63 || cp == 0xFF0D) return false;
-  // Assume all other Unicode ranges (accented letters, Cyrillic, Greek, etc.) are valid
-
-  return true;
-}
-
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -360,21 +330,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordNoSpaceBefore.push_back(noSpaceBefore);
       wordIsFocusSuffix.push_back(false);
     } else {
-      size_t charCount = 0;
-      const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
-      const unsigned char* countEnd = countPtr + segment.length();
-
-      while (countPtr < countEnd) {
-        utf8NextCodepoint(&countPtr);
-        charCount++;
-      }
-
-      // Target 45% for 1-bold at 4 chars and 3-bold at 7 chars with floor truncation
-      constexpr size_t FOCUS_READING_PERCENT = 45;
-      size_t targetBoldChars = (charCount * FOCUS_READING_PERCENT) / 100;
-      targetBoldChars = std::clamp<size_t>(targetBoldChars, 1, 9);
-
-      if (targetBoldChars >= charCount) {
+      const auto split = FocusReading::computeSplitInfo(segment);
+      if (split.wholeBold) {
         // Whole segment is bold - no suffix split needed
         words.emplace_back(segment);
         wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
@@ -382,21 +339,15 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
       } else {
-        countPtr = reinterpret_cast<const unsigned char*>(segment.data());
-        for (size_t i = 0; i < targetBoldChars; ++i) {
-          utf8NextCodepoint(&countPtr);
-        }
-        size_t splitByteOffset = countPtr - reinterpret_cast<const unsigned char*>(segment.data());
-
         // Bold prefix
-        words.emplace_back(segment.substr(0, splitByteOffset));
+        words.emplace_back(segment.substr(0, split.boundaryBytes));
         wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
 
         // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
-        words.emplace_back(segment.substr(splitByteOffset));
+        words.emplace_back(segment.substr(split.boundaryBytes));
         wordStyles.push_back(baseStyle);
         wordContinues.push_back(true);
         wordNoSpaceBefore.push_back(false);
@@ -411,14 +362,14 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   const unsigned char* segmentStart = ptr;
   uint32_t firstCp = utf8NextCodepoint(&ptr);  // Consume the first char to determine initial state
-  bool inWordSegment = isWordCharacter(firstCp);
+  bool inWordSegment = FocusReading::isWordCharacter(firstCp);
 
   bool isFirstSegment = true;
 
   while (ptr < end) {
     const unsigned char* currentCpStart = ptr;
     uint32_t cp = utf8NextCodepoint(&ptr);
-    bool isWordChar = isWordCharacter(cp);
+    bool isWordChar = FocusReading::isWordCharacter(cp);
 
     // Whenever the character type flips, slice off the segment we just completed and process it
     if (isWordChar != inWordSegment) {

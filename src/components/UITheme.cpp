@@ -70,6 +70,18 @@ int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader
   return availableHeight / rowHeight;
 }
 
+Rect UITheme::headerRect(const GfxRenderer& renderer) {
+  const ThemeMetrics& m = getInstance().getMetrics();
+  return Rect(0, m.topPadding, renderer.getScreenWidth(), m.headerHeight);
+}
+
+Rect UITheme::contentRect(const GfxRenderer& renderer) {
+  const ThemeMetrics& m = getInstance().getMetrics();
+  const int contentTop = m.topPadding + m.headerHeight + m.verticalSpacing;
+  const int contentHeight = renderer.getScreenHeight() - contentTop - m.buttonHintsHeight - m.verticalSpacing;
+  return Rect(0, contentTop, renderer.getScreenWidth(), contentHeight);
+}
+
 // Screen area excluding the button hints
 Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
   auto orientation = renderer.getOrientation();

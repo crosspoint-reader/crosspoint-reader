@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <array>
 #include <cstring>
 #include <mutex>
 #include <string>
@@ -25,6 +26,47 @@ void readAndValidate(HalFile& file, uint8_t& member, const uint8_t maxValue) {
 
 namespace {
 constexpr uint8_t SETTINGS_FILE_VERSION = 1;
+
+struct BuiltinFontFamilyMapping {
+  CrossPointSettings::FONT_FAMILY family;
+  std::array<int, CrossPointSettings::FONT_SIZE_COUNT> fontIds;
+  std::array<float, CrossPointSettings::LINE_COMPRESSION_COUNT> lineCompression;
+};
+
+constexpr BuiltinFontFamilyMapping kBuiltinFontFamilyMappings[] = {
+    {CrossPointSettings::NOTOSERIF,
+     {NOTOSERIF_12_FONT_ID, NOTOSERIF_14_FONT_ID, NOTOSERIF_16_FONT_ID, NOTOSERIF_18_FONT_ID},
+     {0.95f, 1.0f, 1.1f}},
+    {CrossPointSettings::NOTOSANS,
+     {NOTOSANS_12_FONT_ID, NOTOSANS_14_FONT_ID, NOTOSANS_16_FONT_ID, NOTOSANS_18_FONT_ID},
+     {0.90f, 0.95f, 1.0f}},
+};
+
+const BuiltinFontFamilyMapping& builtinFontFamilyMapping(CrossPointSettings::FONT_FAMILY family) {
+  for (const BuiltinFontFamilyMapping& mapping : kBuiltinFontFamilyMappings) {
+    // cppcheck-suppress useStlAlgorithm
+    if (mapping.family == family) return mapping;
+  }
+  return kBuiltinFontFamilyMappings[0];
+}
+
+CrossPointSettings::FONT_SIZE normalizeFontSize(CrossPointSettings::FONT_SIZE size) {
+  if (size >= CrossPointSettings::FONT_SIZE_COUNT) return CrossPointSettings::MEDIUM;
+  return size;
+}
+
+CrossPointSettings::LINE_COMPRESSION normalizeLineCompression(CrossPointSettings::LINE_COMPRESSION spacing) {
+  if (spacing >= CrossPointSettings::LINE_COMPRESSION_COUNT) return CrossPointSettings::NORMAL;
+  return spacing;
+}
+
+int builtinFontId(CrossPointSettings::FONT_FAMILY family, CrossPointSettings::FONT_SIZE size) {
+  return builtinFontFamilyMapping(family).fontIds[normalizeFontSize(size)];
+}
+
+float lineCompressionFor(CrossPointSettings::FONT_FAMILY family, CrossPointSettings::LINE_COMPRESSION spacing) {
+  return builtinFontFamilyMapping(family).lineCompression[normalizeLineCompression(spacing)];
+}
 constexpr char SETTINGS_FILE_BIN[] = "/.crosspoint/settings.bin";
 constexpr char SETTINGS_FILE_JSON[] = "/.crosspoint/settings.json";
 constexpr char SETTINGS_FILE_BAK[] = "/.crosspoint/settings.bin.bak";
@@ -290,42 +332,9 @@ bool CrossPointSettings::loadFromBinaryFile() {
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card fonts use same compression as Bookerly (the most neutral values)
-  if (sdFontFamilyName[0] != '\0') {
-    switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.1f;
-    }
-  }
-
-  switch (fontFamily) {
-    case NOTOSERIF:
-    default:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.95f;
-        case NORMAL:
-        default:
-          return 1.0f;
-        case WIDE:
-          return 1.1f;
-      }
-    case NOTOSANS:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
-      }
-  }
+  // SD card fonts use the same compression as NOTOSERIF (the most neutral values).
+  const FONT_FAMILY family = (sdFontFamilyName[0] != '\0') ? NOTOSERIF : static_cast<FONT_FAMILY>(fontFamily);
+  return lineCompressionFor(family, static_cast<LINE_COMPRESSION>(lineSpacing));
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
@@ -351,6 +360,14 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+int CrossPointSettings::getDefinitionFontId() const {
+  return builtinFontId(static_cast<FONT_FAMILY>(dictionaryFontFamily), static_cast<FONT_SIZE>(dictionaryFontSize));
+}
+
+float CrossPointSettings::getDefinitionLineCompression() const {
+  return lineCompressionFor(static_cast<FONT_FAMILY>(dictionaryFontFamily), static_cast<LINE_COMPRESSION>(lineSpacing));
+}
+
 int CrossPointSettings::getReaderFontId() const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
@@ -358,32 +375,5 @@ int CrossPointSettings::getReaderFontId() const {
     if (id != 0) return id;
     // Fall through to built-in if SD font not found
   }
-
-  switch (fontFamily) {
-    case NOTOSERIF:
-    default:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSERIF_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSERIF_14_FONT_ID;
-        case LARGE:
-          return NOTOSERIF_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSERIF_18_FONT_ID;
-      }
-    case NOTOSANS:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSANS_14_FONT_ID;
-        case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
-      }
-  }
+  return builtinFontId(static_cast<FONT_FAMILY>(fontFamily), static_cast<FONT_SIZE>(fontSize));
 }

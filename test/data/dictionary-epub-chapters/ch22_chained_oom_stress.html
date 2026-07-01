@@ -1,0 +1,74 @@
+<h1>22. Chained Lookup OOM Stress</h1>
+
+<p>This chapter is the on-device acceptance test for the dictionary RAM rework
+(one-page streaming render, pooled page, compact lookup chain). The
+<em>chain-stress</em> dictionary holds five deliberately huge, style-dense
+definitions (~22 KB of text, ~30 pages each, many style changes per line) whose
+text cyclically names the next headword, so you can chain lookups arbitrarily
+deep. The goal: <strong>free heap stays flat as you chain, and nothing
+crashes</strong> &mdash; previously a repeated deep render fragmented the heap and
+aborted.</p>
+
+<h3>Dictionary</h3>
+<p><em>chain-stress</em></p>
+
+<h3>Note</h3>
+<p>Watch free heap over the serial monitor (e.g. <em>python3 scripts/debugging_monitor.py</em>)
+while running these tests. Heap should return to roughly the same level after each
+lookup and after backing out &mdash; it must not trend downward as the chain deepens.</p>
+<p>Each definition marks two selectable words with <em>**</em> on both sides: the
+<strong>CHAIN</strong> word (the next entry, also repeated on every page) and a
+<strong>BRANCH</strong> word (a different entry, used in Test C). The <em>**</em> are
+just visual anchors &mdash; select the word between them to look it up.</p>
+<p><strong>Important:</strong> these tests build a chain by looking up the next word
+<em>from within a definition</em> (via Look Up Word). If you instead look a word up
+<em>directly from this chapter</em>, that definition is the start of a new chain, so
+pressing <em>Back</em> returns to the word-select screen &mdash; that is expected, not a
+bug. Always start a chain test by looking up <em>chain_stress_00001</em> below.</p>
+
+<h2>Test A: Deep deterministic chain (heap flat, no crash)</h2>
+<p>Each definition names the next headword on every page, so the chain is
+deterministic. The first render and every subsequent one must hold only a single
+page in RAM.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>chain_stress_00001</em>. Definition 1 appears (page 1 of ~30). No crash.</li>
+<li>Note the free heap reading.</li>
+<li>Press <em>Look Up Word</em>, select <em>chain_stress_00002</em> (it appears mid-line on every page), Confirm. Definition 2 appears.</li>
+<li>Repeat: from definition 2 look up <em>chain_stress_00003</em>, then <em>chain_stress_00004</em>, then <em>chain_stress_00005</em>. Five definitions deep, no crash.</li>
+<li>Verify free heap after definition 5 is within a small margin of the reading from step 2 &mdash; it must not have dropped by tens of KB per hop.</li>
+</ol>
+
+<h2>Test B: Back-navigation titles and page restore</h2>
+<p>Backing out of the chain must return to each prior definition with the same
+title you saw going forward, on the page you were reading.</p>
+<h3>Steps</h3>
+<ol>
+<li>From definition 1, page forward to about page 5 (use PageForward).</li>
+<li>Press <em>Look Up Word</em>, select <em>chain_stress_00002</em>, Confirm. Definition 2 appears at page 1.</li>
+<li>Short-press <em>Back</em>. You return to definition 1 with title <em>chain_stress_00001</em>, on <strong>page 5</strong> (not page 1).</li>
+<li>Short-press <em>Back</em> again. You return to the word-select screen on this chapter (the chain is empty). No crash.</li>
+</ol>
+
+<h2>Test C: Back-then-forward (abandoned branch not revisited)</h2>
+<p>Chaining forward after backing up must not pull the abandoned branch back into
+the stack.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>chain_stress_00001</em> (A). Look Up Word &rarr; select its CHAIN word <em>chain_stress_00002</em> (B). From B, Look Up Word &rarr; select B's CHAIN word <em>chain_stress_00003</em> (C).</li>
+<li>Short-press <em>Back</em> once &mdash; you return to B (<em>chain_stress_00002</em>).</li>
+<li>From B, Look Up Word &rarr; select B's <strong>BRANCH</strong> word <em>chain_stress_00004</em> (D) instead (marked <em>** ... **</em> near the top of B).</li>
+<li>Short-press <em>Back</em>. You return to B, not the abandoned C.</li>
+<li>Short-press <em>Back</em> again. You return to A (<em>chain_stress_00001</em>). The abandoned C is never revisited.</li>
+</ol>
+
+<h2>Test D: Deep chain past the history limit (eviction)</h2>
+<p>Because the definitions cycle (00005 names 00001 again), you can chain well past
+the Dictionary History Limit. The chain depth is bounded by that limit; going
+deeper must stay stable, not crash or leak.</p>
+<h3>Steps</h3>
+<ol>
+<li>Set the Dictionary History Limit to its minimum in settings.</li>
+<li>Look up <em>chain_stress_00001</em> and chain forward continuously (each definition names the next), at least 30 hops deep. Heap stays flat throughout.</li>
+<li>Back out repeatedly. The earliest entries may exit to the reader once the history window is exceeded; this is expected. No crash at any depth.</li>
+</ol>
