@@ -386,6 +386,10 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  // Forced Portrait keeps the hints at the physical buttons (#362); the inverted case still
+  // needs its glyphs flipped 180° to read correctly when the device is held inverted (#2364).
+  const bool flipHintText = origOrientation == GfxRenderer::Orientation::PortraitInverted;
+
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   const int sidePadding = 20;
@@ -395,6 +399,16 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int groupWidth = (pageWidth - sidePadding * 2 - groupGap) / 2;
   const int hintY = pageHeight - hintHeight - bottomMargin;
   const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
+
+  const auto drawHint = [&renderer, flipHintText, hintY, hintHeight](int x, int y, const char* text) {
+    if (flipHintText) {
+      // Centre in the box directly: the physical 180 flip means mirroring the upright
+      // position would surface its small vertical offset (#2375 review).
+      renderer.drawTextRotated180VCentered(kGuideFontId, x, hintY, hintHeight, text, true, EpdFontFamily::REGULAR);
+    } else {
+      renderer.drawText(kGuideFontId, x, y, text, true, EpdFontFamily::REGULAR);
+    }
+  };
 
   const bool backDisabled = (btn1 == nullptr || btn1[0] == '\0');
   const int leftGroupX = sidePadding;
@@ -420,14 +434,14 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int downX = rightGroupX + groupWidth - innerEdgePadding - downWidth;
 
   if (!backDisabled) {
-    renderer.drawText(kGuideFontId, backX, textY, backLabel.c_str(), true, EpdFontFamily::REGULAR);
+    drawHint(backX, textY, backLabel.c_str());
   }
-  renderer.drawText(kGuideFontId, selectX, textY, selectText.c_str(), true, EpdFontFamily::REGULAR);
+  drawHint(selectX, textY, selectText.c_str());
 
   renderer.drawRoundedRect(rightGroupX, hintY, groupWidth, hintHeight, 2, kBottomRadius, true);
 
-  renderer.drawText(kGuideFontId, upX, textY, upText.c_str(), true, EpdFontFamily::REGULAR);
-  renderer.drawText(kGuideFontId, downX, textY, downText.c_str(), true, EpdFontFamily::REGULAR);
+  drawHint(upX, textY, upText.c_str());
+  drawHint(downX, textY, downText.c_str());
 
   renderer.setOrientation(origOrientation);
 }

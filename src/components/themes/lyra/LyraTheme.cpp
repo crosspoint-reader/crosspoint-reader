@@ -322,6 +322,10 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  // Forced Portrait keeps the hints at the physical buttons (#362); the inverted case still
+  // needs its glyphs flipped 180° to read correctly when the device is held inverted (#2364).
+  const bool flipHintText = orig_orientation == GfxRenderer::Orientation::PortraitInverted;
+
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 80;
   constexpr int smallButtonHeight = 15;
@@ -343,7 +347,13 @@ void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
                                false, true);
       const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, labels[i]);
       const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      if (flipHintText) {
+        // Centre in the box directly: the physical 180 flip means mirroring the upright
+        // position would surface its small vertical offset (#2375 review).
+        renderer.drawTextRotated180VCentered(SMALL_FONT_ID, textX, pageHeight - buttonY, buttonHeight, labels[i]);
+      } else {
+        renderer.drawText(SMALL_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      }
     } else {
       // Draw the filled background and border for a SMALL-sized button
       renderer.fillRoundedRect(x, pageHeight - smallButtonHeight, buttonWidth, smallButtonHeight, cornerRadius,
