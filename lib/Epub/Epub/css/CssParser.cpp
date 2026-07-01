@@ -67,13 +67,6 @@ constexpr bool iequalsAscii(std::string_view value, std::string_view lowercaseKe
                     [](char a, char b) { return asciiToLower(a) == b; });
 }
 
-// Case-insensitive ASCII substring search. Only needed by text-decoration,
-// which accepts multi-value strings like "underline solid red".
-constexpr bool icontainsAscii(std::string_view value, std::string_view lowercaseKeyword) {
-  return std::search(value.begin(), value.end(), lowercaseKeyword.begin(), lowercaseKeyword.end(),
-                     [](char a, char b) { return asciiToLower(a) == b; }) != value.end();
-}
-
 // Walk s and invoke fn(token) for each non-empty run between delimiters.
 // Tokens are boundary-trimmed and yielded as string_views into s; no
 // allocation. Runs of consecutive delimiters coalesce — no empty tokens are
@@ -252,11 +245,20 @@ CssFontWeight CssParser::interpretFontWeight(std::string_view val) {
 }
 
 CssTextDecoration CssParser::interpretDecoration(std::string_view val) {
-  // text-decoration can have multiple space-separated values
-  if (icontainsAscii(val, "underline")) {
-    return CssTextDecoration::Underline;
-  }
-  return CssTextDecoration::None;
+  // text-decoration can have multiple space-separated values. Compare whole tokens
+  // so malformed values like "notunderline" do not accidentally enable a line.
+  CssTextDecoration result = CssTextDecoration::None;
+  bool explicitNone = false;
+  forEachDelimitedToken(val, isCssWhitespace, [&](const std::string_view token) {
+    if (iequalsAscii(token, "none")) {
+      explicitNone = true;
+    } else if (iequalsAscii(token, "underline")) {
+      result = result | CssTextDecoration::Underline;
+    } else if (iequalsAscii(token, "line-through")) {
+      result = result | CssTextDecoration::LineThrough;
+    }
+  });
+  return explicitNone ? CssTextDecoration::None : result;
 }
 
 CssLength CssParser::interpretLength(std::string_view val) {
@@ -868,7 +870,7 @@ bool CssParser::loadFromCache() {
       rulesBySelector_.clear();
       return false;
     }
-    style.textDecoration = static_cast<CssTextDecoration>(enumVal);
+    style.textDecoration = static_cast<CssTextDecoration>(enumVal & CSS_TEXT_DECORATION_MASK);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();

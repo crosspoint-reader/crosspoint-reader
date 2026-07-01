@@ -90,13 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 25
+### Version 28
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 25 includes:
+Version 28 includes:
 
 - cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
   image rendering mode, and Focus Reading
@@ -105,6 +105,8 @@ Version 25 includes:
 - paragraph and list-item LUTs used by KOReader sync page refinement
 - optional per-word Focus Reading split metadata
 - per-page footnote entries
+- serialized word style bits for underline, strikethrough, superscript, and
+  subscript
 
 ImHex pattern:
 
@@ -113,7 +115,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 25
+#define EXPECTED_VERSION 28
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
