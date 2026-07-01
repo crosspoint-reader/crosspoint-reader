@@ -40,7 +40,7 @@ std::string sanitizeFilename(const std::string& name, size_t maxBytes) {
     result.clear();
   }
 
-  return result.empty() ? "book" : result;
+  return result;
 }
 
 }  // namespace StringUtils

@@ -269,8 +269,23 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+
+  // Create sanitized filename: "Author/Title.epub" or just "Title.epub" if no author
+  std::string author = StringUtils::sanitizeFilename(book.author);
+  std::string title = StringUtils::sanitizeFilename(book.title);
+
+  if (title == "") title = "book";
+
+  std::string filename = "/" + (author != "" ? (author + "/" + title) : title) + ".epub";
+
+  if (author != "") {
+    if (!Storage.exists(author.c_str()) && !Storage.mkdir(author.c_str())) {
+      LOG_ERR("OPDS", "Failed to create directory '%s'!\n", author.c_str());
+      // Fall back on book title in the root directory
+      filename = "/" + title + ".epub";
+    }
+  }
+
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   const auto result = HttpDownloader::downloadToFile(
