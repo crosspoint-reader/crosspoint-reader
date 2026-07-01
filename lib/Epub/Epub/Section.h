@@ -15,6 +15,9 @@ class Section {
   GfxRenderer& renderer;
   std::string filePath;
   HalFile file;
+  // Byte offset of the page-offset LUT within the section file, cached from the header
+  // so each page load skips a header seek + read. 0 means not yet loaded.
+  uint32_t lutOffset = 0;
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,

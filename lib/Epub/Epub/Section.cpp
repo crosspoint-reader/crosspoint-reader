@@ -127,6 +127,9 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
 
   serialization::readPod(file, pageCount);
+  // lutOffset is written immediately after pageCount in the header; cache it here so
+  // loadPageFromSectionFile can skip the per-load header seek + read.
+  serialization::readPod(file, lutOffset);
   // Explicit close() required: member variable persists beyond function scope
   file.close();
   LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
@@ -303,6 +306,8 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   serialization::writePod(file, anchorMapOffset);
   serialization::writePod(file, paragraphLutOffset);
   serialization::writePod(file, liLutFileOffset);
+  // Cache the LUT offset so subsequent page loads skip the header seek + read.
+  this->lutOffset = lutOffset;
   // Explicit close() required: member variable persists beyond function scope
   file.close();
   if (cssParser) {
@@ -316,9 +321,13 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
-  uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
+  // Use the LUT offset cached by loadSectionFile/createSectionFile; fall back to
+  // reading it from the header if this Section was not populated through those paths.
+  uint32_t lutOffset = this->lutOffset;
+  if (lutOffset == 0) {
+    file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+    serialization::readPod(file, lutOffset);
+  }
   file.seek(lutOffset + sizeof(uint32_t) * currentPage);
   uint32_t pagePos;
   serialization::readPod(file, pagePos);
