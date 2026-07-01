@@ -13,11 +13,8 @@
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // In settings mode, append a virtual "Add Server" item; in picker mode, only show real servers
-  if (!pickerMode) {
-    count++;
-  }
-  return count;
+  // Append a virtual "Add Server" item to both the settings list and the OPDS browser picker.
+  return count + 1;
 }
 
 void OpdsServerListActivity::onEnter() {
@@ -64,12 +61,18 @@ void OpdsServerListActivity::handleSelection() {
   const auto serverCount = static_cast<int>(OPDS_STORE.getCount());
 
   if (pickerMode) {
-    // Picker mode: selecting a server navigates to the OPDS browser
+    // Picker mode: selecting a server navigates to the OPDS browser; selecting the virtual item opens add-server.
     if (selectedIndex < serverCount) {
       const auto* server = OPDS_STORE.getServer(static_cast<size_t>(selectedIndex));
       if (server) {
         activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
       }
+    } else {
+      auto resultHandler = [this](const ActivityResult&) {
+        OPDS_STORE.loadFromFile();
+        selectedIndex = 0;
+      };
+      startActivityForResult(std::make_unique<OpdsSettingsActivity>(renderer, mappedInput, -1), resultHandler);
     }
     return;
   }
