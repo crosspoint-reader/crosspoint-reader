@@ -13,3 +13,15 @@ Run a single suite directly:
 
 Google Test is fetched via CMake FetchContent on first configure; the pinned
 version lives in test/CMakeLists.txt.
+
+Large synthetic dictionaries (on-device manual tests only):
+
+  test/dictionaries/prep-all/ and test/dictionaries/prep-long/ are not checked
+  in. Generate them before on-device preprocessing tests:
+
+    python3 test/data/generate_dictionaries.py test/data/dictionary-sources/prep-all.json
+    python3 test/data/generate_dictionaries.py test/data/dictionary-sources/prep-long.json
+
+  Or regenerate all test dictionaries at once:
+
+    python3 test/data/generate_dictionaries.py --all

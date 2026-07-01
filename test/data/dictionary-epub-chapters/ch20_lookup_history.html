@@ -1,0 +1,131 @@
+<h1>20. Lookup History</h1>
+
+<p>This chapter validates per-book lookup history: recording, display,
+re-lookup, deletion, chain back-navigation, and the history cap.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Empty state</h2>
+<p>Open Lookup History from the reader menu before any lookups have been
+performed.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open the reader menu. Select <em>Lookup History</em>.</li>
+<li>The history screen opens and shows: <em>No words looked up yet</em></li>
+<li>Press <em>Back</em>. Reader returns.</li>
+</ol>
+
+<h2>Test B: Direct lookup recorded</h2>
+<p>A direct hit must be recorded with the checkmark glyph.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>apple</em> (direct hit). Return to the reader.</li>
+<li>Open <em>Lookup History</em>.</li>
+<li>Verify <em>apple</em> appears at the top of the list with the checkmark glyph.</li>
+</ol>
+
+<h2>Test C: Not-found lookup recorded</h2>
+<p>A word with no match and no suggestions must be recorded with the X glyph.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>zxqvmw</em> (no match, no suggestions).</li>
+<li>Open <em>Lookup History</em>.</li>
+<li>Verify <em>zxqvmw</em> appears with the X glyph.</li>
+</ol>
+
+<h2>Test D: Stem lookup recorded</h2>
+<p>A word resolved via stemming must be recorded with the tilde glyph.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>apples</em> (resolved via stemming to <em>apple</em>).</li>
+<li>Open <em>Lookup History</em>.</li>
+<li>Verify the searched word appears with the tilde glyph.</li>
+</ol>
+
+<h2>Test E: Suggestion lookup recorded</h2>
+<p>A word resolved via the suggestions list must be recorded with the
+question mark glyph.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up <em>aplpe</em> (misspelling). Select a suggestion from the list.</li>
+<li>Open <em>Lookup History</em>.</li>
+<li>Verify the selected suggestion word appears with the question mark glyph.</li>
+</ol>
+
+<h2>Test F: Re-lookup from history</h2>
+<p>Selecting a word from the history list must open its definition.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open <em>Lookup History</em>.</li>
+<li>Select a word and press <em>Confirm</em> (short press).</li>
+<li>Definition screen opens.</li>
+<li>Press <em>Back</em>. Returns to the history screen (not the reader).</li>
+</ol>
+
+<h2>Test G: Delete -- confirm</h2>
+<p>Long-pressing Confirm on a history entry must enter delete-confirm mode.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open <em>Lookup History</em>.</li>
+<li>Long-press <em>Confirm</em> on a history entry.</li>
+<li>A popup appears showing the entry word and Delete/Cancel button hints.</li>
+<li>Press <em>Confirm</em> (Delete).</li>
+<li>The entry is removed from the list.</li>
+</ol>
+
+<h2>Test H: Delete -- cancel</h2>
+<p>Cancelling delete-confirm mode must retain the entry.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open <em>Lookup History</em>.</li>
+<li>Long-press <em>Confirm</em> on a history entry.</li>
+<li>Press <em>Back</em> (Cancel).</li>
+<li>The entry is retained. The list returns to normal view.</li>
+</ol>
+
+<h2>Test I: Chain back-navigation</h2>
+<p>Chained lookups must support back-navigation through the chain.</p>
+<h3>Steps</h3>
+<ol>
+<li>From the reader, look up word A. Definition screen appears.</li>
+<li>Enter word-select mode and look up word B. B's definition appears.</li>
+<li>Press <em>Back</em> from B. A's definition re-appears (chain back).</li>
+<li>Press <em>Back</em> again. Returns to word-select or reader (not B's definition).</li>
+<li>Open <em>Lookup History</em>. Verify both A and B entries are present.</li>
+</ol>
+
+<h2>Test J: History cap (eviction)</h2>
+<p>The history list must respect the configured cap, evicting the oldest entries.</p>
+<h3>Steps</h3>
+<ol>
+<li>Set the <em>Dictionary History Limit</em> setting to 25.</li>
+<li>Perform 26 distinct lookups.</li>
+<li>Open <em>Lookup History</em>.</li>
+<li>Verify only 25 entries are shown. The oldest (first) lookup has been evicted.</li>
+</ol>
+
+<h2>Test K: Done exits to reader</h2>
+<p>Long-pressing Back from a chained definition must exit directly to the reader.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up word A. From A's definition, enter word-select and look up word B.</li>
+<li>Long-press <em>Back</em> (Done).</li>
+<li>Exits directly to the reader, bypassing the history screen and word-select mode.</li>
+</ol>
+
+<h2>Test L: List navigation -- wrap-around and paging</h2>
+<p>The history list must support wrap-around single-step navigation and
+page-at-a-time navigation.</p>
+<h3>Note</h3>
+<p>Ensure the history list contains at least two full pages of entries
+(more entries than fit on one screen). If needed, look up enough distinct
+words to fill two pages before opening Lookup History.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open <em>Lookup History</em>. The cursor is on the first (most recent) entry.</li>
+<li>Press Previous once. The cursor wraps to the last (oldest) entry.</li>
+<li>Press Next once. The cursor wraps back to the first entry.</li>
+<li>Hold Next (continuous press). The cursor jumps forward one page at a time.</li>
+<li>Continue paging past the last entry. The cursor wraps to the beginning.</li>
+<li>Hold Previous (continuous press). The cursor pages backward, wrapping from first to last.</li>
+</ol>
