@@ -1,6 +1,7 @@
 #include "IntervalSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -23,6 +24,18 @@ void IntervalSelectionActivity::onEnter() {
 void IntervalSelectionActivity::adjustValue(const int delta) {
   value = clampedValue(value + delta);
   requestUpdate();
+}
+
+void IntervalSelectionActivity::drawStepHintLine(const int y, const StrId labelId, const int step) {
+  char stepText[24];
+  if (valueFormatId != StrId::STR_NONE_OPT) {
+    snprintf(stepText, sizeof(stepText), I18N.get(valueFormatId), static_cast<unsigned int>(step));
+  } else {
+    snprintf(stepText, sizeof(stepText), "%d", step);
+  }
+  char line[64];
+  snprintf(line, sizeof(line), "%s %s", I18N.get(labelId), stepText);
+  renderer.drawCenteredText(SMALL_FONT_ID, y, line, true);
 }
 
 void IntervalSelectionActivity::loop() {
@@ -52,8 +65,15 @@ void IntervalSelectionActivity::loop() {
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustValue(-smallStep); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustValue(smallStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { adjustValue(largeStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustValue(-largeStep); });
+
+  // On X3 the side buttons sit on the left/right edges of the screen rather than as a vertical up/down
+  // rocker (X4), so BTN_UP is physically the left button and BTN_DOWN the right one. Flip the large-step
+  // direction there so the left button decreases and the right button increases, matching the layout.
+  const int upDelta = gpio.deviceIsX3() ? -largeStep : largeStep;
+  const int downDelta = gpio.deviceIsX3() ? largeStep : -largeStep;
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustValue(upDelta); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
+                                       [this, downDelta] { adjustValue(downDelta); });
 }
 
 void IntervalSelectionActivity::render(RenderLock&&) {
@@ -88,7 +108,11 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int knobX = std::max(barX + 2, barX + 2 + fillWidth - 2);
   renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
 
-  renderer.drawCenteredText(SMALL_FONT_ID, barY + 30, I18N.get(stepHintId), true);
+  // Two-line step hint: front buttons do the small step, side buttons the large step. Built from
+  // separate label + value strings (rather than splitting one localized sentence) so the layout
+  // doesn't depend on translators preserving a hidden separator.
+  drawStepHintLine(barY + 30, StrId::STR_STEP_HINT_FRONT, smallStep);
+  drawStepHintLine(barY + 52, StrId::STR_STEP_HINT_SIDE, largeStep);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

@@ -1360,6 +1360,46 @@ void EpubReaderActivity::updateBookmarkFlag() {
   });
 }
 
+#ifdef SIMULATOR
+bool EpubReaderActivity::simulatorHasLoadedPage() const {
+  return section && section->pageCount > 0 && section->currentPage >= 0 && section->currentPage < section->pageCount;
+}
+
+void EpubReaderActivity::simulatorPageTurnForward() {
+  if (!section) return;
+  pageTurn(true);
+}
+
+void EpubReaderActivity::simulatorSetPosition(int spineIndex, int pageIndex) {
+  if (!epub) return;
+  if (spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) return;
+
+  {
+    RenderLock lock(*this);
+    currentSpineIndex = spineIndex;
+    nextPageNumber = pageIndex < 0 ? 0 : pageIndex;
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = 0;
+    pendingPageJump.reset();
+    pendingAnchor.clear();
+    pendingPercentJump = false;
+    pendingSpineProgress = 0.0f;
+    section.reset();
+  }
+  requestUpdate();
+}
+
+int EpubReaderActivity::simulatorCurrentSpineIndex() const { return currentSpineIndex; }
+
+int EpubReaderActivity::simulatorCurrentPageIndex() const { return section ? section->currentPage : -1; }
+
+int EpubReaderActivity::simulatorCurrentSectionPageCount() const { return section ? section->pageCount : 0; }
+
+bool EpubReaderActivity::simulatorAtEndOfBook() const {
+  return epub && currentSpineIndex >= epub->getSpineItemsCount();
+}
+#endif
+
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Epub;

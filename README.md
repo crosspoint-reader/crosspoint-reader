@@ -67,10 +67,6 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 > Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
 > stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
 > the firmware you flashed doesn't support OTA, **there is no way out**.
-> 
-> **The Papyrix fork has removed OTA update support from its code.** If you flash Papyrix onto a
-> USB-locked unit, you will have **zero update or recovery path** and will be stuck on it forever. **Do not flash
-> Papyrix (or any other unsupported firmware) on a locked device.**
 
 ## Install firmware
 
@@ -168,6 +164,27 @@ git submodule update --init --recursive
 pio run --target upload
 ```
 
+### Simulator builds
+
+Default desktop simulator:
+
+```bash
+pio run -e simulator -t run_simulator
+```
+
+32-bit `i386` desktop simulator for ESP-like pointer size and more accurate host memory accounting:
+
+```bash
+pio run -e simulator_i386 -t run_simulator
+```
+
+The simulator heap uses a fixed `153,371` byte arena by default, matching the current `gh_release` firmware's
+remaining DRAM budget from the ESP-IDF size report. Set `CROSSPOINT_SIM_HEAP_BYTES` to a byte count to run with an
+exact heap size and device-comparable `Free`, `Total`, `Min Free`, and `MaxAlloc` metrics.
+
+On Linux, `simulator_i386` needs 32-bit host toolchain and dev libraries in addition to the normal simulator deps:
+`gcc-multilib`, `g++-multilib`, `libsdl2-dev:i386`, and `libssl-dev:i386`.
+
 ### Contributor pre-PR checks
 
 ```bash
@@ -249,7 +266,7 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes via SD card.
 
-- [crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.
+- ~~[crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.~~ (Unmaintained)
 
 - [crosspoint-reader-cjk](https://github.com/aBER0724/crosspoint-reader-cjk) — Purpose-built for Chinese, Japanese, and Korean reading.
 

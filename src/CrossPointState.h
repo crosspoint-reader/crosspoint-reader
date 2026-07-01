@@ -1,12 +1,18 @@
 #pragma once
 #include <cstdint>
+#include <mutex>
 #include <string>
 
 class CrossPointState {
+  mutable std::mutex _mutex;
+
   // Static instance
   static CrossPointState instance;
 
  public:
+  // Access the state mutex for protecting multi-field reads/writes from other cores.
+  std::mutex& getMutex() const { return _mutex; }
+
   static constexpr uint8_t SLEEP_RECENT_COUNT = 16;
 
   std::string openEpubPath;

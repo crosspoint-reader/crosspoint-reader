@@ -31,6 +31,10 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
+#ifdef SIMULATOR
+#include "simulator/SimulatorBenchmark.h"
+#include "simulator/SimulatorHeap.h"
+#endif
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -305,6 +309,10 @@ void setupDisplayAndFonts(bool seamless = false) {
 void setup() {
   t1 = millis();
 
+#ifdef SIMULATOR
+  SimulatorBenchmark::initializeFromEnv();
+#endif
+
 #ifdef ENABLE_SERIAL_LOG
   // Earliest possible Serial setup. The 250 ms stall before begin() lets the
   // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
@@ -478,6 +486,11 @@ void setup() {
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
   allowSleepAt = millis() + 2000;
+
+#ifdef SIMULATOR
+  SimulatorHeap::activateFromEnv();
+  SimulatorBenchmark::startIfConfigured();
+#endif
 }
 
 void loop() {
@@ -581,6 +594,10 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+
+#ifdef SIMULATOR
+  SimulatorBenchmark::tick();
+#endif
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {

@@ -9,6 +9,7 @@ lib/I18n/I18nStrings.cpp
 *.generated.h
 .vs
 build
+fs_
 **/__pycache__/
 /compile_commands.json
 /.cache

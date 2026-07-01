@@ -9,6 +9,10 @@
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
 
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+#include "simulator/SimulatorHeap.h"
+#endif
+
 namespace {
 // v27: words NFC-composed at layout time; bump invalidates NFD section caches.
 constexpr uint8_t SECTION_FILE_VERSION = 27;
@@ -22,6 +26,14 @@ struct PageLutEntry {
   uint16_t paragraphIndex;
   uint16_t listItemIndex;
 };
+
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+void logSectionHeap(const char* phase, const char* path) {
+  LOG_INF("SIMSEC", "%s path=%s free=%zu max_alloc=%zu frag=%zu used=%zu peak=%zu", phase, path ? path : "(null)",
+          SimulatorHeap::freeBytes(), SimulatorHeap::largestFreeBlockBytes(), SimulatorHeap::fragmentationPercent(),
+          SimulatorHeap::currentUsedBytes(), SimulatorHeap::peakUsedBytes());
+}
+#endif
 }  // namespace
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
@@ -157,6 +169,10 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
 
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+  logSectionHeap("createSectionFile:start", localPath.c_str());
+#endif
+
   // Create cache directory if it doesn't exist
   {
     const auto sectionsDir = epub->getCachePath() + "/sections";
@@ -219,6 +235,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       if (!cssParser->loadFromCache()) {
         LOG_ERR("SCT", "Failed to load CSS from cache");
       }
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+      logSectionHeap("createSectionFile:after_css_load", localPath.c_str());
+#endif
     }
   }
 
@@ -243,7 +262,13 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
       },
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser);
   Hyphenator::setPreferredLanguage(epub->getLanguage());
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+  logSectionHeap("createSectionFile:before_parse", localPath.c_str());
+#endif
   success = visitor.parseAndBuildPages();
+#if defined(SIMULATOR) && defined(SIMULATOR_DEBUG_SECTION)
+  logSectionHeap("createSectionFile:after_parse", localPath.c_str());
+#endif
 
   Storage.remove(tmpHtmlPath.c_str());
   if (!success) {
