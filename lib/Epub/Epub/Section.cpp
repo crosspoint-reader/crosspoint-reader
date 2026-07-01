@@ -397,6 +397,18 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   return std::nullopt;
 }
 
+std::optional<uint16_t> Section::getTocStartPage(int tocIndex) const {
+  return tocBoundaryCache.getTocStartPage(tocIndex);
+}
+
+// For better performance, this method assumes TOC entries belonging to the
+// same spine are contiguous in the TOC list and are strictly in reading (page)
+// order. This is not guaranteed to be true in epubs but assuming this avoids
+// scanning the entire TOC.
+int Section::getTocIndexForPage(const int pageInSpine) const {
+  return tocBoundaryCache.getTocIndexForPage(pageInSpine);
+}
+
 std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex) const {
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
@@ -514,4 +526,99 @@ std::optional<uint16_t> Section::getPageForListItemIndex(const uint16_t liIndex)
   }
 
   return resultPage;
+}
+
+void Section::getChapterProgress(int& chapterPageOut, int& chapterPageCountOut) const {
+  const int tocIndex = getTocIndexForPage(currentPage);
+
+  // If there is no TOC entry for this page (e.g. front matter), fallback to
+  // spine page progress.
+  if (tocIndex == -1) {
+    chapterPageOut = currentPage;
+    chapterPageCountOut = pageCount;
+    return;
+  }
+
+  if (auto entry = tocBoundaryCache.getEntry(tocIndex)) {
+    if (entry->metrics) {
+      chapterPageOut = currentPage + entry->metrics->offset;
+      chapterPageCountOut = entry->metrics->totalPages;
+      return;
+    }
+  }
+
+  // Convenience methods to get data from either this section or the requested spine.
+  auto getSpinePageCount = [&](int s) -> int {
+    if (s == spineIndex) return pageCount;
+    Section tempSec(epub, s, renderer);
+    return tempSec.getCachedPageCount().value_or(1);
+  };
+
+  auto getSpineAnchorPage = [&](int s, int tIdx) -> int {
+    if (s == spineIndex) return getTocStartPage(tIdx).value_or(0);
+    Section tempSec(epub, s, renderer);
+    return tempSec.getTocStartPage(tIdx).value_or(0);
+  };
+
+  // --- 1. Find the bounds of the chapter ---
+  // A chapter starts at the anchor of the current TOC entry (which may be in
+  // an earlier spine). It ends at the anchor of the NEXT TOC entry (which may
+  // be in a later spine).
+  const auto startTocEntry = epub->getTocItem(tocIndex);
+  const int startSpine = startTocEntry.spineIndex;
+  const int startPageInSpine = getSpineAnchorPage(startSpine, tocIndex);
+
+  int endSpine = epub->getSpineItemsCount() - 1;
+  int endPageInSpine = 0;
+
+  if (tocIndex + 1 < epub->getTocItemsCount()) {
+    const auto nextTocEntry = epub->getTocItem(tocIndex + 1);
+    endSpine = nextTocEntry.spineIndex;
+    endPageInSpine = getSpineAnchorPage(endSpine, tocIndex + 1);
+  } else {
+    endPageInSpine = getSpinePageCount(endSpine);
+  }
+
+  // --- 2. Calculate total pages and current page offset ---
+  // The offset represents the number of pages from the start of the chapter to
+  // the start of the *current* spine file. This makes calculating the current
+  // chapter page progress an O(1) operation: `chapterPage = offset + currentPage`.
+  int totalPages = 0;
+  int offset = 0;
+
+  if (startSpine == endSpine) {
+    // Multi-chapter spine: The chapter starts and ends in the same spine.
+    totalPages = endPageInSpine - startPageInSpine;
+    if (spineIndex == startSpine) {
+      offset = -startPageInSpine;
+    }
+  } else {
+    // Multi-spine chapter: The chapter spans across multiple spine files.
+    // Sum the pages in the starting spine, any intermediate spines, and the ending spine.
+    int startSpineTotal = getSpinePageCount(startSpine);
+    int pagesFromStartSpine = startSpineTotal - startPageInSpine;
+
+    totalPages += pagesFromStartSpine;
+    if (spineIndex == startSpine) {
+      offset = -startPageInSpine;
+    } else {
+      offset += pagesFromStartSpine;
+    }
+
+    for (int s = startSpine + 1; s < endSpine; ++s) {
+      int sPages = getSpinePageCount(s);
+      totalPages += sPages;
+      if (s < spineIndex) {
+        offset += sPages;
+      }
+    }
+    totalPages += endPageInSpine;
+  }
+
+  if (auto entry = tocBoundaryCache.getEntry(tocIndex)) {
+    entry->metrics = TocBoundaryCache::ChapterMetrics{offset, std::max(1, totalPages)};
+  }
+
+  chapterPageOut = offset + currentPage;
+  chapterPageCountOut = std::max(1, totalPages);
 }
