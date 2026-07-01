@@ -373,6 +373,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
+  // Skip sub-pixel font-size elements (such as <span style="font-size:1px;">).
+  if (cssStyle.hasFontSize()) {
+    const CssLength& fs = cssStyle.fontSize;
+    const bool tinyPx = (fs.unit == CssUnit::Pixels && fs.value <= 1.0f);
+    const bool tinyEm = ((fs.unit == CssUnit::Em || fs.unit == CssUnit::Rem) && fs.value <= 0.0625f);
+    if (tinyPx || tinyEm) {
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
+  }
+
   // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
   if (strcmp(name, "table") == 0) {
     // skip nested tables

@@ -81,6 +81,7 @@ struct CssPropertyFlags {
   uint16_t display : 1;
   uint16_t direction : 1;
   uint16_t verticalAlign : 1;
+  uint16_t fontSize : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -100,23 +101,24 @@ struct CssPropertyFlags {
         imageWidth(0),
         display(0),
         direction(0),
-        verticalAlign(0) {}
+        verticalAlign(0),
+        fontSize(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
-           imageWidth || display || direction || verticalAlign;
+           imageWidth || display || direction || verticalAlign || fontSize;
   }
 
   void clearAll() {
     textAlign = fontStyle = fontWeight = textDecoration = textIndent = 0;
     marginTop = marginBottom = marginLeft = marginRight = 0;
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
-    imageHeight = imageWidth = display = direction = verticalAlign = 0;
+    imageHeight = imageWidth = display = direction = verticalAlign = fontSize = 0;
   }
 };
 
-// Cache serializes defined flags as uint32_t with bit indices 0..17.
+// Cache serializes defined flags as uint32_t with bit indices 0..18.
 static_assert(sizeof(CssPropertyFlags) <= sizeof(uint32_t),
               "CssPropertyFlags exceeds 32 bits; update cache read/write in CssParser.cpp");
 
@@ -141,6 +143,7 @@ struct CssStyle {
   CssLength paddingRight;   // Padding right
   CssLength imageHeight;    // Height for img (e.g. 2em) – width derived from aspect ratio when only height set
   CssLength imageWidth;     // Width for img when both or only width set
+  CssLength fontSize;       // font-size (used to detect sub-pixel invisible text)
   CssDisplay display = CssDisplay::Block;                       // display property (Block or None)
   CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align (super/sub positioning)
 
@@ -209,6 +212,10 @@ struct CssStyle {
       imageWidth = base.imageWidth;
       defined.imageWidth = 1;
     }
+    if (base.hasFontSize()) {
+      fontSize = base.fontSize;
+      defined.fontSize = 1;
+    }
     if (base.hasDisplay()) {
       display = base.display;
       defined.display = 1;
@@ -238,6 +245,7 @@ struct CssStyle {
   [[nodiscard]] bool hasPaddingRight() const { return defined.paddingRight; }
   [[nodiscard]] bool hasImageHeight() const { return defined.imageHeight; }
   [[nodiscard]] bool hasImageWidth() const { return defined.imageWidth; }
+  [[nodiscard]] bool hasFontSize() const { return defined.fontSize; }
   [[nodiscard]] bool hasDisplay() const { return defined.display; }
   [[nodiscard]] bool hasDirection() const { return defined.direction; }
   [[nodiscard]] bool hasVerticalAlign() const { return defined.verticalAlign; }
@@ -251,7 +259,7 @@ struct CssStyle {
     textIndent = CssLength{};
     marginTop = marginBottom = marginLeft = marginRight = CssLength{};
     paddingTop = paddingBottom = paddingLeft = paddingRight = CssLength{};
-    imageHeight = imageWidth = CssLength{};
+    imageHeight = imageWidth = fontSize = CssLength{};
     display = CssDisplay::Block;
     verticalAlign = CssVerticalAlign::Baseline;
     defined.clearAll();
