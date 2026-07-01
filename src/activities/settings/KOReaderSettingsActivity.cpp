@@ -13,9 +13,9 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+constexpr int MENU_ITEMS = 6;
+const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL,
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_AUTHENTICATE};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -98,6 +98,11 @@ void KOReaderSettingsActivity::handleSelection() {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (selectedIndex == 4) {
+    // Send Metadata - toggle on/off
+    KOREADER_STORE.setSendMetadata(!KOREADER_STORE.getSendMetadata());
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (selectedIndex == 5) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -136,6 +141,8 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
           return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
+          return KOREADER_STORE.getSendMetadata() ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
+        } else if (index == 5) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));
