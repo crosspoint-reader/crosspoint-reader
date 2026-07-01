@@ -5,6 +5,8 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <esp_sntp.h>
+#include <time.h>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -237,7 +239,6 @@ void WifiSelectionActivity::checkConnectionStatus() {
   const wl_status_t status = WiFi.status();
 
   if (status == WL_CONNECTED) {
-    // Successfully connected
     IPAddress ip = WiFi.localIP();
     char ipStr[16];
     snprintf(ipStr, sizeof(ipStr), "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
@@ -251,6 +252,29 @@ void WifiSelectionActivity::checkConnectionStatus() {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();
+      }
+    }
+
+    // Sync the system clock so files written this session get real FAT timestamps
+    // (file browser date sort). The RTC sync above only covers X3 devices on their
+    // first-ever connect; this covers everything else, once per boot. Bounded wait,
+    // same pattern as HalClock::syncFromNTP.
+    constexpr time_t MIN_VALID_TIME = 1577836800;  // 2020-01-01; system clock below this = never synced
+    if (time(nullptr) < MIN_VALID_TIME) {
+      configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
+      constexpr int maxRetries = 50;  // 5 seconds max (50 × 100 ms)
+      int retry = 0;
+      while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && retry < maxRetries) {
+        delay(100);
+        retry++;
+      }
+      if (retry < maxRetries) {
+        LOG_DBG("WIFI", "System clock synced from NTP");
+        // Persist to the X3 RTC (incl. date) so the next boot starts with a
+        // valid clock; no-op on RTC-less devices or if the sync failed
+        halClock.setFromSystemTime();
+      } else {
+        LOG_DBG("WIFI", "NTP sync timeout, continuing without time sync");
       }
     }
 

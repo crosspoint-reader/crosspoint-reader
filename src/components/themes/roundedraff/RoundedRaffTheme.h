@@ -73,6 +73,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 
 class RoundedRaffTheme : public BaseTheme {
  public:
+  int getListPageItems(int contentHeight, bool hasSubtitle) const override;
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                   const char* subtitle = nullptr) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
