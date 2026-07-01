@@ -1,6 +1,8 @@
 #pragma once
 #include <WString.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -41,6 +43,12 @@ bool hasGifExtension(std::string_view fileName);
 inline bool hasGifExtension(const String& fileName) {
   return hasGifExtension(std::string_view{fileName.c_str(), fileName.length()});
 }
+
+// Detect a decodable image format from a file's leading magic bytes.
+// Returns a canonical extension (".jpg" or ".png") for formats the reader can
+// decode, or "" if the bytes match no supported format. Used to render EPUB
+// images that are referenced without a (correct) file extension.
+std::string detectImageExtFromMagic(const uint8_t* data, size_t len);
 
 // Check for .epub extension (case-insensitive)
 bool hasEpubExtension(std::string_view fileName);
