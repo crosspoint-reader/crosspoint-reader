@@ -137,8 +137,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
     }
 
-    // Sort item index for binary search if we have enough items
-    if (self->itemIndex.size() >= LARGE_SPINE_THRESHOLD) {
+    // Sort the (unconditionally-built) item index so every idref lookup uses binary
+    // search. Without this, small/medium manifests fell back to an O(spine × manifest)
+    // linear rescan of .items.bin per itemref (up to ~200ms/item at large scale).
+    if (!self->itemIndex.empty()) {
       std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
         return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
       });
@@ -284,9 +286,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
               ++it;
             }
           } else {
-            // Slow path: linear scan (for small manifests, keeps original behavior)
-            // TODO: This lookup is slow as need to scan through all items each time.
-            //       It can take up to 200ms per item when getting to 1500 items.
+            // Fallback linear scan, only reached when the index is empty (no manifest
+            // items). The fast binary-search path above is used for all real manifests.
             self->tempItemStore.seek(0);
             std::string itemId;
             while (self->tempItemStore.available()) {
