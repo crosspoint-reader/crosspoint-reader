@@ -35,6 +35,12 @@ is2Bit = args.is2Bit
 size = args.size
 font_name = args.name
 load_flags = freetype.FT_LOAD_RENDER
+if not is2Bit:
+    # 1-bit fonts: rasterise with FreeType's native monochrome renderer (hinted,
+    # drop-out controlled) instead of rendering antialiased grey and thresholding.
+    # Produces crisper, evenly-weighted stems at small UI sizes. Still 1 bit/pixel,
+    # so glyph metrics and bitmap size are unchanged.
+    load_flags |= freetype.FT_LOAD_TARGET_MONO
 if args.force_autohint:
     load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
 
@@ -275,24 +281,24 @@ for i_start, i_end in intervals:
         face = load_glyph(code_point)
         bitmap = face.glyph.bitmap
 
-        # Build out 4-bit greyscale bitmap
-        pixels4g = []
-        px = 0
-        for i, v in enumerate(bitmap.buffer):
-            y = i / bitmap.width
-            x = i % bitmap.width
-            if x % 2 == 0:
-                px = (v >> 4)
-            else:
-                px = px | (v & 0xF0)
-                pixels4g.append(px);
-                px = 0
-            # eol
-            if x == bitmap.width - 1 and bitmap.width % 2 > 0:
-                pixels4g.append(px)
-                px = 0
-
         if is2Bit:
+            # Build out 4-bit greyscale bitmap
+            pixels4g = []
+            px = 0
+            for i, v in enumerate(bitmap.buffer):
+                y = i / bitmap.width
+                x = i % bitmap.width
+                if x % 2 == 0:
+                    px = (v >> 4)
+                else:
+                    px = px | (v & 0xF0)
+                    pixels4g.append(px)
+                    px = 0
+                # eol
+                if x == bitmap.width - 1 and bitmap.width % 2 > 0:
+                    pixels4g.append(px)
+                    px = 0
+
             # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
             # Downsample to 2-bit bitmap
             pixels2b = []
@@ -328,15 +334,18 @@ for i_start, i_end in intervals:
             #     print(line)
             # print('')
         else:
-            # Downsample to 1-bit bitmap - treat any 2+ as black
+            # 1-bit: FreeType already rasterised this glyph in monochrome
+            # (FT_LOAD_TARGET_MONO), so every source pixel is a single bit in a
+            # row-padded, MSB-first buffer. Repack it into the firmware's
+            # continuous (non-row-padded) 1-bit bitstream.
             pixelsbw = []
             px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
+            src_pitch = abs(bitmap.pitch)
             for y in range(bitmap.rows):
                 for x in range(bitmap.width):
-                    px = px << 1
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+                    src_byte = bitmap.buffer[y * src_pitch + (x >> 3)]
+                    bit = (src_byte >> (7 - (x & 7))) & 1
+                    px = (px << 1) | bit
 
                     if (y * bitmap.width + x) % 8 == 7:
                         pixelsbw.append(px)
