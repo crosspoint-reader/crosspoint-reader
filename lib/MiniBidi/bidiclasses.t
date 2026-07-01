@@ -1,4 +1,4 @@
-/* bidiclasses.t — bidi class table for CrossPoint Hebrew/English epub.
+/* bidiclasses.t — bidi class table for CrossPoint epub rendering.
  *
  * Coverage rationale:
  *   Hebrew + English is the primary target. However, CrossPoint renders
@@ -6,11 +6,14 @@
  *   classified as L (not fall through to ON) to avoid regression when they
  *   appear adjacent to Hebrew runs.
  *
- *   Scripts NOT in this table fall through to ON — correct per UAX#9 for
- *   scripts CrossPoint's fonts don't support (CJK, Arabic, Devanagari, etc.)
- *   ON is the right class for "unknown" — it behaves neutrally.
+ *   Arabic is fully classified (AL, NSM, AN) to enable correct RTL
+ *   reordering and Arabic joining via ArabicShaper.  The Arabic Presentation
+ *   Forms (U+FB50-U+FDFF, U+FE70-U+FEFE) produced by ArabicShaper are also
+ *   classified as AL so that do_bidi() places them in the right visual order.
  *
- * Entries sorted ascending by first (binary search requirement).
+ *   Scripts NOT in this table fall through to ON — correct per UAX#9.
+ *
+ * Entries MUST be sorted ascending by first (binary search requirement).
  */
 
 /* ── ASCII C0 controls ────────────────────────────────────────────────── */
@@ -84,6 +87,57 @@
 {0x05D0, 0x05EA, R},    /* alef … tav */
 {0x05F0, 0x05F4, R},    /* alternative forms + geresh/gershayim */
 
+/* ── Arabic ──────────────────────────────────────────────────────────── */
+/* All entries below are ordered ascending by first. */
+
+/* Arabic number sign / sign sanah / footnote marker / sign safha (AN) */
+{0x0600, 0x0605, AN},
+/* Arabic extended non-spacing marks (harakat, shadda, ...)
+   0x0606-0x060F fall through to ON (not letter/diacritic/number). */
+{0x0610, 0x061A, NSM},
+/* Arabic Letter Mark: BN per UAX#9 (invisible direction mark) */
+{0x061C, 0x061C, BN},
+/* Core Arabic letters: hamza (U+0620) through ghain (U+063F) */
+{0x0620, 0x063F, AL},
+/* Tatweel (U+0640) + Arabic letters fa through yeh (U+0641-U+064A) */
+{0x0640, 0x064A, AL},
+/* Arabic harakat / diacritics: transparent non-spacing marks */
+{0x064B, 0x065F, NSM},
+/* Arabic-Indic digits */
+{0x0660, 0x0669, AN},
+/* Arabic percent sign */
+{0x066A, 0x066A, ET},
+/* Arabic decimal separator + thousands separator (AN) */
+{0x066B, 0x066C, AN},
+/* Arabic five-pointed star + dotless letters */
+{0x066D, 0x066F, AL},
+/* Arabic superscript alef (non-spacing mark used over alef variants) */
+{0x0670, 0x0670, NSM},
+/* Extended Arabic letters (Persian/Urdu/Pashto): U+0671-U+06D5 */
+{0x0671, 0x06D5, AL},
+/* Quranic combined annotation marks (NSM) */
+{0x06D6, 0x06DC, NSM},
+/* End of Ayah (AN per UAX#9) */
+{0x06DD, 0x06DD, AN},
+/* Start of Rub el Hizb (ON) */
+{0x06DE, 0x06DE, ON},
+/* Quranic non-spacing marks */
+{0x06DF, 0x06E4, NSM},
+/* Arabic small medial Waw / Yeh */
+{0x06E5, 0x06E6, AL},
+/* Quranic non-spacing marks */
+{0x06E7, 0x06E8, NSM},
+/* Arabic place of sajdah (ON) */
+{0x06E9, 0x06E9, ON},
+/* Remaining Quranic non-spacing marks */
+{0x06EA, 0x06ED, NSM},
+/* Extended Arabic letters (Waw/Yeh variants) */
+{0x06EE, 0x06EF, AL},
+/* Extended Arabic-Indic digits */
+{0x06F0, 0x06F9, AN},
+/* Remaining extended Arabic letters through U+06FF */
+{0x06FA, 0x06FF, AL},
+
 /* ── Latin Extended Additional (L) ─────────────────────────────────── */
 /* Covers accented chars for Vietnamese, Welsh, Romanian, etc.
    Not currently rendered by CrossPoint fonts, but costs only 2 table rows. */
@@ -110,6 +164,17 @@
 {0x2069, 0x2069, PDI},
 {0x206A, 0x206F, BN},
 
+/* ── Arabic Presentation Forms-A (U+FB50-U+FDFF) ───────────────────── */
+/* Emitted by ArabicShaper for extended Arabic (Persian/Urdu/Pashto).
+   Must be AL so do_bidi() reorders them correctly as RTL script.
+   U+FD3E/FD3F (ornate parentheses) would ideally be ON, but they're
+   uncommon in EPUBs and a single range is simpler on this microcontroller. */
+{0xFB50, 0xFDFD, AL},
+
+/* ── Arabic Presentation Forms-B (U+FE70-U+FEFE) ───────────────────── */
+/* Emitted by ArabicShaper for standard Arabic letters. Must be AL.
+   U+FEFF (BOM) is listed separately below as BN. */
+{0xFE70, 0xFEFE, AL},
 
 /* ── Byte Order Mark ────────────────────────────────────────────────── */
 {0xFEFF, 0xFEFF, BN},
