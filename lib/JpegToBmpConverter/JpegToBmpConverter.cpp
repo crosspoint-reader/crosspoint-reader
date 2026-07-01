@@ -640,20 +640,20 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
 
   if (oneBit) {
     ctx.atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(outWidth);
-    if (!ctx.atkinson1BitDitherer) {
+    if (!ctx.atkinson1BitDitherer || !ctx.atkinson1BitDitherer->isValid()) {
       LOG_ERR("JPG", "OOM: Atkinson1BitDitherer");
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
       ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-      if (!ctx.atkinsonDitherer) {
+      if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
         LOG_ERR("JPG", "OOM: AtkinsonDitherer");
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
       ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
-      if (!ctx.fsDitherer) {
+      if (!ctx.fsDitherer || !ctx.fsDitherer->isValid()) {
         LOG_ERR("JPG", "OOM: FloydSteinbergDitherer");
         return false;
       }
