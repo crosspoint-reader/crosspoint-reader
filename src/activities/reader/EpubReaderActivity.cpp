@@ -351,6 +351,19 @@ void EpubReaderActivity::loop() {
           }
         }
         break;
+      case CrossPointSettings::LP_MENU_FOOTNOTES:
+        // Hold ~0.4s jumps to the current page's footnote(s) (or returns from one). ignoreNext-
+        // ConfirmRelease latches this to fire once per hold (it stays set until the button is
+        // released), otherwise loop() would re-toggle every iteration while the button is held.
+        // When the page has no footnotes, fall through so the normal Confirm-release still opens
+        // the reader menu.
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !ignoreNextConfirmRelease &&
+            (footnoteDepth > 0 || !currentPageFootnotes.empty())) {
+          ignoreNextConfirmRelease = true;  // one-shot latch + suppress menu open on release
+          openOrToggleFootnotes();
+          return;
+        }
+        break;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
         break;
@@ -380,23 +393,7 @@ void EpubReaderActivity::loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
       mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (footnoteDepth > 0) {
-      restoreSavedPosition();
-    } else {
-      if (currentPageFootnotes.size() == 1) {
-        navigateToHref(currentPageFootnotes[0].href, true);
-      } else if (currentPageFootnotes.size() > 1) {
-        startActivityForResult(
-            std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                navigateToHref(footnoteResult.href, true);
-              }
-              requestUpdate();
-            });
-      }
-    }
+    openOrToggleFootnotes();
     return;
   }
 
@@ -529,6 +526,23 @@ void EpubReaderActivity::jumpToPercent(int percent) {
     nextPageNumber = 0;
     pendingPercentJump = true;
     section.reset();
+  }
+}
+
+void EpubReaderActivity::openOrToggleFootnotes() {
+  if (footnoteDepth > 0) {
+    restoreSavedPosition();
+  } else if (currentPageFootnotes.size() == 1) {
+    navigateToHref(currentPageFootnotes[0].href, true);
+  } else if (currentPageFootnotes.size() > 1) {
+    startActivityForResult(std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               const auto& footnoteResult = std::get<FootnoteResult>(result.data);
+                               navigateToHref(footnoteResult.href, true);
+                             }
+                             requestUpdate();
+                           });
   }
 }
 
