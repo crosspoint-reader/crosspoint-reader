@@ -1120,7 +1120,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                         : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+        [self](const std::shared_ptr<TextBlock>& textBlock, const ExtractedLineMeta lineMeta) {
+          self->addLineToPage(textBlock, lineMeta);
+        },
+        false);
   }
 }
 
@@ -1193,8 +1196,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
-      int wordIndex =
-          self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
+      int wordIndex = self->wordsExtractedInBlock +
+                      (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->originalWordCount()) : 0);
       self->pendingFootnotes.push_back({wordIndex, entry});
     }
     self->insideFootnoteLink = false;
@@ -1357,7 +1360,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return true;
 }
 
-void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
+void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const ExtractedLineMeta lineMeta) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
@@ -1372,8 +1375,10 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
-  wordsExtractedInBlock += line->wordCount();
+  // Track cumulative ORIGINAL words to assign footnotes to the page containing their anchor.
+  // Counting original words (not laid-out words) keeps the index aligned with the footnote
+  // word index captured at parse time, even when hyphenation splits words across lines.
+  wordsExtractedInBlock += static_cast<int>(lineMeta.originalWordCount);
   auto footnoteIt = pendingFootnotes.begin();
   while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
     currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
@@ -1416,7 +1421,9 @@ void ChapterHtmlSlimParser::makePages() {
 
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+      [this](const std::shared_ptr<TextBlock>& textBlock, const ExtractedLineMeta lineMeta) {
+        addLineToPage(textBlock, lineMeta);
+      });
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

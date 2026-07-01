@@ -276,6 +276,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
     wordIsFocusSuffix.push_back(isFocusSuffix);
+    wordIsHyphenRemainder.push_back(false);
   };
 
   bool effectiveAttachToPrevious = attachToPrevious;
@@ -347,6 +348,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
     wordIsFocusSuffix.reserve(newCapacity);
+    wordIsHyphenRemainder.reserve(newCapacity);
   }
 
   // Lambda helper to process and push individual sub-segments of the string
@@ -359,6 +361,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordContinues.push_back(attach);
       wordNoSpaceBefore.push_back(noSpaceBefore);
       wordIsFocusSuffix.push_back(false);
+      wordIsHyphenRemainder.push_back(false);
     } else {
       size_t charCount = 0;
       const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
@@ -381,6 +384,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
+        wordIsHyphenRemainder.push_back(false);
       } else {
         countPtr = reinterpret_cast<const unsigned char*>(segment.data());
         for (size_t i = 0; i < targetBoldChars; ++i) {
@@ -394,6 +398,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
+        wordIsHyphenRemainder.push_back(false);
 
         // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
         words.emplace_back(segment.substr(splitByteOffset));
@@ -401,6 +406,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(true);
         wordNoSpaceBefore.push_back(false);
         wordIsFocusSuffix.push_back(true);
+        wordIsHyphenRemainder.push_back(false);
       }
     }
   };
@@ -462,10 +468,21 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
   }
   return 0;
 }
+
+size_t ParsedText::originalWordCount() const {
+  size_t count = 0;
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (!wordIsHyphenRemainder[i] && !wordIsFocusSuffix[i]) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 // Consumes data to minimize memory usage
-void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
-                                       const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
-                                       const bool includeLastLine) {
+void ParsedText::layoutAndExtractLines(
+    const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
+    const std::function<void(std::shared_ptr<TextBlock>, ExtractedLineMeta)>& processLine, const bool includeLastLine) {
   if (words.empty()) {
     return;
   }
@@ -530,6 +547,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
+    wordIsHyphenRemainder.erase(wordIsHyphenRemainder.begin(), wordIsHyphenRemainder.begin() + consumed);
   }
 }
 
@@ -791,6 +809,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
   // The hyphen remainder is not a focus suffix - it starts fresh on the next line.
   wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, false);
+  // The remainder is a layout-time split of an original word, not an original word itself.
+  wordIsHyphenRemainder.insert(wordIsHyphenRemainder.begin() + wordIndex + 1, true);
 
   // Continuation flag handling after splitting a word into prefix + remainder.
   //
@@ -825,11 +845,19 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
                              const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                              const std::vector<size_t>& lineBreakIndices,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                             const std::function<void(std::shared_ptr<TextBlock>, ExtractedLineMeta)>& processLine,
                              const GfxRenderer& renderer, const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
+
+  // originalWordCount is order-independent, so it is computed from the source arrays before any RTL reordering.
+  size_t originalWordCount = 0;
+  for (size_t i = 0; i < lineWordCount; ++i) {
+    if (!wordIsHyphenRemainder[lastBreakAt + i] && !wordIsFocusSuffix[lastBreakAt + i]) {
+      ++originalWordCount;
+    }
+  }
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 
@@ -1134,7 +1162,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit) {
     processLine(std::make_shared<TextBlock>(std::move(lineWords), std::move(lineXPos), std::move(lineWordStyles),
-                                            std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle));
+                                            std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle),
+                ExtractedLineMeta{originalWordCount});
     return;
   }
 
@@ -1180,5 +1209,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   }
 
   processLine(std::make_shared<TextBlock>(std::move(outWords), std::move(outXPos), std::move(outStyles),
-                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle));
+                                          std::move(outBoundaries), std::move(outSuffixX), blockStyle),
+              ExtractedLineMeta{originalWordCount});
 }
