@@ -98,7 +98,7 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
-  void flushPendingAnchor();
+  void flushPendingAnchor(const BlockStyle& anchoredBlockStyle = BlockStyle{});
   void flushPartWordBuffer();
   void makePages();
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);

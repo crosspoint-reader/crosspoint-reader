@@ -140,7 +140,7 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   }
 }
 
-void ChapterHtmlSlimParser::flushPendingAnchor() {
+void ChapterHtmlSlimParser::flushPendingAnchor(const BlockStyle& anchoredBlockStyle) {
   if (pendingAnchorId.empty()) return;
 
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
@@ -154,8 +154,29 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     }
   }
 
-  // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+  // Record deferred anchor after previous block is flushed (and any TOC page break).
+  //
+  // The anchor target is the page where the content *following* the anchor begins. If the
+  // current page is already full, the next line will overflow onto a fresh page (see
+  // addLineToPage), so the anchor must point there. Without this, an anchor whose preceding
+  // content exactly fills a page resolves one page early (e.g. footnote n_2 landing on n_1's
+  // page when note 1 fills the page exactly).
+  //
+  // Include the anchored block's top spacing: makePages() applies marginTop/paddingTop
+  // before the first line (positive values only), which can push content onto the next page.
+  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  int topSpacing = 0;
+  if (anchoredBlockStyle.marginTop > 0) {
+    topSpacing += anchoredBlockStyle.marginTop;
+  }
+  if (anchoredBlockStyle.paddingTop > 0) {
+    topSpacing += anchoredBlockStyle.paddingTop;
+  }
+  uint16_t anchorPage = static_cast<uint16_t>(completedPageCount);
+  if (currentPage && !currentPage->elements.empty() && currentPageNextY + topSpacing + lineHeight > viewportHeight) {
+    anchorPage = static_cast<uint16_t>(completedPageCount + 1);
+  }
+  anchorData.push_back({std::move(pendingAnchorId), anchorPage});
   pendingAnchorId.clear();
 }
 
@@ -204,7 +225,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       const auto style = currentTextBlock->getBlockStyle();
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
 
-      flushPendingAnchor();
+      flushPendingAnchor(currentTextBlock->getBlockStyle());
       return;
     }
 
@@ -212,7 +233,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   }
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
-  flushPendingAnchor();
+  flushPendingAnchor(blockStyle);
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
 }
