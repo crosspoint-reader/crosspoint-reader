@@ -44,6 +44,9 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
+  // Install hooks fired around long e-ink BUSY waits (see EInkDisplay::setBusyWaitHooks)
+  void setBusyWaitHooks(void (*beginHook)(), void (*endHook)());
+
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 

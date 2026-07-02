@@ -26,6 +26,7 @@ class HalPowerManager {
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  bool busyWaitLowClock = false;          // Set/cleared only by the render task (see onEinkBusyWait*)
 
  public:
   static constexpr int LOW_POWER_FREQ = 10;  // MHz
@@ -54,6 +55,15 @@ class HalPowerManager {
   // active, or USB is connected (light sleep kills the CDC link). The caller must
   // fall back to delay() in that case.
   bool lightSleep(const HalGPIO& gpio) const;
+
+  // E-ink BUSY-wait hooks (installed on EInkDisplay via HalDisplay): during a
+  // refresh the render task only polls the BUSY pin for 0.3-2 s, so drop the CPU
+  // clock for the wait and restore it after. Deliberately raw setCpuFrequencyMhz,
+  // NOT setPowerSaving(): the render task holds a Lock (mode != None) which blocks
+  // setPowerSaving, and isLowPower must stay false so input-driven
+  // setPowerSaving(false) calls stay no-ops during the wait.
+  void onEinkBusyWaitBegin();
+  void onEinkBusyWaitEnd();
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;

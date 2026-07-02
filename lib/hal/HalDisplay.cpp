@@ -75,6 +75,10 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
+void HalDisplay::setBusyWaitHooks(void (*beginHook)(), void (*endHook)()) {
+  einkDisplay.setBusyWaitHooks(beginHook, endHook);
+}
+
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {

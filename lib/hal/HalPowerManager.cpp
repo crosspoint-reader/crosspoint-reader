@@ -145,6 +145,30 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   return true;
 }
 
+void HalPowerManager::onEinkBusyWaitBegin() {
+  if (normalFreq <= 0) {
+    return;
+  }
+  // Same exclusions as setPowerSaving()/lightSleep(): a low clock breaks an
+  // active WiFi association and an enumerated USB-CDC link.
+  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
+    return;
+  }
+  if (setCpuFrequencyMhz(LOW_POWER_FREQ)) {
+    busyWaitLowClock = true;
+  }
+}
+
+void HalPowerManager::onEinkBusyWaitEnd() {
+  if (!busyWaitLowClock) {
+    return;
+  }
+  busyWaitLowClock = false;
+  if (!setCpuFrequencyMhz(normalFreq)) {
+    LOG_ERR("PWR", "Failed to restore CPU frequency after busy wait");
+  }
+}
+
 uint16_t HalPowerManager::getBatteryPercentage() const {
   if (_batteryUseI2C) {
     const unsigned long now = millis();
