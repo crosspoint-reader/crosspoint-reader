@@ -10,7 +10,11 @@ OpdsParser::OpdsParser() {
   if (!parser) {
     errorOccured = true;
     LOG_DBG("OPDS", "Couldn't allocate memory for parser");
+    return;
   }
+  XML_SetUserData(parser, this);
+  XML_SetElementHandler(parser, startElement, endElement);
+  XML_SetCharacterDataHandler(parser, characterData);
 }
 
 OpdsParser::~OpdsParser() { destroyXmlParser(parser); }
@@ -19,10 +23,6 @@ size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 
 size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
   if (errorOccured) return length;
-
-  XML_SetUserData(parser, this);
-  XML_SetElementHandler(parser, startElement, endElement);
-  XML_SetCharacterDataHandler(parser, characterData);
 
   const char* currentPos = reinterpret_cast<const char*>(xmlData);
   size_t remaining = length;
@@ -54,6 +54,7 @@ size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
 }
 
 void OpdsParser::flush() {
+  if (errorOccured || !parser) return;
   if (XML_Parse(parser, nullptr, 0, XML_TRUE) != XML_STATUS_OK) {
     errorOccured = true;
     destroyXmlParser(parser);
