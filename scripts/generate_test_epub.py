@@ -599,44 +599,44 @@ def main():
 <li>Cache performance</li>
 </ul>
 """), []),
-            ("1. JPEG Format", make_chapter("JPEG Format Test", """
+            ("1. JPEG Format", make_chapter("JPEG Format Test", f"""
 <p>Basic JPEG decoding test.</p>
 <img src="{image_src(JPEG_FORMAT_JPG)}" alt="JPEG format test"/>
 <p>If the image above is visible, JPEG decoding works.</p>
 """), single_image_asset(JPEG_FORMAT_JPG, images)),
-            ("2. Grayscale", make_chapter("Grayscale Test", """
+            ("2. Grayscale", make_chapter("Grayscale Test", f"""
 <p>Verify 4 distinct gray levels are visible.</p>
 <img src="{image_src(GRAYSCALE_TEST_JPG)}" alt="Grayscale test"/>
 """), single_image_asset(GRAYSCALE_TEST_JPG, images)),
-            ("3. Gradient", make_chapter("Gradient Test", """
+            ("3. Gradient", make_chapter("Gradient Test", f"""
 <p>Verify gradient quantizes to 4 bands.</p>
 <img src="{image_src(GRADIENT_TEST_JPG)}" alt="Gradient test"/>
 """), single_image_asset(GRADIENT_TEST_JPG, images)),
-            ("4. Centering", make_chapter("Centering Test", """
+            ("4. Centering", make_chapter("Centering Test", f"""
 <p>Verify image is centered horizontally.</p>
 <img src="{image_src(CENTERING_TEST_JPG)}" alt="Centering test"/>
 """), single_image_asset(CENTERING_TEST_JPG, images)),
-            ("5. Scaling", make_chapter("Scaling Test", """
+            ("5. Scaling", make_chapter("Scaling Test", f"""
 <p>This image is 1200x1500 pixels - larger than the screen.</p>
 <p>It should be scaled down to fit.</p>
 <img src="{image_src(SCALING_TEST_JPG)}" alt="Scaling test"/>
 """), single_image_asset(SCALING_TEST_JPG, images)),
-            ("6. Wide Scaling", make_chapter("Wide Scaling Test", """
+            ("6. Wide Scaling", make_chapter("Wide Scaling Test", f"""
 <p>This image is 1807x736 pixels - a wide landscape format.</p>
 <p>Tests scaling with dimensions that can cause cache mismatches.</p>
 <img src="{image_src(WIDE_SCALING_TEST_JPG)}" alt="Wide scaling test"/>
 """), single_image_asset(WIDE_SCALING_TEST_JPG, images)),
-            ("7. Cache Test A", make_chapter("Cache Test - Page A", """
+            ("7. Cache Test A", make_chapter("Cache Test - Page A", f"""
 <p>First cache test page. Note the load time.</p>
 <img src="{image_src(CACHE_TEST_1_JPG)}" alt="Cache test 1"/>
 <p>Navigate to next page, then come back.</p>
 """), single_image_asset(CACHE_TEST_1_JPG, images)),
-            ("8. Cache Test B", make_chapter("Cache Test - Page B", """
+            ("8. Cache Test B", make_chapter("Cache Test - Page B", f"""
 <p>Second cache test page.</p>
 <img src="{image_src(CACHE_TEST_2_JPG)}" alt="Cache test 2"/>
 <p>Navigate back to Page A - it should load faster from cache.</p>
 """), single_image_asset(CACHE_TEST_2_JPG, images)),
-            ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", """
+            ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", f"""
 <p>Tests that image centering does not bleed into following text blocks (issue #1026).</p>
 <p>Set Paragraph Alignment to Justify and Embedded Style to OFF before testing.</p>
 <p>All paragraphs below the images should be justified, not centered.</p>
@@ -664,44 +664,44 @@ def main():
 <li>Large image scaling</li>
 </ul>
 """), []),
-            ("1. PNG Format", make_chapter("PNG Format Test", """
+            ("1. PNG Format", make_chapter("PNG Format Test", f"""
 <p>Basic PNG decoding test.</p>
 <img src="{image_src(PNG_FORMAT_PNG)}" alt="PNG format test"/>
 <p>If the image above is visible and no crash occurred, PNG decoding works.</p>
 """), single_image_asset(PNG_FORMAT_PNG, images)),
-            ("2. Grayscale", make_chapter("Grayscale Test", """
+            ("2. Grayscale", make_chapter("Grayscale Test", f"""
 <p>Verify 4 distinct gray levels are visible.</p>
 <img src="{image_src(GRAYSCALE_TEST_PNG)}" alt="Grayscale test"/>
 """), single_image_asset(GRAYSCALE_TEST_PNG, images)),
-            ("3. Gradient", make_chapter("Gradient Test", """
+            ("3. Gradient", make_chapter("Gradient Test", f"""
 <p>Verify gradient quantizes to 4 bands.</p>
 <img src="{image_src(GRADIENT_TEST_PNG)}" alt="Gradient test"/>
 """), single_image_asset(GRADIENT_TEST_PNG, images)),
-            ("4. Centering", make_chapter("Centering Test", """
+            ("4. Centering", make_chapter("Centering Test", f"""
 <p>Verify image is centered horizontally.</p>
 <img src="{image_src(CENTERING_TEST_PNG)}" alt="Centering test"/>
 """), single_image_asset(CENTERING_TEST_PNG, images)),
-            ("5. Scaling", make_chapter("Scaling Test", """
+            ("5. Scaling", make_chapter("Scaling Test", f"""
 <p>This image is 1200x1500 pixels - larger than the screen.</p>
 <p>It should be scaled down to fit.</p>
 <img src="{image_src(SCALING_TEST_PNG)}" alt="Scaling test"/>
 """), single_image_asset(SCALING_TEST_PNG, images)),
-            ("6. Wide Scaling", make_chapter("Wide Scaling Test", """
+            ("6. Wide Scaling", make_chapter("Wide Scaling Test", f"""
 <p>This image is 1807x736 pixels - a wide landscape format.</p>
 <p>Tests scaling with dimensions that can cause cache mismatches.</p>
 <img src="{image_src(WIDE_SCALING_TEST_PNG)}" alt="Wide scaling test"/>
 """), single_image_asset(WIDE_SCALING_TEST_PNG, images)),
-            ("7. Cache Test A", make_chapter("Cache Test - Page A", """
+            ("7. Cache Test A", make_chapter("Cache Test - Page A", f"""
 <p>First cache test page. Note the load time.</p>
 <img src="{image_src(CACHE_TEST_1_PNG)}" alt="Cache test 1"/>
 <p>Navigate to next page, then come back.</p>
 """), single_image_asset(CACHE_TEST_1_PNG, images)),
-            ("8. Cache Test B", make_chapter("Cache Test - Page B", """
+            ("8. Cache Test B", make_chapter("Cache Test - Page B", f"""
 <p>Second cache test page.</p>
 <img src="{image_src(CACHE_TEST_2_PNG)}" alt="Cache test 2"/>
 <p>Navigate back to Page A - it should load faster from cache.</p>
 """), single_image_asset(CACHE_TEST_2_PNG, images)),
-            ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", """
+            ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", f"""
 <p>Tests that image centering does not bleed into following text blocks (issue #1026).</p>
 <p>Set Paragraph Alignment to Justify and Embedded Style to OFF before testing.</p>
 <p>All paragraphs below the images should be justified, not centered.</p>
@@ -722,15 +722,15 @@ def main():
 <p>This EPUB contains both JPEG and PNG images.</p>
 <p>Tests format detection and mixed rendering.</p>
 """), []),
-            ("1. JPEG Image", make_chapter("JPEG in Mixed EPUB", """
+            ("1. JPEG Image", make_chapter("JPEG in Mixed EPUB", f"""
 <p>This is a JPEG image:</p>
 <img src="{image_src(JPEG_FORMAT_JPG)}" alt="JPEG"/>
 """), single_image_asset(JPEG_FORMAT_JPG, images)),
-            ("2. PNG Image", make_chapter("PNG in Mixed EPUB", """
+            ("2. PNG Image", make_chapter("PNG in Mixed EPUB", f"""
 <p>This is a PNG image:</p>
 <img src="{image_src(PNG_FORMAT_PNG)}" alt="PNG"/>
 """), single_image_asset(PNG_FORMAT_PNG, images)),
-            ("3. Both Formats", make_chapter("Both Formats on One Page", """
+            ("3. Both Formats", make_chapter("Both Formats on One Page", f"""
 <p>JPEG image:</p>
 <img src="{image_src(GRAYSCALE_TEST_JPG)}" alt="JPEG grayscale"/>
 <p>PNG image:</p>
