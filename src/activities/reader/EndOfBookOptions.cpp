@@ -70,9 +70,18 @@ std::string EndOfBookOptions::fullPath(const size_t index) const {
 }
 
 EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManager& input, std::string* openPath) {
+  // Directional buttons follow the reader's page-turn semantics: press-triggered by
+  // default, release-triggered when a long-press behavior is configured (same rule as
+  // ReaderUtils::detectPageTurn). This matters on entry: with press-triggered turns, the
+  // press that turned the final page already fired in the reader, and its release must
+  // not double-fire into this menu (it would auto-open the first suggestion).
+  const bool usePress = SETTINGS.longPressButtonBehavior == CrossPointSettings::OFF;
+  const auto triggered = [&](const MappedInputManager::Button button) {
+    return usePress ? input.wasPressed(button) : input.wasReleased(button);
+  };
+
   // Confirm and the side page-forward button both open the current selection
-  if (input.wasReleased(MappedInputManager::Button::Confirm) ||
-      input.wasReleased(MappedInputManager::Button::PageForward)) {
+  if (input.wasReleased(MappedInputManager::Button::Confirm) || triggered(MappedInputManager::Button::PageForward)) {
     if (selector < static_cast<int>(names.size())) {
       if (openPath) {
         *openPath = fullPath(selector);
@@ -83,7 +92,7 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
   }
 
   // Side page-back returns to the last page of the book
-  if (input.wasReleased(MappedInputManager::Button::PageBack)) {
+  if (triggered(MappedInputManager::Button::PageBack)) {
     return Action::LastPage;
   }
 
@@ -99,11 +108,11 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
   const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
-  if (input.wasReleased(prevButton) && selector > 0) {
+  if (triggered(prevButton) && selector > 0) {
     selector--;
     return Action::Redraw;
   }
-  if (input.wasReleased(nextButton) && selector < itemCount - 1) {
+  if (triggered(nextButton) && selector < itemCount - 1) {
     selector++;
     return Action::Redraw;
   }
