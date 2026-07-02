@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 
 struct ZipInflateCtx {
   InflateReader reader;  // Must be first — callback casts uzlib_uncomp* to ZipInflateCtx*
@@ -245,7 +246,10 @@ bool ZipFile::loadZipDetails() {
   int foundOffset = -1;
   for (int i = scanRange - 22; i >= 0; i--) {
     constexpr uint32_t signature = 0x06054b50;
-    if (*reinterpret_cast<uint32_t*>(&buffer[i]) == signature) {
+    // RISC-V faults on unaligned multi-byte loads; &buffer[i] has no alignment guarantee
+    uint32_t candidate;
+    memcpy(&candidate, &buffer[i], sizeof(candidate));
+    if (candidate == signature) {
       foundOffset = i;
       break;
     }
@@ -261,8 +265,12 @@ bool ZipFile::loadZipDetails() {
   // Relative positions within EOCD:
   // Offset 10: Total number of entries (2 bytes)
   // Offset 16: Offset of start of central directory with respect to the starting disk number (4 bytes)
-  zipDetails.totalEntries = *reinterpret_cast<uint16_t*>(&buffer[foundOffset + 10]);
-  zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
+  uint16_t totalEntries;
+  uint32_t centralDirOffset;
+  memcpy(&totalEntries, &buffer[foundOffset + 10], sizeof(totalEntries));
+  memcpy(&centralDirOffset, &buffer[foundOffset + 16], sizeof(centralDirOffset));
+  zipDetails.totalEntries = totalEntries;
+  zipDetails.centralDirOffset = centralDirOffset;
   zipDetails.isSet = true;
 
   free(buffer);

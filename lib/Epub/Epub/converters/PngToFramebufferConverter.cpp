@@ -43,7 +43,13 @@ struct PngContext {
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
 // avoiding the need for global file state.
 void* pngOpenWithHandle(const char* filename, int32_t* size) {
-  HalFile* f = new HalFile();
+  // Raw nothrow allocation: ownership passes to the PNGdec C API, which hands
+  // the handle back to pngCloseWithHandle for delete.
+  HalFile* f = new (std::nothrow) HalFile();
+  if (!f) {
+    LOG_ERR("PNG", "OOM: HalFile alloc failed");
+    return nullptr;
+  }
   if (!Storage.openFileForRead("PNG", std::string(filename), *f)) {
     delete f;
     return nullptr;
