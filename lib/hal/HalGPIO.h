@@ -83,6 +83,10 @@ class HalGPIO {
   // Check if USB is connected
   bool isUsbConnected() const;
 
+  // USB state as sampled by the last update() call.
+  // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
+  bool isUsbConnectedCached() const { return lastUsbConnected; }
+
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;
 

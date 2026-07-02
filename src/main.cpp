@@ -598,9 +598,12 @@ void loop() {
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // If we've been inactive for a while, increase the delay to save power
+      // If we've been inactive for a while, drop the CPU clock and light-sleep
+      // between input polls instead of busy-delaying (same poll cadence)
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(50);
+      if (!powerManager.lightSleep(gpio)) {
+        delay(HalPowerManager::LIGHT_SLEEP_SLICE_MS);
+      }
     } else {
       // Short delay to prevent tight loop while still being responsive
       delay(10);
