@@ -78,6 +78,7 @@ off, no RAM/RTC retention), so this breakdown is where the responsiveness wins h
 | S2 | Deep sleep | | 0.0128 | | 12.77 µA — idling at the sleep-screen (latch off, image is bistable); slim, cable out, 2026-07-02 |
 | S3 | Turn, fast | | | 100.75 | slim, cable out, 2026-07-02 — window included the (since-removed) 160 MHz tail |
 | S3b | Turn, fast + Opp 1 + tail fix | ~1.5 | | ~38 | slim, cable out, 2026-07-02 — press→sawtooth window 39.74 mC incl. idle edges; tail eliminated (render consumes the response window, light sleep engages on lock release) |
+| S3c | Turn, fast + Opp 2 (BUSY-wait downclock) | ~1.5 | | 28.98 | slim, cable out, 2026-07-02 — CPU at 10 MHz during the refresh BUSY wait via EInkDisplay busy-wait hooks |
 | S4 | Turn, full | | | | |
 | S5 | Refresh only | | | | |
 | S6 | 160 MHz tail | ~2 | 21.22 | ~42 | slim + Opp 1 build, cable out, 2026-07-02 — post-turn window before the 3 s idle threshold |
