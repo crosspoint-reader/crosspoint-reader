@@ -45,6 +45,14 @@ class HalGPIO {
 
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
+  unsigned long usbLastPollMs = 0;
+
+  // X3 USB detection is a BQ27220 I2C read (~0.3-1 ms of awake CPU per call);
+  // polled every loop it costs a few percent of the light-sleep idle floor for
+  // nothing. At >=1 s intervals the energy cost is unmeasurable (~µC/s), so 1 s
+  // is chosen for prompt plug/unplug UX (battery icon, light-sleep USB guard /
+  // CDC recovery). X4 detection is a single digitalRead and stays per-loop.
+  static constexpr unsigned long USB_POLL_X3_MS = 1000;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
