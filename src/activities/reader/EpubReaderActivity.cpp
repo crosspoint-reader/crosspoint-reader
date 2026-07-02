@@ -564,11 +564,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     loadCachedBookmarks();
     if (!result.isCancelled) {
       const auto& sync = std::get<ProgressChangeResult>(result.data);
-      if (currentSpineIndex != sync.spineIndex || (section && section->currentPage != sync.page)) {
+      if (currentSpineIndex != sync.spineIndex) {
         RenderLock lock(*this);
         currentSpineIndex = sync.spineIndex;
         nextPageNumber = sync.page;
         section.reset();
+      } else if (section && section->currentPage != sync.page) {
+        RenderLock lock(*this);
+        const int targetPage = std::max(0, sync.page);
+        nextPageNumber = targetPage;
+        if (!section->isBuilding() && section->pageCount > 0 && targetPage >= section->pageCount) {
+          section->currentPage = section->pageCount - 1;
+        } else {
+          section->currentPage = targetPage;
+        }
+      } else if (!section) {
+        nextPageNumber = sync.page;
       }
     }
   };
