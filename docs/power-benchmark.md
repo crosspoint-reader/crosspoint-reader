@@ -74,6 +74,7 @@ off, no RAM/RTC retention), so this breakdown is where the responsiveness wins h
 |----|----------|-------------|------------------|--------------------|----------------------|
 | S1 | Idle static (slim) | | 9.68 | | slim, cable out, 2026-07-02 — awake on a reading page, NOT the sleep screen |
 | S1b | Idle static + Opp 1 light-sleep | | 3.45 | | slim, cable out, 2026-07-02 — 50 ms timer-paced light sleep; ~2.8× vs S1; stable after persistent latch-hold fix (runs: 3.38/3.45/3.47) |
+| S1c | Idle static + USB-poll throttle | | 2.78 | | slim, cable out, 2026-07-02 — BQ27220 USB-detect poll 50 ms → 1 s; tilt off; 3.5× vs S1 |
 | S2 | Deep sleep | | 0.0128 | | 12.77 µA — idling at the sleep-screen (latch off, image is bistable); slim, cable out, 2026-07-02 |
 | S3 | Turn, fast | | | 100.75 | slim, cable out, 2026-07-02 — window included the (since-removed) 160 MHz tail |
 | S3b | Turn, fast + Opp 1 + tail fix | ~1.5 | | ~38 | slim, cable out, 2026-07-02 — press→sawtooth window 39.74 mC incl. idle edges; tail eliminated (render consumes the response window, light sleep engages on lock release) |
