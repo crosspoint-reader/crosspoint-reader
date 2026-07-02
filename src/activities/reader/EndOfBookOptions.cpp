@@ -8,6 +8,7 @@
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 #include "util/NextBookFinder.h"
 
 namespace {
@@ -109,12 +110,12 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
   const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
-  if (triggered(prevButton) && selector > 0) {
-    selector--;
+  if (triggered(prevButton)) {
+    selector = ButtonNavigator::previousIndex(selector, itemCount);  // wraps to the bottom
     return Action::Redraw;
   }
-  if (triggered(nextButton) && selector < itemCount - 1) {
-    selector++;
+  if (triggered(nextButton)) {
+    selector = ButtonNavigator::nextIndex(selector, itemCount);  // wraps to the top
     return Action::Redraw;
   }
   return Action::None;
@@ -135,14 +136,16 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
     return;
   }
 
-  // Ask mode: title, suggestion list (+ Home entry) and button hints
-  renderer.drawCenteredText(UI_12_FONT_ID, ASK_TITLE_Y, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(UI_10_FONT_ID, ASK_SUBTITLE_Y, tr(STR_EOB_CONTINUE_WITH));
+  // Ask mode: title, suggestion list (+ Home entry) and button hints. The hints are
+  // drawn at the physical front buttons, which is a logical side/top edge in the
+  // rotated orientations — layout inside the safe area so nothing hides behind them.
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, ASK_TITLE_Y, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, ASK_SUBTITLE_Y, tr(STR_EOB_CONTINUE_WITH));
 
-  const int pageHeight = renderer.getScreenHeight();
-  const int listHeight = pageHeight - ASK_LIST_TOP - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  GUI.drawList(renderer, Rect{0, ASK_LIST_TOP, pageWidth, listHeight}, static_cast<int>(names.size()) + 1, selector,
-               [this](const int index) {
+  const int listHeight = safe.y + safe.height - ASK_LIST_TOP - metrics.verticalSpacing;
+  GUI.drawList(renderer, Rect{safe.x, ASK_LIST_TOP, safe.width, listHeight}, static_cast<int>(names.size()) + 1,
+               selector, [this](const int index) {
                  return index < static_cast<int>(names.size()) ? displayName(names[index])
                                                                : std::string(tr(STR_EOB_HOME));
                });
