@@ -77,6 +77,9 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+  // Jumps to the only footnote on the page, or opens the footnote list when
+  // there is more than one. Does nothing when there are no footnotes.
+  void openCurrentPageFootnotes();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)

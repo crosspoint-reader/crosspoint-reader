@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <string>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -96,7 +97,6 @@ void EpubReaderFootnotesActivity::render(RenderLock&&) {
       renderer.fillRect(0, y, screenWidth, lineHeight, true);
     }
 
-    // Show footnote number and abbreviated href
     std::string label = footnotes[i].number;
     if (label.empty()) {
       label = tr(STR_LINK);
