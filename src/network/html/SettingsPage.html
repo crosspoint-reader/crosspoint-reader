@@ -737,6 +737,10 @@
         '<span class="setting-name">Password</span>' +
         '<span class="setting-control"><input type="password" id="opds-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
       '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Download Folder</span>' +
+        '<span class="setting-control"><input type="text" id="opds-folder-' + id + '" value="' + escapeHtml(srv.folder || '') + '" placeholder="(SD root)"></span>' +
+      '</div>' +
       '<div class="opds-actions">' +
         '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')">Save</button>' +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteOpdsServer(' + idx + ')">Delete</button>') +
@@ -779,7 +783,7 @@
     const addBtn = card.querySelector('.btn-add').parentElement;
     // Prevent multiple unsaved new-server forms at once (idx -1 → id "new")
     if (document.getElementById('opds-new')) return;
-    addBtn.insertAdjacentHTML('beforebegin', renderOpdsServer({name:'',url:'',username:'',hasPassword:false}, -1));
+    addBtn.insertAdjacentHTML('beforebegin', renderOpdsServer({name:'',url:'',username:'',hasPassword:false,folder:''}, -1));
   }
 
   async function saveOpdsServer(idx) {
@@ -788,6 +792,7 @@
       name: document.getElementById('opds-name-' + id).value,
       url: document.getElementById('opds-url-' + id).value,
       username: document.getElementById('opds-user-' + id).value,
+      folder: document.getElementById('opds-folder-' + id).value,
     };
     // Only include password in payload when the user actually typed something;
     // omitting it tells the server to keep the existing password.

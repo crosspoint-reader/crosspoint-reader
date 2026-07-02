@@ -26,6 +26,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
+#include "util/StringUtils.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -1312,6 +1313,7 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     doc["name"] = servers[i].name;
     doc["url"] = servers[i].url;
     doc["username"] = servers[i].username;
+    doc["folder"] = servers[i].downloadFolder;
     // Never expose passwords over the API — only indicate whether one is set
     doc["hasPassword"] = !servers[i].password.empty();
 
@@ -1351,6 +1353,9 @@ void CrossPointWebServer::handlePostOpdsServer() {
   bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
   std::string password = doc["password"] | std::string("");
 
+  bool hasFolderField = doc["folder"].is<const char*>() || doc["folder"].is<std::string>();
+  std::string folder = StringUtils::normalizeFolderPath(doc["folder"] | std::string(""));
+
   if (doc["index"].is<int>()) {
     int idx = doc["index"].as<int>();
     if (idx < 0 || idx >= static_cast<int>(OPDS_STORE.getCount())) {
@@ -1363,10 +1368,16 @@ void CrossPointWebServer::handlePostOpdsServer() {
       if (existing) password = existing->password;
     }
     opdsServer.password = password;
+    if (!hasFolderField) {
+      const auto* existing = OPDS_STORE.getServer(static_cast<size_t>(idx));
+      if (existing) folder = existing->downloadFolder;
+    }
+    opdsServer.downloadFolder = folder;
     OPDS_STORE.updateServer(static_cast<size_t>(idx), opdsServer);
     LOG_DBG("WEB", "Updated OPDS server at index %d", idx);
   } else {
     opdsServer.password = password;
+    opdsServer.downloadFolder = folder;
     if (!OPDS_STORE.addServer(opdsServer)) {
       server->send(400, "text/plain", "Cannot add server (limit reached)");
       return;

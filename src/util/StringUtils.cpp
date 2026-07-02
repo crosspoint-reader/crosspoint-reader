@@ -43,4 +43,15 @@ std::string sanitizeFilename(const std::string& name, size_t maxBytes) {
   return result.empty() ? "book" : result;
 }
 
+std::string normalizeFolderPath(const std::string& raw) {
+  const size_t start = raw.find_first_not_of(" \t\r\n");
+  if (start == std::string::npos) return "";
+  const size_t end = raw.find_last_not_of(" \t\r\n");
+  std::string s = raw.substr(start, end - start + 1);
+  while (s.size() > 1 && s.back() == '/') s.pop_back();
+  if (s.empty() || s == "/") return "";
+  if (s.front() != '/') s.insert(s.begin(), '/');
+  return s;
+}
+
 }  // namespace StringUtils

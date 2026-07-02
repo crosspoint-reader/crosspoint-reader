@@ -15,6 +15,7 @@
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
+#include "util/StringUtils.h"
 
 // Convert legacy settings.
 void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
@@ -373,6 +374,7 @@ bool JsonSettingsIO::saveOpds(const OpdsServerStore& store, const char* path) {
     obj["url"] = server.url;
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+    obj["folder"] = server.downloadFolder;
   }
 
   String json;
@@ -405,6 +407,7 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
       server.password = obj["password"] | std::string("");
       if (!server.password.empty() && needsResave) *needsResave = true;
     }
+    server.downloadFolder = StringUtils::normalizeFolderPath(obj["folder"] | std::string(""));
     store.servers.push_back(std::move(server));
   }
 

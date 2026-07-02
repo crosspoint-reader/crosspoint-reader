@@ -6,7 +6,8 @@ struct OpdsServer {
   std::string name;
   std::string url;
   std::string username;
-  std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  std::string password;        // Plaintext in memory; obfuscated with hardware key on disk
+  std::string downloadFolder;  // "" = SD root (default). Absolute path, no trailing slash.
 };
 
 class OpdsServerStore;

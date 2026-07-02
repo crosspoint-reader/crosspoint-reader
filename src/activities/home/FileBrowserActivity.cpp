@@ -18,6 +18,9 @@
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+// PickFolder reserves list index 0 as a synthetic "select this folder" entry; index 0 is
+// special-cased everywhere, so this placeholder is never rendered or dereferenced.
+constexpr char SELECT_FOLDER_SENTINEL[] = "\x01";
 }  // namespace
 
 void FileBrowserActivity::loadFiles() {
@@ -45,6 +48,8 @@ void FileBrowserActivity::loadFiles() {
 
     if (file.isDirectory()) {
       files.emplace_back(std::string(fileNameBuffer.get()) + "/");
+    } else if (mode == Mode::PickFolder) {
+      continue;  // Folder picker lists directories only.
     } else {
       std::string_view filename{fileNameBuffer.get()};
       if (mode == Mode::PickFirmware) {
@@ -61,6 +66,10 @@ void FileBrowserActivity::loadFiles() {
   }
   root.close();
   FsHelpers::sortFileList(files);
+
+  if (mode == Mode::PickFolder) {
+    files.insert(files.begin(), SELECT_FOLDER_SENTINEL);
+  }
 }
 
 void FileBrowserActivity::onEnter() {
@@ -213,6 +222,15 @@ void FileBrowserActivity::loop() {
     }
     if (files.empty()) return;
 
+    if (mode == Mode::PickFolder && selectorIndex == 0) {
+      // Synthetic entry: return the current directory to the caller.
+      ActivityResult res{FilePathResult{basepath}};
+      res.isCancelled = false;
+      setResult(std::move(res));
+      finish();
+      return;
+    }
+
     const std::string& entry = files[selectorIndex];
     bool isDirectory = (entry.back() == '/');
 
@@ -290,8 +308,8 @@ void FileBrowserActivity::loop() {
         selectorIndex = findEntry(dirName);
 
         requestUpdate();
-      } else if (mode == Mode::PickFirmware) {
-        // Firmware picker at root: cancel back to caller instead of going home.
+      } else if (mode == Mode::PickFirmware || mode == Mode::PickFolder) {
+        // Picker at root: cancel back to caller instead of going home.
         ActivityResult res;
         res.isCancelled = true;
         setResult(std::move(res));
@@ -352,8 +370,9 @@ void FileBrowserActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   std::string folderName =
-      (mode == Mode::PickFirmware)
-          ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
+      (mode == Mode::PickFirmware) ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
+      : (mode == Mode::PickFolder)
+          ? std::string(tr(STR_SELECT_FOLDER))
           : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
@@ -368,9 +387,20 @@ void FileBrowserActivity::render(RenderLock&&) {
   } else {
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); }, false);
+        [this](int index) {
+          if (mode == Mode::PickFolder && index == 0) return std::string(tr(STR_SELECT_THIS_FOLDER));
+          return getFileName(files[index]);
+        },
+        nullptr,
+        [this](int index) {
+          if (mode == Mode::PickFolder && index == 0) return UIIcon::None;
+          return UITheme::getFileIcon(files[index]);
+        },
+        [this](int index) {
+          if (mode == Mode::PickFolder && index == 0) return std::string("");
+          return getFileExtension(files[index]);
+        },
+        false);
   }
 
   // Full path display
@@ -401,11 +431,11 @@ void FileBrowserActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
-  // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
-  // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
+  const char* backLabel = (basepath == "/") ? (mode == Mode::Books ? tr(STR_HOME) : tr(STR_BACK)) : tr(STR_BACK);
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  const bool selectingFolder = mode == Mode::PickFolder && selectorIndex == 0;
+  const char* confirmLabel =
+      files.empty() ? "" : ((selectingFirmwareFile || selectingFolder) ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

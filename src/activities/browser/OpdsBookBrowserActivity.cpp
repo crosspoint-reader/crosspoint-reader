@@ -1,6 +1,7 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
@@ -269,8 +270,16 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+  std::string dir = server.downloadFolder;
+  if (dir.empty()) dir = "/";
+  const std::string sanitized =
+      StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title);
+  std::string filename = (dir == "/" ? "/" : dir + "/") + sanitized + ".epub";
+  // Fall back to root if the folder can't be created, so a bad config never blocks a download.
+  if (dir != "/" && !Storage.mkdir(dir.c_str())) {
+    LOG_ERR("OPDS", "Cannot create download folder '%s', using root", dir.c_str());
+    filename = "/" + sanitized + ".epub";
+  }
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   const auto result = HttpDownloader::downloadToFile(

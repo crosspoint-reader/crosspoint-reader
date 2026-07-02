@@ -8,14 +8,16 @@
 
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "activities/home/FileBrowserActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
+// Editable fields: Name, URL, Username, Password, Download Folder.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int BASE_ITEMS = 5;
 }  // namespace
 
 int OpdsSettingsActivity::getMenuItemCount() const {
@@ -156,7 +158,21 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (selectedIndex == 4 && !isNewServer) {
+  } else if (selectedIndex == 4) {
+    // Download Folder — choose via the folder picker. Empty means SD root.
+    const std::string startPath = editServer.downloadFolder.empty() ? "/" : editServer.downloadFolder;
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& fp = std::get<FilePathResult>(result.data);
+        editServer.downloadFolder = StringUtils::normalizeFolderPath(fp.path);
+        saveServer();
+      }
+      requestUpdate();
+    };
+    startActivityForResult(
+        std::make_unique<FileBrowserActivity>(renderer, mappedInput, startPath, FileBrowserActivity::Mode::PickFolder),
+        handler);
+  } else if (selectedIndex == 5 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -186,7 +202,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const int menuItems = getMenuItemCount();
 
   const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                              StrId::STR_PASSWORD};
+                              StrId::STR_PASSWORD, StrId::STR_DOWNLOAD_FOLDER};
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
@@ -206,6 +222,8 @@ void OpdsSettingsActivity::render(RenderLock&&) {
           return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
         } else if (index == 3) {
           return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
+        } else if (index == 4) {
+          return editServer.downloadFolder.empty() ? std::string(tr(STR_SD_CARD)) : editServer.downloadFolder;
         }
         return std::string("");
       },
