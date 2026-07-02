@@ -73,18 +73,21 @@ off, no RAM/RTC retention), so this breakdown is where the responsiveness wins h
 | ID | Scenario | Duration (s) | Avg current (mA) | Charge (mC = mA·s) | Notes / build / date |
 |----|----------|-------------|------------------|--------------------|----------------------|
 | S1 | Idle static (slim) | | 9.68 | | slim, cable out, 2026-07-02 — awake on a reading page, NOT the sleep screen |
-| S1b | Idle static + Opp 1 light-sleep | | 3.38–3.47 | | slim, cable out, 2026-07-02 — 50 ms timer-paced light sleep; ~2.8× vs S1; stable after persistent latch-hold fix |
+| S1b | Idle static + Opp 1 light-sleep | | 3.45 | | slim, cable out, 2026-07-02 — 50 ms timer-paced light sleep; ~2.8× vs S1; stable after persistent latch-hold fix (runs: 3.38/3.45/3.47) |
 | S2 | Deep sleep | | 0.0128 | | 12.77 µA — idling at the sleep-screen (latch off, image is bistable); slim, cable out, 2026-07-02 |
-| S3 | Turn, fast | | | 100.75 | slim, cable out, 2026-07-02 |
+| S3 | Turn, fast | | | 100.75 | slim, cable out, 2026-07-02 — window included the (since-removed) 160 MHz tail |
+| S3b | Turn, fast + Opp 1 + tail fix | ~1.5 | | ~38 | slim, cable out, 2026-07-02 — press→sawtooth window 39.74 mC incl. idle edges; tail eliminated (render consumes the response window, light sleep engages on lock release) |
 | S4 | Turn, full | | | | |
 | S5 | Refresh only | | | | |
 | S6 | 160 MHz tail | ~2 | 21.22 | ~42 | slim + Opp 1 build, cable out, 2026-07-02 — post-turn window before the 3 s idle threshold |
 | S7 | Chapter index (cold) | | | | |
 | S8 | Cold boot | | | | |
 | S9 | Wake (Quick Resume) | | | | |
-| S10 | Wake (sleep-screen) | | | 262.32 | slim, cable out, 2026-07-02 |
+| S10 | Wake (sleep-screen) | | | 262.32 | slim, cable out, 2026-07-02 — window included the (since-removed) post-paint tail |
+| S10b | Wake (sleep-screen) + Opp 1 + tail | | | 215 | slim, cable out, 2026-07-02 — drop vs S10 ≈ the eliminated post-paint tail |
 | S11 | Sleep (Quick Resume) | | | | |
 | S12 | Sleep (sleep-screen) | | | 143.81 | slim, cable out, 2026-07-02 |
+| S12b | Sleep (sleep-screen) + Opp 1 + tail | | | 142.66 | slim, cable out, 2026-07-02 — unchanged, as expected (path never idles) |
 
 Superseded captures (default build, USB attached — power path contaminated by charger):
 S1 9.79 mA · S2 22.5 µA · S3 90.63 mA·s · S10 241.80 mA·s · S12 154.51 mA·s.
