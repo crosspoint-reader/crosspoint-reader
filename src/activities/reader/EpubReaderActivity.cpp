@@ -942,10 +942,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // inflating (the multi-second cost), or a deep page target. A reopen with cached HTML builds
         // fast, so no popup -- that's what made an already-indexed book look like it was reindexing.
         // A partial cache that already covers the target page shows it instantly: never popup.
-        const bool targetAvailable = target < static_cast<int>(section->pageCount);
         const bool willInflate = !section->hasHtmlCache();
-        if (!targetAvailable &&
-            ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) || target > BUILD_POPUP_PAGE_THRESHOLD)) {
+        const bool anchorJump = !pendingAnchor.empty();
+        bool showPopup;
+        if (anchorJump) {
+          // An anchor jump's cost is bounded by the anchor's page, not `target`. An anchor already
+          // in the on-disk map (partial or finalized cache) lands instantly: no popup. Otherwise it
+          // lies beyond the indexed watermark and the build may lay out the whole spine to find it,
+          // so gate on spine size alone -- laying out a big spine takes seconds even with cached
+          // HTML. Ordinary chapter-top TOC jumps resolve on page 0 and stay popup-free.
+          showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+        } else {
+          const bool targetAvailable = target < static_cast<int>(section->pageCount);
+          showPopup = !targetAvailable &&
+                      ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) || target > BUILD_POPUP_PAGE_THRESHOLD);
+        }
+        if (showPopup) {
           GUI.drawPopup(renderer, tr(STR_INDEXING));
           // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts under the page.
           pagesUntilFullRefresh = 1;
@@ -959,7 +971,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           showPendingSyncSaveError();
           return;
         }
-        const bool anchorJump = !pendingAnchor.empty();
         while (!section->isBuildComplete() &&
                (anchorJump ? !section->findAnchor(pendingAnchor) : static_cast<int>(section->pageCount) <= target)) {
           // Anchor jump: build until the anchor's page is laid out (usually page 0), checking a

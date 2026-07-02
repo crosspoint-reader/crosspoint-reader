@@ -73,6 +73,9 @@ class Section {
   // partial/finalized file stays readable while a rebuild is in progress.
   std::string binTmpPath() const { return filePath + ".part"; }
   std::unique_ptr<Page> loadPageAt(int page) const;
+  // Read a page already laid out by the in-progress build (page < build LUT size), from
+  // the partially-written tmp .bin without disturbing the build's write cursor.
+  std::unique_ptr<Page> loadPageDuringBuild(int page);
 
  public:
   uint16_t pageCount = 0;
@@ -117,15 +120,11 @@ class Section {
   void suspendBuild();
   // True when a partial file was loaded: pageCount is a watermark, not the chapter total.
   bool isPartial() const { return partial_; }
-  // Read a page already laid out by the in-progress build (page < pageCount), from
-  // the partially-written .bin without disturbing the build's write cursor.
-  std::unique_ptr<Page> loadPageDuringBuild(int page);
 
   // Unified page read: from the active build if it has reached the page, otherwise from
   // the on-disk file (finalized section, or a partial the rebuild hasn't caught up to).
   std::unique_ptr<Page> loadPage(int page);
 
-  std::unique_ptr<Page> loadPageFromSectionFile();
   std::string getTextFromSectionFile();
 
   // Resolve an anchor from the in-progress build first, then the on-disk anchor map

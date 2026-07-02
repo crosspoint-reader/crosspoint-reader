@@ -725,8 +725,6 @@ std::unique_ptr<Page> Section::loadPage(const int page) {
   return loadPageAt(page);
 }
 
-std::unique_ptr<Page> Section::loadPageFromSectionFile() { return loadPageAt(currentPage); }
-
 std::string Section::getTextFromSectionFile() {
   std::string fullText;
   auto p = loadPage(currentPage);
