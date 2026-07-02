@@ -31,6 +31,7 @@ class HalPowerManager {
   static constexpr int LOW_POWER_FREQ = 10;                    // MHz
   static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // ms
   static constexpr unsigned long BATTERY_POLL_MS = 1500;       // ms
+  static constexpr unsigned long LIGHT_SLEEP_SLICE_MS = 50;    // ms
 
   void begin();
 
@@ -40,6 +41,13 @@ class HalPowerManager {
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
   void startDeepSleep(HalGPIO& gpio) const;
+
+  // Light-sleep the CPU for LIGHT_SLEEP_SLICE_MS (timer wake; buttons are polled on
+  // wake at the same cadence as the delay() this replaces). Returns false WITHOUT
+  // sleeping when unsafe: a performance Lock is held (render in flight), WiFi is
+  // active, or USB is connected (light sleep kills the CDC link). The caller must
+  // fall back to delay() in that case.
+  bool lightSleep(const HalGPIO& gpio) const;
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;

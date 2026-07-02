@@ -2,6 +2,7 @@
 
 #include <Logging.h>
 #include <WiFi.h>
+#include <driver/gpio.h>
 #include <esp_sleep.h>
 
 #include <cassert>
@@ -9,6 +10,10 @@
 #include "HalGPIO.h"
 
 HalPowerManager powerManager;  // Singleton instance
+
+// GPIO13 is the flash SPIWP pad (unused in this board's DIO flash mode), rewired to the
+// battery-latch MOSFET gate: high keeps the battery connected, low powers the device off.
+static constexpr gpio_num_t GPIO_BATTERY_LATCH = GPIO_NUM_13;
 
 void HalPowerManager::begin() {
   if (gpio.deviceIsX3()) {
@@ -76,14 +81,13 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 #endif
 
   // Pre-sleep routines from the original firmware
-  // GPIO13 is connected to battery latch MOSFET, we need to make sure it's low during sleep
-  // Note that this means the MCU will be completely powered off during sleep, including RTC
-  constexpr gpio_num_t GPIO_SPIWP = GPIO_NUM_13;
-  gpio_set_direction(GPIO_SPIWP, GPIO_MODE_OUTPUT);
-  gpio_set_level(GPIO_SPIWP, 0);
+  // The battery latch must go low during sleep: the MCU is completely powered off, including RTC
+  gpio_hold_dis(GPIO_BATTERY_LATCH);  // lightSleep() holds the pad high; release so we can drive it low
+  gpio_set_direction(GPIO_BATTERY_LATCH, GPIO_MODE_OUTPUT);
+  gpio_set_level(GPIO_BATTERY_LATCH, 0);
   esp_sleep_config_gpio_isolate();
   gpio_deep_sleep_hold_en();
-  gpio_hold_en(GPIO_SPIWP);
+  gpio_hold_en(GPIO_BATTERY_LATCH);
   pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
   // Arm the wakeup trigger *after* the button is released
   // Note: this is only useful for waking up on USB power. On battery, the MCU will be completely powered off, so the
@@ -92,6 +96,53 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
   // Enter Deep Sleep
   esp_deep_sleep_start();
+}
+
+bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
+  // A performance Lock means a render (or similar) task is mid-flight; light sleep
+  // freezes the whole chip, so it would stall that task.
+  // Note: like setPowerSaving(), read without the mutex — a stale value only delays
+  // sleeping by one 50 ms slice.
+  if (currentLockMode != None) {
+    return false;
+  }
+  // Light sleep drops a WiFi association and kills an enumerated USB-CDC link.
+  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
+    return false;
+  }
+
+  // Timer wake only. It keeps the button/tilt poll cadence identical to the delay()
+  // it replaces: the front/side buttons are ADC resistor-ladder inputs whose pressed
+  // levels sit mid-rail, invisible to a digital GPIO wake, so they must be polled.
+  // The power button (a true GPIO) is deliberately NOT armed as a wake source: a
+  // level wake on it can misread around sleep transitions and inject phantom
+  // presses, and the timer poll catches it within one slice anyway.
+  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(LIGHT_SLEEP_SLICE_MS) * 1000ULL);
+
+  // The IDF flash-leakage workaround (CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND) pulls the
+  // DIO-unused SPIWP pad low on light-sleep entry — on this board that releases the battery
+  // latch and hard-powers-off the device. Drive the latch high and pad-hold it (hold latches
+  // the pad state and overrides both the sleep-time pull and any pad re-muxing on the wake
+  // path). The hold is left enabled permanently while running — the wake path may restore
+  // flash-pad muxing, so even a brief release between slices can drop the latch. It is
+  // released only in startDeepSleep(), which must drive the latch low to power off.
+  // Level is set BEFORE direction so the pad never glitches low on the way to output mode.
+  gpio_set_level(GPIO_BATTERY_LATCH, 1);
+  gpio_set_direction(GPIO_BATTERY_LATCH, GPIO_MODE_OUTPUT);
+  gpio_hold_en(GPIO_BATTERY_LATCH);
+
+  const esp_err_t err = esp_light_sleep_start();
+
+  // Disarm immediately: an armed timer wake persists across sleep calls and would
+  // carry over into startDeepSleep(), waking the device on USB power after 50 ms.
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+
+  if (err != ESP_OK) {
+    // e.g. ESP_ERR_SLEEP_REJECT — we did not actually sleep
+    LOG_DBG("PWR", "Light sleep rejected: %d", static_cast<int>(err));
+    return false;
+  }
+  return true;
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
