@@ -597,15 +597,20 @@ void loop() {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // If we've been inactive for a while, drop the CPU clock and light-sleep
-      // between input polls instead of busy-delaying (same poll cadence)
-      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
+    const unsigned long idleMs = millis() - lastActivityTime;
+    if (idleMs >= HalPowerManager::IDLE_LIGHT_SLEEP_MS) {
+      // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence)
+      powerManager.setPowerSaving(true);
       if (!powerManager.lightSleep(gpio)) {
         delay(HalPowerManager::LIGHT_SLEEP_SLICE_MS);
       }
     } else {
-      // Short delay to prevent tight loop while still being responsive
+      // Response window after recent input: keep 100 Hz polling for snappy interaction,
+      // but downclock once rapid-input bursts have settled — renders re-raise the clock
+      // via HalPowerManager::Lock, so full speed only serves loop bookkeeping here
+      if (idleMs >= HalPowerManager::IDLE_DOWNCLOCK_MS) {
+        powerManager.setPowerSaving(true);
+      }
       delay(10);
     }
   }
