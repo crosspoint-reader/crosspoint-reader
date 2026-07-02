@@ -55,7 +55,24 @@ class Section {
   };
   std::unique_ptr<BuildContext> build_;
   bool buildComplete_ = false;
+  // Pages laid out by the active build (== build_->lut.size()). Distinct from pageCount,
+  // which is the pages *available to read* and also counts a loaded partial file's pages.
+  uint16_t builtPageCount_ = 0;
+  // A partial section file (suspended build from a previous session) is loaded at filePath.
+  // Its pages 0..partialPageCount_-1 are readable while a rebuild extends past them.
+  bool partial_ = false;
+  uint16_t partialPageCount_ = 0;
+  // Parse watermark from the partial's trailer, for estimating the total page count.
+  uint32_t partialBytesConsumed_ = 0;
+  uint32_t partialTotalBytes_ = 0;
   bool finalizeBuild();
+  // Write the LUTs/anchor map (and, for a partial, the watermark trailer), patch the
+  // header, stamp the version byte, and swap the tmp .bin over filePath.
+  bool commitBuildFile(uint8_t version, uint32_t bytesConsumed, uint32_t totalBytes);
+  // Builds write here and are swapped over filePath only on commit, so a prior
+  // partial/finalized file stays readable while a rebuild is in progress.
+  std::string binTmpPath() const { return filePath + ".part"; }
+  std::unique_ptr<Page> loadPageAt(int page) const;
 
  public:
   uint16_t pageCount = 0;
@@ -92,12 +109,28 @@ class Section {
   // is still building, so "page X of Y" / progress don't read off the small build watermark.
   uint16_t estimatedTotalPages() const;
   void abandonBuild();
+  // Persist an in-progress build as a partial section file (version sentinel + LUTs +
+  // watermark trailer) instead of discarding it, so the next open of this spine can show
+  // its pages instantly and only rebuild in the background. Called by the destructor, so
+  // any teardown path (exit, sleep, navigation) keeps the work already done. Keeps a
+  // pre-existing partial when it covers more pages than this build reached.
+  void suspendBuild();
+  // True when a partial file was loaded: pageCount is a watermark, not the chapter total.
+  bool isPartial() const { return partial_; }
   // Read a page already laid out by the in-progress build (page < pageCount), from
   // the partially-written .bin without disturbing the build's write cursor.
   std::unique_ptr<Page> loadPageDuringBuild(int page);
 
+  // Unified page read: from the active build if it has reached the page, otherwise from
+  // the on-disk file (finalized section, or a partial the rebuild hasn't caught up to).
+  std::unique_ptr<Page> loadPage(int page);
+
   std::unique_ptr<Page> loadPageFromSectionFile();
   std::string getTextFromSectionFile();
+
+  // Resolve an anchor from the in-progress build first, then the on-disk anchor map
+  // (covers finalized sections and partials from a previous session).
+  std::optional<uint16_t> findAnchor(const std::string& anchor) const;
 
   // True if this spine's unzipped HTML is already cached, so a build won't pay the (multi-second on a
   // giant spine) zip inflation. Lets the reader skip the indexing popup on a fast reopen/rebuild.

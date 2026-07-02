@@ -59,19 +59,18 @@ class EpubReaderActivity final : public Activity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
-  // Keep a small window of upcoming sections built ahead of the reader (off the
-  // page-turn critical path) so navigating forward never blocks on indexing.
   // Pages laid out per incremental-build pump: on the render path (catching up to the page
   // being shown) and per loop() tick (background build of a large chapter). Kept small so a
   // background build chunk never noticeably delays input or a pending render.
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
   static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
-  // How many pages to keep laid out ahead of the reader for a still-building section. A page turn
-  // is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder -- a
-  // tiny buffer is enough. The background build stops once the watermark is this far ahead and
-  // resumes as the reader advances, so a giant single-spine book (a whole novel in one spine item)
-  // barely builds ahead at all and lets the device sleep. A chapter smaller than this still builds
-  // fully and caches.
+  // How many pages to keep laid out ahead of the reader for a still-building section. A page
+  // turn is ~1s on e-ink and a page builds in ~30ms, so the reader can't out-click the builder
+  // -- a tiny buffer is enough. The background build stops once the watermark is this far
+  // ahead and resumes as the reader advances; building unbounded instead locked up input by
+  // monopolizing the RenderLock. A giant single-spine book therefore never finalizes its .bin
+  // in one sitting -- instant reopen comes from Section::suspendBuild() persisting the pages
+  // already laid out as a partial file on exit/sleep.
   static constexpr int BUILD_WINDOW_AHEAD = 5;
   // Show the indexing popup when an initial build must lay out more than this many pages up front
   // (a deep resume/jump into a not-yet-built section), so it isn't a silent wait. Kept independent

@@ -14,10 +14,18 @@ namespace {
 // v27: words NFC-composed at layout time; bump invalidates NFD section caches.
 constexpr uint8_t SECTION_FILE_VERSION = 27;
 // Written into the version field while a build is in progress; patched to
-// SECTION_FILE_VERSION only when the build is finalized. A partial / abandoned /
+// SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
 // as unknown and clears -- so an incomplete file is never mistaken for a valid one.
 constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
+// Written when a build is suspended partway (reader exited or device slept mid-build).
+// The file carries valid pages 0..pageCount-1, all LUTs, and a trailer with the parse
+// watermark (bytesConsumed, totalBytes) appended after the li LUT. loadSectionFile
+// accepts it so a resume shows those pages instantly; the reader extends it by
+// rebuilding in the background. Uses the same header layout as SECTION_FILE_VERSION,
+// so finalized files are untouched by this feature; older firmware treats the sentinel
+// as an unknown version and rebuilds, which is a safe downgrade.
+constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
@@ -32,24 +40,30 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
       renderer(renderer),
       filePath(epub->getCachePath() + "/sections/" + std::to_string(spineIndex) + ".bin") {}
 
-// Abandon any in-progress build so every section.reset() / navigation path tears the
-// build down and discards the partial .bin (no-op once a build has completed or never started).
-Section::~Section() { abandonBuild(); }
+// Suspend any in-progress build so every section.reset() / navigation / sleep path
+// persists the pages already laid out as a partial .bin instead of discarding them
+// (no-op once a build has completed or never started).
+Section::~Section() { suspendBuild(); }
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   if (!file) {
-    LOG_ERR("SCT", "File not open for writing page %d", pageCount);
+    LOG_ERR("SCT", "File not open for writing page %d", builtPageCount_);
     return 0;
   }
 
   const uint32_t position = file.position();
   if (!page->serialize(file)) {
-    LOG_ERR("SCT", "Failed to serialize page %d", pageCount);
+    LOG_ERR("SCT", "Failed to serialize page %d", builtPageCount_);
     return 0;
   }
-  LOG_DBG("SCT", "Page %d processed", pageCount);
+  LOG_DBG("SCT", "Page %d processed", builtPageCount_);
 
-  pageCount++;
+  builtPageCount_++;
+  // pageCount is the pages available to read: a rebuild over a partial only raises it
+  // once it has laid out more pages than the partial already covers.
+  if (builtPageCount_ > pageCount) {
+    pageCount = builtPageCount_;
+  }
   return position;
 }
 
@@ -97,16 +111,18 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
 
   // Match parameters
+  bool filePartial = false;
   {
     uint8_t version;
     serialization::readPod(file, version);
-    if (version != SECTION_FILE_VERSION) {
+    if (version != SECTION_FILE_VERSION && version != SECTION_FILE_PARTIAL_VERSION) {
       // Explicit close() required: member variable persists beyond function scope
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Unknown version %u", version);
       clearCache();
       return false;
     }
+    filePartial = (version == SECTION_FILE_PARTIAL_VERSION);
 
     int fileFontId;
     uint16_t fileViewportWidth, fileViewportHeight;
@@ -141,14 +157,42 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
   }
 
   serialization::readPod(file, pageCount);
+
+  if (filePartial) {
+    // A partial's pageCount is the watermark of a suspended build. Read the watermark
+    // trailer (appended after the li LUT) so estimatedTotalPages can extrapolate.
+    uint32_t liLutOffset = 0;
+    file.seek(HEADER_SIZE - sizeof(uint32_t));
+    serialization::readPod(file, liLutOffset);
+    const uint32_t trailerOffset = liLutOffset + static_cast<uint32_t>(pageCount) * sizeof(uint16_t);
+    const bool trailerValid =
+        pageCount > 0 && liLutOffset >= HEADER_SIZE && trailerOffset + 2 * sizeof(uint32_t) <= file.size();
+    if (!trailerValid) {
+      file.close();
+      LOG_ERR("SCT", "Deserialization failed: malformed partial section");
+      clearCache();
+      pageCount = 0;
+      return false;
+    }
+    file.seek(trailerOffset);
+    serialization::readPod(file, partialBytesConsumed_);
+    serialization::readPod(file, partialTotalBytes_);
+    partial_ = true;
+    partialPageCount_ = pageCount;
+  }
+
   // Explicit close() required: member variable persists beyond function scope
   file.close();
-  LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
+  LOG_DBG("SCT", "Deserialization succeeded: %d pages%s", pageCount, filePartial ? " (partial)" : "");
   return true;
 }
 
 // Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
 bool Section::clearCache() const {
+  const std::string tmpBin = binTmpPath();
+  if (Storage.exists(tmpBin.c_str())) {
+    Storage.remove(tmpBin.c_str());
+  }
   if (!Storage.exists(filePath.c_str())) {
     LOG_DBG("SCT", "Cache does not exist, no action needed");
     return true;
@@ -188,7 +232,18 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     return false;
   }
   buildComplete_ = false;
-  pageCount = 0;
+  builtPageCount_ = 0;
+  // Pages from a loaded partial stay readable (from filePath) while this build writes
+  // to the tmp .bin, so availability never drops below the partial's watermark.
+  pageCount = partial_ ? partialPageCount_ : 0;
+
+  // Remove a stale tmp .bin from a crash-interrupted build; this build recreates it.
+  {
+    const std::string staleTmp = binTmpPath();
+    if (Storage.exists(staleTmp.c_str())) {
+      Storage.remove(staleTmp.c_str());
+    }
+  }
 
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto htmlDir = epub->getCachePath() + "/html";
@@ -264,7 +319,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     }
   }
 
-  if (!Storage.openFileForWrite("SCT", filePath, file)) {
+  if (!Storage.openFileForWrite("SCT", binTmpPath(), file)) {
     if (!reusedHtml) Storage.remove(tmpHtmlPath.c_str());
     return false;
   }
@@ -276,7 +331,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   if (!ctx) {
     LOG_ERR("SCT", "OOM: BuildContext");
     file.close();
-    Storage.remove(filePath.c_str());
+    Storage.remove(binTmpPath().c_str());
     if (!reusedHtml) Storage.remove(tmpHtmlPath.c_str());
     return false;
   }
@@ -329,7 +384,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     if (ctx->cssParser) ctx->cssParser->clear();
     file.close();
-    Storage.remove(filePath.c_str());
+    Storage.remove(binTmpPath().c_str());
     if (!reusedHtml) Storage.remove(tmpHtmlPath.c_str());
     return false;
   }
@@ -351,7 +406,10 @@ bool Section::buildSomeMore(const int maxPages) {
     LOG_ERR("SCT", "buildSomeMore with no active build");
     return false;
   }
-  const int startCount = pageCount;
+  // Pace on pages laid out by THIS build, not pageCount: during a rebuild over a partial,
+  // pageCount stays pinned at the partial's watermark until the build passes it, which
+  // would otherwise turn one "small" chunk into a blocking rebuild of the whole watermark.
+  const int startCount = builtPageCount_;
   for (;;) {
     const auto status = build_->parser->parseStep();
     if (status == ChapterHtmlSlimParser::ParseStatus::Error) {
@@ -363,7 +421,7 @@ bool Section::buildSomeMore(const int maxPages) {
       return finalizeBuild();
     }
     // ParseStatus::More: yield once we've laid out the requested number of pages.
-    if (maxPages > 0 && (pageCount - startCount) >= maxPages) {
+    if (maxPages > 0 && (builtPageCount_ - startCount) >= maxPages) {
       build_->bytesConsumed = build_->parser->parseBytesConsumed();
       return true;
     }
@@ -383,21 +441,44 @@ std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string& anchor
   return std::nullopt;
 }
 
+std::optional<uint16_t> Section::findAnchor(const std::string& anchor) const {
+  if (const auto page = findAnchorDuringBuild(anchor)) {
+    return page;
+  }
+  // Fall back to the on-disk anchor map: a finalized section, or a partial whose map
+  // covers everything up to its watermark (nullopt past it -- build further and retry).
+  return getPageForAnchor(anchor);
+}
+
 uint16_t Section::estimatedTotalPages() const {
-  if (!build_) return pageCount;  // finalized -> exact count
+  // Extrapolation from a suspended session's watermark trailer. A static snapshot, so no EMA
+  // damping is needed. Also the best guess while a rebuild is running but hasn't laid out
+  // enough pages yet to extrapolate from its own progress.
+  const auto partialEstimate = [this]() -> uint16_t {
+    if (!partial_ || partialBytesConsumed_ == 0 || partialTotalBytes_ <= partialBytesConsumed_) {
+      return pageCount;
+    }
+    const uint64_t est = static_cast<uint64_t>(partialPageCount_) * partialTotalBytes_ / partialBytesConsumed_;
+    if (est <= pageCount) return pageCount;
+    return est > 60000 ? 60000 : static_cast<uint16_t>(est);
+  };
+
+  if (!build_) {
+    return partial_ ? partialEstimate() : pageCount;  // partial -> extrapolate, finalized -> exact
+  }
   const uint32_t consumed = build_->bytesConsumed;
   const uint32_t total = build_->totalBytes;
-  if (pageCount == 0 || consumed == 0 || total <= consumed) return pageCount;
+  if (builtPageCount_ == 0 || consumed == 0 || total <= consumed) return partialEstimate();
 
   // Raw extrapolation: scale the pages built so far by the fraction of HTML still unparsed. This
   // re-derives from a growing, non-uniform sample, so it jitters up and down as the build crosses
   // dense vs sparse regions of the chapter.
-  const uint64_t raw = static_cast<uint64_t>(pageCount) * total / consumed;
+  const uint64_t raw = static_cast<uint64_t>(builtPageCount_) * total / consumed;
 
   // Damp that jitter with an exponential moving average. Step it once per build advance (keyed on
   // bytesConsumed) rather than per status-bar redraw, so the smoothing rate doesn't depend on how
-  // often we repaint. As the build nears the end, consumed -> total and raw -> pageCount, so the
-  // average settles onto the true count (and finalizeBuild then returns the exact pageCount).
+  // often we repaint. As the build nears the end, consumed -> total and raw -> the built count, so
+  // the average settles onto the true count (and finalizeBuild then returns the exact pageCount).
   constexpr float ALPHA = 0.25f;  // weight of each new sample; lower = steadier but slower to settle
   if (build_->smoothedEstimate <= 0) {
     build_->smoothedEstimate = static_cast<float>(raw);  // seed on the first estimate
@@ -407,28 +488,23 @@ uint16_t Section::estimatedTotalPages() const {
   build_->smoothedAtConsumed = consumed;
 
   const uint64_t est = static_cast<uint64_t>(build_->smoothedEstimate + 0.5f);
-  if (est <= pageCount) return pageCount;  // never fewer than the pages already built
+  if (est <= pageCount) return pageCount;  // never fewer than the pages already available
   return est > 60000 ? 60000 : static_cast<uint16_t>(est);
 }
 
-bool Section::finalizeBuild() {
-  // Flush the trailing page (emits the last page via the completePageFn into the LUT).
-  build_->parser->finishParse();
+// Write the LUTs and anchor map into the open tmp .bin, patch the header with the built
+// page count and table offsets, stamp `version` as the commit point, then swap the tmp
+// file over filePath. For SECTION_FILE_PARTIAL_VERSION a watermark trailer
+// (bytesConsumed, totalBytes) is appended after the li LUT so a later open can estimate
+// the total page count. The parser must still be alive (anchors are read from it).
+// On failure the tmp is removed and any pre-existing file at filePath is left intact.
+bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsumed, const uint32_t totalBytes) {
+  const bool asPartial = (version == SECTION_FILE_PARTIAL_VERSION);
 
-  if (!build_->reusedHtml) {
-    // Parse succeeded: promote the freshly unzipped HTML to the persistent cache so future
-    // rebuilds skip zip inflation. If promotion fails, drop the temp -- the build still succeeded.
-    if (!Storage.rename(build_->tmpHtmlPath.c_str(), build_->htmlPath.c_str())) {
-      LOG_DBG("SCT", "Failed to promote HTML cache, removing temp");
-      Storage.remove(build_->tmpHtmlPath.c_str());
-    }
-  }
-
-  const auto failFinalize = [this]() {
-    if (build_->cssParser) build_->cssParser->clear();
+  const auto failCommit = [this]() {
+    // Explicit close() required before remove (member variable, O_RDWR handle).
     file.close();
-    Storage.remove(filePath.c_str());
-    build_.reset();
+    Storage.remove(binTmpPath().c_str());
     return false;
   };
 
@@ -436,16 +512,22 @@ bool Section::finalizeBuild() {
   for (const auto& entry : build_->lut) {
     if (entry.fileOffset == 0) {
       LOG_ERR("SCT", "Failed to write LUT due to invalid page positions");
-      return failFinalize();
+      return failCommit();
     }
     serialization::writePod(file, entry.fileOffset);
   }
 
-  // Write anchor-to-page map for fragment navigation (e.g. footnote targets)
+  // Write anchor-to-page map for fragment navigation (e.g. footnote targets). For a
+  // partial, skip anchors that landed on the incomplete trailing page the suspend drops.
   const uint32_t anchorMapOffset = file.position();
   const auto& anchors = build_->parser->getAnchors();
-  serialization::writePod(file, static_cast<uint16_t>(anchors.size()));
+  uint16_t anchorCount = 0;
   for (const auto& [anchor, page] : anchors) {
+    if (!asPartial || page < builtPageCount_) anchorCount++;
+  }
+  serialization::writePod(file, anchorCount);
+  for (const auto& [anchor, page] : anchors) {
+    if (asPartial && page >= builtPageCount_) continue;
     serialization::writeString(file, anchor);
     serialization::writePod(file, page);
   }
@@ -461,24 +543,107 @@ bool Section::finalizeBuild() {
     serialization::writePod(file, entry.listItemIndex);
   }
 
-  // Patch header with final pageCount and section offsets...
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(pageCount));
-  serialization::writePod(file, pageCount);
+  if (asPartial) {
+    // Watermark trailer, located on load as liLutOffset + pageCount * sizeof(uint16_t).
+    serialization::writePod(file, bytesConsumed);
+    serialization::writePod(file, totalBytes);
+  }
+
+  // Patch header with the built page count and section offsets...
+  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(builtPageCount_));
+  serialization::writePod(file, builtPageCount_);
   serialization::writePod(file, lutOffset);
   serialization::writePod(file, anchorMapOffset);
   serialization::writePod(file, paragraphLutOffset);
   serialization::writePod(file, liLutFileOffset);
   // ...then commit by overwriting the sentinel version with the real one. Writing the
-  // version last makes it the atomic commit point: a crash before here leaves version 0.
+  // version last makes it the commit point: a crash before here leaves version 0.
   file.seek(0);
-  serialization::writePod(file, SECTION_FILE_VERSION);
+  serialization::writePod(file, version);
   // Explicit close() required: member variable persists beyond function scope
   file.close();
 
+  // Swap into place. A crash between remove and rename loses the old file but keeps a
+  // fully-committed tmp; the next build just removes it and rebuilds.
+  if (Storage.exists(filePath.c_str())) {
+    Storage.remove(filePath.c_str());
+  }
+  if (!Storage.rename(binTmpPath().c_str(), filePath.c_str())) {
+    LOG_ERR("SCT", "Failed to move built section into place");
+    Storage.remove(binTmpPath().c_str());
+    return false;
+  }
+  return true;
+}
+
+bool Section::finalizeBuild() {
+  // Flush the trailing page (emits the last page via the completePageFn into the LUT).
+  build_->parser->finishParse();
+
+  if (!build_->reusedHtml) {
+    // Parse succeeded: promote the freshly unzipped HTML to the persistent cache so future
+    // rebuilds skip zip inflation. If promotion fails, drop the temp -- the build still succeeded.
+    if (!Storage.rename(build_->tmpHtmlPath.c_str(), build_->htmlPath.c_str())) {
+      LOG_DBG("SCT", "Failed to promote HTML cache, removing temp");
+      Storage.remove(build_->tmpHtmlPath.c_str());
+    }
+  }
+
+  const bool committed = commitBuildFile(SECTION_FILE_VERSION, 0, 0);
   if (build_->cssParser) build_->cssParser->clear();
   build_.reset();
+  if (!committed) {
+    // commitBuildFile removed filePath before the failed swap, so nothing valid remains.
+    partial_ = false;
+    partialPageCount_ = 0;
+    pageCount = 0;
+    builtPageCount_ = 0;
+    return false;
+  }
   buildComplete_ = true;
+  partial_ = false;
+  partialPageCount_ = 0;
+  pageCount = builtPageCount_;
   return true;
+}
+
+void Section::suspendBuild() {
+  if (!build_) return;
+
+  // Only worth persisting if this build produced pages a pre-existing partial doesn't
+  // already cover; otherwise keep the older (bigger) partial and just drop the tmp.
+  const bool worthKeeping = builtPageCount_ > 0 && (!partial_ || builtPageCount_ > partialPageCount_);
+
+  bool committed = false;
+  if (worthKeeping) {
+    // Capture the parse watermark and commit before tearing the parser down (the anchor
+    // map is read from it). The incomplete trailing page is intentionally not flushed:
+    // only fully laid-out pages are persisted, and the rebuild re-derives the rest.
+    const uint32_t consumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+    committed = commitBuildFile(SECTION_FILE_PARTIAL_VERSION, consumed, build_->totalBytes);
+    if (committed) {
+      partial_ = true;
+      partialPageCount_ = builtPageCount_;
+      partialBytesConsumed_ = consumed;
+      partialTotalBytes_ = build_->totalBytes;
+      LOG_INF("SCT", "Suspended build: %u pages persisted", builtPageCount_);
+    }
+  }
+
+  if (build_->parser) build_->parser->abortParse();
+  if (build_->cssParser) build_->cssParser->clear();
+  if (!committed && file) {
+    // Explicit close() required before remove (member variable, O_RDWR handle).
+    file.close();
+    Storage.remove(binTmpPath().c_str());
+  }
+  if (!build_->reusedHtml && Storage.exists(build_->tmpHtmlPath.c_str())) {
+    Storage.remove(build_->tmpHtmlPath.c_str());
+  }
+  build_.reset();
+  buildComplete_ = false;
+  pageCount = partial_ ? partialPageCount_ : 0;
+  builtPageCount_ = 0;
 }
 
 void Section::abandonBuild() {
@@ -488,6 +653,11 @@ void Section::abandonBuild() {
   if (file) {
     // Explicit close() required before remove (member variable, O_RDWR handle).
     file.close();
+    Storage.remove(binTmpPath().c_str());
+  }
+  // A parse error would recur against the same HTML, so drop any partial too -- resuming
+  // from it would just re-enter the failing build every open.
+  if (Storage.exists(filePath.c_str())) {
     Storage.remove(filePath.c_str());
   }
   if (!build_->reusedHtml && Storage.exists(build_->tmpHtmlPath.c_str())) {
@@ -495,7 +665,10 @@ void Section::abandonBuild() {
   }
   build_.reset();
   buildComplete_ = false;
+  partial_ = false;
+  partialPageCount_ = 0;
   pageCount = 0;
+  builtPageCount_ = 0;
 }
 
 std::unique_ptr<Page> Section::loadPageDuringBuild(const int page) {
@@ -515,30 +688,48 @@ std::unique_ptr<Page> Section::loadPageDuringBuild(const int page) {
   return p;
 }
 
-std::unique_ptr<Page> Section::loadPageFromSectionFile() {
-  if (!Storage.openFileForRead("SCT", filePath, file)) {
+// Read a page from the committed file at filePath (finalized section or partial from a
+// previous session). Uses a local handle so it is safe while a build holds the member
+// `file` open on the tmp .bin.
+std::unique_ptr<Page> Section::loadPageAt(const int page) const {
+  HalFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
   uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
-  file.seek(lutOffset + sizeof(uint32_t) * currentPage);
+  serialization::readPod(f, lutOffset);
+  f.seek(lutOffset + sizeof(uint32_t) * page);
   uint32_t pagePos;
-  serialization::readPod(file, pagePos);
-  file.seek(pagePos);
+  serialization::readPod(f, pagePos);
+  f.seek(pagePos);
 
-  auto page = Page::deserialize(file);
-  // Explicit close() required: member variable persists beyond function scope
-  file.close();
-  return page;
+  return Page::deserialize(f);
+  // No f.close() needed -- DESTRUCTOR_CLOSES_FILE=1 handles it at scope exit
 }
+
+std::unique_ptr<Page> Section::loadPage(const int page) {
+  if (page < 0) {
+    return nullptr;
+  }
+  if (build_ && page < static_cast<int>(build_->lut.size())) {
+    return loadPageDuringBuild(page);
+  }
+  // Not (yet) in the active build: serve from the file on disk -- a finalized section,
+  // or a partial from a previous session whose pages the rebuild hasn't reached again.
+  const int onDisk = partial_ ? partialPageCount_ : (build_ ? 0 : pageCount);
+  if (page >= onDisk) {
+    return nullptr;
+  }
+  return loadPageAt(page);
+}
+
+std::unique_ptr<Page> Section::loadPageFromSectionFile() { return loadPageAt(currentPage); }
 
 std::string Section::getTextFromSectionFile() {
   std::string fullText;
-  // Read via the in-progress build if active, so this never reopens the member file handle
-  // (which would clobber the build's O_RDWR write cursor).
-  auto p = isBuilding() ? loadPageDuringBuild(currentPage) : loadPageFromSectionFile();
+  auto p = loadPage(currentPage);
   if (p) {
     for (const auto& el : p->elements) {
       if (el->getTag() == TAG_PageLine) {
@@ -564,6 +755,15 @@ std::optional<uint16_t> Section::getCachedPageCount() const {
 
   const uint32_t fileSize = f.size();
   if (fileSize < HEADER_SIZE) {
+    return std::nullopt;
+  }
+
+  // Only a finalized section's count is the chapter total; a partial's count is just the
+  // suspended build's watermark, which would skew progress mapping. Callers fall back to
+  // their own estimates.
+  uint8_t version;
+  serialization::readPod(f, version);
+  if (version != SECTION_FILE_VERSION) {
     return std::nullopt;
   }
 
