@@ -53,6 +53,17 @@ void XtcReaderActivity::onExit() {
   xtc.reset();
 }
 
+void XtcReaderActivity::openChapterSelection() {
+  if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
+    startActivityForResult(std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
+                           [this](const ActivityResult& result) {
+                             if (!result.isCancelled) {
+                               currentPage = std::get<PageResult>(result.data).page;
+                             }
+                           });
+  }
+}
+
 void XtcReaderActivity::loop() {
   if (!xtc) {
     return;
@@ -81,6 +92,10 @@ void XtcReaderActivity::loop() {
         currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
         requestUpdate();
         return;
+      case EndOfBookOptions::Action::Menu:
+        // The XTC reader's only menu is chapter selection; no-op without chapters
+        openChapterSelection();
+        return;
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
         return;
@@ -91,15 +106,7 @@ void XtcReaderActivity::loop() {
 
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
-      startActivityForResult(
-          std::make_unique<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
-          [this](const ActivityResult& result) {
-            if (!result.isCancelled) {
-              currentPage = std::get<PageResult>(result.data).page;
-            }
-          });
-    }
+    openChapterSelection();
   }
 
   // Long press BACK (1s+) goes to file selection
@@ -175,7 +182,8 @@ void XtcReaderActivity::render(RenderLock&&) {
     // final page turn; no-op once loaded.
     endOfBookOptions.loadOnce(xtc->getPath());
     renderer.clearScreen();
-    endOfBookOptions.render(renderer, mappedInput);
+    const bool hasMenu = xtc->hasChapters() && !xtc->getChapters().empty();
+    endOfBookOptions.render(renderer, mappedInput, hasMenu ? tr(STR_EOB_MENU) : "");
     renderer.displayBuffer();
     return;
   }

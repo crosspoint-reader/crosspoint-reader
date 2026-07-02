@@ -70,7 +70,9 @@ std::string EndOfBookOptions::fullPath(const size_t index) const {
 }
 
 EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManager& input, std::string* openPath) {
-  if (input.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Confirm and the side page-forward button both open the current selection
+  if (input.wasReleased(MappedInputManager::Button::Confirm) ||
+      input.wasReleased(MappedInputManager::Button::PageForward)) {
     if (selector < static_cast<int>(names.size())) {
       if (openPath) {
         *openPath = fullPath(selector);
@@ -80,26 +82,35 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
     return Action::GoHome;  // "Home" entry selected
   }
 
-  // Short-press Back returns to the last page; a long press falls through to the
-  // reader's own handler (file browser).
-  if (input.wasReleased(MappedInputManager::Button::Back) && input.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+  // Side page-back returns to the last page of the book
+  if (input.wasReleased(MappedInputManager::Button::PageBack)) {
     return Action::LastPage;
   }
 
-  const auto [prev, next, fromTilt] = ReaderUtils::detectPageTurn(input);
+  // Short-press Back opens the reader's menu (device-wide convention); a long press
+  // falls through to the reader's own handler (file browser).
+  if (input.wasReleased(MappedInputManager::Button::Back) && input.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+    return Action::Menu;
+  }
+
+  // Selection movement on the front Left/Right buttons, axis-flipped in the rotated
+  // orientations to match the hint labels (same rule as NavPrevious/NavNext)
+  const bool swapFront = input.isNavDirectionSwapped();
+  const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
+  const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
   const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
-  if (prev && selector > 0) {
+  if (input.wasReleased(prevButton) && selector > 0) {
     selector--;
     return Action::Redraw;
   }
-  if (next && selector < itemCount - 1) {
+  if (input.wasReleased(nextButton) && selector < itemCount - 1) {
     selector++;
     return Action::Redraw;
   }
   return Action::None;
 }
 
-void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& input) const {
+void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& input, const char* menuLabel) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int maxTextWidth = pageWidth - metrics.contentSidePadding * 2;
@@ -126,6 +137,6 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
                                                                : std::string(tr(STR_EOB_HOME));
                });
 
-  const auto labels = input.mapLabels(tr(STR_EOB_LAST_PAGE), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = input.mapLabels(menuLabel, tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
