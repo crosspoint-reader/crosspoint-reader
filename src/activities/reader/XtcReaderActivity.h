@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 
+#include "EndOfBookOptions.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -19,6 +20,8 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  // Next-book suggestions for the End-of-Book screen (SETTINGS.endOfBookBehavior)
+  EndOfBookOptions endOfBookOptions;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {

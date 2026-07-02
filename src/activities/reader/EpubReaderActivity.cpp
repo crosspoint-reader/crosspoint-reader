@@ -263,6 +263,9 @@ void EpubReaderActivity::loop() {
   // move path becomes a safe no-op since the entry was already removed.
   if (atEndOfBook) {
     pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+    // Collect next-book suggestions for the end screen (no-op after the first call
+    // and when the End of Book setting is plain go-home)
+    endOfBookOptions.loadOnce(epub->getPath());
   } else {
     pendingReadFolderMove = false;
   }
@@ -296,6 +299,35 @@ void EpubReaderActivity::loop() {
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showBookmarkMessage = false;
     requestUpdate();
+  }
+
+  // While the Ask-mode end screen menu is showing it owns Confirm/Back/page-turn input.
+  // Anything it doesn't handle (e.g. long-press Back to the file browser) falls through
+  // to the regular handlers below; page turns are absorbed by the end-of-book block.
+  // A Confirm release after a long-press function (bookmark/sync) fired is left to the
+  // regular Confirm handler below, which consumes it via ignoreNextConfirmRelease.
+  if (atEndOfBook && endOfBookOptions.askMenuActive() &&
+      !(ignoreNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
+    std::string openPath;
+    switch (endOfBookOptions.handleAskInput(mappedInput, &openPath)) {
+      case EndOfBookOptions::Action::OpenBook:
+        activityManager.goToReader(openPath);
+        return;
+      case EndOfBookOptions::Action::GoHome:
+        onGoHome();
+        return;
+      case EndOfBookOptions::Action::LastPage:
+        currentSpineIndex = epub->getSpineItemsCount() - 1;
+        nextPageNumber = 0;
+        pendingPageJump = std::numeric_limits<uint16_t>::max();
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::Redraw:
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::None:
+        break;
+    }
   }
 
   // Enter reader menu activity on short-press Confirm. A long-press that fired a bound
@@ -405,9 +437,22 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button goes home and back button returns to last page
+  // At end of the book, forward button opens the next book (when configured and available)
+  // or goes home; back button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
+    if (endOfBookOptions.askMenuActive()) {
+      // Selection movement was handled above; absorb leftover page-turn triggers so
+      // e.g. "previous" at the top of the list doesn't jump back into the book
+      return;
+    }
     if (nextTriggered) {
+      if (SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_NEXT_BOOK) {
+        const std::string nextPath = endOfBookOptions.firstSuggestionPath();
+        if (!nextPath.empty()) {
+          activityManager.goToReader(nextPath);
+          return;
+        }
+      }
       onGoHome();
     } else {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
@@ -811,8 +856,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
+    // Covers the render-before-loop race after the final page turn; no-op once loaded
+    endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+    endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();

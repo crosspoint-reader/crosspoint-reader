@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "BookmarkEntry.h"
+#include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
@@ -45,6 +46,8 @@ class EpubReaderActivity final : public Activity {
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
+  // Next-book suggestions for the End-of-Book screen (SETTINGS.endOfBookBehavior)
+  EndOfBookOptions endOfBookOptions;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

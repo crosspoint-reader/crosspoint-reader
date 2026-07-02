@@ -54,6 +54,41 @@ void XtcReaderActivity::onExit() {
 }
 
 void XtcReaderActivity::loop() {
+  if (!xtc) {
+    return;
+  }
+
+  const bool atEndOfBook = currentPage >= xtc->getPageCount();
+  if (atEndOfBook) {
+    // Collect next-book suggestions for the end screen (no-op after the first call
+    // and when the End of Book setting is plain go-home)
+    endOfBookOptions.loadOnce(xtc->getPath());
+  }
+
+  // While the Ask-mode end screen menu is showing it owns Confirm/Back/page-turn input.
+  // Anything it doesn't handle (e.g. long-press Back to the file browser) falls through
+  // to the regular handlers below; page turns are absorbed by the end-of-book block.
+  if (atEndOfBook && endOfBookOptions.askMenuActive()) {
+    std::string openPath;
+    switch (endOfBookOptions.handleAskInput(mappedInput, &openPath)) {
+      case EndOfBookOptions::Action::OpenBook:
+        activityManager.goToReader(openPath);
+        return;
+      case EndOfBookOptions::Action::GoHome:
+        onGoHome();
+        return;
+      case EndOfBookOptions::Action::LastPage:
+        currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::Redraw:
+        requestUpdate();
+        return;
+      case EndOfBookOptions::Action::None:
+        break;
+    }
+  }
+
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
@@ -85,9 +120,22 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button goes home and back button returns to last page
+  // At end of the book, forward button opens the next book (when configured and available)
+  // or goes home; back button returns to last page
   if (currentPage >= xtc->getPageCount()) {
+    if (endOfBookOptions.askMenuActive()) {
+      // Selection movement was handled above; absorb leftover page-turn triggers so
+      // e.g. "previous" at the top of the list doesn't jump back into the book
+      return;
+    }
     if (nextTriggered) {
+      if (SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_NEXT_BOOK) {
+        const std::string nextPath = endOfBookOptions.firstSuggestionPath();
+        if (!nextPath.empty()) {
+          activityManager.goToReader(nextPath);
+          return;
+        }
+      }
       onGoHome();
     } else {
       currentPage = xtc->getPageCount() - 1;
@@ -123,9 +171,11 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   // Bounds check
   if (currentPage >= xtc->getPageCount()) {
-    // Show end of book screen
+    // Show end of book screen. loadOnce covers the render-before-loop race after the
+    // final page turn; no-op once loaded.
+    endOfBookOptions.loadOnce(xtc->getPath());
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+    endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
     return;
   }
