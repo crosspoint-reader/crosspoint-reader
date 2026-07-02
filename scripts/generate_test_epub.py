@@ -28,15 +28,39 @@ except ImportError:
 OUTPUT_DIR = Path(__file__).parent.parent / "test" / "epubs"
 SCREEN_WIDTH = 480
 SCREEN_HEIGHT = 800
+JPEG_FORMAT_JPG = "jpeg_format.jpg"
+GRAYSCALE_TEST_JPG = "grayscale_test.jpg"
+CENTERING_TEST_JPG = "centering_test.jpg"
+SCALING_TEST_JPG = "scaling_test.jpg"
+WIDE_SCALING_TEST_JPG = "wide_scaling_test.jpg"
+GRADIENT_TEST_JPG = "gradient_test.jpg"
+CACHE_TEST_1_JPG = "cache_test_1.jpg"
+CACHE_TEST_2_JPG = "cache_test_2.jpg"
+PNG_FORMAT_PNG = "png_format.png"
+GRAYSCALE_TEST_PNG = "grayscale_test.png"
+CENTERING_TEST_PNG = "centering_test.png"
+SCALING_TEST_PNG = "scaling_test.png"
+WIDE_SCALING_TEST_PNG = "wide_scaling_test.png"
+GRADIENT_TEST_PNG = "gradient_test.png"
+CACHE_TEST_1_PNG = "cache_test_1.png"
+CACHE_TEST_2_PNG = "cache_test_2.png"
+
+
+def image_src(filename):
+    return f"images/{filename}"
+
+
+def single_image_asset(filename, images):
+    return [(filename, images[filename])]
 
 def get_font(size=20):
     """Get a font, falling back to default if needed."""
     try:
         return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size)
-    except:
+    except OSError:
         try:
             return ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans.ttf", size)
-        except:
+        except OSError:
             return ImageFont.load_default()
 
 def draw_text_centered(draw, y, text, font, fill=0):
@@ -539,24 +563,24 @@ def main():
         images = {}
 
         # JPEG tests
-        create_grayscale_test_image(tmpdir / 'grayscale_test.jpg', is_png=False)
-        create_centering_test_image(tmpdir / 'centering_test.jpg', is_png=False)
-        create_scaling_test_image(tmpdir / 'scaling_test.jpg', is_png=False)
-        create_wide_scaling_test_image(tmpdir / 'wide_scaling_test.jpg', is_png=False)
-        create_gradient_test_image(tmpdir / 'gradient_test.jpg', is_png=False)
-        create_format_test_image(tmpdir / 'jpeg_format.jpg', 'JPEG', is_png=False)
-        create_cache_test_image(tmpdir / 'cache_test_1.jpg', 1, is_png=False)
-        create_cache_test_image(tmpdir / 'cache_test_2.jpg', 2, is_png=False)
+        create_grayscale_test_image(tmpdir / GRAYSCALE_TEST_JPG, is_png=False)
+        create_centering_test_image(tmpdir / CENTERING_TEST_JPG, is_png=False)
+        create_scaling_test_image(tmpdir / SCALING_TEST_JPG, is_png=False)
+        create_wide_scaling_test_image(tmpdir / WIDE_SCALING_TEST_JPG, is_png=False)
+        create_gradient_test_image(tmpdir / GRADIENT_TEST_JPG, is_png=False)
+        create_format_test_image(tmpdir / JPEG_FORMAT_JPG, 'JPEG', is_png=False)
+        create_cache_test_image(tmpdir / CACHE_TEST_1_JPG, 1, is_png=False)
+        create_cache_test_image(tmpdir / CACHE_TEST_2_JPG, 2, is_png=False)
 
         # PNG tests
-        create_grayscale_test_image(tmpdir / 'grayscale_test.png', is_png=True)
-        create_centering_test_image(tmpdir / 'centering_test.png', is_png=True)
-        create_scaling_test_image(tmpdir / 'scaling_test.png', is_png=True)
-        create_wide_scaling_test_image(tmpdir / 'wide_scaling_test.png', is_png=True)
-        create_gradient_test_image(tmpdir / 'gradient_test.png', is_png=True)
-        create_format_test_image(tmpdir / 'png_format.png', 'PNG', is_png=True)
-        create_cache_test_image(tmpdir / 'cache_test_1.png', 1, is_png=True)
-        create_cache_test_image(tmpdir / 'cache_test_2.png', 2, is_png=True)
+        create_grayscale_test_image(tmpdir / GRAYSCALE_TEST_PNG, is_png=True)
+        create_centering_test_image(tmpdir / CENTERING_TEST_PNG, is_png=True)
+        create_scaling_test_image(tmpdir / SCALING_TEST_PNG, is_png=True)
+        create_wide_scaling_test_image(tmpdir / WIDE_SCALING_TEST_PNG, is_png=True)
+        create_gradient_test_image(tmpdir / GRADIENT_TEST_PNG, is_png=True)
+        create_format_test_image(tmpdir / PNG_FORMAT_PNG, 'PNG', is_png=True)
+        create_cache_test_image(tmpdir / CACHE_TEST_1_PNG, 1, is_png=True)
+        create_cache_test_image(tmpdir / CACHE_TEST_2_PNG, 2, is_png=True)
 
         # Read all images
         for img_file in tmpdir.glob('*.*'):
@@ -577,52 +601,52 @@ def main():
 """), []),
             ("1. JPEG Format", make_chapter("JPEG Format Test", """
 <p>Basic JPEG decoding test.</p>
-<img src="images/jpeg_format.jpg" alt="JPEG format test"/>
+<img src="{image_src(JPEG_FORMAT_JPG)}" alt="JPEG format test"/>
 <p>If the image above is visible, JPEG decoding works.</p>
-"""), [('jpeg_format.jpg', images['jpeg_format.jpg'])]),
+"""), single_image_asset(JPEG_FORMAT_JPG, images)),
             ("2. Grayscale", make_chapter("Grayscale Test", """
 <p>Verify 4 distinct gray levels are visible.</p>
-<img src="images/grayscale_test.jpg" alt="Grayscale test"/>
-"""), [('grayscale_test.jpg', images['grayscale_test.jpg'])]),
+<img src="{image_src(GRAYSCALE_TEST_JPG)}" alt="Grayscale test"/>
+"""), single_image_asset(GRAYSCALE_TEST_JPG, images)),
             ("3. Gradient", make_chapter("Gradient Test", """
 <p>Verify gradient quantizes to 4 bands.</p>
-<img src="images/gradient_test.jpg" alt="Gradient test"/>
-"""), [('gradient_test.jpg', images['gradient_test.jpg'])]),
+<img src="{image_src(GRADIENT_TEST_JPG)}" alt="Gradient test"/>
+"""), single_image_asset(GRADIENT_TEST_JPG, images)),
             ("4. Centering", make_chapter("Centering Test", """
 <p>Verify image is centered horizontally.</p>
-<img src="images/centering_test.jpg" alt="Centering test"/>
-"""), [('centering_test.jpg', images['centering_test.jpg'])]),
+<img src="{image_src(CENTERING_TEST_JPG)}" alt="Centering test"/>
+"""), single_image_asset(CENTERING_TEST_JPG, images)),
             ("5. Scaling", make_chapter("Scaling Test", """
 <p>This image is 1200x1500 pixels - larger than the screen.</p>
 <p>It should be scaled down to fit.</p>
-<img src="images/scaling_test.jpg" alt="Scaling test"/>
-"""), [('scaling_test.jpg', images['scaling_test.jpg'])]),
+<img src="{image_src(SCALING_TEST_JPG)}" alt="Scaling test"/>
+"""), single_image_asset(SCALING_TEST_JPG, images)),
             ("6. Wide Scaling", make_chapter("Wide Scaling Test", """
 <p>This image is 1807x736 pixels - a wide landscape format.</p>
 <p>Tests scaling with dimensions that can cause cache mismatches.</p>
-<img src="images/wide_scaling_test.jpg" alt="Wide scaling test"/>
-"""), [('wide_scaling_test.jpg', images['wide_scaling_test.jpg'])]),
+<img src="{image_src(WIDE_SCALING_TEST_JPG)}" alt="Wide scaling test"/>
+"""), single_image_asset(WIDE_SCALING_TEST_JPG, images)),
             ("7. Cache Test A", make_chapter("Cache Test - Page A", """
 <p>First cache test page. Note the load time.</p>
-<img src="images/cache_test_1.jpg" alt="Cache test 1"/>
+<img src="{image_src(CACHE_TEST_1_JPG)}" alt="Cache test 1"/>
 <p>Navigate to next page, then come back.</p>
-"""), [('cache_test_1.jpg', images['cache_test_1.jpg'])]),
+"""), single_image_asset(CACHE_TEST_1_JPG, images)),
             ("8. Cache Test B", make_chapter("Cache Test - Page B", """
 <p>Second cache test page.</p>
-<img src="images/cache_test_2.jpg" alt="Cache test 2"/>
+<img src="{image_src(CACHE_TEST_2_JPG)}" alt="Cache test 2"/>
 <p>Navigate back to Page A - it should load faster from cache.</p>
-"""), [('cache_test_2.jpg', images['cache_test_2.jpg'])]),
+"""), single_image_asset(CACHE_TEST_2_JPG, images)),
             ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", """
 <p>Tests that image centering does not bleed into following text blocks (issue #1026).</p>
 <p>Set Paragraph Alignment to Justify and Embedded Style to OFF before testing.</p>
 <p>All paragraphs below the images should be justified, not centered.</p>
 <h1 class="hidden"></h1>
-<p><img src="images/centering_test.jpg" alt="Test image"/></p>
+<p><img src="{image_src(CENTERING_TEST_JPG)}" alt="Test image"/></p>
 <div>
 <p>FIRST PARAGRAPH after image. This paragraph follows an empty heading and an image-only paragraph. With the bug present, this text appears centered instead of justified because the empty heading's default Center alignment bleeds through the chain of empty text blocks. Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do eiusmod tempor.</p>
 <p>SECOND PARAGRAPH in the same div. This paragraph should always be justified because the first paragraph's text block was flushed. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia.</p>
 </div>
-"""), []),  # centering_test.jpg already included by chapter 4
+"""), []),  # CENTERING_TEST_JPG already included by chapter 4
         ]
 
         create_epub(OUTPUT_DIR / 'test_jpeg_images.epub', 'JPEG Image Tests', jpeg_chapters)
@@ -642,52 +666,52 @@ def main():
 """), []),
             ("1. PNG Format", make_chapter("PNG Format Test", """
 <p>Basic PNG decoding test.</p>
-<img src="images/png_format.png" alt="PNG format test"/>
+<img src="{image_src(PNG_FORMAT_PNG)}" alt="PNG format test"/>
 <p>If the image above is visible and no crash occurred, PNG decoding works.</p>
-"""), [('png_format.png', images['png_format.png'])]),
+"""), single_image_asset(PNG_FORMAT_PNG, images)),
             ("2. Grayscale", make_chapter("Grayscale Test", """
 <p>Verify 4 distinct gray levels are visible.</p>
-<img src="images/grayscale_test.png" alt="Grayscale test"/>
-"""), [('grayscale_test.png', images['grayscale_test.png'])]),
+<img src="{image_src(GRAYSCALE_TEST_PNG)}" alt="Grayscale test"/>
+"""), single_image_asset(GRAYSCALE_TEST_PNG, images)),
             ("3. Gradient", make_chapter("Gradient Test", """
 <p>Verify gradient quantizes to 4 bands.</p>
-<img src="images/gradient_test.png" alt="Gradient test"/>
-"""), [('gradient_test.png', images['gradient_test.png'])]),
+<img src="{image_src(GRADIENT_TEST_PNG)}" alt="Gradient test"/>
+"""), single_image_asset(GRADIENT_TEST_PNG, images)),
             ("4. Centering", make_chapter("Centering Test", """
 <p>Verify image is centered horizontally.</p>
-<img src="images/centering_test.png" alt="Centering test"/>
-"""), [('centering_test.png', images['centering_test.png'])]),
+<img src="{image_src(CENTERING_TEST_PNG)}" alt="Centering test"/>
+"""), single_image_asset(CENTERING_TEST_PNG, images)),
             ("5. Scaling", make_chapter("Scaling Test", """
 <p>This image is 1200x1500 pixels - larger than the screen.</p>
 <p>It should be scaled down to fit.</p>
-<img src="images/scaling_test.png" alt="Scaling test"/>
-"""), [('scaling_test.png', images['scaling_test.png'])]),
+<img src="{image_src(SCALING_TEST_PNG)}" alt="Scaling test"/>
+"""), single_image_asset(SCALING_TEST_PNG, images)),
             ("6. Wide Scaling", make_chapter("Wide Scaling Test", """
 <p>This image is 1807x736 pixels - a wide landscape format.</p>
 <p>Tests scaling with dimensions that can cause cache mismatches.</p>
-<img src="images/wide_scaling_test.png" alt="Wide scaling test"/>
-"""), [('wide_scaling_test.png', images['wide_scaling_test.png'])]),
+<img src="{image_src(WIDE_SCALING_TEST_PNG)}" alt="Wide scaling test"/>
+"""), single_image_asset(WIDE_SCALING_TEST_PNG, images)),
             ("7. Cache Test A", make_chapter("Cache Test - Page A", """
 <p>First cache test page. Note the load time.</p>
-<img src="images/cache_test_1.png" alt="Cache test 1"/>
+<img src="{image_src(CACHE_TEST_1_PNG)}" alt="Cache test 1"/>
 <p>Navigate to next page, then come back.</p>
-"""), [('cache_test_1.png', images['cache_test_1.png'])]),
+"""), single_image_asset(CACHE_TEST_1_PNG, images)),
             ("8. Cache Test B", make_chapter("Cache Test - Page B", """
 <p>Second cache test page.</p>
-<img src="images/cache_test_2.png" alt="Cache test 2"/>
+<img src="{image_src(CACHE_TEST_2_PNG)}" alt="Cache test 2"/>
 <p>Navigate back to Page A - it should load faster from cache.</p>
-"""), [('cache_test_2.png', images['cache_test_2.png'])]),
+"""), single_image_asset(CACHE_TEST_2_PNG, images)),
             ("9. Alignment Bleed", make_chapter("Image Centering Bleed Test", """
 <p>Tests that image centering does not bleed into following text blocks (issue #1026).</p>
 <p>Set Paragraph Alignment to Justify and Embedded Style to OFF before testing.</p>
 <p>All paragraphs below the images should be justified, not centered.</p>
 <h1 class="hidden"></h1>
-<p><img src="images/centering_test.png" alt="Test image"/></p>
+<p><img src="{image_src(CENTERING_TEST_PNG)}" alt="Test image"/></p>
 <div>
 <p>FIRST PARAGRAPH after image. This paragraph follows an empty heading and an image-only paragraph. With the bug present, this text appears centered instead of justified because the empty heading's default Center alignment bleeds through the chain of empty text blocks. Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do eiusmod tempor.</p>
 <p>SECOND PARAGRAPH in the same div. This paragraph should always be justified because the first paragraph's text block was flushed. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia.</p>
 </div>
-"""), []),  # centering_test.png already included by chapter 4
+"""), []),  # CENTERING_TEST_PNG already included by chapter 4
         ]
 
         create_epub(OUTPUT_DIR / 'test_png_images.epub', 'PNG Image Tests', png_chapters)
@@ -700,20 +724,20 @@ def main():
 """), []),
             ("1. JPEG Image", make_chapter("JPEG in Mixed EPUB", """
 <p>This is a JPEG image:</p>
-<img src="images/jpeg_format.jpg" alt="JPEG"/>
-"""), [('jpeg_format.jpg', images['jpeg_format.jpg'])]),
+<img src="{image_src(JPEG_FORMAT_JPG)}" alt="JPEG"/>
+"""), single_image_asset(JPEG_FORMAT_JPG, images)),
             ("2. PNG Image", make_chapter("PNG in Mixed EPUB", """
 <p>This is a PNG image:</p>
-<img src="images/png_format.png" alt="PNG"/>
-"""), [('png_format.png', images['png_format.png'])]),
+<img src="{image_src(PNG_FORMAT_PNG)}" alt="PNG"/>
+"""), single_image_asset(PNG_FORMAT_PNG, images)),
             ("3. Both Formats", make_chapter("Both Formats on One Page", """
 <p>JPEG image:</p>
-<img src="images/grayscale_test.jpg" alt="JPEG grayscale"/>
+<img src="{image_src(GRAYSCALE_TEST_JPG)}" alt="JPEG grayscale"/>
 <p>PNG image:</p>
-<img src="images/grayscale_test.png" alt="PNG grayscale"/>
+<img src="{image_src(GRAYSCALE_TEST_PNG)}" alt="PNG grayscale"/>
 <p>Both should render with proper grayscale.</p>
-"""), [('grayscale_test.jpg', images['grayscale_test.jpg']),
-       ('grayscale_test.png', images['grayscale_test.png'])]),
+"""), [(GRAYSCALE_TEST_JPG, images[GRAYSCALE_TEST_JPG]),
+    (GRAYSCALE_TEST_PNG, images[GRAYSCALE_TEST_PNG])]),
         ]
 
         create_epub(OUTPUT_DIR / 'test_mixed_images.epub', 'Mixed Format Tests', mixed_chapters)

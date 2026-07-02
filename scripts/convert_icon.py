@@ -50,7 +50,7 @@ def image_to_c_array(img, array_name):
                     byte |= (bit << (7 - b))
             packed.append(byte)
     # Format as C array
-    c = f'#pragma once\n#include <cstdint>\n\n'
+            c = '#pragma once\n#include <cstdint>\n\n'
     c += f'// size: {width}x{height}\n'
     c += f'static const uint8_t {array_name}[] = {{\n    '
     for i, v in enumerate(packed):

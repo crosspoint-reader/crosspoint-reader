@@ -168,7 +168,7 @@ def _get_font(size=20):
             return ImageFont.truetype(path, size)
         except (OSError, IOError):
             continue
-    return ImageFont.load_default(size)
+    return ImageFont.load_default()
 
 
 def _draw_text_centered(draw, y, text, font, fill, width):
