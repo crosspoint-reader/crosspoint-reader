@@ -1895,15 +1895,43 @@
     const fileTable = document.getElementById('file-table');
 
     const segments = currentPath.split('/').filter(Boolean);
-    const crumbs = ['<a href="/files">🏠 Home</a>'];
-    segments.forEach(function(segment, index) {
-      const path = '/' + segments.slice(0, index + 1).join('/');
-      crumbs.push('<a href="/files?path=' + encodeURIComponent(path) + '">' + escapeHtml(segment) + '</a>');
-    });
-    // The last crumb is the current location: render as plain text, not a link.
-    const lastSegment = segments.length ? escapeHtml(segments[segments.length - 1]) : '🏠 Home';
-    crumbs[crumbs.length - 1] = '<span class="current">' + lastSegment + '</span>';
-    breadcrumbs.innerHTML = crumbs.join('<span class="sep">›</span>');
+    breadcrumbs.replaceChildren();
+
+    const appendSep = function() {
+      const sep = document.createElement('span');
+      sep.className = 'sep';
+      sep.textContent = '›';
+      breadcrumbs.appendChild(sep);
+    };
+
+    const appendLink = function(label, href) {
+      const link = document.createElement('a');
+      link.href = href;
+      link.textContent = label;
+      breadcrumbs.appendChild(link);
+    };
+
+    const appendCurrent = function(label) {
+      const current = document.createElement('span');
+      current.className = 'current';
+      current.textContent = label;
+      breadcrumbs.appendChild(current);
+    };
+
+    if (segments.length === 0) {
+      appendCurrent('🏠 Home');
+    } else {
+      appendLink('🏠 Home', '/files');
+      segments.forEach(function(segment, index) {
+        appendSep();
+        if (index === segments.length - 1) {
+          appendCurrent(segment);
+        } else {
+          const path = '/' + segments.slice(0, index + 1).join('/');
+          appendLink(segment, '/files?path=' + encodeURIComponent(path));
+        }
+      });
+    }
 
     let files = [];
     try {
