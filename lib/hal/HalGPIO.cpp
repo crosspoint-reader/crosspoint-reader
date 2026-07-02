@@ -204,6 +204,14 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  // Throttle the X3's I2C-based USB detection; see USB_POLL_X3_MS. First call
+  // (usbLastPollMs == 0) always polls so boot state is correct.
+  const unsigned long now = millis();
+  if (deviceIsX3() && usbLastPollMs != 0 && now - usbLastPollMs < USB_POLL_X3_MS) {
+    usbStateChanged = false;
+    return;
+  }
+  usbLastPollMs = now;
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
