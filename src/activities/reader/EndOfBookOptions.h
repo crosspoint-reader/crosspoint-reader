@@ -11,7 +11,7 @@ class MappedInputManager;
 // list input, and draws the end screen for every mode.
 class EndOfBookOptions {
  public:
-  enum class Action { None, Redraw, OpenBook, GoHome, LastPage, Menu };
+  enum class Action { None, Redraw, OpenBook, GoHome, LastPage };
 
   static constexpr size_t MAX_SUGGESTIONS = 3;
 
@@ -27,16 +27,14 @@ class EndOfBookOptions {
   std::string firstSuggestionPath() const;
 
   // Ask-mode input handling. Front Left/Right move the selection, Confirm and side
-  // page-forward open it (or Home), side page-back returns to the last page, and a short
-  // Back press asks for the reader's menu. Fills openPath when the result is OpenBook.
-  // Returns Action::None when nothing relevant was pressed; callers continue their normal
-  // input path (keeping long-press Back to the file browser working).
+  // page-forward open it (or Home), and short Back or side page-back return to the last
+  // page of the book. Fills openPath when the result is OpenBook. Returns Action::None
+  // when nothing relevant was pressed; callers continue their normal input path (keeping
+  // long-press Back to the file browser working).
   Action handleAskInput(const MappedInputManager& input, std::string* openPath);
 
   // Draws the full end screen (title plus mode-specific extras) onto a cleared buffer.
-  // menuLabel is the hint for the Back button in Ask mode (pass "" when the reader has
-  // no menu to open, e.g. an XTC without chapters).
-  void render(GfxRenderer& renderer, const MappedInputManager& input, const char* menuLabel) const;
+  void render(GfxRenderer& renderer, const MappedInputManager& input) const;
 
  private:
   std::string folder;

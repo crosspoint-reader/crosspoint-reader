@@ -96,10 +96,11 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
     return Action::LastPage;
   }
 
-  // Short-press Back opens the reader's menu (device-wide convention); a long press
-  // falls through to the reader's own handler (file browser).
+  // Short-press Back also returns to the last page (works when side buttons are
+  // disabled too); a long press falls through to the reader's own handler (file browser).
+  // Home is reached through the list's own Home entry.
   if (input.wasReleased(MappedInputManager::Button::Back) && input.getHeldTime() < ReaderUtils::GO_HOME_MS) {
-    return Action::Menu;
+    return Action::LastPage;
   }
 
   // Selection movement on the front Left/Right buttons, axis-flipped in the rotated
@@ -119,7 +120,7 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
   return Action::None;
 }
 
-void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& input, const char* menuLabel) const {
+void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& input) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int maxTextWidth = pageWidth - metrics.contentSidePadding * 2;
@@ -146,6 +147,6 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
                                                                : std::string(tr(STR_EOB_HOME));
                });
 
-  const auto labels = input.mapLabels(menuLabel, tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = input.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

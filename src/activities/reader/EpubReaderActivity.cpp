@@ -345,9 +345,6 @@ void EpubReaderActivity::loop() {
         pendingPageJump = std::numeric_limits<uint16_t>::max();
         requestUpdate();
         return;
-      case EndOfBookOptions::Action::Menu:
-        openReaderMenu();
-        return;
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
         return;
@@ -866,7 +863,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Covers the render-before-loop race after the final page turn; no-op once loaded
     endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
-    endOfBookOptions.render(renderer, mappedInput, tr(STR_EOB_MENU));
+    endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
     automaticPageTurnActive = false;
     showPendingSyncSaveError();

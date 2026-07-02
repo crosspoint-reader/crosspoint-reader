@@ -92,10 +92,6 @@ void XtcReaderActivity::loop() {
         currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
         requestUpdate();
         return;
-      case EndOfBookOptions::Action::Menu:
-        // The XTC reader's only menu is chapter selection; no-op without chapters
-        openChapterSelection();
-        return;
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
         return;
@@ -182,8 +178,7 @@ void XtcReaderActivity::render(RenderLock&&) {
     // final page turn; no-op once loaded.
     endOfBookOptions.loadOnce(xtc->getPath());
     renderer.clearScreen();
-    const bool hasMenu = xtc->hasChapters() && !xtc->getChapters().empty();
-    endOfBookOptions.render(renderer, mappedInput, hasMenu ? tr(STR_EOB_MENU) : "");
+    endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
     return;
   }
