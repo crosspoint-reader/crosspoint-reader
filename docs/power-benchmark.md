@@ -90,6 +90,19 @@ off, no RAM/RTC retention), so this breakdown is where the responsiveness wins h
 | S12 | Sleep (sleep-screen) | | | 143.81 | slim, cable out, 2026-07-02 |
 | S12b | Sleep (sleep-screen) + Opp 1 + tail | | | 142.66 | slim, cable out, 2026-07-02 — unchanged, as expected (path never idles) |
 
+**S1c floor decomposition (2026-07-02, zoomed trace):** true floor 2.00 mA; wake slices
+8 mA × 4.0 ms every 50 ms (≈0.5 mA); regulator burst spikes ~15–20 mA every ~5.6 ms
+(PFM light-load delivery); **SD card idle ≈ 0.4 mA** (eject A/B mid-capture). Remaining
+~1 mA: MCU light sleep + flash standby (~0.2), DS3231/gauge/IMU/e-ink standby (~0.4),
+regulator + charger quiescent (rest) — not firmware-addressable.
+
+**Wake-slice decomposition (2026-07-02, duplicate-ADC probe: +0.18 mA, slice 4.0→5.6 ms):**
+one button-ADC pair (Arduino `analogRead` ×2 at 10 MHz) ≈ 1.6 ms ≈ 0.18 mA of the
+0.5 mA slice cost; the remaining ~2.4 ms is light-sleep entry/exit + loop overhead.
+Ceiling for a raw one-shot ADC optimization: ~0.15 mA (needs an open-x4-sdk
+InputManager change) — deferred in favor of Opportunity 2 (refresh busy-wait,
+~10 mC/turn).
+
 Superseded captures (default build, USB attached — power path contaminated by charger):
 S1 9.79 mA · S2 22.5 µA · S3 90.63 mA·s · S10 241.80 mA·s · S12 154.51 mA·s.
 
