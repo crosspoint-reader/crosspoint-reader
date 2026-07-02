@@ -32,6 +32,7 @@ import re
 import signal
 import sys
 import threading
+import time
 from collections import deque
 from datetime import datetime
 
@@ -65,6 +66,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="",
         help="Suppress lines containing this keyword (case-insensitive)",
+    )
+    parser.add_argument(
+        "--no-graph",
+        action="store_true",
+        help="Disable the matplotlib memory graph (plain serial console + command prompt only)",
     )
     return parser
 
@@ -232,12 +238,39 @@ def parse_memory_line(line: str) -> tuple[int | None, int | None, int | None]:
     )
 
 
-def serial_worker(ser, kwargs: dict[str, str]) -> None:
+def reopen_serial(ser_holder: dict) -> bool:
+    """
+    Close the (possibly dead) serial port and retry opening it until it comes back
+    or shutdown is requested. Devices re-enumerate on reboot/deep-sleep, so the
+    monitor must survive the port vanishing and reappearing. Returns True once
+    reconnected, False if shutting down.
+    """
+    try:
+        ser_holder["ser"].close()
+    except (OSError, serial.SerialException):
+        pass
+    print(f"{Fore.YELLOW}Serial disconnected - waiting for device to come back...{Style.RESET_ALL}")
+    while not shutdown_event.is_set():
+        try:
+            ser = serial.Serial(ser_holder["port"], ser_holder["baud"], timeout=0.1)
+            ser.dtr = False
+            ser.rts = False
+            ser_holder["ser"] = ser
+            print(f"{Fore.GREEN}Reconnected to {ser_holder['port']}{Style.RESET_ALL}")
+            return True
+        except (OSError, serial.SerialException):
+            time.sleep(0.25)
+    return False
+
+
+def serial_worker(ser_holder: dict, kwargs: dict[str, str]) -> None:
     """
     Runs in a background thread. Handles reading serial data, printing to console,
     updating memory usage data for graphing, and processing screenshot data.
+    Automatically reconnects when the device reboots or is replugged.
     Monitors the global shutdown event for graceful termination.
     """
+    ser = ser_holder["ser"]
     print(f"{Fore.CYAN}--- Opening serial port ---{Style.RESET_ALL}")
     filter_keyword = kwargs.get("filter", "").lower()
     suppress = kwargs.get("suppress", "").lower()
@@ -262,73 +295,77 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
 
     try:
         while not shutdown_event.is_set():
-            if expecting_screenshot:
-                data = ser.read(screenshot_size - len(screenshot_data))
-                if not data:
+            try:
+                if expecting_screenshot:
+                    data = ser.read(screenshot_size - len(screenshot_data))
+                    if not data:
+                        continue
+                    screenshot_data += data
+                    if len(screenshot_data) == screenshot_size:
+                        if Image:
+                            img = Image.frombytes("1", (800, 480), screenshot_data)
+                            # We need to rotate the image because the raw data is in landscape mode
+                            img = img.transpose(Image.ROTATE_270)
+                            img.save("screenshot.bmp")
+                            print(
+                                f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}"
+                            )
+                        else:
+                            with open("screenshot.raw", "wb") as f:
+                                f.write(screenshot_data)
+                            print(
+                                f"{Fore.GREEN}Screenshot saved to screenshot.raw (PIL not available){Style.RESET_ALL}"
+                            )
+                        expecting_screenshot = False
+                        screenshot_data = b""
                     continue
-                screenshot_data += data
-                if len(screenshot_data) == screenshot_size:
-                    if Image:
-                        img = Image.frombytes("1", (800, 480), screenshot_data)
-                        # We need to rotate the image because the raw data is in landscape mode
-                        img = img.transpose(Image.ROTATE_270)
-                        img.save("screenshot.bmp")
-                        print(
-                            f"{Fore.GREEN}Screenshot saved to screenshot.bmp{Style.RESET_ALL}"
-                        )
-                    else:
-                        with open("screenshot.raw", "wb") as f:
-                            f.write(screenshot_data)
-                        print(
-                            f"{Fore.GREEN}Screenshot saved to screenshot.raw (PIL not available){Style.RESET_ALL}"
-                        )
-                    expecting_screenshot = False
-                    screenshot_data = b""
-            else:
-                try:
-                    raw_data = ser.readline().decode("utf-8", errors="replace")
 
-                    if not raw_data:
-                        continue
+                raw_data = ser.readline().decode("utf-8", errors="replace")
 
-                    clean_line = raw_data.strip()
-                    if not clean_line:
-                        continue
+                if not raw_data:
+                    continue
 
-                    if clean_line.startswith("SCREENSHOT_START:"):
-                        screenshot_size = int(clean_line.split(":")[1])
-                        expecting_screenshot = True
-                        continue
-                    elif clean_line == "SCREENSHOT_END":
-                        continue  # ignore
+                clean_line = raw_data.strip()
+                if not clean_line:
+                    continue
 
-                    # Add PC timestamp
-                    pc_time = datetime.now().strftime("%H:%M:%S")
-                    formatted_line = re.sub(r"^\[\d+\]", f"[{pc_time}]", clean_line)
+                if clean_line.startswith("SCREENSHOT_START:"):
+                    screenshot_size = int(clean_line.split(":")[1])
+                    expecting_screenshot = True
+                    continue
+                elif clean_line == "SCREENSHOT_END":
+                    continue  # ignore
 
-                    # Check for Memory Line
-                    if "[MEM]" in formatted_line:
-                        free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
-                        if free_val is not None and total_val is not None:
-                            with data_lock:
-                                time_data.append(pc_time)
-                                free_mem_data.append(free_val / 1024)
-                                total_mem_data.append(total_val / 1024)
-                                max_alloc_data.append((max_alloc_val or 0) / 1024)
-                    # Apply filters
-                    if filter_keyword and filter_keyword not in formatted_line.lower():
-                        continue
-                    if suppress and suppress in formatted_line.lower():
-                        continue
-                    # Print to console
-                    line_color = get_color_for_line(formatted_line)
-                    print(f"{line_color}{formatted_line}")
+                # Add PC timestamp
+                pc_time = datetime.now().strftime("%H:%M:%S")
+                formatted_line = re.sub(r"^\[\d+\]", f"[{pc_time}]", clean_line)
 
-                except (OSError, UnicodeDecodeError):
-                    print(
-                        f"{Fore.RED}Device disconnected or data error.{Style.RESET_ALL}"
-                    )
+                # Check for Memory Line
+                if "[MEM]" in formatted_line:
+                    free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
+                    if free_val is not None and total_val is not None:
+                        with data_lock:
+                            time_data.append(pc_time)
+                            free_mem_data.append(free_val / 1024)
+                            total_mem_data.append(total_val / 1024)
+                            max_alloc_data.append((max_alloc_val or 0) / 1024)
+                # Apply filters
+                if filter_keyword and filter_keyword not in formatted_line.lower():
+                    continue
+                if suppress and suppress in formatted_line.lower():
+                    continue
+                # Print to console
+                line_color = get_color_for_line(formatted_line)
+                print(f"{line_color}{formatted_line}")
+
+            except (OSError, serial.SerialException):
+                # Device rebooted, deep-slept, or was replugged: drop any partial
+                # screenshot transfer and wait for the port to come back.
+                expecting_screenshot = False
+                screenshot_data = b""
+                if not reopen_serial(ser_holder):
                     break
+                ser = ser_holder["ser"]
     except KeyboardInterrupt:
         # If thread is killed violently (e.g. main exit), silence errors
         pass
@@ -336,7 +373,7 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
         pass  # ser closed in main
 
 
-def input_worker(ser) -> None:
+def input_worker(ser_holder: dict) -> None:
     """
     Runs in a background thread. Handles user input to send commands to the ESP32 device.
     Monitors the global shutdown event for graceful termination on Ctrl-C.
@@ -344,9 +381,11 @@ def input_worker(ser) -> None:
     while not shutdown_event.is_set():
         try:
             cmd = input("Command: ")
-            ser.write(f"CMD:{cmd}\n".encode())
+            ser_holder["ser"].write(f"CMD:{cmd}\n".encode())
         except (EOFError, KeyboardInterrupt):
             break
+        except (OSError, serial.SerialException):
+            print(f"{Fore.YELLOW}Device not connected - command dropped.{Style.RESET_ALL}")
 
 
 def update_graph(frame) -> list:  # pylint: disable=unused-argument
@@ -465,18 +504,35 @@ def main() -> None:
         print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
         return
 
+    # Shared holder so the reader thread can transparently reconnect (device
+    # reboots / deep sleeps / replugs) and the input thread always writes to
+    # the live port object.
+    ser_holder = {"ser": ser, "port": port, "baud": args.baud}
+
     # Set up signal handler for graceful shutdown
     signal.signal(signal.SIGINT, signal_handler)
 
     # 1. Start the Serial Reader in a separate thread
     # Daemon=True means this thread dies when the main program closes
     myargs = vars(args)  # Convert Namespace to dict for easier passing
-    t = threading.Thread(target=serial_worker, args=(ser, myargs), daemon=True)
+    t = threading.Thread(target=serial_worker, args=(ser_holder, myargs), daemon=True)
     t.start()
 
     # Start input thread
-    input_thread = threading.Thread(target=input_worker, args=(ser,), daemon=True)
+    input_thread = threading.Thread(target=input_worker, args=(ser_holder,), daemon=True)
     input_thread.start()
+
+    if args.no_graph:
+        # Plain console mode: keep the main thread alive until Ctrl-C
+        print(f"{Fore.YELLOW}Graph disabled (--no-graph). Press Ctrl-C to exit.{Style.RESET_ALL}")
+        try:
+            while not shutdown_event.is_set():
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            print(f"\n{Fore.YELLOW}Exiting...{Style.RESET_ALL}")
+        finally:
+            shutdown_event.set()
+        return
 
     # 2. Set up the Graph (Main Thread)
     try:
