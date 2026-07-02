@@ -331,6 +331,10 @@ void setup() {
   halTiltSensor.begin();
   halClock.begin();
 
+  // Downclock the CPU while the render task busy-waits on an e-ink refresh
+  // (0.3-2 s of pure pin polling); the hooks no-op when WiFi/USB is active
+  display.setBusyWaitHooks([] { powerManager.onEinkBusyWaitBegin(); }, [] { powerManager.onEinkBusyWaitEnd(); });
+
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
   // SD Card Initialization
