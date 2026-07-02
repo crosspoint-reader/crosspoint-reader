@@ -1525,7 +1525,7 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
 
 CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
   const int currentPage = section ? section->currentPage : nextPageNumber;
-  const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
   std::optional<uint16_t> paragraphIndex;
   if (section && currentPage >= 0 && currentPage < section->pageCount) {
     const uint16_t paragraphPage =
