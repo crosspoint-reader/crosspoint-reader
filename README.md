@@ -8,6 +8,8 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
+> If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
+
 ## What can CrossPoint do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
