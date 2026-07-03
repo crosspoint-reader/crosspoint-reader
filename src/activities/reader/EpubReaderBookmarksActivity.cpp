@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
-#include "ProgressMapper.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -108,16 +107,17 @@ void EpubReaderBookmarksActivity::loop() {
       return;
     }
     auto bookmark = bookmarks.at(selectorIndex);
-    CrossPointPosition pos{};
+    ProgressChangeResult result{};
+    result.xpath = bookmark.xpath;
+    result.percentage = bookmark.percentage;
+    result.hasSavedProgress = true;
     if (bookmark.computedChapterPageCount > 0 && bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
         bookmark.computedSpineIndex < epub->getSpineItemsCount()) {
-      pos.spineIndex = bookmark.computedSpineIndex;
-      pos.pageNumber = bookmark.computedChapterProgress;
-      pos.totalPages = bookmark.computedChapterPageCount;
-    } else {
-      pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
+      result.spineIndex = bookmark.computedSpineIndex;
+      result.page = bookmark.computedChapterProgress;
+      result.totalPages = bookmark.computedChapterPageCount;
     }
-    setResult(ProgressChangeResult{pos.spineIndex, pos.pageNumber});
+    setResult(std::move(result));
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {

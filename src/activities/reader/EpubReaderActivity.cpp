@@ -564,22 +564,37 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     loadCachedBookmarks();
     if (!result.isCancelled) {
       const auto& sync = std::get<ProgressChangeResult>(result.data);
-      if (currentSpineIndex != sync.spineIndex) {
+      int targetSpineIndex = sync.spineIndex;
+      int targetPage = sync.page;
+      const int activeTotalPages = section ? section->estimatedTotalPages() : 0;
+      const bool cachedPageMatchesActiveSection =
+          section && sync.totalPages > 0 && currentSpineIndex == sync.spineIndex && sync.page >= 0 &&
+          sync.page < sync.totalPages && activeTotalPages == sync.totalPages;
+
+      if (!cachedPageMatchesActiveSection && sync.hasSavedProgress) {
+        const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+        CrossPointPosition fallback =
+            ProgressMapper::toCrossPoint(epub, {sync.xpath, sync.percentage}, renderer, currentSpineIndex, totalPages);
+        targetSpineIndex = fallback.spineIndex;
+        targetPage = fallback.pageNumber;
+      }
+
+      if (currentSpineIndex != targetSpineIndex) {
         RenderLock lock(*this);
-        currentSpineIndex = sync.spineIndex;
-        nextPageNumber = sync.page;
-        section.reset();
-      } else if (section && section->currentPage != sync.page) {
-        RenderLock lock(*this);
-        const int targetPage = std::max(0, sync.page);
+        currentSpineIndex = targetSpineIndex;
         nextPageNumber = targetPage;
-        if (!section->isBuilding() && section->pageCount > 0 && targetPage >= section->pageCount) {
+        section.reset();
+      } else if (section && section->currentPage != targetPage) {
+        RenderLock lock(*this);
+        const int clampedTargetPage = std::max(0, targetPage);
+        nextPageNumber = clampedTargetPage;
+        if (!section->isBuilding() && section->pageCount > 0 && clampedTargetPage >= section->pageCount) {
           section->currentPage = section->pageCount - 1;
         } else {
-          section->currentPage = targetPage;
+          section->currentPage = clampedTargetPage;
         }
       } else if (!section) {
-        nextPageNumber = sync.page;
+        nextPageNumber = targetPage;
       }
     }
   };
