@@ -487,6 +487,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->nextWordContinues = false;
       self->tableDepth += 1;
+      // Intentionally does NOT increment self->depth: the matching </table>
+      // close (the tableDepth > 1 branch in endElement) mirrors this by
+      // skipping the decrement, keeping depth balanced across the flattened
+      // nested-table subtree.
       return;
     }
 
@@ -609,7 +613,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Inside a table, images are skipped and block-level structure inside a cell
   // collapses to a word boundary: each cell is laid out as a single paragraph.
-  // (Content of nested tables, tableDepth > 1, is dropped in characterData.)
+  // (Nested-table content, tableDepth > 1, flattens into the enclosing cell's
+  // text — see characterData.)
   if (self->tableDepth >= 1) {
     if (matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
       self->skipUntilDepth = self->depth;

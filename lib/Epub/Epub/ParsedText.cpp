@@ -254,6 +254,9 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
                          const bool attachToPrevious) {
   if (word.empty()) return;
 
+  // Adding words invalidates any widths cached by measureIntrinsicWidths.
+  cachedWordWidths.clear();
+
   // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
   // (a base letter followed by separate combining accents -- common for Vietnamese,
   // and used for many EPUB <h1> chapter headings) renders with the marks detached or

@@ -113,7 +113,8 @@ class ChapterHtmlSlimParser : private TablePageSink {
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);
-  // Hands the finished cell's text to the table layout and restores a fresh flow block.
+  // Hands the finished cell's text to the table layout. currentTextBlock stays null
+  // until the next cell/caption opens or the table closes.
   void closeTableCell();
   // TablePageSink implementation (page access for TableLayout)
   int16_t currentY() const override { return currentPageNextY; }
