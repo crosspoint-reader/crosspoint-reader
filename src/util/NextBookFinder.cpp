@@ -6,6 +6,7 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <string_view>
 
 #include "CrossPointSettings.h"
 

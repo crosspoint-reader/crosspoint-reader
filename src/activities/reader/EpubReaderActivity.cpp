@@ -337,7 +337,7 @@ void EpubReaderActivity::loop() {
         onGoHome();
         return;
       case EndOfBookOptions::Action::LastPage:
-        currentSpineIndex = epub->getSpineItemsCount() - 1;
+        currentSpineIndex = std::max(epub->getSpineItemsCount() - 1, 0);
         nextPageNumber = 0;
         pendingPageJump = std::numeric_limits<uint16_t>::max();
         requestUpdate();
