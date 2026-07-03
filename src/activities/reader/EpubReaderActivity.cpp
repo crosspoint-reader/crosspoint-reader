@@ -333,10 +333,11 @@ void EpubReaderActivity::loop() {
       ignoreNextConfirmRelease = false;
     } else {
       const int currentPage = section ? section->currentPage + 1 : 0;
-      const int totalPages = section ? section->pageCount : 0;
+      const int totalPages = section ? section->estimatedTotalPages() : 0;
       float bookProgress = 0.0f;
-      if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+      if (epub->getBookSize() > 0 && section && section->estimatedTotalPages() > 0) {
+        const float chapterProgress =
+            static_cast<float>(section->currentPage) / static_cast<float>(section->estimatedTotalPages());
         bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
       }
       const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
@@ -587,12 +588,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       } else if (section && section->currentPage != targetPage) {
         RenderLock lock(*this);
         const int clampedTargetPage = std::max(0, targetPage);
-        nextPageNumber = clampedTargetPage;
-        if (!section->isBuilding() && section->pageCount > 0 && clampedTargetPage >= section->pageCount) {
-          section->currentPage = section->pageCount - 1;
-        } else {
-          section->currentPage = clampedTargetPage;
-        }
+        section->currentPage = clampedTargetPage;
       } else if (!section) {
         nextPageNumber = targetPage;
       }
@@ -714,7 +710,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
   if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
-  const int totalPages = section ? section->pageCount : cachedChapterTotalPageCount;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
   std::optional<uint16_t> paragraphIndex;
   if (section && currentPage >= 0 && currentPage < section->pageCount) {
     const uint16_t paragraphPage =
@@ -1016,19 +1012,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
 
     if (pendingPageJump.has_value()) {
-      if (*pendingPageJump >= section->pageCount && section->pageCount > 0) {
-        section->currentPage = section->pageCount - 1;
-      } else {
-        section->currentPage = *pendingPageJump;
-      }
+      section->currentPage = *pendingPageJump;
       pendingPageJump.reset();
     } else {
       section->currentPage = nextPageNumber;
       if (section->currentPage < 0) {
         section->currentPage = 0;
-      } else if (section->currentPage >= section->pageCount && section->pageCount > 0) {
-        LOG_DBG("ERS", "Clamping cached page %d to %d", section->currentPage, section->pageCount - 1);
-        section->currentPage = section->pageCount - 1;
       }
     }
 
@@ -1055,9 +1044,32 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
   }
 
-  // For an in-progress incremental build, make sure the page we're about to show has been laid
-  // out. This runs every render, so it covers both the first page and any forward turn that gets
+  // Extend the build to the requested page if needed (for partials and in-progress builds).
+  // This runs every render, so it covers both the first page and any forward turn that gets
   // ahead of the background builder; pages already built do no work here.
+  while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+    // Start a build to extend a partial toward the requested page.
+    if (!section->isBuilding() &&
+        !section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                             SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                             SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
+                             SETTINGS.focusReadingEnabled)) {
+      LOG_ERR("ERS", "Failed to start partial extension build");
+      section.reset();
+      showPendingSyncSaveError();
+      return;
+    }
+    // Extend until either the target page exists or the build completes.
+    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+        LOG_ERR("ERS", "Failed during incremental section build");
+        section.reset();
+        showPendingSyncSaveError();
+        return;
+      }
+    }
+  }
+  // For an in-progress incremental build, make sure the page we're about to show has been laid out.
   if (section->isBuilding()) {
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
@@ -1127,7 +1139,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
-  saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
+  saveProgress(currentSpineIndex, section->currentPage, section->estimatedTotalPages());
 
   showPendingSyncSaveError();
 
@@ -1461,7 +1473,7 @@ void EpubReaderActivity::addBookmark() {
   int pageCount;
   {
     RenderLock lock(*this);
-    pageCount = section->pageCount;
+    pageCount = section->estimatedTotalPages();
     currentPage = section->currentPage;
   }
 
@@ -1510,10 +1522,10 @@ void EpubReaderActivity::updateBookmarkFlag() {
     currentPageBookmarked = false;
     return;
   }
-  const ProgressRange pageRange =
-      getPageProgressRange(epub, currentSpineIndex, section->currentPage, section->pageCount);
+  const int pageCount = section->estimatedTotalPages();
+  const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, section->currentPage, pageCount);
   currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
-    return bookmarkMatchesProgress(b, currentSpineIndex, section->currentPage, section->pageCount, pageRange);
+    return bookmarkMatchesProgress(b, currentSpineIndex, section->currentPage, pageCount, pageRange);
   });
 }
 
@@ -1526,9 +1538,9 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   }
   if (section) {
     info.currentPage = section->currentPage + 1;
-    info.totalPages = section->pageCount;
-    if (epub && epub->getBookSize() > 0 && section->pageCount > 0) {
-      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    info.totalPages = section->estimatedTotalPages();
+    if (epub && epub->getBookSize() > 0 && info.totalPages > 0) {
+      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(info.totalPages);
       int pct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
       if (pct < 0) pct = 0;
       if (pct > 100) pct = 100;

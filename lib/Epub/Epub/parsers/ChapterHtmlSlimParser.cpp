@@ -1354,7 +1354,10 @@ void ChapterHtmlSlimParser::abortParse() {
     destroyXmlParser(xmlParser_);
     xmlParser_ = nullptr;
   }
-  parseFile_.close();
+  // Only close the file if it was successfully opened in beginParse()
+  if (parseFile_.isOpen()) {
+    parseFile_.close();
+  }
 }
 
 bool ChapterHtmlSlimParser::finishParse() {
