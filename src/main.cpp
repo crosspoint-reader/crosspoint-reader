@@ -605,7 +605,13 @@ void loop() {
     if (idleMs >= HalPowerManager::IDLE_LIGHT_SLEEP_MS) {
       // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence)
       powerManager.setPowerSaving(true);
-      if (!powerManager.lightSleep(gpio)) {
+      if (gpio.isDebouncePending()) {
+        // A raw button-state change is mid-debounce: commitment needs a second
+        // matching sample, so poll again quickly instead of sleeping a slice —
+        // a tap shorter than the 50 ms cadence would otherwise land in a single
+        // sample and be dropped, and every press would commit a slice late.
+        delay(10);
+      } else if (!powerManager.lightSleep(gpio)) {
         delay(HalPowerManager::LIGHT_SLEEP_SLICE_MS);
       }
     } else {

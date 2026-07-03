@@ -77,6 +77,11 @@ class HalGPIO {
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
+  // True while a raw button-state change is still inside the debounce window.
+  // The idle loop polls fast while this is set so the confirming sample lands
+  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
+  // otherwise appear in a single sample and never commit (dropped press).
+  bool isDebouncePending() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
 
