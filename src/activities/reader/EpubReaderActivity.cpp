@@ -567,9 +567,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       int targetSpineIndex = sync.spineIndex;
       int targetPage = sync.page;
       const int activeTotalPages = section ? section->estimatedTotalPages() : 0;
-      const bool cachedPageMatchesActiveSection =
-          section && sync.totalPages > 0 && currentSpineIndex == sync.spineIndex && sync.page >= 0 &&
-          sync.page < sync.totalPages && activeTotalPages == sync.totalPages;
+      const bool cachedPageMatchesActiveSection = section && sync.totalPages > 0 &&
+                                                  currentSpineIndex == sync.spineIndex && sync.page >= 0 &&
+                                                  sync.page < sync.totalPages && activeTotalPages == sync.totalPages;
 
       if (!cachedPageMatchesActiveSection && sync.hasSavedProgress) {
         const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
