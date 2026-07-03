@@ -286,9 +286,6 @@ void EpubReaderActivity::loop() {
   // move path becomes a safe no-op since the entry was already removed.
   if (atEndOfBook) {
     pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
-    // Collect next-book suggestions for the end screen (no-op after the first call
-    // and when the End of Book setting is plain go-home)
-    endOfBookOptions.loadOnce(epub->getPath());
   } else {
     pendingReadFolderMove = false;
   }
@@ -860,7 +857,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
-    // Covers the render-before-loop race after the final page turn; no-op once loaded
+    // Sole load site: runs on the render task (serialized by RenderLock); the main
+    // task only reads the suggestions once the loaded flag is published
     endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);

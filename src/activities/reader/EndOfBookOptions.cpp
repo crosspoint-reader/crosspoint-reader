@@ -26,42 +26,50 @@ std::string displayName(const std::string& filename) {
   return filename.substr(0, pos);
 }
 
-// Right-truncate text with an ellipsis so it fits maxWidth
+// Right-truncate text with an ellipsis so it fits maxWidth. Shrinks the string in
+// place; the only allocation is the final append of the ellipsis.
 std::string fitText(const GfxRenderer& renderer, const int fontId, std::string text, const int maxWidth) {
   if (renderer.getTextWidth(fontId, text.c_str()) <= maxWidth) {
     return text;
   }
   const char ellipsis[] = "\xe2\x80\xa6";  // UTF-8 ellipsis (…)
-  while (!text.empty()) {
+  const int available = maxWidth - renderer.getTextWidth(fontId, ellipsis);
+  while (!text.empty() && renderer.getTextWidth(fontId, text.c_str()) > available) {
     // Drop the last UTF-8 code point, skipping continuation bytes
     size_t i = text.size() - 1;
     while (i > 0 && (static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) {
       i--;
     }
     text.erase(i);
-    if (renderer.getTextWidth(fontId, (text + ellipsis).c_str()) <= maxWidth) {
-      break;
-    }
   }
   return text + ellipsis;
 }
 }  // namespace
 
 void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
-  if (isLoaded || SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_HOME) {
+  if (isLoaded.load(std::memory_order_acquire) || SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_HOME) {
     return;
   }
   folder = FsHelpers::extractFolderPath(currentBookPath);
   names = NextBookFinder::findNextBooks(currentBookPath, MAX_SUGGESTIONS);
   selector = 0;
-  isLoaded = true;
+  // Release-publish so the main task, which gates all access on isLoaded, never
+  // observes a partially built list
+  isLoaded.store(true, std::memory_order_release);
 }
 
 bool EndOfBookOptions::askMenuActive() const {
-  return SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_ASK && isLoaded && !names.empty();
+  return SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_ASK && isLoaded.load(std::memory_order_acquire) &&
+         !names.empty();
 }
 
-std::string EndOfBookOptions::firstSuggestionPath() const { return names.empty() ? std::string() : fullPath(0); }
+std::string EndOfBookOptions::firstSuggestionPath() const {
+  // Gate on the loaded flag: the render task may still be building the list
+  if (!isLoaded.load(std::memory_order_acquire) || names.empty()) {
+    return {};
+  }
+  return fullPath(0);
+}
 
 std::string EndOfBookOptions::fullPath(const size_t index) const {
   if (index >= names.size()) {
@@ -81,8 +89,13 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
     return usePress ? input.wasPressed(button) : input.wasReleased(button);
   };
 
-  // Confirm and the side page-forward button both open the current selection
-  if (input.wasReleased(MappedInputManager::Button::Confirm) || triggered(MappedInputManager::Button::PageForward)) {
+  // Confirm and the side page-forward button both open the current selection, as does
+  // a short Power press when the user configured it as a page-turn button (mirrors
+  // ReaderUtils::detectPageTurn so no configured "forward" input goes dead here)
+  const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                         input.wasReleased(MappedInputManager::Button::Power);
+  if (input.wasReleased(MappedInputManager::Button::Confirm) || triggered(MappedInputManager::Button::PageForward) ||
+      powerTurn) {
     if (selector < static_cast<int>(names.size())) {
       if (openPath) {
         *openPath = fullPath(selector);

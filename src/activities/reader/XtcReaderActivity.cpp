@@ -70,11 +70,6 @@ void XtcReaderActivity::loop() {
   }
 
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
-  if (atEndOfBook) {
-    // Collect next-book suggestions for the end screen (no-op after the first call
-    // and when the End of Book setting is plain go-home)
-    endOfBookOptions.loadOnce(xtc->getPath());
-  }
 
   // While the Ask-mode end screen menu is showing it owns Confirm/Back/page-turn input.
   // Anything it doesn't handle (e.g. long-press Back to the file browser) falls through
@@ -174,8 +169,8 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   // Bounds check
   if (currentPage >= xtc->getPageCount()) {
-    // Show end of book screen. loadOnce covers the render-before-loop race after the
-    // final page turn; no-op once loaded.
+    // Show end of book screen. Sole load site: runs on the render task (serialized by
+    // RenderLock); the main task only reads the suggestions once the flag is published.
     endOfBookOptions.loadOnce(xtc->getPath());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);

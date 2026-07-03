@@ -43,6 +43,10 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
     return result;
   }
 
+  // Heap use is bounded: at most maxCount+1 short filename strings live at once (the
+  // file browser holds a whole folder in the same std::string form). A failed
+  // allocation here would abort like any STL growth in this codebase; the reserve
+  // below makes vector growth a single up-front allocation.
   result.reserve(maxCount + 1);
   const auto less = [](const std::string& a, const std::string& b) { return FsHelpers::naturalLess(a, b); };
 

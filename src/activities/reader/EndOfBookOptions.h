@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -16,8 +17,9 @@ class EndOfBookOptions {
   static constexpr size_t MAX_SUGGESTIONS = 3;
 
   // Scans the book's folder for suggestions; no-op when already loaded or when the
-  // configured behavior is plain go-home. Call from loop() once the end screen is reached
-  // so the scan never delays a regular page turn.
+  // configured behavior is plain go-home. Call ONLY from the reader's render() (the
+  // render task, serialized by RenderLock) — the loaded flag is the release/acquire
+  // publication point that lets the main task read the finished list safely.
   void loadOnce(const std::string& currentBookPath);
 
   // True when the Ask-mode list is showing and should own the reader's input.
@@ -38,9 +40,11 @@ class EndOfBookOptions {
 
  private:
   std::string folder;
+  // Written by the render task in loadOnce(), immutable afterwards; the main task only
+  // reads it after isLoaded is observed true (acquire), so no further locking is needed.
   std::vector<std::string> names;
   int selector = 0;
-  bool isLoaded = false;
+  std::atomic<bool> isLoaded{false};
 
   std::string fullPath(size_t index) const;
 };
