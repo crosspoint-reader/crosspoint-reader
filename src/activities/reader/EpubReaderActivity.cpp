@@ -1079,11 +1079,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         return;
       }
     }
-    // Build finished with fewer pages than the requested page -> clamp to the last page.
-    if (section->isBuildComplete() && section->pageCount > 0 &&
-        section->currentPage >= static_cast<int>(section->pageCount)) {
-      section->currentPage = section->pageCount - 1;
-    }
+  }
+
+  // The requested page is now as built as it will get. If it still lands past the end,
+  // clamp to the last real page: the UINT16_MAX "last page" sentinel from backward chapter
+  // navigation, an explicit jump beyond a finished chapter, or a stale saved position.
+  // Guarded on !isBuilding() because a still-building section's pageCount is only the current
+  // watermark (not the final count) and has already been driven far enough by the loops above.
+  if (!section->isBuilding() && section->pageCount > 0 &&
+      section->currentPage >= static_cast<int>(section->pageCount)) {
+    section->currentPage = section->pageCount - 1;
   }
 
   // Apply a deferred settings-change reposition now that the real page count is known (a no-op for
