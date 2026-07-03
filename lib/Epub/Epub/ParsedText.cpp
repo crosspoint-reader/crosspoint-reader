@@ -487,25 +487,22 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       blockStyle.alignment == CssTextAlign::Justify ||
       (blockStyle.isRtl ? blockStyle.alignment == CssTextAlign::Right : blockStyle.alignment == CssTextAlign::Left);
 
-  // Ensure SD card font glyph metrics are loaded before measuring word widths.
-  // For flash-based fonts isSdCardFont() returns false and this block is skipped
-  // entirely — no heap allocation. For SD card fonts this reads glyph metadata
-  // (advanceX only, no bitmaps) for all unique codepoints in this paragraph so
-  // that calculateWordWidths() can measure text without on-demand SD I/O.
-  if (renderer.isSdCardFont(fontId)) {
-    // Style mask: only ask the SD font to load advances for styles actually
-    // used in this paragraph. Style index is the low two bits (regular/bold/
-    // italic/bold-italic); the underline bit is irrelevant to advance metrics.
-    uint8_t styleMask = 0;
-    for (auto s : wordStyles) {
-      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(s) & 0x03));
-    }
-    if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
-    renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
-  }
-
+  // Reuse the widths measured by measureIntrinsicWidths when they are still in
+  // lockstep with words (table cell layout measures first for column sizing);
+  // otherwise measure now. ensureFontMetricsLoaded reads SD card font glyph
+  // metadata (advanceX only, no bitmaps) for all unique codepoints in this
+  // paragraph so measuring does not fall back to on-demand SD I/O; it is a
+  // no-op for flash fonts and was already done by measureIntrinsicWidths when
+  // the cache is valid.
   const int pageWidth = viewportWidth;
-  auto wordWidths = calculateWordWidths(renderer, fontId);
+  std::vector<uint16_t> wordWidths;
+  if (cachedWordWidths.size() == words.size()) {
+    wordWidths = std::move(cachedWordWidths);
+  } else {
+    ensureFontMetricsLoaded(renderer, fontId);
+    wordWidths = calculateWordWidths(renderer, fontId);
+  }
+  cachedWordWidths.clear();
 
   std::vector<size_t> lineBreakIndices;
   if (hyphenationEnabled) {
@@ -530,6 +527,47 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
+  }
+}
+
+// Loads SD card font glyph advances for all words in this block (no-op for flash
+// fonts). Must run before any width measurement so measuring does not trigger
+// per-glyph on-demand SD reads.
+void ParsedText::ensureFontMetricsLoaded(const GfxRenderer& renderer, const int fontId) const {
+  if (!renderer.isSdCardFont(fontId)) {
+    return;
+  }
+  // Style mask: only ask the SD font to load advances for styles actually used
+  // in this block. Style index is the low two bits (regular/bold/italic/
+  // bold-italic); the underline bit is irrelevant to advance metrics.
+  uint8_t styleMask = 0;
+  for (auto s : wordStyles) {
+    styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(s) & 0x03));
+  }
+  if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
+  renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
+}
+
+void ParsedText::measureIntrinsicWidths(const GfxRenderer& renderer, const int fontId, int& naturalWidth,
+                                        int& maxWordWidth) {
+  naturalWidth = 0;
+  maxWordWidth = 0;
+  cachedWordWidths.clear();
+  if (words.empty()) {
+    return;
+  }
+
+  ensureFontMetricsLoaded(renderer, fontId);
+
+  cachedWordWidths.reserve(words.size());
+  for (size_t i = 0; i < words.size(); ++i) {
+    const int width = measureWordWidth(renderer, fontId, words[i], wordStyles[i]);
+    cachedWordWidths.push_back(static_cast<uint16_t>(width));
+    maxWordWidth = std::max(maxWordWidth, width);
+    naturalWidth += width;
+    if (i > 0 && !wordContinues[i] && !wordNoSpaceBefore[i]) {
+      naturalWidth += renderer.getSpaceWidth(fontId, wordStyles[i - 1]);
+    }
   }
 }
 
@@ -748,9 +786,6 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
   auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
-  if (breakInfos.empty()) {
-    return false;
-  }
 
   size_t chosenOffset = 0;
   int chosenWidth = -1;
@@ -774,8 +809,45 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     chosenNeedsHyphen = needsHyphen;
   }
 
+  // Character-level fallback: no dictionary break point produced a prefix that
+  // fits. This happens in narrow columns (e.g. table cells) when a word's
+  // earliest pattern break — bounded by the language's min-prefix — is still
+  // wider than the column. Break at the widest UTF-8 boundary whose prefix (plus
+  // hyphen) fits so the word can never overflow its column. Only done when the
+  // caller allows it (the word is alone on its line and must be split somewhere);
+  // at least one codepoint of progress is guaranteed so layout always terminates.
+  if (chosenWidth < 0 && allowFallbackBreaks) {
+    const char* const base = word.c_str();
+    const auto* cursor = reinterpret_cast<const unsigned char*>(base);
+    size_t firstBoundary = 0;
+    while (true) {
+      utf8NextCodepoint(&cursor);
+      const size_t offset = static_cast<size_t>(reinterpret_cast<const char*>(cursor) - base);
+      if (offset == 0 || offset >= word.size()) {
+        break;  // consumed the whole word without another boundary
+      }
+      if (firstBoundary == 0) {
+        firstBoundary = offset;
+      }
+      const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, offset), style, /*appendHyphen=*/true);
+      if (prefixWidth <= availableWidth) {
+        chosenOffset = offset;  // widths grow monotonically; keep the widest fit
+        chosenWidth = prefixWidth;
+      } else {
+        break;
+      }
+    }
+    // Even a single codepoint plus hyphen overruns the column: break after it
+    // anyway (minimal overrun of one glyph beats overflowing the whole word).
+    if (chosenWidth < 0 && firstBoundary != 0) {
+      chosenOffset = firstBoundary;
+      chosenWidth = measureWordWidth(renderer, fontId, word.substr(0, firstBoundary), style, /*appendHyphen=*/true);
+    }
+    chosenNeedsHyphen = true;
+  }
+
   if (chosenWidth < 0) {
-    // No hyphenation point produced a prefix that fits in the remaining space.
+    // No usable break (e.g. a single-codepoint word): cannot split.
     return false;
   }
 

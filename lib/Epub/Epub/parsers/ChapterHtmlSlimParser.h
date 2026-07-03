@@ -10,6 +10,7 @@
 
 #include "Epub/FootnoteEntry.h"
 #include "Epub/ParsedText.h"
+#include "Epub/TableLayout.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
@@ -21,7 +22,7 @@ class Epub;
 
 #define MAX_WORD_SIZE 200
 
-class ChapterHtmlSlimParser {
+class ChapterHtmlSlimParser : private TablePageSink {
   std::shared_ptr<Epub> epub;
   const std::string& filepath;
   GfxRenderer& renderer;
@@ -76,9 +77,15 @@ class ChapterHtmlSlimParser {
   CssTextDirection effectiveDirection = CssTextDirection::Ltr;
   bool effectiveSup = false;
   bool effectiveSub = false;
+  // Invariants: tableLayout is non-null iff tableDepth >= 1 (a failed TableLayout
+  // allocation skips the whole table subtree and leaves tableDepth at 0), and
+  // inTableCell/inTableCaption imply tableLayout is non-null. While tableDepth >= 1
+  // and neither a cell nor a caption is open, currentTextBlock may be null; it is
+  // restored when the table closes.
   int tableDepth = 0;
-  int tableRowIndex = 0;
-  int tableColIndex = 0;
+  bool inTableCell = false;
+  bool inTableCaption = false;
+  std::unique_ptr<TableLayout> tableLayout;
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
@@ -106,6 +113,14 @@ class ChapterHtmlSlimParser {
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);
+  // Hands the finished cell's text to the table layout and restores a fresh flow block.
+  void closeTableCell();
+  // TablePageSink implementation (page access for TableLayout)
+  int16_t currentY() const override { return currentPageNextY; }
+  int16_t pageHeight() const override { return static_cast<int16_t>(viewportHeight); }
+  void completePage() override;
+  void addElement(std::shared_ptr<PageElement> element) override;
+  void advanceY(int16_t dy) override { currentPageNextY += dy; }
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);

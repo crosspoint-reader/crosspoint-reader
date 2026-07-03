@@ -31,6 +31,12 @@ class ParsedText {
   std::vector<bool> reorderedNoSpaceBeforeScratch;
   std::vector<bool> reorderedFocusSuffixScratch;
   std::vector<uint16_t> visualOrderScratch;
+  // Word widths measured by measureIntrinsicWidths, consumed by the next
+  // layoutAndExtractLines call so sampled table cells are not measured twice.
+  // Valid only while sized in lockstep with words; any mutation clears it.
+  std::vector<uint16_t> cachedWordWidths;
+
+  void ensureFontMetricsLoaded(const GfxRenderer& renderer, int fontId) const;
 
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
@@ -67,4 +73,9 @@ class ParsedText {
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);
+  // Measures the text without consuming it: naturalWidth is the single-line width
+  // (all words plus inter-word spaces), maxWordWidth is the widest single token.
+  // Used by table layout to derive column widths from cell content. The per-word
+  // widths are cached and reused by the next layoutAndExtractLines call.
+  void measureIntrinsicWidths(const GfxRenderer& renderer, int fontId, int& naturalWidth, int& maxWordWidth);
 };

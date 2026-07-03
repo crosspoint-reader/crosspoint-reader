@@ -10,8 +10,9 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// v28: text decoration bits now include line-through in serialized wordStyles.
-constexpr uint8_t SECTION_FILE_VERSION = 28;
+// v29: adds TAG_PageRect page elements (table cell borders); narrow table cells
+// character-break words that no hyphenation pattern splits narrowly enough.
+constexpr uint8_t SECTION_FILE_VERSION = 29;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +

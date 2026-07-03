@@ -90,13 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 28
+### Version 29
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 28 includes:
+Version 29 includes:
 
 - cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
   image rendering mode, and Focus Reading
@@ -107,6 +107,9 @@ Version 28 includes:
 - per-page footnote entries
 - serialized word style bits for underline, strikethrough, superscript, and
   subscript
+- `TAG_PageRect` filled-rectangle elements used for table cell borders
+- character-level word breaking in narrow table cells (affects laid-out page
+  contents, so v28 caches are regenerated)
 
 ImHex pattern:
 
@@ -115,7 +118,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 28
+#define EXPECTED_VERSION 29
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -135,7 +138,8 @@ fn format_string(String s) {
 enum PageElementTag : u8 {
     TAG_PageLine = 1,
     TAG_PageImage = 2,
-    TAG_PageHorizontalRule = 3
+    TAG_PageHorizontalRule = 3,
+    TAG_PageRect = 4
 };
 
 enum WordStyle : u8 {
@@ -214,6 +218,13 @@ struct PageHorizontalRule {
     u8 thickness;
 };
 
+struct PageRect {
+    s16 xPos;
+    s16 yPos;
+    u16 width;
+    u16 height;
+};
+
 struct PageElement {
     PageElementTag pageElementType;
     if (pageElementType == TAG_PageLine) {
@@ -222,6 +233,8 @@ struct PageElement {
         PageImage pageImage [[inline]];
     } else if (pageElementType == TAG_PageHorizontalRule) {
         PageHorizontalRule horizontalRule [[inline]];
+    } else if (pageElementType == TAG_PageRect) {
+        PageRect rect [[inline]];
     } else {
         std::error(std::format("Unknown page element type: {}", pageElementType));
     }

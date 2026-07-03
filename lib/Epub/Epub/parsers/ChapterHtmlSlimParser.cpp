@@ -4,11 +4,14 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
 #include <expat.h>
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdlib>
 #include <iterator>
 #include <new>
 
@@ -201,6 +204,13 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
 
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
+  // No block to flush into (only possible between table cells): drop the buffer.
+  if (!currentTextBlock) {
+    partWordBufferIndex = 0;
+    nextWordContinues = false;
+    return;
+  }
+
   // Determine font style from depth-based tracking and CSS effective style
   const bool isBold = boldUntilDepth < depth || effectiveBold;
   const bool isItalic = italicUntilDepth < depth || effectiveItalic;
@@ -316,6 +326,62 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   }
 }
 
+void ChapterHtmlSlimParser::closeTableCell() {
+  nextWordContinues = false;
+  if (!inTableCell) {
+    return;
+  }
+  inTableCell = false;
+  tableLayout->endCell(std::move(currentTextBlock), *this);
+  // currentTextBlock stays null until the next cell opens or the table closes;
+  // flushPartWordBuffer and characterData tolerate that inside tables.
+  wordsExtractedInBlock = 0;
+
+  // Footnote links inside this cell anchor to the page the table is currently
+  // filling. The word-index bookkeeping in addLineToPage only works for flow
+  // paragraphs; table lines bypass it, so flush the entries here instead of
+  // letting them drift to the first paragraph after the table.
+  if (!pendingFootnotes.empty()) {
+    if (!currentPage) {
+      currentPage.reset(new (std::nothrow) Page());
+      currentPageNextY = 0;
+    }
+    if (currentPage) {
+      for (const auto& [wordIndex, footnote] : pendingFootnotes) {
+        currentPage->addFootnote(footnote.number, footnote.href);
+      }
+    }
+    pendingFootnotes.clear();
+  }
+}
+
+// TablePageSink: flush the current page (if it has content) and start a fresh one.
+void ChapterHtmlSlimParser::completePage() {
+  if (currentPage && !currentPage->elements.empty()) {
+    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
+    completedPageCount++;
+  }
+  if (!currentPage) {
+    currentPage.reset(new (std::nothrow) Page());
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM: page");
+    }
+  }
+  currentPageNextY = 0;
+}
+
+void ChapterHtmlSlimParser::addElement(std::shared_ptr<PageElement> element) {
+  if (!currentPage) {
+    currentPage.reset(new (std::nothrow) Page());
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM: page");
+      return;
+    }
+    currentPageNextY = 0;
+  }
+  currentPage->elements.push_back(std::move(element));
+}
+
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
@@ -410,10 +476,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
+  // Tables are laid out as a real grid: cells collect words into per-cell
+  // ParsedText blocks that TableLayout streams onto pages with drawn borders.
   if (strcmp(name, "table") == 0) {
-    // skip nested tables
+    // Nested tables flatten into the enclosing cell: their text is kept as
+    // plain words (cells become word boundaries) so nothing is unreadable.
     if (self->tableDepth > 0) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+      self->nextWordContinues = false;
       self->tableDepth += 1;
       return;
     }
@@ -421,16 +493,34 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    self->tableDepth += 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
+    // Page out any preceding paragraph so the table starts below it.
+    self->startNewTextBlock(self->blockStyleStack.back().withoutBottom());
+
+    const auto& enclosing = self->blockStyleStack.back();
+    const int16_t inset = enclosing.totalHorizontalInset();
+    const uint16_t tableAvailWidth = (inset > 0 && inset < self->viewportWidth)
+                                         ? static_cast<uint16_t>(self->viewportWidth - inset)
+                                         : self->viewportWidth;
+    self->tableLayout = makeUniqueNoThrow<TableLayout>(self->renderer, self->fontId, self->lineCompression,
+                                                       enclosing.leftInset(), tableAvailWidth);
+    if (!self->tableLayout) {
+      LOG_ERR("EHP", "OOM: TableLayout, skipping table");
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
+    self->tableDepth = 1;
+    self->inTableCell = false;
     self->depth += 1;
     return;
   }
 
   if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
-    self->tableRowIndex += 1;
-    self->tableColIndex = 0;
+    // Record anchors targeting this row against the table's current page; no
+    // block start runs inside the table to flush them otherwise.
+    self->flushPendingAnchor();
+    self->inTableCaption = false;  // malformed: unclosed <caption>
+    self->tableLayout->startRow();
     self->depth += 1;
     return;
   }
@@ -439,44 +529,101 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->partWordBufferIndex > 0) {
       self->flushPartWordBuffer();
     }
-    self->tableColIndex += 1;
-
-    auto tableCellBlockStyle = BlockStyle();
-    tableCellBlockStyle.textAlignDefined = true;
-    const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                           ? CssTextAlign::Justify
-                           : static_cast<CssTextAlign>(self->paragraphAlignment);
-    tableCellBlockStyle.alignment = align;
-    self->startNewTextBlock(tableCellBlockStyle);
-
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
-    StyleStackEntry headerStyle;
-    headerStyle.depth = self->depth;
-    headerStyle.hasBold = true;
-    headerStyle.bold = false;
-    headerStyle.hasItalic = true;
-    headerStyle.italic = true;
-    self->inlineStyleStack.push_back(headerStyle);
-    self->updateEffectiveInlineStyle();
-    const CssTextDecoration savedTextDecoration = self->effectiveTextDecoration;
-    self->effectiveTextDecoration = CssTextDecoration::None;
-    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
-    }
-    self->effectiveTextDecoration = savedTextDecoration;
     self->nextWordContinues = false;
-    self->inlineStyleStack.pop_back();
-    self->updateEffectiveInlineStyle();
+    self->flushPendingAnchor();
+    self->inTableCaption = false;  // malformed: unclosed <caption>
+
+    const bool isHeaderCell = strcmp(name, "th") == 0;
+    uint8_t colSpan = 1;
+    if (const char* colSpanAttr = getAttribute(atts, "colspan")) {
+      // Clamp to the representable range only; TableLayout owns the column-cap policy.
+      const long parsed = strtol(colSpanAttr, nullptr, 10);
+      colSpan = static_cast<uint8_t>(std::clamp<long>(parsed, 1, UINT8_MAX));
+    }
+
+    if (self->tableLayout->startCell(colSpan, *self)) {
+      auto cellText = makeUniqueNoThrow<ParsedText>(false, self->hyphenationEnabled, self->focusReadingEnabled,
+                                                    TableLayout::cellBlockStyle(isHeaderCell, cssStyle));
+      if (cellText) {
+        self->currentTextBlock = std::move(cellText);
+        self->inTableCell = true;
+        if (isHeaderCell) {
+          StyleStackEntry entry;
+          entry.depth = self->depth;
+          entry.hasBold = true;
+          entry.bold = true;
+          self->inlineStyleStack.push_back(entry);
+          self->updateEffectiveInlineStyle();
+        }
+      } else {
+        LOG_ERR("EHP", "OOM: table cell text");
+        // Keep the parser/table state machines paired: close the cell that
+        // startCell just opened, or every later cell in this row is dropped.
+        self->tableLayout->endCell(nullptr, *self);
+      }
+    }
 
     self->depth += 1;
     return;
   }
 
-  if (self->tableDepth == 1 && strcmp(name, "hr") == 0) {
+  // <hr> anywhere inside a table (any depth) is dropped: emitHorizontalRule
+  // would page out the open cell's text mid-grid.
+  if (self->tableDepth >= 1 && strcmp(name, "hr") == 0) {
     self->depth += 1;
     return;
+  }
+
+  // <caption> renders as a centered italic paragraph in document order (above
+  // the table's rows), reusing the normal flow layout at </caption>.
+  if (self->tableDepth == 1 && strcmp(name, "caption") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->nextWordContinues = false;
+    self->flushPendingAnchor();
+
+    BlockStyle captionStyle;
+    captionStyle.textAlignDefined = true;
+    captionStyle.alignment = CssTextAlign::Center;
+    captionStyle.textIndentDefined = true;
+    captionStyle.textIndent = 0;
+    auto captionText =
+        makeUniqueNoThrow<ParsedText>(false, self->hyphenationEnabled, self->focusReadingEnabled, captionStyle);
+    if (captionText) {
+      self->currentTextBlock = std::move(captionText);
+      self->inTableCaption = true;
+      StyleStackEntry entry;
+      entry.depth = self->depth;
+      entry.hasItalic = true;
+      entry.italic = true;
+      self->inlineStyleStack.push_back(entry);
+      self->updateEffectiveInlineStyle();
+    } else {
+      LOG_ERR("EHP", "OOM: table caption text");
+    }
+
+    self->depth += 1;
+    return;
+  }
+
+  // Inside a table, images are skipped and block-level structure inside a cell
+  // collapses to a word boundary: each cell is laid out as a single paragraph.
+  // (Content of nested tables, tableDepth > 1, is dropped in characterData.)
+  if (self->tableDepth >= 1) {
+    if (matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
+      self->skipUntilDepth = self->depth;
+      self->depth += 1;
+      return;
+    }
+    if (isHeaderOrBlock(name)) {
+      if (self->partWordBufferIndex > 0) {
+        self->flushPartWordBuffer();
+      }
+      self->nextWordContinues = false;
+      self->depth += 1;
+      return;
+    }
   }
 
   if (matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
@@ -980,9 +1127,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
-  // Skip content of nested table
-  if (self->tableDepth > 1) {
-    return;
+  // Inside a table only cell and caption content is collected (nested-table
+  // text flattens into the enclosing cell); stray whitespace between rows and
+  // cells is dropped.
+  if (self->tableDepth >= 1) {
+    if ((!self->inTableCell && !self->inTableCaption) || !self->currentTextBlock) {
+      return;
+    }
   }
 
   // Middle of skip
@@ -1131,7 +1282,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
   // memory.
   // Spotted when reading Intermezzo, there are some really long text blocks in there.
-  if (self->currentTextBlock->size() > 750) {
+  // Captions use the same flow mechanism; table cells stream via TableLayout below.
+  if ((self->tableDepth == 0 || self->inTableCaption) && self->currentTextBlock &&
+      self->currentTextBlock->size() > 750) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
     const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
@@ -1140,6 +1293,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+  }
+
+  // An open table cell that has grown past the streaming threshold flushes its
+  // finished lines to pages now and keeps collecting — cells of any size render
+  // in full without accumulating on the heap.
+  if (self->tableDepth >= 1 && self->inTableCell && self->currentTextBlock &&
+      self->currentTextBlock->size() > TableLayout::CELL_STREAM_THRESHOLD) {
+    self->tableLayout->streamOpenCell(*self->currentTextBlock, *self);
   }
 }
 
@@ -1173,12 +1334,21 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   const bool styleWillChange = willPopStyleStack || willClearBold || willClearItalic;
   const bool headerOrBlockTag = isHeaderOrBlock(name);
   const bool tableStructuralTag = isTableStructuralTag(name);
+  // Table tags whose start was skipped (display:none etc.) never touched table
+  // state; their end tags must not touch it either. The element being closed was
+  // opened at depth - 1; ">=" includes the skip-root element itself, whose start
+  // tag also returned before the table branches (a display:none <table> inside a
+  // live table would otherwise terminate the outer table at its </table>).
+  const bool insideSkippedSubtree = self->depth - 1 >= self->skipUntilDepth;
 
-  if (self->tableDepth > 1 && strcmp(name, "table") == 0) {
-    // get rid of all text inside the nested table
-    self->partWordBufferIndex = 0;
+  if (!insideSkippedSubtree && self->tableDepth > 1 && strcmp(name, "table") == 0) {
+    // Nested table closed: its content was flattened into the enclosing cell.
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    self->nextWordContinues = false;
     self->tableDepth -= 1;
-    LOG_DBG("EHP", "nested table detected, get rid of its content");
+    LOG_DBG("EHP", "nested table flattened into enclosing cell");
     return;
   }
 
@@ -1224,19 +1394,43 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->skipUntilDepth = INT_MAX;
   }
 
-  if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
-    self->nextWordContinues = false;
+  if (!insideSkippedSubtree && self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    self->closeTableCell();
   }
 
-  if (self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+  if (!insideSkippedSubtree && self->tableDepth == 1 && strcmp(name, "caption") == 0 && self->inTableCaption) {
+    self->inTableCaption = false;
     self->nextWordContinues = false;
+    if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+      self->makePages();
+    }
+    // Back to the in-table idle state (no active collector until the next cell).
+    self->currentTextBlock.reset();
   }
 
-  if (self->tableDepth == 1 && strcmp(name, "table") == 0) {
-    self->tableDepth -= 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
+  if (!insideSkippedSubtree && self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+    // Salvage a cell whose </td> never arrived.
+    self->closeTableCell();
+    self->tableLayout->endRow(*self);
+  }
+
+  if (!insideSkippedSubtree && self->tableDepth == 1 && strcmp(name, "table") == 0) {
+    self->closeTableCell();
+    self->inTableCaption = false;
+    self->tableLayout->finish(*self);
+    self->tableLayout.reset();
+    self->tableDepth = 0;
     self->nextWordContinues = false;
+
+    // Restore normal text flow after the table with the user's paragraph alignment.
+    BlockStyle flowStyle;
+    flowStyle.textAlignDefined = true;
+    flowStyle.alignment = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                              ? CssTextAlign::Justify
+                              : static_cast<CssTextAlign>(self->paragraphAlignment);
+    self->startNewTextBlock(self->blockStyleStack.back()
+                                .getCombinedBlockStyle(flowStyle, BlockStyle::CombineAxis::Horizontal)
+                                .withoutBottom());
   }
 
   // Leaving bold tag
@@ -1256,8 +1450,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->updateEffectiveInlineStyle();
   }
 
-  // Clear block style when leaving header or block elements
-  if (headerOrBlockTag) {
+  // Clear block style when leaving header or block elements.
+  // Skipped inside tables: block tags there collapse to word boundaries and
+  // never push onto blockStyleStack (see startElement).
+  if (headerOrBlockTag && self->tableDepth == 0) {
     self->currentCssStyle.reset();
     self->updateEffectiveInlineStyle();
 

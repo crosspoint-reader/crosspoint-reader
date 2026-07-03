@@ -106,6 +106,46 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
   return std::unique_ptr<PageHorizontalRule>(rule);
 }
 
+void PageRect::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  (void)fontId;
+  if (width == 0 || height == 0) {
+    return;
+  }
+
+  renderer.fillRect(xPos + xOffset, yPos + yOffset, width, height, true);
+}
+
+bool PageRect::serialize(HalFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, width);
+  serialization::writePod(file, height);
+  return true;
+}
+
+std::unique_ptr<PageRect> PageRect::deserialize(HalFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, width);
+  serialization::readPod(file, height);
+
+  if (width == 0 || height == 0) {
+    LOG_ERR("PGE", "Deserialization failed: invalid rect metadata (width=%u height=%u)", width, height);
+    return nullptr;
+  }
+
+  auto* rect = new (std::nothrow) PageRect(width, height, xPos, yPos);
+  if (!rect) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageRect");
+    return nullptr;
+  }
+  return std::unique_ptr<PageRect>(rect);
+}
+
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
 }
@@ -165,6 +205,12 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
         return nullptr;
       }
       page->elements.push_back(std::move(rule));
+    } else if (tag == TAG_PageRect) {
+      auto rect = PageRect::deserialize(file);
+      if (!rect) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(rect));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;
