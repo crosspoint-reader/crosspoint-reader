@@ -50,6 +50,11 @@ class Activity {
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes
   void startActivityForResult(std::unique_ptr<Activity>&& activity, ActivityResultHandler resultHandler);
 
+  // Replace this activity with a new one while preserving the existing parent
+  // stack. Use for one-way transitions that should return directly to the
+  // caller of the current activity.
+  void replaceActivityKeepingStack(std::unique_ptr<Activity>&& activity);
+
   // Set the result to be passed back to the previous activity when this activity finishes
   void setResult(ActivityResult&& result);
 

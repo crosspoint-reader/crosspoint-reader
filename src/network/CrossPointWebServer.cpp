@@ -26,6 +26,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
+#include "util/DictionaryRegistry.h"
 
 namespace {
 // Folders/files to hide from the web interface file browser
@@ -1127,7 +1128,7 @@ void CrossPointWebServer::handleGetSettings() const {
   // Pass the SD font registry so the fontFamily setting's enumStringValues
   // includes SD-resident families — otherwise the web API only exposes the
   // three built-in fonts.
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
+  const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaryRegistry);
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1229,7 +1230,7 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
-  const auto& settings = getSettingsList(&sdFontSystem.registry());
+  const auto& settings = getSettingsList(&sdFontSystem.registry(), &dictionaryRegistry);
   int applied = 0;
 
   for (const auto& s : settings) {
@@ -1260,8 +1261,17 @@ void CrossPointWebServer::handlePostSettings() {
         break;
       }
       case SettingType::VALUE: {
-        const int val = doc[s.key].as<int>();
+        int val = doc[s.key].as<int>();
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
+          // Snap to the nearest valid step. The device cycler only ever produces
+          // (min + k*step) values, and main.cpp rejects non-step-multiples on
+          // boot (resetting to default), so a web-supplied off-step value must be
+          // aligned here or it would silently revert on the next reboot.
+          if (s.valueRange.step > 1) {
+            const int rel = val - s.valueRange.min;
+            val = s.valueRange.min + ((rel + s.valueRange.step / 2) / s.valueRange.step) * s.valueRange.step;
+            if (val > s.valueRange.max) val = s.valueRange.max;
+          }
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
           }

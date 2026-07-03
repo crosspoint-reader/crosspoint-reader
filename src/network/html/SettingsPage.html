@@ -356,6 +356,20 @@
     }
 
     if (setting.type === 'value') {
+      const step = setting.step > 0 ? setting.step : 1;
+      const optionCount = Math.floor((setting.max - setting.min) / step) + 1;
+      // Small ranges render as a dropdown; larger ones stay a number input so we
+      // don't build a huge <select>. The option value is the actual stored number,
+      // so getValue()/getControlValue()/setControlValue() need no special-casing.
+      if (optionCount >= 2 && optionCount <= 16) {
+        let html = '<select id="' + id + '" onchange="handleSettingChanged(\'' + setting.key + '\')">';
+        for (let v = setting.min; v <= setting.max; v += step) {
+          const selected = v === setting.value ? ' selected' : '';
+          html += '<option value="' + v + '"' + selected + '>' + v + '</option>';
+        }
+        html += '</select>';
+        return html;
+      }
       return '<input type="number" id="' + id + '" value="' + setting.value + '"' +
         ' min="' + setting.min + '" max="' + setting.max + '" step="' + setting.step + '"' +
         ' onchange="handleSettingChanged(\'' + setting.key + '\')">';

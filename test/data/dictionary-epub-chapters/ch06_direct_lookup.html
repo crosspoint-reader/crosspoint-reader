@@ -1,0 +1,138 @@
+<h1>6. Direct Lookup</h1>
+
+<p>These tests cover the basic lookup path: a headword found directly in the
+index returns a definition immediately. No stemming, alternate forms prompt, or
+suggestions screen is involved.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+
+<h2>Test A: Definition returned immediately</h2>
+<p>Each word below is a headword in <em>english-full</em>. Selecting it must open the
+definition screen directly with no alternate forms prompt or suggestions screen.</p>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>cloud</li>
+<li>dawn</li>
+<li>flame</li>
+<li>grove</li>
+<li>harvest</li>
+<li>ivory</li>
+<li>jungle</li>
+<li>kettle</li>
+<li>lantern</li>
+<li>meadow</li>
+<li>ocean</li>
+<li>pilgrim</li>
+<li>riddle</li>
+<li>shadow</li>
+<li>valley</li>
+<li>willow</li>
+<li>zenith</li>
+</ul>
+
+<h2>Test B: Multi-page definition navigation</h2>
+<p>The word <em>chronicle</em> has a long definition that spans more than one page.
+The page navigation controls must become active and both forward and backward
+navigation must work without a crash.</p>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>chronicle</em>. Definition screen appears on page 1.</li>
+<li>Press <em>PageForward</em> or <em>Right</em>. Page 2 appears.</li>
+<li>Press <em>PageBack</em> or <em>Left</em>. Page 1 reappears.</li>
+<li>Long-press <em>Back</em>. Reader returns.</li>
+</ol>
+
+<h2>Test C: Definition viewer honors reader font size</h2>
+<p>The definition viewer must use the same font size as the reader. Changing the
+font size in Settings must be reflected in the definition screen.</p>
+<h3>Steps</h3>
+<ol>
+<li>Note the current font size in Settings -> Reader -> Font Size.</li>
+<li>Look up any word from Test A. Note the text size in the definition screen.</li>
+<li>Long-press <em>Back</em> to return to the reader.</li>
+<li>Go to Settings -> Reader -> Font Size. Change to a different size.</li>
+<li>Return to this chapter. Look up the same word.</li>
+<li>Verify the definition screen text size has changed to match the new setting.</li>
+<li>Restore the original font size when done.</li>
+</ol>
+
+<h2>Test D: Look Up Word button on direct hit</h2>
+<p>After any successful lookup from Test A, the <em>Confirm</em> button on the
+definition screen must be labelled <em>Look Up Word</em>. This confirms showLookupButton
+is set correctly for direct hits.</p>
+<h3>Steps</h3>
+<ol>
+<li>Look up any word from Test A.</li>
+<li>Verify <em>Confirm</em> button label is <em>Look Up Word</em>.</li>
+</ol>
+
+<h2>Test E: Initial cursor position in reader word-select</h2>
+<p>When entering word-select mode from the reader, the initially highlighted word
+must be approximately centred on the page — not the first word on the first line.</p>
+<h3>Steps</h3>
+<ol>
+<li>Open word-select mode on this page (press the word-select button from the reader).</li>
+<li>Verify the highlighted word is somewhere in the middle of the visible text, not at the top-left corner.</li>
+<li>Press <em>Back</em> to exit word-select without looking anything up.</li>
+</ol>
+
+<h2>Test F: Word-select overlay alignment with definition font override</h2>
+<p>When the definition font or size differs from the reader font, word-select
+highlights in the definition viewer must still align accurately over the rendered text.</p>
+<h3>Steps</h3>
+<ol>
+<li>In Settings, change <em>Definition Font Size</em> to a size different from the reader font size.</li>
+<li>Return to this chapter. Look up <em>chronicle</em>.</li>
+<li>Press <em>Look Up Word</em> to enter word-select mode on the definition.</li>
+<li>Navigate to several words. Verify each highlight box is positioned directly over the word it represents — no offset or misalignment.</li>
+<li>Long-press <em>Back</em> to return to the reader.</li>
+<li>Restore <em>Definition Font Size</em> to its original value.</li>
+</ol>
+
+<h2>Test G: Hold-to-lookup enters word-select directly</h2>
+<p>When <em>Dictionary Hold to Look Up</em> is enabled, holding <em>Confirm</em> in
+the reader must enter word-select mode directly, bypassing the reader menu.</p>
+<h3>Steps</h3>
+<ol>
+<li>In Settings, enable <em>Dictionary Hold to Look Up</em> (Reader section, below Dictionary History Limit).</li>
+<li>Return to this chapter.</li>
+<li>Hold <em>Confirm</em> for about one second. The word-select overlay must appear without the reader menu opening.</li>
+<li>Look up any word from Test A. Verify the definition appears.</li>
+<li>Long-press <em>Back</em> to return to the reader.</li>
+</ol>
+
+<h2>Test H: Hold-to-lookup inactive when setting is off</h2>
+<p>When the setting is disabled, holding <em>Confirm</em> must open the reader menu
+on release, not enter word-select.</p>
+<h3>Steps</h3>
+<ol>
+<li>In Settings, disable <em>Dictionary Hold to Look Up</em>.</li>
+<li>Return to this chapter.</li>
+<li>Hold <em>Confirm</em> for about one second, then release.</li>
+<li>Verify the reader menu opens. No word-select overlay.</li>
+<li>Press <em>Back</em> to close the menu.</li>
+</ol>
+
+<h2>Test I: Hold-to-lookup inactive when no dictionary set</h2>
+<p>Even with the setting enabled, holding <em>Confirm</em> must fall through to the
+reader menu if no dictionary is active.</p>
+<h3>Steps</h3>
+<ol>
+<li>Enable <em>Dictionary Hold to Look Up</em> in Settings.</li>
+<li>Set dictionary to <em>None</em> in Settings.</li>
+<li>Return to this chapter. Hold <em>Confirm</em>.</li>
+<li>Verify the reader menu opens on release. No word-select overlay.</li>
+<li>Re-select <em>english-full</em> as the dictionary when done.</li>
+</ol>
+
+<h2>Test J: Short-press Confirm still opens menu</h2>
+<p>With the setting enabled, a quick press-and-release of <em>Confirm</em> must still
+open the reader menu normally.</p>
+<h3>Steps</h3>
+<ol>
+<li>Enable <em>Dictionary Hold to Look Up</em> in Settings.</li>
+<li>Return to this chapter.</li>
+<li>Short-press <em>Confirm</em> (release quickly, well under one second).</li>
+<li>Verify the reader menu opens normally.</li>
+</ol>

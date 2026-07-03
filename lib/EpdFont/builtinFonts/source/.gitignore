@@ -12,3 +12,7 @@
 !OpenDyslexic/**
 !Ubuntu/
 !Ubuntu/**
+!DoulosSIL/
+!DoulosSIL/*-stripped.ttf
+!NotoSansSymbols2/
+!NotoSansSymbols2/*-stripped.ttf

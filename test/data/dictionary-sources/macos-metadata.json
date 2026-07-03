@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "name": "macos-metadata",
+    "bookname": "macOS Metadata Test",
+    "output_dir": "test/dictionaries/macos-metadata",
+    "entry_format": "m",
+    "base_entries": "english-no-syn",
+    "extra_files": [
+      {"name": ".DS_Store", "content": "Fake DS_Store file"},
+      {"name": "._macos-metadata.dict", "content": "AppleDouble resource fork"},
+      {"name": "._macos-metadata.idx", "content": "AppleDouble resource fork"},
+      {"name": "._macos-metadata.ifo", "content": "AppleDouble resource fork"}
+    ]
+  }
+}

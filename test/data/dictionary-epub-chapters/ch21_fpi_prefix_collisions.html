@@ -1,0 +1,64 @@
+<h1>21. Optimized Index (.fpi) -- Prefix Collisions</h1>
+
+<p>These tests exercise the <em>.idx.fpi</em> optimized index (fencep_6 +
+tab1_3): the exact-match fast lookup path it accelerates, and
+prefix-collision correctness.</p>
+
+<h2>Test A: Baseline lookup on a dictionary with optimized index</h2>
+<p>The <em>english-full</em> dictionary ships with <em>english-full.idx.fpi</em>.
+Every lookup must return the correct definition. This implicitly exercises
+the optimized-index fast path because the device tries it first when present.</p>
+<h3>Dictionary</h3>
+<p><em>english-full</em></p>
+<h3>Words</h3>
+<ul>
+<li>apple</li>
+<li>bridge</li>
+<li>cloud</li>
+<li>dawn</li>
+<li>echo</li>
+</ul>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>english-full</em> in the picker. No preparation should be required.</li>
+<li>Look up each word above.</li>
+<li>Each returns a valid definition. No errors. No crash.</li>
+</ol>
+
+<h2>Test B: Prefix-collision disambiguation</h2>
+<p>The <em>prep-fpi-prefix-collision</em> dictionary contains headwords that
+share 16-character prefixes. Each word must still return <em>its own</em>
+distinct definition -- not a sibling's. Requires Ch 4 Test F to have been
+run so this dictionary has been prepared.</p>
+<h3>Dictionary</h3>
+<p><em>prep-fpi-prefix-collision</em></p>
+<h3>Words</h3>
+<p>16-char prefix <em>international</em>:</p>
+<ul>
+<li>internationalism</li>
+<li>internationalize</li>
+<li>internationalized</li>
+</ul>
+<p>16-char prefix <em>microelectromech</em>:</p>
+<ul>
+<li>microelectromechanical</li>
+<li>microelectromechanics</li>
+</ul>
+<p>Control words (no collision):</p>
+<ul>
+<li>antidisestablish</li>
+<li>simple</li>
+<li>test</li>
+</ul>
+<h3>Steps</h3>
+<ol>
+<li>Select <em>prep-fpi-prefix-collision</em> in the picker. If prep steps
+    are listed, Ch 4 Test F was skipped -- run that first, then return here.</li>
+<li>Look up each word above.</li>
+<li>Each word returns <em>its own</em> distinct definition. Compare against the
+    definition text in
+    <code>test/data/dictionary-sources/prep-fpi-prefix-collision.json</code>
+    if in doubt.</li>
+<li>No two colliding words return the same definition.</li>
+</ol>
+

@@ -1,0 +1,23 @@
+{
+  "_comment": "~25 000 headwords gives 1-2 minutes of processing on ESP32-C3 — long enough for the user to observe processing and press Back to cancel. Each definition is ~200 bytes; 4 synonyms per word.",
+  "meta": {
+    "name": "prep-long",
+    "bookname": "Prep Long Test",
+    "output_dir": "test/dictionaries/prep-long",
+    "author": "CrossPoint Test Suite",
+    "description": "Medium synthetic dictionary for per-book cancel-prepare tests. All 4 steps required.",
+    "entry_format": "m",
+    "compress": true,
+    "_comment": "idx.fpi and syn.fpi are intentionally absent — the device generates them",
+    "ifo_version": "stardict-2.4.2"
+  },
+  "synthetic": {
+    "word_prefix": "long_prep_word",
+    "_comment_word_prefix": "selects the medium prep-long definition template",
+    "syn_prefix": "long_prep_syn",
+    "word_style": "englishish",
+    "seed": 65537,
+    "word_count": 25000,
+    "synonyms_per_word": 4
+  }
+}

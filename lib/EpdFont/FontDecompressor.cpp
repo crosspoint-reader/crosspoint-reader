@@ -174,6 +174,8 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
     stats.cacheMisses++;
     const EpdFontGroup& group = fontData->groups[groupIndex];
 
+    hotGroup.clear();
+    hotGroup.shrink_to_fit();
     hotGroup.resize(group.uncompressedSize);
     if (hotGroup.empty()) {
       LOG_ERR("FDC", "Failed to allocate %u bytes for hot group %u", group.uncompressedSize, groupIndex);

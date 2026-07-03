@@ -46,6 +46,8 @@ void InflateReader::skipZlibHeader() {
   uzlib_get_byte(&decomp);
 }
 
+bool InflateReader::skipGzipHeader() { return uzlib_gzip_parse_header(&decomp) == TINF_OK; }
+
 bool InflateReader::read(uint8_t* dest, size_t len) {
   if (!ringBuffer) {
     // One-shot mode: back-references use absolute offset from dest_start.
