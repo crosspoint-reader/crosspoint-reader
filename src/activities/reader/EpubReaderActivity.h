@@ -46,7 +46,7 @@ class EpubReaderActivity final : public Activity {
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
-  // Next-book suggestions for the End-of-Book screen (SETTINGS.endOfBookBehavior)
+  // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
 
   // Footnote support
@@ -91,8 +91,7 @@ class EpubReaderActivity final : public Activity {
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
-  // Opens the reader menu for the current position (short-press Confirm, or the Menu
-  // button on the Ask-mode end screen).
+  // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.

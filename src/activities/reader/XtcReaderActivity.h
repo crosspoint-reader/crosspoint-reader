@@ -20,7 +20,7 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
-  // Next-book suggestions for the End-of-Book screen (SETTINGS.endOfBookBehavior)
+  // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
@@ -31,8 +31,7 @@ class XtcReaderActivity final : public Activity {
   };
 
   void renderPage();
-  // Opens chapter selection when the book has chapters (Confirm, or the Menu button on
-  // the Ask-mode end screen); no-op otherwise.
+  // Opens chapter selection when the book has chapters (short-press Confirm); no-op otherwise
   void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
