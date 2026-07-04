@@ -64,6 +64,8 @@ class HalGPIO {
 
   // Button input methods
   void update();
+  // Raw hardware state without advancing edge events (safe during Lua idle ticks).
+  uint8_t readButtonState();
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;

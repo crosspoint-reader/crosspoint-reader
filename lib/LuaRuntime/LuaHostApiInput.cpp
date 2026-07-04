@@ -6,6 +6,8 @@
 
 #include <MappedInputManager.h>
 
+#include "LuaAppIdle.h"
+
 extern "C" {
 #include "lauxlib.h"
 #include "lua.h"
@@ -65,6 +67,7 @@ int inputWait(lua_State* L) {
         return 1;
       }
     }
+    crosspointLuaIdleTick();
     delay(10);
   }
 }

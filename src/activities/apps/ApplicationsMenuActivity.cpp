@@ -1,12 +1,18 @@
 #include "ApplicationsMenuActivity.h"
 
+#include <AppDateTimeFormat.h>
+#include <AppListLabels.h>
 #include <AppRegistry.h>
+#include <AppStoreManifest.h>
+#include <AppStoreManifestMeta.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstdio>
 
 #include "AppRunnerActivity.h"
+#include "CrossPointSettings.h"
 #include "DiscoverAppsActivity.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -18,8 +24,48 @@ ApplicationsMenuActivity::ApplicationsMenuActivity(GfxRenderer& renderer, Mapped
 void ApplicationsMenuActivity::reloadEntries() {
   APP_REGISTRY.loadFromFile();
   entries_ = APP_REGISTRY.getEntries();
-  std::sort(entries_.begin(), entries_.end(),
-            [](const AppRegistryEntry& a, const AppRegistryEntry& b) { return a.name < b.name; });
+
+  APP_STORE_CATALOG.loadFromCache();
+  catalogById_.clear();
+  for (const auto& entry : APP_STORE_CATALOG.getEntries()) {
+    catalogById_[entry.id] = entry;
+  }
+
+  hasManifestMeta_ = AppStoreManifestMeta::readMeta(manifestMeta_);
+
+  std::sort(entries_.begin(), entries_.end(), [](const AppRegistryEntry& a, const AppRegistryEntry& b) {
+    if (AppDateTimeFormat::isNewerInstalledAt(a.installedAt, b.installedAt)) {
+      return true;
+    }
+    if (AppDateTimeFormat::isNewerInstalledAt(b.installedAt, a.installedAt)) {
+      return false;
+    }
+    return a.name < b.name;
+  });
+}
+
+std::string ApplicationsMenuActivity::formatInstalledSubtitle(const std::string& dateDisplay) const {
+  if (dateDisplay.empty()) {
+    return "";
+  }
+  char buf[64];
+  snprintf(buf, sizeof(buf), tr(STR_APPS_INSTALLED_ON), dateDisplay.c_str());
+  return buf;
+}
+
+std::string ApplicationsMenuActivity::formatInstalledCountLabel() const {
+  char buf[32];
+  snprintf(buf, sizeof(buf), tr(STR_APPS_INSTALLED_COUNT), static_cast<int>(entries_.size()));
+  return buf;
+}
+
+std::string ApplicationsMenuActivity::formatBrowseCountLabel() const {
+  if (!hasManifestMeta_) {
+    return "";
+  }
+  char buf[32];
+  snprintf(buf, sizeof(buf), tr(STR_APPS_BROWSE_COUNT), static_cast<int>(manifestMeta_.appCount));
+  return buf;
 }
 
 int ApplicationsMenuActivity::totalItemCount() const {
@@ -89,13 +135,20 @@ void ApplicationsMenuActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
+  const bool use12Hour = SETTINGS.clockFormat == 1;
+  const uint8_t utcOffset = SETTINGS.clockUtcOffsetQ;
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_APPLICATIONS));
+  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, "",
+                    formatInstalledCountLabel().c_str());
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop =
+      metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
 
-  const int menuRowHeight = metrics.listRowHeight;
+  const bool discoverHasSubtitle = hasManifestMeta_;
+  const int menuRowHeight =
+      discoverHasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
   const int menuHeight = kMenuItemCount * menuRowHeight;
   const int separatorY = contentTop + menuHeight + metrics.verticalSpacing / 2;
   const int appsTop = contentTop + menuHeight + metrics.verticalSpacing;
@@ -107,7 +160,10 @@ void ApplicationsMenuActivity::render(RenderLock&&) {
                  (void)index;
                  return std::string(tr(STR_DISCOVER_APPS));
                },
-               nullptr);
+               [this](int index) {
+                 (void)index;
+                 return formatBrowseCountLabel();
+               });
 
   renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
 
@@ -116,9 +172,28 @@ void ApplicationsMenuActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, appsTop + appsHeight / 2, tr(STR_NO_INSTALLED_APPS));
   } else {
     const int appSelected = isMenuIndex(selectedIndex) ? -1 : appIndexFor(selectedIndex);
-    GUI.drawList(renderer, Rect{0, appsTop, pageWidth, appsHeight}, appCount, appSelected,
-                 [this](int index) { return entries_[static_cast<size_t>(index)].name; },
-                 [this](int index) { return entries_[static_cast<size_t>(index)].version; });
+    GUI.drawList(
+        renderer, Rect{0, appsTop, pageWidth, appsHeight}, appCount, appSelected,
+        [this](int index) { return entries_[static_cast<size_t>(index)].name; },
+        [this, utcOffset, use12Hour](int index) {
+          const auto& entry = entries_[static_cast<size_t>(index)];
+          const auto* catalog = [&]() -> const AppCatalogEntry* {
+            const auto it = catalogById_.find(entry.id);
+            return it != catalogById_.end() ? &it->second : nullptr;
+          }();
+          const auto labels = AppListLabels::buildInstalledRowLabels(entry, catalog, utcOffset, use12Hour);
+          return formatInstalledSubtitle(labels.subtitle);
+        },
+        nullptr,
+        [this, utcOffset, use12Hour](int index) {
+          const auto& entry = entries_[static_cast<size_t>(index)];
+          const auto* catalog = [&]() -> const AppCatalogEntry* {
+            const auto it = catalogById_.find(entry.id);
+            return it != catalogById_.end() ? &it->second : nullptr;
+          }();
+          return AppListLabels::buildInstalledRowLabels(entry, catalog, utcOffset, use12Hour).rowValue;
+        },
+        true);
   }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

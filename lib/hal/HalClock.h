@@ -42,12 +42,15 @@ class HalClock {
   bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
 
   // Sync time from NTP. On X3 writes the DS3231 RTC; on X4 sets ESP32 system time.
-  // Requires WiFi to be connected. Blocks for up to ~5s while waiting for SNTP response.
-  // Returns true if time was successfully updated.
+  // Requires WiFi to be connected. Blocks for up to ~10s while waiting for SNTP response.
+  // Returns true if time was successfully updated and reads back as valid UTC.
   //
   // Debouncing (skip if already synced once) is enforced by the caller, not here,
   // so the HAL stays free of any app-layer settings dependency.
   bool syncFromNTP();
+
+  // Primary NTP server hostname used by syncFromNTP().
+  static const char* primaryNtpServer();
 
  private:
   bool writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second);

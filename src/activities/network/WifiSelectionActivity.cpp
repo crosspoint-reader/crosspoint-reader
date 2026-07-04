@@ -244,9 +244,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Sync clock from NTP on the first successful WiFi connection only.
+    // Sync clock from NTP when UTC time is invalid (X4 cold boot loses system time).
     // X3: writes DS3231 RTC. X4: sets ESP32 system time.
-    if (!SETTINGS.clockHasBeenSynced) {
+    if (!halClock.hasValidUtcTime()) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();

@@ -68,3 +68,45 @@ target_link_libraries(AppStoreManifestFallbackTest PRIVATE
 )
 
 gtest_discover_tests(AppStoreManifestFallbackTest)
+
+add_executable(AppDateTimeFormatTest
+  AppDateTimeFormatTest.cpp
+  ${REPO_ROOT}/lib/AppStore/AppDateTimeFormat.cpp
+)
+
+target_link_libraries(AppDateTimeFormatTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(AppDateTimeFormatTest)
+
+add_executable(AppListLabelsTest
+  AppListLabelsTest.cpp
+  ${REPO_ROOT}/lib/AppStore/AppListLabels.cpp
+  ${REPO_ROOT}/lib/AppStore/AppDateTimeFormat.cpp
+  ${REPO_ROOT}/lib/AppStore/AppVersion.cpp
+)
+
+target_link_libraries(AppListLabelsTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(AppListLabelsTest)
+
+add_executable(AppStoreManifestMetaTest
+  AppStoreManifestMetaTest.cpp
+  ${REPO_ROOT}/lib/AppStore/AppStoreManifestMetaJson.cpp
+)
+
+target_include_directories(AppStoreManifestMetaTest PRIVATE
+  ${arduinojson_SOURCE_DIR}/src
+)
+
+target_link_libraries(AppStoreManifestMetaTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(AppStoreManifestMetaTest)

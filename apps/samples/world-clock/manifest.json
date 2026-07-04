@@ -1,7 +1,7 @@
 {
   "id": "world-clock",
   "name": "World Clock",
-  "version": "1.0.0",
+  "version": "1.1.9",
   "entry": "main.lua",
   "min_api_version": "1.0"
 }

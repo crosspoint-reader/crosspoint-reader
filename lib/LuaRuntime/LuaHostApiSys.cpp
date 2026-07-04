@@ -1,10 +1,14 @@
 #include "LuaHostApiSys.h"
 
 #include "LuaEngine.h"
+#include "LuaHostApiContext.h"
 
 #include <CrossPointSettings.h>
 #include <HalClock.h>
 #include <Logging.h>
+
+#include "LuaAppIdle.h"
+#include "network/WifiAutoConnect.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -12,6 +16,8 @@ extern "C" {
 }
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <string>
 #include <time.h>
 
 namespace {
@@ -53,8 +59,21 @@ int sysMillis(lua_State* L) {
 
 int sysSleepMs(lua_State* L) {
   const lua_Integer ms = luaL_checkinteger(L, 1);
-  if (ms > 0) {
-    delay(static_cast<unsigned long>(ms));
+  if (ms <= 0) {
+    return 0;
+  }
+
+  unsigned long remaining = static_cast<unsigned long>(ms);
+  while (remaining > 0) {
+    const unsigned long chunk = remaining > 25 ? 25 : remaining;
+    delay(chunk);
+    remaining -= chunk;
+    crosspointLuaIdleTick();
+    if (LuaEngine* engine = currentEngine()) {
+      if (engine->exitRequested()) {
+        return 0;
+      }
+    }
   }
   return 0;
 }
@@ -116,6 +135,63 @@ int sysFormatTime(lua_State* L) {
   return 1;
 }
 
+int sysNtpServer(lua_State* L) {
+  (void)L;
+  lua_pushstring(L, HalClock::primaryNtpServer());
+  return 1;
+}
+
+int sysWifiConnected(lua_State* L) {
+  (void)L;
+  lua_pushboolean(L, WiFi.status() == WL_CONNECTED ? 1 : 0);
+  return 1;
+}
+
+int sysSyncClock(lua_State* L) {
+  (void)L;
+  const char* ntpServer = HalClock::primaryNtpServer();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    std::string ssid;
+    const WifiAutoConnectResult connectResult = connectLastSaved(ssid);
+    if (connectResult != WifiAutoConnectResult::Connected) {
+      const char* err = "no_wifi";
+      switch (connectResult) {
+        case WifiAutoConnectResult::NoCredentials:
+          err = "no_credentials";
+          break;
+        case WifiAutoConnectResult::Failed:
+          err = "wifi_failed";
+          break;
+        case WifiAutoConnectResult::Timeout:
+          err = "wifi_timeout";
+          break;
+        default:
+          break;
+      }
+      lua_pushboolean(L, 0);
+      lua_pushstring(L, err);
+      lua_pushstring(L, ntpServer);
+      return 3;
+    }
+  }
+
+  const bool ok = halClock.syncFromNTP();
+  if (!ok || !halClock.hasValidUtcTime()) {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, ok ? "no_time" : "failed");
+    lua_pushstring(L, ntpServer);
+    return 3;
+  }
+
+  SETTINGS.clockHasBeenSynced = 1;
+  SETTINGS.saveToFile();
+  lua_pushboolean(L, 1);
+  lua_pushnil(L);
+  lua_pushstring(L, ntpServer);
+  return 3;
+}
+
 int sysFormatTimeOffset(lua_State* L) {
   const int offsetQ = static_cast<int>(luaL_checkinteger(L, 1));
   bool use12Hour = SETTINGS.clockFormat == 1;
@@ -146,6 +222,9 @@ const luaL_Reg kSysFunctions[] = {
     {"millis", sysMillis},
     {"sleep_ms", sysSleepMs},
     {"time_synced", sysTimeSynced},
+    {"ntp_server", sysNtpServer},
+    {"wifi_connected", sysWifiConnected},
+    {"sync_clock", sysSyncClock},
     {"time", sysTime},
     {"unix_time", sysUnixTime},
     {"format_time", sysFormatTime},

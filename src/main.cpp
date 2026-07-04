@@ -36,6 +36,7 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "LuaAppIdle.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -45,6 +46,7 @@ FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
+static unsigned long lastActivityTime = 0;
 
 // Fonts
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
@@ -273,6 +275,47 @@ void enterDeepSleep(bool fromTimeout = false) {
   powerManager.startDeepSleep(gpio);
 }
 
+namespace {
+unsigned long luaIdlePowerPressStart = 0;
+}  // namespace
+
+void crosspointLuaIdleTick() {
+  // Never call gpio.update() here: InputManager::update() clears pressedEvents on
+  // every call, stealing button edges before cp.input.poll() can read them.
+
+  halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
+
+  const uint8_t rawState = gpio.readButtonState();
+  const bool powerHeld = (rawState & (1u << HalGPIO::BTN_POWER)) != 0;
+  const bool anyButton = rawState != 0;
+
+  if (anyButton || halTiltSensor.hadActivity()) {
+    lastActivityTime = millis();
+    powerManager.setPowerSaving(false);
+  }
+
+  if (powerHeld) {
+    if (luaIdlePowerPressStart == 0) {
+      luaIdlePowerPressStart = millis();
+    }
+  } else {
+    luaIdlePowerPressStart = 0;
+  }
+
+  if (millis() >= allowSleepAt && powerHeld &&
+      (millis() - luaIdlePowerPressStart) > SETTINGS.getPowerButtonDuration()) {
+    if ((rawState & (1u << HalGPIO::BTN_DOWN)) == 0) {
+      enterDeepSleep();
+    }
+    return;
+  }
+
+  const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
+  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
+    enterDeepSleep(true);
+  }
+}
+
 void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
   renderer.begin();
@@ -485,6 +528,7 @@ void setup() {
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
   allowSleepAt = millis() + 2000;
+  lastActivityTime = millis();
 }
 
 void loop() {
@@ -521,7 +565,6 @@ void loop() {
   }
 
   // Check for any user activity (button press or release) or active background work
-  static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
       activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer

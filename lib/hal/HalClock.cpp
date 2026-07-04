@@ -61,15 +61,38 @@ static bool readSystemUtcHms(uint8_t& hour, uint8_t& minute, uint8_t& second) {
   return true;
 }
 
+static constexpr const char* kPrimaryNtpServer = "pool.ntp.org";
+static constexpr const char* kSecondaryNtpServer = "time.nist.gov";
+
+const char* HalClock::primaryNtpServer() { return kPrimaryNtpServer; }
+
 static bool waitForSntpSync() {
-  configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
-  constexpr int maxAttempts = 50;
+  // Stop and re-init SNTP so manual retries work (configTzTime alone won't restart).
+  if (esp_sntp_enabled()) {
+    esp_sntp_stop();
+  }
+
+  setenv("TZ", "UTC0", 1);
+  tzset();
+
+  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+  esp_sntp_setservername(0, kPrimaryNtpServer);
+  esp_sntp_setservername(1, kSecondaryNtpServer);
+  esp_sntp_init();
+
+  constexpr int maxAttempts = 100;
   for (int i = 0; i < maxAttempts; i++) {
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-      return time(nullptr) >= kMinValidUnixTime;
+      const time_t now = time(nullptr);
+      if (now >= kMinValidUnixTime) {
+        LOG_INF("CLK", "NTP synced via %s (unix %ld)", kPrimaryNtpServer, static_cast<long>(now));
+        return true;
+      }
     }
     delay(100);
   }
+
+  LOG_ERR("CLK", "NTP sync timed out (server %s)", kPrimaryNtpServer);
   return false;
 }
 
@@ -201,9 +224,8 @@ bool HalClock::syncFromNTP() {
     return false;
   }
 
-  LOG_INF("CLK", "Starting NTP sync...");
+  LOG_INF("CLK", "Starting NTP sync via %s...", kPrimaryNtpServer);
   if (!waitForSntpSync()) {
-    LOG_ERR("CLK", "NTP sync timed out");
     return false;
   }
 
@@ -214,8 +236,13 @@ bool HalClock::syncFromNTP() {
     if (writeTimeToRTC(static_cast<uint8_t>(timeinfo.tm_hour), static_cast<uint8_t>(timeinfo.tm_min),
                        static_cast<uint8_t>(timeinfo.tm_sec))) {
       LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-      return true;
+      return hasValidUtcTime();
     }
+    return false;
+  }
+
+  if (!hasValidUtcTime()) {
+    LOG_ERR("CLK", "NTP reported success but UTC time is still invalid");
     return false;
   }
 

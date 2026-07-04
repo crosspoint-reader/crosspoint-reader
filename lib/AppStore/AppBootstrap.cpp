@@ -36,7 +36,7 @@ void AppBootstrap::onBoot() {
     LOG_ERR("APPS", "Registry load failed; starting with empty installed list");
   }
 
-  if (!APP_STORE_CATALOG.load()) {
+  if (!APP_STORE_CATALOG.loadFromCache()) {
     LOG_ERR("APPS", "Discover catalog load failed; Discover list will be empty");
   }
 }

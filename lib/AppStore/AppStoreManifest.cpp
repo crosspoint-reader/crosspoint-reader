@@ -8,7 +8,9 @@
 
 #include <string>
 
+#include "AppDateTimeFormat.h"
 #include "AppStoreManifestData.h"
+#include "AppStoreManifestMeta.h"
 #include "AppStorePaths.h"
 
 namespace {
@@ -90,17 +92,15 @@ bool AppStoreManifest::writeCache(const std::string& json) const {
   return true;
 }
 
-bool AppStoreManifest::load() {
+bool AppStoreManifest::resolveCatalog(const bool allowRemote, const char* callerLabel) {
   entries_.clear();
   source_ = AppCatalogSource::None;
 
   std::string remoteJson;
-  const bool remoteFetchOk = tryLoadRemote(remoteJson);
-  LOG_DBG("APPS", "Remote fetch=%s", remoteFetchOk ? "ok" : "fail");
+  const bool remoteFetchOk = allowRemote ? tryLoadRemote(remoteJson) : false;
 
   std::string cacheJson;
   const bool cacheReadOk = tryLoadCache(cacheJson);
-  LOG_DBG("APPS", "Cache read=%s", cacheReadOk ? "ok" : "fail");
 
   AppCatalogResolveInput input;
   input.remoteJson = remoteFetchOk ? remoteJson.c_str() : nullptr;
@@ -111,12 +111,21 @@ bool AppStoreManifest::load() {
 
   uint8_t version = 0;
   if (!resolveAndParse(input, entries_, version, source_)) {
-    LOG_ERR("APPS", "Failed to load Discover catalog from all sources");
+    LOG_ERR("APPS", "%s failed to load Discover catalog from all sources", callerLabel);
     return false;
   }
 
-  if (source_ == AppCatalogSource::Remote && !writeCache(remoteJson)) {
-    LOG_ERR("APPS", "Discover catalog loaded from remote but cache write failed");
+  if (allowRemote && source_ == AppCatalogSource::Remote) {
+    if (!writeCache(remoteJson)) {
+      LOG_ERR("APPS", "Discover catalog loaded from remote but cache write failed");
+    } else {
+      AppStoreManifestMetaData meta;
+      meta.fetchedAt = AppDateTimeFormat::formatNowIso8601Utc();
+      meta.appCount = static_cast<uint32_t>(entries_.size());
+      if (!meta.fetchedAt.empty() && !AppStoreManifestMeta::writeMeta(meta)) {
+        LOG_ERR("APPS", "Discover catalog loaded from remote but meta cache write failed");
+      }
+    }
   }
 
   const char* sourceLabel = "unknown";
@@ -134,7 +143,11 @@ bool AppStoreManifest::load() {
       break;
   }
 
-  LOG_INF("APPS", "Discover catalog: %u apps from %s (manifest v%u)", static_cast<unsigned>(entries_.size()),
+  LOG_INF("APPS", "%s catalog: %u apps from %s (manifest v%u)", callerLabel, static_cast<unsigned>(entries_.size()),
           sourceLabel, version);
   return true;
 }
+
+bool AppStoreManifest::load() { return resolveCatalog(true, "Discover"); }
+
+bool AppStoreManifest::loadFromCache() { return resolveCatalog(false, "Applications"); }
