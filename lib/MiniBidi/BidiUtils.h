@@ -13,6 +13,13 @@ bool startsWithRtl(const char* utf8, int maxStrongChars = RTL_PARAGRAPH_PROBE_DE
 
 int detectParagraphLevel(const char* utf8, int fallbackLevel = 0, int maxStrongChars = 64);
 
+// True for RTL-script non-spacing marks (Hebrew niqqud/cantillation, Arabic
+// harakat and Quranic annotation): zero-width, transparent for Arabic joining,
+// and skipped by the renderer until built-in fonts carry their glyphs.
+// Latin combining marks (U+0300-U+036F) intentionally return false — they are
+// handled by the utf8IsCombiningMark() rendering path.
+bool isTransparentMark(uint32_t cp);
+
 // paragraphLevel: -1 = auto-detect, 0 = LTR, 1 = RTL
 bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel = -1);
 

@@ -418,9 +418,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
-    // Skip Hebrew Niqqud (vowel marks)
-    // Temporary: avoid adding Niqqud to built-in fonts. Remove when custom fonts are supported.
-    if (cp >= 0x0591 && cp <= 0x05C7) {
+    // Skip RTL-script vowel marks (Hebrew niqqud, Arabic harakat)
+    // Temporary: avoid adding these to built-in fonts. Remove when custom fonts are supported.
+    if (BidiUtils::isTransparentMark(cp)) {
       continue;
     }
 
@@ -1728,9 +1728,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    // Skip Hebrew Niqqud (vowel marks)
-    // Temporary: avoid adding Niqqud to built-in fonts. Remove when custom fonts are supported.
-    if (cp >= 0x0591 && cp <= 0x05C7) {
+    // Skip RTL-script vowel marks (Hebrew niqqud, Arabic harakat)
+    // Temporary: avoid adding these to built-in fonts. Remove when custom fonts are supported.
+    if (BidiUtils::isTransparentMark(cp)) {
       continue;
     }
 

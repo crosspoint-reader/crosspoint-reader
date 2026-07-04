@@ -68,11 +68,23 @@ int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int ma
   return fallbackLevel & 1;
 }
 
+bool isTransparentMark(const uint32_t cp) {
+  // RTL-script combining marks: Hebrew niqqud/cantillation and Arabic
+  // harakat/Quranic annotation.  Transparent for Arabic joining (do_shape
+  // skips them) and skipped at render time until fonts carry their glyphs.
+  // The cp >= 0x0591 guard keeps Latin combining marks (U+0300-U+036F, also
+  // NSM) on their existing utf8IsCombiningMark() rendering path.
+  return cp >= 0x0591 && bidi_class(cp) == NSM;
+}
+
 bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   if (!utf8 || !*utf8) return false;
 
   static bidi_char line[BIDI_MAX_LINE];
+  static bidi_char shaped[BIDI_MAX_LINE];
   int count = 0;
+  int lastBase = -1;           // last non-formatter character (mintty's ibase)
+  uint8_t pendingJoiners = 0;  // ZWJ/ZWNJ seen since lastBase
   auto* p = reinterpret_cast<const unsigned char*>(utf8);
   while (*p) {
     if (count >= BIDI_MAX_LINE) {
@@ -84,18 +96,43 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
     if (!cp || cp == REPLACEMENT_GLYPH) break;
     line[count].origwc = line[count].wc = cp;
     line[count].index = static_cast<uint16_t>(count);
+    line[count].joiners = 0;
+
+    // Flag Arabic joining formatters mintty-style (termline.c): the ZWJ/ZWNJ
+    // goes into the low nibble of the character it follows and the high
+    // nibble of the character it precedes.  Flags are assigned in logical
+    // order here; do_shape() reads them after reordering.
+    if (cp == 0x200C || cp == 0x200D) {
+      const uint8_t joiner = (cp == 0x200D) ? ZWJ : ZWNJ;
+      if (lastBase >= 0) line[lastBase].joiners |= joiner;
+      pendingJoiners |= joiner;
+    } else {
+      line[count].joiners = pendingJoiners << 4;
+      pendingJoiners = 0;
+      lastBase = count;
+    }
     count++;
   }
   if (!count) return false;
 
   const bool autodir = (paragraphLevel < 0);
   const int level = autodir ? 0 : (paragraphLevel & 1);
+
+  // Order matters (mintty does the same): do_bidi() first to obtain visual
+  // order, then do_shape() — contextual forms are resolved from *visual*
+  // adjacency, and shaping presentation forms must never be reordered.
   do_bidi(autodir, level, line, count);
+  do_shape(line, shaped, count);
 
   out.clear();
   out.reserve(std::strlen(utf8));
   for (int i = 0; i < count; i++) {
-    utf8AppendCodepoint(line[i].wc, out);
+    const uint32_t cp = shaped[i].wc;
+    // Filter the Lam-Alef collapse sentinel and the zero-width joining
+    // formatters — they have done their job during shaping and have no
+    // glyphs to render.
+    if (cp == LIGATURE_PLACEHOLDER || cp == 0x200C || cp == 0x200D) continue;
+    utf8AppendCodepoint(cp, out);
   }
   return true;
 }
