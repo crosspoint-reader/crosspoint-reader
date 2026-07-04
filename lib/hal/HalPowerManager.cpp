@@ -28,6 +28,8 @@ void HalPowerManager::begin() {
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
+  sleepMutex = xSemaphoreCreateMutex();
+  assert(sleepMutex != nullptr);
 }
 
 void HalPowerManager::setPowerSaving(bool enabled) {
@@ -111,6 +113,10 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     return false;
   }
 
+  // Serialize wake-source arming with the render task's BUSY-wait slice (see
+  // sleepMutex declaration for the failure mode this prevents).
+  xSemaphoreTake(sleepMutex, portMAX_DELAY);
+
   // Timer wake only. It keeps the button/tilt poll cadence identical to the delay()
   // it replaces: the front/side buttons are ADC resistor-ladder inputs whose pressed
   // levels sit mid-rail, invisible to a digital GPIO wake, so they must be polled.
@@ -136,6 +142,8 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   // Disarm immediately: an armed timer wake persists across sleep calls and would
   // carry over into startDeepSleep(), waking the device on USB power after 50 ms.
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+
+  xSemaphoreGive(sleepMutex);
 
   if (err != ESP_OK) {
     // e.g. ESP_ERR_SLEEP_REJECT — we did not actually sleep
@@ -167,6 +175,50 @@ void HalPowerManager::onEinkBusyWaitEnd() {
   if (!setCpuFrequencyMhz(normalFreq)) {
     LOG_ERR("PWR", "Failed to restore CPU frequency after busy wait");
   }
+}
+
+bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t busyLevel) {
+  // Same exclusions as lightSleep(): light sleep drops a WiFi association and
+  // kills an enumerated USB-CDC link. No LOG here — this runs ~50x/s mid-refresh.
+  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
+    return false;
+  }
+
+  xSemaphoreTake(sleepMutex, portMAX_DELAY);
+
+  // Wake the instant BUSY leaves its active level (refresh complete). Level
+  // wake (not edge) means an already-completed refresh returns immediately
+  // instead of sleeping a full slice. The timer bound only exists so the main
+  // loop gets scheduling windows to keep sampling the ADC-ladder buttons.
+  const auto pin = static_cast<gpio_num_t>(busyPin);
+  gpio_wakeup_enable(pin, busyLevel == HIGH ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+  esp_sleep_enable_gpio_wakeup();
+  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(BUSY_SLEEP_SLICE_MS) * 1000ULL);
+
+  // Battery-latch hold: the IDF flash-leakage workaround would drop the latch
+  // pad on sleep entry and hard-power-off the device (see lightSleep()).
+  gpio_set_level(GPIO_BATTERY_LATCH, 1);
+  gpio_set_direction(GPIO_BATTERY_LATCH, GPIO_MODE_OUTPUT);
+  gpio_hold_en(GPIO_BATTERY_LATCH);
+
+  const esp_err_t err = esp_light_sleep_start();
+
+  // Disarm everything armed above; an armed source persisting into
+  // startDeepSleep() would wake the device on USB power (see lightSleep()).
+  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  gpio_wakeup_disable(pin);
+
+  xSemaphoreGive(sleepMutex);
+
+  if (err != ESP_OK) {
+    return false;  // e.g. ESP_ERR_SLEEP_REJECT — fall back to the SDK's poll delay
+  }
+
+  // Yield one tick so the equal-priority main loop can run its input poll:
+  // without this the render task re-enters sleep within microseconds and
+  // starves button sampling for the entire refresh.
+  vTaskDelay(1);
+  return true;
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {

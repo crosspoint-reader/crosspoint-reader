@@ -79,6 +79,10 @@ void HalDisplay::setBusyWaitHooks(void (*beginHook)(), void (*endHook)()) {
   einkDisplay.setBusyWaitHooks(beginHook, endHook);
 }
 
+void HalDisplay::setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel)) {
+  einkDisplay.setBusyWaitSliceHook(sliceHook);
+}
+
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {

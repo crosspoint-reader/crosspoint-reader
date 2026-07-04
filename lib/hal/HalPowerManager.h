@@ -28,6 +28,13 @@ class HalPowerManager {
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
   bool busyWaitLowClock = false;          // Set/cleared only by the render task (see onEinkBusyWait*)
 
+  // Serializes wake-source arm -> esp_light_sleep_start() -> disarm across the
+  // two sleepers (main-loop lightSleep() and the render task's BUSY-wait slice).
+  // Without it, lightSleep()'s deliberately unsynchronized lock-mode read could
+  // let both tasks interleave arming/disarming: the loser's disarm-all can strip
+  // the winner's wake sources and leave it sleeping with none armed.
+  SemaphoreHandle_t sleepMutex = nullptr;
+
  public:
   static constexpr int LOW_POWER_FREQ = 10;  // MHz
 
@@ -39,6 +46,11 @@ class HalPowerManager {
 
   static constexpr unsigned long BATTERY_POLL_MS = 1500;     // ms
   static constexpr unsigned long LIGHT_SLEEP_SLICE_MS = 50;  // ms
+
+  // Timer bound for one BUSY-wait light-sleep slice. The refresh end itself
+  // wakes exactly via GPIO level wake on the BUSY pin; the timer only bounds
+  // how coarse main-loop button sampling gets during a long refresh.
+  static constexpr unsigned long BUSY_SLEEP_SLICE_MS = 20;  // ms
 
   void begin();
 
@@ -64,6 +76,14 @@ class HalPowerManager {
   // setPowerSaving(false) calls stay no-ops during the wait.
   void onEinkBusyWaitBegin();
   void onEinkBusyWaitEnd();
+
+  // BUSY-wait slice hook (EpdBus::setBusyWaitSliceHook): light-sleep the chip
+  // for up to BUSY_SLEEP_SLICE_MS while the panel refreshes autonomously,
+  // waking early the moment the BUSY pin leaves `busyLevel`. Returns false
+  // WITHOUT sleeping when unsafe (WiFi active, USB connected, or sleep
+  // rejected) — the SDK then falls back to its plain poll delay. Called from
+  // the render task; safe by construction (the waiter IS the locked task).
+  bool onEinkBusyWaitSlice(int8_t busyPin, uint8_t busyLevel);
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
