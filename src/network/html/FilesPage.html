@@ -1558,6 +1558,19 @@
           <div id="convertInfo" style="display:none; margin-bottom: 10px; font-size: 0.9em;">
           </div>
 
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">Rename from Book Metadata</div>
+              <div class="setting-desc">Use Title - Author.epub when available</div>
+            </div>
+            <div class="setting-controls">
+              <label class="toggle-switch">
+                <input type="checkbox" id="renameFromMetadataToggle" onchange="updateUploadSettingsPersistence()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
           <div class="convert-settings" id="convertSettings" style="display:block;">
             <span>⚫ True-Grayscale</span>
           <span id="convertSizeSummary">📏 Max 480×800px</span>
@@ -1654,7 +1667,19 @@
             </div>
             <div class="setting-controls">
               <label class="toggle-switch">
-                <input type="checkbox" id="export-log-checkbox">
+                <input type="checkbox" id="export-log-checkbox" onchange="updateUploadSettingsPersistence()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">Remember Settings</div>
+              <div class="setting-desc">Store these upload options in this browser</div>
+            </div>
+            <div class="setting-controls">
+              <label class="toggle-switch">
+                <input type="checkbox" id="rememberUploadSettings" onchange="updateUploadSettingsPersistence()">
                 <span class="toggle-slider"></span>
               </label>
             </div>
@@ -2019,12 +2044,8 @@
 
   // Modal functions
   function openUploadModal() {
-    // Reset converter variables to defaults
-    ENABLE_GRAYSCALE = true;
-    JPEG_QUALITY = 85;
-    HANDEDNESS = 'right';
-    OVERLAP_PERCENT = 5;
     imageStates = {};
+    restoreUploadSettingsFromStorage();
 
     // Hide convert options when opening modal (no files selected initially)
     const convertOptions = document.getElementById('convertOptions');
@@ -2032,10 +2053,6 @@
       convertOptions.style.display = 'none';
     }
 
-    // Reset rotation and overlap UI
-    setHandedness('right');
-    setOverlap(5);
-    
     // Hide log section from previous session
     const logSection = document.getElementById('log-section');
     if (logSection) logSection.classList.remove('visible');
@@ -2094,7 +2111,8 @@
     document.getElementById('progress-container').style.display = 'none';
     document.getElementById('progress-fill').style.width = '0%';
     document.getElementById('progress-fill').style.backgroundColor = '#27ae60';
-    document.getElementById('convertBeforeUpload').checked = false;
+    const convertOptions = document.getElementById('convertOptions');
+    if (convertOptions) convertOptions.style.display = 'none';
     document.getElementById('convertInfo').style.display = 'none';
     document.getElementById('convertWarning').style.display = 'none';
     // Clear image picker cache and reset layout
@@ -2117,15 +2135,7 @@
       advancedOptionsToggle.style.opacity = '0.5';
       advancedOptionsToggle.style.pointerEvents = 'none';
     }
-    // Reset to defaults
-    document.getElementById('qualitySlider').value = 85;
-    document.getElementById('qualityInput').value = 85;
-    const autoCropToggle = document.getElementById('autoCropToggle');
-    if (autoCropToggle) autoCropToggle.checked = false;
-    setHandedness('right');
-    setOverlap(5);
-    // Update converter variables
-    updateQualitySettings();
+    applyUploadSettings();
   }
 
   function updateBatchModeUI(isBatch) {
@@ -2162,6 +2172,7 @@
       advancedOptionsToggle.style.opacity = checked ? '1' : '0.5';
       advancedOptionsToggle.style.pointerEvents = checked ? 'auto' : 'none';
     }
+    updateUploadSettingsPersistence();
   }
 
   function toggleAdvancedOptions() {
@@ -2199,12 +2210,8 @@
   function setQualityPreset(value) {
     document.getElementById('qualitySlider').value = value;
     document.getElementById('qualityInput').value = value;
-    // Update active preset
     document.querySelectorAll('.quality-preset').forEach(btn => {
-      btn.classList.remove('active');
-      if (parseInt(btn.dataset.value, 10) === value) {
-        btn.classList.add('active');
-      }
+      btn.classList.toggle('active', parseInt(btn.dataset.value, 10) === value);
     });
     updateQualitySettings();
   }
@@ -2226,6 +2233,7 @@
     if (isImagePickerVisible()) {
       renderImageGrid();
     }
+    updateUploadSettingsPersistence();
   }
 
   function setHandedness(value) {
@@ -2238,6 +2246,7 @@
     if (isImagePickerVisible()) {
       renderImageGrid();
     }
+    updateUploadSettingsPersistence();
   }
 
   function setOverlap(value) {
@@ -2246,6 +2255,7 @@
     document.querySelectorAll('.overlap-btn').forEach(btn => {
       btn.classList.toggle('active', parseInt(btn.dataset.value) === value);
     });
+    updateUploadSettingsPersistence();
   }
 
   function isImagePickerVisible() {
@@ -2906,7 +2916,12 @@
 
     if (qualitySlider && qualityInput) {
       // Initialize converter variables with UI default values
-      updateQualitySettings();
+      suppressUploadSettingsSave = true;
+      try {
+        updateQualitySettings();
+      } finally {
+        suppressUploadSettingsSave = false;
+      }
 
       // Deselect all presets when slider is manually changed
       const deselectPresets = function() {
@@ -3139,15 +3154,13 @@
     const hasEpub = Array.from(files).some(f => f.name.toLowerCase().endsWith('.epub'));
     if (files.length > 0 && hasEpub) {
       convertOptions.style.display = 'block';
+      toggleConvertOptions();
     } else {
       convertOptions.style.display = 'none';
-      // Clear stale checkbox state so the "Optimize & Upload" button doesn't linger
-      // when the user re-picks a non-EPUB after having ticked Optimize for an EPUB.
-      const cb = document.getElementById('convertBeforeUpload');
-      if (cb && cb.checked) {
-        cb.checked = false;
-        toggleConvertOptions();
-      }
+      uploadBtn.textContent = 'Upload';
+      uploadBtn.classList.remove('optimize');
+      document.getElementById('convertInfo').style.display = 'none';
+      document.getElementById('convertWarning').style.display = 'none';
       if (files.length === 0) clearImagePicker();
     }
 
@@ -3229,6 +3242,75 @@ let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
 let ENABLE_AUTO_CROP = DEFAULT_ENABLE_AUTO_CROP;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
 let OVERLAP_PERCENT = 5; // Minimum overlap percentage for splits (5%, 10%, 15%)
+const UPLOAD_SETTINGS_STORAGE_KEY = 'crosspoint.files.uploadSettings.v1';
+const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
+  convertBeforeUpload: false,
+  renameFromMetadata: false,
+  quality: DEFAULT_JPEG_QUALITY,
+  autoCrop: DEFAULT_ENABLE_AUTO_CROP,
+  deviceTarget: 'auto',
+  handedness: 'right',
+  overlap: 5,
+  exportLog: false
+});
+let suppressUploadSettingsSave = false;
+
+function getCurrentUploadSettings() {
+  return {
+    convertBeforeUpload: !!document.getElementById('convertBeforeUpload')?.checked,
+    renameFromMetadata: !!document.getElementById('renameFromMetadataToggle')?.checked,
+    quality: parseInt(document.getElementById('qualitySlider')?.value || JPEG_QUALITY, 10),
+    autoCrop: !!document.getElementById('autoCropToggle')?.checked,
+    deviceTarget: DEVICE_TARGET,
+    handedness: HANDEDNESS,
+    overlap: OVERLAP_PERCENT,
+    exportLog: !!document.getElementById('export-log-checkbox')?.checked
+  };
+}
+
+function applyUploadSettings(settings = {}) {
+  const merged = { ...DEFAULT_UPLOAD_SETTINGS, ...settings };
+  suppressUploadSettingsSave = true;
+  try {
+    document.getElementById('convertBeforeUpload').checked = !!merged.convertBeforeUpload;
+    document.getElementById('renameFromMetadataToggle').checked = !!merged.renameFromMetadata;
+    document.getElementById('autoCropToggle').checked = !!merged.autoCrop;
+    document.getElementById('export-log-checkbox').checked = !!merged.exportLog;
+    document.getElementById('rememberUploadSettings').checked = !!settings.rememberSettings;
+
+    setQualityPreset(Math.max(1, Math.min(95, parseInt(merged.quality, 10) || DEFAULT_JPEG_QUALITY)));
+    setDeviceTarget(['auto', 'X3', 'X4'].includes(merged.deviceTarget) ? merged.deviceTarget : 'auto');
+    setHandedness(merged.handedness === 'left' ? 'left' : 'right');
+    setOverlap([5, 10, 15].includes(Number(merged.overlap)) ? Number(merged.overlap) : 5);
+    toggleConvertOptions();
+  } finally {
+    suppressUploadSettingsSave = false;
+  }
+}
+
+function restoreUploadSettingsFromStorage() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(UPLOAD_SETTINGS_STORAGE_KEY) || 'null');
+    applyUploadSettings(saved?.rememberSettings ? saved : undefined);
+  } catch (e) {
+    console.warn('Could not read remembered upload settings:', e);
+    applyUploadSettings();
+  }
+}
+
+function updateUploadSettingsPersistence() {
+  if (suppressUploadSettingsSave) return;
+  try {
+    if (!document.getElementById('rememberUploadSettings')?.checked) {
+      localStorage.removeItem(UPLOAD_SETTINGS_STORAGE_KEY);
+      return;
+    }
+    const settings = { ...getCurrentUploadSettings(), rememberSettings: true };
+    localStorage.setItem(UPLOAD_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.warn('Could not save upload settings:', e);
+  }
+}
 
 // ============================================================================
 // Image Picker State Management
@@ -3306,6 +3388,7 @@ function applyDeviceTarget() {
 function setDeviceTarget(value) {
   DEVICE_TARGET = value;
   applyDeviceTarget();
+  updateUploadSettingsPersistence();
 }
 
 // Batch logging system for multiple files
@@ -3712,6 +3795,64 @@ async function findOPFPath(zip) {
   let fallback = null;
   zip.forEach(p => { if (!fallback && p.toLowerCase().endsWith('.opf')) fallback = p; });
   return fallback;
+}
+
+function sanitizeMetadataFilenamePart(value) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return (text.normalize ? text.normalize('NFC') : text)
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[. ]+/g, '')
+    .replace(/[. ]+$/g, '')
+    .trim();
+}
+
+function buildMetadataFilename(title, author) {
+  title = sanitizeMetadataFilenamePart(title);
+  author = sanitizeMetadataFilenamePart(author);
+  if (!title) return '';
+  let base = author ? `${title} - ${author}` : title;
+  if (base.length > 180) base = base.substring(0, 180).replace(/\s+\S*$/g, '').trim() || base.substring(0, 180).trim();
+  return `${base}.epub`;
+}
+
+async function getMetadataFilenameForEpub(file) {
+  if (typeof JSZip === 'undefined') return '';
+  const zip = await JSZip.loadAsync(file);
+  const opfPath = await findOPFPath(zip);
+  if (!opfPath || !zip.files[opfPath]) return '';
+
+  const doc = new DOMParser().parseFromString(await safeReadText(zip.files[opfPath]), 'application/xml');
+  if (doc.querySelector('parsererror')) return '';
+
+  const title = doc.getElementsByTagNameNS('*', 'title')[0]?.textContent || '';
+  const creators = Array.from(doc.getElementsByTagNameNS('*', 'creator'));
+  const authorEl = creators.find(el => {
+    const role = el.getAttribute('role') || el.getAttribute('opf:role') ||
+                 el.getAttributeNS('http://www.idpf.org/2007/opf', 'role') || '';
+    return role.toLowerCase() === 'aut';
+  }) || creators[0];
+  const author = authorEl?.textContent || authorEl?.getAttribute('file-as') || authorEl?.getAttribute('opf:file-as') || '';
+  return buildMetadataFilename(title, author);
+}
+
+async function maybeRenameEbookFile(file) {
+  const renameToggle = document.getElementById('renameFromMetadataToggle');
+  if (!renameToggle || !renameToggle.checked || !file.name.toLowerCase().endsWith('.epub')) {
+    return file;
+  }
+
+  try {
+    const metadataName = await getMetadataFilenameForEpub(file);
+    if (!metadataName || metadataName === file.name) return file;
+    return new File([file], metadataName, {
+      type: file.type || 'application/epub+zip',
+      lastModified: file.lastModified
+    });
+  } catch (e) {
+    console.warn('Could not rename EPUB from metadata:', e);
+    return file;
+  }
 }
 
 /**
@@ -5248,6 +5389,16 @@ function uploadFile() {
     let conversionFailed = false;  // Track if conversion actually failed
     let convOriginalSize = 0;      // Picked-file size; 0 unless conversion succeeded
     let convNewSize = 0;           // Generated blob size; 0 unless conversion succeeded
+
+    if (isEpub && document.getElementById('renameFromMetadataToggle').checked) {
+      const originalName = file.name;
+      progressText.style.color = '';
+      progressText.textContent = `Reading metadata for ${file.name} (${currentIndex + 1}/${files.length})...`;
+      file = await maybeRenameEbookFile(file);
+      if (file.name !== originalName) {
+        console.log(`[Upload] Renamed from metadata: ${originalName} -> ${file.name}`);
+      }
+    }
 
     const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
     const stageText = needsConversion ? 'Converting & uploading' : 'Uploading';
