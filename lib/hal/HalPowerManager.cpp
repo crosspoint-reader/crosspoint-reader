@@ -103,8 +103,11 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
 bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   // A performance Lock means a render (or similar) task is mid-flight; light sleep
   // freezes the whole chip, so it would stall that task.
-  // Note: like setPowerSaving(), read without the mutex — a stale value only delays
-  // sleeping by one 50 ms slice.
+  // Note: like setPowerSaving(), read without the mutex — stale in either
+  // direction is acceptable: a stale lock delays sleeping by one 50 ms slice;
+  // a Lock acquired after this check freezes that task for at most one slice
+  // (timer wake; RAM/peripheral state retained), which is cheaper than
+  // serializing Lock ctor/dtor against the entire sleep window.
   if (currentLockMode != None) {
     return false;
   }
