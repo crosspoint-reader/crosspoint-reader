@@ -181,10 +181,6 @@ class CrossPointSettings {
     QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
-  // Next-page behavior on the End-of-Book screen. EOB_HOME must stay 0 so existing
-  // installs keep today's go-home behavior until they opt in.
-  enum END_OF_BOOK_BEHAVIOR { EOB_HOME = 0, EOB_NEXT_BOOK = 1, EOB_ASK = 2, END_OF_BOOK_BEHAVIOR_COUNT };
-
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Sleep screen cover mode settings
@@ -279,9 +275,6 @@ class CrossPointSettings {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
-  // End-of-Book screen behavior: go home (default), open the next book in the folder,
-  // or show a small list of next-book suggestions.
-  uint8_t endOfBookBehavior = EOB_HOME;
 
   ~CrossPointSettings() = default;
 

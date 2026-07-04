@@ -41,6 +41,7 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
   const auto nameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
   if (!nameBuffer) {
     LOG_ERR("NBF", "OOM: %d bytes", static_cast<int>(NAME_BUFFER_SIZE));
+    dir.close();
     return result;
   }
 

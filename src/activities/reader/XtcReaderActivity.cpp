@@ -71,12 +71,13 @@ void XtcReaderActivity::loop() {
 
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
-  // While the Ask-mode end screen menu is showing it owns Confirm/Back/page-turn input.
-  // Anything it doesn't handle (e.g. long-press Back to the file browser) falls through
-  // to the regular handlers below; page turns are absorbed by the end-of-book block.
-  if (atEndOfBook && endOfBookOptions.askMenuActive()) {
+  // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
+  // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
+  // through to the regular handlers below; page turns are absorbed by the end-of-book
+  // block.
+  if (atEndOfBook && endOfBookOptions.menuActive()) {
     std::string openPath;
-    switch (endOfBookOptions.handleAskInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
@@ -118,22 +119,15 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button opens the next book (when configured and available)
-  // or goes home; back button returns to last page
+  // At end of the book with no suggestion menu, forward button goes home and back
+  // button returns to last page
   if (currentPage >= xtc->getPageCount()) {
-    if (endOfBookOptions.askMenuActive()) {
+    if (endOfBookOptions.menuActive()) {
       // Selection movement was handled above; absorb leftover page-turn triggers so
       // e.g. "previous" at the top of the list doesn't jump back into the book
       return;
     }
     if (nextTriggered) {
-      if (SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_NEXT_BOOK) {
-        const std::string nextPath = endOfBookOptions.firstSuggestionPath();
-        if (!nextPath.empty()) {
-          activityManager.goToReader(nextPath);
-          return;
-        }
-      }
       onGoHome();
     } else {
       currentPage = xtc->getPageCount() - 1;

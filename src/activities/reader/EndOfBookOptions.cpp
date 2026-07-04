@@ -12,42 +12,15 @@
 #include "util/NextBookFinder.h"
 
 namespace {
-// Vertical layout of the end screen. The plain title position matches the historical
-// end-of-book screen; the Ask layout starts higher so the list fits in landscape too.
-constexpr int TITLE_Y = 300;
-constexpr int ASK_TITLE_Y = 120;
-constexpr int ASK_SUBTITLE_Y = 170;
-constexpr int ASK_LIST_TOP = 200;
-constexpr int NEXT_HINT_Y = 345;
-
 // Display name without the file extension, mirroring the file browser rows
 std::string displayName(const std::string& filename) {
   const auto pos = filename.rfind('.');
   return filename.substr(0, pos);
 }
-
-// Right-truncate text with an ellipsis so it fits maxWidth. Shrinks the string in
-// place; the only allocation is the final append of the ellipsis.
-std::string fitText(const GfxRenderer& renderer, const int fontId, std::string text, const int maxWidth) {
-  if (renderer.getTextWidth(fontId, text.c_str()) <= maxWidth) {
-    return text;
-  }
-  const char ellipsis[] = "\xe2\x80\xa6";  // UTF-8 ellipsis (…)
-  const int available = maxWidth - renderer.getTextWidth(fontId, ellipsis);
-  while (!text.empty() && renderer.getTextWidth(fontId, text.c_str()) > available) {
-    // Drop the last UTF-8 code point, skipping continuation bytes
-    size_t i = text.size() - 1;
-    while (i > 0 && (static_cast<unsigned char>(text[i]) & 0xC0) == 0x80) {
-      i--;
-    }
-    text.erase(i);
-  }
-  return text + ellipsis;
-}
 }  // namespace
 
 void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
-  if (isLoaded.load(std::memory_order_acquire) || SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_HOME) {
+  if (isLoaded.load(std::memory_order_acquire)) {
     return;
   }
   folder = FsHelpers::extractFolderPath(currentBookPath);
@@ -58,18 +31,7 @@ void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
   isLoaded.store(true, std::memory_order_release);
 }
 
-bool EndOfBookOptions::askMenuActive() const {
-  return SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_ASK && isLoaded.load(std::memory_order_acquire) &&
-         !names.empty();
-}
-
-std::string EndOfBookOptions::firstSuggestionPath() const {
-  // Gate on the loaded flag: the render task may still be building the list
-  if (!isLoaded.load(std::memory_order_acquire) || names.empty()) {
-    return {};
-  }
-  return fullPath(0);
-}
+bool EndOfBookOptions::menuActive() const { return isLoaded.load(std::memory_order_acquire) && !names.empty(); }
 
 std::string EndOfBookOptions::fullPath(const size_t index) const {
   if (index >= names.size()) {
@@ -78,24 +40,8 @@ std::string EndOfBookOptions::fullPath(const size_t index) const {
   return folder == "/" ? "/" + names[index] : folder + "/" + names[index];
 }
 
-EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManager& input, std::string* openPath) {
-  // Directional buttons follow the reader's page-turn semantics: press-triggered by
-  // default, release-triggered when a long-press behavior is configured (same rule as
-  // ReaderUtils::detectPageTurn). This matters on entry: with press-triggered turns, the
-  // press that turned the final page already fired in the reader, and its release must
-  // not double-fire into this menu (it would auto-open the first suggestion).
-  const bool usePress = SETTINGS.longPressButtonBehavior == CrossPointSettings::OFF;
-  const auto triggered = [&](const MappedInputManager::Button button) {
-    return usePress ? input.wasPressed(button) : input.wasReleased(button);
-  };
-
-  // Confirm and the side page-forward button both open the current selection, as does
-  // a short Power press when the user configured it as a page-turn button (mirrors
-  // ReaderUtils::detectPageTurn so no configured "forward" input goes dead here)
-  const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                         input.wasReleased(MappedInputManager::Button::Power);
-  if (input.wasReleased(MappedInputManager::Button::Confirm) || triggered(MappedInputManager::Button::PageForward) ||
-      powerTurn) {
+EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputManager& input, std::string* openPath) {
+  if (input.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selector < static_cast<int>(names.size())) {
       if (openPath) {
         *openPath = fullPath(selector);
@@ -105,29 +51,28 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
     return Action::GoHome;  // "Home" entry selected
   }
 
-  // Side page-back returns to the last page of the book
-  if (triggered(MappedInputManager::Button::PageBack)) {
-    return Action::LastPage;
-  }
-
-  // Short-press Back also returns to the last page (works when side buttons are
-  // disabled too); a long press falls through to the reader's own handler (file browser).
-  // Home is reached through the list's own Home entry.
+  // Short-press Back returns to the last page; a long press falls through to the
+  // reader's own handler (file browser). Home is reached through the list's Home entry.
   if (input.wasReleased(MappedInputManager::Button::Back) && input.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     return Action::LastPage;
   }
 
-  // Selection movement on the front Left/Right buttons, axis-flipped in the rotated
-  // orientations to match the hint labels (same rule as NavPrevious/NavNext)
-  const bool swapFront = input.isNavDirectionSwapped();
-  const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
-  const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  // Selection movement on the standard list navigation buttons (side Up/Down plus front
+  // Left/Right, orientation swap included). It follows the reader's page-turn semantics
+  // (press-triggered by default, release-triggered when a long-press behavior is
+  // configured, same rule as ReaderUtils::detectPageTurn). This matters on entry: with
+  // press-triggered turns, the press that turned the final page already fired in the
+  // reader, and its release must not double-fire into this menu.
+  const bool usePress = SETTINGS.longPressButtonBehavior == CrossPointSettings::OFF;
+  const auto triggered = [&](const MappedInputManager::Button button) {
+    return usePress ? input.wasPressed(button) : input.wasReleased(button);
+  };
   const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
-  if (triggered(prevButton)) {
+  if (triggered(MappedInputManager::Button::NavPrevious)) {
     selector = ButtonNavigator::previousIndex(selector, itemCount);  // wraps to the bottom
     return Action::Redraw;
   }
-  if (triggered(nextButton)) {
+  if (triggered(MappedInputManager::Button::NavNext)) {
     selector = ButtonNavigator::nextIndex(selector, itemCount);  // wraps to the top
     return Action::Redraw;
   }
@@ -136,29 +81,31 @@ EndOfBookOptions::Action EndOfBookOptions::handleAskInput(const MappedInputManag
 
 void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& input) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  const int maxTextWidth = pageWidth - metrics.contentSidePadding * 2;
 
-  if (!askMenuActive()) {
-    renderer.drawCenteredText(UI_12_FONT_ID, TITLE_Y, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
-    if (SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_NEXT_BOOK && !names.empty()) {
-      const std::string hint = std::string(tr(STR_EOB_NEXT)) + ": " + displayName(names.front());
-      renderer.drawCenteredText(UI_10_FONT_ID, NEXT_HINT_Y,
-                                fitText(renderer, UI_10_FONT_ID, hint, maxTextWidth).c_str());
-    }
+  if (!menuActive()) {
+    // No suggestions: the historical plain end screen. 3/8 of the screen height matches
+    // the previous fixed position on the 480x800 panel and scales to other resolutions.
+    renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() * 3 / 8, tr(STR_END_OF_BOOK), true,
+                              EpdFontFamily::BOLD);
     return;
   }
 
-  // Ask mode: title, suggestion list (+ Home entry) and button hints. The hints are
-  // drawn at the physical front buttons, which is a logical side/top edge in the
-  // rotated orientations — layout inside the safe area so nothing hides behind them.
+  // Suggestion menu: title, list (+ Home entry) and button hints. The hints are drawn at
+  // the physical front buttons, which is a logical side/top edge in the rotated
+  // orientations — lay out inside the safe area so nothing hides behind them. Vertical
+  // positions derive from the safe-area height and font line heights so other panel
+  // resolutions scale (review request on #2532).
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, ASK_TITLE_Y, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
-  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, ASK_SUBTITLE_Y, tr(STR_EOB_CONTINUE_WITH));
+  const int titleY = safe.y + safe.height / 8;
+  const int subtitleY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing;
+  const int listTop = subtitleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
 
-  const int listHeight = safe.y + safe.height - ASK_LIST_TOP - metrics.verticalSpacing;
-  GUI.drawList(renderer, Rect{safe.x, ASK_LIST_TOP, safe.width, listHeight}, static_cast<int>(names.size()) + 1,
-               selector, [this](const int index) {
+  UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
+
+  const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
+  GUI.drawList(renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
+               [this](const int index) {
                  return index < static_cast<int>(names.size()) ? displayName(names[index])
                                                                : std::string(tr(STR_EOB_HOME));
                });

@@ -321,15 +321,15 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
-  // While the Ask-mode end screen menu is showing it owns Confirm/Back/page-turn input.
-  // Anything it doesn't handle (e.g. long-press Back to the file browser) falls through
-  // to the regular handlers below; page turns are absorbed by the end-of-book block.
-  // A Confirm release after a long-press function (bookmark/sync) fired is left to the
-  // regular Confirm handler below, which consumes it via ignoreNextConfirmRelease.
-  if (atEndOfBook && endOfBookOptions.askMenuActive() &&
+  // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
+  // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
+  // through to the regular handlers below; page turns are absorbed by the end-of-book
+  // block. A Confirm release after a long-press function (bookmark/sync) fired is left
+  // to the regular Confirm handler below, which consumes it via ignoreNextConfirmRelease.
+  if (atEndOfBook && endOfBookOptions.menuActive() &&
       !(ignoreNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     std::string openPath;
-    switch (endOfBookOptions.handleAskInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
@@ -438,22 +438,15 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // At end of the book, forward button opens the next book (when configured and available)
-  // or goes home; back button returns to last page
+  // At end of the book with no suggestion menu, forward button goes home and back
+  // button returns to last page
   if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-    if (endOfBookOptions.askMenuActive()) {
+    if (endOfBookOptions.menuActive()) {
       // Selection movement was handled above; absorb leftover page-turn triggers so
       // e.g. "previous" at the top of the list doesn't jump back into the book
       return;
     }
     if (nextTriggered) {
-      if (SETTINGS.endOfBookBehavior == CrossPointSettings::EOB_NEXT_BOOK) {
-        const std::string nextPath = endOfBookOptions.firstSuggestionPath();
-        if (!nextPath.empty()) {
-          activityManager.goToReader(nextPath);
-          return;
-        }
-      }
       onGoHome();
     } else {
       currentSpineIndex = epub->getSpineItemsCount() - 1;
