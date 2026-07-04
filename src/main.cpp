@@ -608,8 +608,16 @@ void loop() {
   } else {
     const unsigned long idleMs = millis() - lastActivityTime;
     if (idleMs >= HalPowerManager::IDLE_LIGHT_SLEEP_MS) {
-      // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence)
-      powerManager.setPowerSaving(true);
+      // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence).
+      // Race-to-sleep: run the brief wake windows at normal clock, not LOW_POWER_FREQ.
+      // The board's sleep-floor current is paid per-millisecond regardless of CPU
+      // speed, so finishing the per-wake work ~16x faster and returning to sleep
+      // costs less charge than stretching the window at 10 MHz (measured at 10 MHz:
+      // 8.8 mA for 4.5 ms per wake). The downclock below only serves the pre-sleep
+      // 100 Hz delay-poll phase. The lightSleep()-rejected fallback delay() then
+      // also runs at normal clock, but that only happens when USB (externally
+      // powered), WiFi, or a render Lock (full speed wanted anyway) is active.
+      powerManager.setPowerSaving(false);
       if (gpio.isDebouncePending()) {
         // A raw button-state change is mid-debounce: commitment needs a second
         // matching sample, so poll again quickly instead of sleeping a slice —
