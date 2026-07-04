@@ -1275,7 +1275,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 }
 
-bool ChapterHtmlSlimParser::parseAndBuildPages() {
+ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
+
+bool ChapterHtmlSlimParser::beginParse() {
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -1293,67 +1295,78 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
-  XML_Parser parser = XML_ParserCreate(nullptr);
-  int done;
-
-  if (!parser) {
+  xmlParser_ = XML_ParserCreate(nullptr);
+  if (!xmlParser_) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
     return false;
   }
 
   // Handle HTML entities (like &nbsp;) that aren't in XML spec or DTD
   // Using DefaultHandlerExpand preserves normal entity expansion from DOCTYPE
-  XML_SetDefaultHandlerExpand(parser, defaultHandlerExpand);
+  XML_SetDefaultHandlerExpand(xmlParser_, defaultHandlerExpand);
 
-  HalFile file;
-  if (!Storage.openFileForRead("EHP", filepath, file)) {
-    destroyXmlParser(parser);
+  if (!Storage.openFileForRead("EHP", filepath, parseFile_)) {
+    destroyXmlParser(xmlParser_);
+    xmlParser_ = nullptr;
     return false;
   }
 
   // Get file size to decide whether to show indexing popup.
-  if (popupFn && file.size() >= MIN_SIZE_FOR_POPUP) {
+  if (popupFn && parseFile_.size() >= MIN_SIZE_FOR_POPUP) {
     popupFn();
   }
 
-  XML_SetUserData(parser, this);
-  XML_SetElementHandler(parser, startElement, endElement);
-  XML_SetCharacterDataHandler(parser, characterData);
+  XML_SetUserData(xmlParser_, this);
+  XML_SetElementHandler(xmlParser_, startElement, endElement);
+  XML_SetCharacterDataHandler(xmlParser_, characterData);
 
-  // Compute the time taken to parse and build pages
-  const uint32_t chapterStartTime = millis();
-  do {
-    void* const buf = XML_GetBuffer(parser, PARSE_BUFFER_SIZE);
-    if (!buf) {
-      LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-      destroyXmlParser(parser);
-      file.close();
-      return false;
-    }
+  parseStartTime_ = millis();
+  return true;
+}
 
-    const size_t len = file.read(buf, PARSE_BUFFER_SIZE);
+ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
+  void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
+  if (!buf) {
+    LOG_ERR("EHP", "Couldn't allocate memory for buffer");
+    return ParseStatus::Error;
+  }
 
-    if (len == 0 && file.available() > 0) {
-      LOG_ERR("EHP", "File read error");
-      destroyXmlParser(parser);
-      file.close();
-      return false;
-    }
+  const size_t len = parseFile_.read(buf, PARSE_BUFFER_SIZE);
 
-    done = file.available() == 0;
+  if (len == 0 && parseFile_.available() > 0) {
+    LOG_ERR("EHP", "File read error");
+    return ParseStatus::Error;
+  }
 
-    if (XML_ParseBuffer(parser, static_cast<int>(len), done) == XML_STATUS_ERROR) {
-      LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(parser),
-              XML_ErrorString(XML_GetErrorCode(parser)));
-      destroyXmlParser(parser);
-      file.close();
-      return false;
-    }
-  } while (!done);
-  LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - chapterStartTime);
+  const int done = parseFile_.available() == 0;
 
-  destroyXmlParser(parser);
-  file.close();
+  if (XML_ParseBuffer(xmlParser_, static_cast<int>(len), done) == XML_STATUS_ERROR) {
+    LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(xmlParser_),
+            XML_ErrorString(XML_GetErrorCode(xmlParser_)));
+    return ParseStatus::Error;
+  }
+
+  return done ? ParseStatus::Done : ParseStatus::More;
+}
+
+void ChapterHtmlSlimParser::abortParse() {
+  if (xmlParser_) {
+    destroyXmlParser(xmlParser_);
+    xmlParser_ = nullptr;
+  }
+  // Only close the file if it was successfully opened in beginParse()
+  if (parseFile_.isOpen()) {
+    parseFile_.close();
+  }
+}
+
+bool ChapterHtmlSlimParser::finishParse() {
+  if (xmlParser_) {
+    LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - parseStartTime_);
+    destroyXmlParser(xmlParser_);
+    xmlParser_ = nullptr;
+  }
+  parseFile_.close();
 
   // Process last page if there is still text
   if (currentTextBlock) {
@@ -1369,6 +1382,23 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   }
 
   return true;
+}
+
+bool ChapterHtmlSlimParser::parseAndBuildPages() {
+  if (!beginParse()) {
+    return false;
+  }
+  for (;;) {
+    const ParseStatus status = parseStep();
+    if (status == ParseStatus::Error) {
+      abortParse();
+      return false;
+    }
+    if (status == ParseStatus::Done) {
+      break;
+    }
+  }
+  return finishParse();
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {

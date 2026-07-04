@@ -278,13 +278,18 @@ class XPathParagraphResolver final : public Print {
     path.push_back({name, siblingIndex});
     parentStates.emplace_back();
 
+    // Count both <p> and <li> as paragraph-like positions, matching how the section
+    // layout tracks them (xpathParagraphIndex and xpathListItemIndex). This ensures
+    // KOReader progress in list items maps to the correct XPath.
     if (name == "p") {
       paragraphCount++;
-      if (paragraphCount == targetParagraph) {
-        xpath = buildParagraphXPath(spineIndex, path, 0, 0);
-        stopped = true;
-        XML_StopParser(parser, XML_FALSE);
-      }
+    } else if (name == "li") {
+      paragraphCount++;
+    }
+    if (paragraphCount == targetParagraph) {
+      xpath = buildParagraphXPath(spineIndex, path, 0, 0);
+      stopped = true;
+      XML_StopParser(parser, XML_FALSE);
     }
 
     depth++;
