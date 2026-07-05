@@ -36,6 +36,7 @@ class OpdsBookBrowserActivity final : public Activity {
   bool consumeBack = false;  // Added missing member
   int selectorIndex = 0;
   std::string errorMessage;
+  std::string errorDetail;
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;

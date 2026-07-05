@@ -38,6 +38,10 @@ bool isRedirect(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 
+HttpDownloader::DownloadError makeDownloadError(HttpDownloader::DownloadResult result, int httpStatus = 0) {
+  return {result, httpStatus};
+}
+
 // Streams a GET body through sink.write in READ_CHUNK pieces. Uses the manual
 // open/fetch_headers/read path rather than esp_http_client_perform(): perform()
 // pushes the whole body through an event callback and reports a chunked body
@@ -62,7 +66,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) {
     LOG_ERR("HTTP", "client init failed");
-    return HttpDownloader::HTTP_ERROR;
+    return makeDownloadError(HttpDownloader::HTTP_ERROR);
   }
 
   esp_http_client_set_header(client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
@@ -80,7 +84,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   if (err != ESP_OK) {
     LOG_ERR("HTTP", "open failed: %s", esp_err_to_name(err));
     esp_http_client_cleanup(client);
-    return HttpDownloader::HTTP_ERROR;
+    return makeDownloadError(HttpDownloader::HTTP_ERROR);
   }
   int64_t contentLength = esp_http_client_fetch_headers(client);
   int status = esp_http_client_get_status_code(client);
@@ -90,7 +94,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     if (err != ESP_OK) {
       LOG_ERR("HTTP", "redirect open failed: %s", esp_err_to_name(err));
       esp_http_client_cleanup(client);
-      return HttpDownloader::HTTP_ERROR;
+      return makeDownloadError(HttpDownloader::HTTP_ERROR);
     }
     contentLength = esp_http_client_fetch_headers(client);
     status = esp_http_client_get_status_code(client);
@@ -99,7 +103,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   if (status != 200) {
     LOG_ERR("HTTP", "unexpected status: %d", status);
     esp_http_client_cleanup(client);
-    return HttpDownloader::HTTP_ERROR;
+    return makeDownloadError(HttpDownloader::HTTP_ERROR, status);
   }
 
   // fetch_headers returns 0 for a chunked response (no Content-Length); leave
@@ -110,24 +114,24 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   if (!buf) {
     LOG_ERR("HTTP", "OOM: %u byte read buffer", (unsigned)READ_CHUNK);
     esp_http_client_cleanup(client);
-    return HttpDownloader::HTTP_ERROR;
+    return makeDownloadError(HttpDownloader::HTTP_ERROR, status);
   }
 
   while (true) {
     if (sink.cancelFlag && *sink.cancelFlag) {
       esp_http_client_cleanup(client);
-      return HttpDownloader::ABORTED;
+      return makeDownloadError(HttpDownloader::ABORTED, status);
     }
     const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
     if (read < 0) {
       LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
       esp_http_client_cleanup(client);
-      return HttpDownloader::HTTP_ERROR;
+      return makeDownloadError(HttpDownloader::HTTP_ERROR, status);
     }
     if (read == 0) break;  // all data received
     if (!sink.write(reinterpret_cast<const uint8_t*>(buf.get()), read)) {
       esp_http_client_cleanup(client);
-      return HttpDownloader::FILE_ERROR;
+      return makeDownloadError(HttpDownloader::FILE_ERROR, status);
     }
     sink.downloaded += read;
     if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
@@ -137,18 +141,18 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   esp_http_client_cleanup(client);
   if (!complete) {
     LOG_ERR("HTTP", "incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);
-    return HttpDownloader::HTTP_ERROR;
+    return makeDownloadError(HttpDownloader::HTTP_ERROR, status);
   }
-  return HttpDownloader::OK;
+  return makeDownloadError(HttpDownloader::OK, status);
 }
 }  // namespace
 
-bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
+HttpDownloader::DownloadError HttpDownloader::fetchUrl(const std::string& url, Stream& outContent,
+                                                       const std::string& username, const std::string& password) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
-  return runGet(url, username, password, sink) == OK;
+  return runGet(url, username, password, sink);
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
@@ -160,7 +164,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
     outContent.append(reinterpret_cast<const char*>(data), len);
     return true;
   };
-  return runGet(url, username, password, sink) == OK;
+  return runGet(url, username, password, sink).result == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
@@ -168,7 +172,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = onData;
-  return runGet(url, username, password, sink) == OK;
+  return runGet(url, username, password, sink).result == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
@@ -182,7 +186,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   HalFile file;
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
     LOG_ERR("HTTP", "Failed to open file for writing");
-    return FILE_ERROR;
+    return makeDownloadError(FILE_ERROR);
   }
 
   Sink sink;
@@ -195,15 +199,15 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // otherwise close only after the remove.
   file.close();
 
-  if (result != OK) {
+  if (result.result != OK) {
     Storage.remove(destPath.c_str());
     return result;
   }
   if (sink.downloaded == 0) {
     LOG_ERR("HTTP", "no data received");
     Storage.remove(destPath.c_str());
-    return HTTP_ERROR;
+    return makeDownloadError(HTTP_ERROR, result.httpStatus);
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
-  return OK;
+  return result;
 }

@@ -58,6 +58,30 @@ std::string bookDisplayText(const OpdsEntry& entry) {
 std::string bookDownloadBaseName(const OpdsEntry& entry) {
   return (entry.author.empty() ? "" : entry.author + " - ") + entry.title;
 }
+
+std::string opdsDownloadErrorCode(const HttpDownloader::DownloadError error) {
+  switch (error.result) {
+    case HttpDownloader::HTTP_ERROR:
+      if (error.httpStatus > 0 && error.httpStatus != 200) {
+        return "error 2001-" + std::to_string(error.httpStatus);
+      }
+      return "error 2001";
+    case HttpDownloader::FILE_ERROR:
+      return "error 2002";
+    case HttpDownloader::ABORTED:
+      return "error 2003";
+    case HttpDownloader::OK:
+      return "";
+  }
+  return "error 2099";
+}
+
+std::string opdsHttpStatusDetail(const HttpDownloader::DownloadError error) {
+  if (error.httpStatus > 0 && error.httpStatus != 200) {
+    return "http " + std::to_string(error.httpStatus);
+  }
+  return "";
+}
 }
 
 void OpdsBookBrowserActivity::onEnter() {
@@ -72,6 +96,7 @@ void OpdsBookBrowserActivity::onEnter() {
   consumeConfirm = false;
   consumeBack = false;
   errorMessage.clear();
+  errorDetail.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
   requestUpdate();
 
@@ -180,8 +205,12 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   }
 
   if (state == BrowserState::ERROR) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_ERROR_MSG));
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
+    const int messageY = errorDetail.empty() ? pageHeight / 2 + 10 : pageHeight / 2;
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 30, tr(STR_ERROR_MSG));
+    renderer.drawCenteredText(UI_10_FONT_ID, messageY, errorMessage.c_str());
+    if (!errorDetail.empty()) {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, errorDetail.c_str());
+    }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -228,6 +257,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   if (server.url.empty()) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_SERVER_URL);
+    errorDetail.clear();
     requestUpdate();
     return;
   }
@@ -237,9 +267,11 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   OpdsParser parser;
   {
     OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
+    const auto result = HttpDownloader::fetchUrl(url, stream, server.username, server.password);
+    if (result.result != HttpDownloader::OK) {
       state = BrowserState::ERROR;
       errorMessage = tr(STR_FETCH_FEED_FAILED);
+      errorDetail = opdsHttpStatusDetail(result);
       requestUpdate();
       return;
     }
@@ -248,6 +280,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   if (!parser) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_PARSE_FEED_FAILED);
+    errorDetail.clear();
     requestUpdate();
     return;
   }
@@ -266,7 +299,10 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
-  if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
+  if (entries.empty()) {
+    errorMessage = tr(STR_NO_ENTRIES);
+    errorDetail.clear();
+  }
   requestUpdate();
 }
 
@@ -302,6 +338,7 @@ void OpdsBookBrowserActivity::navigateBack() {
 void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
+  errorDetail.clear();
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
@@ -321,12 +358,13 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       },
       nullptr, server.username, server.password);
 
-  if (result == HttpDownloader::OK) {
+  if (result.result == HttpDownloader::OK) {
     clearBookCache(filename);
     state = BrowserState::BROWSING;
   } else {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
+    errorDetail = opdsDownloadErrorCode(result);
   }
   requestUpdate();
 }
@@ -412,6 +450,7 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     // Leave WiFi up; onExit's silent reboot handles teardown without fragmenting.
     state = BrowserState::ERROR;
     errorMessage = tr(STR_WIFI_CONN_FAILED);
+    errorDetail.clear();
     requestUpdate();
   }
 }

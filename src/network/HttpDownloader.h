@@ -16,11 +16,16 @@ class HttpDownloader {
   // streaming parser consume the response without buffering the whole body.
   using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;
 
-  enum DownloadError {
+  enum DownloadResult {
     OK = 0,
     HTTP_ERROR,
     FILE_ERROR,
     ABORTED,
+  };
+
+  struct DownloadError {
+    DownloadResult result = OK;
+    int httpStatus = 0;
   };
 
   /**
@@ -29,8 +34,8 @@ class HttpDownloader {
   static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
                        const std::string& password = "");
 
-  static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "");
+  static DownloadError fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
+                                const std::string& password = "");
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.

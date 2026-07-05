@@ -74,7 +74,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
 
   auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
-  if (result != HttpDownloader::OK) {
+  if (result.result != HttpDownloader::OK) {
     LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
     errorMessage_ = "Failed to fetch font list";
     Storage.remove(MANIFEST_TMP);
@@ -311,7 +311,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
         },
         &cancelRequested_);
 
-    if (result == HttpDownloader::ABORTED) {
+    if (result.result == HttpDownloader::ABORTED) {
       fontInstaller_.deleteFamily(family.name.c_str());
       family.installed = false;
       family.hasUpdate = false;
@@ -322,8 +322,8 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       return;
     }
 
-    if (result != HttpDownloader::OK) {
-      LOG_ERR("FONT", "Download failed: %s (%d)", file.name.c_str(), result);
+    if (result.result != HttpDownloader::OK) {
+      LOG_ERR("FONT", "Download failed: %s (%d)", file.name.c_str(), result.result);
       fontInstaller_.deleteFamily(family.name.c_str());
       family.installed = false;
       family.hasUpdate = false;
