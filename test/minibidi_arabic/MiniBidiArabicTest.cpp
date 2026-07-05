@@ -101,20 +101,34 @@ TEST(ArabicShaping, LamAlefFinalVariants) {
 }
 
 // The specific bug flagged in PR #2398 review: a diacritic between Lam and
-// Alef must not break the ligature. The fatha stays in the stream (it is
-// zero-width at render time); the Alef is absorbed.
+// Alef must not break the ligature. The fatha stays in the stream (a
+// zero-advance overlay at render time); the Alef is absorbed. Per UAX#9 L3
+// the mark is emitted after the ligature it decorates.
 TEST(ArabicShaping, LamAlefWithDiacriticBetween) {
-  EXPECT_EQ(shapeVisual({0x0644, 0x064E, 0x0627}), (CP{0x064E, 0xFEFB}));
+  EXPECT_EQ(shapeVisual({0x0644, 0x064E, 0x0627}), (CP{0xFEFB, 0x064E}));
 }
 
 /* ── Harakat (diacritics) ────────────────────────────────────────────── */
 
 // كَتَبَ fully vocalized: harakat are transparent for joining — the letter
-// skeleton shapes exactly as كتب — and remain in the output stream (the
-// renderer treats them as zero-width transparent marks).
+// skeleton shapes exactly as كتب — and remain in the output stream. UAX#9
+// rule L3: each mark is emitted after its base, so the renderer can overlay
+// it on the most recently drawn glyph.
 TEST(ArabicShaping, VocalizedTextJoinsAcrossHarakat) {
   EXPECT_EQ(shapeVisual({0x0643, 0x064E, 0x062A, 0x064E, 0x0628, 0x064E}),
-            (CP{0x064E, 0xFE90, 0x064E, 0xFE98, 0x064E, 0xFEDB}));
+            (CP{0xFE90, 0x064E, 0xFE98, 0x064E, 0xFEDB, 0x064E}));
+}
+
+// Stacked marks (shadda + fatha on one base) keep their logical order after
+// the base, so above-base stacking renders bottom-up as authored.
+TEST(ArabicShaping, StackedMarksFollowBaseInLogicalOrder) {
+  EXPECT_EQ(shapeVisual({0x0628, 0x0651, 0x064E}), (CP{0xFE8F, 0x0651, 0x064E}));
+}
+
+// Hebrew niqqud rides the same L3 path: mark follows its base after the
+// RTL run is reversed.
+TEST(HebrewShaping, NiqqudFollowsBase) {
+  EXPECT_EQ(shapeVisual({0x05E9, 0x05B0, 0x05DC}), (CP{0x05DC, 0x05E9, 0x05B0}));
 }
 
 /* ── Farsi extra letters ─────────────────────────────────────────────── */

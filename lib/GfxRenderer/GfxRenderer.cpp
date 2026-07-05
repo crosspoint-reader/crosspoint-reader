@@ -455,13 +455,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
-    // Skip RTL-script vowel marks (Hebrew niqqud, Arabic harakat)
-    // Temporary: avoid adding these to built-in fonts. Remove when custom fonts are supported.
-    if (BidiUtils::isTransparentMark(cp)) {
-      continue;
-    }
-
-    if (utf8IsCombiningMark(cp)) {
+    // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
+    // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
+    // emits base-then-marks per UAX#9 L3). raiseAboveBase leaves below-base
+    // marks (kasra) at their font-native position. Fonts without their glyphs
+    // — the built-ins — miss the getGlyph lookup and skip them, as before.
+    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
@@ -1681,7 +1680,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     }
     const auto& font = fontIt->second;
     while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
-      // drawText skips RTL vowel marks (niqqud/harakat) — measure must match.
+      // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
       if (BidiUtils::isTransparentMark(cp)) {
         continue;
       }
@@ -1707,7 +1706,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
   const auto& font = fontIt->second;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    // drawText skips RTL vowel marks (niqqud/harakat) — measure must match.
+    // RTL vowel marks (niqqud/harakat) are zero-advance overlays in drawText — no width.
     if (BidiUtils::isTransparentMark(cp)) {
       continue;
     }
@@ -1787,13 +1786,12 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
-    // Skip RTL-script vowel marks (Hebrew niqqud, Arabic harakat)
-    // Temporary: avoid adding these to built-in fonts. Remove when custom fonts are supported.
-    if (BidiUtils::isTransparentMark(cp)) {
-      continue;
-    }
-
-    if (utf8IsCombiningMark(cp)) {
+    // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
+    // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
+    // emits base-then-marks per UAX#9 L3). raiseAboveBase leaves below-base
+    // marks (kasra) at their font-native position. Fonts without their glyphs
+    // — the built-ins — miss the getGlyph lookup and skip them, as before.
+    if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
       const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);

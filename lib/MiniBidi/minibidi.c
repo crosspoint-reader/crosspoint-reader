@@ -375,7 +375,7 @@ int do_shape(bidi_char* line, bidi_char* to, int count) {
     to[i] = line[i];
     int tempShape = stype(line[i].wc);
     switch (tempShape) {
-      case SR: { /* Right-Joining, i.e. has Isolated, Final */
+      case SR: {                                     /* Right-Joining, i.e. has Isolated, Final */
         const int nx = next_non_nsm(line, i, count); /* deviation 1: was i + 1 */
         tempShape = (nx < count) ? stype(line[nx].wc) : SU;
         if (tempShape == SL || tempShape == SD || tempShape == SC)
@@ -384,7 +384,7 @@ int do_shape(bidi_char* line, bidi_char* to, int count) {
           to[i].wc = shape_form(line[i].wc, SHAPE_ISOLATED);
         break;
       }
-      case SD: { /* Dual-Joining, i.e. has Isolated, Final, Initial, Medial */
+      case SD: {                                     /* Dual-Joining, i.e. has Isolated, Final, Initial, Medial */
         const int nx = next_non_nsm(line, i, count); /* deviation 1: was i + 1 */
         const int pv = prev_non_nsm(line, i);        /* deviation 1: was i - 1 */
 
