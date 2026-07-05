@@ -19,6 +19,45 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
+
+const char* acquisitionBadge(const OpdsAcquisitionType type) {
+  switch (type) {
+    case OpdsAcquisitionType::EPUB:
+      return "[e] ";
+    case OpdsAcquisitionType::XTC:
+    case OpdsAcquisitionType::XTCH:
+      return "[x] ";
+    case OpdsAcquisitionType::UNKNOWN:
+      return "";
+  }
+  return "";
+}
+
+const char* acquisitionExtension(const OpdsAcquisitionType type) {
+  switch (type) {
+    case OpdsAcquisitionType::XTC:
+      return ".xtc";
+    case OpdsAcquisitionType::XTCH:
+      return ".xtch";
+    case OpdsAcquisitionType::EPUB:
+    case OpdsAcquisitionType::UNKNOWN:
+      return ".epub";
+  }
+  return ".epub";
+}
+
+std::string bookDisplayText(const OpdsEntry& entry) {
+  std::string text = acquisitionBadge(entry.acquisitionType);
+  if (!entry.author.empty()) {
+    text += entry.author + " - ";
+  }
+  text += entry.title;
+  return text;
+}
+
+std::string bookDownloadBaseName(const OpdsEntry& entry) {
+  return (entry.author.empty() ? "" : entry.author + " - ") + entry.title;
+}
 }
 
 void OpdsBookBrowserActivity::onEnter() {
@@ -175,8 +214,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
     for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
       const auto& entry = entries[i];
-      std::string displayText = (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : entry.title;
-      if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) displayText += " - " + entry.author;
+      std::string displayText =
+          (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : bookDisplayText(entry);
       auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
       renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
                         i != static_cast<size_t>(selectorIndex));
@@ -270,7 +309,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
   std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+      "/" + StringUtils::sanitizeFilename(bookDownloadBaseName(book)) + acquisitionExtension(book.acquisitionType);
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   const auto result = HttpDownloader::downloadToFile(

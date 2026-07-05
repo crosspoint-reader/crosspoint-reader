@@ -5,6 +5,16 @@
 
 #include <cstring>
 
+namespace {
+OpdsAcquisitionType acquisitionTypeFromMime(const char* type) {
+  if (!type) return OpdsAcquisitionType::UNKNOWN;
+  if (strcmp(type, "application/epub+zip") == 0) return OpdsAcquisitionType::EPUB;
+  if (strcmp(type, "application/x-xtc+zip") == 0) return OpdsAcquisitionType::XTC;
+  if (strcmp(type, "application/x-xtch+zip") == 0) return OpdsAcquisitionType::XTCH;
+  return OpdsAcquisitionType::UNKNOWN;
+}
+}  // namespace
+
 OpdsParser::OpdsParser() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
@@ -69,6 +79,7 @@ void OpdsParser::clear() {
   nextPageUrl.clear();
   prevPageUrl.clear();
   currentEntry = OpdsEntry{};
+  currentAcquisitionEntries.clear();
   currentText.clear();
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
 }
@@ -109,17 +120,14 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       }
 
       if (self->inEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-            strcmp(type, "application/epub+zip") == 0) {
-          // Prefer plain EPUB links over derived formats when multiple
-          // acquisition links are present for one entry.
-          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                            self->currentEntry.href.find("/epub/") != std::string::npos);
-          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
-            self->currentEntry.type = OpdsEntryType::BOOK;
-            self->currentEntry.href = href;
+        if (rel && strstr(rel, "opds-spec.org/acquisition") != nullptr) {
+          const OpdsAcquisitionType acquisitionType = acquisitionTypeFromMime(type);
+          if (acquisitionType != OpdsAcquisitionType::UNKNOWN) {
+            OpdsEntry acquisitionEntry;
+            acquisitionEntry.type = OpdsEntryType::BOOK;
+            acquisitionEntry.href = href;
+            acquisitionEntry.acquisitionType = acquisitionType;
+            self->currentAcquisitionEntries.push_back(acquisitionEntry);
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
@@ -134,6 +142,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
     self->inEntry = true;
     self->currentEntry = OpdsEntry{};
+    self->currentAcquisitionEntries.clear();
     return;
   }
 
@@ -157,10 +166,18 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<OpdsParser*>(userData);
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
-    if (!self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
+    if (!self->currentEntry.title.empty() && !self->currentAcquisitionEntries.empty()) {
+      for (auto acquisitionEntry : self->currentAcquisitionEntries) {
+        acquisitionEntry.title = self->currentEntry.title;
+        acquisitionEntry.author = self->currentEntry.author;
+        acquisitionEntry.id = self->currentEntry.id;
+        self->entries.push_back(acquisitionEntry);
+      }
+    } else if (!self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
       self->entries.push_back(self->currentEntry);
     }
     self->inEntry = false;
+    self->currentAcquisitionEntries.clear();
   } else if (self->inEntry) {
     if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
       if (self->inTitle) self->currentEntry.title = self->currentText;
