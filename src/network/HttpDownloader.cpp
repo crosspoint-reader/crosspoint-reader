@@ -7,6 +7,8 @@
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <functional>
 #include <string>
@@ -36,6 +38,50 @@ struct Sink {
 
 bool isRedirect(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+}
+
+std::string lowerAscii(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(),
+                 [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  return value;
+}
+
+std::string urlHost(const std::string& url) {
+  const size_t protocolEnd = url.find("://");
+  const size_t hostStart = protocolEnd == std::string::npos ? 0 : protocolEnd + 3;
+  const size_t authorityEnd = url.find_first_of("/?#", hostStart);
+  std::string authority =
+      url.substr(hostStart, authorityEnd == std::string::npos ? std::string::npos : authorityEnd - hostStart);
+
+  const size_t userInfoEnd = authority.rfind('@');
+  if (userInfoEnd != std::string::npos) {
+    authority.erase(0, userInfoEnd + 1);
+  }
+
+  if (!authority.empty() && authority.front() == '[') {
+    const size_t bracketEnd = authority.find(']');
+    if (bracketEnd != std::string::npos) {
+      authority.resize(bracketEnd + 1);
+    }
+  } else {
+    const size_t portStart = authority.find(':');
+    if (portStart != std::string::npos) {
+      authority.resize(portStart);
+    }
+  }
+
+  while (!authority.empty() && authority.back() == '.') {
+    authority.pop_back();
+  }
+  return lowerAscii(authority);
+}
+
+bool isSameOrChildDomain(const std::string& host, const std::string& root) {
+  if (host.empty() || root.empty()) return false;
+  if (host == root) return true;
+
+  const std::string suffix = "." + root;
+  return host.size() > suffix.size() && host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
 HttpDownloader::DownloadError makeDownloadError(HttpDownloader::DownloadResult result, int httpStatus = 0) {
@@ -70,11 +116,14 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
 
   esp_http_client_set_header(client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  const std::string authHost = urlHost(url);
+  bool hasAuthorization = false;
   if (!username.empty() && !password.empty()) {
     // Preemptive Basic auth, like the prior addHeader; don't wait for a 401.
     const std::string credentials = username + ":" + password;
     const String header = "Basic " + base64::encode(credentials.c_str());
     esp_http_client_set_header(client, "Authorization", header.c_str());
+    hasAuthorization = true;
   }
 
   // open()/read() does not auto-follow redirects (only perform() does), so step
@@ -90,6 +139,17 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   int status = esp_http_client_get_status_code(client);
   for (int hop = 0; isRedirect(status) && hop < 5; ++hop) {
     if (esp_http_client_set_redirection(client) != ESP_OK) break;
+    if (hasAuthorization) {
+      bool dropAuthorization = true;
+      auto redirectedUrl = makeUniqueNoThrow<char[]>(2048);
+      if (redirectedUrl && esp_http_client_get_url(client, redirectedUrl.get(), 2048) == ESP_OK) {
+        dropAuthorization = !isSameOrChildDomain(urlHost(redirectedUrl.get()), authHost);
+      }
+      if (dropAuthorization) {
+        esp_http_client_delete_header(client, "Authorization");
+        hasAuthorization = false;
+      }
+    }
     err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
       LOG_ERR("HTTP", "redirect open failed: %s", esp_err_to_name(err));
