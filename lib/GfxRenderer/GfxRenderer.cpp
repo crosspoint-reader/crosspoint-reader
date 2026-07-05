@@ -1658,7 +1658,12 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   // uses base-letter advances instead of presentation-form advances, so RTL
   // lines come out wider than they draw — uneven word gaps and a ragged
   // right margin.
-  std::string visual;
+  // Static scratch: this runs per word during layout, and a local std::string
+  // would heap-alloc/free on every RTL word. The buffer retains its capacity
+  // (bounded by the longest word measured) across calls. Single-task use is
+  // already a bidi-path invariant — applyBidiVisual writes through static
+  // line/shaped buffers in BidiUtils.cpp. LTR text early-outs before touching it.
+  static std::string visual;
   text = resolveVisualText(text, visual, BidiUtils::BidiBaseDir::AUTO);
 
   // Advance table fast-path for SD card fonts during layout.

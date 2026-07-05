@@ -120,45 +120,31 @@ TEST(ArabicShaping, VocalizedTextJoinsAcrossHarakat) {
 /* ── Farsi extra letters ─────────────────────────────────────────────── */
 
 // Peh joins like beh, using Presentation Forms-A codepoints.
-TEST(FarsiShaping, PehContextualForms) {
-  EXPECT_EQ(shapeVisual({0x067E, 0x067E}), (CP{0xFB57, 0xFB58}));
-}
+TEST(FarsiShaping, PehContextualForms) { EXPECT_EQ(shapeVisual({0x067E, 0x067E}), (CP{0xFB57, 0xFB58})); }
 
 // گاز: gaf initial, alef final, jeh-group zain isolated.
-TEST(FarsiShaping, GafWord) {
-  EXPECT_EQ(shapeVisual({0x06AF, 0x0627, 0x0632}), (CP{0xFEAF, 0xFE8E, 0xFB94}));
-}
+TEST(FarsiShaping, GafWord) { EXPECT_EQ(shapeVisual({0x06AF, 0x0627, 0x0632}), (CP{0xFEAF, 0xFE8E, 0xFB94})); }
 
 // سیب: Farsi yeh (U+06CC) takes its medial Presentation Forms-A form.
-TEST(FarsiShaping, FarsiYehMedial) {
-  EXPECT_EQ(shapeVisual({0x0633, 0x06CC, 0x0628}), (CP{0xFE90, 0xFBFF, 0xFEB3}));
-}
+TEST(FarsiShaping, FarsiYehMedial) { EXPECT_EQ(shapeVisual({0x0633, 0x06CC, 0x0628}), (CP{0xFE90, 0xFBFF, 0xFEB3})); }
 
 /* ── Urdu extra letters ──────────────────────────────────────────────── */
 
 // ٹ (U+0679) and ڑ (U+0691) were specifically flagged in PR #2398 review as
 // missing from a literal mintty port; ڈ (U+0688) completes the retroflex set.
-TEST(UrduShaping, RetroflexLetters) {
-  EXPECT_EQ(shapeVisual({0x0679, 0x0688, 0x0691}), (CP{0xFB8C, 0xFB89, 0xFB68}));
-}
+TEST(UrduShaping, RetroflexLetters) { EXPECT_EQ(shapeVisual({0x0679, 0x0688, 0x0691}), (CP{0xFB8C, 0xFB89, 0xFB68})); }
 
 // میں: noon ghunna (U+06BA) is dual-joining but only has isolated/final
 // presentation forms — final position works.
-TEST(UrduShaping, NoonGhunnaFinal) {
-  EXPECT_EQ(shapeVisual({0x0645, 0x06CC, 0x06BA}), (CP{0xFB9F, 0xFBFF, 0xFEE3}));
-}
+TEST(UrduShaping, NoonGhunnaFinal) { EXPECT_EQ(shapeVisual({0x0645, 0x06CC, 0x06BA}), (CP{0xFB9F, 0xFBFF, 0xFEE3})); }
 
 // ہے: heh goal initial + yeh barree final.
-TEST(UrduShaping, HehGoalYehBarree) {
-  EXPECT_EQ(shapeVisual({0x06C1, 0x06D2}), (CP{0xFBAF, 0xFBA8}));
-}
+TEST(UrduShaping, HehGoalYehBarree) { EXPECT_EQ(shapeVisual({0x06C1, 0x06D2}), (CP{0xFBAF, 0xFBA8})); }
 
 /* ── Sindhi / Pashto / Kurdish samples ───────────────────────────────── */
 
 // Sindhi ٻار: beeh (U+067B) initial form from Presentation Forms-A.
-TEST(SindhiShaping, BeehInitial) {
-  EXPECT_EQ(shapeVisual({0x067B, 0x0627, 0x0631}), (CP{0xFEAD, 0xFE8E, 0xFB54}));
-}
+TEST(SindhiShaping, BeehInitial) { EXPECT_EQ(shapeVisual({0x067B, 0x0627, 0x0631}), (CP{0xFEAD, 0xFE8E, 0xFB54})); }
 
 // Pashto ښه: seen-with-dots (U+069A) has a joining type but NO presentation
 // forms — it keeps its base codepoint while its neighbour still takes the
@@ -168,9 +154,7 @@ TEST(PashtoShaping, LetterWithoutPresentationFormsFallsBack) {
 }
 
 // Pashto کور: keheh initial, waw final, reh isolated.
-TEST(PashtoShaping, KehehWord) {
-  EXPECT_EQ(shapeVisual({0x06A9, 0x0648, 0x0631}), (CP{0xFEAD, 0xFEEE, 0xFB90}));
-}
+TEST(PashtoShaping, KehehWord) { EXPECT_EQ(shapeVisual({0x06A9, 0x0648, 0x0631}), (CP{0xFEAD, 0xFEEE, 0xFB90})); }
 
 // Kurdish ڕۆژ: all right-joining; ڕ (U+0695) has no presentation forms and
 // stays as its base codepoint, ۆ and ژ take Presentation Forms-A isolated.
@@ -230,9 +214,7 @@ TEST(Regression, HebrewUntouchedByShaper) {
 }
 
 // Pure Latin text passes through unchanged.
-TEST(Regression, LatinPassthrough) {
-  EXPECT_EQ(shapeVisual({'h', 'e', 'l', 'l', 'o'}), (CP{'h', 'e', 'l', 'l', 'o'}));
-}
+TEST(Regression, LatinPassthrough) { EXPECT_EQ(shapeVisual({'h', 'e', 'l', 'l', 'o'}), (CP{'h', 'e', 'l', 'l', 'o'})); }
 
 /* ── isTransparentMark ───────────────────────────────────────────────── */
 
