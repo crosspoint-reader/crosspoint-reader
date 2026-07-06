@@ -353,10 +353,10 @@ void CrossPointWebServer::handleJszip() const {
 }
 
 void CrossPointWebServer::handleNotFound() const {
-  // in AP mode, redirect all unmatched URLs to "/" — this handles captive portal detection probes
-  // (e.g. /generate_204, /hotspot-detect.html, /connecttest.txt) so the OS auto-opens the browser
+  // in AP mode, redirect unmatched browser/captive-portal requests to "/" so the OS auto-opens the browser
+  // API requests (/api/*) still return 404 so XHR errors surface correctly
   // see https://en.wikipedia.org/wiki/Captive_portal#Detection
-  if (apMode) {
+  if (apMode && !server->uri().startsWith("/api/")) {
     server->sendHeader("Location", "/", true);
     server->send(302, "text/plain", "");
     return;
