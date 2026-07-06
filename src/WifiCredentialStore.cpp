@@ -6,6 +6,8 @@
 #include <ObfuscationUtils.h>
 #include <Serialization.h>
 
+#include <algorithm>
+
 // Initialize the static instance
 WifiCredentialStore WifiCredentialStore::instance;
 
@@ -89,6 +91,7 @@ bool WifiCredentialStore::loadFromBinaryFile() {
   serialization::readPod(file, count);
 
   credentials.clear();
+  credentials.reserve(std::min<size_t>(count, MAX_NETWORKS));
   for (uint8_t i = 0; i < count && i < MAX_NETWORKS; i++) {
     WifiCredential cred;
     serialization::readString(file, cred.ssid);
