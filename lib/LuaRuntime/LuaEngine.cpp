@@ -7,6 +7,7 @@
 #include "LuaHostApiInput.h"
 #include "LuaHostApiSettings.h"
 #include "LuaHostApiSys.h"
+#include "LuaHostApiUi.h"
 
 #include "LuaHostApiContext.h"
 
@@ -147,6 +148,7 @@ void LuaEngine::registerHostApi() {
   registerCpInputApi(state_);
   registerCpFsApi(state_);
   registerCpSettingsApi(state_);
+  registerCpUiApi(state_);
   lua_setglobal(state_, "cp");
 }
 
