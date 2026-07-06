@@ -11,6 +11,13 @@ extern "C" {
 #include <Utf8.h>
 
 #include <cstring>
+#include <mutex>
+
+// Guards the static bidi_char buffers in applyBidiVisual() and
+// computeVisualWordOrder().  The bidi+shaping pipeline is not reentrant;
+// this mutex serialises access so multi-core callers don't corrupt each
+// other's intermediate state.
+static std::mutex bidiMutex;
 
 namespace {
 
@@ -80,6 +87,7 @@ bool isTransparentMark(const uint32_t cp) {
 
 bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   if (!utf8 || !*utf8) return false;
+  const std::lock_guard<std::mutex> lock(bidiMutex);
 
   static bidi_char line[BIDI_MAX_LINE];
   static bidi_char shaped[BIDI_MAX_LINE];
@@ -166,6 +174,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
   visualOrder.clear();
   const size_t nWords = words.size();
   if (nWords <= 1 || nWords > BIDI_MAX_LINE) return false;
+  const std::lock_guard<std::mutex> lock(bidiMutex);
 
   static bidi_char line[BIDI_MAX_LINE];
   int count = 0;
@@ -182,6 +191,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
       if (!cp || cp == REPLACEMENT_GLYPH) break;
       line[count].origwc = line[count].wc = cp;
       line[count].index = static_cast<uint16_t>(w);
+      line[count].joiners = 0;
       count++;
     }
 
@@ -192,6 +202,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
       }
       line[count].origwc = line[count].wc = ' ';
       line[count].index = static_cast<uint16_t>(nWords);
+      line[count].joiners = 0;
       count++;
     }
   }
