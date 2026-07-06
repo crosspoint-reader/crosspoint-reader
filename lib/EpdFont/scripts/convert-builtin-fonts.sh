@@ -36,8 +36,13 @@ for size in ${UI_FONT_SIZES[@]}; do
     font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
     hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${style}.ttf"
+    # Ubuntu lacks the Latin Extended Additional block (U+1EA0-U+1EF9) used for
+    # Vietnamese tone marks. Append a Vietnamese-only Ubuntu cut so those glyphs
+    # are filled from it while every glyph Ubuntu already has stays unchanged
+    # (fontstack is ordered by descending priority).
+    viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path $hebrew_path \
+    python fontconvert.py $font_name $size $font_path $hebrew_path $viet_path \
       --additional-intervals 0x05D0,0x05EA > $output_path
     echo "Generated $output_path"
   done

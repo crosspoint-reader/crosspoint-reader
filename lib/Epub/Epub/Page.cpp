@@ -6,6 +6,20 @@
 
 #include <new>
 
+namespace {
+
+template <typename Predicate>
+void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
+                                const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
+  for (const auto& element : elements) {
+    if (predicate(*element)) {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
+  }
+}
+
+}  // namespace
+
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
@@ -93,9 +107,12 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
-  for (auto& element : elements) {
-    element->render(renderer, fontId, xOffset, yOffset);
-  }
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
+}
+
+void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset,
+                             [](const PageElement& element) { return element.getTag() == TAG_PageImage; });
 }
 
 bool Page::serialize(HalFile& file) const {

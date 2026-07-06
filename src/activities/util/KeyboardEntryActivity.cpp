@@ -99,7 +99,9 @@ bool KeyboardEntryActivity::handleKeyPress() {
       case SpecialKeyType::Shift:
         delPressCount = 0;
         hintVisible = false;
-        if (urlMode || inputType == InputType::Url) return true;
+        // Shift is meaningless in the URL-snippet panel and the symbol layout, but
+        // must work for the URL letter layout so uppercase letters can be entered (#2178).
+        if (urlMode) return true;
         if (symMode) return true;
         shiftState = (shiftState + 1) % 2;
         return true;
@@ -675,8 +677,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const char* label;
   };
   const BottomKeyInfo bottomKeys[BOTTOM_KEY_COUNT] = {
-      {(symMode || urlMode || inputType == InputType::Url) ? KeyboardKeyType::Disabled : KeyboardKeyType::Shift,
-       (symMode || urlMode || inputType == InputType::Url) ? shiftString[0] : shiftString[shiftState]},
+      {(symMode || urlMode) ? KeyboardKeyType::Disabled : KeyboardKeyType::Shift,
+       (symMode || urlMode) ? shiftString[0] : shiftString[shiftState]},
       {KeyboardKeyType::Mode, urlMode ? "abc" : (symMode ? "abc" : "#@!")},
       {inputType == InputType::Url ? KeyboardKeyType::Mode : KeyboardKeyType::Space,
        inputType == InputType::Url ? "URL" : nullptr},

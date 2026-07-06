@@ -77,6 +77,9 @@ const StrId titleNames[TITLE_ITEMS] = {StrId::STR_BOOK, StrId::STR_CHAPTER, StrI
 constexpr int XTC_STATUS_BAR_ITEMS = 3;
 const StrId xtcStatusBarNames[XTC_STATUS_BAR_ITEMS] = {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP};
 
+constexpr int STATUS_BAR_CLOCK_ITEMS = 3;
+const StrId statusBarClockNames[STATUS_BAR_CLOCK_ITEMS] = {StrId::STR_HIDE, StrId::STR_DIR_RIGHT, StrId::STR_DIR_LEFT};
+
 const int verticalPreviewPadding = 50;
 const int verticalPreviewTextPadding = 40;
 }  // namespace
@@ -110,6 +113,10 @@ void StatusBarSettingsActivity::onEnter() {
 
   if (SETTINGS.clockFormat >= CLOCK_FORMAT_ITEMS) {
     SETTINGS.clockFormat = 0;
+  }
+
+  if (SETTINGS.statusBarClock >= STATUS_BAR_CLOCK_ITEMS) {
+    SETTINGS.statusBarClock = CrossPointSettings::STATUS_BAR_CLOCK_MODE::STATUS_BAR_CLOCK_HIDE;
   }
 
   requestUpdate();
@@ -176,7 +183,7 @@ void StatusBarSettingsActivity::handleSelection() {
       SETTINGS.xtcStatusBarMode = (SETTINGS.xtcStatusBarMode + 1) % XTC_STATUS_BAR_ITEMS;
       break;
     case ITEM_CLOCK:
-      SETTINGS.statusBarClock = (SETTINGS.statusBarClock + 1) % 2;
+      SETTINGS.statusBarClock = (SETTINGS.statusBarClock + 1) % STATUS_BAR_CLOCK_ITEMS;
       break;
     case ITEM_CLOCK_FORMAT:
       SETTINGS.clockFormat = (SETTINGS.clockFormat + 1) % CLOCK_FORMAT_ITEMS;
@@ -225,7 +232,7 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
           case ITEM_XTC_STATUS_BAR:
             return I18N.get(xtcStatusBarNames[SETTINGS.xtcStatusBarMode]);
           case ITEM_CLOCK:
-            return SETTINGS.statusBarClock ? tr(STR_SHOW) : tr(STR_HIDE);
+            return I18N.get(statusBarClockNames[SETTINGS.statusBarClock]);
           case ITEM_CLOCK_FORMAT: {
             const uint8_t fmt = SETTINGS.clockFormat < CLOCK_FORMAT_ITEMS ? SETTINGS.clockFormat : 0;
             return std::string(I18N.get(clockFormatNames[fmt]));

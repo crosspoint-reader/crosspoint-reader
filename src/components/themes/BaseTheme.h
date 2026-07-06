@@ -32,6 +32,9 @@ struct ThemeMetrics {
   int headerHeight;
   int verticalSpacing;
 
+  int previewPadding;
+  int previewHeightPercent;
+
   int contentSidePadding;
   int listRowHeight;
   int listWithSubtitleRowHeight;
@@ -111,6 +114,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryBarHeight = 20,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
+                                 .previewPadding = 12,
+                                 .previewHeightPercent = 30,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 50,
@@ -205,7 +210,7 @@ class BaseTheme {
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
                      std::string title, const int paddingBottom = 0, const int textYOffset = 0,
-                     const bool fillMargin = true) const;
+                     const bool fillMargin = true, const bool isPageBookmarked = false) const;
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;

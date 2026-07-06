@@ -218,7 +218,15 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  if (hasGreyscale) {
+    // OEM grayscale pipeline base: on X3 this displays the frame with the
+    // dedicated "AA-pre-BW(mid)" differential waveform, leaving every pixel
+    // in the calibrated state the gray nudge refresh expects; on X4 it is a
+    // plain HALF refresh (previous behavior).
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
 
   if (hasGreyscale) {
     bitmap.rewindToData();
