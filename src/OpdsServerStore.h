@@ -5,11 +5,11 @@
 enum OpdsSaveFolder { ROOT_FOLDER, AUTHOR_FOLDER, COUNT = 2 };
 
 struct OpdsServer {
-  std::string name;
-  std::string url;
-  std::string username;
-  std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
-  OpdsSaveFolder saveFolder;
+  std::string name = "";
+  std::string url = "";
+  std::string username = "";
+  std::string password = "";  // Plaintext in memory; obfuscated with hardware key on disk
+  OpdsSaveFolder saveFolder = ROOT_FOLDER;
 };
 
 class OpdsServerStore;
