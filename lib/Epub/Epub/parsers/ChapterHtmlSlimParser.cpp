@@ -868,7 +868,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       // the block remains empty (i.e. <br> is a section separator between paragraphs).
       // If the block gets text added before the next block opens it becomes non-empty,
       // goes through makePages() normally, and the flag has no effect (inline <br> case).
-      BlockStyle brStyle = self->currentTextBlock->getBlockStyle();
+      BlockStyle brStyle =
+          self->currentTextBlock ? self->currentTextBlock->getBlockStyle() : self->blockStyleStack.back();
       brStyle.fromBrElement = true;
       self->startNewTextBlock(brStyle);
     } else {
