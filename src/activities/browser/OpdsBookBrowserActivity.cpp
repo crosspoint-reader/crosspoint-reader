@@ -266,11 +266,25 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
+  std::string folder = "";
+  std::string filename = "";
+  if (server.saveFolder == OpdsSaveFolder::ROOT_FOLDER) {
+    folder = "/";
+  }
+  if (server.saveFolder == OpdsSaveFolder::AUTHOR_FOLDER) {
+    if (book.author.empty()) {
+      folder = "/";
+    } else {
+      folder = "/" + StringUtils::sanitizeFilename(book.author) + "/";
+      Storage.ensureDirectoryExists(folder.c_str());
+    }
+  }
+  filename =
+      folder + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   const auto result = HttpDownloader::downloadToFile(

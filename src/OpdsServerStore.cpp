@@ -54,6 +54,7 @@ bool OpdsServerStore::migrateFromSettings() {
   server.url = SETTINGS.opdsServerUrl;
   server.username = SETTINGS.opdsUsername;
   server.password = SETTINGS.opdsPassword;
+  server.saveFolder = ROOT_FOLDER;
   servers.push_back(std::move(server));
 
   if (saveToFile()) {
@@ -89,6 +90,7 @@ bool OpdsServerStore::updateServer(size_t index, const OpdsServer& server) {
 
   servers[index] = server;
   LOG_DBG("OPS", "Updated server: %s", server.name.c_str());
+
   return saveToFile();
 }
 

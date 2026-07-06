@@ -720,6 +720,7 @@
   function renderOpdsServer(srv, idx) {
     const isNew = idx === -1;
     const id = isNew ? 'new' : idx;
+    const saveFolderOptions = [[0, 'SD Card'], [1, 'Author Folder']];
     return '<div class="opds-server" id="opds-' + id + '">' +
       '<div class="setting-row">' +
         '<span class="setting-name">Server Name</span>' +
@@ -737,6 +738,11 @@
         '<span class="setting-name">Password</span>' +
         '<span class="setting-control"><input type="password" id="opds-pass-' + id + '" placeholder="' + (srv.hasPassword ? '(unchanged)' : '') + '"></span>' +
       '</div>' +
+      '<div class="setting-row">' +
+        '<span class="setting-name">Save Folder</span>' +
+        '<span class="setting-control"><select id="opds-saveFolder-' + id + '">' + 
+          saveFolderOptions.reduce((acc, v) => acc + `<option value='${v[0]}' ${v[0] == srv.saveFolder ? 'selected' : ''}>${v[1]}</option>`, '') +
+      '</select></div>' +
       '<div class="opds-actions">' +
         '<button class="btn-small btn-save-server" onclick="saveOpdsServer(' + idx + ')">Save</button>' +
         (isNew ? '' : '<button class="btn-small btn-delete" onclick="deleteOpdsServer(' + idx + ')">Delete</button>') +
@@ -788,6 +794,7 @@
       name: document.getElementById('opds-name-' + id).value,
       url: document.getElementById('opds-url-' + id).value,
       username: document.getElementById('opds-user-' + id).value,
+      saveFolder: document.getElementById('opds-saveFolder-' + id).value,
     };
     // Only include password in payload when the user actually typed something;
     // omitting it tells the server to keep the existing password.

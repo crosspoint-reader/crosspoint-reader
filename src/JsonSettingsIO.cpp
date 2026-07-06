@@ -373,6 +373,7 @@ bool JsonSettingsIO::saveOpds(const OpdsServerStore& store, const char* path) {
     obj["url"] = server.url;
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+    obj["saveFolder"] = server.saveFolder;
   }
 
   String json;
@@ -397,6 +398,8 @@ bool JsonSettingsIO::loadOpds(OpdsServerStore& store, const char* json, bool* ne
     server.name = obj["name"] | std::string("");
     server.url = obj["url"] | std::string("");
     server.username = obj["username"] | std::string("");
+    server.saveFolder = static_cast<OpdsSaveFolder>(obj["saveFolder"].as<OpdsSaveFolder>() |
+                                                    (OpdsSaveFolder)OpdsSaveFolder::ROOT_FOLDER);
     // Try the obfuscated key first; fall back to plaintext "password" for
     // files written before obfuscation was added (or hand-edited JSON).
     bool ok = false;
