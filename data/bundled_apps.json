@@ -1,0 +1,11 @@
+{
+  "apps": [
+    { "id": "daily-quote", "archive": "daily-quote-1.0.0.cpapp" },
+    { "id": "dice", "archive": "dice-1.0.0.cpapp" },
+    { "id": "break-tips", "archive": "break-tips-1.0.0.cpapp" },
+    { "id": "world-clock", "archive": "world-clock-1.1.9.cpapp" },
+    { "id": "countdown", "archive": "countdown-1.0.0.cpapp" },
+    { "id": "pomodoro", "archive": "pomodoro-1.0.0.cpapp" },
+    { "id": "sudoku", "archive": "sudoku-1.1.0.cpapp" }
+  ]
+}

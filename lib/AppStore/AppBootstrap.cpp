@@ -9,6 +9,7 @@
 #include "AppRegistry.h"
 #include "AppStoreManifest.h"
 #include "AppStorePaths.h"
+#include "BundledAppSeeder.h"
 
 void AppBootstrap::cleanupTmpDir() {
   if (!Storage.exists(AppStorePaths::kTmpDir)) {
@@ -31,6 +32,8 @@ void AppBootstrap::onBoot() {
   Storage.ensureDirectoryExists(AppStorePaths::kTmpDir);
   Storage.ensureDirectoryExists(AppStorePaths::kCacheDir);
   cleanupTmpDir();
+
+  BundledAppSeeder::seedMissingApps();
 
   if (!APP_REGISTRY.loadFromFile()) {
     LOG_ERR("APPS", "Registry load failed; starting with empty installed list");

@@ -5,8 +5,11 @@
 
 #include <GfxRenderer.h>
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include <cstdio>
+
+#include "components/UITheme.h"
 
 extern "C" {
 #include "lauxlib.h"
@@ -14,6 +17,21 @@ extern "C" {
 }
 
 namespace {
+
+void refreshContentBounds(LuaHostApiContext* context) {
+  if (context == nullptr || context->renderer == nullptr) {
+    return;
+  }
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageHeight = context->renderer->getScreenHeight();
+  context->contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int footerReserve =
+      metrics.buttonHintsHeight + metrics.verticalSpacing + context->renderer->getLineHeight(context->fontId);
+  context->contentHeight = pageHeight - context->contentTop - footerReserve;
+  if (context->contentHeight < 0) {
+    context->contentHeight = 0;
+  }
+}
 
 void readHintField(lua_State* L, int tableIdx, const char* key, std::string& out) {
   lua_getfield(L, tableIdx, key);
@@ -278,6 +296,7 @@ int displayContentTop(lua_State* L) {
   if (context == nullptr) {
     return luaL_error(L, "display unavailable");
   }
+  refreshContentBounds(context);
   lua_pushinteger(L, context->contentTop);
   return 1;
 }
@@ -287,6 +306,7 @@ int displayContentHeight(lua_State* L) {
   if (context == nullptr) {
     return luaL_error(L, "display unavailable");
   }
+  refreshContentBounds(context);
   lua_pushinteger(L, context->contentHeight);
   return 1;
 }
@@ -305,6 +325,14 @@ int displayRefresh(lua_State* L) {
     parseChromeOptions(L, 1, chrome);
     LuaAppDisplay::setChrome(chrome);
   }
+
+  refreshContentBounds(context);
+  // #region agent log
+  LOG_DBG("APPS",
+          "[DBG2b83c6] refresh orient=%d sw=%d sh=%d contentTop=%d contentHeight=%d app=%s hypothesisId=B",
+          static_cast<int>(context->renderer->getOrientation()), context->renderer->getScreenWidth(),
+          context->renderer->getScreenHeight(), context->contentTop, context->contentHeight, context->appId.c_str());
+  // #endregion
 
   LuaAppDisplay::paintWithChrome(*context->renderer, context->fontId, context->appId, context->displayName,
                                  context->contentTop, context->contentHeight);

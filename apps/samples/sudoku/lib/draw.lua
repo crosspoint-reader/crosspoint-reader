@@ -3,12 +3,14 @@
 local M = {}
 
 local PAD = 20
-local PICKER_H = 44
+local HINT_LINE_H = 20
 
 local function layout()
   local sw = cp.display.width()
   local ch = cp.display.content_height()
-  local grid_size = math.min(sw - 2 * PAD, ch - PICKER_H - 8)
+  local picker_cell = math.max(24, math.floor((sw - 2 * PAD) / 9))
+  local picker_block_h = picker_cell + HINT_LINE_H
+  local grid_size = math.min(sw - 2 * PAD, ch - picker_block_h - 8)
   local cell = math.floor(grid_size / 9)
   grid_size = cell * 9
   local ox = math.floor((sw - grid_size) / 2)
@@ -20,7 +22,7 @@ local function layout()
     cell = cell,
     grid_size = grid_size,
     picker_y = picker_y,
-    picker_cell = math.max(24, math.floor((sw - 2 * PAD) / 9)),
+    picker_cell = picker_cell,
   }
 end
 

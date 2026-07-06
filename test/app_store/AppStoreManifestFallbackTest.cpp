@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
 #include "lib/AppStore/AppStoreManifest.h"
-#include "lib/AppStore/AppStoreManifestData.h"
 
 namespace {
 
@@ -19,6 +18,19 @@ constexpr char kCacheJson[] = R"({
   ]
 })";
 
+constexpr char kBuiltinHelloJson[] = R"({
+  "version": 1,
+  "apps": [
+    {
+      "id": "hello",
+      "name": "Hello App",
+      "version": "1.0.0",
+      "description": "Smoke-test sample for the Lua runtime",
+      "min_api_version": "1.0"
+    }
+  ]
+})";
+
 }  // namespace
 
 TEST(AppStoreManifestFallbackTest, UsesRemoteWhenFetchSucceeds) {
@@ -27,7 +39,7 @@ TEST(AppStoreManifestFallbackTest, UsesRemoteWhenFetchSucceeds) {
   input.remoteJson = kRemoteJson;
   input.cacheReadOk = true;
   input.cacheJson = kCacheJson;
-  input.builtinJson = AppStoreManifestData::kBuiltinJson;
+  input.builtinJson = kBuiltinHelloJson;
 
   std::vector<AppCatalogEntry> entries;
   uint8_t version = 0;
@@ -43,7 +55,7 @@ TEST(AppStoreManifestFallbackTest, FallsBackToCacheWhenRemoteFails) {
   input.remoteFetchOk = false;
   input.cacheReadOk = true;
   input.cacheJson = kCacheJson;
-  input.builtinJson = AppStoreManifestData::kBuiltinJson;
+  input.builtinJson = kBuiltinHelloJson;
 
   std::vector<AppCatalogEntry> entries;
   uint8_t version = 0;
@@ -58,7 +70,7 @@ TEST(AppStoreManifestFallbackTest, FallsBackToBuiltinWhenRemoteAndCacheFail) {
   AppCatalogResolveInput input;
   input.remoteFetchOk = false;
   input.cacheReadOk = false;
-  input.builtinJson = AppStoreManifestData::kBuiltinJson;
+  input.builtinJson = kBuiltinHelloJson;
 
   std::vector<AppCatalogEntry> entries;
   uint8_t version = 0;
@@ -76,7 +88,7 @@ TEST(AppStoreManifestFallbackTest, FallsBackToBuiltinWhenRemoteJsonInvalid) {
   input.remoteFetchOk = true;
   input.remoteJson = kBadRemote;
   input.cacheReadOk = false;
-  input.builtinJson = AppStoreManifestData::kBuiltinJson;
+  input.builtinJson = kBuiltinHelloJson;
 
   std::vector<AppCatalogEntry> entries;
   uint8_t version = 0;

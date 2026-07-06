@@ -332,6 +332,15 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
   // Bounds checking against runtime panel dimensions
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
+    // #region agent log
+    static int agentOobLogs = 0;
+    if (agentOobLogs < 3) {
+      ++agentOobLogs;
+      LOG_ERR("GFX",
+              "[DBG2b83c6] OOB #%d orient=%d logical=(%d,%d) phy=(%d,%d) logH=%d hypothesisId=A/C",
+              agentOobLogs, static_cast<int>(orientation), x, y, phyX, phyY, getScreenHeight());
+    }
+    // #endregion
     LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
     return;
   }

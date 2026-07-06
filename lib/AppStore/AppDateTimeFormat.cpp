@@ -65,6 +65,32 @@ std::string formatNowIso8601Utc() {
   return buf;
 }
 
+std::string formatNowIso8601UtcMinusSeconds(const uint32_t secondsAgo) {
+  const time_t now = time(nullptr);
+  if (now < 978307200) {
+    return "";
+  }
+
+  const time_t adjusted = now - static_cast<time_t>(secondsAgo);
+  const time_t clamped = adjusted < 978307200 ? 978307200 : adjusted;
+
+  struct tm utc {};
+#if defined(__unix__) || defined(__APPLE__)
+  gmtime_r(&clamped, &utc);
+#else
+  const struct tm* tmp = gmtime(&clamped);
+  if (tmp == nullptr) {
+    return "";
+  }
+  utc = *tmp;
+#endif
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02dT%02d:%02d:%02dZ", utc.tm_year + 1900, utc.tm_mon + 1, utc.tm_mday,
+           utc.tm_hour, utc.tm_min, utc.tm_sec);
+  return buf;
+}
+
 std::string formatIso8601ForDisplay(const std::string& isoUtc, const uint8_t utcOffsetQuarterHoursBiased,
                                     const bool use12Hour) {
   if (isoUtc.empty()) {

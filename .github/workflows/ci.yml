@@ -116,6 +116,46 @@ jobs:
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 
+  build-app-store:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Pack app bundles
+        run: cd apiserver && python3 scripts/build.py
+
+      - name: Build app_store firmware
+        run: pio run -e app_store
+
+      - name: Upload app_store firmware.bin artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: firmware-app-store.bin
+          path: .pio/build/app_store/firmware.bin
+          if-no-files-found: error
+
   unit-tests:
     runs-on: ubuntu-latest
     steps:
@@ -149,6 +189,7 @@ jobs:
     name: Test Status
     needs:
       - build
+      - build-app-store
       - clang-format
       - cppcheck
       - unit-tests

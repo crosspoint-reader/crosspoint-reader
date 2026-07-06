@@ -28,3 +28,14 @@ TEST(AppDateTimeFormatTest, ComparesInstalledAtDescending) {
   EXPECT_FALSE(AppDateTimeFormat::isNewerInstalledAt("", "2026-07-03T10:00:00Z"));
   EXPECT_TRUE(AppDateTimeFormat::isNewerInstalledAt("2026-07-03T10:00:00Z", ""));
 }
+
+TEST(AppDateTimeFormatTest, MinusSecondsProducesOlderTimestamp) {
+  const std::string now = AppDateTimeFormat::formatNowIso8601Utc();
+  if (now.empty()) {
+    GTEST_SKIP() << "System clock unset";
+  }
+  const std::string older = AppDateTimeFormat::formatNowIso8601UtcMinusSeconds(3);
+  ASSERT_FALSE(older.empty());
+  EXPECT_TRUE(AppDateTimeFormat::isNewerInstalledAt(now, older));
+  EXPECT_FALSE(AppDateTimeFormat::isNewerInstalledAt(older, now));
+}

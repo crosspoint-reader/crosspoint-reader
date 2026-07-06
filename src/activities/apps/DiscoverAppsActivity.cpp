@@ -1,5 +1,6 @@
 #include "DiscoverAppsActivity.h"
 
+#include <AppBundleInstaller.h>
 #include <AppDateTimeFormat.h>
 #include <AppListLabels.h>
 #include <AppPathSanitizer.h>
@@ -12,16 +13,12 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <Memory.h>
 #include <WiFi.h>
-#include <ZipFile.h>
 
 #include <algorithm>
-#include <cstring>
 
 #include <cstdio>
 #include <cstdlib>
-#include <string_view>
 
 #include "ApplicationsMenuActivity.h"
 #include "CrossPointSettings.h"
@@ -30,55 +27,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
-
-namespace {
-
-bool ensureParentDirectoryExists(const char* filePath) {
-  const char* lastSlash = strrchr(filePath, '/');
-  if (lastSlash == nullptr || lastSlash == filePath) {
-    return true;
-  }
-  char dirPath[128];
-  const size_t len = static_cast<size_t>(lastSlash - filePath);
-  if (len >= sizeof(dirPath)) {
-    return false;
-  }
-  memcpy(dirPath, filePath, len);
-  dirPath[len] = '\0';
-  if (Storage.exists(dirPath)) {
-    return true;
-  }
-  return Storage.mkdir(dirPath, true);
-}
-
-bool extractZipEntry(ZipFile& zip, const char* zipEntry, const char* destPath) {
-  if (!ensureParentDirectoryExists(destPath)) {
-    return false;
-  }
-
-  HalFile outFile;
-  if (!Storage.openFileForWrite("APPS", destPath, outFile)) {
-    LOG_ERR("APPS", "Install failed: could not open %s for write", destPath);
-    return false;
-  }
-
-  const bool ok = zip.readFileToStream(zipEntry, outFile, 1024);
-  outFile.close();
-  if (!ok) {
-    Storage.remove(destPath);
-  }
-  return ok;
-}
-
-static constexpr size_t kMaxBundleFiles = 48;
-static constexpr size_t kMaxBundleEntryLen = 96;
-
-struct BundleFileEntry {
-  char zipPath[kMaxBundleEntryLen];
-  char destPath[128];
-};
-
-}  // namespace
 
 DiscoverAppsActivity::DiscoverAppsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : Activity("DiscoverApps", renderer, mappedInput) {}
@@ -289,8 +237,6 @@ bool DiscoverAppsActivity::installSelectedEntry() {
 
   char tmpZipPath[96];
   snprintf(tmpZipPath, sizeof(tmpZipPath), "%s/%s.cpapp", AppStorePaths::kTmpDir, entry.id.c_str());
-  char appDirPath[96];
-  snprintf(appDirPath, sizeof(appDirPath), "%s/%s", AppStorePaths::kAppsRoot, entry.id.c_str());
 
   LOG_DBG("APPS", "Installing app id=%s from %s", entry.id.c_str(), entry.bundleUrl.c_str());
   const auto downloadRes = HttpDownloader::downloadToFile(entry.bundleUrl, tmpZipPath, nullptr);
@@ -300,104 +246,12 @@ bool DiscoverAppsActivity::installSelectedEntry() {
     return false;
   }
 
-  if (Storage.exists(appDirPath)) {
-    if (!Storage.removeDir(appDirPath)) {
-      LOG_ERR("APPS", "Install failed: could not remove existing app dir %s", appDirPath);
-      Storage.remove(tmpZipPath);
-      return false;
-    }
-  }
-  Storage.ensureDirectoryExists(appDirPath);
+  AppInstallRequest request;
+  request.id = entry.id;
+  request.name = entry.name;
+  request.version = entry.version;
 
-  ZipFile zip(tmpZipPath);
-  bool extractOk = true;
-  bool hasMainLua = false;
-  bool hasManifest = false;
-  auto bundleFiles = makeUniqueNoThrow<BundleFileEntry[]>(kMaxBundleFiles);
-  if (!bundleFiles) {
-    LOG_ERR("APPS", "Install failed: OOM bundle file table");
-    Storage.remove(tmpZipPath);
-    return false;
-  }
-  size_t bundleFileCount = 0;
-
-  zip.enumerateFilePaths([&](const std::string_view entryPath) {
-    if (!extractOk) {
-      return;
-    }
-
-    if (entryPath.empty() || entryPath.back() == '/') {
-      return;
-    }
-
-    const auto sanitized = AppPathSanitizer::sanitizeRelativePath(entryPath);
-    if (!sanitized.has_value()) {
-      LOG_ERR("APPS", "Install rejected: unsafe bundle path %.*s", static_cast<int>(entryPath.size()), entryPath.data());
-      extractOk = false;
-      return;
-    }
-
-    if (sanitized->normalized == "main.lua") {
-      hasMainLua = true;
-    } else if (sanitized->normalized == "manifest.json") {
-      hasManifest = true;
-    }
-
-    if (bundleFileCount >= kMaxBundleFiles) {
-      LOG_ERR("APPS", "Install failed: bundle has too many files");
-      extractOk = false;
-      return;
-    }
-
-    if (entryPath.size() >= kMaxBundleEntryLen) {
-      LOG_ERR("APPS", "Install failed: bundle entry path too long");
-      extractOk = false;
-      return;
-    }
-
-    BundleFileEntry& fileEntry = bundleFiles[bundleFileCount];
-    memcpy(fileEntry.zipPath, entryPath.data(), entryPath.size());
-    fileEntry.zipPath[entryPath.size()] = '\0';
-
-    const int destWritten =
-        snprintf(fileEntry.destPath, sizeof(fileEntry.destPath), "%s/%s", appDirPath, sanitized->normalized.c_str());
-    if (destWritten <= 0 || static_cast<size_t>(destWritten) >= sizeof(fileEntry.destPath)) {
-      LOG_ERR("APPS", "Install failed: path too long for %s", sanitized->normalized.c_str());
-      extractOk = false;
-      return;
-    }
-
-    bundleFileCount++;
-  });
-
-  for (size_t i = 0; extractOk && i < bundleFileCount; i++) {
-    const BundleFileEntry& fileEntry = bundleFiles[i];
-    if (!extractZipEntry(zip, fileEntry.zipPath, fileEntry.destPath)) {
-      LOG_ERR("APPS", "Install failed: could not extract %s", fileEntry.zipPath);
-      extractOk = false;
-      break;
-    }
-  }
-
+  const bool installed = AppBundleInstaller::installFromZipFile(tmpZipPath, request);
   Storage.remove(tmpZipPath);
-
-  if (!extractOk || !hasMainLua || !hasManifest) {
-    if (!hasMainLua || !hasManifest) {
-      LOG_ERR("APPS", "Install failed: bundle missing required files");
-    }
-    return false;
-  }
-
-  AppRegistryEntry registryEntry;
-  registryEntry.id = entry.id;
-  registryEntry.name = entry.name;
-  registryEntry.version = entry.version;
-  registryEntry.installedAt = AppDateTimeFormat::formatNowIso8601Utc();
-  if (!APP_REGISTRY.upsertEntry(registryEntry)) {
-    LOG_ERR("APPS", "Install failed: could not update registry for %s", entry.id.c_str());
-    return false;
-  }
-
-  LOG_INF("APPS", "Installed app id=%s version=%s", entry.id.c_str(), entry.version.c_str());
-  return true;
+  return installed;
 }
