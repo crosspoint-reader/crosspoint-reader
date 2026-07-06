@@ -353,6 +353,15 @@ void CrossPointWebServer::handleJszip() const {
 }
 
 void CrossPointWebServer::handleNotFound() const {
+  // in AP mode, redirect all unmatched URLs to "/" — this handles captive portal detection probes
+  // (e.g. /generate_204, /hotspot-detect.html, /connecttest.txt) so the OS auto-opens the browser
+  // see https://en.wikipedia.org/wiki/Captive_portal#Detection
+  if (apMode) {
+    server->sendHeader("Location", "/", true);
+    server->send(302, "text/plain", "");
+    return;
+  }
+
   String message = "404 Not Found\n\n";
   message += "URI: " + server->uri() + "\n";
   server->send(404, "text/plain", message);
