@@ -420,13 +420,25 @@ int do_shape(bidi_char* line, bidi_char* to, int count) {
         const uchar joiners = line[i].joiners & 0xF;
         const uchar prevjoiners = line[i].joiners >> 4;
         if (prevjoiners == ZWNJ) {
-          to[i].wc = shape_form(line[i].wc, SHAPE_INITIAL);
+          /* backward join blocked; initial only if the visually-right
+             (logically next) neighbour joins, else isolated */
+          tempShape = (pv >= 0) ? stype(line[pv].wc) : SU;
+          if (tempShape == SR || tempShape == SD || tempShape == SC)
+            to[i].wc = shape_form(line[i].wc, SHAPE_INITIAL);
+          else
+            to[i].wc = shape_form(line[i].wc, SHAPE_ISOLATED);
         } else if (prevjoiners == (ZWJ | ZWNJ)) {
           to[i].wc = shape_form(line[i].wc, SHAPE_MEDIAL);
         } else if (prevjoiners == ZWJ) {
           to[i].wc = shape_form(line[i].wc, SHAPE_FINAL);
         } else if (joiners & ZWNJ) {
-          to[i].wc = shape_form(line[i].wc, SHAPE_ISOLATED);
+          /* forward join blocked; final only if the visually-left
+             (logically previous) neighbour joins, else isolated —
+             tempShape still holds stype(nx) from above */
+          if (tempShape == SL || tempShape == SD || tempShape == SC)
+            to[i].wc = shape_form(line[i].wc, SHAPE_FINAL);
+          else
+            to[i].wc = shape_form(line[i].wc, SHAPE_ISOLATED);
         } else if (tempShape == SL || tempShape == SD || tempShape == SC) {
           /* visually-right neighbour joins → final, or medial if the
              visually-left neighbour joins too */

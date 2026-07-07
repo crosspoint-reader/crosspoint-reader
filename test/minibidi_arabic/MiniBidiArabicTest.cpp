@@ -178,11 +178,15 @@ TEST(KurdishShaping, RightJoiningLetters) {
 
 /* ── ZWJ / ZWNJ joining formatters ───────────────────────────────────── */
 
-// ZWNJ breaks joining (Farsi morphology, e.g. می‌خواهم). The formatter
-// itself must be filtered from the output. Forms follow mintty's rules:
-// the letter after ZWNJ is forced initial, the letter before it isolated.
+// ZWNJ blocks joining across it but leaves the outer sides to normal
+// contextual rules (Farsi morphology, e.g. می‌خواهم). The formatter itself
+// must be filtered from the output. Here meem joins into yeh (initial +
+// final) while the ZWNJ keeps yeh from connecting to khah.
 TEST(JoinerShaping, ZwnjBreaksJoin) {
-  EXPECT_EQ(shapeVisual({0x0645, 0x06CC, 0x200C, 0x062E}), (CP{0xFEA7, 0xFBFC, 0xFEE3}));
+  // می‌خ: trailing khah has no forward partner → isolated.
+  EXPECT_EQ(shapeVisual({0x0645, 0x06CC, 0x200C, 0x062E}), (CP{0xFEA5, 0xFBFD, 0xFEE3}));
+  // می‌خو: waw follows khah → khah initial, waw final.
+  EXPECT_EQ(shapeVisual({0x0645, 0x06CC, 0x200C, 0x062E, 0x0648}), (CP{0xFEEE, 0xFEA7, 0xFBFD, 0xFEE3}));
 }
 
 // ZWJ forces a join where none would occur: a lone beh followed by ZWJ takes
