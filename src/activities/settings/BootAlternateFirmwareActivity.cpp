@@ -106,8 +106,7 @@ void BootAlternateFirmwareActivity::render(RenderLock&&) {
   const int textMaxWidth = pageWidth - 2 * metrics.contentSidePadding;
 
   renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 tr(STR_SWITCH_FIRMWARE_TITLE));
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SWITCH_FIRMWARE_TITLE));
 
   const auto lineH = renderer.getLineHeight(UI_10_FONT_ID);
   const int contentTop = metrics.topPadding + metrics.headerHeight;
