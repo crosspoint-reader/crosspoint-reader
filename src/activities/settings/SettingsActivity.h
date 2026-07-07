@@ -24,6 +24,7 @@ enum class SettingAction {
   SdFirmwareUpdate,
   Language,
   DownloadFonts,
+  BootAlternateFirmware,
 };
 
 struct SettingInfo {

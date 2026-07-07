@@ -2,11 +2,14 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <esp_app_desc.h>
+#include <esp_ota_ops.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
 
+#include "BootAlternateFirmwareActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
@@ -65,6 +68,14 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
+  {
+    // Only surface the switch option when the inactive OTA partition holds a valid app image.
+    const esp_partition_t* other = esp_ota_get_next_update_partition(nullptr);
+    esp_app_desc_t desc = {};
+    if (other && esp_ota_get_partition_description(other, &desc) == ESP_OK) {
+      systemSettings.push_back(SettingInfo::Action(StrId::STR_SWITCH_FIRMWARE, SettingAction::BootAlternateFirmware));
+    }
+  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   // Insert "Manage Fonts" right after the font family setting so users discover it naturally
   readerSettings.insert(readerSettings.begin() + 1,
@@ -294,6 +305,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::BootAlternateFirmware:
+        startActivityForResult(std::make_unique<BootAlternateFirmwareActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::None:
         // Do nothing
