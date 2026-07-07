@@ -45,6 +45,16 @@ class SdCardFontSystem {
     }
   }
 
+  /// Free the active SD font and the discovered registry before a memory-heavy
+  /// network operation (e.g. the font manager). Both are restored on demand
+  /// afterwards: the registry via discover()/refreshIfDirty(), the active font
+  /// via ensureLoaded().
+  void releaseForNetwork(GfxRenderer& renderer) {
+    manager_.unloadAll(renderer);
+    registry_.clear();
+    registryDirty_.store(true, std::memory_order_release);
+  }
+
  private:
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
