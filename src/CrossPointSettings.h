@@ -3,9 +3,12 @@
 
 #include <cstdint>
 #include <iosfwd>
+#include <mutex>
 
 class CrossPointSettings {
  private:
+  mutable std::mutex _mutex;
+
   // Private constructor for singleton
   CrossPointSettings() = default;
 
@@ -16,6 +19,10 @@ class CrossPointSettings {
   // Delete copy constructor and assignment
   CrossPointSettings(const CrossPointSettings&) = delete;
   CrossPointSettings& operator=(const CrossPointSettings&) = delete;
+
+  // Access the settings mutex for protecting multi-field reads/writes from other cores.
+  // Callers must not re-enter SETTINGS methods that lock _mutex while holding it.
+  std::mutex& getMutex() const { return _mutex; }
 
   enum SLEEP_SCREEN_MODE {
     DARK = 0,

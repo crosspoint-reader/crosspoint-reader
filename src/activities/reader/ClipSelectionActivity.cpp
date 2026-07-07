@@ -234,7 +234,7 @@ void ClipSelectionActivity::render(RenderLock&&) {
 void ClipSelectionActivity::switchToPage(int pageIdx) {
   const int oldPage = section.currentPage;
   section.currentPage = startPageInSection + pageIdx;
-  auto page = section.loadPageFromSectionFile();
+  auto page = section.loadPage(section.currentPage);
   if (!page) {
     section.currentPage = oldPage;
     LOG_ERR("CLIP", "Failed to load page %d (section.currentPage=%d, currentDisplayPage=%d) — reverted", pageIdx,
