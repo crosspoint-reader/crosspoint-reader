@@ -6,6 +6,10 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <algorithm>
+#include <cstdio>
+
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -19,6 +23,7 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
+constexpr size_t OPDS_PROGRESS_UPDATE_BYTES = 1024 * 1024;
 
 const char* acquisitionBadge(const OpdsAcquisitionType type) {
   switch (type) {
@@ -81,6 +86,32 @@ std::string opdsHttpStatusDetail(const HttpDownloader::DownloadError error) {
     return "http " + std::to_string(error.httpStatus);
   }
   return "";
+}
+
+std::string downloadSpeedText(const size_t downloadedBytes, const size_t totalBytes, const uint32_t kibPerSec) {
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%zu/%zu KiB \xE2\x80\xA2 %u KiB/s", downloadedBytes / 1024, totalBytes / 1024,
+           static_cast<unsigned>(kibPerSec));
+  return buf;
+}
+
+std::string downloadIntervalText(const size_t intervalBytes, const uint32_t intervalMs, const int rssi) {
+  char buf[80];
+  snprintf(buf, sizeof(buf), "%zu KiB / %u ms  RSSI %d dBm", intervalBytes / 1024,
+           static_cast<unsigned>(intervalMs), rssi);
+  return buf;
+}
+
+std::string downloadNetworkTimeText(const bool usesTls, const uint32_t readMs) {
+  char buf[48];
+  snprintf(buf, sizeof(buf), "%s read %u ms", usesTls ? "net+TLS" : "net+HTTP", static_cast<unsigned>(readMs));
+  return buf;
+}
+
+std::string downloadSdTimeText(const uint32_t writeMs) {
+  char buf[32];
+  snprintf(buf, sizeof(buf), "SD write %u ms", static_cast<unsigned>(writeMs));
+  return buf;
 }
 }
 
@@ -221,9 +252,25 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
     auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
+    const int barY = pageHeight / 2 + 20;
     if (downloadTotal > 0) {
-      GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress,
-                          downloadTotal);
+      GUI.drawProgressBar(renderer, Rect{50, barY, pageWidth - 100, 20}, downloadProgress, downloadTotal);
+    }
+    if (downloadShowDebugInfo && downloadStatsAvailable) {
+      const int statsY = barY + 20 + 64;
+      auto speedText = renderer.truncatedText(
+          SMALL_FONT_ID, downloadSpeedText(downloadProgress, downloadTotal, downloadKibPerSec).c_str(), pageWidth - 40);
+      renderer.drawCenteredText(SMALL_FONT_ID, statsY, speedText.c_str());
+      auto intervalText = renderer.truncatedText(
+          SMALL_FONT_ID, downloadIntervalText(downloadIntervalBytes, downloadIntervalMs, downloadRssi).c_str(),
+          pageWidth - 40);
+      renderer.drawCenteredText(SMALL_FONT_ID, statsY + 24, intervalText.c_str());
+      auto networkText = renderer.truncatedText(
+          SMALL_FONT_ID, downloadNetworkTimeText(downloadUsesTls, downloadReadMs).c_str(), pageWidth - 40);
+      renderer.drawCenteredText(SMALL_FONT_ID, statsY + 48, networkText.c_str());
+      auto sdText =
+          renderer.truncatedText(SMALL_FONT_ID, downloadSdTimeText(downloadWriteMs).c_str(), pageWidth - 40);
+      renderer.drawCenteredText(SMALL_FONT_ID, statsY + 72, sdText.c_str());
     }
     renderer.displayBuffer();
     return;
@@ -340,6 +387,15 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   statusMessage = book.title;
   errorDetail.clear();
   downloadProgress = downloadTotal = 0;
+  downloadIntervalBytes = 0;
+  downloadIntervalMs = 0;
+  downloadReadMs = 0;
+  downloadWriteMs = 0;
+  downloadKibPerSec = 0;
+  downloadRssi = 0;
+  downloadUsesTls = false;
+  downloadStatsAvailable = false;
+  downloadShowDebugInfo = SETTINGS.opdsShowDebugInfo != 0;
   requestUpdate(true);
 
   // Build full download URL relative to the current feed, not the root server URL
@@ -349,12 +405,49 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       "/" + StringUtils::sanitizeFilename(bookDownloadBaseName(book)) + acquisitionExtension(book.acquisitionType);
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
+  size_t lastRenderBytes = 0;
+  size_t lastStatsBytes = 0;
+  uint32_t lastStatsMs = millis();
+  uint32_t statsReadMs = 0;
+  uint32_t statsWriteMs = 0;
   const auto result = HttpDownloader::downloadToFile(
       downloadUrl, filename,
-      [this](const size_t downloaded, const size_t total) {
+      [this, &lastRenderBytes, &lastStatsBytes, &lastStatsMs, &statsReadMs, &statsWriteMs](
+          const HttpDownloader::ProgressInfo& info) {
+        const size_t downloaded = info.downloaded;
+        const size_t total = info.total;
         downloadProgress = downloaded;
         downloadTotal = total;
-        requestUpdate(true);
+        statsReadMs += info.readMs;
+        statsWriteMs += info.writeMs;
+        const bool complete = total > 0 && downloaded >= total;
+
+        if (downloadShowDebugInfo &&
+            (downloaded - lastStatsBytes >= OPDS_PROGRESS_UPDATE_BYTES || complete)) {
+          const size_t intervalBytes = downloaded - lastStatsBytes;
+          if (intervalBytes > 0) {
+            const uint32_t now = millis();
+            const uint32_t intervalMs = std::max<uint32_t>(1, now - lastStatsMs);
+            downloadIntervalBytes = intervalBytes;
+            downloadIntervalMs = intervalMs;
+            downloadReadMs = statsReadMs;
+            downloadWriteMs = statsWriteMs;
+            downloadKibPerSec = static_cast<uint32_t>(
+                (static_cast<uint64_t>(intervalBytes) * 1000ULL) / (static_cast<uint64_t>(intervalMs) * 1024ULL));
+            downloadRssi = WiFi.RSSI();
+            downloadUsesTls = info.usesTls;
+            downloadStatsAvailable = true;
+            lastStatsBytes = downloaded;
+            lastStatsMs = now;
+            statsReadMs = 0;
+            statsWriteMs = 0;
+          }
+        }
+
+        if (downloaded - lastRenderBytes >= OPDS_PROGRESS_UPDATE_BYTES || complete) {
+          lastRenderBytes = downloaded;
+          requestUpdate(true);
+        }
       },
       nullptr, server.username, server.password);
 

@@ -1,6 +1,8 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 
@@ -11,7 +13,15 @@
  */
 class HttpDownloader {
  public:
-  using ProgressCallback = std::function<void(size_t downloaded, size_t total)>;
+  struct ProgressInfo {
+    size_t downloaded = 0;
+    size_t total = 0;
+    uint32_t readMs = 0;
+    uint32_t writeMs = 0;
+    bool usesTls = false;
+  };
+
+  using ProgressCallback = std::function<void(const ProgressInfo& info)>;
   // Called with each body chunk as it arrives; return false to abort. Lets a
   // streaming parser consume the response without buffering the whole body.
   using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;

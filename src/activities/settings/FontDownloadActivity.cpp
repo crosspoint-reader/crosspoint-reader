@@ -299,9 +299,9 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
 
     auto result = HttpDownloader::downloadToFile(
         url, destPath,
-        [this](size_t downloaded, size_t total) {
-          fileProgress_ = downloaded;
-          fileTotal_ = total;
+        [this](const HttpDownloader::ProgressInfo& info) {
+          fileProgress_ = info.downloaded;
+          fileTotal_ = info.total;
           mappedInput.update();
           if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
               mappedInput.wasPressed(MappedInputManager::Button::Back)) {

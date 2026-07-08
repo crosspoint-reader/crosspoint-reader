@@ -35,6 +35,7 @@ struct Sink {
   bool* cancelFlag = nullptr;
   size_t total = 0;
   size_t downloaded = 0;
+  bool usesTls = false;
 };
 
 bool isRedirect(int status) {
@@ -85,6 +86,8 @@ bool isSameOrChildDomain(const std::string& host, const std::string& root) {
   return host.size() > suffix.size() && host.compare(host.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+bool urlUsesTls(const std::string& url) { return lowerAscii(url).rfind("https://", 0) == 0; }
+
 HttpDownloader::DownloadError makeDownloadError(HttpDownloader::DownloadResult result, int httpStatus = 0) {
   return {result, httpStatus};
 }
@@ -125,6 +128,8 @@ class WifiDownloadPowerSaveGuard {
 // large/slow files and surfaces a short read directly.
 HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
                                      Sink& sink) {
+  sink.usesTls = urlUsesTls(url);
+
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.buffer_size = HTTP_RX_BUF;
@@ -169,10 +174,15 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   int status = esp_http_client_get_status_code(client);
   for (int hop = 0; isRedirect(status) && hop < 5; ++hop) {
     if (esp_http_client_set_redirection(client) != ESP_OK) break;
+    auto redirectedUrl = makeUniqueNoThrow<char[]>(2048);
+    const bool haveRedirectedUrl =
+        redirectedUrl && esp_http_client_get_url(client, redirectedUrl.get(), 2048) == ESP_OK;
+    if (haveRedirectedUrl) {
+      sink.usesTls = urlUsesTls(redirectedUrl.get());
+    }
     if (hasAuthorization) {
       bool dropAuthorization = true;
-      auto redirectedUrl = makeUniqueNoThrow<char[]>(2048);
-      if (redirectedUrl && esp_http_client_get_url(client, redirectedUrl.get(), 2048) == ESP_OK) {
+      if (haveRedirectedUrl) {
         dropAuthorization = !isSameOrChildDomain(urlHost(redirectedUrl.get()), authHost);
       }
       if (dropAuthorization) {
@@ -212,6 +222,8 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
       esp_http_client_cleanup(client);
       return makeDownloadError(HttpDownloader::ABORTED, status);
     }
+    const bool collectTiming = static_cast<bool>(sink.progress);
+    const uint32_t readStartMs = collectTiming ? millis() : 0;
     const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
     if (read < 0) {
       LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
@@ -219,12 +231,23 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
       return makeDownloadError(HttpDownloader::HTTP_ERROR, status);
     }
     if (read == 0) break;  // all data received
+    const uint32_t readMs = collectTiming ? millis() - readStartMs : 0;
+    const uint32_t writeStartMs = collectTiming ? millis() : 0;
     if (!sink.write(reinterpret_cast<const uint8_t*>(buf.get()), read)) {
       esp_http_client_cleanup(client);
       return makeDownloadError(HttpDownloader::FILE_ERROR, status);
     }
+    const uint32_t writeMs = collectTiming ? millis() - writeStartMs : 0;
     sink.downloaded += read;
-    if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+    if (sink.progress && sink.total > 0) {
+      HttpDownloader::ProgressInfo info;
+      info.downloaded = sink.downloaded;
+      info.total = sink.total;
+      info.readMs = readMs;
+      info.writeMs = writeMs;
+      info.usesTls = sink.usesTls;
+      sink.progress(info);
+    }
   }
 
   const bool complete = esp_http_client_is_complete_data_received(client);

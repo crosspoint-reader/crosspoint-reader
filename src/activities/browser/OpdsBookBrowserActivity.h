@@ -1,6 +1,7 @@
 #pragma once
 #include <OpdsParser.h>
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <vector>
@@ -40,6 +41,15 @@ class OpdsBookBrowserActivity final : public Activity {
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
+  size_t downloadIntervalBytes = 0;
+  uint32_t downloadIntervalMs = 0;
+  uint32_t downloadReadMs = 0;
+  uint32_t downloadWriteMs = 0;
+  uint32_t downloadKibPerSec = 0;
+  int downloadRssi = 0;
+  bool downloadUsesTls = false;
+  bool downloadStatsAvailable = false;
+  bool downloadShowDebugInfo = false;
 
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
