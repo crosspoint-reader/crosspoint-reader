@@ -15,6 +15,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <esp_ota_ops.h>
 
 #include <cstring>
 
@@ -134,6 +135,25 @@ enum class BootResume : uint8_t {
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
+
+void confirmRunningOtaAppIfPending() {
+  const esp_partition_t* runningPartition = esp_ota_get_running_partition();
+  esp_ota_img_states_t otaState;
+  const esp_err_t stateResult = esp_ota_get_state_partition(runningPartition, &otaState);
+  if (stateResult != ESP_OK) {
+    LOG_DBG("OTA", "Running app state unavailable: %s", esp_err_to_name(stateResult));
+    return;
+  }
+
+  if (otaState != ESP_OTA_IMG_PENDING_VERIFY) return;
+
+  const esp_err_t markResult = esp_ota_mark_app_valid_cancel_rollback();
+  if (markResult == ESP_OK) {
+    LOG_INF("OTA", "Confirmed running OTA app as valid");
+  } else {
+    LOG_ERR("OTA", "Failed to confirm running OTA app: %s", esp_err_to_name(markResult));
+  }
+}
 
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
@@ -352,6 +372,12 @@ void setup() {
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+
+  // SD-card firmware updates switch otadata directly and may boot under a
+  // rollback-enabled bootloader from a previously flashed image. Once the app
+  // reaches normal setup, confirm it before any later ESP.restart() can make
+  // that bootloader abort this slot and roll back.
+  confirmRunningOtaAppIfPending();
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
