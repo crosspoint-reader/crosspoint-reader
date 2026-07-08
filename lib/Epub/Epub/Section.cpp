@@ -11,9 +11,8 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// v29: TextBlock word data stored as one flat arena (offset table + NUL-terminated
-// text blob) instead of length-prefixed strings and per-field arrays.
-constexpr uint8_t SECTION_FILE_VERSION = 29;
+// v31: code block line breaks use line spacing instead of paragraph spacing.
+constexpr uint8_t SECTION_FILE_VERSION = 31;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -33,7 +32,7 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                 sizeof(uint8_t) + sizeof(bool) + sizeof(int) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t);
 }  // namespace
 
@@ -76,7 +75,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                      const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                      const uint16_t viewportHeight, const bool hyphenationEnabled,
                                      const bool embeddedStyle, const uint8_t imageRendering,
-                                     const bool focusReadingEnabled) {
+                                     const bool focusReadingEnabled, const int codeFontId) {
   if (!file) {
     LOG_DBG("SCT", "File not open for writing header");
     return;
@@ -85,7 +84,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
                                    sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
                                    sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(focusReadingEnabled) +
-                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+                                   sizeof(codeFontId) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint32_t),
                 "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
@@ -100,6 +100,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, embeddedStyle);
   serialization::writePod(file, imageRendering);
   serialization::writePod(file, focusReadingEnabled);
+  serialization::writePod(file, codeFontId);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
   serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
@@ -110,7 +111,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                              const uint8_t imageRendering, const bool focusReadingEnabled) {
+                              const uint8_t imageRendering, const bool focusReadingEnabled, const int codeFontId) {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -138,6 +139,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
+    int fileCodeFontId;
     serialization::readPod(file, fileFontId);
     serialization::readPod(file, fileLineCompression);
     serialization::readPod(file, fileExtraParagraphSpacing);
@@ -148,12 +150,14 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
+    serialization::readPod(file, fileCodeFontId);
 
     if (fontId != fileFontId || lineCompression != fileLineCompression ||
         extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
         viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
         hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle ||
-        imageRendering != fileImageRendering || focusReadingEnabled != fileFocusReadingEnabled) {
+        imageRendering != fileImageRendering || focusReadingEnabled != fileFocusReadingEnabled ||
+        codeFontId != fileCodeFontId) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
@@ -215,11 +219,11 @@ bool Section::clearCache() const {
 bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                 const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                                const uint8_t imageRendering, const bool focusReadingEnabled,
+                                const uint8_t imageRendering, const bool focusReadingEnabled, const int codeFontId,
                                 const std::function<void()>& popupFn) {
   // One-shot build: start, then lay out the whole section in a single pass.
   if (!startBuild(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
-                  hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, popupFn)) {
+                  hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, codeFontId, popupFn)) {
     return false;
   }
   if (!buildSomeMore(0)) {  // 0 = build to completion
@@ -231,7 +235,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 bool Section::startBuild(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                          const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
                          const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
-                         const bool focusReadingEnabled, const std::function<void()>& popupFn) {
+                         const bool focusReadingEnabled, const int codeFontId, const std::function<void()>& popupFn) {
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
@@ -330,7 +334,8 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   }
   // Header is written with the incomplete-version sentinel; finalizeBuild() commits it.
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-                         viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled);
+                         viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
+                         codeFontId);
 
   auto ctx = makeUniqueNoThrow<BuildContext>();
   if (!ctx) {
@@ -383,8 +388,8 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
       [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         ctxPtr->lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
       },
-      embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, imageRendering, std::move(tocAnchors), popupFn,
-      ctxPtr->cssParser);
+      embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, imageRendering, codeFontId, std::move(tocAnchors),
+      popupFn, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     if (ctx->cssParser) ctx->cssParser->clear();

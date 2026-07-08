@@ -21,7 +21,7 @@ class Section {
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
+                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled, int codeFontId);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
   // Page-offset table entry, kept in RAM while an incremental build is running so
@@ -87,11 +87,11 @@ class Section {
   ~Section();
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled);
+                       uint8_t imageRendering, bool focusReadingEnabled, int codeFontId);
   bool clearCache() const;
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled,
+                         uint8_t imageRendering, bool focusReadingEnabled, int codeFontId,
                          const std::function<void()>& popupFn = nullptr);
 
   // Incremental build: lay out the section a few pages at a time so a large chapter
@@ -101,7 +101,8 @@ class Section {
   //   each tick: buildSomeMore(N); render up to pageCount; when isBuildComplete() stop.
   bool startBuild(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                   uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                  uint8_t imageRendering, bool focusReadingEnabled, const std::function<void()>& popupFn = nullptr);
+                  uint8_t imageRendering, bool focusReadingEnabled, int codeFontId,
+                  const std::function<void()>& popupFn = nullptr);
   // Lay out up to maxPages more pages (maxPages <= 0 = build to completion). Returns
   // false on error (the build is abandoned). Sets isBuildComplete() when finished.
   bool buildSomeMore(int maxPages);

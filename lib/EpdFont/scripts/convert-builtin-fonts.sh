@@ -48,6 +48,15 @@ for size in ${UI_FONT_SIZES[@]}; do
   done
 done
 
+CODE_FONT_SIZES=(10 12)
+for size in ${CODE_FONT_SIZES[@]}; do
+  font_name="ibmplexmono_${size}_regular"
+  font_path="../builtinFonts/source/IBMPlexMono/IBMPlexMono-Regular.ttf"
+  output_path="../builtinFonts/${font_name}.h"
+  python fontconvert.py $font_name $size $font_path --2bit --compress > $output_path
+  echo "Generated $output_path"
+done
+
 python fontconvert.py notosans_8_regular 8 \
   ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
   ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \

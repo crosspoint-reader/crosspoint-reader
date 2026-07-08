@@ -31,6 +31,7 @@ class ParsedText {
   std::vector<bool> reorderedNoSpaceBeforeScratch;
   std::vector<bool> reorderedFocusSuffixScratch;
   std::vector<uint16_t> visualOrderScratch;
+  int blockFontId;
 
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
@@ -39,8 +40,13 @@ class ParsedText {
   std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                                   std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                                   std::vector<bool>& noSpaceBeforeVec);
+  std::vector<size_t> computeCodeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
+                                            std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                            std::vector<bool>& noSpaceBeforeVec);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
+  bool splitCodeTokenAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
+                             std::vector<uint16_t>& wordWidths);
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                    const std::vector<size_t>& lineBreakIndices,
@@ -50,13 +56,15 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle())
+                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
+                      const int blockFontId = 0)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         isNaturalAlign(false),
-        hasRtlWord(false) {}
+        hasRtlWord(false),
+        blockFontId(blockFontId) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);
@@ -64,6 +72,7 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  int getFontId(const int fallbackFontId) const { return blockFontId != 0 ? blockFontId : fallbackFontId; }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);

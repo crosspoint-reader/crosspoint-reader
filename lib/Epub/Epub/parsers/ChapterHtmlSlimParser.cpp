@@ -268,7 +268,9 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  const int blockFontId = blockStyle.isCodeBlock ? codeFontId : 0;
+  currentTextBlock.reset(
+      new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle, blockFontId));
   wordsExtractedInBlock = 0;
 }
 
@@ -1055,6 +1057,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     auto preBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
     preBlockStyle.textAlignDefined = true;
     preBlockStyle.alignment = CssTextAlign::Left;
+    preBlockStyle.isCodeBlock = true;
     const auto accumulated =
         self->blockStyleStack.back().getCombinedBlockStyle(preBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
@@ -1162,7 +1165,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         if (self->partWordBufferIndex > 0) {
           self->flushPartWordBuffer();
         }
-        self->startNewTextBlock(self->blockStyleStack.back().withoutBottom());
+        self->startNewTextBlock(self->blockStyleStack.back().withoutVertical());
         self->nextWordContinues = false;
         continue;
       }
@@ -1594,7 +1597,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  const int lineHeight = renderer.getLineHeight(line->getFontId(fontId)) * lineCompression;
 
   if (!currentPage) {
     currentPage.reset(new Page());
@@ -1634,7 +1637,7 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY = 0;
   }
 
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  const int lineHeight = renderer.getLineHeight(currentTextBlock->getFontId(fontId)) * lineCompression;
 
   // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
@@ -1673,7 +1676,7 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   // Extra paragraph spacing if enabled (default behavior)
-  if (extraParagraphSpacing) {
+  if (extraParagraphSpacing && !blockStyle.isCodeBlock) {
     currentPageNextY += lineHeight / 2;
   }
 }

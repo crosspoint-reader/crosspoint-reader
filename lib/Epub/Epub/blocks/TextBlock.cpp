@@ -38,8 +38,8 @@ void TextBlock::bindArenaPointers() {
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle)
-    : blockStyle(blockStyle) {
+                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle, const int fontId)
+    : blockStyle(blockStyle), fontId(fontId) {
   // Focus annotations are optional: empty vectors mean no word in this block has a split.
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
@@ -115,7 +115,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   }
 
   const bool scanning = renderer.isFontCacheScanning();
-  const int ascender = renderer.getFontAscenderSize(fontId);
+  const int effectiveFontId = getFontId(fontId);
+  const int ascender = renderer.getFontAscenderSize(effectiveFontId);
 
   struct DecorationLineTracker {
     EpdFontFamily::Style style;
@@ -182,11 +183,11 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
           std::min<size_t>({static_cast<size_t>(boundary), static_cast<size_t>(wordTextLen(i)), sizeof(boldBuf) - 1});
       memcpy(boldBuf, word, boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle, baseDir);
+      renderer.drawText(effectiveFontId, wordX, wordY, boldBuf, true, boldStyle, baseDir);
       const int suffixX = wordX + focusSuffixXArr[i];
-      renderer.drawText(fontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
+      renderer.drawText(effectiveFontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
     } else {
-      renderer.drawText(fontId, wordX, wordY, word, true, currentStyle, baseDir);
+      renderer.drawText(effectiveFontId, wordX, wordY, word, true, currentStyle, baseDir);
     }
 
     if (scanning) {
@@ -195,7 +196,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
     if (EpdFontFamily::hasTextDecoration(currentStyle)) {
       int lineStartX = wordX;
-      int lineWidth = renderer.getTextWidth(fontId, word, currentStyle, baseDir);
+      int lineWidth = renderer.getTextWidth(effectiveFontId, word, currentStyle, baseDir);
 
       if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
         lineWidth = (lineWidth + 1) / 2;
@@ -205,8 +206,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       if (wordTextLen(i) >= 3 && static_cast<uint8_t>(word[0]) == 0xE2 && static_cast<uint8_t>(word[1]) == 0x80 &&
           static_cast<uint8_t>(word[2]) == 0x83) {
         const char* visibleText = word + 3;
-        lineStartX += renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
-        lineWidth = renderer.getTextWidth(fontId, visibleText, currentStyle, baseDir);
+        lineStartX += renderer.getTextAdvanceX(effectiveFontId, "\xe2\x80\x83", currentStyle);
+        lineWidth = renderer.getTextWidth(effectiveFontId, visibleText, currentStyle, baseDir);
         if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
           lineWidth = (lineWidth + 1) / 2;
         }
@@ -270,6 +271,8 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.textIndentDefined);
   serialization::writePod(file, blockStyle.isRtl);
   serialization::writePod(file, blockStyle.directionDefined);
+  serialization::writePod(file, blockStyle.isCodeBlock);
+  serialization::writePod(file, fontId);
 
   return true;
 }
@@ -348,6 +351,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
+  serialization::readPod(file, blockStyle.isCodeBlock);
+  serialization::readPod(file, block->fontId);
 
   return block;
 }

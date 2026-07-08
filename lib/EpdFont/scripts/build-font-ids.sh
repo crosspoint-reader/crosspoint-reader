@@ -80,22 +80,39 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define UI_10_FONT_ID ($(
+# Keep legacy IDs stable for existing built-in UI fonts. These constants are
+# used as runtime/cache keys, so changing them would invalidate unrelated state.
+echo "#define UI_10_FONT_ID (22918846)"
+echo "#define UI_12_FONT_ID (1635686837)"
+echo "#define SMALL_FONT_ID (674098198)"
+
+echo "#define IBMPLEXMONO_10_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./ubuntu_10_regular.h",
-  "./ubuntu_10_bold.h",
+  "./ibmplexmono_10_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define UI_12_FONT_ID ($(
+echo "#define IBMPLEXMONO_12_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./ubuntu_12_regular.h",
-  "./ubuntu_12_bold.h",
+  "./ibmplexmono_12_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define SMALL_FONT_ID ($(
-ruby -rdigest -e 'puts [
-  "./notosans_8_regular.h",
-].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
-))"
+cat <<'EOF'
+
+// Font ID 0 is reserved as the "not found" sentinel.
+// Guard against any hash accidentally producing 0.
+static_assert(NOTOSERIF_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSERIF_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSERIF_16_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSERIF_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_14_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_16_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(NOTOSANS_18_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(IBMPLEXMONO_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(IBMPLEXMONO_12_FONT_ID != 0, "Font ID collision with sentinel");
+EOF

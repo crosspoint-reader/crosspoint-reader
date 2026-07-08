@@ -1,5 +1,7 @@
 #pragma once
 
+#include <builtinFonts/ibmplexmono_10_regular.h>
+#include <builtinFonts/ibmplexmono_12_regular.h>
 #include <builtinFonts/notoserif_12_bold.h>
 #include <builtinFonts/notoserif_12_bolditalic.h>
 #include <builtinFonts/notoserif_12_italic.h>

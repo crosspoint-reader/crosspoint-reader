@@ -950,7 +950,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const bool cacheLoaded = section->loadSectionFile(
         SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
         SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-        SETTINGS.imageRendering, SETTINGS.focusReadingEnabled);
+        SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.getCodeFontId());
     if (cacheLoaded) {
       // Matching render params means identical pagination, so the saved page number is valid
       // as-is: consume any pending settings-change reposition. Without this, a chapter total
@@ -988,7 +988,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                         SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                         viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                        SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, popupFn)) {
+                                        SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.getCodeFontId(),
+                                        popupFn)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
           section.reset();
           showPendingSyncSaveError();
@@ -1030,7 +1031,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                 SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+                                 SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.getCodeFontId())) {
           LOG_ERR("ERS", "Failed to start section build");
           section.reset();
           showPendingSyncSaveError();
@@ -1095,7 +1096,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         !section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                              SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
                              SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
-                             SETTINGS.focusReadingEnabled)) {
+                             SETTINGS.focusReadingEnabled, SETTINGS.getCodeFontId())) {
       LOG_ERR("ERS", "Failed to start partial extension build");
       section.reset();
       showPendingSyncSaveError();

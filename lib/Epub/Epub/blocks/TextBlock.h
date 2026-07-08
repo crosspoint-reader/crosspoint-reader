@@ -39,6 +39,7 @@
 class TextBlock final : public Block {
  private:
   BlockStyle blockStyle;
+  int fontId = 0;
   uint16_t numWords = 0;
   uint16_t textBytes = 0;  // total size of the text region, including NULs
   bool focusPresent = false;
@@ -65,13 +66,15 @@ class TextBlock final : public Block {
   // is false -- callers must check and fail the line instead of using it.
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle());
+                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
+                     int fontId = 0);
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
   TextBlock& operator=(const TextBlock&) = delete;
 
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  int getFontId(const int fallbackFontId) const { return fontId != 0 ? fontId : fallbackFontId; }
   bool isEmpty() override { return numWords == 0; }
   bool valid() const { return isValid; }
   uint16_t wordCount() const { return numWords; }

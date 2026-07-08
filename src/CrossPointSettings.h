@@ -291,6 +291,7 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  int getCodeFontId() const;
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(HalFile& file, bool count_only = false) const;

@@ -366,3 +366,15 @@ int CrossPointSettings::getReaderFontId() const {
       }
   }
 }
+
+int CrossPointSettings::getCodeFontId() const {
+  switch (fontSize) {
+    case SMALL:
+      return IBMPLEXMONO_10_FONT_ID;
+    case MEDIUM:
+    case LARGE:
+    case EXTRA_LARGE:
+    default:
+      return IBMPLEXMONO_12_FONT_ID;
+  }
+}

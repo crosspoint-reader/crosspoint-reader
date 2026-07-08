@@ -31,6 +31,7 @@ struct BlockStyle {
   bool textAlignDefined = false;   // true if text-align was explicitly set in CSS
   bool isRtl = false;              // true if resolved direction is RTL
   bool directionDefined = false;   // true if direction was explicitly set in CSS/HTML
+  bool isCodeBlock = false;        // true for <pre>; use code-oriented wrapping/spacing
 
   // Set when this block was created by a <br> element. Used by startNewTextBlock to inject
   // a full line-height gap when the <br> block stays empty (section-break use case).
@@ -48,6 +49,16 @@ struct BlockStyle {
   [[nodiscard]] BlockStyle withoutBottom() const {
     BlockStyle result = *this;
     result.marginBottom = 0;
+    result.paddingBottom = 0;
+    return result;
+  }
+
+  // Return a copy with all vertical margins/padding zeroed out.
+  [[nodiscard]] BlockStyle withoutVertical() const {
+    BlockStyle result = *this;
+    result.marginTop = 0;
+    result.marginBottom = 0;
+    result.paddingTop = 0;
     result.paddingBottom = 0;
     return result;
   }
@@ -96,6 +107,7 @@ struct BlockStyle {
       result.isRtl = isRtl;
       result.directionDefined = true;
     }
+    result.isCodeBlock = child.isCodeBlock || isCodeBlock;
 
     // fromBrElement is consumed by startNewTextBlock when an empty <br> block
     // is merged with the following paragraph; never propagate it further.
