@@ -91,6 +91,20 @@ void GfxRenderer::begin() {
   bwBufferChunks.assign((frameBufferSize + BW_BUFFER_CHUNK_SIZE - 1) / BW_BUFFER_CHUNK_SIZE, nullptr);
 }
 
+void GfxRenderer::releaseFrameBufferForBuild() {
+  display.releaseFrameBuffers();
+  frameBuffer = nullptr;
+}
+
+bool GfxRenderer::restoreFrameBufferAfterBuild() {
+  if (!display.reallocFrameBuffers()) {
+    LOG_ERR("GFX", "Framebuffer realloc failed after build");
+    return false;
+  }
+  frameBuffer = display.getFrameBuffer();
+  return frameBuffer != nullptr;
+}
+
 bool GfxRenderer::isFontCacheScanning() const { return fontCacheManager_ && fontCacheManager_->isScanning(); }
 
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {

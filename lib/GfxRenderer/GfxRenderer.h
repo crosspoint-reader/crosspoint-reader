@@ -250,6 +250,15 @@ class GfxRenderer {
   // Font helpers
   const uint8_t* getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const;
 
+  // Lend the 48 KB framebuffer to a memory-hungry phase (chapter builds).
+  // Between release and a successful restore NOTHING may draw or display —
+  // the panel keeps showing its last refreshed image. restore returns the
+  // buffer white, so the caller must redraw the full screen; false means the
+  // heap could not re-supply the buffer (callers treat that as fatal).
+  void releaseFrameBufferForBuild();
+  bool restoreFrameBufferAfterBuild();
+  bool hasFrameBuffer() const { return frameBuffer != nullptr; }
+
   // Low level functions
   uint8_t* getFrameBuffer() const;
   size_t getBufferSize() const;
