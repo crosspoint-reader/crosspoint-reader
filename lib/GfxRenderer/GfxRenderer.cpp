@@ -105,6 +105,23 @@ bool GfxRenderer::restoreFrameBufferAfterBuild() {
   return frameBuffer != nullptr;
 }
 
+GfxRenderer::FrameBufferLoan::FrameBufferLoan(GfxRenderer& renderer) : renderer_(renderer) {
+  renderer_.releaseFrameBufferForBuild();
+  active_ = true;
+}
+
+void GfxRenderer::FrameBufferLoan::end() {
+  if (!active_) return;
+  active_ = false;
+  if (!renderer_.restoreFrameBufferAfterBuild()) {
+    // The build scratch that borrowed this memory is already freed, so a
+    // failed 48 KB realloc means the heap is corrupt; running blind (no
+    // display) helps nobody -- restart.
+    LOG_ERR("GFX", "Framebuffer restore failed - restarting");
+    ESP.restart();
+  }
+}
+
 bool GfxRenderer::isFontCacheScanning() const { return fontCacheManager_ && fontCacheManager_->isScanning(); }
 
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {

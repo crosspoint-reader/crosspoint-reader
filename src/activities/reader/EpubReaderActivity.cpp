@@ -984,16 +984,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // The popup's own refresh is a plain FAST, so force the page that replaces it onto the HALF
         // ghost-cleanup path -- otherwise the "INDEXING" text ghosts under the rendered page.
         pagesUntilFullRefresh = 1;
-        const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
+        // No popup redraws while the framebuffer is lent to the build below;
+        // the panel holds the popup displayed above (e-ink is persistent).
+        const auto popupFn = [this]() {
+          if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
+        };
+        // Lend the framebuffer's 48 KB to the blocking full build; restored
+        // (white) at scope exit, and the page render below redraws everything.
+        GfxRenderer::FrameBufferLoan loan(renderer);
         if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                         SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                         viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
                                         SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, popupFn)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
           section.reset();
+          loan.end();  // restore before anything draws
           showPendingSyncSaveError();
           return;
         }
+        loan.end();
       } else {
         // Lay out just enough to show the landing page; loop() builds the rest behind it. Show the
         // indexing popup up front only when the build will actually be slow: a large spine (its
@@ -1027,12 +1036,18 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts under the page.
           pagesUntilFullRefresh = 1;
         }
+        // Lend the framebuffer's 48 KB to the blocking pre-render burst
+        // (startBuild inflates the whole spine HTML — the memory peak). The
+        // background buildSomeMore chunks in loop() do NOT get the loan: they
+        // deliberately interleave with page renders. Restored before render.
+        GfxRenderer::FrameBufferLoan loan(renderer);
         if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
           LOG_ERR("ERS", "Failed to start section build");
           section.reset();
+          loan.end();  // restore before anything draws
           showPendingSyncSaveError();
           return;
         }
@@ -1044,10 +1059,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
             LOG_ERR("ERS", "Failed during incremental section build");
             section.reset();
+            loan.end();  // restore before anything draws
             showPendingSyncSaveError();
             return;
           }
         }
+        loan.end();
       }
     } else {
       LOG_DBG("ERS", "Cache found, skipping build...");

@@ -5,6 +5,8 @@
 #include <I18n.h>
 #include <Memory.h>
 
+#include <optional>
+
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
@@ -40,10 +42,20 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   // First open: building the spine/TOC index (book.bin) takes a couple of seconds. Show the
   // indexing popup so it isn't a silent wait on the home screen. The cachePath/hash is known at
   // construction, so this check is valid before load(); a cached open loads in a blink -> no popup.
-  if (!Storage.exists((epub->getCachePath() + "/book.bin").c_str())) {
+  const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
+  if (uncached) {
     GUI.drawPopup(renderer, tr(STR_INDEXING));
   }
-  if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
+  bool loaded;
+  {
+    // Lend the framebuffer's 48 KB to the container parse (expat + spine/TOC
+    // build). The popup just displayed stays on the panel; whichever reader
+    // activity follows redraws the full screen anyway.
+    std::optional<GfxRenderer::FrameBufferLoan> loan;
+    if (uncached) loan.emplace(renderer);
+    loaded = epub->load(true, SETTINGS.embeddedStyle == 0);
+  }
+  if (loaded) {
     return epub;
   }
 
