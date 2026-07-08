@@ -97,8 +97,8 @@ std::string downloadSpeedText(const size_t downloadedBytes, const size_t totalBy
 
 std::string downloadIntervalText(const size_t intervalBytes, const uint32_t intervalMs, const int rssi) {
   char buf[80];
-  snprintf(buf, sizeof(buf), "%zu KiB / %u ms  RSSI %d dBm", intervalBytes / 1024,
-           static_cast<unsigned>(intervalMs), rssi);
+  snprintf(buf, sizeof(buf), "%zu KiB / %u ms  RSSI %d dBm", intervalBytes / 1024, static_cast<unsigned>(intervalMs),
+           rssi);
   return buf;
 }
 
@@ -113,7 +113,11 @@ std::string downloadSdTimeText(const uint32_t writeMs) {
   snprintf(buf, sizeof(buf), "SD write %u ms", static_cast<unsigned>(writeMs));
   return buf;
 }
+
+bool isDownloadCancelInput(const MappedInputManager& input) {
+  return input.isPressed(MappedInputManager::Button::Left);
 }
+}  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   Activity::onEnter();
@@ -126,6 +130,7 @@ void OpdsBookBrowserActivity::onEnter() {
   selectorIndex = 0;
   consumeConfirm = false;
   consumeBack = false;
+  consumeLeft = false;
   errorMessage.clear();
   errorDetail.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
@@ -157,6 +162,12 @@ void OpdsBookBrowserActivity::loop() {
   }
   if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     consumeBack = false;
+    return;
+  }
+  if (consumeLeft) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+      consumeLeft = false;
+    }
     return;
   }
 
@@ -268,10 +279,11 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       auto networkText = renderer.truncatedText(
           SMALL_FONT_ID, downloadNetworkTimeText(downloadUsesTls, downloadReadMs).c_str(), pageWidth - 40);
       renderer.drawCenteredText(SMALL_FONT_ID, statsY + 48, networkText.c_str());
-      auto sdText =
-          renderer.truncatedText(SMALL_FONT_ID, downloadSdTimeText(downloadWriteMs).c_str(), pageWidth - 40);
+      auto sdText = renderer.truncatedText(SMALL_FONT_ID, downloadSdTimeText(downloadWriteMs).c_str(), pageWidth - 40);
       renderer.drawCenteredText(SMALL_FONT_ID, statsY + 72, sdText.c_str());
     }
+    const auto labels = mappedInput.mapLabels("", "", tr(STR_CANCEL), "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -290,8 +302,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
     for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
       const auto& entry = entries[i];
-      std::string displayText =
-          (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : bookDisplayText(entry);
+      std::string displayText = (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : bookDisplayText(entry);
       auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
       renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
                         i != static_cast<size_t>(selectorIndex));
@@ -405,6 +416,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       "/" + StringUtils::sanitizeFilename(bookDownloadBaseName(book)) + acquisitionExtension(book.acquisitionType);
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
+  bool downloadCancelRequested = false;
+  size_t lastCancelCheckBytes = 0;
   size_t lastRenderBytes = 0;
   size_t lastStatsBytes = 0;
   uint32_t lastStatsMs = millis();
@@ -412,8 +425,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   uint32_t statsWriteMs = 0;
   const auto result = HttpDownloader::downloadToFile(
       downloadUrl, filename,
-      [this, &lastRenderBytes, &lastStatsBytes, &lastStatsMs, &statsReadMs, &statsWriteMs](
-          const HttpDownloader::ProgressInfo& info) {
+      [this, &downloadCancelRequested, &lastCancelCheckBytes, &lastRenderBytes, &lastStatsBytes, &lastStatsMs,
+       &statsReadMs, &statsWriteMs](const HttpDownloader::ProgressInfo& info) {
         const size_t downloaded = info.downloaded;
         const size_t total = info.total;
         downloadProgress = downloaded;
@@ -422,8 +435,16 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         statsWriteMs += info.writeMs;
         const bool complete = total > 0 && downloaded >= total;
 
-        if (downloadShowDebugInfo &&
-            (downloaded - lastStatsBytes >= OPDS_PROGRESS_UPDATE_BYTES || complete)) {
+        // Cancellation is intentionally sampled on coarse progress boundaries.
+        if (!downloadCancelRequested && downloaded - lastCancelCheckBytes >= OPDS_PROGRESS_UPDATE_BYTES) {
+          lastCancelCheckBytes = downloaded;
+          mappedInput.update();
+          if (isDownloadCancelInput(mappedInput)) {
+            downloadCancelRequested = true;
+          }
+        }
+
+        if (downloadShowDebugInfo && (downloaded - lastStatsBytes >= OPDS_PROGRESS_UPDATE_BYTES || complete)) {
           const size_t intervalBytes = downloaded - lastStatsBytes;
           if (intervalBytes > 0) {
             const uint32_t now = millis();
@@ -432,8 +453,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
             downloadIntervalMs = intervalMs;
             downloadReadMs = statsReadMs;
             downloadWriteMs = statsWriteMs;
-            downloadKibPerSec = static_cast<uint32_t>(
-                (static_cast<uint64_t>(intervalBytes) * 1000ULL) / (static_cast<uint64_t>(intervalMs) * 1024ULL));
+            downloadKibPerSec = static_cast<uint32_t>((static_cast<uint64_t>(intervalBytes) * 1000ULL) /
+                                                      (static_cast<uint64_t>(intervalMs) * 1024ULL));
             downloadRssi = WiFi.RSSI();
             downloadUsesTls = info.usesTls;
             downloadStatsAvailable = true;
@@ -449,10 +470,13 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
           requestUpdate(true);
         }
       },
-      nullptr, server.username, server.password);
+      &downloadCancelRequested, server.username, server.password);
 
   if (result.result == HttpDownloader::OK) {
     clearBookCache(filename);
+    state = BrowserState::BROWSING;
+  } else if (result.result == HttpDownloader::ABORTED) {
+    consumeLeft = mappedInput.isPressed(MappedInputManager::Button::Left);
     state = BrowserState::BROWSING;
   } else {
     state = BrowserState::ERROR;
