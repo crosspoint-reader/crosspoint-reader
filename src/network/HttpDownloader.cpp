@@ -6,6 +6,7 @@
 #include <base64.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <esp_wifi.h>
 
 #include <algorithm>
 #include <cctype>
@@ -87,6 +88,35 @@ bool isSameOrChildDomain(const std::string& host, const std::string& root) {
 HttpDownloader::DownloadError makeDownloadError(HttpDownloader::DownloadResult result, int httpStatus = 0) {
   return {result, httpStatus};
 }
+
+class WifiDownloadPowerSaveGuard {
+ public:
+  WifiDownloadPowerSaveGuard() {
+    const esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (err == ESP_OK) {
+      active = true;
+      LOG_DBG("HTTP", "WiFi power save disabled for download");
+    } else if (err != ESP_ERR_WIFI_NOT_INIT) {
+      LOG_DBG("HTTP", "esp_wifi_set_ps(WIFI_PS_NONE) failed: %s", esp_err_to_name(err));
+    }
+  }
+
+  ~WifiDownloadPowerSaveGuard() {
+    if (!active) return;
+    const esp_err_t err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+    if (err == ESP_OK) {
+      LOG_DBG("HTTP", "WiFi power save restored to min modem");
+    } else if (err != ESP_ERR_WIFI_NOT_INIT) {
+      LOG_DBG("HTTP", "esp_wifi_set_ps(WIFI_PS_MIN_MODEM) failed: %s", esp_err_to_name(err));
+    }
+  }
+
+  WifiDownloadPowerSaveGuard(const WifiDownloadPowerSaveGuard&) = delete;
+  WifiDownloadPowerSaveGuard& operator=(const WifiDownloadPowerSaveGuard&) = delete;
+
+ private:
+  bool active = false;
+};
 
 // Streams a GET body through sink.write in READ_CHUNK pieces. Uses the manual
 // open/fetch_headers/read path rather than esp_http_client_perform(): perform()
@@ -254,7 +284,11 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
 
-  const DownloadError result = runGet(url, username, password, sink);
+  DownloadError result;
+  {
+    WifiDownloadPowerSaveGuard wifiPowerSave;
+    result = runGet(url, username, password, sink);
+  }
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();
