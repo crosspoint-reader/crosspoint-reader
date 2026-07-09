@@ -140,6 +140,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
   server->on("/api/progress", HTTP_GET, [this] { handleGetProgress(); });
+  server->on("/api/manifest", HTTP_GET, [this] { handleManifest(); });
 
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
@@ -599,6 +600,25 @@ void CrossPointWebServer::handleGetProgress() const {
   doc["percentage"] = prog.percentage;        // 0.0–1.0 whole-book
   doc["timestamp"] = prog.timestamp;          // last-save unix seconds (0 = unclocked)
   doc["titleHash"] = titleHash.c_str();       // MD5(norm title 0x1F author)
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
+}
+
+// GET /api/manifest — (path, titleHash) for the X4's known books, so a WiFi
+// client can match its own library by the optimization-proof title hash even
+// when filenames differ (e.g. an X4-re-encoded copy). Cheap: cached metadata
+// only, no epub loads. `manifest` MUST outlive serializeJson — ArduinoJson
+// stores const char* by reference, not by copy.
+void CrossPointWebServer::handleManifest() const {
+  const auto manifest = BleProgress::pathTitleHashes(200);
+  JsonDocument doc;
+  JsonArray arr = doc.to<JsonArray>();
+  for (const auto& entry : manifest) {
+    JsonObject o = arr.add<JsonObject>();
+    o["path"] = entry.first.c_str();
+    o["titleHash"] = entry.second.c_str();
+  }
   String json;
   serializeJson(doc, json);
   server->send(200, "application/json", json);
