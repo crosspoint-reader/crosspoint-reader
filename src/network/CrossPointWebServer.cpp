@@ -182,8 +182,10 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
-  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout"};
-  server->collectHeaders(davHeaders, 6);
+  // If-None-Match is collected so the static-page handlers can answer conditional GETs with 304
+  const char* collectedHeaders[] = {"Depth",      "Destination", "Overwrite",    "If",
+                                    "Lock-Token", "Timeout",     "If-None-Match"};
+  server->collectHeaders(collectedHeaders, 7);
   server->addHandler(new WebDAVHandler());  // Note: WebDAVHandler will be deleted by WebServer when server is stopped
   LOG_DBG("WEB", "WebDAV handler initialized");
 
@@ -336,19 +338,32 @@ CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() con
   return status;
 }
 
-static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
+static void sendStaticContent(WebServer* server, const char* data, size_t len, const char* etag,
+                              const char* contentType) {
+  // Content is baked into flash at build time, so the ETag is stable for the
+  // lifetime of a firmware image. Honor If-None-Match with a 304 so browsers
+  // reuse their cache instead of re-downloading on every navigation.
+  if (server->header("If-None-Match") == etag) {
+    server->sendHeader("ETag", etag);
+    server->sendHeader("Cache-Control", "no-cache");
+    server->send(304);
+    return;
+  }
   server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "text/html", data, len);
+  server->sendHeader("ETag", etag);
+  // no-cache: the browser may cache, but must revalidate (conditional GET)
+  // before reuse — this is what unlocks 304 responses.
+  server->sendHeader("Cache-Control", "no-cache");
+  server->send_P(200, contentType, data, len);
 }
 
 void CrossPointWebServer::handleRoot() const {
-  sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
+  sendStaticContent(server.get(), HomePageHtml, sizeof(HomePageHtml), HomePageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served root page");
 }
 
 void CrossPointWebServer::handleJszip() const {
-  server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
+  sendStaticContent(server.get(), jszip_minJs, jszip_minJsCompressedSize, jszip_minJsETag, "application/javascript");
   LOG_DBG("WEB", "Served jszip.min.js");
 }
 
@@ -455,7 +470,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
 
 void CrossPointWebServer::handleFileList() const {
-  sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
+  sendStaticContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml), FilesPageHtmlETag, "text/html");
 }
 
 void CrossPointWebServer::handleFileListData() const {
@@ -1119,7 +1134,7 @@ void CrossPointWebServer::handleDelete() const {
 }
 
 void CrossPointWebServer::handleSettingsPage() const {
-  sendHtmlContent(server.get(), SettingsPageHtml, sizeof(SettingsPageHtml));
+  sendStaticContent(server.get(), SettingsPageHtml, sizeof(SettingsPageHtml), SettingsPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served settings page");
 }
 
@@ -1732,7 +1747,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 // --- Font management handlers ---
 
 void CrossPointWebServer::handleFontsPage() const {
-  sendHtmlContent(server.get(), FontsPageHtml, sizeof(FontsPageHtml));
+  sendStaticContent(server.get(), FontsPageHtml, sizeof(FontsPageHtml), FontsPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served fonts page");
 }
 
