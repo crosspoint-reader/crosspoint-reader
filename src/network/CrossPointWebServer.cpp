@@ -17,6 +17,7 @@
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include "ble_sync/BleProgressBridge.h"  // reading-position read for WiFi position sync
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -138,6 +139,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
+  server->on("/api/progress", HTTP_GET, [this] { handleGetProgress(); });
 
   // Upload endpoint with special handling for multipart form data
   server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
@@ -567,6 +569,39 @@ void CrossPointWebServer::handleDownload() const {
   }
   client.clear();
   file.close();
+}
+
+// GET /api/progress?path=<epub> — one book's saved reading position in the same
+// canonical form BLE sync speaks (crengine xpath + 0..1 percentage + title hash).
+// Lets the iOS WiFi sync seed a freshly downloaded book's resume position so it
+// opens where the X4 left off instead of on page 1. Read-only: reuses
+// BleProgress::getForPath (no renderer). 204 when the book has no saved progress.
+void CrossPointWebServer::handleGetProgress() const {
+  if (!server->hasArg("path")) {
+    server->send(400, "text/plain", "Missing path");
+    return;
+  }
+  String itemPath = server->arg("path");
+  if (!itemPath.startsWith("/")) {
+    itemPath = "/" + itemPath;
+  }
+
+  KOReaderProgress prog;
+  std::string titleHash;
+  if (!BleProgress::getForPath(std::string(itemPath.c_str()), prog, titleHash, "")) {
+    server->send(204, "application/json", "{}");  // unread book — not an error
+    return;
+  }
+
+  JsonDocument doc;
+  doc["document"] = prog.document.c_str();    // KOReader partial-MD5 (path identity)
+  doc["progress"] = prog.progress.c_str();    // crengine xpath
+  doc["percentage"] = prog.percentage;        // 0.0–1.0 whole-book
+  doc["timestamp"] = prog.timestamp;          // last-save unix seconds (0 = unclocked)
+  doc["titleHash"] = titleHash.c_str();       // MD5(norm title 0x1F author)
+  String json;
+  serializeJson(doc, json);
+  server->send(200, "application/json", json);
 }
 
 // Diagnostic counters for upload performance analysis
