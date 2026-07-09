@@ -61,8 +61,9 @@ for root, _, files in os.walk(SRC_DIR):
                 processed = content
 
             # Compress with gzip (compresslevel 9 is maximum compression)
+            # mtime=0 keeps the output reproducible across builds
             # IMPORTANT: we don't use brotli because Firefox doesn't support brotli with insecured context (only supported on HTTPS)
-            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9)
+            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9, mtime=0)
 
             # Create valid C identifier from filename
             # Use appropriate suffix based on file type
