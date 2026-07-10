@@ -262,6 +262,30 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Lazily resume a partial's extension build once the reader nears its watermark. Far from
+  // it the rebuild is all cost (whole-chapter re-layout from page 0) and no benefit this
+  // session, so reopening a partial deliberately does NOT start it (see the deferral in
+  // render()); crossing this margin is the signal that the reader will actually need pages
+  // past the watermark soon. Uses the last render's viewport so pagination matches the
+  // partial being extended.
+  if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
+      !partialRebuildStartFailed &&
+      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+    RenderLock lock;
+    if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                             SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, buildViewportWidth,
+                             buildViewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                             SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+      // Not fatal: the partial keeps serving its pages; crossing the watermark falls back to
+      // the blocking extension in render(). Don't retry every tick.
+      partialRebuildStartFailed = true;
+      LOG_ERR("ERS", "Failed to start deferred partial extension build");
+    } else {
+      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
+              section->pageCount);
+    }
+  }
+
   // Drive any in-progress incremental section build forward, off the page-turn critical path,
   // but only within a small window ahead of the reader: an unbounded build monopolized the
   // RenderLock and locked out page turns. The build follows the reader instead, and instant
@@ -941,6 +965,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+  // Capture for loop()'s lazy partial-extension start (must match this render's layout params).
+  buildViewportWidth = viewportWidth;
+  buildViewportHeight = viewportHeight;
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
@@ -1014,61 +1041,74 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // a deep resume/jump that must lay out many pages to reach the landing page. Tiny sections
         // build in a blink and stay popup-free.
         const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
-        const size_t spineBytes = epub->getCumulativeSpineItemSize(currentSpineIndex) -
-                                  (currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
-        // Popup only when the build will actually be slow: a big spine whose HTML still needs
-        // inflating (the multi-second cost), or a deep page target. A reopen with cached HTML builds
-        // fast, so no popup -- that's what made an already-indexed book look like it was reindexing.
-        // A partial cache that already covers the target page shows it instantly: never popup.
-        const bool willInflate = !section->hasHtmlCache();
         const bool anchorJump = !pendingAnchor.empty();
-        bool showPopup;
-        if (anchorJump) {
-          // An anchor jump's cost is bounded by the anchor's page, not `target`. An anchor already
-          // in the on-disk map (partial or finalized cache) lands instantly: no popup. Otherwise it
-          // lies beyond the indexed watermark and the build may lay out the whole spine to find it,
-          // so gate on spine size alone -- laying out a big spine takes seconds even with cached
-          // HTML. Ordinary chapter-top TOC jumps resolve on page 0 and stay popup-free.
-          showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+
+        // Landing well inside a partial: the page (or anchor, via the on-disk map) is already
+        // servable, so don't restart the extension build now -- it re-lays out the WHOLE chapter
+        // from page 0 (minutes of background CPU + SD writes on a giant spine), pure waste when
+        // the reader never nears the watermark this session. loop() starts it lazily once the
+        // reader is within PARTIAL_REBUILD_START_MARGIN pages of the watermark.
+        if (section->isPartial() &&
+            (anchorJump ? section->getPageForAnchor(pendingAnchor).has_value()
+                        : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+          LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
         } else {
-          const bool targetAvailable = target < static_cast<int>(section->pageCount);
-          showPopup = !targetAvailable &&
-                      ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) || target > BUILD_POPUP_PAGE_THRESHOLD);
-        }
-        if (showPopup) {
-          GUI.drawPopup(renderer, tr(STR_INDEXING));
-          // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts under the page.
-          pagesUntilFullRefresh = 1;
-        }
-        // Lend the framebuffer's 48 KB to the blocking pre-render burst
-        // (startBuild inflates the whole spine HTML — the memory peak). The
-        // background buildSomeMore chunks in loop() do NOT get the loan: they
-        // deliberately interleave with page renders. Restored before render.
-        GfxRenderer::FrameBufferLoan loan(renderer);
-        if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                 SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                 viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                 SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
-          LOG_ERR("ERS", "Failed to start section build");
-          section.reset();
-          loan.end();  // restore before anything draws
-          showPendingSyncSaveError();
-          return;
-        }
-        while (!section->isBuildComplete() &&
-               (anchorJump ? !section->findAnchor(pendingAnchor) : static_cast<int>(section->pageCount) <= target)) {
-          // Anchor jump: build until the anchor's page is laid out (usually page 0), checking a
-          // partial's on-disk anchor map too so an already-indexed anchor resolves immediately.
-          // Otherwise: build until the target page exists. loop() builds the rest behind it.
-          if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-            LOG_ERR("ERS", "Failed during incremental section build");
+          const size_t spineBytes =
+              epub->getCumulativeSpineItemSize(currentSpineIndex) -
+              (currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
+          // Popup only when the build will actually be slow: a big spine whose HTML still needs
+          // inflating (the multi-second cost), or a deep page target. A reopen with cached HTML builds
+          // fast, so no popup -- that's what made an already-indexed book look like it was reindexing.
+          // A partial cache that already covers the target page shows it instantly: never popup.
+          const bool willInflate = !section->hasHtmlCache();
+          bool showPopup;
+          if (anchorJump) {
+            // An anchor jump's cost is bounded by the anchor's page, not `target`. An anchor already
+            // in the on-disk map (partial or finalized cache) lands instantly: no popup. Otherwise it
+            // lies beyond the indexed watermark and the build may lay out the whole spine to find it,
+            // so gate on spine size alone -- laying out a big spine takes seconds even with cached
+            // HTML. Ordinary chapter-top TOC jumps resolve on page 0 and stay popup-free.
+            showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+          } else {
+            const bool targetAvailable = target < static_cast<int>(section->pageCount);
+            showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
+                                             target > BUILD_POPUP_PAGE_THRESHOLD);
+          }
+          if (showPopup) {
+            GUI.drawPopup(renderer, tr(STR_INDEXING));
+            // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts under the page.
+            pagesUntilFullRefresh = 1;
+          }
+          // Lend the framebuffer's 48 KB to the blocking pre-render burst
+          // (startBuild inflates the whole spine HTML — the memory peak). The
+          // background buildSomeMore chunks in loop() do NOT get the loan: they
+          // deliberately interleave with page renders. Restored before render.
+          GfxRenderer::FrameBufferLoan loan(renderer);
+          if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                   SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+            LOG_ERR("ERS", "Failed to start section build");
             section.reset();
             loan.end();  // restore before anything draws
             showPendingSyncSaveError();
             return;
           }
+          while (!section->isBuildComplete() &&
+                 (anchorJump ? !section->findAnchor(pendingAnchor) : static_cast<int>(section->pageCount) <= target)) {
+            // Anchor jump: build until the anchor's page is laid out (usually page 0), checking a
+            // partial's on-disk anchor map too so an already-indexed anchor resolves immediately.
+            // Otherwise: build until the target page exists. loop() builds the rest behind it.
+            if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+              LOG_ERR("ERS", "Failed during incremental section build");
+              section.reset();
+              loan.end();  // restore before anything draws
+              showPendingSyncSaveError();
+              return;
+            }
+          }
+          loan.end();
         }
-        loan.end();
       }
     } else {
       LOG_DBG("ERS", "Cache found, skipping build...");
@@ -1110,6 +1150,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Extend the build to the requested page if needed (for partials and in-progress builds).
   // This runs every render, so it covers both the first page and any forward turn that gets
   // ahead of the background builder; pages already built do no work here.
+  //
+  // Crossing a partial's watermark before the extension rebuild has caught up means a
+  // synchronous wait spanning the remaining prefix re-layout -- potentially tens of
+  // seconds on a giant spine. Show the indexing popup so it isn't a silent freeze
+  // (the page that replaces it takes the HALF ghost-cleanup path). Ordinary window
+  // catch-ups on a non-partial build are a page or two and stay popup-free.
+  if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    pagesUntilFullRefresh = 1;
+  }
   while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
     // Start a build to extend a partial toward the requested page.
     if (!section->isBuilding() &&
