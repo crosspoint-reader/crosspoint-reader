@@ -57,6 +57,20 @@ There are three ways to install fonts:
 The current list of pre-built fonts is maintained in the
 [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
 
+### Publishing Pre-Built Fonts
+
+Merging a change to `develop` that updates the font definitions, conversion
+scripts, or their Python requirements automatically runs the
+[SD card font release workflow](../.github/workflows/release-fonts.yml). The
+workflow builds the configured fonts, publishes the next immutable
+`sd-fonts-m*-b*-rN` release, and updates the matching stable
+`sd-fonts-m*-b*` release used by devices. Maintainers can still run the
+workflow manually when a rebuild is needed without an input change.
+
+The **Manage Fonts** screen fetches `fonts.json` from the stable release each
+time it is opened, so newly published font families become available without
+a firmware release or another manual publishing step.
+
 ## Converting Custom Fonts
 
 To convert your own TrueType/OpenType fonts:
