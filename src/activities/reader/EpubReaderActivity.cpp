@@ -968,10 +968,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Every real page turn changes currentPage, so progress durability is unaffected.
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
       section->pageCount != lastSavedPageCount) {
-    saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
-    lastSavedSpineIndex = currentSpineIndex;
-    lastSavedPage = section->currentPage;
-    lastSavedPageCount = section->pageCount;
+    if (saveProgress(currentSpineIndex, section->currentPage, section->pageCount)) {
+      lastSavedSpineIndex = currentSpineIndex;
+      lastSavedPage = section->currentPage;
+      lastSavedPageCount = section->pageCount;
+    }
   }
 
   showPendingSyncSaveError();
