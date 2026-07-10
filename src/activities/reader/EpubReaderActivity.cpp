@@ -982,6 +982,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
+    // Fresh section, fresh chance: a failed lazy extension start in a previous
+    // section must not suppress watermark-triggered rebuilds for this one.
+    partialRebuildStartFailed = false;
 
     // A finalized cache serves every page as-is. A partial cache (suspended build from a
     // previous session) serves its pages instantly too, but a build must still run to lay
