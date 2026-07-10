@@ -457,15 +457,19 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor)))) {
     // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
     // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
-    // emits base-then-marks per UAX#9 L3). raiseAboveBase leaves below-base
-    // marks (kasra) at their font-native position. Fonts without their glyphs
-    // — the built-ins — miss the getGlyph lookup and skip them, as before.
+    // emits base-then-marks per UAX#9 L3). anchorFor pins position-sensitive
+    // niqqud (dagesh, shin/sin dots, holam) to their spot on the base; other
+    // marks stay centered, raised above the base or (kasra) at their
+    // font-native position. Fonts without their glyphs — the built-ins — miss
+    // the getGlyph lookup and skip them, as before.
     if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
-      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
-      const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
-                                                       combiningGlyph->width);
+      const auto anchor = combiningMark::anchorFor(cp);
+      const int raiseBy =
+          combiningMark::raiseAboveBase(anchor, combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+      const int combiningX = combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
+                                                       combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
       continue;
     }
@@ -1783,15 +1787,19 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text)))) {
     // RTL vowel marks (Hebrew niqqud, Arabic harakat) ride the combining-mark
     // path: zero-advance overlays on the preceding base glyph (applyBidiVisual
-    // emits base-then-marks per UAX#9 L3). raiseAboveBase leaves below-base
-    // marks (kasra) at their font-native position. Fonts without their glyphs
-    // — the built-ins — miss the getGlyph lookup and skip them, as before.
+    // emits base-then-marks per UAX#9 L3). anchorFor pins position-sensitive
+    // niqqud (dagesh, shin/sin dots, holam) to their spot on the base; other
+    // marks stay centered, raised above the base or (kasra) at their
+    // font-native position. Fonts without their glyphs — the built-ins — miss
+    // the getGlyph lookup and skip them, as before.
     if (utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp)) {
       const EpdGlyph* combiningGlyph = font.getGlyph(cp, style);
       if (!combiningGlyph) continue;
-      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+      const auto anchor = combiningMark::anchorFor(cp);
+      const int raiseBy =
+          combiningMark::raiseAboveBase(anchor, combiningGlyph->top, combiningGlyph->height, lastBaseTop);
       const int combiningX = x - raiseBy;
-      const int combiningY = combiningMark::centerOverRotated90CW(lastBaseY, lastBaseLeft, lastBaseWidth,
+      const int combiningY = combiningMark::anchorOverRotated90CW(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
                                                                   combiningGlyph->left, combiningGlyph->width);
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
       continue;
