@@ -41,7 +41,9 @@ class BufferedFileWriter {
       okFlag &= file.write(p, len) == len;
       return;
     }
-    memcpy(buf.get() + fill, p, len);
+    // Typed local: cppcheck misreads unique_ptr<uint8_t[]>::get() arithmetic as void*.
+    uint8_t* const data = buf.get();
+    memcpy(data + fill, p, len);
     fill += len;
   }
 
@@ -94,7 +96,9 @@ class BufferedFileReader {
         if (fill == 0) break;  // EOF or error
       }
       const size_t chunk = std::min(len, fill - off);
-      memcpy(p, buf.get() + off, chunk);
+      // Typed local: cppcheck misreads unique_ptr<uint8_t[]>::get() arithmetic as void*.
+      const uint8_t* const data = buf.get();
+      memcpy(p, data + off, chunk);
       p += chunk;
       off += chunk;
       len -= chunk;
