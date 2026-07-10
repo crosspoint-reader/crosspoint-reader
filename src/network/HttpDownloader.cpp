@@ -4,8 +4,6 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <base64.h>
-#include <esp_crt_bundle.h>
-#include <esp_http_client.h>
 
 #include <algorithm>
 #include <cctype>
@@ -19,6 +17,9 @@
 #include <WiFiClient.h>
 
 extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("WOLFSSL", "%s", msg); }
+#else
+#include <esp_crt_bundle.h>
+#include <esp_http_client.h>
 #endif
 
 namespace {
