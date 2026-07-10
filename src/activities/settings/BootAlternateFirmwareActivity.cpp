@@ -27,7 +27,7 @@ bool isCrossPointFirmware(const char* projectName) {
 }
 
 // Draw a block of wrapped centered lines starting at y, return new y after last line.
-int drawWrappedCentered(GfxRenderer& renderer, int fontId, int y, int lineH, const char* text, int maxWidth,
+int drawWrappedCentered(const GfxRenderer& renderer, int fontId, int y, int lineH, const char* text, int maxWidth,
                         int maxLines, bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR) {
   const auto lines = renderer.wrappedText(fontId, text, maxWidth, maxLines, style);
   for (const auto& line : lines) {
