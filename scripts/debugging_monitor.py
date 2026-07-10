@@ -252,9 +252,13 @@ def reopen_serial(ser_holder: dict) -> bool:
     print(f"{Fore.YELLOW}Serial disconnected - waiting for device to come back...{Style.RESET_ALL}")
     while not shutdown_event.is_set():
         try:
-            ser = serial.Serial(ser_holder["port"], ser_holder["baud"], timeout=0.1)
+            # Same no-reset open as the initial connect: deassert DTR/RTS
+            # before open() so the reconnect never reboots the device.
+            ser = serial.Serial(None, ser_holder["baud"], timeout=0.1)
+            ser.port = ser_holder["port"]
             ser.dtr = False
             ser.rts = False
+            ser.open()
             ser_holder["ser"] = ser
             print(f"{Fore.GREEN}Reconnected to {ser_holder['port']}{Style.RESET_ALL}")
             return True
@@ -497,9 +501,16 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        ser = serial.Serial(port, args.baud, timeout=0.1)
+        # Deassert DTR/RTS BEFORE opening: passing the port to the constructor
+        # opens immediately with DTR asserted, and the USB-Serial-JTAG
+        # peripheral interprets that as a reset — rebooting the device on every
+        # monitor attach (the `reset=11` bench artifact) and destroying any
+        # wedged state we're trying to observe post-mortem.
+        ser = serial.Serial(None, args.baud, timeout=0.1)
+        ser.port = port
         ser.dtr = False
         ser.rts = False
+        ser.open()
     except serial.SerialException as e:
         print(f"{Fore.RED}Error opening port: {e}{Style.RESET_ALL}")
         return
