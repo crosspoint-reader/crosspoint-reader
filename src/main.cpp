@@ -625,7 +625,12 @@ void loop() {
         // sample and be dropped, and every press would commit a slice late.
         delay(10);
       } else if (!powerManager.lightSleep(gpio)) {
-        delay(HalPowerManager::LIGHT_SLEEP_SLICE_MS);
+        // Light sleep declined = a render Lock, USB, or WiFi is active — the
+        // chip is at full clock anyway, so poll at 100 Hz. A 50 ms cadence
+        // here dropped sub-slice power taps (a press needs two samples >=5 ms
+        // apart to commit), which made short-press sleep flaky during renders
+        // — exactly when a render Lock forces this fallback.
+        delay(10);
       }
     } else {
       // Response window after recent input: keep 100 Hz polling for snappy interaction,

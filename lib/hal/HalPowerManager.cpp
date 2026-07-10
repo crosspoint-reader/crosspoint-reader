@@ -1,5 +1,6 @@
 #include "HalPowerManager.h"
 
+#include <BoardConfig.h>
 #include <Logging.h>
 #include <WiFi.h>
 #include <driver/gpio.h>
@@ -120,13 +121,25 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   // sleepMutex declaration for the failure mode this prevents).
   xSemaphoreTake(sleepMutex, portMAX_DELAY);
 
-  // Timer wake only. It keeps the button/tilt poll cadence identical to the delay()
-  // it replaces: the front/side buttons are ADC resistor-ladder inputs whose pressed
-  // levels sit mid-rail, invisible to a digital GPIO wake, so they must be polled.
-  // The power button (a true GPIO) is deliberately NOT armed as a wake source: a
-  // level wake on it can misread around sleep transitions and inject phantom
-  // presses, and the timer poll catches it within one slice anyway.
+  // Timer wake keeps the button/tilt poll cadence identical to the delay() it
+  // replaces: the front/side buttons are ADC resistor-ladder inputs whose
+  // pressed levels sit mid-rail, invisible to a digital GPIO wake, so they
+  // must be polled. The power button (a true GPIO) is ALSO armed, as a level
+  // wake at its pressed level: committing a press needs two update() samples
+  // >=5 ms apart, so at the timer-only 50 ms cadence a tap shorter than a
+  // slice could land in one sample — or none — and be dropped entirely
+  // (field-reported as unreliable short-press sleep). The wake is only an
+  // early poll: update()'s debounce still decides whether it was a real
+  // press, so a misread around the sleep transition costs one extra wake
+  // blip, never a phantom press. Idle cost is zero — the pin only holds its
+  // pressed level while a finger is on it.
   esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(LIGHT_SLEEP_SLICE_MS) * 1000ULL);
+  const int8_t powerPin = BoardConfig::ACTIVE.input.power;
+  if (powerPin >= 0) {
+    gpio_wakeup_enable(static_cast<gpio_num_t>(powerPin),
+                       BoardConfig::ACTIVE.input.powerActiveHigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+  }
 
   // The IDF flash-leakage workaround (CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND) pulls the
   // DIO-unused SPIWP pad low on light-sleep entry — on this board that releases the battery
@@ -145,6 +158,9 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   // Disarm immediately: an armed timer wake persists across sleep calls and would
   // carry over into startDeepSleep(), waking the device on USB power after 50 ms.
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+  if (powerPin >= 0) {
+    gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
+  }
 
   xSemaphoreGive(sleepMutex);
 
