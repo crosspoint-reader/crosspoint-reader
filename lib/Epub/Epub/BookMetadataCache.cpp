@@ -77,13 +77,23 @@ bool BookMetadataCache::beginContentOpfPass() {
   LOG_DBG("BMC", "Beginning content opf pass");
 
   // Open spine file for writing
-  return Storage.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile);
+  if (!Storage.openFileForWrite("BMC", cachePath + tmpSpineBinFile, spineFile)) {
+    return false;
+  }
+  // Wrapper OOM is fine: createSpineEntry falls back to unbuffered writes.
+  passOut = makeUniqueNoThrow<serialization::BufferedFileWriter>(spineFile, BUILD_IO_BUFFER_SIZE);
+  return true;
 }
 
 bool BookMetadataCache::endContentOpfPass() {
+  const bool flushed = !passOut || passOut->flush();
+  passOut.reset();
   // Explicit close() required: member variable persists beyond function scope
   spineFile.close();
-  return true;
+  if (!flushed) {
+    LOG_ERR("BMC", "Failed writing spine tmp file");
+  }
+  return flushed;
 }
 
 bool BookMetadataCache::beginTocPass() {
@@ -121,10 +131,17 @@ bool BookMetadataCache::beginTocPass() {
     useSpineHrefIndex = false;
   }
 
+  // Wrapper OOM is fine: createTocEntry falls back to unbuffered writes.
+  passOut = makeUniqueNoThrow<serialization::BufferedFileWriter>(tocFile, BUILD_IO_BUFFER_SIZE);
   return true;
 }
 
 bool BookMetadataCache::endTocPass() {
+  const bool flushed = !passOut || passOut->flush();
+  passOut.reset();
+  if (!flushed) {
+    LOG_ERR("BMC", "Failed writing toc tmp file");
+  }
   // Explicit close() required: member variables persist beyond function scope
   tocFile.close();
   spineFile.close();
@@ -133,7 +150,7 @@ bool BookMetadataCache::endTocPass() {
   spineHrefIndex.shrink_to_fit();
   useSpineHrefIndex = false;
 
-  return true;
+  return flushed;
 }
 
 bool BookMetadataCache::endWrite() {
@@ -378,7 +395,11 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
   }
 
   const SpineEntry entry(href, 0, -1);
-  writeSpineEntry(spineFile, entry);
+  if (passOut) {
+    writeSpineEntryTo(*passOut, entry);
+  } else {
+    writeSpineEntry(spineFile, entry);
+  }
   spineCount++;
 }
 
@@ -426,7 +447,11 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   // Compose the title to NFC at index time so the cache stores precomposed glyphs;
   // device fonts have no combining-mark positioning, so NFD titles render broken.
   const TocEntry entry(utf8ComposeNfc(title), href, anchor, level, spineIndex);
-  writeTocEntry(tocFile, entry);
+  if (passOut) {
+    writeTocEntryTo(*passOut, entry);
+  } else {
+    writeTocEntry(tocFile, entry);
+  }
   tocCount++;
 }
 

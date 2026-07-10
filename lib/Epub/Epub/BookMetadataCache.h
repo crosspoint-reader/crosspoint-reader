@@ -1,9 +1,11 @@
 #pragma once
 
+#include <BufferedFile.h>
 #include <HalStorage.h>
 
 #include <algorithm>
 #include <deque>
+#include <memory>
 #include <string>
 
 class BookMetadataCache {
@@ -54,6 +56,11 @@ class BookMetadataCache {
   // Temp file handles during build
   HalFile spineFile;
   HalFile tocFile;
+  // Buffers the per-entry tmp-file writes during the OPF/TOC passes: those
+  // writes interleave with zip-inflate SD reads, and unbuffered they thrash
+  // SdFat's shared sector cache (one 512B transaction per 4-byte pod). One
+  // wrapper serves whichever pass is active (spine, then toc).
+  std::unique_ptr<serialization::BufferedFileWriter> passOut;
 
   // Index for fast href→spineIndex lookup (used only for large EPUBs)
   struct SpineHrefIndexEntry {

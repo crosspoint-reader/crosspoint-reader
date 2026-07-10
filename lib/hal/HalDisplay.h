@@ -47,11 +47,13 @@ class HalDisplay {
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 
-  // Lend the framebuffer's ~48 KB to a memory-hungry phase (chapter builds).
-  // No display calls between release and a successful realloc; the panel
-  // keeps its last refreshed image. Buffers come back white — redraw fully.
-  void releaseFrameBuffers();
-  bool reallocFrameBuffers();
+  // Lend the framebuffer's ~48 KB STORAGE to a memory-hungry phase (chapter
+  // builds) without freeing it: the allocation never moves, so repeated loans
+  // cannot fragment the heap (free+realloc measurably did). No display calls
+  // between lend and return; the panel keeps its last refreshed image. The
+  // buffer comes back white — redraw fully. Returns nullptr if already lent.
+  uint8_t* lendFrameBufferStorage(uint32_t* sizeOut);
+  void returnFrameBufferStorage();
 
   // X3 grayscale preconditioning (OEM "AA-pre-BW(mid)" settle pass), windowed
   // to the gray region in physical panel coordinates (no-arg = full frame).
