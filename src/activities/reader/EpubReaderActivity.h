@@ -72,6 +72,12 @@ class EpubReaderActivity final : public Activity {
   // tick; the blocking extension in render() remains the fallback past the watermark.
   bool partialRebuildStartFailed = false;
 
+  // Last position persisted by render()'s saveProgress, used to skip redundant
+  // writeAtomic calls on no-op re-renders (menu/bookmark/screenshot).
+  int lastSavedSpineIndex = -1;
+  int lastSavedPage = -1;
+  int lastSavedPageCount = -1;
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
