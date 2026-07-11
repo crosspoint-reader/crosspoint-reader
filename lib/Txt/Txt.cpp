@@ -42,7 +42,7 @@ std::string Txt::getTitle() const {
 
   // Remove .txt extension
   if (FsHelpers::hasTxtExtension(filename)) {
-    filename = filename.substr(0, filename.length() - 4);
+    filename.resize(filename.length() - 4);
   }
 
   return filename;

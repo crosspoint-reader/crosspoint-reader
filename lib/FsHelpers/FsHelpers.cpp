@@ -79,6 +79,53 @@ std::string normalisePath(const std::string& path) {
   return result;
 }
 
+bool naturalLess(const std::string& str1, const std::string& str2) {
+  // Naive natural sort: numeric-aware, case-insensitive
+  const char* s1 = str1.c_str();
+  const char* s2 = str2.c_str();
+
+  // ctype functions require unsigned char values: passing a negative char (UTF-8
+  // bytes above 0x7f with signed char) is undefined behavior
+  const auto isDigit = [](const char c) { return isdigit(static_cast<unsigned char>(c)) != 0; };
+
+  // Iterate while both strings have characters
+  while (*s1 && *s2) {
+    // Check if both are at the start of a number
+    if (isDigit(*s1) && isDigit(*s2)) {
+      // Skip leading zeros and track them
+      while (*s1 == '0') s1++;
+      while (*s2 == '0') s2++;
+
+      // Count digits to compare lengths first
+      int len1 = 0, len2 = 0;
+      while (isDigit(s1[len1])) len1++;
+      while (isDigit(s2[len2])) len2++;
+
+      // Different length so return smaller integer value
+      if (len1 != len2) return len1 < len2;
+
+      // Same length so compare digit by digit
+      for (int i = 0; i < len1; i++) {
+        if (s1[i] != s2[i]) return s1[i] < s2[i];
+      }
+
+      // Numbers equal so advance pointers
+      s1 += len1;
+      s2 += len2;
+    } else {
+      // Regular case-insensitive character comparison
+      const int c1 = tolower(static_cast<unsigned char>(*s1));
+      const int c2 = tolower(static_cast<unsigned char>(*s2));
+      if (c1 != c2) return c1 < c2;
+      s1++;
+      s2++;
+    }
+  }
+
+  // One string is prefix of other
+  return *s1 == '\0' && *s2 != '\0';
+}
+
 void sortFileList(std::vector<std::string>& strs) {
   std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
     // Directories first
@@ -86,46 +133,7 @@ void sortFileList(std::vector<std::string>& strs) {
     bool isDir2 = str2.back() == '/';
     if (isDir1 != isDir2) return isDir1;
 
-    // Start naive natural sort
-    const char* s1 = str1.c_str();
-    const char* s2 = str2.c_str();
-
-    // Iterate while both strings have characters
-    while (*s1 && *s2) {
-      // Check if both are at the start of a number
-      if (isdigit(*s1) && isdigit(*s2)) {
-        // Skip leading zeros and track them
-        while (*s1 == '0') s1++;
-        while (*s2 == '0') s2++;
-
-        // Count digits to compare lengths first
-        int len1 = 0, len2 = 0;
-        while (isdigit(s1[len1])) len1++;
-        while (isdigit(s2[len2])) len2++;
-
-        // Different length so return smaller integer value
-        if (len1 != len2) return len1 < len2;
-
-        // Same length so compare digit by digit
-        for (int i = 0; i < len1; i++) {
-          if (s1[i] != s2[i]) return s1[i] < s2[i];
-        }
-
-        // Numbers equal so advance pointers
-        s1 += len1;
-        s2 += len2;
-      } else {
-        // Regular case-insensitive character comparison
-        char c1 = tolower(*s1);
-        char c2 = tolower(*s2);
-        if (c1 != c2) return c1 < c2;
-        s1++;
-        s2++;
-      }
-    }
-
-    // One string is prefix of other
-    return *s1 == '\0' && *s2 != '\0';
+    return naturalLess(str1, str2);
   });
 }
 

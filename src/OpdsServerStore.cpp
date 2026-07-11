@@ -1,74 +1,48 @@
 #include "OpdsServerStore.h"
 
-#include <HalStorage.h>
-#include <JsonSettingsIO.h>
 #include <Logging.h>
+#include <ObfuscationUtils.h>
 
+#include <algorithm>
 #include <cstring>
 
-#include "CrossPointSettings.h"
-
-OpdsServerStore OpdsServerStore::instance;
-
-namespace {
-constexpr char OPDS_FILE_JSON[] = "/.crosspoint/opds.json";
-}  // namespace
-
-bool OpdsServerStore::saveToFile() const {
-  Storage.mkdir("/.crosspoint");
-  return JsonSettingsIO::saveOpds(*this, OPDS_FILE_JSON);
+void OpdsServerStore::toJson(JsonDocument& doc) const {
+  JsonArray arr = doc["servers"].to<JsonArray>();
+  for (const auto& server : servers) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["name"] = server.name;
+    obj["url"] = server.url;
+    obj["username"] = server.username;
+    obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+  }
 }
 
-bool OpdsServerStore::loadFromFile() {
-  if (Storage.exists(OPDS_FILE_JSON)) {
-    String json = Storage.readFile(OPDS_FILE_JSON);
-    if (!json.isEmpty()) {
-      // resave flag is set when passwords were stored in plaintext and need re-obfuscation
-      bool resave = false;
-      bool result = JsonSettingsIO::loadOpds(*this, json.c_str(), &resave);
-      if (result && resave) {
-        LOG_DBG("OPS", "Resaving JSON with obfuscated passwords");
-        saveToFile();
-      }
-      return result;
-    }
-  }
-
-  // No opds.json found — attempt one-time migration from the legacy single-server
-  // fields in CrossPointSettings (opdsServerUrl/opdsUsername/opdsPassword).
-  if (migrateFromSettings()) {
-    LOG_DBG("OPS", "Migrated legacy OPDS settings");
-    return true;
-  }
-
-  return false;
-}
-
-bool OpdsServerStore::migrateFromSettings() {
-  if (strlen(SETTINGS.opdsServerUrl) == 0) {
-    return false;
-  }
-
-  OpdsServer server;
-  server.name = "OPDS Server";
-  server.url = SETTINGS.opdsServerUrl;
-  server.username = SETTINGS.opdsUsername;
-  server.password = SETTINGS.opdsPassword;
-  servers.push_back(std::move(server));
-
-  if (saveToFile()) {
-    // Clear legacy fields so migration won't run again on next boot
-    SETTINGS.opdsServerUrl[0] = '\0';
-    SETTINGS.opdsUsername[0] = '\0';
-    SETTINGS.opdsPassword[0] = '\0';
-    SETTINGS.saveToFile();
-    LOG_DBG("OPS", "Migrated single-server OPDS config to opds.json");
-    return true;
-  }
-
-  // Save failed — roll back in-memory state so we don't have a partial migration
+bool OpdsServerStore::fromJson(JsonVariantConst doc) {
+  // Tolerate a missing/invalid 'servers' key (treat as empty list); only a
+  // JSON parse error is fatal. A null JsonArray iterates zero times.
   servers.clear();
-  return false;
+  JsonArrayConst arr = doc["servers"].as<JsonArrayConst>();
+  servers.reserve(std::min(arr.size(), MAX_SERVERS));
+  bool needsResave = false;
+
+  for (JsonObjectConst obj : arr) {
+    if (servers.size() >= OpdsServerStore::MAX_SERVERS) break;
+    OpdsServer server;
+    server.name = obj["name"] | "";
+    server.url = obj["url"] | "";
+    server.username = obj["username"] | "";
+    server.password = extractPassword(obj, needsResave);
+    servers.push_back(std::move(server));
+  }
+
+  LOG_DBG("OPS", "Loaded %zu OPDS servers from file", servers.size());
+
+  if (needsResave) {
+    LOG_DBG("OPS", "Resaving JSON with obfuscated passwords");
+    saveToFile();
+  }
+
+  return true;
 }
 
 bool OpdsServerStore::addServer(const OpdsServer& server) {
