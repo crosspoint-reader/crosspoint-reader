@@ -117,19 +117,32 @@ At `src/activities/browser/OpdsBookBrowserActivity.cpp:272`, prefix the folder
 and ensure it exists:
 
 ```cpp
-std::string folder = SETTINGS.opdsDownloadFolder;   // "" => SD root
-if (!folder.empty()) {
+// opdsDownloadFolder is already a null-terminated char[64]; operate on it
+// directly — no std::string copy. exists()/mkdir() take const char*.
+const char* folder = SETTINGS.opdsDownloadFolder;   // "" => SD root
+bool haveFolder = folder[0] != '\0';
+if (haveFolder) {
   // Guard with exists() first: mkdir's return-on-existing is not confirmed, and
   // every existing caller (CrossPointWebServer.cpp:788, WebDAVHandler.cpp:472)
   // checks exists() before mkdir. Without the guard, the 2nd+ download into a
   // configured folder could log a false "mkdir failed" and redirect to root.
-  if (!Storage.exists(folder.c_str()) && !Storage.mkdir(folder.c_str())) {
-    LOG_ERR("OPDS", "mkdir failed for %s, falling back to SD root", folder.c_str());
-    folder.clear();                                 // never lose the download
+  if (!Storage.exists(folder) && !Storage.mkdir(folder)) {
+    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
+    haveFolder = false;                             // never lose the download
   }
 }
-std::string filename = folder + "/" +
-    StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+
+// downloadToFile() takes a std::string, so the path must own one. A fixed char[]
+// is rejected: book titles are unbounded and would truncate (collision / lost
+// ".epub"). This is a cold path (a multi-second network download follows), so
+// one owning string is justified; reserve + in-place append avoids the chain of
+// temporaries that `a + "/" + b + ".epub"` would allocate.
+std::string filename;
+filename.reserve(96);
+if (haveFolder) filename += folder;
+filename += '/';
+filename += StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title);
+filename += ".epub";
 ```
 
 `HalStorage::mkdir(path, pFlag=true)` is documented to create parent directories,
@@ -164,10 +177,13 @@ Commit the YAML only; the three generated files are gitignored.
 - **Path sanitization**: normalize leading/trailing slashes on entry. Individual
   path segments are the user's responsibility; the existing
   `StringUtils::sanitizeFilename` still sanitizes the *filename*, not the folder.
-- **RAM**: +64 bytes permanent DRAM in the settings singleton. Section 4 adds a
-  transient `std::string folder` copy and one concatenation; negligible, and the
-  current code already heap-allocates the filename string. No RISC-V alignment
-  concern (plain `char[]`, byte access).
+- **RAM**: +64 bytes permanent DRAM in the settings singleton (static `char[]`,
+  zero runtime allocation for storage or persistence). Section 4 operates on the
+  `char[]` directly (no folder copy) and builds a single `reserve`d, in-place
+  `filename` string on a cold path — no net increase in per-download heap
+  temporaries versus the current code, and one fewer than a naive
+  `folder + "/" + …` chain. No RISC-V alignment concern (plain `char[]`, byte
+  access).
 - **"Hidden" scope**: the setting is hidden from the **on-device** Settings
   screen only. `CrossPointWebServer::handleGetSettings()` does not filter by
   category, so it WILL appear in the web settings API/page under an empty
