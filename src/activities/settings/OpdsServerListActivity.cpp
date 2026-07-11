@@ -190,7 +190,7 @@ void OpdsServerListActivity::render(RenderLock&&) {
           }
           if (index == serverCount + 1) {
             const char* f = SETTINGS.opdsDownloadFolder;
-            return f[0] ? std::string(f) : std::string(I18n::getInstance().get(StrId::STR_SD_CARD));
+            return f[0] ? std::string(f) : std::string(I18n::getInstance().get(StrId::STR_OPDS_SD_ROOT));
           }
           if (index == serverCount + 2) {
             return std::string(I18n::getInstance().get(opdsFormatLabel(SETTINGS.opdsFilenameFormat)));
