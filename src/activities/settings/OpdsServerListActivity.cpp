@@ -24,6 +24,7 @@ std::string normalizeFolder(std::string v) {
   if (v.empty()) return "";
   if (v.front() != '/') v.insert(v.begin(), '/');
   while (v.size() > 1 && v.back() == '/') v.pop_back();
+  if (v == "/") return "";  // a bare slash is SD root, same as empty
   return v;
 }
 }  // namespace
