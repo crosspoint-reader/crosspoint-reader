@@ -14,6 +14,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/OpdsFilename.h"
 
 namespace {
 // Normalizes a user-typed folder: trims spaces, "" => SD root, otherwise a
@@ -27,13 +28,26 @@ std::string normalizeFolder(std::string v) {
   if (v == "/") return "";  // a bare slash is SD root, same as empty
   return v;
 }
+
+// Label shown for the current OPDS filename format in the list subtitle.
+StrId opdsFormatLabel(uint8_t format) {
+  switch (format) {
+    case static_cast<uint8_t>(OpdsFilenameFormat::TitleAuthor):
+      return StrId::STR_FMT_TITLE_AUTHOR;
+    case static_cast<uint8_t>(OpdsFilenameFormat::TitleOnly):
+      return StrId::STR_FMT_TITLE;
+    default:
+      return StrId::STR_FMT_AUTHOR_TITLE;
+  }
+}
 }  // namespace
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends two virtual items: "Add Server" and "Download folder".
+  // Settings mode appends three virtual items: "Add Server", "Download folder"
+  // and "Filename format".
   if (!pickerMode) {
-    count += 2;
+    count += 3;
   }
   return count;
 }
@@ -92,7 +106,7 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format].
   if (selectedIndex == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -108,6 +122,15 @@ void OpdsServerListActivity::handleSelection() {
         std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
                                                 std::string(SETTINGS.opdsDownloadFolder), 63, InputType::Text),
         folderHandler);
+    return;
+  }
+
+  // "Filename format": tap cycles through the available formats.
+  if (selectedIndex == serverCount + 2) {
+    SETTINGS.opdsFilenameFormat =
+        static_cast<uint8_t>((SETTINGS.opdsFilenameFormat + 1) % static_cast<uint8_t>(OpdsFilenameFormat::Count));
+    SETTINGS.saveToFile();
+    requestUpdate();
     return;
   }
 
@@ -156,7 +179,10 @@ void OpdsServerListActivity::render(RenderLock&&) {
           if (index == serverCount) {
             return std::string(I18n::getInstance().get(StrId::STR_ADD_SERVER));
           }
-          return std::string(I18n::getInstance().get(StrId::STR_OPDS_DOWNLOAD_FOLDER));
+          if (index == serverCount + 1) {
+            return std::string(I18n::getInstance().get(StrId::STR_OPDS_DOWNLOAD_FOLDER));
+          }
+          return std::string(I18n::getInstance().get(StrId::STR_OPDS_FILENAME_FORMAT));
         },
         [&servers, serverCount](int index) -> std::string {
           if (index < serverCount && !servers[index].name.empty()) {
@@ -165,6 +191,9 @@ void OpdsServerListActivity::render(RenderLock&&) {
           if (index == serverCount + 1) {
             const char* f = SETTINGS.opdsDownloadFolder;
             return f[0] ? std::string(f) : std::string(I18n::getInstance().get(StrId::STR_SD_CARD));
+          }
+          if (index == serverCount + 2) {
+            return std::string(I18n::getInstance().get(opdsFormatLabel(SETTINGS.opdsFilenameFormat)));
           }
           return std::string("");
         });
