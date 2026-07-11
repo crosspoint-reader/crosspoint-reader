@@ -71,14 +71,19 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
+  int currentMajor = 0, currentMinor = 0, currentPatch = 0;
+  int latestMajor = 0, latestMinor = 0, latestPatch = 0;
 
   const auto currentVersion = CROSSPOINT_VERSION;
 
   // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+  if (sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch) != 3 ||
+      sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch) != 3) {
+    // Unparseable version string — comparing garbage could trigger a spurious
+    // install or suppress a real update, so treat as not newer.
+    LOG_DBG("OTA", "Version parse failed: latest=%s current=%s", latestVersion.c_str(), currentVersion);
+    return false;
+  }
 
   /*
    * Compare major versions.
@@ -143,6 +148,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   esp_err = esp_https_ota_begin(&ota_config, &ota_handle);
   if (esp_err != ESP_OK) {
     LOG_DBG("OTA", "HTTP OTA Begin Failed: %s", esp_err_to_name(esp_err));
+    // Restore power saving — otherwise the radio stays in max-power mode for
+    // the rest of the session after a failed begin.
+    esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     return INTERNAL_UPDATE_ERROR;
   }
 
