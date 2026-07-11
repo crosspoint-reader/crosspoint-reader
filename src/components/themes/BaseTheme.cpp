@@ -749,7 +749,9 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) const {
+                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated,
+                              const int bookCurrentPage, const int bookTotalPages,
+                              const bool bookTotalIsEstimate) const {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -769,16 +771,32 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     // Right aligned text for progress counter
     char progressStr[32];
 
-    // Prefix the page count with "~" while a still-building spine only yields an estimated total.
-    const char* estimatePrefix = pageCountEstimated ? "~" : "";
+    // Prefer book-global page numbers when the caller supplies them (EPUB reader);
+    // otherwise fall back to the values passed for the counter (TXT/XTC readers).
+    const bool useBookPages = bookTotalPages >= 0;
+    const int textCurrentPage = useBookPages ? bookCurrentPage : currentPage;
+    const int textTotalPages = useBookPages ? bookTotalPages : pageCount;
+    const bool totalIsEstimate = useBookPages ? bookTotalIsEstimate : pageCountEstimated;
 
     if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
-               bookProgress);
+      if (useBookPages) {
+        snprintf(progressStr, sizeof(progressStr), "%d/%s%d  %.0f%%", textCurrentPage, totalIsEstimate ? "~" : "",
+                 textTotalPages, bookProgress);
+      } else {
+        // Preserve the existing lazy-indexing format for a single section.
+        snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %.0f%%", totalIsEstimate ? "~" : "", textCurrentPage,
+                 textTotalPages, bookProgress);
+      }
     } else if (SETTINGS.statusBarBookProgressPercentage) {
       snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d", estimatePrefix, currentPage, pageCount);
+      if (useBookPages) {
+        snprintf(progressStr, sizeof(progressStr), "%d/%s%d", textCurrentPage, totalIsEstimate ? "~" : "",
+                 textTotalPages);
+      } else {
+        snprintf(progressStr, sizeof(progressStr), "%s%d/%d", totalIsEstimate ? "~" : "", textCurrentPage,
+                 textTotalPages);
+      }
     }
 
     int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);

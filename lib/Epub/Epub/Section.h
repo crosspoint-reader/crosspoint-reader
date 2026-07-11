@@ -78,6 +78,10 @@ class Section {
   std::unique_ptr<Page> loadPageDuringBuild(int page);
 
  public:
+  // Bump whenever the serialized pagination/cache contract changes. Derived
+  // caches such as BookPageMap include this epoch in their fingerprint.
+  static constexpr uint8_t CACHE_VERSION = 29;
+
   uint16_t pageCount = 0;
   int currentPage = 0;
 

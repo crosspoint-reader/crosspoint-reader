@@ -249,6 +249,9 @@ class CrossPointSettings {
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Whole-book "page X of Y": when on, the reader aggregates/persists per-section
+  // counts and estimates unknown sections. Default off -> chapter-local counts.
+  uint8_t smartCalculateTotalPages = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
