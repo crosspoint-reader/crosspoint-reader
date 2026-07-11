@@ -157,9 +157,14 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
 
   // Disarm immediately: an armed timer wake persists across sleep calls and would
   // carry over into startDeepSleep(), waking the device on USB power after 50 ms.
+  // gpio_wakeup_disable() clears only the wake-enable bit — the pin's LEVEL
+  // interrupt type survives it, and a leftover level type is live ammunition
+  // for any later-installed GPIO ISR service (slice-sleep wedge, candidate #1).
+  // Clear the type explicitly.
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   if (powerPin >= 0) {
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
+    gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
   }
 
   xSemaphoreGive(sleepMutex);
@@ -224,8 +229,11 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
 
   // Disarm everything armed above; an armed source persisting into
   // startDeepSleep() would wake the device on USB power (see lightSleep()).
+  // As in lightSleep(): also clear the LEVEL interrupt types, which
+  // gpio_wakeup_disable() leaves behind (slice-sleep wedge, candidate #1).
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   gpio_wakeup_disable(pin);
+  gpio_set_intr_type(pin, GPIO_INTR_DISABLE);
 
   xSemaphoreGive(sleepMutex);
 
