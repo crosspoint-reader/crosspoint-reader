@@ -216,6 +216,14 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   // loop gets scheduling windows to keep sampling the ADC-ladder buttons.
   const auto pin = static_cast<gpio_num_t>(busyPin);
   gpio_wakeup_enable(pin, busyLevel == HIGH ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+  // Also wake the instant the power button is pressed, so the main loop's poll
+  // sees even sub-slice taps mid-refresh (same rationale and safety argument
+  // as lightSleep(): the wake is an early poll, never a synthesized press).
+  const int8_t powerPin = BoardConfig::ACTIVE.input.power;
+  if (powerPin >= 0) {
+    gpio_wakeup_enable(static_cast<gpio_num_t>(powerPin),
+                       BoardConfig::ACTIVE.input.powerActiveHigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
+  }
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(BUSY_SLEEP_SLICE_MS) * 1000ULL);
 
@@ -234,6 +242,10 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
   gpio_wakeup_disable(pin);
   gpio_set_intr_type(pin, GPIO_INTR_DISABLE);
+  if (powerPin >= 0) {
+    gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
+    gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
+  }
 
   xSemaphoreGive(sleepMutex);
 
