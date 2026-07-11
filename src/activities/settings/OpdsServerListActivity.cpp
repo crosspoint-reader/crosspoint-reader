@@ -106,7 +106,7 @@ void OpdsServerListActivity::handleSelection() {
     };
     startActivityForResult(
         std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
-                                                 std::string(SETTINGS.opdsDownloadFolder), 63, InputType::Text),
+                                                std::string(SETTINGS.opdsDownloadFolder), 63, InputType::Text),
         folderHandler);
     return;
   }
