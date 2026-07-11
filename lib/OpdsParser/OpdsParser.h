@@ -13,6 +13,13 @@ enum class OpdsEntryType {
   BOOK         // Downloadable book
 };
 
+enum class OpdsAcquisitionType {
+  UNKNOWN,
+  EPUB,
+  XTC,
+  XTCH,
+};
+
 /**
  * Represents an entry from an OPDS feed (either a navigation link or a book).
  */
@@ -20,8 +27,9 @@ struct OpdsEntry {
   OpdsEntryType type = OpdsEntryType::NAVIGATION;
   std::string title;
   std::string author;  // Only for books
-  std::string href;    // Navigation URL or epub download URL
+  std::string href;    // Navigation URL or book download URL
   std::string id;
+  OpdsAcquisitionType acquisitionType = OpdsAcquisitionType::UNKNOWN;
 };
 
 // Legacy alias for backward compatibility
@@ -97,6 +105,7 @@ class OpdsParser final : public Print {
   XML_Parser parser = nullptr;
   std::vector<OpdsEntry> entries;
   OpdsEntry currentEntry;
+  std::vector<OpdsEntry> currentAcquisitionEntries;
   std::string currentText;
 
   // Parser state

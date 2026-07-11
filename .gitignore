@@ -12,6 +12,9 @@ build
 **/__pycache__/
 /compile_commands.json
 /.cache
+/managed_components/
+/sdkconfig.*
+!sdkconfig.defaults
 .history/
 /.venv
 *.local*

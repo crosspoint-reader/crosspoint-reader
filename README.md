@@ -139,6 +139,17 @@ Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` 
 - [Project scope](./SCOPE.md)
 - [Contributing docs](./docs/contributing/README.md)
 
+### OPDS download error codes
+
+When an OPDS book download fails, the device shows `Download failed` plus a short diagnostic code:
+
+- `error 2001`: HTTP transfer failed, including non-200 responses, redirect/open/read failures, incomplete bodies, or zero-byte downloads.
+- `error 2002`: File open/write failed on storage.
+- `error 2003`: Download was aborted.
+- `error 2099`: Unknown OPDS download error.
+
+When an HTTP status code is available for `error 2001`, it is appended to the code, for example `error 2001-403`.
+
 ---
 
 ## Development quick start
