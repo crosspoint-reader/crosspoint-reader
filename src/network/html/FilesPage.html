@@ -169,6 +169,27 @@
     .modal.picker-mode {
       max-width: 920px;
     }
+    .modal.image-preview-mode {
+      max-width: 640px;
+    }
+    .image-preview-stage {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: auto;
+      margin-bottom: 15px;
+      border-radius: 6px;
+    }
+    .image-preview-stage img {
+      max-width: 100%;
+      max-height: 65vh;
+      object-fit: contain;
+    }
+    #imagePreviewDownload {
+      display: inline-block;
+      width: auto;
+      text-decoration: none;
+    }
     .picker-columns.picker-active {
       display: flex;
       flex-direction: row;
@@ -1779,6 +1800,21 @@
   </div>
 </div>
 
+<!-- Image Preview Modal -->
+<div class="modal-overlay" id="imagePreviewModal">
+  <div class="modal image-preview-mode">
+    <button class="modal-close" onclick="closeImagePreview()">&times;</button>
+    <h3>🖼️ Preview</h3>
+    <div class="folder-form">
+      <p class="file-info"><strong id="imagePreviewName"></strong></p>
+      <div class="image-preview-stage">
+        <img id="imagePreviewImg" alt="">
+      </div>
+      <a id="imagePreviewDownload" class="move-btn-confirm" rel="noopener noreferrer" target="_blank" href="#">Download</a>
+    </div>
+  </div>
+</div>
+
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
@@ -1886,6 +1922,7 @@
           if (overlay.id === 'deleteModal') return closeDeleteModal();
           if (overlay.id === 'renameModal') return closeRenameModal();
           if (overlay.id === 'moveModal') return closeMoveModal();
+          if (overlay.id === 'imagePreviewModal') return closeImagePreview();
           overlay.classList.remove('open');
         }
       });
@@ -1998,8 +2035,13 @@
           // Checkbox cell + file row
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
-          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
-          fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
+          const fileIsImage = isImageFile(file.name);
+          fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : (fileIsImage ? '🖼️' : '📄')}</span>`;
+          if (fileIsImage) {
+            fileTableContent += `<a href="${downloadUrl(filePath)}" class="file-link image-preview-link">${escapeHtml(file.name)}</a>`;
+          } else {
+            fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="${downloadUrl(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
+          }
           fileTableContent += '</td>';
           fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
@@ -2015,6 +2057,30 @@
       fileTableContent += '</table>';
       fileTable.innerHTML = fileTableContent;
     }
+  }
+
+  // Image preview
+  function isImageFile(name) {
+    return /\.(png|jpe?g|bmp|gif|webp)$/i.test(name);
+  }
+
+  function downloadUrl(filePath) {
+    return `/download?path=${encodeURIComponent(filePath)}`;
+  }
+
+  function openImagePreview(url, name) {
+    const img = document.getElementById('imagePreviewImg');
+    document.getElementById('imagePreviewName').textContent = name;
+    img.src = url;
+    img.alt = name;
+    document.getElementById('imagePreviewDownload').href = url;
+    document.getElementById('imagePreviewModal').classList.add('open');
+  }
+
+  function closeImagePreview() {
+    document.getElementById('imagePreviewModal').classList.remove('open');
+    // Clear src to free the decoded image and avoid showing the stale one on reopen.
+    document.getElementById('imagePreviewImg').src = '';
   }
 
   // Modal functions
@@ -2892,6 +2958,14 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
+    // Delegated so it survives file-table re-renders (avoids inline onclick with untrusted names).
+    document.getElementById('file-table').addEventListener('click', function(e) {
+      const link = e.target.closest('.image-preview-link');
+      if (!link) return;
+      e.preventDefault();
+      openImagePreview(link.getAttribute('href'), link.textContent);
+    });
+
     const qualitySlider = document.getElementById('qualitySlider');
     const qualityInput = document.getElementById('qualityInput');
 

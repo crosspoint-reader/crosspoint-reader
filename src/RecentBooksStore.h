@@ -1,4 +1,7 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <string>
 #include <vector>
 
@@ -11,24 +14,21 @@ struct RecentBook {
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 
-class RecentBooksStore;
-namespace JsonSettingsIO {
-bool loadRecentBooks(RecentBooksStore& store, const char* json);
-}  // namespace JsonSettingsIO
-
-class RecentBooksStore {
-  // Static instance
-  static RecentBooksStore instance;
-
+class RecentBooksStore : public PersistableStore<RecentBooksStore> {
+ private:
   std::vector<RecentBook> recentBooks;
 
-  friend bool JsonSettingsIO::loadRecentBooks(RecentBooksStore&, const char*);
+  static constexpr int MAX_RECENT_BOOKS = 10;
 
- public:
+  RecentBooksStore() = default;
   ~RecentBooksStore() = default;
 
-  // Get singleton instance
-  static RecentBooksStore& getInstance() { return instance; }
+  friend class PersistableStore<RecentBooksStore>;
+
+ public:
+  static const char* getFilePath() { return "/.crosspoint/recent.json"; }
+  void toJson(JsonDocument& doc) const;
+  bool fromJson(JsonVariantConst doc);
 
   // Add a book to the recent list (moves to front if already exists)
   void addBook(const std::string& path, const std::string& title, const std::string& author,
@@ -61,13 +61,7 @@ class RecentBooksStore {
   // Get the count of recent books
   int getCount() const { return static_cast<int>(recentBooks.size()); }
 
-  bool saveToFile() const;
-
-  bool loadFromFile();
   RecentBook getDataFromBook(std::string path) const;
-
- private:
-  bool loadFromBinaryFile();
 };
 
 // Helper macro to access recent books store
