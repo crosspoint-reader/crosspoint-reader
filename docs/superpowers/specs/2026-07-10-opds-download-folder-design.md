@@ -73,10 +73,18 @@ Why this works:
   any entry whose `category == StrId::STR_NONE_OPT` → the field never appears in
   the generic device Settings screen.
 
-Note: this is expected to be the **first** `SettingType::STRING` entry actually
-present in `getSettingsList()`. The `stringOffset` save/load path in
-`JsonSettingsIO` exists but is currently dormant; implementation MUST verify the
-JSON round-trip end to end (write a value, reboot/reload, confirm it persists).
+Notes:
+- This is the **first** `getSettingsList()` entry to use the `stringOffset`
+  variant of `SettingInfo::String` (existing `DynamicString` entries use
+  `stringGetter/Setter` with `stringOffset == 0`, which the JsonSettingsIO
+  generic loop skips). The field is already read/written via the web API
+  (`CrossPointWebServer.cpp:1170` GET, `:1256` SET), but the **`settings.json`
+  file round-trip through JsonSettingsIO is untested** — implementation MUST
+  verify it end to end (write a value, reload, confirm it persists).
+- `JsonSettingsIO` skips any entry with `stringOffset == 0`
+  (`JsonSettingsIO.cpp:126`, `:185`). `opdsDownloadFolder` therefore must **not**
+  be the first member of `CrossPointSettings`; placing it mid-struct near the
+  other `opds*` fields (~line 237) satisfies this.
 
 ### 3. Edit UX — `OpdsServerListActivity`
 
@@ -89,7 +97,14 @@ only), keeping it in the OPDS area while remaining a single global value.
 - `handleSelection()`: when the new item is selected, open
   `KeyboardEntryActivity` (`InputType::Text`, prefilled with the current value,
   maxLen 63).
-- On keyboard confirm:
+- `KeyboardEntryActivity` has **no constructor callback**. It returns via
+  `setResult(KeyboardResult{...})` + `finish()` and is consumed through
+  `startActivityForResult(std::make_unique<KeyboardEntryActivity>(...), handler)`,
+  where the handler reads `std::get<KeyboardResult>(result.data)` and checks
+  `result.isCancelled` (established pattern at
+  `src/activities/settings/OpdsSettingsActivity.cpp:116-145`). The confirm logic
+  below MUST live inside that result handler.
+- On keyboard confirm (inside the result handler, when not cancelled):
   1. Normalize the input: trim; empty → `""` (root); otherwise ensure a single
      leading `/` and strip any trailing `/`.
   2. Copy into `SETTINGS.opdsDownloadFolder` (bounded `strncpy`, NUL-terminate).
@@ -104,7 +119,11 @@ and ensure it exists:
 ```cpp
 std::string folder = SETTINGS.opdsDownloadFolder;   // "" => SD root
 if (!folder.empty()) {
-  if (!Storage.mkdir(folder.c_str())) {             // pFlag=true => creates parents
+  // Guard with exists() first: mkdir's return-on-existing is not confirmed, and
+  // every existing caller (CrossPointWebServer.cpp:788, WebDAVHandler.cpp:472)
+  // checks exists() before mkdir. Without the guard, the 2nd+ download into a
+  // configured folder could log a false "mkdir failed" and redirect to root.
+  if (!Storage.exists(folder.c_str()) && !Storage.mkdir(folder.c_str())) {
     LOG_ERR("OPDS", "mkdir failed for %s, falling back to SD root", folder.c_str());
     folder.clear();                                 // never lose the download
   }
@@ -113,9 +132,16 @@ std::string filename = folder + "/" +
     StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
 ```
 
-`HalStorage::mkdir(path, pFlag=true)` creates parent directories, so nested
-folders (`/Books/SciFi`) are supported. On mkdir failure, fall back to SD root
-and still write the book (logged), rather than failing the download.
+`HalStorage::mkdir(path, pFlag=true)` is documented to create parent directories,
+so nested folders (`/Books/SciFi`) should be supported. **Both of these are
+unverified** because the `open-x4-sdk` submodule (where `SDCardManager::mkdir`
+lives) is not checked out in this workspace. Implementation MUST confirm, before
+relying on the above: (a) `mkdir` returns `true` (or is a no-op) for an existing
+directory, and (b) `pFlag=true` truly creates parents. If mkdir-on-existing
+returns `false`, the `exists()` guard above already covers it. A purpose-built
+idempotent helper `HalStorage::ensureDirectoryExists()` exists (`HalStorage.h:31`,
+currently zero callers) and may be used instead if it proves cleaner. On any
+failure, fall back to SD root and still write the book (logged).
 
 ### 5. i18n
 
@@ -138,8 +164,15 @@ Commit the YAML only; the three generated files are gitignored.
 - **Path sanitization**: normalize leading/trailing slashes on entry. Individual
   path segments are the user's responsibility; the existing
   `StringUtils::sanitizeFilename` still sanitizes the *filename*, not the folder.
-- **RAM**: +64 bytes DRAM in the settings struct; no per-download heap
-  allocation introduced.
+- **RAM**: +64 bytes permanent DRAM in the settings singleton. Section 4 adds a
+  transient `std::string folder` copy and one concatenation; negligible, and the
+  current code already heap-allocates the filename string. No RISC-V alignment
+  concern (plain `char[]`, byte access).
+- **"Hidden" scope**: the setting is hidden from the **on-device** Settings
+  screen only. `CrossPointWebServer::handleGetSettings()` does not filter by
+  category, so it WILL appear in the web settings API/page under an empty
+  ("None") category. This is acceptable (the value is legitimately a global
+  setting) and is called out here so it is not a surprise.
 
 ## Files Touched
 
