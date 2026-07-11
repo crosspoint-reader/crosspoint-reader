@@ -1346,6 +1346,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto tPrewarm = millis();
 
   const bool pageHasImages = page->hasImages();
+  const bool pageHasUncachedImages = pageHasImages && page->hasUncachedImages();
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   auto renderGrayscalePass = [&]() {
@@ -1355,6 +1356,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
     }
   };
+
+  if (pageHasUncachedImages) {
+    page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    renderStatusBar();
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    renderer.clearScreen();
+  }
 
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderStatusBar();

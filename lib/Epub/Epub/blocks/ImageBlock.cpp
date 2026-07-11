@@ -29,6 +29,23 @@ std::string getCachePath(const std::string& imagePath) {
   return imagePath + ".pxc";
 }
 
+bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
+                          uint16_t& cachedHeight) {
+  if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
+    return false;
+  }
+
+  const int widthDiff = abs(cachedWidth - expectedWidth);
+  const int heightDiff = abs(cachedHeight - expectedHeight);
+  if (widthDiff > 1 || heightDiff > 1) {
+    return false;
+  }
+
+  const size_t bytesPerRow = (cachedWidth + 3) / 4;
+  const size_t expectedSize = 4 + bytesPerRow * cachedHeight;
+  return cacheFile.size() >= expectedSize;
+}
+
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight) {
   HalFile cacheFile;
@@ -37,16 +54,8 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   }
 
   uint16_t cachedWidth, cachedHeight;
-  if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
-    return false;
-  }
-
-  // Verify dimensions are close (allow 1 pixel tolerance for rounding differences)
-  int widthDiff = abs(cachedWidth - expectedWidth);
-  int heightDiff = abs(cachedHeight - expectedHeight);
-  if (widthDiff > 1 || heightDiff > 1) {
-    LOG_ERR("IMG", "Cache dimension mismatch: %dx%d vs %dx%d", cachedWidth, cachedHeight, expectedWidth,
-            expectedHeight);
+  if (!readValidCacheHeader(cacheFile, expectedWidth, expectedHeight, cachedWidth, cachedHeight)) {
+    LOG_ERR("IMG", "Invalid image cache: %s", cachePath.c_str());
     return false;
   }
 
@@ -118,6 +127,17 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 }
 
 }  // namespace
+
+bool ImageBlock::hasValidCache() const {
+  const auto cachePath = getCachePath(imagePath);
+  HalFile cacheFile;
+  if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
+    return false;
+  }
+
+  uint16_t cachedWidth, cachedHeight;
+  return readValidCacheHeader(cacheFile, width, height, cachedWidth, cachedHeight);
+}
 
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
