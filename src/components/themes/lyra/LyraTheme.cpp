@@ -104,7 +104,8 @@ void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
   }
 }
 
-void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool titleIsUserContent) const {
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
 
   const bool showBatteryPercentage =
@@ -115,7 +116,18 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    Rect{batteryX, rect.y + 5, LyraMetrics::values.batteryWidth, LyraMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
-  int maxTitleWidth = title != nullptr ? renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD) : 0;
+  const int contentFallbackFontId = titleIsUserContent ? SETTINGS.getReaderFontId() : 0;
+  if (titleIsUserContent && title != nullptr) {
+    renderer.prepareContentTextFallback(UI_12_FONT_ID, contentFallbackFontId, title, EpdFontFamily::BOLD);
+  }
+
+  int maxTitleWidth = 0;
+  if (title != nullptr) {
+    maxTitleWidth = titleIsUserContent
+                        ? renderer.getContentTextWidth(UI_12_FONT_ID, contentFallbackFontId, title,
+                                                       EpdFontFamily::BOLD)
+                        : renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD);
+  }
   int maxSubtitleWidth =
       subtitle != nullptr ? renderer.getTextWidth(SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR) : 0;
 
@@ -138,10 +150,20 @@ void LyraTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   }
 
   if (title) {
-    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
-    renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
-                      rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
-                      EpdFontFamily::BOLD);
+    auto truncatedTitle =
+        titleIsUserContent
+            ? renderer.truncatedContentText(UI_12_FONT_ID, contentFallbackFontId, title, maxTitleWidth,
+                                            EpdFontFamily::BOLD)
+            : renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
+    if (titleIsUserContent) {
+      renderer.drawContentText(UI_12_FONT_ID, contentFallbackFontId, rect.x + LyraMetrics::values.contentSidePadding,
+                               rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
+                               EpdFontFamily::BOLD);
+    } else {
+      renderer.drawText(UI_12_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding,
+                        rect.y + LyraMetrics::values.batteryBarHeight + 3, truncatedTitle.c_str(), true,
+                        EpdFontFamily::BOLD);
+    }
     renderer.drawLine(rect.x, rect.y + rect.height - 3, rect.x + rect.width - 1, rect.y + rect.height - 3, 3, true);
   }
 
@@ -215,7 +237,7 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
                          const std::function<std::string(int index)>& rowValue, bool highlightValue,
-                         const std::function<bool(int index)>& rowDimmed) const {
+                         const std::function<bool(int index)>& rowDimmed, bool rowTextIsUserContent) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? LyraMetrics::values.listWithSubtitleRowHeight : LyraMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -255,6 +277,25 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
   // Draw all items
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
+  const int contentFallbackFontId = rowTextIsUserContent ? SETTINGS.getReaderFontId() : 0;
+  if (rowTextIsUserContent) {
+    std::string titleText;
+    std::string subtitleText;
+    titleText.reserve(256);
+    subtitleText.reserve(256);
+    for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
+      titleText += rowTitle(i);
+      titleText += '\n';
+      if (rowSubtitle != nullptr) {
+        subtitleText += rowSubtitle(i);
+        subtitleText += '\n';
+      }
+    }
+    renderer.prepareContentTextFallback(UI_10_FONT_ID, contentFallbackFontId, titleText.c_str());
+    if (rowSubtitle != nullptr) {
+      renderer.prepareContentTextFallback(SMALL_FONT_ID, contentFallbackFontId, subtitleText.c_str());
+    }
+  }
   int iconY = (rowSubtitle != nullptr) ? 16 : 10;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
@@ -271,12 +312,21 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     auto itemName = rowTitle(i);
-    auto item = renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
-    renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), true);
+    auto item = rowTextIsUserContent
+                    ? renderer.truncatedContentText(UI_10_FONT_ID, contentFallbackFontId, itemName.c_str(),
+                                                    rowTextWidth)
+                    : renderer.truncatedText(UI_10_FONT_ID, itemName.c_str(), rowTextWidth);
+    if (rowTextIsUserContent) {
+      renderer.drawContentText(UI_10_FONT_ID, contentFallbackFontId, textX, itemY + 7, item.c_str(), true);
+    } else {
+      renderer.drawText(UI_10_FONT_ID, textX, itemY + 7, item.c_str(), true);
+    }
 
     // Apply checkerboard dither to create gray text effect for dimmed items
     if (rowDimmed && rowDimmed(i) && i != selectedIndex) {
-      const int titleWidth = renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
+      const int titleWidth = rowTextIsUserContent
+                                 ? renderer.getContentTextWidth(UI_10_FONT_ID, contentFallbackFontId, item.c_str())
+                                 : renderer.getTextWidth(UI_10_FONT_ID, item.c_str());
       const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
       for (int py = itemY + 7; py < itemY + 7 + lineH; py++)
         for (int px = textX; px < textX + titleWidth; px++)
@@ -295,8 +345,15 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     if (rowSubtitle != nullptr) {
       // Draw subtitle
       std::string subtitleText = rowSubtitle(i);
-      auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-      renderer.drawText(SMALL_FONT_ID, textX, itemY + 30, subtitle.c_str(), true);
+      auto subtitle =
+          rowTextIsUserContent
+              ? renderer.truncatedContentText(SMALL_FONT_ID, contentFallbackFontId, subtitleText.c_str(), rowTextWidth)
+              : renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
+      if (rowTextIsUserContent) {
+        renderer.drawContentText(SMALL_FONT_ID, contentFallbackFontId, textX, itemY + 30, subtitle.c_str(), true);
+      } else {
+        renderer.drawText(SMALL_FONT_ID, textX, itemY + 30, subtitle.c_str(), true);
+      }
     }
 
     // Draw value
@@ -479,9 +536,17 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                hPaddingInSelection, cornerRadius, false, false, true, true, Color::LightGray);
     }
 
-    auto titleLines = renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), textWidth, 3, EpdFontFamily::BOLD);
+    const int contentFallbackFontId = SETTINGS.getReaderFontId();
+    renderer.prepareContentTextFallback(UI_12_FONT_ID, contentFallbackFontId, book.title.c_str(),
+                                        EpdFontFamily::BOLD);
+    if (!book.author.empty()) {
+      renderer.prepareContentTextFallback(UI_10_FONT_ID, contentFallbackFontId, book.author.c_str());
+    }
+    auto titleLines =
+        renderer.wrappedContentText(UI_12_FONT_ID, contentFallbackFontId, book.title.c_str(), textWidth, 3,
+                                    EpdFontFamily::BOLD);
 
-    auto author = renderer.truncatedText(UI_10_FONT_ID, book.author.c_str(), textWidth);
+    auto author = renderer.truncatedContentText(UI_10_FONT_ID, contentFallbackFontId, book.author.c_str(), textWidth);
     const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
     const int titleBlockHeight = titleLineHeight * static_cast<int>(titleLines.size());
     const int authorHeight = book.author.empty() ? 0 : (renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2);
@@ -489,12 +554,13 @@ void LyraTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     int titleY = tileY + tileHeight / 2 - totalBlockHeight / 2;
     const int textX = tileX + hPaddingInSelection + coverWidth + LyraMetrics::values.verticalSpacing;
     for (const auto& line : titleLines) {
-      renderer.drawText(UI_12_FONT_ID, textX, titleY, line.c_str(), true, EpdFontFamily::BOLD);
+      renderer.drawContentText(UI_12_FONT_ID, contentFallbackFontId, textX, titleY, line.c_str(), true,
+                               EpdFontFamily::BOLD);
       titleY += titleLineHeight;
     }
     if (!book.author.empty()) {
       titleY += renderer.getLineHeight(UI_10_FONT_ID) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, titleY, author.c_str(), true);
+      renderer.drawContentText(UI_10_FONT_ID, contentFallbackFontId, textX, titleY, author.c_str(), true);
     }
   } else {
     drawEmptyRecents(renderer, rect);

@@ -198,6 +198,22 @@ class GfxRenderer {
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  bool contentTextNeedsFallback(int primaryFontId, int fallbackFontId, const char* text,
+                                EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  void prepareContentTextFallback(int primaryFontId, int fallbackFontId, const char* text,
+                                  EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                                  BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
+                                  bool prewarmBitmaps = true) const;
+  int getContentTextWidth(int primaryFontId, int fallbackFontId, const char* text,
+                          EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                          BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  void drawCenteredContentText(int primaryFontId, int fallbackFontId, int y, const char* text, bool black = true,
+                               EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                               BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  void drawContentText(int primaryFontId, int fallbackFontId, int x, int y, const char* text, bool black = true,
+                       EpdFontFamily::Style style = EpdFontFamily::REGULAR,
+                       BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
@@ -210,11 +226,16 @@ class GfxRenderer {
   int getLineHeight(int fontId) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  std::string truncatedContentText(int primaryFontId, int fallbackFontId, const char* text, int maxWidth,
+                                   EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Word-wrap \p text into at most \p maxLines lines, each no wider than
   /// \p maxWidth pixels. Overflowing words and excess lines are UTF-8-safely
   /// truncated with an ellipsis (U+2026).
   std::vector<std::string> wrappedText(int fontId, const char* text, int maxWidth, int maxLines,
                                        EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
+  std::vector<std::string> wrappedContentText(int primaryFontId, int fallbackFontId, const char* text, int maxWidth,
+                                              int maxLines,
+                                              EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
 
   // Helper for drawing rotated text (90 degrees clockwise, for side buttons)
   void drawTextRotated90CW(int fontId, int x, int y, const char* text, bool black = true,

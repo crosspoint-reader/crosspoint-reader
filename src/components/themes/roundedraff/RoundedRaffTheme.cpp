@@ -47,7 +47,7 @@ void drawScrollBar(const GfxRenderer& renderer, Rect rect, int itemCount, int pa
 int coverWidth = 0;
 
 void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                                  const char* subtitle) const {
+                                  const char* subtitle, const bool titleIsUserContent) const {
   (void)subtitle;
   // Home screen header is custom-rendered in drawRecentBookCover.
   if (title == nullptr) {
@@ -74,8 +74,21 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   }
 
   const int maxTitleWidth = std::max(0, batteryGroupLeftX - 20 - titleX);
-  auto headerTitle = renderer.truncatedText(kTitleFontId, title, maxTitleWidth, EpdFontFamily::BOLD);
-  renderer.drawText(kTitleFontId, titleX, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
+  const int contentFallbackFontId = titleIsUserContent ? SETTINGS.getReaderFontId() : 0;
+  if (titleIsUserContent) {
+    renderer.prepareContentTextFallback(kTitleFontId, contentFallbackFontId, title, EpdFontFamily::BOLD);
+  }
+  auto headerTitle =
+      titleIsUserContent
+          ? renderer.truncatedContentText(kTitleFontId, contentFallbackFontId, title, maxTitleWidth,
+                                          EpdFontFamily::BOLD)
+          : renderer.truncatedText(kTitleFontId, title, maxTitleWidth, EpdFontFamily::BOLD);
+  if (titleIsUserContent) {
+    renderer.drawContentText(kTitleFontId, contentFallbackFontId, titleX, titleY, headerTitle.c_str(), true,
+                             EpdFontFamily::BOLD);
+  } else {
+    renderer.drawText(kTitleFontId, titleX, titleY, headerTitle.c_str(), true, EpdFontFamily::BOLD);
+  }
   drawBatteryRight(renderer,
                    Rect{batteryIconX, rect.y + 14, RoundedRaffMetrics::values.batteryWidth,
                         RoundedRaffMetrics::values.batteryHeight},
@@ -306,7 +319,7 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
                                 const std::function<std::string(int index)>& rowSubtitle,
                                 const std::function<UIIcon(int index)>& rowIcon,
                                 const std::function<std::string(int index)>& rowValue, bool highlightValue,
-                                const std::function<bool(int index)>& rowDimmed) const {
+                                const std::function<bool(int index)>& rowDimmed, bool rowTextIsUserContent) const {
   (void)rowIcon;
   (void)highlightValue;
   (void)rowDimmed;
@@ -326,6 +339,26 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
   const int rowX = rect.x + sidePadding;
   const int rowWidth = rect.width - sidePadding * 2;
+  const int contentFallbackFontId = rowTextIsUserContent ? SETTINGS.getReaderFontId() : 0;
+  if (rowTextIsUserContent) {
+    std::string titleText;
+    std::string subtitleText;
+    titleText.reserve(256);
+    subtitleText.reserve(256);
+    for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
+      titleText += rowTitle(i);
+      titleText += '\n';
+      if (hasSubtitle) {
+        subtitleText += rowSubtitle(i);
+        subtitleText += '\n';
+      }
+    }
+    renderer.prepareContentTextFallback(kTitleFontId, contentFallbackFontId, titleText.c_str(),
+                                        EpdFontFamily::BOLD);
+    if (hasSubtitle) {
+      renderer.prepareContentTextFallback(kSubtitleFontId, contentFallbackFontId, subtitleText.c_str());
+    }
+  }
 
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int rowY = rect.y + (i % pageItems) * rowStep;
@@ -353,28 +386,57 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
 
     if (hasSubtitle) {
       const std::string subtitleRaw = rowSubtitle(i);
-      auto title = renderer.truncatedText(kTitleFontId, rowTitle(i).c_str(), textAreaWidth, EpdFontFamily::BOLD);
+      auto title =
+          rowTextIsUserContent
+              ? renderer.truncatedContentText(kTitleFontId, contentFallbackFontId, rowTitle(i).c_str(), textAreaWidth,
+                                              EpdFontFamily::BOLD)
+              : renderer.truncatedText(kTitleFontId, rowTitle(i).c_str(), textAreaWidth, EpdFontFamily::BOLD);
 
       if (subtitleRaw.empty()) {
         // If there is no subtitle/author, center title vertically in the full row.
         const int centeredTitleY = rowY + (rowHeight - titleLineHeight) / 2;
-        renderer.drawText(kTitleFontId, rowX + kInteractiveInsetX, centeredTitleY, title.c_str(), !isSelected,
-                          EpdFontFamily::BOLD);
+        if (rowTextIsUserContent) {
+          renderer.drawContentText(kTitleFontId, contentFallbackFontId, rowX + kInteractiveInsetX, centeredTitleY,
+                                   title.c_str(), !isSelected, EpdFontFamily::BOLD);
+        } else {
+          renderer.drawText(kTitleFontId, rowX + kInteractiveInsetX, centeredTitleY, title.c_str(), !isSelected,
+                            EpdFontFamily::BOLD);
+        }
       } else {
         const int titleY = rowY + subtitleTopPadding;
         const int subtitleY = titleY + titleLineHeight + subtitleInterLineGap;
         auto subtitle =
-            renderer.truncatedText(kSubtitleFontId, subtitleRaw.c_str(), textAreaWidth, EpdFontFamily::REGULAR);
-        renderer.drawText(kTitleFontId, rowX + kInteractiveInsetX, titleY, title.c_str(), !isSelected,
-                          EpdFontFamily::BOLD);
-        renderer.drawText(kSubtitleFontId, rowX + kInteractiveInsetX, subtitleY, subtitle.c_str(), !isSelected,
-                          EpdFontFamily::REGULAR);
+            rowTextIsUserContent
+                ? renderer.truncatedContentText(kSubtitleFontId, contentFallbackFontId, subtitleRaw.c_str(),
+                                                textAreaWidth, EpdFontFamily::REGULAR)
+                : renderer.truncatedText(kSubtitleFontId, subtitleRaw.c_str(), textAreaWidth,
+                                         EpdFontFamily::REGULAR);
+        if (rowTextIsUserContent) {
+          renderer.drawContentText(kTitleFontId, contentFallbackFontId, rowX + kInteractiveInsetX, titleY,
+                                   title.c_str(), !isSelected, EpdFontFamily::BOLD);
+          renderer.drawContentText(kSubtitleFontId, contentFallbackFontId, rowX + kInteractiveInsetX, subtitleY,
+                                   subtitle.c_str(), !isSelected, EpdFontFamily::REGULAR);
+        } else {
+          renderer.drawText(kTitleFontId, rowX + kInteractiveInsetX, titleY, title.c_str(), !isSelected,
+                            EpdFontFamily::BOLD);
+          renderer.drawText(kSubtitleFontId, rowX + kInteractiveInsetX, subtitleY, subtitle.c_str(), !isSelected,
+                            EpdFontFamily::REGULAR);
+        }
       }
     } else {
-      auto title = renderer.truncatedText(kTitleFontId, rowTitle(i).c_str(), textAreaWidth, EpdFontFamily::BOLD);
-      renderer.drawText(kTitleFontId, rowX + kInteractiveInsetX,
-                        rowY + (rowHeight - renderer.getLineHeight(kTitleFontId)) / 2, title.c_str(), !isSelected,
-                        EpdFontFamily::BOLD);
+      auto title =
+          rowTextIsUserContent
+              ? renderer.truncatedContentText(kTitleFontId, contentFallbackFontId, rowTitle(i).c_str(), textAreaWidth,
+                                              EpdFontFamily::BOLD)
+              : renderer.truncatedText(kTitleFontId, rowTitle(i).c_str(), textAreaWidth, EpdFontFamily::BOLD);
+      const int titleY = rowY + (rowHeight - renderer.getLineHeight(kTitleFontId)) / 2;
+      if (rowTextIsUserContent) {
+        renderer.drawContentText(kTitleFontId, contentFallbackFontId, rowX + kInteractiveInsetX, titleY,
+                                 title.c_str(), !isSelected, EpdFontFamily::BOLD);
+      } else {
+        renderer.drawText(kTitleFontId, rowX + kInteractiveInsetX, titleY, title.c_str(), !isSelected,
+                          EpdFontFamily::BOLD);
+      }
     }
   }
 

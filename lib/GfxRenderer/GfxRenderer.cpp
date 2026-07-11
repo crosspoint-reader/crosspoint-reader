@@ -8,17 +8,25 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "FontCacheManager.h"
 
 namespace {
 
-/**
- * Resolves the requested style to the best available style in the given SD card font.
- * Falls back gracefully when the font lacks the requested variant.
- */
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
   return font.resolveStyle(static_cast<uint8_t>(style));
+}
+
+uint8_t styleMaskFor(const EpdFontFamily::Style style) {
+  return static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
+}
+
+bool isHebrewNiqqud(const uint32_t cp) { return cp >= 0x0591 && cp <= 0x05C7; }
+
+int32_t glyphAdvance(const EpdFontFamily& font, const uint32_t cp, const EpdFontFamily::Style style) {
+  const EpdGlyph* glyph = font.getGlyph(cp, style);
+  return glyph ? glyph->advanceX : 0;
 }
 }  // namespace
 
@@ -465,6 +473,246 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, lastBaseX, yPos, black, style);
     }
     prevCp = cp;
+  }
+}
+
+bool GfxRenderer::contentTextNeedsFallback(const int primaryFontId, const int fallbackFontId, const char* text,
+                                           const EpdFontFamily::Style style,
+                                           const BidiUtils::BidiBaseDir baseDir) const {
+  if (text == nullptr || *text == '\0' || fallbackFontId == 0 || fallbackFontId == primaryFontId) {
+    return false;
+  }
+
+  const auto primaryIt = fontMap.find(primaryFontId);
+  const auto fallbackIt = fontMap.find(fallbackFontId);
+  const auto sdIt = sdCardFonts_.find(fallbackFontId);
+  if (primaryIt == fontMap.end() || fallbackIt == fontMap.end() || sdIt == sdCardFonts_.end() || !sdIt->second) {
+    return false;
+  }
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+
+  const char* textCursor = renderedText;
+  while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor))) {
+    if (isHebrewNiqqud(cp)) continue;
+    if (primaryIt->second.hasGlyph(cp, style)) continue;
+    if (sdIt->second->hasGlyph(cp, static_cast<uint8_t>(style))) return true;
+  }
+  return false;
+}
+
+void GfxRenderer::prepareContentTextFallback(const int primaryFontId, const int fallbackFontId, const char* text,
+                                             const EpdFontFamily::Style style,
+                                             const BidiUtils::BidiBaseDir baseDir, const bool prewarmBitmaps) const {
+  if (text == nullptr || *text == '\0' || fallbackFontId == 0 || fallbackFontId == primaryFontId) {
+    return;
+  }
+
+  const auto primaryIt = fontMap.find(primaryFontId);
+  const auto fallbackIt = fontMap.find(fallbackFontId);
+  const auto sdIt = sdCardFonts_.find(fallbackFontId);
+  if (primaryIt == fontMap.end() || fallbackIt == fontMap.end() || sdIt == sdCardFonts_.end() || !sdIt->second) {
+    return;
+  }
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+  std::string fallbackText;
+  fallbackText.reserve(strlen(renderedText));
+
+  const char* textCursor = renderedText;
+  while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor))) {
+    if (isHebrewNiqqud(cp)) continue;
+    if (primaryIt->second.hasGlyph(cp, style)) continue;
+    if (!sdIt->second->hasGlyph(cp, static_cast<uint8_t>(style))) continue;
+    utf8AppendCodepoint(cp, fallbackText);
+  }
+
+  if (fallbackText.empty()) return;
+
+  const uint8_t styleMask = styleMaskFor(style);
+  ensureSdCardFontReady(fallbackFontId, fallbackText.c_str(), styleMask);
+  if (prewarmBitmaps && fontCacheManager_ && !fontCacheManager_->isScanning()) {
+    fontCacheManager_->prewarmCache(fallbackFontId, fallbackText.c_str(), styleMask);
+  }
+}
+
+int GfxRenderer::getContentTextWidth(const int primaryFontId, const int fallbackFontId, const char* text,
+                                     const EpdFontFamily::Style style,
+                                     const BidiUtils::BidiBaseDir baseDir) const {
+  if (text == nullptr || *text == '\0') {
+    return 0;
+  }
+  if (!contentTextNeedsFallback(primaryFontId, fallbackFontId, text, style, baseDir)) {
+    return getTextWidth(primaryFontId, text, style, baseDir);
+  }
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+  prepareContentTextFallback(primaryFontId, fallbackFontId, renderedText, style, BidiUtils::BidiBaseDir::LTR, false);
+
+  const auto primaryIt = fontMap.find(primaryFontId);
+  const auto fallbackIt = fontMap.find(fallbackFontId);
+  const auto sdIt = sdCardFonts_.find(fallbackFontId);
+  if (primaryIt == fontMap.end() || fallbackIt == fontMap.end() || sdIt == sdCardFonts_.end() || !sdIt->second) {
+    return getTextWidth(primaryFontId, renderedText, style, BidiUtils::BidiBaseDir::LTR);
+  }
+
+  const auto& primaryFont = primaryIt->second;
+  const auto& fallbackFont = fallbackIt->second;
+  const auto* fallbackSdFont = sdIt->second;
+  const uint8_t fallbackStyle = fallbackSdFont->resolveStyle(static_cast<uint8_t>(style));
+
+  int widthPx = 0;
+  int32_t prevAdvanceFP = 0;
+  uint32_t prevCp = 0;
+  int prevFontId = 0;
+
+  const char* textCursor = renderedText;
+  while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor))) {
+    if (isHebrewNiqqud(cp) || utf8IsCombiningMark(cp)) {
+      continue;
+    }
+
+    const EpdFontFamily* font = &primaryFont;
+    int fontId = primaryFontId;
+    bool useFallback = false;
+
+    if (primaryFont.hasGlyph(cp, style)) {
+      const char* ligatureCursor = textCursor;
+      const uint32_t ligatureCp = primaryFont.applyLigatures(cp, ligatureCursor, style);
+      if (ligatureCp != cp && primaryFont.hasGlyph(ligatureCp, style)) {
+        cp = ligatureCp;
+        textCursor = ligatureCursor;
+      }
+    } else if (fallbackSdFont->hasGlyph(cp, static_cast<uint8_t>(style))) {
+      font = &fallbackFont;
+      fontId = fallbackFontId;
+      useFallback = true;
+    }
+
+    if (prevCp != 0) {
+      const int kernFP = (prevFontId == fontId && !useFallback) ? font->getKerning(prevCp, cp, style) : 0;
+      widthPx += fp4::toPixel(prevAdvanceFP + kernFP);
+    }
+
+    if (useFallback) {
+      prevAdvanceFP = fallbackSdFont->getAdvance(cp, fallbackStyle);
+      if (prevAdvanceFP == 0) prevAdvanceFP = glyphAdvance(fallbackFont, cp, style);
+    } else {
+      prevAdvanceFP = glyphAdvance(primaryFont, cp, style);
+    }
+    if ((style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+      prevAdvanceFP = (prevAdvanceFP + 1) / 2;
+    }
+    prevCp = cp;
+    prevFontId = fontId;
+  }
+
+  widthPx += fp4::toPixel(prevAdvanceFP);
+  return widthPx;
+}
+
+void GfxRenderer::drawCenteredContentText(const int primaryFontId, const int fallbackFontId, const int y,
+                                          const char* text, const bool black, const EpdFontFamily::Style style,
+                                          const BidiUtils::BidiBaseDir baseDir) const {
+  const int x = (getScreenWidth() - getContentTextWidth(primaryFontId, fallbackFontId, text, style, baseDir)) / 2;
+  drawContentText(primaryFontId, fallbackFontId, x, y, text, black, style, baseDir);
+}
+
+void GfxRenderer::drawContentText(const int primaryFontId, const int fallbackFontId, const int x, const int y,
+                                  const char* text, const bool black, const EpdFontFamily::Style style,
+                                  const BidiUtils::BidiBaseDir baseDir) const {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+  if (!contentTextNeedsFallback(primaryFontId, fallbackFontId, text, style, baseDir)) {
+    drawText(primaryFontId, x, y, text, black, style, baseDir);
+    return;
+  }
+
+  std::string visual;
+  const char* renderedText = resolveVisualText(text, visual, baseDir);
+
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(renderedText, primaryFontId, style);
+    return;
+  }
+
+  const auto primaryIt = fontMap.find(primaryFontId);
+  const auto fallbackIt = fontMap.find(fallbackFontId);
+  const auto sdIt = sdCardFonts_.find(fallbackFontId);
+  if (primaryIt == fontMap.end() || fallbackIt == fontMap.end() || sdIt == sdCardFonts_.end() || !sdIt->second) {
+    drawText(primaryFontId, x, y, renderedText, black, style, BidiUtils::BidiBaseDir::LTR);
+    return;
+  }
+
+  const auto& primaryFont = primaryIt->second;
+  const auto& fallbackFont = fallbackIt->second;
+  const auto* fallbackSdFont = sdIt->second;
+  const int yPos = y + getFontAscenderSize(primaryFontId);
+  int lastBaseX = x;
+  int lastBaseLeft = 0;
+  int lastBaseWidth = 0;
+  int lastBaseTop = 0;
+  int32_t prevAdvanceFP = 0;
+  uint32_t prevCp = 0;
+  int prevFontId = 0;
+
+  const char* textCursor = renderedText;
+  while (uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&textCursor))) {
+    if (isHebrewNiqqud(cp)) {
+      continue;
+    }
+
+    const EpdFontFamily* font = &primaryFont;
+    int fontId = primaryFontId;
+    bool useFallback = false;
+
+    if (utf8IsCombiningMark(cp)) {
+      const EpdGlyph* combiningGlyph = font->getGlyph(cp, style);
+      if (!combiningGlyph) continue;
+      const int raiseBy = combiningMark::raiseAboveBase(combiningGlyph->top, combiningGlyph->height, lastBaseTop);
+      const int combiningX = combiningMark::centerOver(lastBaseX, lastBaseLeft, lastBaseWidth, combiningGlyph->left,
+                                                       combiningGlyph->width);
+      renderCharImpl<TextRotation::None>(*this, renderMode, *font, cp, combiningX, yPos - raiseBy, black, style);
+      continue;
+    }
+
+    if (primaryFont.hasGlyph(cp, style)) {
+      const char* ligatureCursor = textCursor;
+      const uint32_t ligatureCp = primaryFont.applyLigatures(cp, ligatureCursor, style);
+      if (ligatureCp != cp && primaryFont.hasGlyph(ligatureCp, style)) {
+        cp = ligatureCp;
+        textCursor = ligatureCursor;
+      }
+    } else if (fallbackSdFont->hasGlyph(cp, static_cast<uint8_t>(style))) {
+      font = &fallbackFont;
+      fontId = fallbackFontId;
+      useFallback = true;
+    }
+
+    if (prevCp != 0) {
+      const int kernFP = (prevFontId == fontId && !useFallback) ? font->getKerning(prevCp, cp, style) : 0;
+      lastBaseX += fp4::toPixel(prevAdvanceFP + kernFP);
+    }
+
+    const EpdGlyph* glyph = font->getGlyph(cp, style);
+    lastBaseLeft = glyph ? glyph->left : 0;
+    lastBaseWidth = glyph ? glyph->width : 0;
+    lastBaseTop = glyph ? glyph->top : 0;
+    prevAdvanceFP = glyph ? glyph->advanceX : 0;
+
+    const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
+    if (isSupSub) {
+      prevAdvanceFP = (prevAdvanceFP + 1) / 2;
+      renderCharScaled(*this, renderMode, *font, cp, lastBaseX, yPos, black, style);
+    } else {
+      renderCharImpl<TextRotation::None>(*this, renderMode, *font, cp, lastBaseX, yPos, black, style);
+    }
+    prevCp = cp;
+    prevFontId = fontId;
   }
 }
 
@@ -1389,6 +1637,25 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   return item.empty() ? ellipsis : item + ellipsis;
 }
 
+std::string GfxRenderer::truncatedContentText(const int primaryFontId, const int fallbackFontId, const char* text,
+                                              const int maxWidth, const EpdFontFamily::Style style) const {
+  if (!text || maxWidth <= 0) return "";
+
+  std::string item = text;
+  const char* ellipsis = "\xe2\x80\xa6";
+  int textWidth = getContentTextWidth(primaryFontId, fallbackFontId, item.c_str(), style);
+  if (textWidth <= maxWidth) {
+    return item;
+  }
+
+  while (!item.empty() && getContentTextWidth(primaryFontId, fallbackFontId, (item + ellipsis).c_str(), style) >=
+                              maxWidth) {
+    utf8RemoveLastChar(item);
+  }
+
+  return item.empty() ? ellipsis : item + ellipsis;
+}
+
 std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* text, const int maxWidth,
                                                   const int maxLines, const EpdFontFamily::Style style) const {
   std::vector<std::string> lines;
@@ -1441,6 +1708,62 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
         // splitting rules (different between languages). Results in an aesthetically
         // pleasing end.
         lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
+        return lines;
+      }
+    }
+  }
+
+  if (!currentLine.empty() && static_cast<int>(lines.size()) < maxLines) {
+    lines.push_back(currentLine);
+  }
+
+  return lines;
+}
+
+std::vector<std::string> GfxRenderer::wrappedContentText(const int primaryFontId, const int fallbackFontId,
+                                                         const char* text, const int maxWidth, const int maxLines,
+                                                         const EpdFontFamily::Style style) const {
+  std::vector<std::string> lines;
+
+  if (!text || maxWidth <= 0 || maxLines <= 0) return lines;
+
+  std::string remaining = text;
+  std::string currentLine;
+
+  while (!remaining.empty()) {
+    if (static_cast<int>(lines.size()) == maxLines - 1) {
+      std::string lastContent = currentLine.empty() ? remaining : currentLine + " " + remaining;
+      lines.push_back(truncatedContentText(primaryFontId, fallbackFontId, lastContent.c_str(), maxWidth, style));
+      return lines;
+    }
+
+    size_t spacePos = remaining.find(' ');
+    std::string word;
+
+    if (spacePos == std::string::npos) {
+      word = remaining;
+      remaining.clear();
+    } else {
+      word = remaining.substr(0, spacePos);
+      remaining.erase(0, spacePos + 1);
+    }
+
+    std::string testLine = currentLine.empty() ? word : currentLine + " " + word;
+
+    if (getContentTextWidth(primaryFontId, fallbackFontId, testLine.c_str(), style) <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (!currentLine.empty()) {
+        lines.push_back(currentLine);
+        if (getContentTextWidth(primaryFontId, fallbackFontId, word.c_str(), style) > maxWidth) {
+          lines.push_back(truncatedContentText(primaryFontId, fallbackFontId, word.c_str(), maxWidth, style));
+          currentLine.clear();
+          if (static_cast<int>(lines.size()) >= maxLines) return lines;
+        } else {
+          currentLine = word;
+        }
+      } else {
+        lines.push_back(truncatedContentText(primaryFontId, fallbackFontId, word.c_str(), maxWidth, style));
         return lines;
       }
     }

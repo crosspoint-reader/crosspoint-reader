@@ -55,6 +55,10 @@ class SdCardFont {
   // Returns the 12.4 fixed-point advance, or 0 if not found.
   uint16_t getAdvance(uint32_t codepoint, uint8_t style) const;
 
+  // Returns true only when the loaded .cpfont contains a real glyph for the codepoint.
+  // This uses the resident interval table and does not read bitmap data from SD.
+  bool hasGlyph(uint32_t codepoint, uint8_t style = 0) const;
+
   // Returns true if advance table is populated for at least one style.
   bool hasAdvanceTable() const;
 

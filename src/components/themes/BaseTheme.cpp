@@ -260,7 +260,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
                          const std::function<std::string(int index)>& rowValue, bool highlightValue,
-                         const std::function<bool(int index)>& rowDimmed) const {
+                         const std::function<bool(int index)>& rowDimmed, bool rowTextIsUserContent) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
@@ -300,6 +300,26 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
   // Draw all items
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
+  const int contentFallbackFontId = rowTextIsUserContent ? SETTINGS.getReaderFontId() : 0;
+  if (rowTextIsUserContent) {
+    std::string titleText;
+    std::string subtitleText;
+    titleText.reserve(256);
+    subtitleText.reserve(256);
+    for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
+      titleText += rowTitle(i);
+      titleText += '\n';
+      if (rowSubtitle != nullptr) {
+        subtitleText += rowSubtitle(i);
+        subtitleText += '\n';
+      }
+    }
+    renderer.prepareContentTextFallback(UI_10_FONT_ID, contentFallbackFontId, titleText.c_str());
+    if (rowSubtitle != nullptr) {
+      renderer.prepareContentTextFallback(SMALL_FONT_ID, contentFallbackFontId, subtitleText.c_str());
+    }
+  }
+
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
 
@@ -317,12 +337,22 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     auto itemName = rowTitle(i);
     auto font = UI_10_FONT_ID;
-    auto item = renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
-    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), i != selectedIndex);
+    auto item = rowTextIsUserContent
+                    ? renderer.truncatedContentText(font, contentFallbackFontId, itemName.c_str(), rowTextWidth)
+                    : renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
+    if (rowTextIsUserContent) {
+      renderer.drawContentText(font, contentFallbackFontId, rect.x + BaseMetrics::values.contentSidePadding, itemY,
+                               item.c_str(), i != selectedIndex);
+    } else {
+      renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(),
+                        i != selectedIndex);
+    }
 
     // Apply checkerboard dither to create gray text effect for dimmed items
     if (rowDimmed && rowDimmed(i) && i != selectedIndex) {
-      const int titleWidth = renderer.getTextWidth(font, item.c_str());
+      const int titleWidth = rowTextIsUserContent
+                                 ? renderer.getContentTextWidth(font, contentFallbackFontId, item.c_str())
+                                 : renderer.getTextWidth(font, item.c_str());
       const int lineH = renderer.getLineHeight(font);
       const int tx = rect.x + BaseMetrics::values.contentSidePadding;
       for (int py = itemY; py < itemY + lineH; py++)
@@ -333,9 +363,19 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     if (rowSubtitle != nullptr) {
       std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
-        auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 22, subtitle.c_str(),
-                          i != selectedIndex);
+        auto subtitle =
+            rowTextIsUserContent
+                ? renderer.truncatedContentText(SMALL_FONT_ID, contentFallbackFontId, subtitleText.c_str(),
+                                                rowTextWidth)
+                : renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
+        if (rowTextIsUserContent) {
+          renderer.drawContentText(SMALL_FONT_ID, contentFallbackFontId,
+                                   rect.x + BaseMetrics::values.contentSidePadding, itemY + 22, subtitle.c_str(),
+                                   i != selectedIndex);
+        } else {
+          renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 22,
+                            subtitle.c_str(), i != selectedIndex);
+        }
       }
     }
 
@@ -351,7 +391,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   }
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const bool titleIsUserContent) const {
   // Hide last battery draw
   constexpr int maxBatteryWidth = 80;
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
@@ -367,10 +408,22 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
 
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
-    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
-                                                 rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
-                                                 EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+    const int maxTitleWidth = rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2;
+    const int contentFallbackFontId = titleIsUserContent ? SETTINGS.getReaderFontId() : 0;
+    if (titleIsUserContent) {
+      renderer.prepareContentTextFallback(UI_12_FONT_ID, contentFallbackFontId, title, EpdFontFamily::BOLD);
+    }
+    auto truncatedTitle =
+        titleIsUserContent
+            ? renderer.truncatedContentText(UI_12_FONT_ID, contentFallbackFontId, title, maxTitleWidth,
+                                            EpdFontFamily::BOLD)
+            : renderer.truncatedText(UI_12_FONT_ID, title, maxTitleWidth, EpdFontFamily::BOLD);
+    if (titleIsUserContent) {
+      renderer.drawCenteredContentText(UI_12_FONT_ID, contentFallbackFontId, rect.y + 5, truncatedTitle.c_str(), true,
+                                       EpdFontFamily::BOLD);
+    } else {
+      renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+    }
   }
 
   if (subtitle) {
@@ -577,12 +630,20 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   if (hasContinueReading) {
     const std::string& lastBookTitle = recentBooks[0].title;
     const std::string& lastBookAuthor = recentBooks[0].author;
+    const int contentFallbackFontId = SETTINGS.getReaderFontId();
+    renderer.prepareContentTextFallback(UI_12_FONT_ID, contentFallbackFontId, lastBookTitle.c_str(),
+                                        EpdFontFamily::BOLD);
+    if (!lastBookAuthor.empty()) {
+      renderer.prepareContentTextFallback(UI_10_FONT_ID, contentFallbackFontId, lastBookAuthor.c_str());
+    }
 
     // Invert text colors based on selection state:
     // - With cover: selected = white text on black box, unselected = black text on white box
     // - Without cover: selected = white text on black card, unselected = black text on white card
 
-    auto lines = renderer.wrappedText(UI_12_FONT_ID, lastBookTitle.c_str(), bookWidth - 40, 3);
+    auto lines =
+        renderer.wrappedContentText(UI_12_FONT_ID, contentFallbackFontId, lastBookTitle.c_str(), bookWidth - 40, 3,
+                                    EpdFontFamily::BOLD);
 
     // Book title text
     int totalTextHeight = renderer.getLineHeight(UI_12_FONT_ID) * static_cast<int>(lines.size());
@@ -595,7 +656,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
     const auto truncatedAuthor = lastBookAuthor.empty()
                                      ? std::string{}
-                                     : renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40);
+                                     : renderer.truncatedContentText(UI_10_FONT_ID, contentFallbackFontId,
+                                                                     lastBookAuthor.c_str(), bookWidth - 40);
 
     // If cover image was rendered, draw box behind title and author
     if (coverRendered) {
@@ -603,13 +665,15 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       // Calculate the max text width for the box
       int maxTextWidth = 0;
       for (const auto& line : lines) {
-        const int lineWidth = renderer.getTextWidth(UI_12_FONT_ID, line.c_str());
+        const int lineWidth =
+            renderer.getContentTextWidth(UI_12_FONT_ID, contentFallbackFontId, line.c_str(), EpdFontFamily::BOLD);
         if (lineWidth > maxTextWidth) {
           maxTextWidth = lineWidth;
         }
       }
       if (!truncatedAuthor.empty()) {
-        const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
+        const int authorWidth = renderer.getContentTextWidth(UI_10_FONT_ID, contentFallbackFontId,
+                                                             truncatedAuthor.c_str());
         if (authorWidth > maxTextWidth) {
           maxTextWidth = authorWidth;
         }
@@ -627,13 +691,15 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     }
 
     for (const auto& line : lines) {
-      renderer.drawCenteredText(UI_12_FONT_ID, titleYStart, line.c_str(), !bookSelected);
+      renderer.drawCenteredContentText(UI_12_FONT_ID, contentFallbackFontId, titleYStart, line.c_str(), !bookSelected,
+                                       EpdFontFamily::BOLD);
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
     if (!truncatedAuthor.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !bookSelected);
+      renderer.drawCenteredContentText(UI_10_FONT_ID, contentFallbackFontId, titleYStart, truncatedAuthor.c_str(),
+                                       !bookSelected);
     }
 
     // "Continue Reading" label at the bottom

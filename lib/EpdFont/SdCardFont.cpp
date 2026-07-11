@@ -1089,6 +1089,13 @@ uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
   return 0;
 }
 
+bool SdCardFont::hasGlyph(const uint32_t codepoint, uint8_t style) const {
+  if (!loaded_) return false;
+  style = resolveStyle(style);
+  if (style >= MAX_STYLES || !styles_[style].present) return false;
+  return findGlobalGlyphIndex(styles_[style], codepoint) >= 0;
+}
+
 // Given a sorted array of unique codepoints, resolve glyph indices per style,
 // batch-read advanceX from SD, and merge into the persistent advance table.
 // Caller owns the codepoints buffer.

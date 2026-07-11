@@ -87,8 +87,12 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
       int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
 
       const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
+      const int contentFallbackFontId = SETTINGS.getReaderFontId();
+      renderer.prepareContentTextFallback(SMALL_FONT_ID, contentFallbackFontId, recentBooks[i].title.c_str());
 
-      auto titleLines = renderer.wrappedText(SMALL_FONT_ID, recentBooks[i].title.c_str(), maxLineWidth, 3);
+      auto titleLines =
+          renderer.wrappedContentText(SMALL_FONT_ID, contentFallbackFontId, recentBooks[i].title.c_str(), maxLineWidth,
+                                      3);
 
       const int titleLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
       const int dynamicBlockHeight = static_cast<int>(titleLines.size()) * titleLineHeight;
@@ -110,7 +114,8 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
 
       int currentY = tileY + Lyra3CoversMetrics::values.homeCoverHeight + hPaddingInSelection + 5;
       for (const auto& line : titleLines) {
-        renderer.drawText(SMALL_FONT_ID, tileX + hPaddingInSelection, currentY, line.c_str(), true);
+        renderer.drawContentText(SMALL_FONT_ID, contentFallbackFontId, tileX + hPaddingInSelection, currentY,
+                                 line.c_str(), true);
         currentY += titleLineHeight;
       }
     }

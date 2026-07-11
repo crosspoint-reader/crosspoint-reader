@@ -5,6 +5,7 @@
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
+#include "lib/Utf8/Utf8.h"
 
 // ============================================================================
 // Synthetic test font
@@ -76,10 +77,51 @@ const EpdFontData kTestFontData = {
   .glyphMissHandler  = nullptr,
   .glyphMissCtx      = nullptr,
 };
+
+const EpdGlyph kReplacementGlyphs[] = {
+  // idx  width  height  advanceX  left  top  dataLength  dataOffset
+  /* 0 'A'    */ { 6, 8, 112, 0, 8, 0, 0 },
+  /* 1 U+FFFD */ { 7, 8, 128, 0, 8, 0, 0 },
+};
+
+const EpdUnicodeInterval kReplacementIntervals[] = {
+  { 0x41, 0x41, 0 },                          // 'A' -> glyph[0]
+  { REPLACEMENT_GLYPH, REPLACEMENT_GLYPH, 1 }, // U+FFFD -> glyph[1]
+};
+
+const EpdFontData kReplacementFontData = {
+  .bitmap            = nullptr,
+  .glyph             = kReplacementGlyphs,
+  .intervals         = kReplacementIntervals,
+  .intervalCount     = 2,
+  .advanceY          = 16,
+  .ascender          = 12,
+  .descender         = 0,
+  .is2Bit            = false,
+  .groups            = nullptr,
+  .groupCount        = 0,
+  .glyphToGroup      = nullptr,
+  .kernLeftClasses   = nullptr,
+  .kernRightClasses  = nullptr,
+  .kernMatrix        = nullptr,
+  .kernLeftEntryCount  = 0,
+  .kernRightEntryCount = 0,
+  .kernLeftClassCount  = 0,
+  .kernRightClassCount = 0,
+  .ligaturePairs     = nullptr,
+  .ligaturePairCount = 0,
+  .glyphMissHandler  = nullptr,
+  .glyphMissCtx      = nullptr,
+};
 // clang-format on
 
 EpdFont& testFont() {
   static EpdFont font(&kTestFontData);
+  return font;
+}
+
+EpdFont& replacementFont() {
+  static EpdFont font(&kReplacementFontData);
   return font;
 }
 
@@ -189,6 +231,19 @@ TEST(EpdFont, GlyphLookup) {
   // No U+FFFD in font, so unknown codepoints return nullptr
   EXPECT_EQ(testFont().getGlyph('Z'), nullptr);
   EXPECT_EQ(testFont().getGlyph('b'), nullptr);
+}
+
+TEST(EpdFont, HasGlyphIgnoresReplacementFallback) {
+  ASSERT_NE(replacementFont().getGlyph('A'), nullptr);
+  ASSERT_NE(replacementFont().getGlyph(REPLACEMENT_GLYPH), nullptr);
+
+  EXPECT_TRUE(replacementFont().hasGlyph('A'));
+  EXPECT_TRUE(replacementFont().hasGlyph(REPLACEMENT_GLYPH));
+  EXPECT_FALSE(replacementFont().hasGlyph(0xAC00));  // Hangul syllable "ga".
+  EXPECT_FALSE(replacementFont().hasGlyph(0xD55C));  // Hangul syllable "han".
+
+  EXPECT_EQ(replacementFont().getGlyph(0xAC00), replacementFont().getGlyph(REPLACEMENT_GLYPH));
+  EXPECT_EQ(replacementFont().getGlyph(0xD55C), replacementFont().getGlyph(REPLACEMENT_GLYPH));
 }
 
 // Known-value regression tests.  Expected widths are computed by hand using
