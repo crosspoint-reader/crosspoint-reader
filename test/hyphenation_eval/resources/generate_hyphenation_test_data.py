@@ -20,6 +20,7 @@ from collections import Counter
 from fractions import Fraction
 from html.parser import HTMLParser
 from pathlib import Path
+from typing import ClassVar
 import zipfile
 
 
@@ -39,8 +40,8 @@ LEGACY_GUTENBERG_END_RE = re.compile(
 class EpubTextExtractor(HTMLParser):
     """Extract visible book text while excluding EPUB navigation and boilerplate."""
 
-    SKIPPED_TAGS = {"head", "nav", "script", "style"}
-    VOID_TAGS = {
+    SKIPPED_TAGS: ClassVar[set[str]] = {"head", "nav", "script", "style"}
+    VOID_TAGS: ClassVar[set[str]] = {
         "area",
         "base",
         "br",
