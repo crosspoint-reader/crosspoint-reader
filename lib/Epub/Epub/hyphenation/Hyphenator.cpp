@@ -22,10 +22,9 @@ struct Iso639Mapping {
   const char* iso639_2;
   const char* iso639_1;
 };
-static constexpr Iso639Mapping kIso639Mappings[] = {{"cat", "ca"}, {"eng", "en"}, {"fra", "fr"}, {"fre", "fr"},
-                                                    {"deu", "de"}, {"ger", "de"}, {"rus", "ru"}, {"spa", "es"},
-                                                    {"ita", "it"}, {"pol", "pl"}, {"ukr", "uk"}, {"swe", "sv"},
-                                                    {"fin", "fi"}};
+static constexpr Iso639Mapping kIso639Mappings[] = {
+    {"cat", "ca"}, {"eng", "en"}, {"fra", "fr"}, {"fre", "fr"}, {"deu", "de"}, {"ger", "de"}, {"rus", "ru"},
+    {"spa", "es"}, {"ita", "it"}, {"pol", "pl"}, {"ukr", "uk"}, {"swe", "sv"}, {"fin", "fi"}};
 
 // Maps a BCP-47 or ISO 639-2 language tag to a language-specific hyphenator.
 const LanguageHyphenator* hyphenatorForLanguage(const std::string& langTag) {
