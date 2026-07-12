@@ -47,6 +47,13 @@ class HalDisplay {
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 
+  // Hand the framebuffer heap back to the system while the panel keeps
+  // showing its last refresh (e-ink retains the image unpowered). Rendering
+  // is unavailable until reallocBuffers() succeeds again. Used by the
+  // boot-time OTA download, which needs every contiguous block it can get.
+  void releaseBuffers();
+  bool reallocBuffers();
+
   // X3 grayscale preconditioning (OEM "AA-pre-BW(mid)" settle pass), windowed
   // to the gray region in physical panel coordinates (no-arg = full frame).
   // Call after the BW base frame is displayed and before the grayscale planes

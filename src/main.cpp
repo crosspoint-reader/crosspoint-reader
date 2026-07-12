@@ -27,10 +27,12 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/settings/OtaUpdateActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
+#include "network/OtaBootCheck.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -325,6 +327,8 @@ void setup() {
       (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
+  // Same read-and-clear rule as the silent-reboot flag above.
+  const OtaBootCheck::Stage otaBootStage = OtaBootCheck::takeStage();
 
   gpio.begin();
   powerManager.begin();
@@ -436,6 +440,12 @@ void setup() {
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (otaBootStage != OtaBootCheck::Stage::None) {
+    // OTA network work runs here, before the activity stack exists, because a
+    // TLS handshake needs more contiguous heap than survives full UI init
+    // (#2570). A successful install restarts inside runStage.
+    OtaBootCheck::runStage(otaBootStage, renderer);
+    activityManager.replaceActivity(std::make_unique<OtaUpdateActivity>(renderer, mappedInputManager));
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
