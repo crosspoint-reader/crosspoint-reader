@@ -15,7 +15,7 @@
 namespace {
 // Editable fields: Name, URL, Username, Password.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int BASE_ITEMS = 5;
 }  // namespace
 
 int OpdsSettingsActivity::getMenuItemCount() const {
@@ -156,7 +156,12 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (selectedIndex == 4 && !isNewServer) {
+  } else if (selectedIndex == 4) {
+    editServer.saveFolder = static_cast<OpdsSaveFolder>((static_cast<int>(editServer.saveFolder) + 1) %
+                                                        static_cast<int>(OpdsSaveFolder::COUNT));
+    saveServer();
+    requestUpdate();
+  } else if (selectedIndex == 5 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -186,7 +191,7 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const int menuItems = getMenuItemCount();
 
   const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                              StrId::STR_PASSWORD};
+                              StrId::STR_PASSWORD, StrId::STR_OPDS_FILE_FOLDER_TYPE};
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
@@ -206,6 +211,13 @@ void OpdsSettingsActivity::render(RenderLock&&) {
           return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
         } else if (index == 3) {
           return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
+        } else if (index == 4) {
+          switch (editServer.saveFolder) {
+            case OpdsSaveFolder::ROOT_FOLDER:
+              return std::string(tr(STR_OPDS_FILE_FOLDER_ROOT));
+            case OpdsSaveFolder::AUTHOR_FOLDER:
+              return std::string(tr(STR_OPDS_FILE_FOLDER_AUTHOR));
+          }
         }
         return std::string("");
       },

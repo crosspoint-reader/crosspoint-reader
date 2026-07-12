@@ -13,6 +13,7 @@ void OpdsServerStore::toJson(JsonDocument& doc) const {
     obj["name"] = server.name;
     obj["url"] = server.url;
     obj["username"] = server.username;
+    obj["saveFolder"] = server.saveFolder;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
   }
 }
@@ -32,6 +33,8 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     server.url = obj["url"] | "";
     server.username = obj["username"] | "";
     server.password = extractPassword(obj, needsResave);
+    server.saveFolder =
+        static_cast<OpdsSaveFolder>(obj["saveFolder"].as<OpdsSaveFolder>() | (OpdsSaveFolder)ROOT_FOLDER);
     servers.push_back(std::move(server));
   }
 
@@ -63,6 +66,7 @@ bool OpdsServerStore::updateServer(size_t index, const OpdsServer& server) {
 
   servers[index] = server;
   LOG_DBG("OPS", "Updated server: %s", server.name.c_str());
+
   return saveToFile();
 }
 
