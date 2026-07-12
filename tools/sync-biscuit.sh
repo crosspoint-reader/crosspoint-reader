@@ -7,7 +7,7 @@
 set -euo pipefail
 
 BISCUIT_URL="${BISCUIT_URL:-https://github.com/yattsu/biscuit.git}"
-BRANCH="${1:-main}"
+BRANCH="${1:-master}"
 
 cd "$(git rev-parse --show-toplevel)"
 

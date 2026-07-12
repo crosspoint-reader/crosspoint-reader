@@ -2,3 +2,6 @@
 	path = freeink-sdk
 	url = https://github.com/Free-Ink/freeink-sdk.git
 	branch = main
+[submodule "biscuit/open-x4-sdk"]
+	path = biscuit/open-x4-sdk
+	url = https://github.com/open-x4-epaper/community-sdk.git

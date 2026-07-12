@@ -16,10 +16,9 @@ DIST    := $(ROOT)/dist
 CP_ENV  ?= gh_release
 CP_VER  := $(shell python3 -c "import configparser; c = configparser.ConfigParser(); c.read('$(ROOT)/platformio.ini'); print(c['crosspoint']['version'])" 2>/dev/null || echo unknown)
 GIT_REV := $(shell git -C $(ROOT) describe --tags --always --dirty 2>/dev/null || echo unknown)
-# Biscuit ship env + version label: set B_ENV once biscuit/ is vendored and its
-# env names are known (see tools/sync-biscuit.sh). With B_ENV empty, pio builds
-# biscuit's default env and the copy globs its single build dir.
-B_ENV   ?=
+# Biscuit ship env (its platformio.ini mirrors CrossPoint's env names).
+# Override with B_ENV=default for a dev build.
+B_ENV   ?= gh_release
 B_VER   ?= $(GIT_REV)
 
 .PHONY: all crosspoint biscuit clean
