@@ -28,6 +28,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#include "activities/settings/SwapBootSlotActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
@@ -375,7 +376,13 @@ void setup() {
   // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
   // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
   // flashing has been locked down (e.g. recent X3 firmware).
+  // Boot swap mode: hold BOTH side buttons (BTN_UP + BTN_DOWN) with power to jump to the OS
+  // slot switch screen. DOWN alone is deliberately left free — POWER+DOWN is the runtime
+  // screenshot chord (see loop()) and would otherwise hijack wake-from-sleep. App-level
+  // convenience only, NOT a recovery path — it runs inside this slot's firmware, so it cannot
+  // rescue a slot that no longer boots.
   bool recoveryFirmwareMode = false;
+  bool bootSwapMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
     // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
@@ -385,7 +392,10 @@ void setup() {
       gpio.update();
       delay(10);
     }
-    if (gpio.isPressed(HalGPIO::BTN_UP)) {
+    if (gpio.isPressed(HalGPIO::BTN_UP) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      bootSwapMode = true;
+      LOG_INF("MAIN", "Boot swap mode (UP + DOWN + POWER held at boot)");
+    } else if (gpio.isPressed(HalGPIO::BTN_UP)) {
       recoveryFirmwareMode = true;
       LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
     }
@@ -433,6 +443,9 @@ void setup() {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
+  } else if (bootSwapMode) {
+    activityManager.replaceActivity(
+        std::make_unique<SwapBootSlotActivity>(renderer, mappedInputManager, /*bootMode=*/true));
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();

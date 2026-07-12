@@ -1,0 +1,1 @@
+freetype-py==2.5.1

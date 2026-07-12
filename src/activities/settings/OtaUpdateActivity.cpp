@@ -1,5 +1,6 @@
 #include "OtaUpdateActivity.h"
 
+#include <BootSwitch.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <WiFi.h>
@@ -7,6 +8,7 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
@@ -79,6 +81,12 @@ void OtaUpdateActivity::onExit() {
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {
+  // Restart is imminent; keep the FINISHED screen's power-on hint on the panel
+  // instead of wiping it with a page no branch below draws content for.
+  if (state == SHUTTING_DOWN) {
+    return;
+  }
+
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -143,45 +151,71 @@ void OtaUpdateActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
+void OtaUpdateActivity::onOverwriteWarningResult(const ActivityResult& result) {
+  if (result.isCancelled) {
+    // Stay on the update-available screen; the redraw happens automatically
+    // once this result handler returns (see Activity::startActivityForResult).
+    return;
+  }
+  startInstall();
+}
+
+void OtaUpdateActivity::startInstall() {
+  LOG_DBG("OTA", "Starting download...");
+  {
+    RenderLock lock(*this);
+    state = UPDATE_IN_PROGRESS;
+  }
+  requestUpdateAndWait();
+  const auto res = updater.installUpdate(
+      [](void* ctx) {
+        // immediate=true notifies the render task directly. The default deferred path only
+        // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
+        // installUpdate() blocks this task.
+        static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
+      },
+      this);
+
+  if (res != OtaUpdater::OK) {
+    LOG_DBG("OTA", "Update failed: %d", res);
+    {
+      RenderLock lock(*this);
+      state = FAILED;
+    }
+    requestUpdate();
+    return;
+  }
+
+  {
+    RenderLock lock(*this);
+    state = FINISHED;
+  }
+  requestUpdateAndWait();
+  // Hold the completion screen briefly so the user sees it, then restart.
+  delay(3000);
+  {
+    RenderLock lock(*this);
+    state = SHUTTING_DOWN;
+  }
+}
+
 void OtaUpdateActivity::loop() {
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      LOG_DBG("OTA", "New update available, starting download...");
-      {
-        RenderLock lock(*this);
-        state = UPDATE_IN_PROGRESS;
-      }
-      requestUpdateAndWait();
-      const auto res = updater.installUpdate(
-          [](void* ctx) {
-            // immediate=true notifies the render task directly. The default deferred path only
-            // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
-            // installUpdate() blocks this task.
-            static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
-          },
-          this);
-
-      if (res != OtaUpdater::OK) {
-        LOG_DBG("OTA", "Update failed: %d", res);
-        {
-          RenderLock lock(*this);
-          state = FAILED;
-        }
-        requestUpdate();
+      // Dual-OS guard: the updater streams into the passive slot, so a
+      // bootable image there (e.g. the other OS) is destroyed by this update.
+      // A blank slot skips the extra prompt.
+      boot_switch::PassiveSlotInfo info = {};
+      if (boot_switch::peekPassiveSlot(info)) {
+        char body[64];
+        boot_switch::describeSlot(info, body, sizeof(body));
+        startActivityForResult(std::make_unique<ConfirmationActivity>(
+                                   renderer, mappedInput, tr(STR_OVERWRITE_OTHER_OS_PROMPT), std::string(body)),
+                               [this](const ActivityResult& result) { onOverwriteWarningResult(result); });
         return;
       }
-
-      {
-        RenderLock lock(*this);
-        state = FINISHED;
-      }
-      requestUpdateAndWait();
-      // Hold the completion screen briefly so the user sees it, then restart.
-      delay(3000);
-      {
-        RenderLock lock(*this);
-        state = SHUTTING_DOWN;
-      }
+      startInstall();
+      return;
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {

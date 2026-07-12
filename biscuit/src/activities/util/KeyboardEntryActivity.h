@@ -1,0 +1,75 @@
+#pragma once
+#include <GfxRenderer.h>
+
+#include <functional>
+#include <string>
+#include <utility>
+
+#include "../Activity.h"
+#include "util/ButtonNavigator.h"
+
+/**
+ * Reusable keyboard entry activity for text input.
+ * Can be started from any activity that needs text entry via startActivityForResult()
+ */
+class KeyboardEntryActivity : public Activity {
+ public:
+  /**
+   * Constructor
+   * @param renderer Reference to the GfxRenderer for drawing
+   * @param mappedInput Reference to MappedInputManager for handling input
+   * @param title Title to display above the keyboard
+   * @param initialText Initial text to show in the input field
+   * @param maxLength Maximum length of input text (0 for unlimited)
+   * @param isPassword If true, display asterisks instead of actual characters
+   */
+  explicit KeyboardEntryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                 std::string title = "Enter Text", std::string initialText = "",
+                                 const size_t maxLength = 0, const bool isPassword = false)
+      : Activity("KeyboardEntry", renderer, mappedInput),
+        title(std::move(title)),
+        text(std::move(initialText)),
+        maxLength(maxLength),
+        isPassword(isPassword) {}
+
+  // Activity overrides
+  void onEnter() override;
+  void onExit() override;
+  void loop() override;
+  void render(RenderLock&&) override;
+
+ private:
+  std::string title;
+  std::string text;
+  size_t maxLength;
+  bool isPassword;
+
+  ButtonNavigator buttonNavigator;
+
+  // Keyboard state
+  int selectedRow = 0;
+  int selectedCol = 0;
+  int shiftState = 0;  // 0 = lower case, 1 = upper case, 2 = shift lock)
+
+  // Handlers
+  void onComplete(std::string text);
+  void onCancel();
+
+  // Keyboard layout
+  static constexpr int NUM_ROWS = 5;
+  static constexpr int KEYS_PER_ROW = 13;  // Max keys per row (rows 0 and 1 have 13 keys)
+  static const char* const keyboard[NUM_ROWS];
+  static const char* const keyboardShift[NUM_ROWS];
+  static const char* const shiftString[3];
+
+  // Special key positions (bottom row)
+  static constexpr int SPECIAL_ROW = 4;
+  static constexpr int SHIFT_COL = 0;
+  static constexpr int SPACE_COL = 2;
+  static constexpr int BACKSPACE_COL = 7;
+  static constexpr int DONE_COL = 9;
+
+  char getSelectedChar() const;
+  bool handleKeyPress();  // false if onComplete was triggered
+  int getRowLength(int row) const;
+};
