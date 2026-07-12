@@ -1,28 +1,26 @@
 #pragma once
 
 #include "activities/Activity.h"
+#include "network/OtaBootCheck.h"
 #include "network/OtaUpdater.h"
 
+// The network work (check + install) runs at boot time via OtaBootCheck, not
+// in this activity — see OtaBootCheck.h. This activity only shows the boot
+// result, collects the user's confirmation, and requests the next boot stage.
 class OtaUpdateActivity : public Activity {
   enum State {
     WIFI_SELECTION,
     CHECKING_FOR_UPDATE,
     WAITING_CONFIRMATION,
-    UPDATE_IN_PROGRESS,
     NO_UPDATE,
     FAILED,
-    FINISHED,
-    SHUTTING_DOWN
   };
 
-  // Can't initialize this to 0 or the first render doesn't happen
-  static constexpr unsigned int UNINITIALIZED_PERCENTAGE = 111;
-
   State state = WIFI_SELECTION;
-  unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   OtaUpdater updater;
 
   void onWifiSelectionComplete(bool success);
+  void consumeBootResult(const OtaBootCheck::Result& result);
 
  public:
   explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -31,6 +29,6 @@ class OtaUpdateActivity : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
+  bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE; }
   bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
 };

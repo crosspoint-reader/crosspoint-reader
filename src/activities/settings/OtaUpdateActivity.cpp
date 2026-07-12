@@ -9,7 +9,22 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "network/OtaUpdater.h"
+#include "network/OtaBootCheck.h"
+
+void OtaUpdateActivity::consumeBootResult(const OtaBootCheck::Result& result) {
+  {
+    RenderLock lock(*this);
+    if (result.error == OtaUpdater::OK) {
+      updater.adoptManifest(result.version, result.url, result.size);
+      state = updater.isUpdateNewer() ? WAITING_CONFIRMATION : NO_UPDATE;
+    } else if (result.error == OtaUpdater::NO_UPDATE) {
+      state = NO_UPDATE;
+    } else {
+      state = FAILED;
+    }
+  }
+  requestUpdate(true);
+}
 
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
@@ -18,48 +33,35 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  LOG_DBG("OTA", "WiFi connected, checking for update");
-
-  {
-    RenderLock lock(*this);
-    state = CHECKING_FOR_UPDATE;
-  }
-  requestUpdateAndWait();
-
-  const auto res = updater.checkForUpdate();
-  if (res != OtaUpdater::OK) {
-    LOG_DBG("OTA", "Update check failed: %d", res);
-    {
-      RenderLock lock(*this);
-      state = FAILED;
-    }
-    return;
-  }
-
-  if (!updater.isUpdateNewer()) {
-    LOG_DBG("OTA", "No new update available");
-    {
-      RenderLock lock(*this);
-      state = NO_UPDATE;
-    }
-    return;
-  }
-
-  {
-    RenderLock lock(*this);
-    state = WAITING_CONFIRMATION;
-  }
+  // The selection saved the credential; the boot stage reconnects with it.
+  OtaBootCheck::requestCheck();
 }
 
 void OtaUpdateActivity::onEnter() {
   Activity::onEnter();
 
-  // Turn on WiFi immediately
-  LOG_DBG("OTA", "Turning on WiFi...");
-  WiFi.mode(WIFI_STA);
+  // Landing here after a boot-time stage: show its outcome.
+  if (const auto* bootResult = OtaBootCheck::takeResult()) {
+    LOG_DBG("OTA", "Consuming boot stage result: error=%d", static_cast<int>(bootResult->error));
+    consumeBootResult(*bootResult);
+    return;
+  }
 
-  // Launch WiFi selection subactivity
-  LOG_DBG("OTA", "Launching WifiSelectionActivity...");
+  // Fresh entry from Settings: hand the check to the next boot, where the TLS
+  // handshake has enough heap. Needs a saved credential to reconnect with.
+  if (OtaBootCheck::canAutoConnect()) {
+    {
+      RenderLock lock(*this);
+      state = CHECKING_FOR_UPDATE;
+    }
+    requestUpdateAndWait();
+    OtaBootCheck::requestCheck();  // does not return
+    return;
+  }
+
+  // No saved network yet: run the selection UI once to capture a credential.
+  LOG_DBG("OTA", "No saved WiFi network, launching WifiSelectionActivity");
+  WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
@@ -67,10 +69,9 @@ void OtaUpdateActivity::onEnter() {
 void OtaUpdateActivity::onExit() {
   Activity::onExit();
 
-  // Success path reboots via the SHUTTING_DOWN state's plain ESP.restart()
-  // (loop() above) so the new firmware boots normally. Back-out paths land
-  // here with wifi still active; silent-restart to free the LWIP/mbedTLS
-  // fragmentation, same as the other wifi activities.
+  // Only the credential-capture path turns WiFi on in this activity; the boot
+  // stages tear their connection down themselves. Silent-restart to free the
+  // LWIP/TLS fragmentation, same as the other wifi activities.
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
     delay(30);
@@ -89,17 +90,6 @@ void OtaUpdateActivity::render(RenderLock&&) {
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = (pageHeight - height) / 2;
 
-  float updaterProgress = 0;
-  if (state == UPDATE_IN_PROGRESS) {
-    LOG_DBG("OTA", "Update progress: %d / %d", updater.getProcessedSize(), updater.getTotalSize());
-    updaterProgress = static_cast<float>(updater.getProcessedSize()) / static_cast<float>(updater.getTotalSize());
-    // Only update every 2% at the most
-    if (static_cast<int>(updaterProgress * 50) == lastUpdaterPercentage / 2) {
-      return;
-    }
-    lastUpdaterPercentage = static_cast<int>(updaterProgress * 100);
-  }
-
   if (state == CHECKING_FOR_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
   } else if (state == WAITING_CONFIRMATION) {
@@ -111,22 +101,6 @@ void OtaUpdateActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state == UPDATE_IN_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING));
-
-    int y = top + height + metrics.verticalSpacing;
-    GUI.drawProgressBar(
-        renderer,
-        Rect{metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
-        static_cast<int>(updaterProgress * 100), 100);
-
-    y += metrics.progressBarHeight + metrics.verticalSpacing;
-    // Percent label is drawn by BaseTheme::drawProgressBar; this slot is left intentionally empty
-    // so the bytes line below stays at the same Y it was at when the activity drew its own percent.
-    y += height + metrics.verticalSpacing;
-    renderer.drawCenteredText(
-        UI_10_FONT_ID, y,
-        (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
   } else if (state == NO_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
@@ -135,9 +109,6 @@ void OtaUpdateActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::BOLD);
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state == FINISHED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_POWER_ON_HINT));
   }
 
   renderer.displayBuffer();
@@ -146,42 +117,10 @@ void OtaUpdateActivity::render(RenderLock&&) {
 void OtaUpdateActivity::loop() {
   if (state == WAITING_CONFIRMATION) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      LOG_DBG("OTA", "New update available, starting download...");
-      {
-        RenderLock lock(*this);
-        state = UPDATE_IN_PROGRESS;
-      }
-      requestUpdateAndWait();
-      const auto res = updater.installUpdate(
-          [](void* ctx) {
-            // immediate=true notifies the render task directly. The default deferred path only
-            // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
-            // installUpdate() blocks this task.
-            static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
-          },
-          this);
-
-      if (res != OtaUpdater::OK) {
-        LOG_DBG("OTA", "Update failed: %d", res);
-        {
-          RenderLock lock(*this);
-          state = FAILED;
-        }
-        requestUpdate();
-        return;
-      }
-
-      {
-        RenderLock lock(*this);
-        state = FINISHED;
-      }
-      requestUpdateAndWait();
-      // Hold the completion screen briefly so the user sees it, then restart.
-      delay(3000);
-      {
-        RenderLock lock(*this);
-        state = SHUTTING_DOWN;
-      }
+      LOG_DBG("OTA", "Update confirmed, requesting boot-time install");
+      OtaBootCheck::requestInstall(updater.getLatestVersion().c_str(), updater.getOtaUrl().c_str(),
+                                   updater.getOtaSize());  // does not return
+      return;
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -191,21 +130,9 @@ void OtaUpdateActivity::loop() {
     return;
   }
 
-  if (state == FAILED) {
+  if (state == FAILED || state == NO_UPDATE) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
     }
-    return;
-  }
-
-  if (state == NO_UPDATE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finish();
-    }
-    return;
-  }
-
-  if (state == SHUTTING_DOWN) {
-    ESP.restart();
   }
 }
