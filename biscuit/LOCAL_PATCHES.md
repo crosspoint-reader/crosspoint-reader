@@ -45,6 +45,11 @@ invite name collisions (both trees have `Logging`, `I18n`, `hal`, …).
 `BOOTSWITCH_USE_ESP_LOG` is **not** set: Biscuit ships the same `lib/Logging` as
 CrossPoint, so BootSwitch's default `<Logging.h>` path compiles here.
 
+This install path requires `lib/BootSwitch/library.json` in the parent repo: anything
+pulled in via `lib_deps` goes through PlatformIO's Library Manager, which refuses
+packages without a manifest (`MissingPackageManifestError`) — do not remove it as
+"unused" just because the other internal libs have none.
+
 **On conflict:** re-add the line inside `lib_deps`; keep upstream's entries.
 
 ## P2 — `biscuit/platformio.ini` : use the canonical shared partition table

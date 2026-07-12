@@ -1,0 +1,7 @@
+{
+  "name": "BootSwitch",
+  "version": "0.1.0",
+  "description": "Dual-OS OTA slot swap shared by CrossPoint and the vendored Biscuit firmware",
+  "frameworks": "arduino",
+  "platforms": "espressif32"
+}
