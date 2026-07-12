@@ -1,9 +1,17 @@
 #include "OtaBootSwitch.h"
 
-#include <Logging.h>
 #include <esp_rom_crc.h>
-#include <spi_flash_mmap.h>
 #include <string.h>
+
+// SPI_FLASH_SEC_SIZE moved headers in IDF 5.x; keep the 4.x fallback so the
+// vendored Biscuit build (biscuit/) compiles even if it pins an older core.
+#if __has_include(<spi_flash_mmap.h>)
+#include <spi_flash_mmap.h>
+#else
+#include <esp_spi_flash.h>
+#endif
+
+#include "BootSwitchLog.h"
 
 namespace ota_boot {
 
@@ -17,18 +25,18 @@ bool switchTo(const esp_partition_t* dest) {
   const esp_partition_t* otadata =
       esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, nullptr);
   if (!otadata) {
-    LOG_ERR("BOOT", "otadata partition not found");
+    BOOTSWITCH_LOG_ERR("BOOT", "otadata partition not found");
     return false;
   }
   if (otadata->size < 2 * SPI_FLASH_SEC_SIZE) {
-    LOG_ERR("BOOT", "otadata too small: %u", static_cast<unsigned>(otadata->size));
+    BOOTSWITCH_LOG_ERR("BOOT", "otadata too small: %u", static_cast<unsigned>(otadata->size));
     return false;
   }
 
   SelectEntry slots[2] = {};
   if (esp_partition_read(otadata, 0, &slots[0], sizeof(SelectEntry)) != ESP_OK ||
       esp_partition_read(otadata, SPI_FLASH_SEC_SIZE, &slots[1], sizeof(SelectEntry)) != ESP_OK) {
-    LOG_ERR("BOOT", "otadata read failed");
+    BOOTSWITCH_LOG_ERR("BOOT", "otadata read failed");
     return false;
   }
 
@@ -44,13 +52,13 @@ bool switchTo(const esp_partition_t* dest) {
       activeSeq = slots[i].ota_seq;
     }
   }
-  LOG_INF("BOOT", "otadata: active slot=%d seq=%u", activeIdx, static_cast<unsigned>(activeSeq));
+  BOOTSWITCH_LOG_INF("BOOT", "otadata: active slot=%d seq=%u", activeIdx, static_cast<unsigned>(activeSeq));
 
   // ota_seq encoding: (seq - 1) % NUM_OTA_PARTITIONS picks the partition.
   const uint32_t destOtaIdx =
       static_cast<uint32_t>(dest->subtype) - static_cast<uint32_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0);
   if (destOtaIdx > 15) {
-    LOG_ERR("BOOT", "dest is not an OTA app partition (subtype=0x%02X)", dest->subtype);
+    BOOTSWITCH_LOG_ERR("BOOT", "dest is not an OTA app partition (subtype=0x%02X)", dest->subtype);
     return false;
   }
 
@@ -70,16 +78,16 @@ bool switchTo(const esp_partition_t* dest) {
   const size_t targetOff = static_cast<size_t>(targetSlot) * SPI_FLASH_SEC_SIZE;
 
   if (esp_partition_erase_range(otadata, targetOff, SPI_FLASH_SEC_SIZE) != ESP_OK) {
-    LOG_ERR("BOOT", "otadata erase failed (slot=%d)", targetSlot);
+    BOOTSWITCH_LOG_ERR("BOOT", "otadata erase failed (slot=%d)", targetSlot);
     return false;
   }
   if (esp_partition_write(otadata, targetOff, &next, sizeof(next)) != ESP_OK) {
-    LOG_ERR("BOOT", "otadata write failed (slot=%d)", targetSlot);
+    BOOTSWITCH_LOG_ERR("BOOT", "otadata write failed (slot=%d)", targetSlot);
     return false;
   }
 
-  LOG_INF("BOOT", "otadata: wrote slot=%d seq=%u crc=0x%08x -> %s", targetSlot, static_cast<unsigned>(newSeq),
-          static_cast<unsigned>(next.crc), dest->label);
+  BOOTSWITCH_LOG_INF("BOOT", "otadata: wrote slot=%d seq=%u crc=0x%08x -> %s", targetSlot,
+                     static_cast<unsigned>(newSeq), static_cast<unsigned>(next.crc), dest->label);
   return true;
 }
 

@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <OtaBootSwitch.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <mbedtls/sha256.h>
@@ -12,12 +13,9 @@
 #include <cstring>
 #include <memory>
 
-#include "OtaBootSwitch.h"
-
 namespace firmware_flash {
 
 namespace {
-constexpr uint8_t ESP_IMAGE_MAGIC = 0xE9;
 constexpr size_t MIN_FIRMWARE_SIZE = 64 * 1024;
 constexpr size_t SEC = SPI_FLASH_SEC_SIZE;  // 4 KiB
 constexpr size_t BLK = 64 * 1024;           // 64 KiB block-erase granularity
@@ -112,7 +110,7 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
     file.close();
     return Result::READ_FAIL;
   }
-  if (header[0] != ESP_IMAGE_MAGIC) {
+  if (header[0] != ota_boot::kEspImageMagic) {
     LOG_ERR("FLASH", "validate: bad magic 0x%02X", header[0]);
     file.close();
     return Result::BAD_MAGIC;

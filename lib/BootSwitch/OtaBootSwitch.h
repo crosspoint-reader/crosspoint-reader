@@ -29,6 +29,9 @@ constexpr uint32_t kOtaImgInvalid = 3;  // ESP_OTA_IMG_INVALID
 constexpr uint32_t kOtaImgAborted = 4;  // ESP_OTA_IMG_ABORTED
 constexpr size_t kOtaSeqCrcLen = 4;
 
+// First byte of every ESP32 app image (esp_image_header_t.magic).
+constexpr uint8_t kEspImageMagic = 0xE9;
+
 // CRC32-LE over the 4-byte ota_seq, init UINT32_MAX. Matches IDF and web flasher.
 uint32_t computeSeqCrc(uint32_t seq);
 
