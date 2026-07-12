@@ -1,106 +1,46 @@
 #include "WifiCredentialStore.h"
 
-#include <HalStorage.h>
-#include <JsonSettingsIO.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
-#include <Serialization.h>
 
 #include <algorithm>
 
-// Initialize the static instance
-WifiCredentialStore WifiCredentialStore::instance;
+void WifiCredentialStore::toJson(JsonDocument& doc) const {
+  doc["lastConnectedSsid"] = lastConnectedSsid;
 
-namespace {
-// File format version (for binary migration)
-constexpr uint8_t WIFI_FILE_VERSION = 2;
-
-// File paths
-constexpr char WIFI_FILE_BIN[] = "/.crosspoint/wifi.bin";
-constexpr char WIFI_FILE_JSON[] = "/.crosspoint/wifi.json";
-constexpr char WIFI_FILE_BAK[] = "/.crosspoint/wifi.bin.bak";
-
-// Legacy obfuscation key - "CrossPoint" in ASCII (only used for binary migration)
-constexpr uint8_t LEGACY_OBFUSCATION_KEY[] = {0x43, 0x72, 0x6F, 0x73, 0x73, 0x50, 0x6F, 0x69, 0x6E, 0x74};
-constexpr size_t LEGACY_KEY_LENGTH = sizeof(LEGACY_OBFUSCATION_KEY);
-
-void legacyDeobfuscate(std::string& data) {
-  for (size_t i = 0; i < data.size(); i++) {
-    data[i] ^= LEGACY_OBFUSCATION_KEY[i % LEGACY_KEY_LENGTH];
+  JsonArray arr = doc["credentials"].to<JsonArray>();
+  for (const auto& cred : credentials) {
+    JsonObject obj = arr.add<JsonObject>();
+    obj["ssid"] = cred.ssid;
+    obj["password_obf"] = obfuscation::obfuscateToBase64(cred.password);
   }
 }
-}  // namespace
 
-bool WifiCredentialStore::saveToFile() const {
-  Storage.mkdir("/.crosspoint");
-  return JsonSettingsIO::saveWifi(*this, WIFI_FILE_JSON);
-}
+bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
+  lastConnectedSsid = doc["lastConnectedSsid"] | "";
 
-bool WifiCredentialStore::loadFromFile() {
-  // Try JSON first
-  if (Storage.exists(WIFI_FILE_JSON)) {
-    String json = Storage.readFile(WIFI_FILE_JSON);
-    if (!json.isEmpty()) {
-      bool resave = false;
-      bool result = JsonSettingsIO::loadWifi(*this, json.c_str(), &resave);
-      if (result && resave) {
-        LOG_DBG("WCS", "Resaving JSON with obfuscated passwords");
-        saveToFile();
-      }
-      return result;
-    }
-  }
-
-  // Fall back to binary migration
-  if (Storage.exists(WIFI_FILE_BIN)) {
-    if (loadFromBinaryFile()) {
-      if (saveToFile()) {
-        Storage.rename(WIFI_FILE_BIN, WIFI_FILE_BAK);
-        LOG_DBG("WCS", "Migrated wifi.bin to wifi.json");
-        return true;
-      } else {
-        LOG_ERR("WCS", "Failed to save wifi during migration");
-        return false;
-      }
-    }
-  }
-
-  return false;
-}
-
-bool WifiCredentialStore::loadFromBinaryFile() {
-  HalFile file;
-  if (!Storage.openFileForRead("WCS", WIFI_FILE_BIN, file)) {
-    return false;
-  }
-
-  uint8_t version;
-  serialization::readPod(file, version);
-  if (version > WIFI_FILE_VERSION) {
-    LOG_DBG("WCS", "Unknown file version: %u", version);
-    return false;
-  }
-
-  if (version >= 2) {
-    serialization::readString(file, lastConnectedSsid);
-  } else {
-    lastConnectedSsid.clear();
-  }
-
-  uint8_t count;
-  serialization::readPod(file, count);
-
+  // Tolerate a missing/invalid 'credentials' key (treat as empty list); only
+  // a JSON parse error is fatal. A null JsonArray iterates zero times.
   credentials.clear();
-  credentials.reserve(std::min<size_t>(count, MAX_NETWORKS));
-  for (uint8_t i = 0; i < count && i < MAX_NETWORKS; i++) {
+  JsonArrayConst arr = doc["credentials"].as<JsonArrayConst>();
+  credentials.reserve(std::min(arr.size(), MAX_NETWORKS));
+  bool needsResave = false;
+
+  for (JsonObjectConst obj : arr) {
+    if (credentials.size() >= MAX_NETWORKS) break;
     WifiCredential cred;
-    serialization::readString(file, cred.ssid);
-    serialization::readString(file, cred.password);
-    legacyDeobfuscate(cred.password);
+    cred.ssid = obj["ssid"] | "";
+    cred.password = extractPassword(obj, needsResave);
     credentials.push_back(cred);
   }
 
-  // LOG_DBG("WCS", "Loaded %zu WiFi credentials from binary file", credentials.size());
+  LOG_DBG("WCS", "Loaded %zu WiFi credentials from file", credentials.size());
+
+  if (needsResave) {
+    LOG_DBG("WCS", "Resaving JSON with obfuscated passwords");
+    saveToFile();
+  }
+
   return true;
 }
 

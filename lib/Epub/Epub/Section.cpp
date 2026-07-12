@@ -11,8 +11,9 @@
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
-// v28: text decoration bits now include line-through in serialized wordStyles.
-constexpr uint8_t SECTION_FILE_VERSION = 28;
+// v29: TextBlock word data stored as one flat arena (offset table + NUL-terminated
+// text blob) instead of length-prefixed strings and per-field arrays.
+constexpr uint8_t SECTION_FILE_VERSION = 29;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -25,7 +26,11 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // rebuilding in the background. Uses the same header layout as SECTION_FILE_VERSION,
 // so finalized files are untouched by this feature; older firmware treats the sentinel
 // as an unknown version and rebuilds, which is a safe downgrade.
-constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE;
+// MUST change in lockstep with SECTION_FILE_VERSION: the sentinel IS the partial's
+// format version, so a stale-format partial otherwise passes the header check and
+// only fails (noisily, via the block-decode error path) when a page is loaded.
+// Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
+constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
@@ -733,10 +738,10 @@ std::string Section::getTextFromSectionFile() {
       if (el->getTag() == TAG_PageLine) {
         const auto& line = static_cast<const PageLine&>(*el);
         if (line.getBlock()) {
-          const auto& words = line.getBlock()->getWords();
-          for (const auto& w : words) {
+          const auto& block = *line.getBlock();
+          for (uint16_t i = 0; i < block.wordCount(); i++) {
             if (!fullText.empty()) fullText += " ";
-            fullText += w;
+            fullText += block.wordText(i);
           }
         }
       }

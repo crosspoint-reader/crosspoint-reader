@@ -1,4 +1,7 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <cstdint>
 #include <string>
 
@@ -14,9 +17,9 @@ enum class DocumentMatchMethod : uint8_t {
  * and base64-encoded before writing to JSON (not cryptographically secure,
  * but prevents casual reading and ties credentials to the specific device).
  */
-class KOReaderCredentialStore {
+
+class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore> {
  private:
-  static KOReaderCredentialStore instance;
   std::string username;
   std::string password;
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
@@ -24,20 +27,14 @@ class KOReaderCredentialStore {
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
+  ~KOReaderCredentialStore() = default;
 
-  bool loadFromBinaryFile();
+  friend class PersistableStore<KOReaderCredentialStore>;
 
  public:
-  // Delete copy constructor and assignment
-  KOReaderCredentialStore(const KOReaderCredentialStore&) = delete;
-  KOReaderCredentialStore& operator=(const KOReaderCredentialStore&) = delete;
-
-  // Get singleton instance
-  static KOReaderCredentialStore& getInstance() { return instance; }
-
-  // Save/load from SD card
-  bool saveToFile() const;
-  bool loadFromFile();
+  static const char* getFilePath() { return "/.crosspoint/koreader.json"; }
+  void toJson(JsonDocument& doc) const;
+  bool fromJson(JsonVariantConst doc);
 
   // Credential management
   void setCredentials(const std::string& user, const std::string& pass);
