@@ -1,0 +1,126 @@
+name: Dual-OS bins
+
+# Builds both firmwares of the dual-OS setup as flashable app images:
+#   dist/crosspoint-<ver>-ota0.bin  (repo root project)
+#   dist/biscuit-<rev>-ota1.bin     (vendored biscuit/ project)
+# The -ota0/-ota1 suffixes are labels only — images are slot-agnostic and the
+# on-device SD flasher always writes the passive slot. A biscuit link failure
+# ("does not fit") means the app outgrew the shared 0x640000 slot; see
+# biscuit/LOCAL_PATCHES.md (P2).
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dual-os-bins-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-crosspoint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Build CrossPoint (ota0)
+        run: |
+          set -euo pipefail
+          make -C tools crosspoint | tee pio.log
+
+      - name: Extract firmware stats
+        run: |
+          set -euo pipefail
+          ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
+          flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
+          {
+            echo "## CrossPoint (ota0) build stats"
+            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
+            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: crosspoint-${{ github.ref_name }}-ota0
+          path: |
+            dist/crosspoint-*-ota0.bin
+            .pio/build/gh_release/bootloader.bin
+            .pio/build/gh_release/partitions.bin
+          if-no-files-found: error
+
+  build-biscuit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-biscuit-${{ hashFiles('biscuit/platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Build Biscuit (ota1)
+        run: |
+          set -euo pipefail
+          make -C tools biscuit | tee pio.log
+
+      - name: Extract firmware stats
+        run: |
+          set -euo pipefail
+          ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
+          flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
+          {
+            echo "## Biscuit (ota1) build stats"
+            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
+            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: biscuit-${{ github.ref_name }}-ota1
+          path: dist/biscuit-*-ota1.bin
+          if-no-files-found: error
