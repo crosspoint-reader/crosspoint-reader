@@ -206,6 +206,14 @@ bool OtaUpdater::isUpdateNewer() const {
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate() {
+#ifdef DUAL_OS_LOCK
+  // [BOOTSWITCH-PATCH] P6: refuse self-OTA in dual-OS mode — esp_https_ota streams
+  // into the passive slot, which holds CrossPoint. Update Biscuit via CrossPoint's
+  // SD Card Firmware Update instead.
+  LOG_ERR("OTA", "self-OTA disabled in dual-OS build (would overwrite the other slot)");
+  return INTERNAL_UPDATE_ERROR;
+#endif
+
   if (!isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
   }

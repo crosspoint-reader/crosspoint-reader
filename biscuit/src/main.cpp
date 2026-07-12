@@ -22,6 +22,7 @@
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/settings/SwapBootSlotActivity.h"  // [BOOTSWITCH-PATCH] P7
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
@@ -280,6 +281,24 @@ void setup() {
       break;
   }
 
+  // [BOOTSWITCH-PATCH] P7: hold BOTH side buttons (BTN_UP + BTN_DOWN) with the power button
+  // at boot to open the OS slot switch screen. DOWN alone is left free — POWER+DOWN is the
+  // runtime screenshot chord (see loop()). App-level convenience only, NOT a recovery path —
+  // it runs inside this slot's firmware, so it cannot rescue a slot that no longer boots.
+  bool bootSwapMode = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    // isPressed() needs ~half a second to settle after boot per the HalGPIO contract.
+    const unsigned long settleStart = millis();
+    while (millis() - settleStart < 500) {
+      gpio.update();
+      delay(10);
+    }
+    if (gpio.isPressed(HalGPIO::BTN_UP) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      bootSwapMode = true;
+      LOG_INF("MAIN", "Boot swap mode (UP + DOWN + POWER held at boot)");
+    }
+  }
+
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting Biscuit version " CROSSPOINT_VERSION);
 
@@ -292,7 +311,11 @@ void setup() {
 
   // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
   // crashed (indicated by readerActivityLoadCount > 0)
-  if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
+  if (bootSwapMode) {
+    // [BOOTSWITCH-PATCH] P7: skip normal home/reader routing; open the slot-swap screen.
+    activityManager.replaceActivity(
+        std::make_unique<SwapBootSlotActivity>(renderer, mappedInputManager, /*bootMode=*/true));
+  } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
       mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     activityManager.goHome();
   } else {

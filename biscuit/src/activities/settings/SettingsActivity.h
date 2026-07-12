@@ -20,6 +20,7 @@ enum class SettingAction {
   Network,
   ClearCache,
   CheckForUpdates,
+  SwapBootSlot,  // [BOOTSWITCH-PATCH] P5
   Language,
 };
 
