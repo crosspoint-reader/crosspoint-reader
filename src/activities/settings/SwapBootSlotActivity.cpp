@@ -14,7 +14,10 @@ void SwapBootSlotActivity::onEnter() {
   Activity::onEnter();
 
   if (!boot_switch::peekPassiveSlot(info)) {
-    state = State::NO_TARGET;
+    {
+      RenderLock lock(*this);
+      state = State::NO_TARGET;
+    }
     requestUpdate(true);
     return;
   }
@@ -22,13 +25,8 @@ void SwapBootSlotActivity::onEnter() {
   // Generic app descriptors make the two firmwares indistinguishable by name
   // (see BootSwitch.h), so the prompt names the slot plus best-effort version.
   char body[64];
-  if (info.version[0] != '\0') {
-    snprintf(body, sizeof(body), "%s: %s", info.label, info.version);
-  } else {
-    snprintf(body, sizeof(body), "%s", info.label);
-  }
+  boot_switch::describeSlot(info, body, sizeof(body));
 
-  state = State::CONFIRMING;
   startActivityForResult(
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_SWITCH_OS_PROMPT), std::string(body)),
       [this](const ActivityResult& result) { onConfirmationResult(result); });

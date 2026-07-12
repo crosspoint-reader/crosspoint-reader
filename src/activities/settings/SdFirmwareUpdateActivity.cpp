@@ -1,6 +1,7 @@
 #include "SdFirmwareUpdateActivity.h"
 
 #include <Arduino.h>
+#include <BootSwitch.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -138,6 +139,40 @@ void SdFirmwareUpdateActivity::onConfirmationResult(const ActivityResult& result
     return;
   }
 
+  promptOverwriteWarning();
+}
+
+void SdFirmwareUpdateActivity::promptOverwriteWarning() {
+  // Dual-OS guard: the flasher writes the passive slot, so a bootable image
+  // there (e.g. the other OS) is destroyed by this update. A blank slot means
+  // no extra prompt — the common single-OS path is unchanged.
+  boot_switch::PassiveSlotInfo info = {};
+  if (!boot_switch::peekPassiveSlot(info)) {
+    startUpdate();
+    return;
+  }
+
+  char body[64];
+  boot_switch::describeSlot(info, body, sizeof(body));
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                                tr(STR_OVERWRITE_OTHER_OS_PROMPT), std::string(body)),
+                         [this](const ActivityResult& result) { onOverwriteWarningResult(result); });
+}
+
+void SdFirmwareUpdateActivity::onOverwriteWarningResult(const ActivityResult& result) {
+  if (result.isCancelled) {
+    if (recoveryMode) {
+      launchPicker();
+      return;
+    }
+    finish();
+    return;
+  }
+
+  startUpdate();
+}
+
+void SdFirmwareUpdateActivity::startUpdate() {
   {
     RenderLock lock(*this);
     state = State::UPDATING;

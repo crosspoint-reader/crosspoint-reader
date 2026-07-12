@@ -2,6 +2,7 @@
 
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "BootSwitchLog.h"
@@ -84,6 +85,14 @@ bool swapToPassive() {
   }
 
   return ota_boot::switchTo(passive);
+}
+
+void describeSlot(const PassiveSlotInfo& info, char* out, size_t outLen) {
+  if (info.version[0] != '\0') {
+    snprintf(out, outLen, "%s: %s", info.label, info.version);
+  } else {
+    snprintf(out, outLen, "%s", info.label);
+  }
 }
 
 }  // namespace boot_switch

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 // High-level dual-OS slot API layered on ota_boot::switchTo (OtaBootSwitch.h).
 // Shared by CrossPoint and the vendored Biscuit firmware (biscuit/): each OS
 // lives in one of the two OTA app slots and uses this to inspect and boot the
@@ -27,5 +29,10 @@ bool peekPassiveSlot(PassiveSlotInfo& out);
 // the caller is responsible for ESP.restart() (same contract as
 // firmware_flash::flashFromSdPath).
 bool swapToPassive();
+
+// Formats "label: version" (or just "label" when no descriptor was readable)
+// into out — the one-line human description both firmwares show for the
+// passive slot.
+void describeSlot(const PassiveSlotInfo& info, char* out, size_t outLen);
 
 }  // namespace boot_switch

@@ -52,5 +52,8 @@ class SdFirmwareUpdateActivity : public Activity {
   bool validateFirmware();
   void promptConfirmation();
   void onConfirmationResult(const ActivityResult& result);
+  void promptOverwriteWarning();
+  void onOverwriteWarningResult(const ActivityResult& result);
+  void startUpdate();
   void performUpdate();
 };
