@@ -5,6 +5,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
 - [CrossPoint User Guide](#crosspoint-user-guide)
   - [1. Hardware Overview](#1-hardware-overview)
     - [Button Layout](#button-layout)
+    - [Taking a Screenshot](#taking-a-screenshot)
   - [2. Power \& Startup](#2-power--startup)
     - [Power On / Off](#power-on--off)
     - [First Launch](#first-launch)
@@ -14,7 +15,11 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.3 Browse Files Screen](#33-browse-files-screen)
     - [3.4 Recent Books Screen](#34-recent-books-screen)
     - [3.5 File Transfer Screen](#35-file-transfer-screen)
-      - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
+    - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
+      - [Installing the Plugin in Calibre](#installing-the-plugin-in-calibre)
+      - [Configuring the CrossPoint Plugin in Calibre](#configuring-the-crosspoint-plugin-in-calibre)
+      - [Uploading Books](#uploading-books)
+      - [Removing a Book](#removing-a-book)
     - [3.6 Settings](#36-settings)
       - [3.6.1 Display](#361-display)
       - [3.6.2 Reader](#362-reader)
@@ -23,21 +28,25 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [3.6.5 OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries)
       - [3.6.6 Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds)
       - [3.6.7 KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)
+        - [Option A: Free Public Server (`sync.koreader.rocks`)](#option-a-free-public-server-synckoreaderrocks)
+        - [Option B: Self-Hosted Server (Docker Compose)](#option-b-self-hosted-server-docker-compose)
     - [3.7 Sleep Screen](#37-sleep-screen)
+      - [Cover settings](#cover-settings)
+      - [Custom images](#custom-images)
     - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
   - [4. Reading Mode](#4-reading-mode)
-      - [Page Turning](#page-turning)
-      - [Chapter Navigation](#chapter-navigation)
-      - [Auto Page Turn](#auto-page-turn)
-      - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
-      - [Footnote Navigation](#footnote-navigation)
-      - [System Navigation](#system-navigation)
-      - [Supported Languages](#supported-languages)
+    - [Page Turning](#page-turning)
+    - [Chapter Navigation](#chapter-navigation)
+    - [Auto Page Turn](#auto-page-turn)
+    - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
+    - [Footnote Navigation](#footnote-navigation)
+    - [System Navigation](#system-navigation)
+    - [Supported Languages](#supported-languages)
   - [5. Reader Menu](#5-reader-menu)
-      - [5.1 Chapter Selection](#51-chapter-selection)
-      - [5.2 Bookmarks](#52-bookmarks)
-  - [6. Current Limitations & Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues & Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
+    - [5.1 Chapter Selection](#51-chapter-selection)
+    - [5.2 Bookmarks](#52-bookmarks)
+  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
+  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
 ## 1. Hardware Overview
 
@@ -122,19 +131,43 @@ A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined
 
 CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
 
-1. Install the plugin in Calibre:
-   
-   - Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
-   
-   - Download the zip file.
-   
-   - Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+#### Installing the Plugin in Calibre
 
-2. On the device: File Transfer -> Calibre Wireless, then join a network.
+If you don't already have the plugin installed:
 
-3. Make sure your computer is on the same Wi-Fi network.
+1. Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
+2. Download the zip file.
+3. Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+4. Restart Calibre.
 
-4. In Calibre, click "Send to device" to transfer books.
+#### Configuring the CrossPoint Plugin in Calibre
+1. In Calibre select Preferences.
+2. In the Preferences dialog select Plugins.
+3. In Plugins search for "crosspoint".
+4. Click on "Customize plugin".
+5. Update the value for "Host" to match the IP for your device.
+6. Leave the other settings as they are.
+7. [optional] Modify the "Upload path" to point to a subfolder other than the root "/" folder. Enter this as a path relative to the root folder. Example: `/mybooks`
+8. Restart Calibre.
+
+<img width="420" height="385" alt="Image" src="https://github.com/user-attachments/assets/01fc7e33-a9a7-48ba-9e26-2e68d1f9daec" />
+
+#### Uploading Books
+
+To upload a book using the CrossPoint plugin in Calibre:
+
+1. On the device: File Transfer -> Calibre Wireless, then join a network.
+2. Select one or more books.
+3. Right-click on that selection.
+4. Select "Send to Device" > "Send to main memory"
+
+The CrossPoint plugin will connect to your device, create a folder for the book's author in the root folder (or the folder you configured for the plugin), then copy the book into that folder.
+
+<img width="783" height="310" alt="Image" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
+
+#### Removing a Book
+
+Books cannot be removed from your device through Calibre. Use the web interface instead.
 
 ### 3.6 Settings
 
@@ -150,6 +183,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
+  - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
 
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   
@@ -161,6 +195,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
   - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
   - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
+
+- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (System > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
 
 - **Status Bar**: Configure the status bar displayed while reading:
   
@@ -241,6 +277,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
   
   - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
   - "Page Scroll" - Long-pressing scrolls a page up/down
+- **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
+  - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
+  - "KOSync" - Hold Confirm (~1 second) to launch KOReader sync directly.
+  - "Disabled" - Long-press is ignored; only short-press opens the reader menu.
 
 - **Short Power Button Click**: Controls the effect of a short click of the power button:
   
@@ -523,11 +563,14 @@ On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the dev
 
 When reading an EPUB that contains footnotes, you can navigate to the footnote text by selecting the footnote reference in the book. From the footnote, you can return to your original reading position.
 
+If the device goes to sleep or you close the book while viewing a footnote, the book reopens to your original reading position, not the footnote.
+
 ### System Navigation
 
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
+* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Disabled" does nothing. A short press always opens the Reader Menu.
 
 ### Supported Languages
 
@@ -574,9 +617,9 @@ Accessible by selecting **Chapters** from the Reader Menu.
 
 Bookmarks can be created to quickly save and restore your place in a book.
 
-To create a bookmark, hold **Confirm** for 1 second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
+To create a bookmark, hold **Confirm** for about half a second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
 
-To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for 1 second, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
+To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
 

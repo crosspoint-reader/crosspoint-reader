@@ -81,6 +81,27 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* m
   einkDisplay.copyGrayscaleBuffers(lsbBuffer, msbBuffer);
 }
 
+void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
+  // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
+  // cover, a full-screen swap from arbitrary prior content). Without this, the
+  // X3 grayscale base takes its gentle differential happy path and the prior
+  // home/reader frame ghosts through the soft aa_pre_bw_mid waveform. Forcing a
+  // resync makes displayGrayscaleBase clear first, matching displayBuffer(HALF).
+  // The reader's FAST path is deliberately left on the differential path so
+  // per-page grayscale stays cheap.
+  if (gpio.deviceIsX3() && fallback == RefreshMode::HALF_REFRESH) {
+    einkDisplay.requestResync(1);
+  }
+
+  einkDisplay.displayGrayscaleBase(convertRefreshMode(fallback), turnOffScreen);
+}
+
+void HalDisplay::preconditionGrayscale() { einkDisplay.preconditionGrayscale(); }
+
+void HalDisplay::preconditionGrayscale(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+  einkDisplay.preconditionGrayscale(x, y, w, h);
+}
+
 void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer); }
 
 void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay.copyGrayscaleMsbBuffers(msbBuffer); }

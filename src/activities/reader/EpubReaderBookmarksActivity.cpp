@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
-#include "ProgressMapper.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -39,14 +38,6 @@ void EpubReaderBookmarksActivity::onEnter() {
       bookmarks.shrink_to_fit();
     } else {
       JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
-
-      // pre-compute bookmark page values for quicker rendering
-      for (auto& bookmark : bookmarks) {
-        CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
-        bookmark.computedSpineIndex = pos.spineIndex;
-        bookmark.computedChapterPageCount = pos.totalPages;
-        bookmark.computedChapterProgress = pos.pageNumber;
-      }
     }
   } else {
     LOG_DBG("EPB", "No bookmark file found at %s, starting with empty bookmarks", path.c_str());
@@ -93,6 +84,14 @@ void EpubReaderBookmarksActivity::loop() {
         selectorIndex--;
       }
 
+      if (bookmarks.empty()) {
+        ActivityResult result;
+        result.isCancelled = true;
+        setResult(std::move(result));
+        finish();
+        return;
+      }
+
       requestUpdate();
       confirmingDelete = DELETE_MODE_OFF;
       return;
@@ -108,8 +107,17 @@ void EpubReaderBookmarksActivity::loop() {
       return;
     }
     auto bookmark = bookmarks.at(selectorIndex);
-    CrossPointPosition pos = ProgressMapper::toCrossPoint(epub, {bookmark.xpath, bookmark.percentage}, renderer);
-    setResult(ProgressChangeResult{pos.spineIndex, pos.pageNumber});
+    ProgressChangeResult result{};
+    result.xpath = bookmark.xpath;
+    result.percentage = bookmark.percentage;
+    result.hasSavedProgress = true;
+    if (bookmark.computedChapterPageCount > 0 && bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
+        bookmark.computedSpineIndex < epub->getSpineItemsCount()) {
+      result.spineIndex = bookmark.computedSpineIndex;
+      result.page = bookmark.computedChapterProgress;
+      result.totalPages = bookmark.computedChapterPageCount;
+    }
+    setResult(std::move(result));
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -186,9 +194,12 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
     auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
     auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.computedSpineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-    return std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - " +
-           std::to_string(bookmark.computedChapterProgress + 1) + "/" +
-           std::to_string(bookmark.computedChapterPageCount) + " - " + tocTitle;
+    std::string subtitle = std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - ";
+    if (bookmark.computedChapterPageCount > 0) {
+      subtitle += std::to_string(bookmark.computedChapterProgress + 1) + "/" +
+                  std::to_string(bookmark.computedChapterPageCount) + " - ";
+    }
+    return subtitle + tocTitle;
   };
   const auto getBookmarkIcon = [isPortrait](int index) {
     // only enabled icon in portrait mode due to limitation with rotating icons for other orientations
@@ -208,16 +219,13 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
                    getBookmarkTitle, getBookmarkSubtitle, getBookmarkIcon);
 
       GUI.drawHelpText(renderer, Rect{contentX, pageHeight - hintGutterBottom, contentWidth, LINE_HEIGHT},
-                       tr(STR_HOLD_CONFIRM_TO_DELETE));
+                       tr(STR_HOLD_OPEN_TO_DELETE));
     }
-  } else {
-    GUI.drawHelpText(renderer, Rect{contentX, LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
-                     tr(STR_BOOKMARK_INSTRUCTIONS));
   }
 
   const auto backLabel = confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_CANCEL) : tr(STR_BACK);
   const auto confirmLabel =
-      bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_OPEN)) : "";
+      bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_SELECT)) : "";
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

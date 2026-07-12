@@ -163,7 +163,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
@@ -218,7 +218,13 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  if (hasGreyscale) {
+    // OEM grayscale pipeline base: use a full sleep-screen paint so the panel
+    // enters deep sleep from a clean B/W baseline before the gray nudge refresh.
+    renderer.displayGrayscaleBase(HalDisplay::FULL_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  }
 
   if (hasGreyscale) {
     bitmap.rewindToData();
@@ -325,5 +331,5 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }

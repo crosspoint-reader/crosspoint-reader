@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderMenuActivity final : public Activity {
@@ -18,6 +19,7 @@ class EpubReaderMenuActivity final : public Activity {
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,
+    TOGGLE_BOOKMARK,
     SCREENSHOT,
     DISPLAY_QR,
     GO_HOME,
@@ -27,7 +29,7 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes);
+                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
 
   void onEnter() override;
   void onExit() override;
@@ -40,7 +42,7 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes);
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;
@@ -48,6 +50,7 @@ class EpubReaderMenuActivity final : public Activity {
   int selectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
+  OptionPopup optionPopup;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
