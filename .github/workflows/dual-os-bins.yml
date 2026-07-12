@@ -65,10 +65,14 @@ jobs:
             if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Compute artifact ref
+        # Branch refs contain '/', which artifact names forbid.
+        run: echo "SAFE_REF=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: crosspoint-${{ github.ref_name }}-ota0
+          name: crosspoint-${{ env.SAFE_REF }}-ota0
           path: |
             dist/crosspoint-*-ota0.bin
             .pio/build/gh_release/bootloader.bin
@@ -118,9 +122,13 @@ jobs:
             if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Compute artifact ref
+        # Branch refs contain '/', which artifact names forbid.
+        run: echo "SAFE_REF=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
+
       - name: Upload Artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: biscuit-${{ github.ref_name }}-ota1
+          name: biscuit-${{ env.SAFE_REF }}-ota1
           path: dist/biscuit-*-ota1.bin
           if-no-files-found: error
