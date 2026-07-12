@@ -26,4 +26,4 @@ process it
 process uk
 process pl
 process sv
-process fi
+process "fi"
