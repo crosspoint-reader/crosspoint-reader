@@ -100,10 +100,10 @@ class Page {
                        [](const std::shared_ptr<PageElement>& el) { return el->getTag() == TAG_PageImage; });
   }
 
-  bool hasUncachedImages() const {
+  bool hasImagesNeedingDecode() const {
     return std::any_of(elements.begin(), elements.end(), [](const std::shared_ptr<PageElement>& element) {
       return element->getTag() == TAG_PageImage &&
-             !static_cast<const PageImage&>(*element).getImageBlock().hasValidCache();
+             static_cast<const PageImage&>(*element).getImageBlock().needsDecode();
     });
   }
 

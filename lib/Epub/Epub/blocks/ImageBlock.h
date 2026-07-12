@@ -17,6 +17,9 @@ class ImageBlock final : public Block {
 
   bool imageExists() const;
   bool hasValidCache() const;
+  bool needsDecode() const;
+  void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;
+  static void clearSessionRenderFailures();
 
   BlockType getType() override { return IMAGE_BLOCK; }
   bool isEmpty() override { return false; }

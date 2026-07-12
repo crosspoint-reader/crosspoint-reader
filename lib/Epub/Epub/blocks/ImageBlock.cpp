@@ -5,6 +5,8 @@
 #include <Logging.h>
 #include <Serialization.h>
 
+#include <cstdlib>
+
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 
@@ -44,6 +46,37 @@ bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int
   const size_t bytesPerRow = (cachedWidth + 3) / 4;
   const size_t expectedSize = 4 + bytesPerRow * cachedHeight;
   return cacheFile.size() >= expectedSize;
+}
+
+// Pages are deserialized afresh on each visit. Keep a bounded, allocation-free
+// record so an image that failed renders its placeholder directly for the rest
+// of the reader session instead of paying another placeholder refresh and
+// decode. The reader clears this on entry so transient memory/storage failures
+// are retried.
+constexpr size_t MAX_SESSION_IMAGE_FAILURES = 16;
+uint64_t failedImageHashes[MAX_SESSION_IMAGE_FAILURES];
+size_t failedImageCount = 0;
+
+uint64_t imagePathHash(const std::string& path) {
+  uint64_t hash = 14695981039346656037ull;
+  for (const char c : path) {
+    hash ^= static_cast<uint8_t>(c);
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+bool imageFailedThisSession(const std::string& path) {
+  const uint64_t hash = imagePathHash(path);
+  for (size_t i = 0; i < failedImageCount; i++) {
+    if (failedImageHashes[i] == hash) return true;
+  }
+  return false;
+}
+
+void rememberImageFailure(const std::string& path) {
+  if (failedImageCount == MAX_SESSION_IMAGE_FAILURES || imageFailedThisSession(path)) return;
+  failedImageHashes[failedImageCount++] = imagePathHash(path);
 }
 
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
@@ -139,6 +172,17 @@ bool ImageBlock::hasValidCache() const {
   return readValidCacheHeader(cacheFile, width, height, cachedWidth, cachedHeight);
 }
 
+bool ImageBlock::needsDecode() const { return !imageFailedThisSession(imagePath) && !hasValidCache(); }
+
+void ImageBlock::clearSessionRenderFailures() { failedImageCount = 0; }
+
+void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
+  renderer.fillRect(x, y, width, height, true);
+  if (width > 2 && height > 2) {
+    renderer.fillRect(x + 1, y + 1, width - 2, height - 2, false);
+  }
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
   // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
@@ -170,6 +214,11 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;
   }
 
+  if (imageFailedThisSession(imagePath)) {
+    renderPlaceholder(renderer, x, y);
+    return;
+  }
+
   // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
@@ -181,6 +230,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   HalFile file;
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
     LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
   size_t fileSize = file.size();
@@ -188,6 +239,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   if (fileSize == 0) {
     LOG_ERR("IMG", "Image file is empty: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
 
@@ -207,6 +260,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
 
@@ -215,6 +270,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
   if (!success) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
 

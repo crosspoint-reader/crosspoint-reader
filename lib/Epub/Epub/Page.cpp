@@ -58,15 +58,7 @@ void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffse
 }
 
 void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
-  const int x = xPos + xOffset;
-  const int y = yPos + yOffset;
-  const int width = imageBlock->getWidth();
-  const int height = imageBlock->getHeight();
-
-  renderer.fillRect(x, y, width, height, true);
-  if (width > 2 && height > 2) {
-    renderer.fillRect(x + 1, y + 1, width - 2, height - 2, false);
-  }
+  imageBlock->renderPlaceholder(renderer, xPos + xOffset, yPos + yOffset);
 }
 
 bool PageImage::serialize(HalFile& file) {
