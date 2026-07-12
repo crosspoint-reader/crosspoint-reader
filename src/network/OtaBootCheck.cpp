@@ -88,8 +88,6 @@ void runInstallStage(OtaUpdater& updater, GfxRenderer& renderer) {
   rtcRequest.url[sizeof(rtcRequest.url) - 1] = '\0';
   updater.adoptManifest(rtcRequest.version, rtcRequest.url, rtcRequest.size);
 
-  drawStatus(renderer, tr(STR_UPDATING));
-
   // The panel retains the frame just drawn, so hand the framebuffer heap to
   // the download: the TLS pipeline plus flash writes need every contiguous
   // block available. No progress UI — rendering is offline until the buffers
@@ -97,7 +95,11 @@ void runInstallStage(OtaUpdater& updater, GfxRenderer& renderer) {
   display.releaseBuffers();
   bootResult.error = updater.installUpdate(nullptr, nullptr);
   const bool buffersBack = display.reallocBuffers();
-  if (!buffersBack) {
+  if (buffersBack) {
+    // The renderer caches the framebuffer pointer in begin(); the realloc may
+    // have moved it, so refresh before anything paints again.
+    renderer.begin();
+  } else {
     // Can't render anything; reboot clean. The pending result is lost and the
     // OTA screen will simply offer the update again.
     LOG_ERR("OTA", "Framebuffer realloc failed after install, restarting");
@@ -134,7 +136,7 @@ void runStage(const Stage stage, GfxRenderer& renderer) {
 
   LOG_INF("OTA", "Boot stage %d starting (heap=%u maxAlloc=%u)", static_cast<int>(stage), ESP.getFreeHeap(),
           ESP.getMaxAllocHeap());
-  drawStatus(renderer, tr(STR_CHECKING_UPDATE));
+  drawStatus(renderer, stage == Stage::Check ? tr(STR_CHECKING_UPDATE) : tr(STR_UPDATING));
 
   if (!connectSavedWifi()) {
     bootResult.error = OtaUpdater::HTTP_ERROR;
