@@ -517,7 +517,6 @@ STR_EMERGENCY_CONTACT: "Emergency Contact"
 STR_EMERGENCY_PHONE: "Emergency Phone"
 STR_EDIT: "Edit"
 STR_SHOW_QR: "Show QR"
-# [BOOTSWITCH-PATCH] P4: dual-OS slot switch strings
 STR_SWITCH_OS: "Switch OS"
 STR_SWITCH_OS_PROMPT: "Restart into other OS?"
 STR_SWITCH_OS_NO_TARGET: "No other OS installed"

@@ -8,7 +8,10 @@ This file is the crib sheet that makes resolving those conflicts mechanical.
 **Sentinel convention.** Every in-place edit carries a grep-able marker:
 - in C/C++: `// [BOOTSWITCH-PATCH] Pn`
 - in `.ini`: `; [BOOTSWITCH-PATCH] Pn`
-- in `.yaml`: `# [BOOTSWITCH-PATCH] Pn`
+
+(The i18n yaml block carries NO marker: Biscuit's `gen_i18n.py` hard-fails on comment
+lines in translation files. Locate those keys with `grep -n STR_SWITCH_OS
+biscuit/lib/I18n/translations/english.yaml` instead.)
 
 After any sync, run:
 
@@ -16,8 +19,8 @@ After any sync, run:
 grep -rn --exclude=LOCAL_PATCHES.md "BOOTSWITCH-PATCH" biscuit/
 ```
 
-Expected: **15 marker lines** across 8 files (P1–P3 ×1 each in platformio.ini; P4 ×3
-— two source headers + yaml block; P5 ×4; P6 ×2; P7 ×3). A missing marker means the
+Expected: **14 marker lines** across 7 files (P1–P3 ×1 each in platformio.ini; P4 ×2
+— the two source-file headers; P5 ×4; P6 ×2; P7 ×3). A missing marker means the
 merge dropped that patch — re-apply from this file.
 
 **Golden rule:** keep biscuit-side edits minimal. All swap *logic* lives in the parent
@@ -88,7 +91,8 @@ Check-for-updates menu entry to reappear, see P6).
 Near-verbatim copy of the CrossPoint activity (states CONFIRMING / NO_TARGET /
 SWAPPING / FAILED, `bootMode` flag). Differences: Biscuit's `onGoHome()` takes no
 argument, and its yaml lacks `STR_RESTARTING_HINT`, so the SWAPPING screen shows only
-"Switching OS...".
+"Switching OS...". The yaml keys are appended WITHOUT a marker comment — Biscuit's
+`gen_i18n.py` rejects comment lines in translation files.
 
 **On conflict:** new files don't collide. If upstream ever adds a same-named file,
 rename ours and update P5/P7.
