@@ -32,6 +32,10 @@ struct PercentResult {
   int percent = 0;
 };
 
+struct IntervalResult {
+  uint32_t value = 0;
+};
+
 struct PageResult {
   uint32_t page = 0;
 };
@@ -39,6 +43,10 @@ struct PageResult {
 struct ProgressChangeResult {
   int spineIndex = 0;
   int page = 0;
+  int totalPages = 0;
+  std::string xpath;
+  float percentage = 0.0f;
+  bool hasSavedProgress = false;
 };
 
 enum class NetworkMode;
@@ -55,8 +63,9 @@ struct FilePathResult {
   std::string path;
 };
 
-using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
-                                   PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+using ResultVariant =
+    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
+                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

@@ -5,11 +5,15 @@
 
 #include "CrossPointSettings.h"
 
+namespace {
+
 static uint8_t fontSizeEnumFromSettings() {
   uint8_t e = SETTINGS.fontSize;
   if (e >= CrossPointSettings::FONT_SIZE_COUNT) e = 1;  // default to MEDIUM
   return e;
 }
+
+}  // namespace
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
   registry_.discover();
@@ -30,10 +34,12 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
       } else {
         LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
         SETTINGS.sdFontFamilyName[0] = '\0';
+        SETTINGS.saveToFile();
       }
     } else {
       LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      SETTINGS.saveToFile();
     }
   }
 
@@ -72,12 +78,11 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       manager_.unloadAll(renderer);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      SETTINGS.saveToFile();
       return;
     }
-    auto sizes = family->availableSizes();
-    uint8_t idx = sizeEnum;
-    if (idx >= sizes.size()) idx = sizes.size() - 1;
-    uint8_t wantedPt = sizes.empty() ? 0 : sizes[idx];
+    const auto* selected = family->findClosestReaderSize(sizeEnum);
+    const uint8_t wantedPt = selected ? selected->pointSize : 0;
     if (!registryWasDirty && wantedPt == manager_.currentPointSize()) return;
     LOG_DBG("SDFS", "Reloading %s: size %u -> %u (enum %u)%s", wantedFamily, manager_.currentPointSize(), wantedPt,
             sizeEnum, registryWasDirty ? " [registry dirty]" : "");
@@ -94,10 +99,12 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     } else {
       LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
       SETTINGS.sdFontFamilyName[0] = '\0';
+      SETTINGS.saveToFile();
     }
   } else {
     LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
     SETTINGS.sdFontFamilyName[0] = '\0';
+    SETTINGS.saveToFile();
   }
 }
 

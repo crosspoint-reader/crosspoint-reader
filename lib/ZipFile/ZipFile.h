@@ -72,9 +72,58 @@ class ZipFile {
   bool readFileToStream(const char* filename, Print& out, size_t chunkSize);
 
   template <typename F>
-  void enumerateFilePaths(F&& callback) const {
-    for (const auto& entry : fileStatSlimCache) {
-      callback(std::string_view{entry.first});
+  bool enumerateFilePaths(F&& callback) {
+    if (!fileStatSlimCache.empty()) {
+      for (const auto& entry : fileStatSlimCache) {
+        callback(std::string_view{entry.first});
+      }
+      return true;
     }
+
+    const bool wasOpen = isOpen();
+    if (!wasOpen && !open()) {
+      return false;
+    }
+
+    if (!loadZipDetails()) {
+      if (!wasOpen) {
+        close();
+      }
+      return false;
+    }
+
+    file.seek(zipDetails.centralDirOffset);
+
+    uint32_t sig;
+    char itemName[256];
+
+    while (file.available()) {
+      file.read(&sig, 4);
+      if (sig != 0x02014b50) {
+        break;
+      }
+
+      file.seekCur(24);
+      uint16_t nameLen, m, k;
+      file.read(&nameLen, 2);
+      file.read(&m, 2);
+      file.read(&k, 2);
+      file.seekCur(12);
+
+      if (nameLen < sizeof(itemName)) {
+        file.read(itemName, nameLen);
+        itemName[nameLen] = '\0';
+        callback(std::string_view{itemName, nameLen});
+      } else {
+        file.seekCur(nameLen);
+      }
+
+      file.seekCur(m + k);
+    }
+
+    if (!wasOpen) {
+      close();
+    }
+    return true;
   }
 };

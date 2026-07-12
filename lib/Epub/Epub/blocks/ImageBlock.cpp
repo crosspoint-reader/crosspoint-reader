@@ -1,8 +1,11 @@
 #include "ImageBlock.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Serialization.h>
+
+#include <cstdlib>
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
@@ -28,6 +31,54 @@ std::string getCachePath(const std::string& imagePath) {
   return imagePath + ".pxc";
 }
 
+bool readValidCacheHeader(HalFile& cacheFile, const int expectedWidth, const int expectedHeight, uint16_t& cachedWidth,
+                          uint16_t& cachedHeight) {
+  if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
+    return false;
+  }
+
+  const int widthDiff = abs(cachedWidth - expectedWidth);
+  const int heightDiff = abs(cachedHeight - expectedHeight);
+  if (widthDiff > 1 || heightDiff > 1) {
+    return false;
+  }
+
+  const size_t bytesPerRow = (cachedWidth + 3) / 4;
+  const size_t expectedSize = 4 + bytesPerRow * cachedHeight;
+  return cacheFile.size() >= expectedSize;
+}
+
+// Pages are deserialized afresh on each visit. Keep a bounded, allocation-free
+// record so an image that failed renders its placeholder directly for the rest
+// of the reader session instead of paying another placeholder refresh and
+// decode. The reader clears this on entry so transient memory/storage failures
+// are retried.
+constexpr size_t MAX_SESSION_IMAGE_FAILURES = 16;
+uint64_t failedImageHashes[MAX_SESSION_IMAGE_FAILURES];
+size_t failedImageCount = 0;
+
+uint64_t imagePathHash(const std::string& path) {
+  uint64_t hash = 14695981039346656037ull;
+  for (const char c : path) {
+    hash ^= static_cast<uint8_t>(c);
+    hash *= 1099511628211ull;
+  }
+  return hash;
+}
+
+bool imageFailedThisSession(const std::string& path) {
+  const uint64_t hash = imagePathHash(path);
+  for (size_t i = 0; i < failedImageCount; i++) {
+    if (failedImageHashes[i] == hash) return true;
+  }
+  return false;
+}
+
+void rememberImageFailure(const std::string& path) {
+  if (failedImageCount == MAX_SESSION_IMAGE_FAILURES || imageFailedThisSession(path)) return;
+  failedImageHashes[failedImageCount++] = imagePathHash(path);
+}
+
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight) {
   HalFile cacheFile;
@@ -36,16 +87,8 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   }
 
   uint16_t cachedWidth, cachedHeight;
-  if (cacheFile.read(&cachedWidth, 2) != 2 || cacheFile.read(&cachedHeight, 2) != 2) {
-    return false;
-  }
-
-  // Verify dimensions are close (allow 1 pixel tolerance for rounding differences)
-  int widthDiff = abs(cachedWidth - expectedWidth);
-  int heightDiff = abs(cachedHeight - expectedHeight);
-  if (widthDiff > 1 || heightDiff > 1) {
-    LOG_ERR("IMG", "Cache dimension mismatch: %dx%d vs %dx%d", cachedWidth, cachedHeight, expectedWidth,
-            expectedHeight);
+  if (!readValidCacheHeader(cacheFile, expectedWidth, expectedHeight, cachedWidth, cachedHeight)) {
+    LOG_ERR("IMG", "Invalid image cache: %s", cachePath.c_str());
     return false;
   }
 
@@ -55,10 +98,22 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
   LOG_DBG("IMG", "Loading from cache: %s (%dx%d)", cachePath.c_str(), cachedWidth, cachedHeight);
 
-  // Read and render row by row to minimize memory usage
+  // Read several rows per SD access. A full-page image is re-rendered on every
+  // grayscale strip pass (~14x per page), and a one-row-per-read loop here means
+  // cachedHeight (~728) tiny reads through the storage mutex + SdFat each time —
+  // the dominant cost of displaying an image page. Batching rows into a ~4KB
+  // buffer cuts that to ~20 reads per pass without holding the whole image.
   const int bytesPerRow = (cachedWidth + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
-  uint8_t* rowBuffer = (uint8_t*)malloc(bytesPerRow);
-  if (!rowBuffer) {
+  int rowsPerRead = 4096 / bytesPerRow;
+  if (rowsPerRead < 1) rowsPerRead = 1;
+  if (rowsPerRead > cachedHeight) rowsPerRead = cachedHeight;
+  uint8_t* readBuffer = (uint8_t*)malloc((size_t)rowsPerRead * bytesPerRow);
+  if (!readBuffer) {
+    // Fall back to a single-row buffer under memory pressure.
+    rowsPerRead = 1;
+    readBuffer = (uint8_t*)malloc(bytesPerRow);
+  }
+  if (!readBuffer) {
     LOG_ERR("IMG", "Failed to allocate row buffer");
     return false;
   }
@@ -66,16 +121,31 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   DirectPixelWriter pw;
   pw.init(renderer);
 
+  int rowsInBuffer = 0;
+  int bufferRow = 0;
   for (int row = 0; row < cachedHeight; row++) {
-    if (cacheFile.read(rowBuffer, bytesPerRow) != bytesPerRow) {
-      LOG_ERR("IMG", "Cache read error at row %d", row);
-      free(rowBuffer);
-      return false;
+    if (bufferRow >= rowsInBuffer) {
+      const int toRead = (cachedHeight - row < rowsPerRead) ? (cachedHeight - row) : rowsPerRead;
+      const size_t bytes = (size_t)toRead * bytesPerRow;
+      if (cacheFile.read(readBuffer, bytes) != static_cast<int>(bytes)) {
+        LOG_ERR("IMG", "Cache read error at row %d", row);
+        free(readBuffer);
+        return false;
+      }
+      rowsInBuffer = toRead;
+      bufferRow = 0;
     }
+
+    const uint8_t* rowBuffer = readBuffer + (size_t)bufferRow * bytesPerRow;
+    bufferRow++;
 
     const int destY = y + row;
     pw.beginRow(destY);
-    for (int col = 0; col < cachedWidth; col++) {
+    // On a grayscale strip pass only a narrow column window of the image is in
+    // the active band; skip the rest instead of unpacking+clipping every pixel.
+    int colStart, colEnd;
+    pw.bandColRange(x, cachedWidth, colStart, colEnd);
+    for (int col = colStart; col < colEnd; col++) {
       const int byteIdx = col >> 2;            // col / 4
       const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
       uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
@@ -84,14 +154,44 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
     }
   }
 
-  free(rowBuffer);
+  free(readBuffer);
   LOG_DBG("IMG", "Cache render complete");
   return true;
 }
 
 }  // namespace
 
+bool ImageBlock::hasValidCache() const {
+  const auto cachePath = getCachePath(imagePath);
+  HalFile cacheFile;
+  if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
+    return false;
+  }
+
+  uint16_t cachedWidth, cachedHeight;
+  return readValidCacheHeader(cacheFile, width, height, cachedWidth, cachedHeight);
+}
+
+bool ImageBlock::needsDecode() const { return !imageFailedThisSession(imagePath) && !hasValidCache(); }
+
+void ImageBlock::clearSessionRenderFailures() { failedImageCount = 0; }
+
+void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
+  renderer.fillRect(x, y, width, height, true);
+  if (width > 2 && height > 2) {
+    renderer.fillRect(x + 1, y + 1, width - 2, height - 2, false);
+  }
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
+  // The font-prewarm scan pass only accumulates glyphs; an image contributes
+  // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
+  // suppression, so it would otherwise do a full (discarded) cache render every
+  // page view. Skip it here. The image still draws in the real BW/grayscale
+  // passes; on first view this just moves the one-time decode to the BW pass.
+  FontCacheManager* fcm = renderer.getFontCacheManager();
+  if (fcm && fcm->isScanning()) return;
+
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
   const int screenWidth = renderer.getScreenWidth();
@@ -101,6 +201,21 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   if (x < 0 || y < 0 || x + width > screenWidth || y + height > screenHeight) {
     LOG_ERR("IMG", "Invalid render position: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
             screenHeight);
+    return;
+  }
+
+  // Tiled grayscale (#2190): skip the whole image when it doesn't touch the
+  // active band. The per-pixel writer already clips off-band pixels, but without
+  // this each of the ~7 bands per plane re-ran the full cache load / pixel walk
+  // and discarded the result — the dominant cost of AA on image pages. The check
+  // is orientation-aware and returns true when no strip is active, so the BW
+  // pass and non-tiled controllers render the image exactly as before.
+  if (!renderer.glyphIntersectsStrip(x, y, x + width - 1, y + height - 1)) {
+    return;
+  }
+
+  if (imageFailedThisSession(imagePath)) {
+    renderPlaceholder(renderer, x, y);
     return;
   }
 
@@ -115,6 +230,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   HalFile file;
   if (!Storage.openFileForRead("IMG", imagePath, file)) {
     LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
   size_t fileSize = file.size();
@@ -122,6 +239,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   if (fileSize == 0) {
     LOG_ERR("IMG", "Image file is empty: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
 
@@ -141,6 +260,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {
     LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
 
@@ -149,6 +270,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
   if (!success) {
     LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
+    rememberImageFailure(imagePath);
+    renderPlaceholder(renderer, x, y);
     return;
   }
 

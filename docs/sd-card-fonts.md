@@ -9,15 +9,15 @@ There are three ways to install fonts:
 
 ### Option 1: Download from device (recommended)
 
-1. Connect your CrossPoint reader to WiFi
+1. Connect your CrossPoint reader to Wi-Fi
 2. Go to **Settings > System > Manage Fonts**
 3. Browse available font families and tap to download
 4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
 
 ### Option 2: Upload via web browser
 
-1. Connect your CrossPoint reader to WiFi
-2. Open the web interface in your browser (shown on the WiFi screen)
+1. Start **File Transfer** and connect through **Join Network** or **Create Hotspot**
+2. Open the web interface URL shown on the reader
 3. Navigate to the **Fonts** tab
 4. Upload `.cpfont` files using the upload form
 
@@ -96,6 +96,7 @@ To convert your own TrueType/OpenType fonts:
 | `latin-ext` | European languages (Latin + Extended-A/B + punctuation + ligatures) |
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
+| `hebrew` | Hebrew + Alphabetic Presentation Forms |
 | `georgian` | Georgian + Georgian Supplement |
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |
@@ -107,7 +108,7 @@ To convert your own TrueType/OpenType fonts:
 | `tifinagh` | Tifinagh |
 | `symbols` | Math, currency, arrows, box-drawing, misc symbols, dingbats |
 | `reading` | Literary fiction coverage: Latin, Greek, Cyrillic, math/symbol blocks, supplemental punctuation, and CJK quote marks |
-| `builtin` | Matches built-in Bookerly coverage exactly |
+| `builtin` | Matches the firmware's built-in font conversion intervals |
 
 Combine presets with commas: `--intervals latin-ext,greek,cyrillic`
 
@@ -122,4 +123,4 @@ To list all presets with codepoint counts:
 
 `--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
 
-Install custom fonts via WiFi upload or manual SD card copy.
+Install custom fonts via the web interface or manual SD card copy.

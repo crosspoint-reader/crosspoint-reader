@@ -6,6 +6,20 @@
 
 #include <new>
 
+namespace {
+
+template <typename Predicate>
+void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
+                                const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
+  for (const auto& element : elements) {
+    if (predicate(*element)) {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
+  }
+}
+
+}  // namespace
+
 void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   block->render(renderer, fontId, xPos + xOffset, yPos + yOffset);
 }
@@ -25,12 +39,26 @@ std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
   serialization::readPod(file, yPos);
 
   auto tb = TextBlock::deserialize(file);
-  return std::unique_ptr<PageLine>(new PageLine(std::move(tb), xPos, yPos));
+  if (!tb) {
+    LOG_ERR("PGE", "Deserialization failed: null TextBlock");
+    return nullptr;
+  }
+
+  auto* line = new (std::nothrow) PageLine(std::move(tb), xPos, yPos);
+  if (!line) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageLine");
+    return nullptr;
+  }
+  return std::unique_ptr<PageLine>(line);
 }
 
 void PageImage::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
   // Images don't use fontId or text rendering
   imageBlock->render(renderer, xPos + xOffset, yPos + yOffset);
+}
+
+void PageImage::renderPlaceholder(GfxRenderer& renderer, const int xOffset, const int yOffset) const {
+  imageBlock->renderPlaceholder(renderer, xPos + xOffset, yPos + yOffset);
 }
 
 bool PageImage::serialize(HalFile& file) {
@@ -93,8 +121,22 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
-  for (auto& element : elements) {
-    element->render(renderer, fontId, xOffset, yOffset);
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
+}
+
+void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
+  renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset,
+                             [](const PageElement& element) { return element.getTag() == TAG_PageImage; });
+}
+
+void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, const int xOffset,
+                                       const int yOffset) const {
+  for (const auto& element : elements) {
+    if (element->getTag() == TAG_PageImage) {
+      static_cast<const PageImage&>(*element).renderPlaceholder(renderer, xOffset, yOffset);
+    } else {
+      element->render(renderer, fontId, xOffset, yOffset);
+    }
   }
 }
 
@@ -138,9 +180,15 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
+      if (!pl) {
+        return nullptr;
+      }
       page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
       auto pi = PageImage::deserialize(file);
+      if (!pi) {
+        return nullptr;
+      }
       page->elements.push_back(std::move(pi));
     } else if (tag == TAG_PageHorizontalRule) {
       auto rule = PageHorizontalRule::deserialize(file);
