@@ -108,6 +108,10 @@ class WifiSelectionActivity final : public Activity {
   void handleAutoConnectFailure();
   void showNetworkListFromAutoConnect();
   bool hasAttemptedAutoSsid(const std::string& ssid) const;
+  void disableModemPowerSave();
+  void applyDisplayHostname();
+  void disableAutoReconnect();
+  void logConnectionDiagnostics();
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
   void onComplete(bool connected);

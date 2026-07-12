@@ -295,19 +295,83 @@ void WifiSelectionActivity::attemptConnection() {
 
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
-  delay(100);
 
-  // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
-  String mac = WiFi.macAddress();
-  mac.replace(":", "");
-  String hostname = "CrossPoint-Reader-" + mac;
-  WiFi.setHostname(hostname.c_str());
+  disableModemPowerSave();
+  applyDisplayHostname();
+  disableAutoReconnect();
 
+  wl_status_t beginResult;
   if (selectedRequiresPassword && !enteredPassword.empty()) {
-    WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
+    beginResult = WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
   } else {
-    WiFi.begin(selectedSSID.c_str());
+    beginResult = WiFi.begin(selectedSSID.c_str());
+  }
+
+  if (beginResult != WL_DISCONNECTED) {
+    LOG_ERR("WIFI", "WiFi.begin() returned %d (expected %d=WL_DISCONNECTED) for ssid=%s", beginResult, WL_DISCONNECTED,
+            selectedSSID.c_str());
+    connectionError = tr(STR_ERROR_GENERAL_FAILURE);
+    state = WifiSelectionState::CONNECTION_FAILED;
+    requestUpdate();
+    return;
+  }
+
+  LOG_DBG("WIFI", "WiFi.begin() initiated async connection for ssid=%s", selectedSSID.c_str());
+  LOG_DBG("WIFI", "attemptConnection: ssid=%s requiresPwd=%d hostname=%s", selectedSSID.c_str(),
+          selectedRequiresPassword, WiFi.getHostname());
+}
+
+void WifiSelectionActivity::disableModemPowerSave() { WiFi.setSleep(WIFI_PS_NONE); }
+
+void WifiSelectionActivity::applyDisplayHostname() {
+  // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[13];
+  snprintf(macStr, sizeof(macStr), "%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  String hostname = "CrossPoint-Reader-" + String(macStr);
+  WiFi.setHostname(hostname.c_str());
+}
+
+void WifiSelectionActivity::disableAutoReconnect() { WiFi.setAutoReconnect(false); }
+
+void WifiSelectionActivity::logConnectionDiagnostics() {
+  const wl_status_t status = WiFi.status();
+  static unsigned long lastStatusLog = 0;
+  const unsigned long elapsed = millis() - connectionStartTime;
+  if (elapsed - lastStatusLog >= 2000) {
+    lastStatusLog = elapsed;
+    const char* statusName = "unknown";
+    switch (status) {
+      case WL_IDLE_STATUS:
+        statusName = "WL_IDLE_STATUS(0)";
+        break;
+      case WL_NO_SSID_AVAIL:
+        statusName = "WL_NO_SSID_AVAIL(1)";
+        break;
+      case WL_SCAN_COMPLETED:
+        statusName = "WL_SCAN_COMPLETED(2)";
+        break;
+      case WL_CONNECTED:
+        statusName = "WL_CONNECTED(3)";
+        break;
+      case WL_CONNECT_FAILED:
+        statusName = "WL_CONNECT_FAILED(4)";
+        break;
+      case WL_CONNECTION_LOST:
+        statusName = "WL_CONNECTION_LOST(5)";
+        break;
+      case WL_DISCONNECTED:
+        statusName = "WL_DISCONNECTED(6)";
+        break;
+      case WL_STOPPED:
+        statusName = "WL_STOPPED(254)";
+        break;
+      case WL_NO_SHIELD:
+        statusName = "WL_NO_SHIELD(255)";
+        break;
+    }
+    LOG_DBG("WIFI", "conn status=%s elapsed=%lums ssid=%s", statusName, elapsed, selectedSSID.c_str());
   }
 }
 
@@ -317,6 +381,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
   }
 
   const wl_status_t status = WiFi.status();
+  logConnectionDiagnostics();
 
   if (status == WL_CONNECTED) {
     // Successfully connected
@@ -376,6 +441,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
   // Check for timeout
   const unsigned long timeoutMs = autoConnecting ? AUTO_CONNECTION_TIMEOUT_MS : CONNECTION_TIMEOUT_MS;
   if (millis() - connectionStartTime > timeoutMs) {
+    LOG_DBG("WIFI", "TIMEOUT after %lums — final WiFi.status()=%d", millis() - connectionStartTime, WiFi.status());
     WiFi.disconnect();
     connectionError = tr(STR_ERROR_CONNECTION_TIMEOUT);
     if (autoConnecting) {
