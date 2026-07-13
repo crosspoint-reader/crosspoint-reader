@@ -1,4 +1,5 @@
 #pragma once
+#include <Stream.h>
 #include <expat.h>
 
 #include <cstddef>
@@ -49,6 +50,21 @@ class WebDavParser {
   bool inCollection = false;
 
   bool errorOccurred = false;
+};
+
+class WebDavParserStream final : public Stream {
+ public:
+  explicit WebDavParserStream(WebDavParser& parser) : parser(parser) {}
+  ~WebDavParserStream() override { parser.flush(); }
+
+  size_t write(uint8_t c) override { return parser.write(c); }
+  size_t write(const uint8_t* buffer, size_t size) override { return parser.write(buffer, size); }
+  int available() override { return 0; }
+  int read() override { return -1; }
+  int peek() override { return -1; }
+
+ private:
+  WebDavParser& parser;
 };
 
 namespace WebDavClient {

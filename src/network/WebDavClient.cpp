@@ -5,7 +5,19 @@
 #include <cstring>
 #include <utility>
 
+// Uncomment to use HttpDownloader (wolfSSL) instead of Arduino HTTPClient (mbedTLS)
+// #define WEBDAV_USE_HTTPDOWNLOADER
+
+#ifdef WEBDAV_USE_HTTPDOWNLOADER
 #include "HttpDownloader.h"
+#else
+#include <HTTPClient.h>
+#include <NetworkClient.h>
+#include <NetworkClientSecure.h>
+#include <base64.h>
+
+#include <memory>
+#endif
 
 static constexpr const char* PROPFIND_BODY =
     "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
@@ -174,8 +186,11 @@ void XMLCALL WebDavParser::characterData(void* userData, const XML_Char* s, cons
 
 // WebDavClient
 
-static bool doPropfind(const char* url, const std::string& user, const std::string& pass,
-                       std::vector<WebDavEntry>& entries) {
+bool WebDavClient::listFiles(const char* url, const char* username, const char* password,
+                             std::vector<WebDavEntry>& entries) {
+  LOG_DBG("DAV", "PROPFIND: %s", url);
+
+#ifdef WEBDAV_USE_HTTPDOWNLOADER
   WebDavParser parser;
   if (parser.error()) return false;
 
@@ -183,6 +198,9 @@ static bool doPropfind(const char* url, const std::string& user, const std::stri
       {"Depth", "1"},
       {"Content-Type", "application/xml"},
   };
+
+  const std::string user = username ? username : "";
+  const std::string pass = password ? password : "";
 
   bool ok = HttpDownloader::sendRequest(
       url, "PROPFIND", PROPFIND_BODY, headers,
@@ -198,6 +216,53 @@ static bool doPropfind(const char* url, const std::string& user, const std::stri
   }
 
   parser.flush();
+#else
+  const bool isHttps = strncmp(url, "https", 5) == 0;
+  std::unique_ptr<NetworkClient> client;
+  if (isHttps) {
+    auto* sc = new (std::nothrow) NetworkClientSecure();
+    if (!sc) {
+      LOG_ERR("DAV", "OOM: NetworkClientSecure");
+      return false;
+    }
+    sc->setInsecure();
+    client.reset(sc);
+  } else {
+    auto* nc = new (std::nothrow) NetworkClient();
+    if (!nc) {
+      LOG_ERR("DAV", "OOM: NetworkClient");
+      return false;
+    }
+    client.reset(nc);
+  }
+
+  HTTPClient http;
+  http.begin(*client, url);
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+  http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  http.addHeader("Depth", "1");
+  http.addHeader("Content-Type", "application/xml");
+
+  if (username && password && strlen(username) > 0 && strlen(password) > 0) {
+    std::string credentials = std::string(username) + ":" + password;
+    String encoded = base64::encode(credentials.c_str());
+    http.addHeader("Authorization", "Basic " + encoded);
+  }
+
+  const int httpCode = http.sendRequest("PROPFIND", PROPFIND_BODY);
+  if (httpCode != 207) {
+    LOG_ERR("DAV", "PROPFIND failed: %d for %s", httpCode, url);
+    http.end();
+    return false;
+  }
+
+  WebDavParser parser;
+  {
+    WebDavParserStream stream{parser};
+    http.writeToStream(&stream);
+  }
+  http.end();
+#endif
 
   if (parser.error()) {
     LOG_ERR("DAV", "Failed to parse PROPFIND XML for %s", url);
@@ -219,14 +284,4 @@ static bool doPropfind(const char* url, const std::string& user, const std::stri
   }
 
   return true;
-}
-
-bool WebDavClient::listFiles(const char* url, const char* username, const char* password,
-                             std::vector<WebDavEntry>& entries) {
-  LOG_DBG("DAV", "PROPFIND: %s", url);
-
-  const std::string user = username ? username : "";
-  const std::string pass = password ? password : "";
-
-  return doPropfind(url, user, pass, entries);
 }
