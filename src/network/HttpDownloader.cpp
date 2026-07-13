@@ -255,6 +255,139 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   return runGetSecure(url, username, password, sink) == OK;
 }
 
+bool HttpDownloader::sendRequest(const std::string& url, const char* method, const std::string& body,
+                                 const std::vector<std::pair<std::string, std::string>>& extraHeaders,
+                                 const DataCallback& onData, int acceptedStatus, const std::string& username,
+                                 const std::string& password) {
+  LOG_DBG("HTTP", "%s: %s", method, url.c_str());
+  Sink sink;
+  sink.write = onData;
+
+#if defined(FREEINK_NET_WOLFSSL)
+  std::string currentUrl = url;
+  for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
+    freeink::SecureHttpClient http;
+    http.setTimeout(HTTP_TIMEOUT_MS);
+    http.setInsecure();
+    if (!http.begin(currentUrl)) {
+      LOG_ERR("HTTP", "wolfSSL bad URL: %s", currentUrl.c_str());
+      return false;
+    }
+    http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+    if (!username.empty() && !password.empty()) {
+      const std::string credentials = username + ":" + password;
+      const String encoded = base64::encode(credentials.c_str());
+      http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
+    }
+    for (const auto& [name, value] : extraHeaders) {
+      http.addHeader(name, value);
+    }
+
+    const auto* payloadData = reinterpret_cast<const uint8_t*>(body.data());
+    const int status = http.sendRequest(
+        method, payloadData, body.size(),
+        [&http, &sink, acceptedStatus](const uint8_t* data, size_t len) {
+          if (http.getStatus() != acceptedStatus) return true;
+          if (!sink.write(data, len)) return false;
+          sink.downloaded += len;
+          return true;
+        });
+    if (status < 0) {
+      LOG_ERR("HTTP", "wolfSSL %s failed: %s", method, currentUrl.c_str());
+      return false;
+    }
+    if (isRedirect(status)) {
+      const std::string location = http.getHeader("location");
+      if (location.empty() || !freeink::SecureHttpClient::resolveUrl(currentUrl, location, currentUrl)) {
+        LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
+        return false;
+      }
+      continue;
+    }
+    if (status != acceptedStatus) {
+      LOG_ERR("HTTP", "wolfSSL unexpected status: %d (expected %d)", status, acceptedStatus);
+      return false;
+    }
+    if (http.callbackAborted()) return false;
+    return true;
+  }
+  LOG_ERR("HTTP", "too many redirects");
+  return false;
+#else
+  esp_http_client_config_t config = {};
+  config.url = url.c_str();
+  config.buffer_size = HTTP_RX_BUF;
+  config.buffer_size_tx = HTTP_TX_BUF;
+  config.timeout_ms = HTTP_TIMEOUT_MS;
+  config.crt_bundle_attach = esp_crt_bundle_attach;
+  config.keep_alive_enable = true;
+
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  if (!client) {
+    LOG_ERR("HTTP", "client init failed");
+    return false;
+  }
+
+  esp_http_client_set_method(client, HTTP_METHOD_GET);
+  if (strcmp(method, "POST") == 0) esp_http_client_set_method(client, HTTP_METHOD_POST);
+  else if (strcmp(method, "PUT") == 0) esp_http_client_set_method(client, HTTP_METHOD_PUT);
+  else if (strcmp(method, "PROPFIND") == 0) esp_http_client_set_method(client, HTTP_METHOD_PROPFIND);
+
+  esp_http_client_set_header(client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  if (!username.empty() && !password.empty()) {
+    const std::string credentials = username + ":" + password;
+    const String header = "Basic " + base64::encode(credentials.c_str());
+    esp_http_client_set_header(client, "Authorization", header.c_str());
+  }
+  for (const auto& [name, value] : extraHeaders) {
+    esp_http_client_set_header(client, name.c_str(), value.c_str());
+  }
+
+  const int bodyLen = static_cast<int>(body.size());
+  esp_err_t err = esp_http_client_open(client, bodyLen);
+  if (err != ESP_OK) {
+    LOG_ERR("HTTP", "open failed: %s", esp_err_to_name(err));
+    esp_http_client_cleanup(client);
+    return false;
+  }
+  if (bodyLen > 0) {
+    esp_http_client_write(client, body.c_str(), bodyLen);
+  }
+  esp_http_client_fetch_headers(client);
+  const int status = esp_http_client_get_status_code(client);
+
+  if (status != acceptedStatus) {
+    LOG_ERR("HTTP", "unexpected status: %d (expected %d)", status, acceptedStatus);
+    esp_http_client_cleanup(client);
+    return false;
+  }
+
+  auto buf = makeUniqueNoThrow<char[]>(READ_CHUNK);
+  if (!buf) {
+    LOG_ERR("HTTP", "OOM: %u byte read buffer", (unsigned)READ_CHUNK);
+    esp_http_client_cleanup(client);
+    return false;
+  }
+
+  while (true) {
+    const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
+    if (read < 0) {
+      LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
+      esp_http_client_cleanup(client);
+      return false;
+    }
+    if (read == 0) break;
+    if (!sink.write(reinterpret_cast<const uint8_t*>(buf.get()), read)) {
+      esp_http_client_cleanup(client);
+      return false;
+    }
+    sink.downloaded += read;
+  }
+  esp_http_client_cleanup(client);
+  return true;
+#endif
+}
+
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password) {

@@ -238,6 +238,10 @@ class CrossPointSettings {
 
   // Reader screen margin settings
   uint8_t screenMargin = 5;
+  // WebDAV browser settings
+  char webdavServerUrl[128] = "";
+  char webdavUsername[64] = "";
+  char webdavPassword[64] = "";
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
