@@ -3,6 +3,8 @@
 
 #include <functional>
 #include <string>
+#include <utility>
+#include <vector>
 
 /**
  * HTTP client utility for fetching content and downloading files. Built on
@@ -37,6 +39,16 @@ class HttpDownloader {
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
                        const std::string& password = "");
+
+  /**
+   * Send a request with a custom HTTP method, optional body, and extra headers.
+   * Streams the response body to onData. Accepts any status via acceptedStatus
+   * (default 200). Returns true if the request succeeded with the accepted status.
+   */
+  static bool sendRequest(const std::string& url, const char* method, const std::string& body,
+                           const std::vector<std::pair<std::string, std::string>>& extraHeaders,
+                           const DataCallback& onData, int acceptedStatus = 200, const std::string& username = "",
+                           const std::string& password = "");
 
   /**
    * Download a file to the SD card with optional credentials.

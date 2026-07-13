@@ -49,7 +49,7 @@ void WebDavSettingsActivity::loop() {
 void WebDavSettingsActivity::handleSelection() {
   if (selectedIndex == 0) {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_WEBDAV_SERVER_URL),
-                                                                   SETTINGS.webdavServerUrl, 127, false),
+                                                                   SETTINGS.webdavServerUrl, 127, InputType::Url),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
@@ -60,7 +60,7 @@ void WebDavSettingsActivity::handleSelection() {
                            });
   } else if (selectedIndex == 1) {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
-                                                                   SETTINGS.webdavUsername, 63, false),
+                                                                   SETTINGS.webdavUsername, 63, InputType::Text),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
@@ -71,7 +71,7 @@ void WebDavSettingsActivity::handleSelection() {
                            });
   } else if (selectedIndex == 2) {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
-                                                                   SETTINGS.webdavPassword, 63, false),
+                                                                   SETTINGS.webdavPassword, 63, InputType::Password),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);

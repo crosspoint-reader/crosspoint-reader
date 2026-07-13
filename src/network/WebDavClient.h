@@ -1,7 +1,8 @@
 #pragma once
-#include <Stream.h>
 #include <expat.h>
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -12,7 +13,7 @@ struct WebDavEntry {
   bool isCollection = false;
 };
 
-class WebDavParser final : public Print {
+class WebDavParser {
  public:
   WebDavParser();
   ~WebDavParser();
@@ -20,12 +21,11 @@ class WebDavParser final : public Print {
   WebDavParser(const WebDavParser&) = delete;
   WebDavParser& operator=(const WebDavParser&) = delete;
 
-  size_t write(uint8_t) override;
-  size_t write(const uint8_t*, size_t) override;
-  void flush() override;
+  size_t write(uint8_t c);
+  size_t write(const uint8_t* data, size_t len);
+  void flush();
 
   bool error() const { return errorOccurred; }
-  operator bool() const { return !errorOccurred; }
 
   const std::vector<WebDavEntry>& getEntries() const& { return entries; }
   std::vector<WebDavEntry> getEntries() && { return std::move(entries); }
@@ -49,21 +49,6 @@ class WebDavParser final : public Print {
   bool inCollection = false;
 
   bool errorOccurred = false;
-};
-
-class WebDavParserStream final : public Stream {
- public:
-  explicit WebDavParserStream(WebDavParser& parser) : parser(parser) {}
-  ~WebDavParserStream() override { parser.flush(); }
-
-  size_t write(uint8_t c) override { return parser.write(c); }
-  size_t write(const uint8_t* buffer, size_t size) override { return parser.write(buffer, size); }
-  int available() override { return 0; }
-  int read() override { return -1; }
-  int peek() override { return -1; }
-
- private:
-  WebDavParser& parser;
 };
 
 namespace WebDavClient {
