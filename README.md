@@ -22,6 +22,8 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 - **Tilt page turn (X3 only)**.
 
+- **Dictionary lookup**: inline word lookup without leaving the reader, using offline dictionaries on the SD card (converted from StarDict/dictd sources — see [docs/dictionaries.md](docs/dictionaries.md)).
+
 - **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, SD-cache management.
 
 - **Wireless workflows**:
@@ -41,8 +43,6 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 - **Localization**: 24 UI languages and counting. RTL support.
 
 ### Coming soon:
-
-- Dictionary lookup — inline word lookup without leaving the reader.
 
 - More themes.
 
