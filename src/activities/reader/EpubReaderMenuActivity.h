@@ -1,5 +1,5 @@
 #pragma once
-#include <Epub.h>
+#include <Epub/FootnoteEntry.h>
 #include <I18n.h>
 
 #include <string>
@@ -13,8 +13,8 @@ class EpubReaderMenuActivity final : public Activity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
-    SELECT_CHAPTER,
     FOOTNOTES,
+    SELECT_CHAPTER,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
@@ -29,7 +29,8 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
+                                  const uint8_t currentOrientation, const std::vector<FootnoteEntry>& footnotes,
+                                  bool hasBookmarks);
 
   void onEnter() override;
   void onExit() override;
@@ -39,10 +40,16 @@ class EpubReaderMenuActivity final : public Activity {
  private:
   struct MenuItem {
     MenuAction action;
+    // Static translation key, resolved at render time. Kept (rather than
+    // pre-resolving every row to a std::string) so the fixed labels stay in
+    // flash instead of heap-allocating on each menu open.
     StrId labelId;
+    // Optional dynamic label that overrides labelId when non-empty (used only
+    // for the single-footnote "Go to Footnote: N" row).
+    std::string label;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
+  static std::vector<MenuItem> buildMenuItems(const std::vector<FootnoteEntry>& footnotes, bool hasBookmarks);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;
