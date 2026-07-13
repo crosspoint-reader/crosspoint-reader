@@ -14,6 +14,15 @@ OVERRIDES = f"""
 #endif
 #undef FP_MAX_BITS
 #define FP_MAX_BITS 16384
+#ifndef HAVE_CHACHA
+#define HAVE_CHACHA
+#endif
+#ifndef HAVE_POLY1305
+#define HAVE_POLY1305
+#endif
+#ifndef HAVE_CURVE25519
+#define HAVE_CURVE25519
+#endif
 """
 
 

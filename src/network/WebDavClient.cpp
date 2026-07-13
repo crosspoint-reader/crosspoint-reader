@@ -6,7 +6,7 @@
 #include <utility>
 
 // Uncomment to use HttpDownloader (wolfSSL) instead of Arduino HTTPClient (mbedTLS)
-// #define WEBDAV_USE_HTTPDOWNLOADER
+#define WEBDAV_USE_HTTPDOWNLOADER
 
 #ifdef WEBDAV_USE_HTTPDOWNLOADER
 #include "HttpDownloader.h"
