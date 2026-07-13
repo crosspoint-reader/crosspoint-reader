@@ -6,6 +6,9 @@ Tests that a bare <br> element between paragraphs produces a visible blank-line
 gap (section separator), while a <br> inside a paragraph only produces a line
 break with no extra spacing.
 
+Also tests that <li> containing <p> renders the bullet inline with the paragraph
+text, not on a separate line (GitHub issue #956).
+
 Cases covered:
   1. Standalone <br> between paragraphs (section break — must show gap).
   2. <br class="..."> with a CSS class (calibre-style section break).
@@ -13,6 +16,9 @@ Cases covered:
   4. Inline <br> inside a <p> (line break only — no extra gap).
   5. <br> at start of chapter (no gap before first paragraph).
   6. <br> following a heading.
+  7. <li><p> with bold+italic text (bullet must be inline with text).
+  8. <li><p> with nested <ul> (bullet inline, nested list indented).
+  9. <li> with direct text (no <p> wrapper — baseline, already works).
 
 Visual verification instructions are embedded as the first paragraph of each
 chapter so a human tester can confirm the expected result on device.
@@ -36,6 +42,12 @@ p    { margin-top: 1pt; margin-bottom: 0; text-indent: 1em; text-align: justify;
 h1   { text-align: center; margin-top: 0.5em; margin-bottom: 0.5em; }
 h2   { text-align: center; margin-top: 0.5em; margin-bottom: 0.5em; }
 .section-br { display: block; }
+.list-simple1 { margin-left: 1em; }
+.list-item1 { text-indent: 0; }
+.list-bullet { margin-left: 1em; }
+.list-bullet2 { margin-left: 2em; }
+.list { text-indent: 0; }
+.list-item { text-indent: 0; }
 """
 
 def xhtml(title, body):
@@ -130,6 +142,55 @@ area above it despite the &lt;br&gt; being the very first element.</p>
 <p>{FILLER}</p>
 """)
 
+# ---------------------------------------------------------------------------
+# Chapter 7 — <li><p> with bold+italic (issue #956 example 1)
+# ---------------------------------------------------------------------------
+ch7 = xhtml("Ch7: li>p bold italic", """
+<h1>Ch 7: &lt;li&gt;&lt;p&gt; with Bold+Italic</h1>
+<p>PASS: Each bullet below must be on the SAME line as its text, not on a
+separate line above it. The bullet and text are inline.</p>
+<ul class="list-simple1">
+<li><p class="list-item1"><b><i>Sketching User Experiences</i> by Bill Buxton</b>. This book examines the notion of sketching (Hint: prototypes are a kind of sketch) across a wide variety of disciplines, with eye-opening results.</p></li>
+<li><p class="list-item1"><b><i>Have Paper, Will Prototype</i> by Bill Lucas</b>. This lecture is a series of case studies about how to successfully create paper prototypes of computer interfaces.</p></li>
+<li><p class="list-item1"><b><i>The Kobold Guide to Board Game Design</i> by Mike Selinker</b>. The very best book there is on how to design great board games.</p></li>
+</ul>
+<p>PASS: All three bullets above should be inline with their respective text.</p>
+""")
+
+# ---------------------------------------------------------------------------
+# Chapter 8 — <li><p> with nested <ul> (issue #956 example 2)
+# ---------------------------------------------------------------------------
+ch8 = xhtml("Ch8: li>p nested ul", """
+<h1>Ch 8: &lt;li&gt;&lt;p&gt; with Nested List</h1>
+<p>PASS: Each bullet must be inline with its text. The nested list should be
+indented further with its own bullets also inline.</p>
+<ul class="list-bullet">
+<li><p class="list">Problem statement: Design a flying dino game where dinosaurs race in and above the water.</p></li>
+<li><p class="list">Detailed problem statements</p>
+<ul class="list-bullet2">
+<li><p class="list-item">We need to figure out if we can schedule all the animation time needed for the dinosaurs.</p></li>
+<li><p class="list-item">We need to develop the right number of levels for this game.</p></li>
+<li><p class="list-item">We need to figure out all the power-ups that will go into this game.</p></li>
+</ul></li>
+</ul>
+<p>PASS: All bullets above should be inline with their text, including the nested ones.</p>
+""")
+
+# ---------------------------------------------------------------------------
+# Chapter 9 — <li> with direct text (no <p> wrapper, baseline)
+# ---------------------------------------------------------------------------
+ch9 = xhtml("Ch9: li direct text", """
+<h1>Ch 9: &lt;li&gt; Direct Text (Baseline)</h1>
+<p>PASS: Each bullet below must be inline with its text. This is the baseline
+case that already works — no &lt;p&gt; wrapper inside &lt;li&gt;.</p>
+<ul>
+<li>The fundamental difference between changes to the behavior of a system and changes to its structure.</li>
+<li>The enabling magic of alternating investment in structure and investment in behavior.</li>
+<li>The basics of the theory of how software design works and the forces that act on it.</li>
+</ul>
+<p>PASS: All three bullets above should be inline with their text.</p>
+""")
+
 CHAPTERS = [
     ("ch1", "chapter1.xhtml", "Chapter 1: Standalone br",    ch1),
     ("ch2", "chapter2.xhtml", "Chapter 2: Classed br",       ch2),
@@ -137,6 +198,9 @@ CHAPTERS = [
     ("ch4", "chapter4.xhtml", "Chapter 4: Inline br",        ch4),
     ("ch5", "chapter5.xhtml", "Chapter 5: br after heading", ch5),
     ("ch6", "chapter6.xhtml", "Chapter 6: br at start",      ch6),
+    ("ch7", "chapter7.xhtml", "Chapter 7: li>p bold italic", ch7),
+    ("ch8", "chapter8.xhtml", "Chapter 8: li>p nested ul",   ch8),
+    ("ch9", "chapter9.xhtml", "Chapter 9: li direct text",   ch9),
 ]
 
 def build_epub(path):
@@ -177,7 +241,7 @@ def build_epub(path):
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">test-epub-br-section-break</dc:identifier>
-    <dc:title>Test: br Section Break</dc:title>
+    <dc:title>Test: br Section Break & li/p</dc:title>
     <dc:language>en</dc:language>
   </metadata>
   <manifest>

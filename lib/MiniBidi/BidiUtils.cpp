@@ -11,6 +11,13 @@ extern "C" {
 #include <Utf8.h>
 
 #include <cstring>
+#include <mutex>
+
+// Guards the static bidi_char buffers in applyBidiVisual() and
+// computeVisualWordOrder().  The bidi+shaping pipeline is not reentrant;
+// this mutex serialises access so multi-core callers don't corrupt each
+// other's intermediate state.
+static std::mutex bidiMutex;
 
 namespace {
 
@@ -68,11 +75,25 @@ int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int ma
   return fallbackLevel & 1;
 }
 
+bool isTransparentMark(const uint32_t cp) {
+  // RTL-script combining marks: Hebrew niqqud/cantillation and Arabic
+  // harakat/Quranic annotation.  Transparent for Arabic joining (do_shape
+  // skips them), zero-advance for measurement, and rendered as overlays on
+  // the preceding base glyph when the active font carries their glyphs.
+  // The cp >= 0x0591 guard keeps Latin combining marks (U+0300-U+036F, also
+  // NSM) on their existing utf8IsCombiningMark() rendering path.
+  return cp >= 0x0591 && bidi_class(cp) == NSM;
+}
+
 bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   if (!utf8 || !*utf8) return false;
+  const std::lock_guard<std::mutex> lock(bidiMutex);
 
   static bidi_char line[BIDI_MAX_LINE];
+  static bidi_char shaped[BIDI_MAX_LINE];
   int count = 0;
+  int lastBase = -1;           // last non-formatter character (mintty's ibase)
+  uint8_t pendingJoiners = 0;  // ZWJ/ZWNJ seen since lastBase
   auto* p = reinterpret_cast<const unsigned char*>(utf8);
   while (*p) {
     if (count >= BIDI_MAX_LINE) {
@@ -84,18 +105,66 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
     if (!cp || cp == REPLACEMENT_GLYPH) break;
     line[count].origwc = line[count].wc = cp;
     line[count].index = static_cast<uint16_t>(count);
+    line[count].joiners = 0;
+
+    // Flag Arabic joining formatters mintty-style (termline.c): the ZWJ/ZWNJ
+    // goes into the low nibble of the character it follows and the high
+    // nibble of the character it precedes.  Flags are assigned in logical
+    // order here; do_shape() reads them after reordering.
+    if (cp == 0x200C || cp == 0x200D) {
+      const uint8_t joiner = (cp == 0x200D) ? ZWJ : ZWNJ;
+      if (lastBase >= 0) line[lastBase].joiners |= joiner;
+      pendingJoiners |= joiner;
+    } else {
+      line[count].joiners = pendingJoiners << 4;
+      pendingJoiners = 0;
+      lastBase = count;
+    }
     count++;
   }
   if (!count) return false;
 
   const bool autodir = (paragraphLevel < 0);
   const int level = autodir ? 0 : (paragraphLevel & 1);
+
+  // Order matters (mintty does the same): do_bidi() first to obtain visual
+  // order, then do_shape() — contextual forms are resolved from *visual*
+  // adjacency, and shaping presentation forms must never be reordered.
   do_bidi(autodir, level, line, count);
+  do_shape(line, shaped, count);
 
   out.clear();
   out.reserve(std::strlen(utf8));
+  // Lam-Alef collapse sentinel and zero-width joining formatters have done
+  // their job during shaping and have no glyphs to render.
+  const auto filtered = [](const uint32_t cp) { return cp == LIGATURE_PLACEHOLDER || cp == 0x200C || cp == 0x200D; };
   for (int i = 0; i < count; i++) {
-    utf8AppendCodepoint(line[i].wc, out);
+    const uint32_t cp = shaped[i].wc;
+    if (filtered(cp)) continue;
+    if (!isTransparentMark(cp)) {
+      utf8AppendCodepoint(cp, out);
+      continue;
+    }
+    // UAX#9 rule L3: reversing an RTL run leaves combining marks *before*
+    // their base character. The renderer overlays a mark on the most
+    // recently drawn glyph, so emit the base first, then its marks in
+    // logical order. `index` is the original logical position: a base
+    // following its marks with a *lower* index means the run was reversed.
+    int j = i;  // [i, j) = the run of marks (and filtered entries)
+    while (j < count && (filtered(shaped[j].wc) || isTransparentMark(shaped[j].wc))) j++;
+    if (j < count && shaped[j].index < shaped[i].index) {
+      utf8AppendCodepoint(shaped[j].wc, out);
+      for (int k = j - 1; k >= i; k--) {
+        if (isTransparentMark(shaped[k].wc)) utf8AppendCodepoint(shaped[k].wc, out);
+      }
+      i = j;  // base already emitted
+    } else {
+      // Unreversed (or trailing, base-less) marks already follow their base.
+      for (int k = i; k < j; k++) {
+        if (isTransparentMark(shaped[k].wc)) utf8AppendCodepoint(shaped[k].wc, out);
+      }
+      i = j - 1;
+    }
   }
   return true;
 }
@@ -105,6 +174,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
   visualOrder.clear();
   const size_t nWords = words.size();
   if (nWords <= 1 || nWords > BIDI_MAX_LINE) return false;
+  const std::lock_guard<std::mutex> lock(bidiMutex);
 
   static bidi_char line[BIDI_MAX_LINE];
   int count = 0;
@@ -121,6 +191,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
       if (!cp || cp == REPLACEMENT_GLYPH) break;
       line[count].origwc = line[count].wc = cp;
       line[count].index = static_cast<uint16_t>(w);
+      line[count].joiners = 0;
       count++;
     }
 
@@ -131,6 +202,7 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool paragrap
       }
       line[count].origwc = line[count].wc = ' ';
       line[count].index = static_cast<uint16_t>(nWords);
+      line[count].joiners = 0;
       count++;
     }
   }
