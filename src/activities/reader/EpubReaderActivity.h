@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "BookmarkEntry.h"
+#include "DictionaryLookup.h"
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
@@ -132,6 +133,13 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+
+  // Dictionary word-selection mode. Entry is deferred to the end of render()
+  // (pendingDictionaryMode) because closing the reader menu triggers a full
+  // re-render that would wipe an overlay drawn any earlier.
+  DictionaryLookup dictionaryLookup{renderer, mappedInput};
+  bool pendingDictionaryMode = false;
+  void enterDictionaryModeLocked();
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)

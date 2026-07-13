@@ -208,6 +208,9 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  // Free the dictionary overlay's page/snapshots and close its SD file handle.
+  dictionaryLookup.reset();
+
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -346,6 +349,19 @@ void EpubReaderActivity::loop() {
     pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;
+  }
+
+  // Dictionary word-selection mode owns all input while active. Draws happen
+  // under the RenderLock so they never interleave with a background build.
+  if (dictionaryLookup.active()) {
+    if (RenderLock::peek()) {
+      return;
+    }
+    RenderLock lock(*this);
+    if (dictionaryLookup.handleInput() == DictionaryLookup::TickResult::EXITED_NEEDS_RENDER) {
+      requestUpdate();
+    }
+    return;
   }
 
   if (automaticPageTurnActive) {
@@ -665,6 +681,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   };
 
   switch (action) {
+    case EpubReaderMenuActivity::MenuAction::DICTIONARY:
+      // Entry happens at the end of the next render(): the menu close is about
+      // to trigger a full re-render that would wipe an overlay drawn now.
+      pendingDictionaryMode = true;
+      break;
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
@@ -916,6 +937,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
   }
+
+  // A full render invalidates any dictionary overlay (its snapshots and word
+  // boxes describe the previous framebuffer). Consume the deferred entry flag
+  // up front so error paths below can't trigger a stale entry later.
+  dictionaryLookup.reset();
+  const bool enterDictionaryAfterRender = pendingDictionaryMode;
+  pendingDictionaryMode = false;
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -1305,6 +1333,26 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
   }
+
+  if (enterDictionaryAfterRender) {
+    enterDictionaryModeLocked();
+  }
+}
+
+// Loads the page currently on screen and hands it to the dictionary overlay.
+// Must run with the RenderLock held (called from render()).
+void EpubReaderActivity::enterDictionaryModeLocked() {
+  if (!section) {
+    return;
+  }
+  auto page = section->loadPage(section->currentPage);
+  if (!page) {
+    return;
+  }
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  dictionaryLookup.enter(std::move(page), left + SETTINGS.screenMargin, top + SETTINGS.screenMargin,
+                         SETTINGS.getReaderFontId());
 }
 
 bool EpubReaderActivity::applyDeferredReposition() {
