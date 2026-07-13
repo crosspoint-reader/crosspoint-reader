@@ -148,6 +148,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   // Build JSON body
   JsonDocument doc;
   doc["document"] = progress.document;
+  if (progress.metadata.has_value()) {
+    auto meta = doc["metadata"].to<JsonObject>();
+    meta["filename"] = progress.metadata->filename;
+    meta["title"] = progress.metadata->title;
+    meta["authors"] = progress.metadata->authors;
+  }
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;
   doc["device"] = DEVICE_NAME;

@@ -1,16 +1,30 @@
 #pragma once
+#include <cstdint>
+#include <optional>
 #include <string>
+
+/**
+ * Optional document metadata sent alongside progress sync requests.
+ * Mirrors the metadata object added in KOReader PR #15306.
+ * The official sync server ignores this field; custom servers may use it.
+ */
+struct KOReaderMetadata {
+  std::string filename;  // e.g. "my_book.epub"
+  std::string title;     // Document title from EPUB metadata
+  std::string authors;   // Author(s) from EPUB metadata
+};
 
 /**
  * Progress data from KOReader sync server.
  */
 struct KOReaderProgress {
-  std::string document;  // Document hash
-  std::string progress;  // XPath-like progress string
-  float percentage;      // Progress percentage (0.0 to 1.0)
-  std::string device;    // Device name
-  std::string deviceId;  // Device ID
-  int64_t timestamp;     // Unix timestamp of last update
+  std::string document;                      // Document hash
+  std::string progress;                      // XPath-like progress string
+  float percentage;                          // Progress percentage (0.0 to 1.0)
+  std::string device;                        // Device name
+  std::string deviceId;                      // Device ID
+  int64_t timestamp;                         // Unix timestamp of last update
+  std::optional<KOReaderMetadata> metadata;  // Optional document metadata
 };
 
 /**

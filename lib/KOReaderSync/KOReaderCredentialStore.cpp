@@ -14,6 +14,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
   doc["serverUrl"] = getServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
+  doc["sendMetadata"] = getSendMetadata();
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
@@ -32,6 +33,7 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
     LOG_DBG("KRS", "Invalid matchMethod %u in JSON, resetting to FILENAME", method);
     setMatchMethod(DocumentMatchMethod::FILENAME);
   }
+  setSendMetadata(doc["sendMetadata"] | false);
 
   if (needsResave) {
     LOG_DBG("KRS", "Resaved KOReader credentials to update format");
@@ -97,4 +99,9 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;
   LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
+}
+
+void KOReaderCredentialStore::setSendMetadata(bool enabled) {
+  sendMetadata = enabled;
+  LOG_DBG("KRS", "Set send metadata: %s", enabled ? "true" : "false");
 }

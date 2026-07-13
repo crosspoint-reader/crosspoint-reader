@@ -47,6 +47,7 @@ git ls-files  --exclude-standard ${GIT_LS_FILES_FLAGS} \
     | grep -v -E '^lib/EpdFont/builtinFonts/' \
     | grep -v -E '^lib/Epub/Epub/hyphenation/generated/' \
     | grep -v -E '^lib/uzlib/' \
+    | grep -v -E '^lib/miniz/third_party/' \
     | xargs -r "${CLANG_FORMAT_BIN}" -style=file -i
 # Restore strict pipeline failure handling for the rest of the script.
 set -o pipefail
