@@ -81,7 +81,7 @@ bool FontInstaller::ensureFamilyDir(const char* familyName) {
 }
 
 bool FontInstaller::validateCpfontFile(const char* path) {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("FONT", path, file)) {
     LOG_ERR("FONT", "Cannot open for validation: %s", path);
     return false;

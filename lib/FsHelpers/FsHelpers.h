@@ -7,7 +7,13 @@
 
 namespace FsHelpers {
 
+std::string decodeUriEscapes(const std::string& path);
+
 std::string normalisePath(const std::string& path);
+
+// Numeric-aware, case-insensitive comparison ("2" < "10"). Returns true when str1 orders
+// before str2. Same ordering sortFileList applies within the file/directory groups.
+bool naturalLess(const std::string& str1, const std::string& str2);
 
 void sortFileList(std::vector<std::string>& strs);
 
@@ -58,6 +64,11 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+// Check for .css extension (case-insensitive)
+bool hasCssExtension(std::string_view fileName);
+inline bool hasCssExtension(const String& fileName) {
+  return hasCssExtension(std::string_view{fileName.c_str(), fileName.length()});
+}
 std::string extractFolderPath(const std::string& filePath);
 
 /**

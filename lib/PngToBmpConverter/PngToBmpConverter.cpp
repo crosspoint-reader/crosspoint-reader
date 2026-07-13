@@ -2,7 +2,7 @@
 
 #include <HalDisplay.h>
 #include <HalStorage.h>
-#include <InflateReader.h>
+#include <InflateStream.h>
 #include <Logging.h>
 
 #include <cstdio>
@@ -73,7 +73,7 @@ enum PngFilter : uint8_t {
 };
 
 // Read a big-endian 32-bit value from file
-bool readBE32(FsFile& file, uint32_t& value) {
+bool readBE32(HalFile& file, uint32_t& value) {
   uint8_t buf[4];
   if (file.read(buf, 4) != 4) return false;
   value = (static_cast<uint32_t>(buf[0]) << 24) | (static_cast<uint32_t>(buf[1]) << 16) |
@@ -174,10 +174,9 @@ void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
 }  // namespace
 
 // Context for streaming PNG decompression
-// IMPORTANT: reader must be the first field - the uzlib callback casts uzlib_uncomp* to PngDecodeContext*
 struct PngDecodeContext {
-  InflateReader reader;  // Must be first — callback casts uzlib_uncomp* to PngDecodeContext*
-  FsFile* file;
+  InflateStream reader;
+  HalFile* file;
 
   // PNG image properties
   uint32_t width;
@@ -195,7 +194,7 @@ struct PngDecodeContext {
   uint32_t chunkBytesRemaining;  // bytes left in current IDAT chunk
   bool idatFinished;             // no more IDAT chunks
 
-  // File read buffer for feeding uzlib
+  // File read buffer for feeding the inflate stream
   uint8_t readBuf[2048];
 
   // Palette for indexed color (type 3)
@@ -229,21 +228,21 @@ static bool findNextIdatChunk(PngDecodeContext& ctx) {
   }
 }
 
-// uzlib callback: reads the next batch of IDAT data from the file
-static int pngIdatReadCallback(uzlib_uncomp* uncomp) {
-  auto* ctx = reinterpret_cast<PngDecodeContext*>(uncomp);
+// Fill callback: reads the next batch of IDAT data from the file
+static size_t pngIdatFillCallback(void* vctx, const uint8_t** data) {
+  auto* ctx = static_cast<PngDecodeContext*>(vctx);
 
-  if (ctx->idatFinished) return -1;
+  if (ctx->idatFinished) return 0;
 
   // Skip 4-byte CRC and find next IDAT chunk when current chunk is exhausted
   while (ctx->chunkBytesRemaining == 0) {
     if (!ctx->file->seekCur(4)) {  // skip 4-byte CRC of previous IDAT
       ctx->idatFinished = true;
-      return -1;
+      return 0;
     }
     if (!findNextIdatChunk(*ctx)) {
       ctx->idatFinished = true;
-      return -1;
+      return 0;
     }
   }
 
@@ -251,18 +250,15 @@ static int pngIdatReadCallback(uzlib_uncomp* uncomp) {
   size_t toRead = sizeof(ctx->readBuf);
   if (toRead > ctx->chunkBytesRemaining) toRead = ctx->chunkBytesRemaining;
 
-  int bytesRead = ctx->file->read(ctx->readBuf, toRead);
+  const int bytesRead = ctx->file->read(ctx->readBuf, toRead);
   if (bytesRead <= 0) {
     ctx->idatFinished = true;
-    return -1;
+    return 0;
   }
 
   ctx->chunkBytesRemaining -= bytesRead;
-
-  // Give uzlib the buffer (skip first byte since we return it directly)
-  uncomp->source = ctx->readBuf + 1;
-  uncomp->source_limit = ctx->readBuf + bytesRead;
-  return ctx->readBuf[0];
+  *data = ctx->readBuf;
+  return static_cast<size_t>(bytesRead);
 }
 
 // Decode one scanline: decompress filter byte + raw bytes, then unfilter
@@ -395,7 +391,7 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
   }
 }
 
-bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
+bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
                                                    bool oneBit, bool crop) {
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
@@ -555,16 +551,16 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
     return false;
   }
 
-  // Initialize streaming decompressor with 32KB ring buffer for back-reference history
+  // Initialize streaming decompressor with 32KB window for back-reference history
   if (!ctx.reader.init(true)) {
-    LOG_ERR("PNG", "Failed to init inflate reader");
+    LOG_ERR("PNG", "Failed to init inflate stream");
     free(ctx.currentRow);
     free(ctx.previousRow);
     return false;
   }
-  ctx.reader.setReadCallback(pngIdatReadCallback);
-  // PNG IDAT data is zlib-wrapped: consume the 2-byte zlib header (CMF + FLG)
-  ctx.reader.skipZlibHeader();
+  ctx.reader.setFill(pngIdatFillCallback, &ctx);
+  // PNG IDAT data is zlib-wrapped (2-byte header + trailing adler32)
+  ctx.reader.setZlibWrapped();
 
   // Calculate output dimensions (same logic as JpegToBmpConverter)
   int outWidth = width;
@@ -820,19 +816,19 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(FsFile& pngFile, Print& bmpOu
   return success;
 }
 
-bool PngToBmpConverter::pngFileToBmpStream(FsFile& pngFile, Print& bmpOut, bool crop) {
+bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop) {
   // Use runtime display dimensions (swapped for portrait cover sizing)
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop);
 }
 
-bool PngToBmpConverter::pngFileToBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
+bool PngToBmpConverter::pngFileToBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,
                                                    int targetMaxHeight) {
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
 }
 
-bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(FsFile& pngFile, Print& bmpOut, int targetMaxWidth,
+bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,
                                                        int targetMaxHeight) {
   return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
 }

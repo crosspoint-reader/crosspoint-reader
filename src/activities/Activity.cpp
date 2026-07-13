@@ -10,7 +10,7 @@ void Activity::requestUpdate(bool immediate) { activityManager.requestUpdate(imm
 
 void Activity::requestUpdateAndWait() { activityManager.requestUpdateAndWait(); }
 
-void Activity::onGoHome() { activityManager.goHome(); }
+void Activity::onGoHome(HomeMenuItem item) { activityManager.goHome(item); }
 
 void Activity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 

@@ -9,13 +9,16 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
+struct Rect;
+struct ThemeMetrics;
+struct WifiCredential;
+
 // Structure to hold WiFi network information
 struct WifiNetworkInfo {
   std::string ssid;
   int32_t rssi;
   bool isEncrypted;
   bool hasSavedPassword;  // Whether we have saved credentials for this network
-  std::string ipAddress;  // Populated after connection for display
 };
 
 // WiFi selection states
@@ -69,8 +72,14 @@ class WifiSelectionActivity final : public Activity {
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
 
-  // Whether we are attempting to auto-connect
+  // Whether we are attempting to auto-connect or auto-scan saved networks.
   bool autoConnecting = false;
+
+  // True when the user stopped auto-connect and asked to see the scan result.
+  bool manualNetworkListRequested = false;
+
+  // Saved SSIDs already attempted during the current auto-connect session.
+  std::vector<std::string> autoAttemptedSsids;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
@@ -78,21 +87,27 @@ class WifiSelectionActivity final : public Activity {
 
   // Connection timeout
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
+  static constexpr unsigned long AUTO_CONNECTION_TIMEOUT_MS = 7000;
   unsigned long connectionStartTime = 0;
 
-  void renderNetworkList() const;
-  void renderPasswordEntry() const;
-  void renderConnecting() const;
-  void renderConnected() const;
-  void renderSavePrompt() const;
-  void renderConnectionFailed() const;
-  void renderForgetPrompt() const;
+  void renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderPasswordEntry(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnected(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderSavePrompt(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const;
+  void renderForgetPrompt(const Rect* screen, const ThemeMetrics* metrics) const;
 
-  void startWifiScan();
+  void startWifiScan(bool autoScan = false);
   void processWifiScanResults();
   void selectNetwork(int index);
   void attemptConnection();
   void checkConnectionStatus();
+  bool tryAutoConnectCredential(const WifiCredential& cred);
+  bool tryNextSavedNetworkFromScan();
+  void handleAutoConnectFailure();
+  void showNetworkListFromAutoConnect();
+  bool hasAttemptedAutoSsid(const std::string& ssid) const;
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
   void onComplete(bool connected);

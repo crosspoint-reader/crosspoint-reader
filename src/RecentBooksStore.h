@@ -1,4 +1,7 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <string>
 #include <vector>
 
@@ -11,24 +14,21 @@ struct RecentBook {
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 
-class RecentBooksStore;
-namespace JsonSettingsIO {
-bool loadRecentBooks(RecentBooksStore& store, const char* json);
-}  // namespace JsonSettingsIO
-
-class RecentBooksStore {
-  // Static instance
-  static RecentBooksStore instance;
-
+class RecentBooksStore : public PersistableStore<RecentBooksStore> {
+ private:
   std::vector<RecentBook> recentBooks;
 
-  friend bool JsonSettingsIO::loadRecentBooks(RecentBooksStore&, const char*);
+  static constexpr int MAX_RECENT_BOOKS = 10;
 
- public:
+  RecentBooksStore() = default;
   ~RecentBooksStore() = default;
 
-  // Get singleton instance
-  static RecentBooksStore& getInstance() { return instance; }
+  friend class PersistableStore<RecentBooksStore>;
+
+ public:
+  static const char* getFilePath() { return "/.crosspoint/recent.json"; }
+  void toJson(JsonDocument& doc) const;
+  bool fromJson(JsonVariantConst doc);
 
   // Add a book to the recent list (moves to front if already exists)
   void addBook(const std::string& path, const std::string& title, const std::string& author,
@@ -36,6 +36,17 @@ class RecentBooksStore {
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
+
+  // Remove the entry whose path matches (used when a book is removed from recents or finished/read).
+  // Returns true if an entry was found and removed (no-op + false otherwise).
+  // Persistence is best-effort: a failed save is logged, not reflected in the return.
+  bool removeByPath(const std::string& path);
+
+  // Repoint an entry's path (and coverBmpPath, if it lived under the old cache dir) after the
+  // backing file and cache dir were moved on disk. No-op if no entry matches oldPath.
+  // Persists on success. Keeps the entry's list position (does not reorder).
+  void updatePath(const std::string& oldPath, const std::string& newPath, const std::string& oldCachePath,
+                  const std::string& newCachePath);
 
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);
@@ -50,13 +61,7 @@ class RecentBooksStore {
   // Get the count of recent books
   int getCount() const { return static_cast<int>(recentBooks.size()); }
 
-  bool saveToFile() const;
-
-  bool loadFromFile();
   RecentBook getDataFromBook(std::string path) const;
-
- private:
-  bool loadFromBinaryFile();
 };
 
 // Helper macro to access recent books store

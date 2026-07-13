@@ -4,11 +4,6 @@
 namespace UrlUtils {
 
 /**
- * Check if URL uses HTTPS protocol
- */
-bool isHttpsUrl(const std::string& url);
-
-/**
  * Prepend http:// if no protocol specified (server will redirect to https if needed)
  */
 std::string ensureProtocol(const std::string& url);
@@ -17,6 +12,11 @@ std::string ensureProtocol(const std::string& url);
  * Extract host with protocol from URL (e.g., "http://example.com" from "http://example.com/path")
  */
 std::string extractHost(const std::string& url);
+
+/**
+ * Percent-encode raw characters that esp_http_client rejects in a URL.
+ */
+std::string encodeUnsafeUrlChars(const std::string& url);
 
 /**
  * Build full URL from server URL and path.

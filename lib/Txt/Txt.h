@@ -22,6 +22,7 @@ class Txt {
   [[nodiscard]] size_t getFileSize() const { return fileSize; }
 
   void setupCacheDir() const;
+  bool clearCache() const;
 
   // Cover image support - looks for cover.bmp/jpg/jpeg/png in same folder as txt file
   [[nodiscard]] std::string getCoverBmpPath() const;

@@ -248,7 +248,7 @@ unmerged_intervals = sorted(intervals + add_ints)
 intervals = []
 unvalidated_intervals = []
 for i_start, i_end in unmerged_intervals:
-    if len(unvalidated_intervals) > 0 and i_start + 1 <= unvalidated_intervals[-1][1]:
+    if len(unvalidated_intervals) > 0 and i_start <= unvalidated_intervals[-1][1] + 1:
         unvalidated_intervals[-1] = (unvalidated_intervals[-1][0], max(unvalidated_intervals[-1][1], i_end))
         continue
     unvalidated_intervals.append((i_start, i_end))

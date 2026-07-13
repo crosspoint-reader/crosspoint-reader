@@ -34,7 +34,7 @@ void OpdsServerListActivity::onExit() { Activity::onExit(); }
 void OpdsServerListActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (pickerMode) {
-      activityManager.goHome();
+      activityManager.goHome(HomeMenuItem::OPDS_BROWSER);
     } else {
       finish();
     }
