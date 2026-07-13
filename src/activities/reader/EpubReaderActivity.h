@@ -1,5 +1,6 @@
 #pragma once
 #include <Epub.h>
+#include <Epub/BookPageMap.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
@@ -23,6 +24,11 @@ class EpubReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
+  // Whole-book page accounting (book-global "page X of Y").
+  BookPageMap bookPageMap;
+  bool bookPageMapInitialized = false;
+  bool bookPageMapAllocationFailed = false;
+  bool suppressPageMapSave = false;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   // Signals that the next render should reposition within the newly loaded section
@@ -113,6 +119,8 @@ class EpubReaderActivity final : public Activity {
   // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
   // No-op while the section is still building or when the pagination is unchanged (plain resume).
   bool applyDeferredReposition();
+  PageMapFingerprint currentFingerprint(uint16_t viewportWidth, uint16_t viewportHeight) const;
+  void ensurePageMap(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);

@@ -211,6 +211,13 @@ void EpubReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  if (bookPageMapInitialized && epub && !suppressPageMapSave) {
+    if (section && !section->isBuilding() && !section->isPartial()) {
+      bookPageMap.recordSection(currentSpineIndex, section->pageCount);
+    }
+    bookPageMap.save(epub->getCachePath() + "/pagemap.bin");
+  }
+
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
 
@@ -234,27 +241,52 @@ void EpubReaderActivity::onExit() {
 }
 
 void EpubReaderActivity::openReaderMenu() {
-  const int currentPage = section ? section->currentPage + 1 : 0;
-  const int totalPages = section ? section->estimatedTotalPages() : 0;
-  float bookProgress = 0.0f;
-  if (epub->getBookSize() > 0 && section && section->estimatedTotalPages() > 0) {
-    const float chapterProgress =
-        static_cast<float>(section->currentPage) / static_cast<float>(section->estimatedTotalPages());
-    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+  int currentPage = 0;
+  int totalPages = 0;
+  int bookProgressPercent = 0;
+  int bookCurrentPage = 0;
+  int bookTotalPages = 0;
+  bool bookTotalIsEstimate = false;
+  bool hasFootnotes = false;
+  {
+    // The render task owns section and may initialize/reallocate bookPageMap.
+    // Snapshot everything needed by the menu while holding the same lock.
+    RenderLock lock(*this);
+    if (section) {
+      currentPage = section->currentPage + 1;
+      totalPages = section->estimatedTotalPages();
+      float bookProgress = 0.0f;
+      if (epub->getBookSize() > 0 && totalPages > 0) {
+        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(totalPages);
+        bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+      }
+      bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+
+      const bool smartPages = SETTINGS.smartCalculateTotalPages && bookPageMapInitialized;
+      if (smartPages) {
+        if (!section->isBuilding() && !section->isPartial()) {
+          bookPageMap.recordSection(currentSpineIndex, section->pageCount);
+        }
+        bookCurrentPage = bookPageMap.globalPage(currentSpineIndex, section->currentPage, totalPages);
+        bookTotalPages = bookPageMap.total(currentSpineIndex, totalPages);
+        bookTotalIsEstimate = !bookPageMap.isExact();
+      }
+    }
+    hasFootnotes = !currentPageFootnotes.empty();
   }
-  const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                             renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
-                         [this](const ActivityResult& result) {
-                           // Always apply orientation change even if the menu was cancelled
-                           const auto& menu = std::get<MenuResult>(result.data);
-                           applyOrientation(menu.orientation);
-                           toggleAutoPageTurn(menu.pageTurnOption);
-                           if (!result.isCancelled) {
-                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                           }
-                         });
+  startActivityForResult(
+      std::make_unique<EpubReaderMenuActivity>(
+          renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent, bookCurrentPage,
+          bookTotalPages, bookTotalIsEstimate, SETTINGS.orientation, hasFootnotes, !cachedBookmarks.empty()),
+      [this](const ActivityResult& result) {
+        // Always apply orientation change even if the menu was cancelled
+        const auto& menu = std::get<MenuResult>(result.data);
+        applyOrientation(menu.orientation);
+        toggleAutoPageTurn(menu.pageTurnOption);
+        if (!result.isCancelled) {
+          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+        }
+      });
 }
 
 void EpubReaderActivity::loop() {
@@ -740,6 +772,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           uint16_t backupPage = section->currentPage;
           uint16_t backupPageCount = section->pageCount;
           section.reset();
+          bookPageMapInitialized = false;
+          suppressPageMapSave = true;
           epub->clearCache();
           epub->setupCacheDir();
           if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
@@ -979,6 +1013,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Capture for loop()'s lazy partial-extension start (must match this render's layout params).
   buildViewportWidth = viewportWidth;
   buildViewportHeight = viewportHeight;
+
+  ensurePageMap(viewportWidth, viewportHeight);
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
@@ -1222,6 +1258,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // a plain resume / unchanged pagination). If still building, this defers to loop() on completion.
   applyDeferredReposition();
 
+  // Only finalized sections contribute exact counts. A lazy build's pageCount is
+  // just its current watermark; treating it as exact would make the book total
+  // shrink and would persist a false final count.
+  if (SETTINGS.smartCalculateTotalPages && bookPageMapInitialized && !section->isBuilding() && !section->isPartial()) {
+    bookPageMap.recordSection(currentSpineIndex, section->pageCount);
+  }
+
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
@@ -1329,6 +1372,54 @@ bool EpubReaderActivity::applyDeferredReposition() {
   }
   cachedChapterTotalPageCount = 0;  // consumed; don't read cached progress again
   return changed;
+}
+
+PageMapFingerprint EpubReaderActivity::currentFingerprint(const uint16_t viewportWidth,
+                                                          const uint16_t viewportHeight) const {
+  PageMapFingerprint fp;
+  fp.sectionCacheVersion = Section::CACHE_VERSION;
+  fp.fontId = SETTINGS.getReaderFontId();
+  fp.lineCompression = SETTINGS.getReaderLineCompression();
+  fp.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+  fp.paragraphAlignment = SETTINGS.paragraphAlignment;
+  fp.viewportWidth = viewportWidth;
+  fp.viewportHeight = viewportHeight;
+  fp.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+  fp.embeddedStyle = SETTINGS.embeddedStyle;
+  fp.imageRendering = SETTINGS.imageRendering;
+  fp.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+  return fp;
+}
+
+void EpubReaderActivity::ensurePageMap(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  if (!SETTINGS.smartCalculateTotalPages) {
+    return;  // opt-in feature: leave the map uninitialized so all book-page paths stay inert
+  }
+  const PageMapFingerprint fp = currentFingerprint(viewportWidth, viewportHeight);
+  if (bookPageMapInitialized && fp == bookPageMap.fingerprint()) {
+    return;
+  }
+  if (bookPageMapAllocationFailed && fp == bookPageMap.fingerprint()) {
+    return;
+  }
+  bookPageMapAllocationFailed = false;
+  // (Re)build: a fingerprint change means the section caches and the persisted
+  // pagemap are invalid (load() below will reject a stale file).
+  const int n = epub->getSpineItemsCount();
+  if (!bookPageMap.init(n, fp)) {
+    LOG_ERR("ERS", "Not enough memory for whole-book page map (%d sections)", n);
+    bookPageMapInitialized = false;
+    bookPageMapAllocationFailed = true;
+    return;
+  }
+  size_t prev = 0;
+  for (int i = 0; i < n; ++i) {
+    const size_t cum = epub->getCumulativeSpineItemSize(i);
+    bookPageMap.setSectionBytes(i, static_cast<uint32_t>(cum >= prev ? cum - prev : 0));
+    prev = cum;
+  }
+  bookPageMap.load(epub->getCachePath() + "/pagemap.bin");
+  bookPageMapInitialized = true;
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
@@ -1512,9 +1603,21 @@ void EpubReaderActivity::renderStatusBar() const {
   // Calculate progress in book. Use the estimated total while a giant spine is still building so
   // "page X of Y" and the progress bar don't read off the small build watermark.
   const int currentPage = section->currentPage + 1;
-  const float pageCount = section->estimatedTotalPages();
+  const int pageCount = section->estimatedTotalPages();
   const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
   const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
+
+  // Book-global page position for the counter text (chapter values above still
+  // drive the progress bar). Only when Smart Calculate Total Pages is on; otherwise
+  // pass -1 so drawStatusBar falls back to chapter-local counts.
+  int bookCurrentPage = -1;
+  int bookTotalPages = -1;
+  bool bookTotalIsEstimate = false;
+  if (SETTINGS.smartCalculateTotalPages && bookPageMapInitialized) {
+    bookCurrentPage = bookPageMap.globalPage(currentSpineIndex, section->currentPage, pageCount);
+    bookTotalPages = bookPageMap.total(currentSpineIndex, pageCount);
+    bookTotalIsEstimate = !bookPageMap.isExact();
+  }
 
   std::string title;
 
@@ -1544,7 +1647,7 @@ void EpubReaderActivity::renderStatusBar() const {
   }
 
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
-                    section->isBuilding());
+                    section->isBuilding(), bookCurrentPage, bookTotalPages, bookTotalIsEstimate);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

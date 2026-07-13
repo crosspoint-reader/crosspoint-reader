@@ -29,6 +29,7 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
+                                  const int bookCurrentPage, const int bookTotalPages, const bool bookTotalIsEstimate,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks);
 
   void onEnter() override;
@@ -60,4 +61,7 @@ class EpubReaderMenuActivity final : public Activity {
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;
+  int bookCurrentPage = 0;
+  int bookTotalPages = 0;
+  bool bookTotalIsEstimate = false;
 };

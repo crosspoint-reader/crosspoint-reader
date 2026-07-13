@@ -13,7 +13,7 @@
 namespace {
 // v29: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 // text blob) instead of length-prefixed strings and per-field arrays.
-constexpr uint8_t SECTION_FILE_VERSION = 29;
+constexpr uint8_t SECTION_FILE_VERSION = Section::CACHE_VERSION;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
