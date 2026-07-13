@@ -373,14 +373,14 @@ void setup() {
       break;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
-  // Boot swap mode: hold BOTH side buttons (BTN_UP + BTN_DOWN) with power to jump to the OS
-  // slot switch screen. DOWN alone is deliberately left free — POWER+DOWN is the runtime
-  // screenshot chord (see loop()) and would otherwise hijack wake-from-sleep. App-level
-  // convenience only, NOT a recovery path — it runs inside this slot's firmware, so it cannot
-  // rescue a slot that no longer boots.
+  // Boot swap mode: hold the upper side button (BTN_UP) with the power button at boot to jump
+  // to the OS slot switch screen. App-level convenience only, NOT a recovery path — it runs
+  // inside this slot's firmware, so it cannot rescue a slot that no longer boots.
+  // Recovery firmware mode: hold BOTH side buttons (BTN_UP + BTN_DOWN) with power to skip
+  // directly to the SD-card firmware update screen. Useful on devices where USB flashing has
+  // been locked down (e.g. recent X3 firmware).
+  // DOWN alone is deliberately left free — POWER+DOWN is the runtime screenshot chord (see
+  // loop()) and would otherwise hijack wake-from-sleep.
   bool recoveryFirmwareMode = false;
   bool bootSwapMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
@@ -393,11 +393,11 @@ void setup() {
       delay(10);
     }
     if (gpio.isPressed(HalGPIO::BTN_UP) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
-      bootSwapMode = true;
-      LOG_INF("MAIN", "Boot swap mode (UP + DOWN + POWER held at boot)");
-    } else if (gpio.isPressed(HalGPIO::BTN_UP)) {
       recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+      LOG_INF("MAIN", "Recovery firmware mode (UP + DOWN + POWER held at boot)");
+    } else if (gpio.isPressed(HalGPIO::BTN_UP)) {
+      bootSwapMode = true;
+      LOG_INF("MAIN", "Boot swap mode (UP + POWER held at boot)");
     }
   }
 

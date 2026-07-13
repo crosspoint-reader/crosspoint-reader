@@ -126,11 +126,11 @@ reach `esp_https_ota_begin` at runtime.
 ## P7 — `biscuit/src/main.cpp` : boot-hold shortcut
 **Kind:** modified · **Sync risk:** MEDIUM · 3 marker sites (include, settle block, routing)
 
-Hold **BTN_UP + BTN_DOWN + POWER** at boot to open the swap screen (500 ms settle
-window after `wakeupReason == PowerButton`, then `replaceActivity(SwapBootSlotActivity,
-bootMode=true)` instead of home/reader routing). DOWN alone stays free — POWER+DOWN is
-the runtime screenshot chord in both firmwares. App-level convenience, NOT a recovery
-path.
+Hold **BTN_UP + POWER** at boot to open the swap screen (500 ms settle window after
+`wakeupReason == PowerButton`, then `replaceActivity(SwapBootSlotActivity,
+bootMode=true)` instead of home/reader routing) — same chord as CrossPoint, where
+UP+DOWN+POWER means recovery instead. DOWN stays free — POWER+DOWN is the runtime
+screenshot chord in both firmwares. App-level convenience, NOT a recovery path.
 
 **On conflict:** `setup()` churns upstream; re-apply the block after the wakeup-reason
 switch and the routing branch before the home/reader `if`.

@@ -281,10 +281,11 @@ void setup() {
       break;
   }
 
-  // [BOOTSWITCH-PATCH] P7: hold BOTH side buttons (BTN_UP + BTN_DOWN) with the power button
-  // at boot to open the OS slot switch screen. DOWN alone is left free — POWER+DOWN is the
-  // runtime screenshot chord (see loop()). App-level convenience only, NOT a recovery path —
-  // it runs inside this slot's firmware, so it cannot rescue a slot that no longer boots.
+  // [BOOTSWITCH-PATCH] P7: hold the upper side button (BTN_UP) with the power button at boot
+  // to open the OS slot switch screen (same chord as CrossPoint). DOWN is left free —
+  // POWER+DOWN is the runtime screenshot chord (see loop()). App-level convenience only, NOT
+  // a recovery path — it runs inside this slot's firmware, so it cannot rescue a slot that no
+  // longer boots.
   bool bootSwapMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // isPressed() needs ~half a second to settle after boot per the HalGPIO contract.
@@ -293,9 +294,9 @@ void setup() {
       gpio.update();
       delay(10);
     }
-    if (gpio.isPressed(HalGPIO::BTN_UP) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    if (gpio.isPressed(HalGPIO::BTN_UP)) {
       bootSwapMode = true;
-      LOG_INF("MAIN", "Boot swap mode (UP + DOWN + POWER held at boot)");
+      LOG_INF("MAIN", "Boot swap mode (UP + POWER held at boot)");
     }
   }
 

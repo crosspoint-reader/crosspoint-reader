@@ -14,8 +14,8 @@
  *  3) On confirm: repoint otadata at the passive slot (boot_switch::swapToPassive)
  *     and restart into the other firmware.
  *
- * Reached from Settings -> System -> "Switch OS", or by holding both side
- * buttons while powering on (bootMode) — see main.cpp. The boot-hold shortcut is
+ * Reached from Settings -> System -> "Switch OS", or by holding the upper side
+ * button while powering on (bootMode) — see main.cpp. The boot-hold shortcut is
  * app-level convenience, NOT a recovery path: it only runs when this slot boots.
  */
 class SwapBootSlotActivity : public Activity {
