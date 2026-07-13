@@ -174,10 +174,8 @@ void XMLCALL WebDavParser::characterData(void* userData, const XML_Char* s, cons
 
 // WebDavClient
 
-bool WebDavClient::listFiles(const char* url, const char* username, const char* password,
-                             std::vector<WebDavEntry>& entries) {
-  LOG_DBG("DAV", "PROPFIND: %s", url);
-
+static bool doPropfind(const char* url, const std::string& user, const std::string& pass,
+                       std::vector<WebDavEntry>& entries) {
   WebDavParser parser;
   if (parser.error()) return false;
 
@@ -185,9 +183,6 @@ bool WebDavClient::listFiles(const char* url, const char* username, const char* 
       {"Depth", "1"},
       {"Content-Type", "application/xml"},
   };
-
-  const std::string user = username ? username : "";
-  const std::string pass = password ? password : "";
 
   bool ok = HttpDownloader::sendRequest(
       url, "PROPFIND", PROPFIND_BODY, headers,
@@ -198,19 +193,19 @@ bool WebDavClient::listFiles(const char* url, const char* username, const char* 
       207, user, pass);
 
   if (!ok) {
-    LOG_ERR("DAV", "PROPFIND request failed");
+    LOG_ERR("DAV", "PROPFIND request failed for %s", url);
     return false;
   }
 
   parser.flush();
 
   if (parser.error()) {
-    LOG_ERR("DAV", "Failed to parse PROPFIND response");
+    LOG_ERR("DAV", "Failed to parse PROPFIND XML for %s", url);
     return false;
   }
 
   auto parsed = std::move(parser).getEntries();
-  LOG_DBG("DAV", "Got %d entries", parsed.size());
+  LOG_DBG("DAV", "Got %zu entries", parsed.size());
 
   bool first = true;
   entries.clear();
@@ -224,4 +219,14 @@ bool WebDavClient::listFiles(const char* url, const char* username, const char* 
   }
 
   return true;
+}
+
+bool WebDavClient::listFiles(const char* url, const char* username, const char* password,
+                             std::vector<WebDavEntry>& entries) {
+  LOG_DBG("DAV", "PROPFIND: %s", url);
+
+  const std::string user = username ? username : "";
+  const std::string pass = password ? password : "";
+
+  return doPropfind(url, user, pass, entries);
 }
