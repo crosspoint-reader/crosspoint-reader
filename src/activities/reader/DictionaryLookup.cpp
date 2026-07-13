@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 
 namespace {
 
@@ -321,9 +322,8 @@ void DictionaryLookup::openPopup(const char* header, const std::string& body) {
     } else {
       auto wrapped = renderer.wrappedText(fontId, paragraph.c_str(), textW,
                                           static_cast<int>(MAX_DEFINITION_LINES - popupLines.size()));
-      for (auto& line : wrapped) {
-        popupLines.push_back(std::move(line));
-      }
+      popupLines.insert(popupLines.end(), std::make_move_iterator(wrapped.begin()),
+                        std::make_move_iterator(wrapped.end()));
     }
     start = end + 1;
   }
