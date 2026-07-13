@@ -232,3 +232,4 @@ TEST(HyphenationEval, Spanish) { runLanguageEval("spanish", "es", "spanish_hyphe
 TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphenation_tests.txt", 98.99); }
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
+TEST(HyphenationEval, Turkish) { runLanguageEval("turkish", "tr", "turkish_hyphenation_tests.txt", 98.75); }
