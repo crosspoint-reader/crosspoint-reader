@@ -153,6 +153,7 @@ class CrossPointSettings {
     LP_MENU_KOSYNC = 0,
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
+    LP_MENU_DICTIONARY = 3,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
@@ -257,6 +258,8 @@ class CrossPointSettings {
   uint8_t focusReadingEnabled = 0;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
+  // Dictionary folder name under /dictionaries (empty = no dictionary)
+  char dictionaryName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)

@@ -189,6 +189,15 @@ class GfxRenderer {
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
+  // Snapshot / restore a screen-coordinate framebuffer region (byte-aligned in
+  // panel memory). readFramebufferRegion returns the bytes written to dst, or
+  // 0 when the region is empty, offscreen, or exceeds dstCapacity. Pass the
+  // same rectangle to writeFramebufferRegion to restore the saved pixels.
+  // Enables partial-repaint patterns (e.g. moving a selection highlight)
+  // without re-rendering the whole page.
+  size_t readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const;
+  void writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src);
+
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                    BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;

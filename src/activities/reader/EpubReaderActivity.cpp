@@ -20,6 +20,7 @@
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
@@ -257,6 +258,29 @@ void EpubReaderActivity::openReaderMenu() {
                          });
 }
 
+void EpubReaderActivity::openDictionaryWordSelect() {
+  if (SETTINGS.dictionaryName[0] == '\0') {
+    showDictionaryMessage = true;
+    dictionaryMessageTime = millis();
+    requestUpdate();
+    return;
+  }
+  if (!section) return;
+  auto page = section->loadPage(section->currentPage);
+  if (!page) return;
+
+  // Word geometry must match render(): viewable-area margins plus screen margin.
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
+                                                                        orientedMarginLeft, orientedMarginTop),
+                         [this](const ActivityResult&) { requestUpdate(); });
+}
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
@@ -379,6 +403,11 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showDictionaryMessage = false;
+    requestUpdate();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
@@ -440,6 +469,14 @@ void EpubReaderActivity::loop() {
             ignoreNextConfirmRelease = true;  // sync launched or error shown; suppress menu open
             return;
           }
+        }
+        break;
+      case CrossPointSettings::LP_MENU_DICTIONARY:
+        // Hold ~0.4s starts dictionary word selection on the current page.
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
+          ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
+          openDictionaryWordSelect();
+          return;
         }
         break;
       case CrossPointSettings::LP_MENU_DISABLED:
@@ -713,6 +750,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
+      openDictionaryWordSelect();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
@@ -1304,6 +1345,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  }
+
+  if (showDictionaryMessage) {
+    GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
 }
 
