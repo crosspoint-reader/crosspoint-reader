@@ -6,8 +6,9 @@
 #include <algorithm>
 #include <cstdio>
 
-#include "CrossPointSettings.h"
 #include "I18n.h"
+
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "components/UITheme.h"
@@ -163,10 +164,9 @@ void FontSizeSelectionActivity::render(RenderLock&&) {
 
   // Get the font ID for the preview (using current font family and previewed size)
   const int previewFontId = SETTINGS.getReaderFontId();
-  const char* previewSizeName =
-      (previewFontSizeIndex_ >= 0 && previewFontSizeIndex_ < static_cast<int>(fontSizes_.size()))
-          ? fontSizes_[previewFontSizeIndex_].name.c_str()
-          : nullptr;
+  const char* previewSizeName = (previewFontSizeIndex_ >= 0 && previewFontSizeIndex_ < static_cast<int>(fontSizes_.size()))
+                                   ? fontSizes_[previewFontSizeIndex_].name.c_str()
+                                   : nullptr;
   renderPreviewPane(previewTop, previewHeight, previewFontId, previewSizeName);
 
   renderer.drawLine(0, listTop - metrics_.verticalSpacing / 2, pageWidth, listTop - metrics_.verticalSpacing / 2);
