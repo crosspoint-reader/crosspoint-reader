@@ -1,118 +1,45 @@
 #include "KOReaderCredentialStore.h"
 
-#include <HalStorage.h>
 #include <Logging.h>
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>
-#include <Serialization.h>
-
-#include "KOReaderJsonIO.h"
-
-// Initialize the static instance
-KOReaderCredentialStore KOReaderCredentialStore::instance;
 
 namespace {
-// File format version (for binary migration)
-constexpr uint8_t KOREADER_FILE_VERSION = 1;
-
-// File paths
-constexpr char KOREADER_FILE_BIN[] = "/.crosspoint/koreader.bin";
-constexpr char KOREADER_FILE_JSON[] = "/.crosspoint/koreader.json";
-constexpr char KOREADER_FILE_BAK[] = "/.crosspoint/koreader.bin.bak";
-
 // Default sync server URL
 constexpr char DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
-
-// Legacy obfuscation key - "KOReader" in ASCII (only used for binary migration)
-constexpr uint8_t LEGACY_OBFUSCATION_KEY[] = {0x4B, 0x4F, 0x52, 0x65, 0x61, 0x64, 0x65, 0x72};
-constexpr size_t LEGACY_KEY_LENGTH = sizeof(LEGACY_OBFUSCATION_KEY);
-
-void legacyDeobfuscate(std::string& data) {
-  for (size_t i = 0; i < data.size(); i++) {
-    data[i] ^= LEGACY_OBFUSCATION_KEY[i % LEGACY_KEY_LENGTH];
-  }
-}
 }  // namespace
 
-bool KOReaderCredentialStore::saveToFile() const {
-  Storage.mkdir("/.crosspoint");
-  return KOReaderJsonIO::save(*this, KOREADER_FILE_JSON);
+void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
+  doc["username"] = getUsername();
+  doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
+  doc["serverUrl"] = getServerUrl();
+  doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
+  doc["sendMetadata"] = getSendMetadata();
 }
 
-bool KOReaderCredentialStore::loadFromFile() {
-  // Try JSON first
-  if (Storage.exists(KOREADER_FILE_JSON)) {
-    String json = Storage.readFile(KOREADER_FILE_JSON);
-    if (!json.isEmpty()) {
-      bool resave = false;
-      bool result = KOReaderJsonIO::load(*this, json.c_str(), &resave);
-      if (result && resave) {
-        saveToFile();
-        LOG_DBG("KRS", "Resaved KOReader credentials to update format");
-      }
-      return result;
-    }
-  }
+bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
+  std::string user = doc["username"] | "";
 
-  // Fall back to binary migration
-  if (Storage.exists(KOREADER_FILE_BIN)) {
-    if (loadFromBinaryFile()) {
-      if (saveToFile()) {
-        Storage.rename(KOREADER_FILE_BIN, KOREADER_FILE_BAK);
-        LOG_DBG("KRS", "Migrated koreader.bin to koreader.json");
-        return true;
-      } else {
-        LOG_ERR("KRS", "Failed to save KOReader credentials during migration");
-        return false;
-      }
-    }
-  }
+  bool needsResave = false;
+  std::string pass = extractPassword(doc, needsResave);
 
-  LOG_DBG("KRS", "No credentials file found");
-  return false;
-}
+  setCredentials(user, pass);
+  setServerUrl(doc["serverUrl"] | "");
 
-bool KOReaderCredentialStore::loadFromBinaryFile() {
-  HalFile file;
-  if (!Storage.openFileForRead("KRS", KOREADER_FILE_BIN, file)) {
-    return false;
-  }
-
-  uint8_t version;
-  serialization::readPod(file, version);
-  if (version != KOREADER_FILE_VERSION) {
-    LOG_DBG("KRS", "Unknown file version: %u", version);
-    return false;
-  }
-
-  if (file.available()) {
-    serialization::readString(file, username);
+  uint8_t method = doc["matchMethod"] | (uint8_t)0;
+  if (method <= static_cast<uint8_t>(DocumentMatchMethod::BINARY)) {
+    setMatchMethod(static_cast<DocumentMatchMethod>(method));
   } else {
-    username.clear();
+    LOG_DBG("KRS", "Invalid matchMethod %u in JSON, resetting to FILENAME", method);
+    setMatchMethod(DocumentMatchMethod::FILENAME);
+  }
+  setSendMetadata(doc["sendMetadata"] | false);
+
+  if (needsResave) {
+    LOG_DBG("KRS", "Resaved KOReader credentials to update format");
+    saveToFile();
   }
 
-  if (file.available()) {
-    serialization::readString(file, password);
-    legacyDeobfuscate(password);
-  } else {
-    password.clear();
-  }
-
-  if (file.available()) {
-    serialization::readString(file, serverUrl);
-  } else {
-    serverUrl.clear();
-  }
-
-  if (file.available()) {
-    uint8_t method;
-    serialization::readPod(file, method);
-    matchMethod = static_cast<DocumentMatchMethod>(method);
-  } else {
-    matchMethod = DocumentMatchMethod::FILENAME;
-  }
-
-  LOG_DBG("KRS", "Loaded KOReader credentials from binary for user: %s", username.c_str());
   return true;
 }
 
@@ -172,4 +99,9 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;
   LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
+}
+
+void KOReaderCredentialStore::setSendMetadata(bool enabled) {
+  sendMetadata = enabled;
+  LOG_DBG("KRS", "Set send metadata: %s", enabled ? "true" : "false");
 }

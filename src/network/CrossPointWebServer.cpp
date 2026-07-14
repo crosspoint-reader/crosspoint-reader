@@ -6,9 +6,12 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <esp_efuse.h>
+#include <esp_efuse_table.h>
 #include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <cctype>
 
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -350,6 +353,15 @@ void CrossPointWebServer::handleJszip() const {
 }
 
 void CrossPointWebServer::handleNotFound() const {
+  // in AP mode, redirect unmatched browser/captive-portal requests to "/" so the OS auto-opens the browser
+  // API requests (/api/*) still return 404 so XHR errors surface correctly
+  // see https://en.wikipedia.org/wiki/Captive_portal#Detection
+  if (apMode && !server->uri().startsWith("/api/")) {
+    server->sendHeader("Location", "/", true);
+    server->send(302, "text/plain", "");
+    return;
+  }
+
   String message = "404 Not Found\n\n";
   message += "URI: " + server->uri() + "\n";
   server->send(404, "text/plain", message);
@@ -368,9 +380,27 @@ void CrossPointWebServer::handleStatus() const {
   doc["uptime"] = millis() / 1000;
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
 
-  String json;
-  serializeJson(doc, json);
-  server->send(200, "application/json", json);
+  char snBuf[33] = {0};
+  bool valid = false;
+  if (esp_efuse_read_field_blob(ESP_EFUSE_USER_DATA, snBuf, 256) == ESP_OK) {
+    valid = snBuf[0] != '\0' && snBuf[0] != (char)0xFF;
+    for (int i = 0; i < 32 && snBuf[i] != '\0'; i++) {
+      if (!std::isprint(static_cast<unsigned char>(snBuf[i]))) {
+        valid = false;
+        break;
+      }
+    }
+  }
+
+  if (valid) {
+    doc["serial"] = snBuf;
+  } else {
+    doc["serial"] = "Not found";
+  }
+
+  String response;
+  serializeJson(doc, response);
+  server->send(200, "application/json", response);
 }
 
 void CrossPointWebServer::scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const {
