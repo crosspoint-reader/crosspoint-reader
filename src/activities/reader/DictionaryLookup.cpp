@@ -65,7 +65,11 @@ void DictionaryLookup::reset() {
   popupScroll = 0;
   fullRenderNeeded = false;
   dictStore.close();
-  dictFile.close();
+  // HalFile::close() asserts on a never-opened file; reset() runs on every
+  // reader render, long before any dictionary file is opened.
+  if (dictFile.isOpen()) {
+    dictFile.close();
+  }
   dictOpenFailed = false;
 }
 
