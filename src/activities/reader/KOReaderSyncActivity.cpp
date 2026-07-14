@@ -225,6 +225,10 @@ void KOReaderSyncActivity::performUpload() {
     progress.metadata = std::move(meta);
   }
 
+  // Release the Epub before the network call so the TLS handshake has enough free heap
+  // (consistent with the release-before-sync pattern in performSync); nothing below needs it.
+  epub.reset();
+
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
