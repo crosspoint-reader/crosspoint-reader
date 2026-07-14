@@ -410,10 +410,43 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     tocParsed = parseTocNavFile();
   }
 
-  // Fall back to NCX if nav parsing failed or wasn't available
-  if (!tocParsed && !tocNcxItem.empty()) {
-    LOG_DBG("EBP", "Falling back to NCX TOC");
-    tocParsed = parseTocNcxFile();
+  // Converted books (e.g. Amazon exports) often pair a coarse EPUB 3 nav
+  // (parts and front matter only) with an NCX carrying the full chapter list.
+  // A parsed nav covering less than half the spine is treated as sparse and
+  // the NCX gets a chance to do better; the richer result wins. The pass is
+  // restarted before each re-parse so the loser's entries are discarded
+  // rather than appended to.
+  const int navCount = bookMetadataCache->getTocCount();
+  const int spineItemCount = bookMetadataCache->getSpineCount();
+  const bool navSparse = tocParsed && navCount * 2 < spineItemCount;
+
+  if ((!tocParsed || navSparse) && !tocNcxItem.empty()) {
+    if (navSparse) {
+      LOG_DBG("EBP", "Nav TOC sparse (%d entries for %d spine items), trying NCX", navCount, spineItemCount);
+    } else {
+      LOG_DBG("EBP", "Falling back to NCX TOC");
+    }
+    bookMetadataCache->endTocPass();
+    if (!bookMetadataCache->beginTocPass()) {
+      LOG_ERR("EBP", "Could not restart toc pass");
+      return false;
+    }
+    const bool ncxParsed = parseTocNcxFile();
+    if (ncxParsed && (!tocParsed || bookMetadataCache->getTocCount() > navCount)) {
+      LOG_DBG("EBP", "NCX TOC adopted (%d entries)", bookMetadataCache->getTocCount());
+      tocParsed = true;
+    } else if (tocParsed) {
+      // NCX failed or was no richer - re-run nav to restore its entries
+      LOG_DBG("EBP", "Keeping nav TOC (%d entries)", navCount);
+      bookMetadataCache->endTocPass();
+      if (!bookMetadataCache->beginTocPass()) {
+        LOG_ERR("EBP", "Could not restart toc pass");
+        return false;
+      }
+      tocParsed = parseTocNavFile();
+    } else {
+      tocParsed = ncxParsed;
+    }
   }
 
   if (!tocParsed) {
