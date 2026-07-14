@@ -208,12 +208,20 @@ void KOReaderSyncActivity::performUpload() {
 
   // Optionally include document metadata (KOReader PR #15306)
   if (KOREADER_STORE.getSendMetadata()) {
+    // The Epub is released before the sync network calls and is only reloaded on the
+    // remote-progress path (performSync). When uploading from NO_REMOTE_PROGRESS the
+    // Epub is still null, so reload it here and guard the title/author reads to avoid
+    // dereferencing a null Epub. Filename is derived from the path and is always safe.
+    ensureEpubLoaded();
     KOReaderMetadata meta;
-    // Extract filename from path
     const auto lastSlash = epubPath.rfind('/');
     meta.filename = (lastSlash != std::string::npos) ? epubPath.substr(lastSlash + 1) : epubPath;
-    meta.title = epub->getTitle();
-    meta.authors = epub->getAuthor();
+    if (epub) {
+      meta.title = epub->getTitle();
+      meta.authors = epub->getAuthor();
+    } else {
+      LOG_ERR("KOSync", "Epub unavailable for metadata; sending filename only");
+    }
     progress.metadata = std::move(meta);
   }
 
