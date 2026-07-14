@@ -12,6 +12,7 @@
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "FontSelectionActivity.h"
+#include "FontSizeSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
@@ -202,6 +203,15 @@ void SettingsActivity::toggleCurrentSetting() {
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    if (setting.nameId == StrId::STR_FONT_SIZE) {
+      // Launch font size selection submenu instead of cycling
+      startActivityForResult(std::make_unique<FontSizeSelectionActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) {
+                               SETTINGS.saveToFile();
+                               rebuildSettingsLists();
+                             });
+      return;
+    }
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
