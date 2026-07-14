@@ -18,7 +18,6 @@ struct WifiNetworkInfo {
   int32_t rssi;
   bool isEncrypted;
   bool hasSavedPassword;  // Whether we have saved credentials for this network
-  std::string ipAddress;  // Populated after connection for display
 };
 
 // WiFi selection states

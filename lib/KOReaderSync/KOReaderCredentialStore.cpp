@@ -73,7 +73,7 @@ bool KOReaderCredentialStore::loadFromFile() {
 }
 
 bool KOReaderCredentialStore::loadFromBinaryFile() {
-  FsFile file;
+  HalFile file;
   if (!Storage.openFileForRead("KRS", KOREADER_FILE_BIN, file)) {
     return false;
   }

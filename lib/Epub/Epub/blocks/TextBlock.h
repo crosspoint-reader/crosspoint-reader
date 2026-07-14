@@ -47,6 +47,6 @@ class TextBlock final : public Block {
   // given a renderer works out where to break the words into lines
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   BlockType getType() override { return TEXT_BLOCK; }
-  bool serialize(FsFile& file) const;
-  static std::unique_ptr<TextBlock> deserialize(FsFile& file);
+  bool serialize(HalFile& file) const;
+  static std::unique_ptr<TextBlock> deserialize(HalFile& file);
 };

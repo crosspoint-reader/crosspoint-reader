@@ -1,10 +1,8 @@
 #include <Utf8.h>
+#include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cctype>
-#include <cmath>
 #include <fstream>
-#include <functional>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -13,6 +11,12 @@
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
+
+#ifndef HYPHENATION_RESOURCES_DIR
+#error "HYPHENATION_RESOURCES_DIR must be defined by the build system"
+#endif
+
+namespace {
 
 struct TestCase {
   std::string word;
@@ -29,23 +33,6 @@ struct EvaluationResult {
   double recall = 0.0;
   double f1Score = 0.0;
   double weightedScore = 0.0;
-};
-
-struct LanguageConfig {
-  std::string cliName;
-  std::string testDataFile;
-  const char* primaryTag;
-};
-
-const std::vector<LanguageConfig> kSupportedLanguages = {
-    {"english", "test/hyphenation_eval/resources/english_hyphenation_tests.txt", "en"},
-    {"french", "test/hyphenation_eval/resources/french_hyphenation_tests.txt", "fr"},
-    {"german", "test/hyphenation_eval/resources/german_hyphenation_tests.txt", "de"},
-    {"russian", "test/hyphenation_eval/resources/russian_hyphenation_tests.txt", "ru"},
-    {"spanish", "test/hyphenation_eval/resources/spanish_hyphenation_tests.txt", "es"},
-    {"italian", "test/hyphenation_eval/resources/italian_hyphenation_tests.txt", "it"},
-    {"polish", "test/hyphenation_eval/resources/polish_hyphenation_tests.txt", "pl"},
-    {"swedish", "test/hyphenation_eval/resources/swedish_hyphenation_tests.txt", "sv"},
 };
 
 std::vector<size_t> expectedPositionsFromAnnotatedWord(const std::string& annotated) {
@@ -72,7 +59,6 @@ std::vector<TestCase> loadTestData(const std::string& filename) {
   std::ifstream file(filename);
 
   if (!file.is_open()) {
-    std::cerr << "Error: Could not open file " << filename << std::endl;
     return testCases;
   }
 
@@ -90,14 +76,11 @@ std::vector<TestCase> loadTestData(const std::string& filename) {
       testCase.word = word;
       testCase.hyphenated = hyphenated;
       testCase.frequency = std::stoi(freqStr);
-
       testCase.expectedPositions = expectedPositionsFromAnnotatedWord(hyphenated);
-
       testCases.push_back(testCase);
     }
   }
 
-  file.close();
   return testCases;
 }
 
@@ -133,29 +116,11 @@ std::string positionsToHyphenated(const std::string& word, const std::vector<siz
 std::vector<size_t> hyphenateWordWithHyphenator(const std::string& word, const LanguageHyphenator& hyphenator) {
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuationAndFootnote(cps);
-
   return hyphenator.breakIndexes(cps);
 }
 
-std::vector<LanguageConfig> resolveLanguages(const std::string& selection) {
-  if (selection == "all") {
-    return kSupportedLanguages;
-  }
-
-  for (const auto& config : kSupportedLanguages) {
-    if (config.cliName == selection) {
-      return {config};
-    }
-  }
-
-  return {};
-}
-
-EvaluationResult evaluateWord(const TestCase& testCase,
-                              std::function<std::vector<size_t>(const std::string&)> hyphenateFunc) {
+EvaluationResult evaluateWord(const TestCase& testCase, const std::vector<size_t>& actualPositions) {
   EvaluationResult result;
-
-  std::vector<size_t> actualPositions = hyphenateFunc(testCase.word);
 
   std::vector<size_t> expected = testCase.expectedPositions;
   std::vector<size_t> actual = actualPositions;
@@ -189,8 +154,7 @@ EvaluationResult evaluateWord(const TestCase& testCase,
     result.f1Score = 2 * result.precision * result.recall / (result.precision + result.recall);
   }
 
-  // Treat words that contain no hyphenation marks in both the expected data and the
-  // algorithmic output as perfect matches so they don't drag down the per-word averages.
+  // Treat words with no expected and no actual hyphenation marks as perfect.
   if (expected.empty() && actual.empty()) {
     result.precision = 1.0;
     result.recall = 1.0;
@@ -199,9 +163,8 @@ EvaluationResult evaluateWord(const TestCase& testCase,
 
   double fpPenalty = 2.0;
   double fnPenalty = 1.0;
-
   int totalErrors = result.falsePositives * fpPenalty + result.falseNegatives * fnPenalty;
-  int totalPossible = expected.size() * fpPenalty;
+  int totalPossible = static_cast<int>(expected.size() * fpPenalty);
 
   if (totalPossible > 0) {
     result.weightedScore = 1.0 - (static_cast<double>(totalErrors) / totalPossible);
@@ -213,180 +176,59 @@ EvaluationResult evaluateWord(const TestCase& testCase,
   return result;
 }
 
-void printResults(const std::string& language, const std::vector<TestCase>& testCases,
-                  const std::vector<std::pair<TestCase, EvaluationResult>>& worstCases, int perfectMatches,
-                  int partialMatches, int completeMisses, double totalPrecision, double totalRecall, double totalF1,
-                  double totalWeighted, int totalTP, int totalFP, int totalFN,
-                  std::function<std::vector<size_t>(const std::string&)> hyphenateFunc) {
-  std::string lang_upper = language;
-  if (!lang_upper.empty()) {
-    lang_upper[0] = std::toupper(lang_upper[0]);
-  }
+// Runs the evaluation for a single language and asserts the per-word average F1
+// is at or above `minF1Percent`. Thresholds are set ~1pp below measured
+// baselines so unrelated tweaks don't fail CI but real regressions still trip.
+void runLanguageEval(const char* langName, const char* primaryTag, const char* resourceFile, double minF1Percent) {
+  const auto* hyphenator = getLanguageHyphenatorForPrimaryTag(primaryTag);
+  ASSERT_NE(hyphenator, nullptr) << "No hyphenator registered for tag: " << primaryTag;
 
-  std::cout << "================================================================================" << std::endl;
-  std::cout << lang_upper << " HYPHENATION EVALUATION RESULTS" << std::endl;
-  std::cout << "================================================================================" << std::endl;
-  std::cout << std::endl;
+  std::string path = std::string(HYPHENATION_RESOURCES_DIR) + "/" + resourceFile;
+  std::vector<TestCase> testCases = loadTestData(path);
+  ASSERT_FALSE(testCases.empty()) << "No test cases loaded from " << path;
 
-  std::cout << "Total test cases:   " << testCases.size() << std::endl;
-  std::cout << "Perfect matches:    " << perfectMatches << " (" << (perfectMatches * 100.0 / testCases.size()) << "%)"
-            << std::endl;
-  std::cout << "Partial matches:    " << partialMatches << std::endl;
-  std::cout << "Complete misses:    " << completeMisses << std::endl;
-  std::cout << std::endl;
+  double totalF1 = 0.0;
+  std::vector<std::pair<TestCase, EvaluationResult>> imperfect;
 
-  std::cout << "--- Overall Metrics (averaged per word) ---" << std::endl;
-  std::cout << "Average Precision:       " << (totalPrecision / testCases.size() * 100.0) << "%" << std::endl;
-  std::cout << "Average Recall:          " << (totalRecall / testCases.size() * 100.0) << "%" << std::endl;
-  std::cout << "Average F1 Score:        " << (totalF1 / testCases.size() * 100.0) << "%" << std::endl;
-  std::cout << "Average Weighted Score:  " << (totalWeighted / testCases.size() * 100.0) << "% (FP penalty: 2x)"
-            << std::endl;
-  std::cout << std::endl;
-
-  std::cout << "--- Overall Metrics (total counts) ---" << std::endl;
-  std::cout << "True Positives:          " << totalTP << std::endl;
-  std::cout << "False Positives:         " << totalFP << " (incorrect hyphenation points)" << std::endl;
-  std::cout << "False Negatives:         " << totalFN << " (missed hyphenation points)" << std::endl;
-
-  double overallPrecision = totalTP + totalFP > 0 ? static_cast<double>(totalTP) / (totalTP + totalFP) : 0.0;
-  double overallRecall = totalTP + totalFN > 0 ? static_cast<double>(totalTP) / (totalTP + totalFN) : 0.0;
-  double overallF1 = overallPrecision + overallRecall > 0
-                         ? 2 * overallPrecision * overallRecall / (overallPrecision + overallRecall)
-                         : 0.0;
-
-  std::cout << "Overall Precision:       " << (overallPrecision * 100.0) << "%" << std::endl;
-  std::cout << "Overall Recall:          " << (overallRecall * 100.0) << "%" << std::endl;
-  std::cout << "Overall F1 Score:        " << (overallF1 * 100.0) << "%" << std::endl;
-  std::cout << std::endl;
-
-  // Filter out perfect matches from the “worst cases” section so that only actionable failures appear.
-  auto hasImperfection = [](const EvaluationResult& r) { return r.weightedScore < 0.999999; };
-  std::vector<std::pair<TestCase, EvaluationResult>> imperfectCases;
-  imperfectCases.reserve(worstCases.size());
-  for (const auto& entry : worstCases) {
-    if (hasImperfection(entry.second)) {
-      imperfectCases.push_back(entry);
+  for (const auto& tc : testCases) {
+    std::vector<size_t> actual = hyphenateWordWithHyphenator(tc.word, *hyphenator);
+    EvaluationResult res = evaluateWord(tc, actual);
+    totalF1 += res.f1Score;
+    if (res.weightedScore < 0.999999) {
+      imperfect.emplace_back(tc, res);
     }
   }
 
-  std::cout << "--- Worst Cases (lowest weighted scores) ---" << std::endl;
-  int showCount = std::min(10, static_cast<int>(imperfectCases.size()));
-  for (int i = 0; i < showCount; i++) {
-    const auto& testCase = imperfectCases[i].first;
-    const auto& result = imperfectCases[i].second;
+  double averageF1Percent = totalF1 / testCases.size() * 100.0;
+  ::testing::Test::RecordProperty("avg_f1_percent", std::to_string(averageF1Percent));
+  ::testing::Test::RecordProperty("test_cases", std::to_string(testCases.size()));
 
-    std::vector<size_t> actualPositions = hyphenateFunc(testCase.word);
-    std::string actualHyphenated = positionsToHyphenated(testCase.word, actualPositions);
+  std::cout << langName << ": F1=" << averageF1Percent << "% (threshold " << minF1Percent << "%, " << testCases.size()
+            << " cases)\n";
 
-    std::cout << "Word: " << testCase.word << " (freq: " << testCase.frequency << ")" << std::endl;
-    std::cout << "  Expected:  " << testCase.hyphenated << std::endl;
-    std::cout << "  Got:       " << actualHyphenated << std::endl;
-    std::cout << "  Precision: " << (result.precision * 100.0) << "%"
-              << "  Recall: " << (result.recall * 100.0) << "%"
-              << "  F1: " << (result.f1Score * 100.0) << "%"
-              << "  Weighted: " << (result.weightedScore * 100.0) << "%" << std::endl;
-    std::cout << "  TP: " << result.truePositives << "  FP: " << result.falsePositives
-              << "  FN: " << result.falseNegatives << std::endl;
-    std::cout << std::endl;
-  }
-
-  // Additional compact list of the worst ~100 words to aid iteration
-  int compactCount = std::min(100, static_cast<int>(imperfectCases.size()));
-  if (compactCount > 0) {
-    std::cout << "--- Compact Worst Cases (" << compactCount << ") ---" << std::endl;
-    for (int i = 0; i < compactCount; i++) {
-      const auto& testCase = imperfectCases[i].first;
-      std::vector<size_t> actualPositions = hyphenateFunc(testCase.word);
-      std::string actualHyphenated = positionsToHyphenated(testCase.word, actualPositions);
-      std::cout << testCase.word << " | exp:" << testCase.hyphenated << " | got:" << actualHyphenated << std::endl;
-    }
-    std::cout << std::endl;
-  }
-}
-
-int main(int argc, char* argv[]) {
-  const bool summaryMode = argc <= 1;
-  const std::string languageSelection = summaryMode ? "all" : argv[1];
-
-  std::vector<LanguageConfig> languages = resolveLanguages(languageSelection);
-  if (languages.empty()) {
-    std::cerr << "Unknown language: " << languageSelection << std::endl;
-    return 1;
-  }
-
-  for (const auto& lang : languages) {
-    const auto* hyphenator = getLanguageHyphenatorForPrimaryTag(lang.primaryTag);
-    if (!hyphenator) {
-      std::cerr << "No hyphenator registered for tag: " << lang.primaryTag << std::endl;
-      continue;
-    }
-    const auto hyphenateFunc = [hyphenator](const std::string& word) {
-      return hyphenateWordWithHyphenator(word, *hyphenator);
-    };
-
-    if (!summaryMode) {
-      std::cout << "Loading test data from: " << lang.testDataFile << std::endl;
-    }
-    std::vector<TestCase> testCases = loadTestData(lang.testDataFile);
-
-    if (testCases.empty()) {
-      std::cerr << "No test cases loaded for " << lang.cliName << ". Skipping." << std::endl;
-      continue;
-    }
-
-    if (!summaryMode) {
-      std::cout << "Loaded " << testCases.size() << " test cases for " << lang.cliName << std::endl;
-      std::cout << std::endl;
-    }
-
-    int perfectMatches = 0;
-    int partialMatches = 0;
-    int completeMisses = 0;
-
-    double totalPrecision = 0.0;
-    double totalRecall = 0.0;
-    double totalF1 = 0.0;
-    double totalWeighted = 0.0;
-
-    int totalTP = 0, totalFP = 0, totalFN = 0;
-
-    std::vector<std::pair<TestCase, EvaluationResult>> worstCases;
-
-    for (const auto& testCase : testCases) {
-      EvaluationResult result = evaluateWord(testCase, hyphenateFunc);
-
-      totalTP += result.truePositives;
-      totalFP += result.falsePositives;
-      totalFN += result.falseNegatives;
-
-      totalPrecision += result.precision;
-      totalRecall += result.recall;
-      totalF1 += result.f1Score;
-      totalWeighted += result.weightedScore;
-
-      if (result.f1Score == 1.0) {
-        perfectMatches++;
-      } else if (result.f1Score > 0.0) {
-        partialMatches++;
-      } else {
-        completeMisses++;
-      }
-
-      worstCases.push_back({testCase, result});
-    }
-
-    if (summaryMode) {
-      const double averageF1Percent = testCases.empty() ? 0.0 : (totalF1 / testCases.size() * 100.0);
-      std::cout << lang.cliName << ": " << averageF1Percent << "%" << std::endl;
-      continue;
-    }
-
-    std::sort(worstCases.begin(), worstCases.end(),
+  if (averageF1Percent < minF1Percent) {
+    std::sort(imperfect.begin(), imperfect.end(),
               [](const auto& a, const auto& b) { return a.second.weightedScore < b.second.weightedScore; });
-
-    printResults(lang.cliName, testCases, worstCases, perfectMatches, partialMatches, completeMisses, totalPrecision,
-                 totalRecall, totalF1, totalWeighted, totalTP, totalFP, totalFN, hyphenateFunc);
+    std::cout << "Worst cases for " << langName << ":\n";
+    int show = std::min<int>(10, static_cast<int>(imperfect.size()));
+    for (int i = 0; i < show; ++i) {
+      const TestCase& tc = imperfect[i].first;
+      std::vector<size_t> actual = hyphenateWordWithHyphenator(tc.word, *hyphenator);
+      std::cout << "  " << tc.word << " | expected=" << tc.hyphenated
+                << " | got=" << positionsToHyphenated(tc.word, actual) << "\n";
+    }
   }
 
-  return 0;
+  EXPECT_GE(averageF1Percent, minF1Percent) << "Hyphenation quality regressed for " << langName;
 }
+
+}  // namespace
+
+TEST(HyphenationEval, English) { runLanguageEval("english", "en", "english_hyphenation_tests.txt", 98.10); }
+TEST(HyphenationEval, French) { runLanguageEval("french", "fr", "french_hyphenation_tests.txt", 99.00); }
+TEST(HyphenationEval, German) { runLanguageEval("german", "de", "german_hyphenation_tests.txt", 96.73); }
+TEST(HyphenationEval, Russian) { runLanguageEval("russian", "ru", "russian_hyphenation_tests.txt", 96.22); }
+TEST(HyphenationEval, Spanish) { runLanguageEval("spanish", "es", "spanish_hyphenation_tests.txt", 98.02); }
+TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphenation_tests.txt", 98.99); }
+TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
+TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }

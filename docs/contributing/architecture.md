@@ -8,17 +8,18 @@ At a high level, it is firmware that uses an activity-driven application archite
 
 ```mermaid
 graph TD
-    A[Hardware: ESP32-C3 + SD + E-ink + Buttons] --> B[open-x4-sdk HAL]
-    B --> C[src/main.cpp runtime loop]
-    C --> D[Activities layer]
-    C --> E[State and settings]
-    D --> F[Reader flows]
-    D --> G[Home/Library/Settings flows]
-    D --> H[Network/Web server flows]
-    F --> I[lib/Epub parsing + layout + hyphenation]
-    I --> J[SD cache in .crosspoint]
-    D --> K[GfxRenderer]
-    K --> L[E-ink display buffer]
+    A[Hardware: ESP32-C3 + SD + E-ink + Buttons] --> B[open-x4-sdk]
+    B --> C[lib/hal wrappers]
+    C --> D[src/main.cpp runtime loop]
+    D --> E[Activities layer]
+    D --> F[State and settings]
+    E --> G[Reader flows]
+    E --> H[Home/Library/Settings flows]
+    E --> I[Network/Web server flows]
+    G --> J[lib/Epub parsing + layout + hyphenation]
+    J --> K[SD cache in .crosspoint]
+    E --> L[GfxRenderer]
+    L --> M[E-ink display buffer]
 ```
 
 ## Runtime lifecycle
@@ -58,7 +59,7 @@ Top-level activity groups:
 - `src/activities/home/`: home and library navigation
 - `src/activities/reader/`: EPUB/XTC/TXT reading flows
 - `src/activities/settings/`: settings menus and configuration
-- `src/activities/network/`: WiFi selection, AP/STA mode, file transfer server
+- `src/activities/network/`: Wi-Fi selection, AP/STA mode, file transfer server
 - `src/activities/boot_sleep/`: boot and sleep transitions
 
 ## Reader and content pipeline
@@ -73,10 +74,11 @@ flowchart LR
     C -->|EPUB| D[lib/Epub/Epub]
     C -->|XTC| E[lib/Xtc reader]
     C -->|TXT| F[lib/Txt reader]
-    D --> G[Parse OPF/TOC/CSS]
-    G --> H[Layout pages/sections]
-    H --> I[Write section and metadata caches]
-    I --> J[Render current page via GfxRenderer]
+    D --> G[Parse OPF/TOC and collect CSS refs]
+    G --> H[Build/load book.bin and css_rules.cache]
+    H --> I[Layout pages/sections]
+    I --> J[Write section cache]
+    J --> K[Render current page via GfxRenderer]
 ```
 
 Why caching matters:
@@ -98,7 +100,7 @@ flowchart TD
     D --> E[Locate container and OPF]
     E --> F[Build or load BookMetadataCache]
     F --> G[Load TOC and spine]
-    G --> H[Load or parse CSS rules]
+    G --> H[Load CSS cache or parse manifest/base-dir CSS]
 
     H --> I[EpubReaderActivity]
     I --> J{Section cache exists for current settings?}
@@ -121,7 +123,12 @@ flowchart TD
 
 Notes:
 
-- "section cache exists" depends on cache-busting parameters such as font and layout-related settings
+- CSS files are collected from the OPF manifest and, when needed, discovered by
+  streaming ZIP paths under the OPF content base directory; the firmware avoids
+  preloading the full ZIP central directory for large books.
+- "section cache exists" depends on cache-busting parameters such as font,
+  viewport size, paragraph alignment, hyphenation, embedded CSS, image rendering,
+  and Focus Reading settings
 - rendering favors reusing precomputed layout data to keep page turns responsive on constrained hardware
 - progress/session state is persisted so the reader can reopen at the last position after reboot/sleep
 
@@ -138,14 +145,18 @@ Typical persisted areas on SD:
 /.crosspoint/
   epub_<hash>/
     book.bin
+    css_rules.cache
     progress.bin
     cover.bmp
     sections/*.bin
-  settings.bin
-  state.bin
+    img_* cache files
+  settings.json
+  state.json
 ```
 
-For binary cache formats, see `docs/file-formats.md`.
+`sections/*.bin` contains rendered pages plus anchor, paragraph, and list-item
+lookup tables used for TOC/footnote jumps and KOReader sync refinement. For
+binary cache formats, see `docs/file-formats.md`.
 
 ## Networking architecture
 
@@ -153,14 +164,18 @@ Network file transfer is controlled by `src/activities/network/CrossPointWebServ
 
 Modes:
 
-- STA: join existing WiFi network
+- STA: join existing Wi-Fi network
 - AP: create hotspot
+- Calibre Wireless: STA flow specialized for Calibre plugin uploads
 
 Server behavior:
 
 - HTTP server on port 80
 - WebSocket upload server on port 81
+- WebDAV handler on the HTTP server
+- UDP discovery listener for upload clients
 - file operations backed by SD storage
+- browser APIs for file management, settings, fonts, OPDS servers, and saved Wi-Fi networks
 - activity requests faster loop responsiveness while server is running
 
 Endpoint reference: `docs/webserver-endpoints.md`.
@@ -170,6 +185,7 @@ Endpoint reference: `docs/webserver-endpoints.md`.
 Some sources are generated and should not be edited manually.
 
 - `scripts/build_html.py` generates `src/network/html/*.generated.h` from HTML files
+- `scripts/gen_i18n.py` generates `lib/I18n/I18nKeys.h`, `I18nStrings.h`, and `I18nStrings.cpp`
 - `scripts/generate_hyphenation_trie.py` generates hyphenation headers under `lib/Epub/Epub/hyphenation/generated/`
 
 When editing related source assets, regenerate via normal build steps/scripts.
@@ -179,6 +195,7 @@ When editing related source assets, regenerate via normal build steps/scripts.
 - `src/`: app orchestration, settings/state, and activity implementations
 - `src/network/`: web server and OTA/update networking
 - `src/components/`: theming and shared UI components
+- `lib/hal/`: hardware abstraction wrappers around open-x4-sdk
 - `lib/Epub/`: EPUB parser, layout, CSS handling, and hyphenation
 - `lib/`: supporting libraries (fonts, text, filesystem helpers, etc.)
 - `open-x4-sdk/`: hardware SDK submodule (display, input, storage, battery)

@@ -3,17 +3,48 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <string_view>
 #include <vector>
 
 namespace FsHelpers {
 
-std::string normalisePath(const std::string& path) {
-  std::vector<std::string> components;
-  std::string component;
+namespace {
+bool isHexDigit(const char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
-  for (const auto c : path) {
-    if (c == '/') {
-      if (!component.empty()) {
+uint8_t hexValue(const char c) {
+  if (c >= '0' && c <= '9') return static_cast<uint8_t>(c - '0');
+  if (c >= 'a' && c <= 'f') return static_cast<uint8_t>(10 + (c - 'a'));
+  return static_cast<uint8_t>(10 + (c - 'A'));
+}
+}  // namespace
+
+std::string decodeUriEscapes(const std::string& path) {
+  std::string decoded;
+  decoded.reserve(path.size());
+
+  for (size_t i = 0; i < path.size(); i++) {
+    if (path[i] == '%' && i + 2 < path.size() && isHexDigit(path[i + 1]) && isHexDigit(path[i + 2])) {
+      const uint8_t value = static_cast<uint8_t>((hexValue(path[i + 1]) << 4) | hexValue(path[i + 2]));
+      decoded += static_cast<char>(value);
+      i += 2;
+      continue;
+    }
+
+    decoded += path[i];
+  }
+
+  return decoded;
+}
+
+std::string normalisePath(const std::string& path) {
+  std::vector<std::string_view> components;
+  components.reserve(8);  // Eight nested folders is more than we might expect
+
+  size_t start = 0;
+  for (size_t i = 0; i <= path.length(); ++i) {
+    if (i == path.length() || path[i] == '/') {
+      if (i > start) {
+        std::string_view component(path.data() + start, i - start);
         if (component == "..") {
           if (!components.empty()) {
             components.pop_back();
@@ -21,23 +52,28 @@ std::string normalisePath(const std::string& path) {
         } else {
           components.push_back(component);
         }
-        component.clear();
       }
-    } else {
-      component += c;
+      start = i + 1;
     }
   }
 
-  if (!component.empty()) {
-    components.push_back(component);
+  if (components.empty()) {
+    return "";
+  }
+
+  size_t total_len = 0;
+  for (const auto& c : components) {
+    total_len += c.length() + 1;
   }
 
   std::string result;
-  for (const auto& c : components) {
-    if (!result.empty()) {
-      result += "/";
+  result.reserve(total_len - 1);
+
+  for (size_t i = 0; i < components.size(); ++i) {
+    if (i > 0) {
+      result += '/';
     }
-    result += c;
+    result.append(components[i].data(), components[i].length());
   }
 
   return result;
@@ -59,8 +95,6 @@ void sortFileList(std::vector<std::string>& strs) {
       // Check if both are at the start of a number
       if (isdigit(*s1) && isdigit(*s2)) {
         // Skip leading zeros and track them
-        const char* start1 = s1;
-        const char* start2 = s2;
         while (*s1 == '0') s1++;
         while (*s2 == '0') s2++;
 
@@ -130,6 +164,8 @@ bool hasXtcExtension(std::string_view fileName) {
 bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(fileName, ".txt"); }
 
 bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
+
+bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
 std::string extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');

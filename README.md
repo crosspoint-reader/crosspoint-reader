@@ -10,7 +10,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 ## What can CrossPoint do?
 
-- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
+- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
 
 - **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
 
@@ -29,20 +29,16 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
   - Web settings UI/API (edit many device settings from browser)
   - WebSocket fast uploads
   - WebDAV handler
-  - AP mode (hotspot) and STA mode (join existing WiFi), both with QR helpers
+  - AP mode (hotspot) and STA mode (join existing Wi-Fi), both with QR helpers
   - Calibre wireless connect flow
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
   - OTA update checks and installs from GitHub releases
 
 - **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-- **Localization**: 22 UI languages and counting.
+- **Localization**: 24 UI languages and counting. RTL support.
 
 ### Coming soon:
-
-- RTL support — Arabic, Hebrew, and Farsi.
-
-- Bookmarks.
 
 - Dictionary lookup — inline word lookup without leaving the reader.
 
@@ -211,7 +207,7 @@ CrossPoint Reader is pretty aggressive about caching data down to the SD card to
 
 ### Data caching
 
-The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the 
+The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the
 cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
 
 ```text
@@ -220,13 +216,18 @@ cache. This cache directory exists at `.crosspoint` on the SD card. The structur
 │   ├── progress.bin     # reading position (chapter, page, etc.)
 │   ├── cover.bmp        # generated cover image
 │   ├── book.bin         # metadata: title, author, spine, TOC
+│   ├── css_rules.cache  # parsed CSS rule cache
+│   ├── img_*            # rendered image cache files
 │   └── sections/        # per-chapter layout cache
 │       ├── 0.bin
 │       ├── 1.bin
 │       └── ...
+├── settings.json        # device settings
+├── state.json           # resume/runtime state
+└── recent.json          # recent books list
 ```
 
-Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Note: the cache isn't cleared automatically when you delete a book, and moving a file to a new path resets its reading progress.
+Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 
@@ -250,8 +251,6 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.
 
-- [crosspoint-reader (jpirnay)](https://github.com/jpirnay/crosspoint-reader) — Faster integration of functionality. Tracks upstream PRs and integrates the good ones ahead of the official merge.
-
 - [crosspoint-reader-cjk](https://github.com/aBER0724/crosspoint-reader-cjk) — Purpose-built for Chinese, Japanese, and Korean reading.
 
 - [inx](https://github.com/obijuankenobiii/inx) — Completely reimagines the user interface with tabbed navigation.
@@ -259,6 +258,8 @@ One of the best things about open source is that anyone can take the code in a d
 - ~~[PlusPoint](https://github.com/ngxson/pluspoint-reader) — custom JS apps support.~~ (Unmaintained)
 
 - [crosspoint-reader-papers3](https://github.com/juicecultus/crosspoint-reader-papers3) — Crosspoint port for M5Stack Paper S3. 
+
+- [t5s3-reader](https://github.com/ShallowGreen123/t5s3-reader) — Crosspoint port for LilyGo T5 ePaper S3 / T5S3 4.7-inch e-paper device.
 
 **Note:** Many of these features will make their way into CrossPoint over time. We maintain a slower pace to ensure rock-solid stability and squash bugs before they reach your device.
 

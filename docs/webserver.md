@@ -1,235 +1,148 @@
 # Web Server Guide
 
-This guide explains how to connect your CrossPoint Reader to WiFi and use the built-in web server to upload files from your computer or phone.
+This guide explains how to use CrossPoint Reader's built-in web server for file
+transfer, device settings, Wi-Fi/OPDS management, and SD-card font management.
 
 ## Overview
 
-CrossPoint Reader includes a built-in web server that allows you to:
+The web server is available while the device is in **File Transfer** or
+**Calibre Wireless** mode. It can:
 
-- Upload files wirelessly from any device on the same WiFi network
-- Browse and manage files on your device's SD card
-- Create folders to organize your library
-- Delete files and folders
+- Upload, download, rename, move, and delete files on the SD card
+- Create folders
+- Edit many device settings from a browser
+- Manage saved Wi-Fi networks and OPDS servers
+- Upload and delete `.cpfont` SD-card font families
+- Accept WebDAV clients and Calibre wireless uploads
 
-## Prerequisites
+The server does not require authentication. Use it only on trusted private
+networks or in hotspot mode when you control who is connected.
 
-- Your CrossPoint Reader device
-- A WiFi network
-- A computer, phone, or tablet connected to the **same WiFi network**
+## Starting File Transfer
 
----
+1. From the Home screen, select **File Transfer**.
+2. Choose one of the available modes:
 
-## Step 1: Accessing the WiFi Screen
+| Mode | Use when |
+|------|----------|
+| **Join Network** | You want the reader to join an existing Wi-Fi network. |
+| **Calibre Wireless** | You want to receive books from the CrossPoint Calibre plugin workflow. |
+| **Create Hotspot** | You want the reader to create its own open Wi-Fi network. |
 
-1. From the main menu or file browser, navigate to the **Settings** screen
-2. Select the **WiFi** option
-3. The device will automatically start scanning for available networks
+## Join Network Mode
 
----
+1. Select **Join Network**.
+2. Pick a 2.4 GHz Wi-Fi network from the scan results.
+3. Enter the password if prompted.
+4. Save credentials if you want the reader to reconnect automatically next time.
 
-## Step 2: Connecting to WiFi
+After connection, the reader shows:
 
-### Viewing Available Networks
+- The connected SSID
+- A QR code for the web URL
+- The direct IP URL, for example `http://192.168.1.102/`
+- The mDNS fallback URL, usually `http://crosspoint.local/`
 
-Once the scan completes, you'll see a list of available WiFi networks with the following indicators:
+Use either URL from a phone, tablet, or computer on the same network.
 
-- **Signal strength bars** (`||||`, `|||`, `||`, `|`) - Shows connection quality
-- **`*` symbol** - Indicates the network is password-protected (encrypted)
-- **`+` symbol** - Indicates you have previously saved credentials for this network
+## Create Hotspot Mode
 
-<img src="./images/wifi/wifi_networks.jpeg" height="500">
+1. Select **Create Hotspot**.
+2. Connect your phone or computer to the open Wi-Fi network:
 
-### Selecting a Network
+```text
+CrossPoint-Reader
+```
 
-1. Use the **Left/Right** (or **Volume Up/Down**) buttons to navigate through the network list
-2. Press **Confirm** to select the highlighted network
+3. Open the URL shown on the reader. `http://crosspoint.local/` is preferred
+   when supported; the fallback IP is typically `http://192.168.4.1/`.
 
-### Entering Password (for encrypted networks)
+The reader displays one QR code for joining the hotspot and another QR code for
+opening the web interface.
 
-If the network requires a password:
+## Calibre Wireless Mode
 
-1. An on-screen keyboard will appear
-2. Use the navigation buttons to select characters
-3. Press **Confirm** to enter each character
-4. When complete, select the **Done** option on the keyboard
+Calibre Wireless starts the same web server in station mode, then displays setup
+instructions and upload progress on the reader. Use this mode with the
+CrossPoint Calibre plugin or other clients that speak the documented WebSocket
+upload protocol.
 
-<img src="./images/wifi/wifi_password.jpeg" height="500">
+For Calibre OPDS browsing, add `/opds` to the catalog URL when configuring an
+OPDS server.
 
-**Note:** If you've previously connected to this network, the saved password will be used automatically.
+## Web Interface
 
-### Connection Process
+The browser UI has four primary pages.
 
-The device will display "Connecting..." while establishing the connection. This typically takes 5-10 seconds.
+### Home
 
-### Saving Credentials
-
-If this is a new network, you'll be prompted to save the password:
-
-- Select **Yes** to save credentials for automatic connection next time (NOTE: These are stored in plaintext on the device's SD card. Do not use this for sensitive networks.)
-- Select **No** to connect without saving
-
----
-
-## Step 3: Connection Success
-
-Once connected, the screen will display:
-
-- **Network name** (SSID)
-- **IP Address** (e.g., `192.168.1.102`)
-- **Web server URL** (e.g., `http://192.168.1.102/`)
-
-<img src="./images/wifi/wifi_connected.jpeg" height="500">
-
-**Important:** Make note of the IP address - you'll need this to access the web interface from your computer or phone.
-
----
-
-## Step 4: Accessing the Web Interface
-
-### From a Computer
-
-1. Ensure your computer is connected to the **same WiFi network** as your CrossPoint Reader
-2. Open any web browser (Chrome is recommended)
-3. Type the IP address shown on your device into the browser's address bar
-   - Example: `http://192.168.1.102/`
-4. Press Enter
-
-### From a Phone or Tablet
-
-1. Ensure your phone/tablet is connected to the **same WiFi network** as your CrossPoint Reader
-2. Open your mobile browser (Safari, Chrome, etc.)
-3. Type the IP address into the address bar
-   - Example: `http://192.168.1.102/`
-4. Tap Go
-
----
-
-## Step 5: Using the Web Interface
-
-### Home Page
-
-The home page displays:
-
-- Device status and version information
-- WiFi connection status
-- Current IP address
-- Available memory
-
-Navigation links:
-
-- **Home** - Returns to the status page
-- **File Manager** - Access file management features
-
-<img src="./images/wifi/webserver_homepage.png" width="600">
+The Home page shows firmware status, network mode, IP address, device type,
+uptime, and free heap.
 
 ### File Manager
 
-Click **File Manager** to access file management features.
+The File Manager page can:
 
-#### Browsing Files
+- Browse SD-card folders
+- Upload files, using WebSocket upload when available and HTTP upload as a fallback
+- Create folders
+- Download files
+- Rename files
+- Move files into existing folders
+- Delete one or more selected files or empty folders
 
-- The file manager displays all files and folders on your SD card
-- **Folders** are highlighted in yellow and indicated with a 📁 icon
-- **EPUB Files** are highlighted in green and indicated with a 📗 icon
-- **All Other Files** are not highlighted and indicated with a 📄 icon
-- Click on a folder name to navigate into it
-- Use the breadcrumb navigation at the top to go back to parent folders
+Existing files with the same name are overwritten by uploads. When EPUB files
+are overwritten, moved, renamed, or deleted through the web server, the matching
+book cache is cleared so stale metadata is not reused.
 
-<img src="./images/wifi/webserver_files.png" width="600">
+### Settings
 
-#### Uploading Files
+The Settings page exposes many firmware settings in the browser. It also has
+cards for:
 
-1. Click the **📤 Upload** button in the top-right corner
-2. Click **Choose File** and select a file from your device
-3. Click **Upload**
-4. A progress bar will show the upload status
-5. The page will automatically refresh when the upload is complete
+- Saved Wi-Fi networks
+- OPDS servers
 
-<img src="./images/wifi/webserver_upload.png" width="600">
+Passwords are accepted when adding or editing entries, but saved passwords are
+not returned by the API.
 
-#### Creating Folders
+### Fonts
 
-1. Click the **📁 New Folder** button in the top-right corner
-2. Enter a folder name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
-3. Click **Create Folder**
+The Fonts page lists installed SD-card font families and lets you upload
+`.cpfont` files. Upload files from one font family at a time. The server validates
+the font family name, filename, and `.cpfont` magic bytes before accepting the
+upload.
 
-This is useful for organizing your library by genre, author, series or file type.
+Installed fonts appear in **Settings > Reader > Font Family** after the font
+registry refreshes.
 
-#### Deleting Files and Folders
+## Command Line Use
 
-1. Click the **🗑️** (trash) icon next to any file or folder
-2. Confirm the deletion in the popup dialog
-3. Click **Delete** to permanently remove the item
+Power users can use `curl`, WebDAV clients, or WebSocket clients while the web
+server is running.
 
-**Warning:** Deletion is permanent and cannot be undone!
-
-**Note:** Folders must be empty before they can be deleted.
-
-#### Moving Files
-
-1. Click the **📂** (folder) icon next to any file
-2. Enter a folder name or select one from the dropdown
-3. Click **Move** to relocate the file
-
-**Note:** Typing in a nonexistent folder name will result in the following error: "Failed to move: Destination not found"
-
-#### Renaming Files
-
-1. Click the **✏️** (pencil) icon next to any file
-2. Enter a file name (must not contain characters \" * : < > ? / \\ | and must not be . or ..)
-3. Click **Rename** to permanently rename the file
-
----
-
-## Command Line File Management
-
-For power users, you can manage files directly from your terminal using `curl` while the device is in File Upload mode. Detailed documentation can be found [here](./webserver-endpoints.md). 
+Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoints.md).
 
 ## Security Notes
 
-- The web server runs on port 80 (standard HTTP)
-- **No authentication is required** - anyone on the same network can access the interface
-- The web server is only accessible while the WiFi screen shows "Connected"
-- The web server automatically stops when you exit the WiFi screen
-- For security, only use on trusted private networks
+- The HTTP server runs on port 80.
+- The WebSocket upload server runs on port 81.
+- There is no authentication.
+- Anyone on the same network can access the web interface while it is running.
+- The server stops when you exit File Transfer or Calibre Wireless mode.
+- Hotspot mode creates an open network for connectivity fallback; disconnect when done.
 
----
+## Tips
 
-## Technical Details
-
-- **Supported WiFi:** 2.4GHz networks (802.11 b/g/n)
-- **Web Server Port:** 80 (HTTP)
-- **Maximum Upload Size:** Limited by available SD card space
-- **Browser Compatibility:** All modern browsers (Chrome, Firefox, Safari, Edge)
-
----
-
-## Tips and Best Practices
-
-1. **Organize with folders** - Create folders before uploading to keep your library organized
-2. **Check signal strength** - Stronger signals (`|||` or `||||`) provide faster, more reliable uploads
-3. **Upload multiple files** - You can select and upload multiple files at once; the manager will queue them and refresh when the batch is finished
-4. **Use descriptive names** - Name your folders clearly (e.g., "SciFi", "Mystery", "Non-Fiction")
-5. **Keep credentials saved** - Save your WiFi password for quick reconnection in the future
-6. **Exit when done** - Press **Back** to exit the WiFi screen and save battery
-
----
-
-## Exiting WiFi Mode
-
-When you're finished uploading files:
-
-1. Press the **Back** button on your CrossPoint Reader
-2. The web server will automatically stop
-3. WiFi will disconnect to conserve battery
-4. You'll return to the previous screen
-
-Your uploaded files will be immediately available in the file browser!
-
----
+1. Use **Create Hotspot** when no trusted network is available.
+2. Prefer `crosspoint.local` when available, but keep the displayed IP address as a fallback.
+3. Move closer to the router if upload progress stalls in Join Network mode.
+4. Upload custom fonts through the Fonts page or copy them to `/.fonts/` or `/fonts/` on the SD card.
+5. Exit File Transfer mode when finished to conserve battery.
 
 ## Related Documentation
 
-- [User Guide](../USER_GUIDE.md) - General device operation
-- [Troubleshooting](./troubleshooting.md) - Troubleshooting
-- [README](../README.md) - Project overview and features
+- [User Guide](../USER_GUIDE.md)
+- [Webserver Endpoints](./webserver-endpoints.md)
+- [SD Card Fonts](./sd-card-fonts.md)
+- [Troubleshooting](./troubleshooting.md)

@@ -32,14 +32,14 @@ void EpubReaderChapterSelectionActivity::loop() {
   const int totalItems = getTotalItems();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    const auto newSpineIndex = epub->getSpineIndexForTocIndex(selectorIndex);
-    if (newSpineIndex == -1) {
+    const auto tocItem = epub->getTocItem(selectorIndex);
+    if (tocItem.spineIndex == -1) {
       ActivityResult result;
       result.isCancelled = true;
       setResult(std::move(result));
       finish();
     } else {
-      setResult(ChapterResult{newSpineIndex});
+      setResult(ChapterResult{tocItem.spineIndex, tocItem.anchor});
       finish();
     }
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {

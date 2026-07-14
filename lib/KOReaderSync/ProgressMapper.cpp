@@ -1,5 +1,6 @@
 #include "ProgressMapper.h"
 
+#include <GfxRenderer.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 #include <cstring>
 
 #include "ChapterXPathResolver.h"
+#include "Epub/Section.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
 
@@ -28,8 +30,7 @@ int parseIndex(const std::string& xpath, const char* prefix, bool last = false) 
 
 int parseCharOffset(const std::string& xpath) {
   const size_t textPos = xpath.rfind("text()");
-  if (textPos == std::string::npos) return 0;
-  const size_t dotPos = xpath.find('.', textPos);
+  const size_t dotPos = (textPos != std::string::npos) ? xpath.find('.', textPos) : xpath.rfind('.');
   if (dotPos == std::string::npos || dotPos + 1 >= xpath.size()) return 0;
   int val = 0;
   for (size_t i = dotPos + 1; i < xpath.size(); i++) {
@@ -54,6 +55,70 @@ int parseTextNodeIndex(const std::string& xpath) {
   return val > 0 ? val : 1;
 }
 
+bool isChapterStartXPath(const std::string& xpath) {
+  if (xpath.find("/p[") != std::string::npos || xpath.find("/li[") != std::string::npos) {
+    return false;
+  }
+
+  static constexpr char kDocFragment[] = "/body/DocFragment[";
+  const size_t docFragPos = xpath.find(kDocFragment);
+  if (docFragPos == std::string::npos) {
+    return false;
+  }
+  const size_t docFragEnd = xpath.find(']', docFragPos + strlen(kDocFragment));
+  if (docFragEnd == std::string::npos) {
+    return false;
+  }
+  if (docFragEnd + 1 == xpath.size()) {
+    return true;
+  }
+  if (xpath[docFragEnd + 1] == '.') {
+    if (docFragEnd + 2 >= xpath.size()) {
+      return false;
+    }
+    for (size_t i = docFragEnd + 2; i < xpath.size(); i++) {
+      if (xpath[i] != '0') return false;
+    }
+    return true;
+  }
+
+  static constexpr char kDocBody[] = "]/body";
+  const size_t docBodyPos = xpath.find(kDocBody);
+  if (docBodyPos == std::string::npos) {
+    return false;
+  }
+  size_t bodyContentStart = docBodyPos + strlen(kDocBody);
+  if (bodyContentStart == xpath.size()) {
+    return true;
+  }
+  if (xpath[bodyContentStart] != '/') {
+    return false;
+  }
+  bodyContentStart++;
+  if (bodyContentStart == xpath.size()) {
+    return true;
+  }
+
+  const size_t dotPos = xpath.rfind('.');
+  if (dotPos == std::string::npos || dotPos <= bodyContentStart || dotPos + 1 >= xpath.size()) {
+    return false;
+  }
+  size_t terminalEnd = dotPos;
+  static constexpr char kTextNode[] = "/text()";
+  const size_t textNodePos = xpath.rfind(kTextNode, dotPos);
+  if (textNodePos != std::string::npos && textNodePos >= bodyContentStart) {
+    terminalEnd = textNodePos;
+  }
+  if (xpath.find('/', bodyContentStart) < terminalEnd) {
+    return false;
+  }
+
+  for (size_t i = dotPos + 1; i < xpath.size(); i++) {
+    if (xpath[i] != '0') return false;
+  }
+  return true;
+}
+
 // Parsed representation of one step in the XPath ancestry.
 struct XPathStep {
   char tag[12];      // element name, null-terminated
@@ -62,7 +127,7 @@ struct XPathStep {
 
 static constexpr int MAX_XPATH_DEPTH = 16;
 
-// Parse the XPath segment between /body/DocFragment[N]/body/ and text()[N].offset
+// Parse the XPath segment between /body/DocFragment[N]/body/ and the terminal position
 // into an ordered sequence of steps. Returns step count, 0 on failure.
 // Example input: "/body/DocFragment[1]/body/div[1]/ul/li[4]/text()[1].51"
 // Fills steps with: {div,1}, {ul,1}, {li,4}
@@ -76,13 +141,20 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
   if (xpath.compare(afterBracket + 1, strlen(kBody), kBody) != 0) return 0;
   size_t pos = afterBracket + 1 + strlen(kBody);
 
-  const size_t textPos = xpath.rfind("/text()");
-  if (textPos == std::string::npos || textPos <= pos) return 0;
+  size_t stepsEnd = xpath.rfind("/text()");
+  if (stepsEnd == std::string::npos) {
+    stepsEnd = xpath.rfind('.');
+    if (stepsEnd == std::string::npos || stepsEnd <= pos || stepsEnd + 1 >= xpath.size()) return 0;
+    for (size_t i = stepsEnd + 1; i < xpath.size(); i++) {
+      if (xpath[i] < '0' || xpath[i] > '9') return 0;
+    }
+  }
+  if (stepsEnd <= pos) return 0;
 
   int count = 0;
-  while (pos < textPos && count < MAX_XPATH_DEPTH) {
+  while (pos < stepsEnd && count < MAX_XPATH_DEPTH) {
     const size_t slash = xpath.find('/', pos);
-    const size_t segEnd = (slash < textPos) ? slash : textPos;
+    const size_t segEnd = (slash < stepsEnd) ? slash : stepsEnd;
 
     XPathStep& step = steps[count];
     const size_t bracket = xpath.find('[', pos);
@@ -106,7 +178,7 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
     }
 
     count++;
-    pos = (slash < textPos) ? slash + 1 : textPos;
+    pos = (slash < stepsEnd) ? slash + 1 : stepsEnd;
   }
   return count;
 }
@@ -163,10 +235,148 @@ class ParagraphStreamer final : public Print {
   char capturedAnchorId[MAX_ANCHOR_ID] = {};
   int capturedAnchorIdLen = 0;
   bool capturingAnchorTag = false;
-  enum IdScanState { ID_SCAN, ID_I, ID_D, ID_EQ, ID_IN_VALUE_D, ID_IN_VALUE_S } idState = ID_SCAN;
+  enum AnchorAttrState {
+    ATTR_FIND_NAME,
+    ATTR_READ_NAME,
+    ATTR_AFTER_NAME,
+    ATTR_BEFORE_VALUE,
+    ATTR_CAPTURE_D,
+    ATTR_CAPTURE_S
+  } attrState = ATTR_FIND_NAME;
+  uint8_t attrNameLen = 0;
+  bool currentAttrIsId = false;
   bool inAttrQuote =
       false;  // true while inside a quoted attribute value (prevents '/' from being treated as self-close)
   char attrQuoteChar = 0;
+  uint8_t nonVisibleDepth = 0;
+
+  bool isNonVisibleTag() const {
+    return strcasecmp(tagName, "head") == 0 || strcasecmp(tagName, "style") == 0 ||
+           strcasecmp(tagName, "script") == 0 || strcasecmp(tagName, "title") == 0;
+  }
+
+  static bool isAttrWhitespace(uint8_t c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
+
+  static bool isAttrNameChar(uint8_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' ||
+           c == ':' || c == '.';
+  }
+
+  void resetAnchorAttrScan() {
+    attrState = ATTR_FIND_NAME;
+    attrNameLen = 0;
+    currentAttrIsId = false;
+  }
+
+  void finishCapturedAnchorId() {
+    capturedAnchorId[capturedAnchorIdLen] = '\0';
+    capturingAnchorTag = false;
+    resetAnchorAttrScan();
+  }
+
+  void beginAnchorIdScan() {
+    capturingAnchorTag = true;
+    resetAnchorAttrScan();
+  }
+
+  void endAnchorIdScan() {
+    if (capturingAnchorTag) {
+      capturedAnchorIdLen = 0;
+    }
+    capturingAnchorTag = false;
+    resetAnchorAttrScan();
+  }
+
+  void appendCapturedAnchorId(uint8_t c) {
+    if (capturedAnchorIdLen + 1 < MAX_ANCHOR_ID) {
+      capturedAnchorId[capturedAnchorIdLen++] = c;
+    }
+  }
+
+  void scanAnchorAttribute(uint8_t c) {
+    switch (attrState) {
+      case ATTR_FIND_NAME:
+        if (isAttrNameChar(c)) {
+          attrState = ATTR_READ_NAME;
+          attrNameLen = 1;
+          currentAttrIsId = c == 'i';
+        }
+        break;
+      case ATTR_READ_NAME:
+        if (isAttrNameChar(c)) {
+          if (attrNameLen == 1) {
+            currentAttrIsId = currentAttrIsId && c == 'd';
+          } else {
+            currentAttrIsId = false;
+          }
+          attrNameLen++;
+        } else {
+          currentAttrIsId = currentAttrIsId && attrNameLen == 2;
+          if (isAttrWhitespace(c)) {
+            attrState = ATTR_AFTER_NAME;
+          } else if (c == '=') {
+            attrState = ATTR_BEFORE_VALUE;
+          } else {
+            resetAnchorAttrScan();
+          }
+        }
+        break;
+      case ATTR_AFTER_NAME:
+        if (isAttrWhitespace(c)) {
+          break;
+        }
+        if (c == '=') {
+          attrState = ATTR_BEFORE_VALUE;
+        } else if (isAttrNameChar(c)) {
+          attrState = ATTR_READ_NAME;
+          attrNameLen = 1;
+          currentAttrIsId = c == 'i';
+        } else {
+          resetAnchorAttrScan();
+        }
+        break;
+      case ATTR_BEFORE_VALUE:
+        if (isAttrWhitespace(c)) {
+          break;
+        }
+        if (currentAttrIsId && c == '"') {
+          capturedAnchorIdLen = 0;
+          attrState = ATTR_CAPTURE_D;
+        } else if (currentAttrIsId && c == '\'') {
+          capturedAnchorIdLen = 0;
+          attrState = ATTR_CAPTURE_S;
+        } else if (c == '"') {
+          attrState = ATTR_CAPTURE_D;
+        } else if (c == '\'') {
+          attrState = ATTR_CAPTURE_S;
+        } else {
+          resetAnchorAttrScan();
+        }
+        break;
+      case ATTR_CAPTURE_D:
+        if (c == '"') {
+          if (currentAttrIsId) {
+            finishCapturedAnchorId();
+          } else {
+            resetAnchorAttrScan();
+          }
+        } else if (currentAttrIsId) {
+          appendCapturedAnchorId(c);
+        }
+        break;
+      case ATTR_CAPTURE_S:
+        if (c == '\'') {
+          if (currentAttrIsId) {
+            finishCapturedAnchorId();
+          } else {
+            resetAnchorAttrScan();
+          }
+        } else if (currentAttrIsId) {
+          appendCapturedAnchorId(c);
+        }
+        break;
+    }
+  }
 
   void onVisibleCodepoint() {
     totalVisChars++;
@@ -226,15 +436,19 @@ class ParagraphStreamer final : public Print {
   void onOpenTag() {
     htmlDepth++;
 
+    if (nonVisibleDepth > 0 || isNonVisibleTag()) {
+      nonVisibleDepth++;
+      return;
+    }
+
     if (stepCount == 0) {
       if (strcasecmp(tagName, "p") == 0) onLegacyP();
       return;
     }
 
-    // Capture <a id> inside the fully-matched element even after target char is found
+    // Capture a child <a id> inside the fully-matched element even after target char is found.
     if (revPFound && matchedDepth == stepCount && capturedAnchorIdLen == 0 && strcasecmp(tagName, "a") == 0) {
-      capturingAnchorTag = true;
-      idState = ID_SCAN;
+      beginAnchorIdScan();
     }
 
     if (revDone) return;
@@ -255,6 +469,7 @@ class ParagraphStreamer final : public Print {
           stepEnteredAtDepth[matchedDepth] = htmlDepth;
           matchedDepth++;
           if (matchedDepth == stepCount) {
+            beginAnchorIdScan();
             paragraphAtMatch = pCount;
             liCountAtMatch = liCount;
             revPFound = true;
@@ -272,6 +487,12 @@ class ParagraphStreamer final : public Print {
   }
 
   void onCloseTag() {
+    if (nonVisibleDepth > 0) {
+      nonVisibleDepth--;
+      if (htmlDepth > 0) htmlDepth--;
+      return;
+    }
+
     // Legacy mode: each direct child element closing advances the text node index.
     if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth + 1) {
       currentTextNode++;
@@ -359,42 +580,12 @@ class ParagraphStreamer final : public Print {
           attrQuoteChar = 0;
         }
         if (capturingAnchorTag) {
-          switch (idState) {
-            case ID_SCAN:
-              idState = (c == 'i' || c == 'I') ? ID_I : ID_SCAN;
-              break;
-            case ID_I:
-              idState = (c == 'd' || c == 'D') ? ID_D : ID_SCAN;
-              break;
-            case ID_D:
-              idState = (c == '=') ? ID_EQ : ID_SCAN;
-              break;
-            case ID_EQ:
-              if (c == '"')
-                idState = ID_IN_VALUE_D;
-              else if (c == '\'')
-                idState = ID_IN_VALUE_S;
-              break;
-            case ID_IN_VALUE_D:
-              if (c == '"') {
-                capturedAnchorId[capturedAnchorIdLen] = '\0';
-                capturingAnchorTag = false;
-              } else if (capturedAnchorIdLen + 1 < MAX_ANCHOR_ID)
-                capturedAnchorId[capturedAnchorIdLen++] = c;
-              break;
-            case ID_IN_VALUE_S:
-              if (c == '\'') {
-                capturedAnchorId[capturedAnchorIdLen] = '\0';
-                capturingAnchorTag = false;
-              } else if (capturedAnchorIdLen + 1 < MAX_ANCHOR_ID)
-                capturedAnchorId[capturedAnchorIdLen++] = c;
-              break;
-          }
+          scanAnchorAttribute(c);
         }
         // Only treat '/' as self-closing when outside a quoted attribute value.
         if (c == '/' && !inAttrQuote) {
+          endAnchorIdScan();
           onCloseTag();
-          capturingAnchorTag = false;
         }
         break;
     }
@@ -452,10 +643,13 @@ class ParagraphStreamer final : public Print {
       tagNameLen = 0;
       tagIsClose = false;
       capturingAnchorTag = false;
-      idState = ID_SCAN;
+      resetAnchorAttrScan();
       inAttrQuote = false;
       attrQuoteChar = 0;
     } else if (c == '>') {
+      if (tagState == TAG_ATTRS) {
+        endAnchorIdScan();
+      }
       globalInTag = false;
       inAttrQuote = false;
       if (tagState == TAG_IN_NAME && tagNameLen > 0) {
@@ -469,6 +663,9 @@ class ParagraphStreamer final : public Print {
       tagState = TAG_IDLE;
     } else if (globalInTag) {
       processByteInTag(c);
+    } else if (nonVisibleDepth > 0) {
+      // Ignore head/style/script/title text. KOReader XPaths are body-relative, and CSS text
+      // should not contribute to intra-spine progress.
     } else {
       if (c == '&') {
         globalInEntity = true;
@@ -506,8 +703,9 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStr
 }
 }  // namespace
 
-KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos) {
-  KOReaderPosition result;
+SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub>& epub,
+                                                      const CrossPointPosition& pos) {
+  SavedProgressPosition result;
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
@@ -520,13 +718,14 @@ KOReaderPosition ProgressMapper::toKOReader(const std::shared_ptr<Epub>& epub, c
   if (result.xpath.empty()) {
     result.xpath = generateXPath(epub, pos.spineIndex, intra);
   }
-  LOG_DBG("PM", "-> KO: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
+  LOG_DBG("PM", "-> Progress: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
           result.percentage * 100, result.xpath.c_str());
   return result;
 }
 
-CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const KOReaderPosition& koPos,
-                                                int currentSpineIndex, int totalPagesInCurrentSpine) {
+CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
+                                                GfxRenderer& renderer, int currentSpineIndex,
+                                                int totalPagesInCurrentSpine, int fallbackTotalPages) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) return result;
@@ -556,7 +755,6 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       }
     }
   }
-  if (result.spineIndex >= spineCount) return result;
 
   const size_t prevCum = (result.spineIndex > 0) ? epub->getCumulativeSpineItemSize(result.spineIndex - 1) : 0;
   const size_t spineSize = epub->getCumulativeSpineItemSize(result.spineIndex) - prevCum;
@@ -570,13 +768,25 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       result.totalPages = std::max(
           1, static_cast<int>(totalPagesInCurrentSpine * static_cast<float>(spineSize) / static_cast<float>(cs)));
   }
-  if (spineSize == 0 || result.totalPages == 0) return result;
+
+  if (result.totalPages <= 0) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    if (auto cachedCount = tempSection.getCachedPageCount()) {
+      result.totalPages = *cachedCount;
+    } else if (fallbackTotalPages > 0) {
+      result.totalPages = fallbackTotalPages;
+    } else {
+      result.totalPages = 1;  // Prevent division by zero and give a fallback
+    }
+  }
 
   float intra = 0.0f;
+  bool resolvedIntra = false;
   if (useAncestry) {
     ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
+      resolvedIntra = true;
       const int pAtMatch = s.getParagraphAtMatch();
       if (pAtMatch > 0) {
         result.paragraphIndex = static_cast<uint16_t>(pAtMatch);
@@ -602,19 +812,77 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
+      resolvedIntra = true;
       LOG_DBG("PM", "XPath p[%d]/text()[%d]+%d -> %.1f%% (target=%zu total=%zu)", xpathP, xpathTextNode, xpathChar,
               intra * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }
   }
-  if (intra <= 0.0f) {
+  if (!resolvedIntra && xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
+    intra = 0.0f;
+    resolvedIntra = true;
+    LOG_DBG("PM", "Chapter-start XPath %s -> spine=%d page start", koPos.xpath.c_str(), result.spineIndex);
+  }
+  if (!resolvedIntra) {
     const size_t bytesIn = (targetBytes > prevCum) ? (targetBytes - prevCum) : 0;
     intra = std::max(0.0f, std::min(1.0f, static_cast<float>(bytesIn) / static_cast<float>(spineSize)));
   }
 
   result.pageNumber = std::max(
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
-  LOG_DBG("PM", "<- KO: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
+  LOG_DBG("PM", "<- Progress: %.2f%% %s -> spine=%d page=%d/%d", koPos.percentage * 100, koPos.xpath.c_str(),
           result.spineIndex, result.pageNumber, result.totalPages);
+
+  // Refine page using section cache LUTs: li index, anchor, or paragraph index.
+  if (result.hasLiIndex || result.xpathAnchorId[0] != '\0' || result.hasParagraphIndex) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    bool refined = false;
+    if (result.hasLiIndex) {
+      const auto liPage = tempSection.getPageForListItemIndex(result.liIndex);
+      if (liPage.has_value()) {
+        LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage, result.pageNumber);
+        result.pageNumber = *liPage;
+        refined = true;
+      } else {
+        LOG_DBG("PM", "Li index %u not found in section LUT", result.liIndex);
+      }
+    }
+    if (!refined && result.xpathAnchorId[0] != '\0') {
+      const auto anchorPage = tempSection.getPageForAnchor(std::string(result.xpathAnchorId));
+      if (anchorPage.has_value()) {
+        LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage, result.pageNumber);
+        result.pageNumber = *anchorPage;
+        refined = true;
+      } else {
+        LOG_DBG("PM", "Anchor '%s' not found in section cache", result.xpathAnchorId);
+      }
+    }
+    if (!refined && result.hasParagraphIndex) {
+      const auto paragraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex);
+      const auto nextParagraphPage = tempSection.getPageForParagraphIndex(result.paragraphIndex + 1);
+      if (paragraphPage.has_value()) {
+        int refinedPage = std::max(result.pageNumber, static_cast<int>(*paragraphPage));
+        if (nextParagraphPage.has_value()) {
+          const int lutSpan = static_cast<int>(*nextParagraphPage) - static_cast<int>(*paragraphPage);
+          // Only cap when the LUT span is >1. A span of 1 means the LUT granularity is too
+          // coarse to trust over the intra-spine position (e.g. a stale cache where the paragraph
+          // occupies different pages than at build time).
+          if (lutSpan > 1 && refinedPage >= static_cast<int>(*nextParagraphPage)) {
+            refinedPage = static_cast<int>(*nextParagraphPage) - 1;
+          }
+        }
+        char nextParaBuf[8];
+        if (nextParagraphPage.has_value())
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "%d", *nextParagraphPage);
+        else
+          snprintf(nextParaBuf, sizeof(nextParaBuf), "none");
+        LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d", result.paragraphIndex,
+                *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
+        result.pageNumber = refinedPage;
+      } else {
+        LOG_DBG("PM", "Paragraph %u not found in section LUT", result.paragraphIndex);
+      }
+    }
+  }
   return result;
 }
 
