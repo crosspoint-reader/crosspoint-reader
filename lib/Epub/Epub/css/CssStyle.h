@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
 
 // Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
 enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
@@ -268,3 +269,6 @@ struct CssStyle {
     defined.clearAll();
   }
 };
+
+// CssParser's style pool copies CssStyle with memcpy-style array growth.
+static_assert(std::is_trivially_copyable_v<CssStyle>, "CssStyle must stay trivially copyable");
