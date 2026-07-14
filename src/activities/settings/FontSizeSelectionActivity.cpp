@@ -16,9 +16,9 @@
 namespace {
 constexpr const char* ELLIPSIS_UTF8 = "\xe2\x80\xa6";
 
-int findCurrentFontSizeIndex(uint8_t fontSize) {
+int findCurrentFontSizeIndex(uint8_t fontSize, size_t listSize) {
   // Font size is a simple enum: SMALL=0, MEDIUM=1, LARGE=2, EXTRA_LARGE=3
-  return fontSize < CrossPointSettings::FONT_SIZE_COUNT ? fontSize : 1;  // Default to MEDIUM
+  return fontSize < listSize ? fontSize : 1;  // Default to MEDIUM
 }
 }  // namespace
 
@@ -47,7 +47,7 @@ void FontSizeSelectionActivity::onEnter() {
   fontSizes_.push_back({I18N.get(StrId::STR_LARGE), static_cast<uint8_t>(CrossPointSettings::LARGE)});
   fontSizes_.push_back({I18N.get(StrId::STR_X_LARGE), static_cast<uint8_t>(CrossPointSettings::EXTRA_LARGE)});
 
-  selectedIndex_ = findCurrentFontSizeIndex(SETTINGS.fontSize);
+  selectedIndex_ = findCurrentFontSizeIndex(SETTINGS.fontSize, fontSizes_.size());
   previewFontSizeIndex_ = selectedIndex_;
 
   requestUpdate();
@@ -171,7 +171,7 @@ void FontSizeSelectionActivity::render(RenderLock&&) {
 
   renderer.drawLine(0, listTop - metrics_.verticalSpacing / 2, pageWidth, listTop - metrics_.verticalSpacing / 2);
 
-  const int currentFontSizeIndex = findCurrentFontSizeIndex(originalFontSize_);
+  const int currentFontSizeIndex = findCurrentFontSizeIndex(originalFontSize_, fontSizes_.size());
   GUI.drawList(
       renderer, Rect{0, listTop, pageWidth, listHeight}, static_cast<int>(fontSizes_.size()), selectedIndex_,
       [this](int index) { return fontSizes_[index].name; }, nullptr, nullptr,
