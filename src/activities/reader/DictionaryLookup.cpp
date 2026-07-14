@@ -249,7 +249,6 @@ bool DictionaryLookup::ensureDictionaryOpen() {
     return false;
   }
 
-  char path[96] = {0};
   HalFile dir = Storage.open(DICTIONARY_DIR);
   if (dir && dir.isDirectory()) {
     while (true) {
@@ -260,30 +259,29 @@ bool DictionaryLookup::ensureDictionaryOpen() {
       char name[64] = {0};
       entry.getName(name, sizeof(name));
       const size_t len = strlen(name);
-      if (!entry.isDirectory() && len > 4 && strcasecmp(name + len - 4, ".cpd") == 0) {
-        snprintf(path, sizeof(path), "%s/%s", DICTIONARY_DIR, name);
-        break;
+      // Skip directories, hidden files and macOS "._*" AppleDouble siblings,
+      // and keep scanning past files that fail to parse — Finder copies leave
+      // junk next to the real dictionary.
+      if (entry.isDirectory() || name[0] == '.' || len <= 4 || strcasecmp(name + len - 4, ".cpd") != 0) {
+        continue;
       }
+      char path[96];
+      snprintf(path, sizeof(path), "%s/%s", DICTIONARY_DIR, name);
+      if (!Storage.openFileForRead("DICT", path, dictFile)) {
+        LOG_ERR("DICT", "Cannot open %s", path);
+        continue;
+      }
+      if (dictStore.open(halFileDictSource(dictFile))) {
+        LOG_INF("DICT", "Opened dictionary: %s (%s)", path, dictStore.title());
+        return true;
+      }
+      LOG_ERR("DICT", "Invalid dictionary file: %s", path);
+      dictFile.close();
     }
   }
-  if (path[0] == '\0') {
-    LOG_ERR("DICT", "No .cpd dictionary in %s", DICTIONARY_DIR);
-    dictOpenFailed = true;
-    return false;
-  }
-
-  if (!Storage.openFileForRead("DICT", path, dictFile)) {
-    dictOpenFailed = true;
-    return false;
-  }
-  if (!dictStore.open(halFileDictSource(dictFile))) {
-    LOG_ERR("DICT", "Invalid dictionary file: %s", path);
-    dictFile.close();
-    dictOpenFailed = true;
-    return false;
-  }
-  LOG_INF("DICT", "Opened dictionary: %s (%s)", path, dictStore.title());
-  return true;
+  LOG_ERR("DICT", "No usable .cpd dictionary in %s", DICTIONARY_DIR);
+  dictOpenFailed = true;
+  return false;
 }
 
 void DictionaryLookup::lookupSelectedWord() {
