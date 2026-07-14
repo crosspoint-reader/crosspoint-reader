@@ -57,6 +57,7 @@ class DictionaryLookup {
 
   static constexpr int HIGHLIGHT_PADDING = 2;
   static constexpr int HIGHLIGHT_LINE_WIDTH = 2;
+  static constexpr uint8_t GHOST_CLEAN_EVERY_MOVES = 8;
   static constexpr int POPUP_MARGIN = 16;
   static constexpr int POPUP_PADDING = 12;
   static constexpr int MAX_DEFINITION_LINES = 200;
@@ -89,6 +90,7 @@ class DictionaryLookup {
   int selected = 0;
   int fontId = 0;
   bool fullRenderNeeded = false;
+  uint8_t movesSinceGhostClean = 0;
 
   // Saved pixels under the current highlight / popup
   std::unique_ptr<uint8_t[]> highlightSnapshot;

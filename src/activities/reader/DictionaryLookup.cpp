@@ -64,6 +64,7 @@ void DictionaryLookup::reset() {
   popupLines.clear();
   popupScroll = 0;
   fullRenderNeeded = false;
+  movesSinceGhostClean = 0;
   dictStore.close();
   // HalFile::close() asserts on a never-opened file; reset() runs on every
   // reader render, long before any dictionary file is opened.
@@ -74,7 +75,6 @@ void DictionaryLookup::reset() {
 }
 
 void DictionaryLookup::buildWordBoxes(const int marginLeft, const int marginTop) {
-  const int ascender = renderer.getFontAscenderSize(fontId);
   const int lineHeight = renderer.getLineHeight(fontId);
   words.reserve(256);
   uint16_t lineIndex = 0;
@@ -94,8 +94,11 @@ void DictionaryLookup::buildWordBoxes(const int marginLeft, const int marginTop)
       }
       WordBox box;
       box.text = text;
+      // line.yPos is the y drawText receives, which is the TOP of the text
+      // line (TextBlock draws the underline at y + ascender + 2), not the
+      // baseline — so no ascender correction here.
       box.x = static_cast<int16_t>(marginLeft + line.xPos + block->wordXpos(i));
-      box.y = static_cast<int16_t>(marginTop + line.yPos - ascender);
+      box.y = static_cast<int16_t>(marginTop + line.yPos);
       box.w = static_cast<int16_t>(renderer.getTextWidth(fontId, text, block->wordStyle(i)));
       box.h = static_cast<int16_t>(lineHeight);
       box.lineIndex = lineIndex;
@@ -144,7 +147,8 @@ DictionaryLookup::TickResult DictionaryLookup::handleInput() {
     const TickResult result = fullRenderNeeded ? TickResult::EXITED_NEEDS_RENDER : TickResult::EXITED;
     reset();
     if (result == TickResult::EXITED) {
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      // HALF refresh on exit clears any ghosting the fast highlight updates left behind.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
     return result;
   }
@@ -207,7 +211,15 @@ void DictionaryLookup::moveSelection(const int wordDelta, const int lineDelta) {
   eraseHighlight();
   selected = target;
   drawHighlight();
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  // Thin outlines under FAST refresh accumulate ghosting; a periodic HALF
+  // refresh wipes the residue without making every move slow.
+  movesSinceGhostClean++;
+  if (movesSinceGhostClean >= GHOST_CLEAN_EVERY_MOVES) {
+    movesSinceGhostClean = 0;
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  } else {
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  }
 }
 
 void DictionaryLookup::drawHighlight() {
@@ -335,8 +347,8 @@ void DictionaryLookup::openPopup(const char* header, const std::string& body) {
     popupLines.pop_back();
   }
 
-  // Height: header + separator + body lines, clamped to the screen.
-  const int headerH = lineHeight + POPUP_PADDING / 2;
+  // Height: header + separator gap + body lines, clamped to the screen.
+  const int headerH = lineHeight + POPUP_PADDING;
   const int maxPopupH = screenHeight - 2 * POPUP_MARGIN;
   const int wantedH = 2 * POPUP_PADDING + headerH + static_cast<int>(popupLines.size()) * lineHeight;
   const int popupH = std::min(wantedH, maxPopupH);
@@ -354,17 +366,17 @@ void DictionaryLookup::openPopup(const char* header, const std::string& body) {
 void DictionaryLookup::drawPopupContents() {
   const int popupX = popupRect[0], popupY = popupRect[1], popupW = popupRect[2], popupH = popupRect[3];
   const int lineHeight = renderer.getLineHeight(fontId);
-  const int ascender = renderer.getFontAscenderSize(fontId);
   const int textX = popupX + POPUP_PADDING;
-  const int headerBaseline = popupY + POPUP_PADDING + ascender;
+  // drawText's y is the TOP of the text line, not the baseline.
+  const int headerTop = popupY + POPUP_PADDING;
 
   // Clear the interior (keep the border) and draw header + separator.
   renderer.fillRect(popupX + 2, popupY + 2, popupW - 4, popupH - 4, false);
-  renderer.drawText(fontId, textX, headerBaseline, popupHeader.c_str(), true, EpdFontFamily::BOLD);
-  const int separatorY = popupY + POPUP_PADDING + lineHeight;
+  renderer.drawText(fontId, textX, headerTop, popupHeader.c_str(), true, EpdFontFamily::BOLD);
+  const int separatorY = headerTop + lineHeight + POPUP_PADDING / 4;
   renderer.drawLine(textX, separatorY, popupX + popupW - POPUP_PADDING, separatorY, true);
 
-  int y = separatorY + POPUP_PADDING / 2 + ascender;
+  int y = separatorY + POPUP_PADDING - POPUP_PADDING / 4;
   const int lastLine = std::min(popupScroll + popupVisibleLines, static_cast<int>(popupLines.size()));
   for (int i = popupScroll; i < lastLine; i++) {
     if (!popupLines[i].empty()) {
@@ -375,10 +387,11 @@ void DictionaryLookup::drawPopupContents() {
 
   // Scroll indicators on the right edge.
   if (popupScroll > 0) {
-    renderer.drawText(fontId, popupX + popupW - POPUP_PADDING - 8, popupY + POPUP_PADDING + ascender, "^", true);
+    renderer.drawText(fontId, popupX + popupW - POPUP_PADDING - 8, headerTop, "^", true);
   }
   if (lastLine < static_cast<int>(popupLines.size())) {
-    renderer.drawText(fontId, popupX + popupW - POPUP_PADDING - 8, popupY + popupH - POPUP_PADDING, "v", true);
+    renderer.drawText(fontId, popupX + popupW - POPUP_PADDING - 8, popupY + popupH - POPUP_PADDING - lineHeight, "v",
+                      true);
   }
 }
 
@@ -391,7 +404,8 @@ bool DictionaryLookup::closePopup() {
   const bool restorable = popupSnapshot != nullptr;
   if (restorable) {
     restoreRegion(popupRect[0], popupRect[1], popupRect[2], popupRect[3], popupSnapshot);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    // HALF refresh: the popup border/text would otherwise ghost over the page.
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
   popupHeader.clear();
   popupLines.clear();
