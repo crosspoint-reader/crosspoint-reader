@@ -4,22 +4,35 @@
 #include <I18n.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
 
 // Button-driven word selection over the current reader page: Left/Right step
-// through words in reading order, Up/Down jump rows, Confirm looks the word up
-// and opens DictionaryDefinitionActivity, Back returns to the reader.
+// through words in reading order, Up/Down jump rows, Back returns to the
+// reader. What Confirm does depends on the mode:
+//  - Dictionary: release looks the word up in DictionaryDefinitionActivity.
+//  - Highlight: release anchors a passage selection; the next release saves
+//    the anchored range as a markdown highlight (HighlightStore).
+//  - DictionaryHighlight: long-press release looks up, short release
+//    anchors/saves a highlight. Back cancels an active selection first.
 class DictionaryWordSelectActivity final : public Activity {
  public:
+  enum class Mode : uint8_t { Dictionary, Highlight, DictionaryHighlight };
+
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop,
+                                        Mode mode = Mode::Dictionary, std::string bookTitle = {},
+                                        std::string chapterTitle = {})
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
-        marginTop(marginTop) {}
+        marginTop(marginTop),
+        mode(mode),
+        bookTitle(std::move(bookTitle)),
+        chapterTitle(std::move(chapterTitle)) {}
 
   void onEnter() override;
   void loop() override;
@@ -37,23 +50,46 @@ class DictionaryWordSelectActivity final : public Activity {
     EpdFontFamily::Style style;
   };
 
-  enum class Popup : uint8_t { None, Busy, NotFound, Error };
+  enum class Popup : uint8_t { None, Busy, NotFound, Error, Saved };
 
   void extractWords();
+  void buildReadingOrder();
   int closestInRow(uint16_t row, int centerX) const;
   void moveVertical(int direction);
   void performLookup();
+  void handleConfirmRelease();
+  void toggleHighlight();
+  bool saveHighlight();
   bool drawHighlightWithSnapshot();
+  void paintWordBox(int idx, bool highlighted, int rangeLo, int rangeHi);
 
   std::unique_ptr<Page> page;
   const int marginLeft;
   const int marginTop;
+  const Mode mode;
+  const std::string bookTitle;
+  const std::string chapterTitle;
   int fontId = 0;
   int lineHeight = 0;
 
   std::vector<WordBox> words;
   int selected = 0;
   uint16_t rowCount = 0;
+
+  // TextBlock stores each line's words in visual (left-to-right) order; the
+  // logical order is discarded at layout time. These map between the two so
+  // passage selection follows the text on RTL (e.g. Arabic) pages:
+  // readingOrder[pos] = word index, readingPos[idx] = reading position.
+  std::vector<uint16_t> readingOrder;
+  std::vector<uint16_t> readingPos;
+
+  // Passage selection (highlight modes): index of the word anchoring the
+  // active selection, -1 when none. drawnLo/drawnHi is the reading-position
+  // range whose highlight boxes are currently painted in the framebuffer
+  // (-1 = unknown, the next render must repaint the full page).
+  int anchor = -1;
+  int drawnLo = -1;
+  int drawnHi = -1;
 
   Dictionary dict;
   bool dictOpenAttempted = false;

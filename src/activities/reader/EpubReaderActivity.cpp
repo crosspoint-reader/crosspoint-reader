@@ -258,8 +258,10 @@ void EpubReaderActivity::openReaderMenu() {
                          });
 }
 
-void EpubReaderActivity::openDictionaryWordSelect() {
-  if (SETTINGS.dictionaryName[0] == '\0') {
+void EpubReaderActivity::openWordSelect(const DictionaryWordSelectActivity::Mode mode) {
+  // Pure dictionary mode is useless without a dictionary; the mixed mode can
+  // still highlight, so it opens and only the lookup path reports an error.
+  if (mode == DictionaryWordSelectActivity::Mode::Dictionary && SETTINGS.dictionaryName[0] == '\0') {
     showDictionaryMessage = true;
     dictionaryMessageTime = millis();
     requestUpdate();
@@ -276,8 +278,12 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
 
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "";
+
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
-                                                                        orientedMarginLeft, orientedMarginTop),
+                                                                        orientedMarginLeft, orientedMarginTop, mode,
+                                                                        epub->getTitle(), std::move(chapterTitle)),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
@@ -472,10 +478,23 @@ void EpubReaderActivity::loop() {
         }
         break;
       case CrossPointSettings::LP_MENU_DICTIONARY:
-        // Hold ~0.4s starts dictionary word selection on the current page.
+      case CrossPointSettings::LP_MENU_HIGHLIGHT:
+      case CrossPointSettings::LP_MENU_DICT_HIGHLIGHT:
+        // Hold ~0.4s starts word selection on the current page (dictionary
+        // lookup, passage highlighting, or both).
         if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
           ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
-          openDictionaryWordSelect();
+          switch (SETTINGS.longPressMenuFunction) {
+            case CrossPointSettings::LP_MENU_HIGHLIGHT:
+              openWordSelect(DictionaryWordSelectActivity::Mode::Highlight);
+              break;
+            case CrossPointSettings::LP_MENU_DICT_HIGHLIGHT:
+              openWordSelect(DictionaryWordSelectActivity::Mode::DictionaryHighlight);
+              break;
+            default:
+              openWordSelect(DictionaryWordSelectActivity::Mode::Dictionary);
+              break;
+          }
           return;
         }
         break;
@@ -753,7 +772,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
-      openDictionaryWordSelect();
+      openWordSelect(DictionaryWordSelectActivity::Mode::Dictionary);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {

@@ -1,22 +1,30 @@
 #include "DictionaryWordSelectActivity.h"
 
+#include <BidiUtils.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <cctype>
 #include <climits>
 #include <cstdlib>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
+#include "util/HighlightStore.h"
 
 namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;
+
+// DictionaryHighlight mode: Confirm held at least this long looks the word
+// up; a shorter press anchors/saves the highlight selection.
+constexpr unsigned long DICT_LOOKUP_HOLD_MS = 400;
 
 // A token is selectable when it has an ASCII alphanumeric or a non-ASCII
 // codepoint outside U+2000-U+206F (dashes, bullets and other General
@@ -48,6 +56,7 @@ void DictionaryWordSelectActivity::onEnter() {
   // full-repaint path as the fallback.
   snapshot = makeUniqueNoThrow<uint8_t[]>(SNAPSHOT_CAPACITY);
   extractWords();
+  buildReadingOrder();
   // Start on the middle row's word nearest mid-screen instead of top-left:
   // any word on the page is then at most half a page of moves away.
   if (!words.empty()) {
@@ -103,6 +112,48 @@ void DictionaryWordSelectActivity::extractWords() {
   renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
   for (auto& word : words) {
     word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
+  }
+}
+
+// Rebuilds the reading order of the page's words: rows top to bottom, RTL
+// rows right to left. Needed because TextBlock keeps only the visual
+// (left-to-right) order, so a highlight saved by visual index would come out
+// reversed for Arabic/Hebrew text. Row direction is a majority vote of each
+// word's first strong bidi class, so embedded LTR words (numbers, Latin
+// names) inside an RTL row don't flip it.
+void DictionaryWordSelectActivity::buildReadingOrder() {
+  const size_t count = words.size();
+  readingOrder.clear();
+  readingOrder.reserve(count);
+  readingPos.assign(count, 0);
+
+  size_t rowStart = 0;
+  while (rowStart < count) {
+    size_t rowEnd = rowStart + 1;
+    while (rowEnd < count && words[rowEnd].row == words[rowStart].row) rowEnd++;
+
+    int rtlStrong = 0;
+    int ltrStrong = 0;
+    for (size_t i = rowStart; i < rowEnd; i++) {
+      // fallback 0 answers "is the first strong char R/AL?"; fallback 1
+      // answers "is it L?"; words with no strong char count for neither.
+      if (BidiUtils::detectParagraphLevel(words[i].text, 0) == 1) {
+        rtlStrong++;
+      } else if (BidiUtils::detectParagraphLevel(words[i].text, 1) == 0) {
+        ltrStrong++;
+      }
+    }
+
+    if (rtlStrong > ltrStrong) {
+      for (size_t i = rowEnd; i > rowStart; i--) readingOrder.push_back(static_cast<uint16_t>(i - 1));
+    } else {
+      for (size_t i = rowStart; i < rowEnd; i++) readingOrder.push_back(static_cast<uint16_t>(i));
+    }
+    rowStart = rowEnd;
+  }
+
+  for (size_t pos = 0; pos < readingOrder.size(); pos++) {
+    readingPos[readingOrder[pos]] = static_cast<uint16_t>(pos);
   }
 }
 
@@ -164,9 +215,74 @@ void DictionaryWordSelectActivity::performLookup() {
   requestUpdate();
 }
 
+void DictionaryWordSelectActivity::handleConfirmRelease() {
+  switch (mode) {
+    case Mode::Dictionary:
+      performLookup();
+      break;
+    case Mode::Highlight:
+      toggleHighlight();
+      break;
+    case Mode::DictionaryHighlight:
+      if (mappedInput.getHeldTime() >= DICT_LOOKUP_HOLD_MS) {
+        performLookup();
+      } else {
+        toggleHighlight();
+      }
+      break;
+  }
+}
+
+// First short press anchors a selection at the current word; the second saves
+// the anchored range as a highlight and shows the outcome popup.
+void DictionaryWordSelectActivity::toggleHighlight() {
+  if (anchor < 0) {
+    anchor = selected;
+    // The cursor word is already highlighted; when the framebuffer is clean
+    // (snapshot tracks it) seed the painted range from it so extending the
+    // selection takes the incremental path without a repaint.
+    if (snapshotIdx == selected) {
+      drawnLo = drawnHi = readingPos[selected];
+    } else {
+      drawnLo = drawnHi = -1;
+      requestUpdate();
+    }
+    snapshotIdx = -1;  // the single-word snapshot is not maintained while selecting
+    return;
+  }
+  const bool ok = saveHighlight();
+  anchor = -1;
+  drawnLo = drawnHi = -1;
+  popup = ok ? Popup::Saved : Popup::Error;
+  popupMsg = ok ? StrId::STR_HIGHLIGHT_SAVED : StrId::STR_HIGHLIGHT_SAVE_FAILED;
+  popupTime = millis();
+  requestUpdate();
+}
+
+// Joins the selected words in reading order (see buildReadingOrder) and
+// appends the passage to the highlights markdown file.
+bool DictionaryWordSelectActivity::saveHighlight() {
+  const int lo = std::min(readingPos[anchor], readingPos[selected]);
+  const int hi = std::max(readingPos[anchor], readingPos[selected]);
+  size_t length = 0;
+  for (int p = lo; p <= hi; p++) length += strlen(words[readingOrder[p]].text) + 1;
+  std::string passage;
+  passage.reserve(length);
+  for (int p = lo; p <= hi; p++) {
+    if (p > lo) passage += ' ';
+    passage += words[readingOrder[p]].text;
+  }
+  return HighlightStore::save(bookTitle, chapterTitle, passage);
+}
+
 void DictionaryWordSelectActivity::loop() {
-  if (popup == Popup::NotFound || popup == Popup::Error) {
+  if (popup == Popup::NotFound || popup == Popup::Error || popup == Popup::Saved) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
+      if (popup == Popup::Saved) {
+        // Saving completes the task: return straight to the reader.
+        finish();
+        return;
+      }
       popup = Popup::None;
       requestUpdate();
     }
@@ -176,11 +292,18 @@ void DictionaryWordSelectActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen = true;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
+    if (anchor >= 0) {
+      // Cancel the in-progress selection; a full repaint clears its boxes.
+      anchor = -1;
+      drawnLo = drawnHi = -1;
+      requestUpdate();
+    } else {
+      finish();
+    }
     return;
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && !words.empty()) {
-    performLookup();
+    handleConfirmRelease();
     return;
   }
 
@@ -234,12 +357,68 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   return saved;
 }
 
+// Paints (black box, white text) or clears (white box, black text) one word's
+// highlight box directly, without snapshots. When a visually adjacent word on
+// the same row also lies inside the [rangeLo, rangeHi] reading-position
+// range, the box is stretched across the inter-word gap so the passage shows
+// as one connected highlight (clearing passes the previously drawn range so
+// stale bridges are erased too). Clearing can clip a few pixels of adjacent
+// glyphs that overlap the padded box, which the next full repaint restores.
+void DictionaryWordSelectActivity::paintWordBox(const int idx, const bool highlighted, const int rangeLo,
+                                                const int rangeHi) {
+  const WordBox& word = words[idx];
+  int hx = word.x - 2;
+  int hxEnd = word.x + word.width + 2;
+  int hy = word.y - 2;
+  int hh = lineHeight + 4;
+
+  const auto inRange = [&](const int n) {
+    return n >= 0 && n < static_cast<int>(words.size()) && words[n].row == word.row && readingPos[n] >= rangeLo &&
+           readingPos[n] <= rangeHi;
+  };
+  // Words within a row are stored left to right, so idx-1/idx+1 are the
+  // visual neighbours regardless of the text's reading direction.
+  if (inRange(idx - 1)) hx = std::min(hx, static_cast<int>(words[idx - 1].x) + words[idx - 1].width + 2);
+  if (inRange(idx + 1)) hxEnd = std::max(hxEnd, static_cast<int>(words[idx + 1].x) - 2);
+
+  if (hx < 0) hx = 0;
+  if (hy < 0) {
+    hh += hy;
+    hy = 0;
+  }
+  if (hxEnd <= hx || hh <= 0) return;
+  renderer.fillRect(hx, hy, hxEnd - hx, hh, highlighted);
+  // Outside a PrewarmScope the glyph cache may be empty; batch-load this word.
+  renderer.getFontCacheManager()->prewarmCache(fontId, word.text,
+                                               static_cast<uint8_t>(1u << (static_cast<uint8_t>(word.style) & 0x03)));
+  renderer.drawText(fontId, word.x, word.y, word.text, !highlighted, word.style);
+}
+
 void DictionaryWordSelectActivity::render(RenderLock&&) {
+  // Incremental selection repaint: the framebuffer holds a clean page with
+  // reading positions [drawnLo, drawnHi] highlighted; repaint only the words
+  // entering or leaving the selection instead of re-running the two-pass
+  // page render.
+  if (popup == Popup::None && anchor >= 0 && drawnLo >= 0 && !words.empty()) {
+    const int lo = std::min(readingPos[anchor], readingPos[selected]);
+    const int hi = std::max(readingPos[anchor], readingPos[selected]);
+    for (int p = drawnLo; p <= drawnHi; p++) {
+      if (p < lo || p > hi) paintWordBox(readingOrder[p], false, drawnLo, drawnHi);
+    }
+    for (int p = lo; p <= hi; p++) {
+      if (p < drawnLo || p > drawnHi) paintWordBox(readingOrder[p], true, lo, hi);
+    }
+    drawnLo = lo;
+    drawnHi = hi;
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    return;
+  }
+
   // Differential fast path: only the highlight moved and the framebuffer
   // still holds a clean page (no popup or sub-activity since the last full
   // repaint). Restore the pixels under the old highlight, draw the new one,
   // and push — skipping the two-pass page render entirely.
-  if (popup == Popup::None && snapshotIdx >= 0 && !words.empty() && selected != snapshotIdx) {
+  if (popup == Popup::None && anchor < 0 && snapshotIdx >= 0 && !words.empty() && selected != snapshotIdx) {
     renderer.writeFramebufferRegion(snapshotX, snapshotY, snapshotW, snapshotH, snapshot.get());
     // The full path's PrewarmScope cleared the glyph cache on exit; batch-load
     // just the highlighted word's glyphs before drawing them white-on-black.
@@ -263,13 +442,24 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   page->render(renderer, fontId, marginLeft, marginTop);
 
   if (!words.empty()) {
-    drawHighlightWithSnapshot();
+    if (anchor >= 0) {
+      const int lo = std::min(readingPos[anchor], readingPos[selected]);
+      const int hi = std::max(readingPos[anchor], readingPos[selected]);
+      for (int p = lo; p <= hi; p++) paintWordBox(readingOrder[p], true, lo, hi);
+      drawnLo = lo;
+      drawnHi = hi;
+      snapshotIdx = -1;
+    } else {
+      drawHighlightWithSnapshot();
+      drawnLo = drawnHi = -1;
+    }
   }
 
   if (popup != Popup::None) {
     // The popup overdraws the page, so the snapshot no longer matches the
     // framebuffer — force the next render onto the full-repaint path.
     snapshotIdx = -1;
+    drawnLo = drawnHi = -1;
     // drawPopup overlays the framebuffer and refreshes the display itself.
     // I18N.get directly: tr() only accepts literal key names.
     GUI.drawPopup(renderer, I18N.get(popupMsg));
