@@ -3827,12 +3827,20 @@ async function getMetadataFilenameForEpub(file) {
 
   const title = doc.getElementsByTagNameNS('*', 'title')[0]?.textContent || '';
   const creators = Array.from(doc.getElementsByTagNameNS('*', 'creator'));
-  const authorEl = creators.find(el => {
-    const role = el.getAttribute('role') || el.getAttribute('opf:role') ||
-                 el.getAttributeNS('http://www.idpf.org/2007/opf', 'role') || '';
-    return role.toLowerCase() === 'aut';
-  }) || creators[0];
-  const author = authorEl?.textContent || authorEl?.getAttribute('file-as') || authorEl?.getAttribute('opf:file-as') || '';
+  const getCreatorRole = el => (
+    el.getAttribute('role') ||
+    el.getAttribute('opf:role') ||
+    el.getAttributeNS('http://www.idpf.org/2007/opf', 'role') ||
+    ''
+  ).toLowerCase();
+  const authorEl = creators.find(el => getCreatorRole(el) === 'aut') ||
+                   creators.find(el => !getCreatorRole(el));
+  const authorText = authorEl?.textContent?.trim();
+  const author = authorText ||
+                 authorEl?.getAttribute('file-as') ||
+                 authorEl?.getAttribute('opf:file-as') ||
+                 authorEl?.getAttributeNS('http://www.idpf.org/2007/opf', 'file-as') ||
+                 '';
   return buildMetadataFilename(title, author);
 }
 
