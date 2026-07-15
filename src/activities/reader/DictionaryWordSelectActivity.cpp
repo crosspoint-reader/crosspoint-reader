@@ -1,6 +1,7 @@
 #include "DictionaryWordSelectActivity.h"
 
 #include <BidiUtils.h>
+#include <Epub/Section.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Memory.h>
@@ -57,13 +58,17 @@ void DictionaryWordSelectActivity::onEnter() {
   snapshot = makeUniqueNoThrow<uint8_t[]>(SNAPSHOT_CAPACITY);
   extractWords();
   buildReadingOrder();
-  // Start on the middle row's word nearest mid-screen instead of top-left:
-  // any word on the page is then at most half a page of moves away.
-  if (!words.empty()) {
-    const int initial = closestInRow(rowCount / 2, renderer.getScreenWidth() / 2);
-    if (initial >= 0) selected = initial;
-  }
+  resetCursorToMiddle();
   requestUpdate();
+}
+
+// Start on the middle row's word nearest mid-screen instead of top-left:
+// any word on the page is then at most half a page of moves away.
+void DictionaryWordSelectActivity::resetCursorToMiddle() {
+  selected = 0;
+  if (words.empty()) return;
+  const int initial = closestInRow(rowCount / 2, renderer.getScreenWidth() / 2);
+  if (initial >= 0) selected = initial;
 }
 
 void DictionaryWordSelectActivity::extractWords() {
@@ -233,11 +238,117 @@ void DictionaryWordSelectActivity::handleConfirmRelease() {
   }
 }
 
+// True when the row's stored (visual) order runs opposite to reading order.
+bool DictionaryWordSelectActivity::rowIsRtl(const uint16_t row) const {
+  int first = -1;
+  int last = -1;
+  for (size_t i = 0; i < words.size(); i++) {
+    if (words[i].row != row) continue;
+    if (first < 0) first = static_cast<int>(i);
+    last = static_cast<int>(i);
+  }
+  return first >= 0 && readingPos[first] > readingPos[last];
+}
+
+void DictionaryWordSelectActivity::resetCarried() {
+  carriedText.clear();
+  carriedText.shrink_to_fit();
+  carriedLens.clear();
+  firstPageSelStart = -1;
+}
+
+// Loads and displays another page of the section, rebuilding the word list.
+// On failure (bad index, load error, page with nothing selectable) the
+// current page stays and false is returned.
+bool DictionaryWordSelectActivity::showPage(const int pageIndex) {
+  if (!section || pageIndex < 0 || pageIndex >= static_cast<int>(section->pageCount)) return false;
+  auto next = section->loadPage(pageIndex);
+  if (!next) return false;
+  auto prev = std::move(page);
+  page = std::move(next);
+  extractWords();
+  buildReadingOrder();
+  if (words.empty()) {
+    // An image-only page would strand the selection; back out.
+    page = std::move(prev);
+    extractWords();
+    buildReadingOrder();
+    return false;
+  }
+  sectionPageIndex = pageIndex;
+  snapshotIdx = -1;
+  drawnLo = drawnHi = -1;
+  requestUpdate();
+  return true;
+}
+
+// Extends the anchored selection onto the next page: everything from the
+// selection start to the end of the current page joins carriedText and the
+// selection re-anchors at the top of the new page.
+bool DictionaryWordSelectActivity::advancePage() {
+  if (carriedLens.size() >= MAX_CARRIED_PAGES) return false;
+  const int lo = std::min(readingPos[anchor], readingPos[selected]);
+  const size_t lenBefore = carriedText.size();
+  for (size_t p = lo; p < words.size(); p++) {
+    if (!carriedText.empty()) carriedText += ' ';
+    carriedText += words[readingOrder[p]].text;
+  }
+  if (!showPage(sectionPageIndex + 1)) {
+    carriedText.resize(lenBefore);
+    return false;
+  }
+  if (carriedLens.empty()) firstPageSelStart = lo;
+  carriedLens.push_back(lenBefore);
+  anchor = readingOrder[0];
+  selected = anchor;
+  return true;
+}
+
+// Undoes one page advance: the current page's part of the selection is
+// dropped and the previous page is shown again, selected from where the
+// passage entered it through its end.
+bool DictionaryWordSelectActivity::retreatPage() {
+  if (carriedLens.empty()) return false;
+  if (!showPage(sectionPageIndex - 1)) return false;
+  carriedText.resize(carriedLens.back());
+  carriedLens.pop_back();
+  const int startPos =
+      carriedLens.empty() ? std::min(std::max(firstPageSelStart, 0), static_cast<int>(words.size()) - 1) : 0;
+  anchor = readingOrder[startPos];
+  selected = readingOrder[words.size() - 1];
+  return true;
+}
+
+// Cross-page selection: while anchored, a forward move past the last word
+// (or Down on the last row) continues the selection onto the next page; the
+// symmetric backward move on the first word/row returns. True when the key
+// press was consumed.
+bool DictionaryWordSelectActivity::handleCrossPageNavigation() {
+  if (anchor < 0 || !section || words.empty()) return false;
+  const uint16_t row = words[selected].row;
+  const bool rtl = rowIsRtl(row);
+  const bool fwdKey =
+      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Left : MappedInputManager::Button::Right);
+  const bool backKey =
+      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Right : MappedInputManager::Button::Left);
+  const int pos = readingPos[selected];
+  if ((fwdKey && pos == static_cast<int>(words.size()) - 1) ||
+      (mappedInput.wasPressed(MappedInputManager::Button::Down) && row == rowCount - 1)) {
+    return advancePage();
+  }
+  if (!carriedLens.empty() &&
+      ((backKey && pos == 0) || (mappedInput.wasPressed(MappedInputManager::Button::Up) && row == 0))) {
+    return retreatPage();
+  }
+  return false;
+}
+
 // First short press anchors a selection at the current word; the second saves
 // the anchored range as a highlight and shows the outcome popup.
 void DictionaryWordSelectActivity::toggleHighlight() {
   if (anchor < 0) {
     anchor = selected;
+    resetCarried();
     // The cursor word is already highlighted; when the framebuffer is clean
     // (snapshot tracks it) seed the painted range from it so extending the
     // selection takes the incremental path without a repaint.
@@ -251,6 +362,7 @@ void DictionaryWordSelectActivity::toggleHighlight() {
     return;
   }
   const bool ok = saveHighlight();
+  resetCarried();
   anchor = -1;
   drawnLo = drawnHi = -1;
   popup = ok ? Popup::Saved : Popup::Error;
@@ -259,17 +371,19 @@ void DictionaryWordSelectActivity::toggleHighlight() {
   requestUpdate();
 }
 
-// Joins the selected words in reading order (see buildReadingOrder) and
-// appends the passage to the highlights markdown file.
+// Joins the selected words in reading order (see buildReadingOrder), after
+// any text carried over from previous pages, and appends the passage to the
+// highlights markdown file.
 bool DictionaryWordSelectActivity::saveHighlight() {
   const int lo = std::min(readingPos[anchor], readingPos[selected]);
   const int hi = std::max(readingPos[anchor], readingPos[selected]);
-  size_t length = 0;
+  size_t length = carriedText.size();
   for (int p = lo; p <= hi; p++) length += strlen(words[readingOrder[p]].text) + 1;
   std::string passage;
   passage.reserve(length);
+  passage.append(carriedText);
   for (int p = lo; p <= hi; p++) {
-    if (p > lo) passage += ' ';
+    if (!passage.empty()) passage += ' ';
     passage += words[readingOrder[p]].text;
   }
   return HighlightStore::save(bookTitle, chapterTitle, passage);
@@ -294,8 +408,13 @@ void DictionaryWordSelectActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (anchor >= 0) {
       // Cancel the in-progress selection; a full repaint clears its boxes.
+      // A cross-page selection also returns to the page it started from.
       anchor = -1;
       drawnLo = drawnHi = -1;
+      resetCarried();
+      if (sectionPageIndex != originalPageIndex && showPage(originalPageIndex)) {
+        resetCursorToMiddle();
+      }
       requestUpdate();
     } else {
       finish();
@@ -308,6 +427,7 @@ void DictionaryWordSelectActivity::loop() {
   }
 
   if (words.empty()) return;
+  if (handleCrossPageNavigation()) return;
   if (mappedInput.wasPressed(MappedInputManager::Button::Left) && selected > 0) {
     selected--;
     requestUpdate();

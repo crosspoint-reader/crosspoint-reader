@@ -281,9 +281,11 @@ void EpubReaderActivity::openWordSelect(const DictionaryWordSelectActivity::Mode
   const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
   std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "";
 
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
-                                                                        orientedMarginLeft, orientedMarginTop, mode,
-                                                                        epub->getTitle(), std::move(chapterTitle)),
+  // section.get() outlives the sub-activity (the reader is paused beneath it)
+  // and enables highlight selections that continue onto the following pages.
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop, mode,
+                             epub->getTitle(), std::move(chapterTitle), section.get(), section->currentPage),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
