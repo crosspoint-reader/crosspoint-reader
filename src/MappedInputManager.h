@@ -30,17 +30,15 @@ class MappedInputManager {
 
   // True when the control axis is flipped relative to the physical buttons: the user opted into
   // orientation-following front buttons AND the screen is *currently rendered* rotated (INVERTED /
-  // LANDSCAPE_CCW). Keyed on the live renderer orientation rather than the persisted reader setting,
-  // so portrait UI (home, settings) never swaps while the reader and its menus do.
+  // LANDSCAPE_CCW). Keyed on the live renderer orientation so shell and reader stay in sync with
+  // SETTINGS.orientation after it is applied.
   [[nodiscard]] bool isNavDirectionSwapped() const;
 
  private:
   HalGPIO& gpio;
   // Logical-to-physical button mapping depends on what the user is actually looking at: when the
-  // screen is rendered rotated, the directional buttons must flip to match. The renderer is the only
-  // authority on the *live* orientation (the reader rotates it and restores portrait on exit), so we
-  // read it here instead of CrossPointSettings.orientation, which is just the persisted reader
-  // preference and stays "rotated" even while portrait UI like home/settings is on screen.
+  // screen is rendered rotated, the directional buttons must flip to match. The renderer is the live
+  // authority (applied from SETTINGS.orientation at boot, in Settings, and via reader shortcuts).
   const GfxRenderer& renderer;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;

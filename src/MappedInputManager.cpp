@@ -5,9 +5,8 @@
 #include "CrossPointSettings.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
-  // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
-  // setting. The reader (and its modal menus) render rotated, so navigation/labels flip there; the
-  // home and settings UI render in portrait, so they never flip even when a rotated reader is configured.
+  // Key the swap on the orientation the screen is *actually* rendered at. Device orientation is
+  // applied globally (boot / Settings / reader shortcuts), so shell and reader share the live value.
   const auto orientation = renderer.getOrientation();
   return SETTINGS.frontButtonFollowOrientation &&
          (orientation == GfxRenderer::PortraitInverted || orientation == GfxRenderer::LandscapeCounterClockwise);

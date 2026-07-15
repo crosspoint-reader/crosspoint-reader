@@ -27,6 +27,7 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/reader/ReaderUtils.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -403,6 +404,7 @@ void setup() {
                                                         : BootResume::Splash;
 
   setupDisplayAndFonts(resume != BootResume::Splash);
+  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   switch (resume) {
     case BootResume::Silent:
