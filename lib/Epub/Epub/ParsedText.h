@@ -12,12 +12,20 @@
 
 class GfxRenderer;
 
+// Transient metadata produced by ParsedText::extractLine alongside each laid-out line (TextBlock)
+struct ExtractedLineMeta {
+  // Number of line's original words, excluding layout-time hyphenation remainders and focus-reading suffixes
+  size_t originalWordCount = 0;
+  explicit ExtractedLineMeta(const size_t originalWordCount) : originalWordCount(originalWordCount) {}
+};
+
 class ParsedText {
   std::vector<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<bool> wordContinues;      // true = word attaches to previous with no break
-  std::vector<bool> wordNoSpaceBefore;  // true = may break before token, but no synthetic space when joined
-  std::vector<bool> wordIsFocusSuffix;  // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordContinues;          // true = word attaches to previous with no break
+  std::vector<bool> wordNoSpaceBefore;      // true = may break before token, but no synthetic space when joined
+  std::vector<bool> wordIsFocusSuffix;      // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordIsHyphenRemainder;  // true = token is a layout-time hyphenation remainder, not an original word
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
@@ -44,8 +52,8 @@ class ParsedText {
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                    const std::vector<size_t>& lineBreakIndices,
-                   const std::function<void(std::shared_ptr<TextBlock>)>& processLine, const GfxRenderer& renderer,
-                   int fontId);
+                   const std::function<void(std::shared_ptr<TextBlock>, ExtractedLineMeta)>& processLine,
+                   const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
@@ -63,8 +71,10 @@ class ParsedText {
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
+  // Number of original words, excluding layout-time hyphenation remainders and focus-reading suffixes
+  size_t originalWordCount() const;
   bool isEmpty() const { return words.empty(); }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
-                             const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
+                             const std::function<void(std::shared_ptr<TextBlock>, ExtractedLineMeta)>& processLine,
                              bool includeLastLine = true);
 };

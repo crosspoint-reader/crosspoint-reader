@@ -85,8 +85,9 @@ class ChapterHtmlSlimParser {
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
   std::vector<std::pair<std::string, uint16_t>> anchorData;
-  std::string pendingAnchorId;          // deferred until after previous text block is flushed
-  std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
+  std::string pendingAnchorId;              // parsed id, not yet tied to a block boundary
+  std::vector<std::string> armedAnchorIds;  // ids awaiting the real page their content lands on
+  std::vector<std::string> tocAnchors;      // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
@@ -111,6 +112,7 @@ class ChapterHtmlSlimParser {
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
+  void recordArmedAnchors();
   void flushPartWordBuffer();
   void makePages();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
@@ -172,7 +174,7 @@ class ChapterHtmlSlimParser {
   bool finishParse();  // flush the trailing page and tear down; returns true
   void abortParse();   // tear down without flushing (error / abandon)
 
-  void addLineToPage(std::shared_ptr<TextBlock> line);
+  void addLineToPage(std::shared_ptr<TextBlock> line, ExtractedLineMeta lineMeta);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page

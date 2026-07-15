@@ -194,9 +194,22 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     }
   }
 
-  // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+  // Anchor belongs to the *next* content yet to be laid out, so we cannot be sure if it
+  // lands on current page or on the next one. So we do not place the anchor instantly but
+  // rather "arm" it to be fired in future when the anchored content is finally placed
+  armedAnchorIds.push_back(std::move(pendingAnchorId));
   pendingAnchorId.clear();
+}
+
+// Stamp every armed anchor with the page whose content just landed. Called from each content
+// placement site (text line, image, horizontal rule) after any page break has been applied,
+// so completedPageCount already reflects the correct target page.
+void ChapterHtmlSlimParser::recordArmedAnchors() {
+  if (armedAnchorIds.empty()) return;
+  for (auto& id : armedAnchorIds) {
+    anchorData.push_back({std::move(id), static_cast<uint16_t>(completedPageCount)});
+  }
+  armedAnchorIds.clear();
 }
 
 // flush the contents of partWordBuffer to currentTextBlock
@@ -332,10 +345,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   currentPage->elements.push_back(pageRule);
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
-  }
+  recordArmedAnchors();
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -381,8 +391,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
           // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
           // lands at page 0 (section start) instead of the footnote.
+          // Such an id sits inline in the current block, so the current page is its best-effort target.
           if (!self->pendingAnchorId.empty()) {
-            self->flushPendingAnchor();
+            self->anchorData.push_back(
+                {std::move(self->pendingAnchorId), static_cast<uint16_t>(self->completedPageCount)});
           }
           self->pendingAnchorId = idValue;
         }
@@ -671,6 +683,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->startNewTextBlock(parentBlockStyle);
                 }
 
+                // Apply page breaks before TOC-boundary anchors (if any)
+                self->flushPendingAnchor();
+
                 // Apply vertical margins from the container to the image.
                 // Top margin lives on the empty text block (deposited via vertical merge
                 // in startNewTextBlock). Bottom margin was stripped by withoutBottom() for
@@ -724,6 +739,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 }
                 self->currentPage->elements.push_back(pageImage);
                 self->currentPageNextY += displayHeight + imageMarginBottom;
+
+                // An id resolves to the page the image actually landed on, after the fit/break decision above.
+                self->recordArmedAnchors();
 
                 // The image consumed the empty block's accumulated vertical spacing.
                 // Reset the block so the Vertical merge in startNewTextBlock doesn't
@@ -1167,7 +1185,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                         : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+        [self](const std::shared_ptr<TextBlock>& textBlock, const ExtractedLineMeta lineMeta) {
+          self->addLineToPage(textBlock, lineMeta);
+        },
+        false);
   }
 }
 
@@ -1240,8 +1261,8 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       entry.number[sizeof(entry.number) - 1] = '\0';
       strncpy(entry.href, self->currentFootnote.href, sizeof(entry.href) - 1);
       entry.href[sizeof(entry.href) - 1] = '\0';
-      int wordIndex =
-          self->wordsExtractedInBlock + (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0);
+      int wordIndex = self->wordsExtractedInBlock +
+                      (self->currentTextBlock ? static_cast<int>(self->currentTextBlock->originalWordCount()) : 0);
       self->pendingFootnotes.push_back({wordIndex, entry});
     }
     self->insideFootnoteLink = false;
@@ -1407,9 +1428,10 @@ bool ChapterHtmlSlimParser::finishParse() {
   if (currentTextBlock) {
     makePages();
     if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+      armedAnchorIds.push_back(std::move(pendingAnchorId));
       pendingAnchorId.clear();
     }
+    recordArmedAnchors();
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     currentPage.reset();
@@ -1436,7 +1458,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return finishParse();
 }
 
-void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
+void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const ExtractedLineMeta lineMeta) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
@@ -1451,8 +1473,14 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     currentPageNextY = 0;
   }
 
-  // Track cumulative words to assign footnotes to the page containing their anchor
-  wordsExtractedInBlock += line->wordCount();
+  // The first line of the anchored block just landed on this page (top margins already
+  // advanced currentPageNextY and any overflow break above bumped completedPageCount).
+  recordArmedAnchors();
+
+  // Track cumulative ORIGINAL words to assign footnotes to the page containing their anchor.
+  // Counting original words (not laid-out words) keeps the index aligned with the footnote
+  // word index captured at parse time, even when hyphenation splits words across lines.
+  wordsExtractedInBlock += static_cast<int>(lineMeta.originalWordCount);
   auto footnoteIt = pendingFootnotes.begin();
   while (footnoteIt != pendingFootnotes.end() && footnoteIt->first <= wordsExtractedInBlock) {
     currentPage->addFootnote(footnoteIt->second.number, footnoteIt->second.href);
@@ -1495,7 +1523,9 @@ void ChapterHtmlSlimParser::makePages() {
 
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+      [this](const std::shared_ptr<TextBlock>& textBlock, const ExtractedLineMeta lineMeta) {
+        addLineToPage(textBlock, lineMeta);
+      });
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches
