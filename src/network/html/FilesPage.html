@@ -3863,6 +3863,38 @@ async function maybeRenameEbookFile(file) {
   }
 }
 
+function reserveAvailableUploadFilename(fileName, usedFileNames) {
+  const normalize = name => name.toLowerCase();
+  if (!usedFileNames.has(normalize(fileName))) {
+    usedFileNames.add(normalize(fileName));
+    return fileName;
+  }
+
+  const dotIndex = fileName.lastIndexOf('.');
+  const extensionIndex = dotIndex > 0 ? dotIndex : fileName.length;
+  const baseName = fileName.substring(0, extensionIndex);
+  const extension = fileName.substring(extensionIndex);
+  let nextSuffix = 2;
+
+  let candidateName;
+  do {
+    candidateName = `${baseName} (${nextSuffix})${extension}`;
+    nextSuffix++;
+  } while (usedFileNames.has(normalize(candidateName)));
+
+  usedFileNames.add(normalize(candidateName));
+  return candidateName;
+}
+
+async function fetchExistingUploadNames() {
+  const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+  if (!response.ok) {
+    throw new Error(response.status + ' ' + response.statusText);
+  }
+  const entries = await response.json();
+  return new Set(entries.map(entry => entry.name.toLowerCase()));
+}
+
 /**
  * Resolve a relative href against a base file path.
  * Handles multiple ../, ./, absolute /, and bare relative paths.
@@ -5294,7 +5326,7 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
   });
 }
 
-function uploadFile() {
+async function uploadFile() {
   if (isUploadInProgress) return;
 
   const fileInput = document.getElementById('fileInput');
@@ -5306,8 +5338,17 @@ function uploadFile() {
     return;
   }
 
-  // Prevent modal close during upload
   isUploadInProgress = true;
+  let usedFileNames;
+  try {
+    usedFileNames = await fetchExistingUploadNames();
+  } catch (error) {
+    isUploadInProgress = false;
+    alert('Failed to check existing files: ' + error.message);
+    return;
+  }
+
+  // Prevent modal close during upload
   uploadGeneration++;
   const myGeneration = uploadGeneration;
   document.getElementById('uploadModalClose').classList.add('disabled');
@@ -5406,6 +5447,15 @@ function uploadFile() {
       if (file.name !== originalName) {
         console.log(`[Upload] Renamed from metadata: ${originalName} -> ${file.name}`);
       }
+    }
+
+    const availableName = reserveAvailableUploadFilename(file.name, usedFileNames);
+    if (availableName !== file.name) {
+      console.log(`[Upload] Renamed to avoid collision: ${file.name} -> ${availableName}`);
+      file = new File([file], availableName, {
+        type: file.type,
+        lastModified: file.lastModified
+      });
     }
 
     const methodText = useWebSocket ? ' [WS]' : ' [HTTP]';
