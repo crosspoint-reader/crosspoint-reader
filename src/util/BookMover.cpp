@@ -48,6 +48,10 @@ std::string buildDestination(const std::string& srcPath, const std::string& dstD
     dstPath = dirPrefix + base + " (" + std::to_string(suffix) + ")" + ext;
     suffix++;
   } while (Storage.exists(dstPath.c_str()) && suffix < 100);
+  if (Storage.exists(dstPath.c_str())) {
+    // Exhausted the numbered-suffix range; fall back to a guaranteed-unique name.
+    dstPath = dirPrefix + base + "_" + std::to_string(millis()) + ext;
+  }
   return dstPath;
 }
 
