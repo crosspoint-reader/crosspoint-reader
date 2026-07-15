@@ -23,6 +23,5 @@ index a60b548..26bcf6f 100644
      uint32_t ulBitOff;
      my_ulong ulCode, ulBits, ulTemp; // local copies to allow compiler to use register vars
      uint8_t *pBuf;
--- 
+--
 2.50.1 (Apple Git-155)
-

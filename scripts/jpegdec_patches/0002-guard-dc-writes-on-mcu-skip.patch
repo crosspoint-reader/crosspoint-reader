@@ -36,6 +36,5 @@ index 26bcf6f..1bd38b2 100644
      }
      // Now get the other 63 AC coefficients
      pFast = &pJPEG->usHuffAC[pJPEG->ucACTable * HUFF11SIZE];
--- 
+--
 2.50.1 (Apple Git-155)
-

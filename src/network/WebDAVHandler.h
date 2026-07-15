@@ -15,8 +15,10 @@ class WebDAVHandler : public RequestHandler {
   // PUT streaming state (raw() is called in chunks)
   HalFile _putFile;
   String _putPath;
+  String _putTempPath;
   bool _putOk = false;
   bool _putExisted = false;
+  bool _putComplete = false;
 
   // WebDAV method handlers
   void handleOptions(WebServer& s);
