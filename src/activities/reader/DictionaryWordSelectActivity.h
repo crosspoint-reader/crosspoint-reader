@@ -10,6 +10,8 @@
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
 
+class Section;
+
 // Button-driven word selection over the current reader page: Left/Right step
 // through words in reading order, Up/Down jump rows, Back returns to the
 // reader. What Confirm does depends on the mode:
@@ -18,6 +20,8 @@
 //    the anchored range as a markdown highlight (HighlightStore).
 //  - DictionaryHighlight: long-press release looks up, short release
 //    anchors/saves a highlight. Back cancels an active selection first.
+// When a Section is supplied, an anchored selection can keep extending past
+// the last word onto the following page(s) of the same chapter.
 class DictionaryWordSelectActivity final : public Activity {
  public:
   enum class Mode : uint8_t { Dictionary, Highlight, DictionaryHighlight };
@@ -25,14 +29,17 @@ class DictionaryWordSelectActivity final : public Activity {
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int marginLeft, int marginTop,
                                         Mode mode = Mode::Dictionary, std::string bookTitle = {},
-                                        std::string chapterTitle = {})
+                                        std::string chapterTitle = {}, Section* section = nullptr, int pageIndex = 0)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
         marginTop(marginTop),
         mode(mode),
         bookTitle(std::move(bookTitle)),
-        chapterTitle(std::move(chapterTitle)) {}
+        chapterTitle(std::move(chapterTitle)),
+        section(section),
+        originalPageIndex(pageIndex),
+        sectionPageIndex(pageIndex) {}
 
   void onEnter() override;
   void loop() override;
@@ -62,6 +69,13 @@ class DictionaryWordSelectActivity final : public Activity {
   bool saveHighlight();
   bool drawHighlightWithSnapshot();
   void paintWordBox(int idx, bool highlighted, int rangeLo, int rangeHi);
+  void resetCursorToMiddle();
+  bool rowIsRtl(uint16_t row) const;
+  bool handleCrossPageNavigation();
+  bool advancePage();
+  bool retreatPage();
+  void resetCarried();
+  bool showPage(int pageIndex);
 
   std::unique_ptr<Page> page;
   const int marginLeft;
@@ -90,6 +104,21 @@ class DictionaryWordSelectActivity final : public Activity {
   int anchor = -1;
   int drawnLo = -1;
   int drawnHi = -1;
+
+  // Cross-page selection (only when section != nullptr): the reader's section
+  // outlives this activity, so the raw pointer stays valid. carriedText holds
+  // the selected words of pages already scrolled past; carriedLens records
+  // its length before each page advance so retreating can truncate it.
+  // firstPageSelStart is the selection's start reading-position on the page
+  // where it was anchored, restored when retreating all the way back.
+  Section* section;
+  const int originalPageIndex;
+  int sectionPageIndex;
+  std::string carriedText;
+  std::vector<size_t> carriedLens;
+  int firstPageSelStart = -1;
+  // Bounds the carried text (~2 KB per page) on a 380 KB-RAM device.
+  static constexpr size_t MAX_CARRIED_PAGES = 8;
 
   Dictionary dict;
   bool dictOpenAttempted = false;
