@@ -21,6 +21,7 @@ void ButtonRemapActivity::onEnter() {
   Activity::onEnter();
 
   // Start with all roles unassigned to avoid duplicate blocking.
+  // Remap UI stays in the live device orientation (including Portrait 180°).
   currentStep = 0;
   tempMapping[0] = kUnassigned;
   tempMapping[1] = kUnassigned;
@@ -140,12 +141,17 @@ void ButtonRemapActivity::render(RenderLock&&) {
                    Rect{0, topOffset + 4 * metrics.listRowHeight + 5 * metrics.verticalSpacing + 20, pageWidth, 20},
                    tr(STR_REMAP_CANCEL_HINT));
 
-  // Live preview of logical labels under front buttons.
-  // This mirrors the on-device front button order: Back, Confirm, Left, Right.
-  GUI.drawButtonHints(renderer, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
-                      labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
-                      labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
-                      labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
+  // Preview under the logical front-button strip for the current orientation.
+  // Under Portrait 180° / Landscape CW, reverse hardware L→R so labels match visual order.
+  const char* hw0 = labelForHardware(CrossPointSettings::FRONT_HW_BACK);
+  const char* hw1 = labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM);
+  const char* hw2 = labelForHardware(CrossPointSettings::FRONT_HW_LEFT);
+  const char* hw3 = labelForHardware(CrossPointSettings::FRONT_HW_RIGHT);
+  if (mappedInput.shouldReverseFrontHintOrder()) {
+    GUI.drawButtonHints(renderer, hw3, hw2, hw1, hw0);
+  } else {
+    GUI.drawButtonHints(renderer, hw0, hw1, hw2, hw3);
+  }
   renderer.displayBuffer();
 }
 

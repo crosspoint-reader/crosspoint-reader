@@ -319,7 +319,12 @@ void LyraTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
 void LyraTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
-  // Draw in the live device orientation so hints stay attached to the logical bottom of the UI.
+  // Landscape / Portrait 180° use orientation-aware placement in BaseTheme (vertical sides / top strip).
+  if (renderer.getOrientation() != GfxRenderer::Orientation::Portrait) {
+    BaseTheme::drawButtonHints(renderer, btn1, btn2, btn3, btn4);
+    return;
+  }
+
   const int pageHeight = renderer.getScreenHeight();
   constexpr int buttonWidth = 80;
   constexpr int smallButtonHeight = 15;

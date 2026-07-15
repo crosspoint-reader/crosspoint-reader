@@ -154,31 +154,81 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
-void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                                const char* btn4) const {
-  // Draw in the live device orientation so hints stay attached to the logical bottom of the UI.
-  // (Previously forced Portrait for hardware-button alignment when only the reader rotated.)
+namespace {
+
+// Front-flexure hint geometry shared by portrait strips and landscape side columns.
+constexpr int kFrontHintButtonLen = 106;
+constexpr int kX4FrontHintPositions[] = {25, 130, 245, 350};
+constexpr int kX3FrontHintPositions[] = {38, 154, 268, 384};
+
+void drawHorizontalFrontHints(GfxRenderer& renderer, const bool deviceIsX3, const char* const labels[4],
+                              const bool atBottom) {
   const int pageHeight = renderer.getScreenHeight();
-  constexpr int buttonWidth = 106;
+  constexpr int buttonWidth = kFrontHintButtonLen;
   constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
-  constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
-  constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
-  // X3 has wider screen in portrait (528 vs 480), use more spacing
-  constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
-  constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
-  const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
-  const char* labels[] = {btn1, btn2, btn3, btn4};
+  constexpr int textYOffset = 7;
+  const int* buttonPositions = deviceIsX3 ? kX3FrontHintPositions : kX4FrontHintPositions;
+  const int buttonY = atBottom ? (pageHeight - buttonHeight) : 0;
 
   for (int i = 0; i < 4; i++) {
-    // Only draw if the label is non-empty
-    if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+    if (labels[i] == nullptr || labels[i][0] == '\0') {
+      continue;
     }
+    const int x = buttonPositions[i];
+    renderer.fillRect(x, buttonY, buttonWidth, buttonHeight, false);
+    renderer.drawRect(x, buttonY, buttonWidth, buttonHeight);
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
+    const int textX = x + (buttonWidth - 1 - textWidth) / 2;
+    renderer.drawText(UI_10_FONT_ID, textX, buttonY + textYOffset, labels[i]);
+  }
+}
+
+void drawVerticalFrontHints(GfxRenderer& renderer, const bool deviceIsX3, const char* const labels[4],
+                            const bool onLeft) {
+  // Matches UITheme::getScreenSafeArea: Landscape CW → left, Landscape CCW → right.
+  const int pageWidth = renderer.getScreenWidth();
+  constexpr int stripWidth = BaseMetrics::values.buttonHintsHeight;
+  constexpr int buttonHeight = kFrontHintButtonLen;
+  const int* buttonPositions = deviceIsX3 ? kX3FrontHintPositions : kX4FrontHintPositions;
+  const int x = onLeft ? 0 : (pageWidth - stripWidth);
+
+  for (int i = 0; i < 4; i++) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') {
+      continue;
+    }
+    const int y = buttonPositions[i];
+    renderer.fillRect(x, y, stripWidth, buttonHeight, false);
+    renderer.drawRect(x, y, stripWidth, buttonHeight);
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
+    const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
+    const int textX = x + (stripWidth - textHeight) / 2;
+    const int textY = y + (buttonHeight + textWidth) / 2;
+    renderer.drawTextRotated90CW(UI_10_FONT_ID, textX, textY, labels[i]);
+  }
+}
+
+}  // namespace
+
+void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                                const char* btn4) const {
+  // mapLabels() supplies visual order for the current orientation. Place the strip on the edge
+  // where the front flexure sits (see UITheme::getScreenSafeArea).
+  const char* labels[] = {btn1, btn2, btn3, btn4};
+  const bool isX3 = gpio.deviceIsX3();
+
+  switch (renderer.getOrientation()) {
+    case GfxRenderer::Orientation::Portrait:
+      drawHorizontalFrontHints(renderer, isX3, labels, /*atBottom=*/true);
+      break;
+    case GfxRenderer::Orientation::PortraitInverted:
+      drawHorizontalFrontHints(renderer, isX3, labels, /*atBottom=*/false);
+      break;
+    case GfxRenderer::Orientation::LandscapeClockwise:
+      drawVerticalFrontHints(renderer, isX3, labels, /*onLeft=*/true);
+      break;
+    case GfxRenderer::Orientation::LandscapeCounterClockwise:
+      drawVerticalFrontHints(renderer, isX3, labels, /*onLeft=*/false);
+      break;
   }
 }
 

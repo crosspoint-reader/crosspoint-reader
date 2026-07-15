@@ -34,6 +34,10 @@ class MappedInputManager {
   // SETTINGS.orientation after it is applied.
   [[nodiscard]] bool isNavDirectionSwapped() const;
 
+  // True when front-hint L→R should be reversed vs hardware order (Portrait 180° / Landscape CW),
+  // so overlays match the rotated logical UI.
+  [[nodiscard]] bool shouldReverseFrontHintOrder() const;
+
  private:
   HalGPIO& gpio;
   // Logical-to-physical button mapping depends on what the user is actually looking at: when the

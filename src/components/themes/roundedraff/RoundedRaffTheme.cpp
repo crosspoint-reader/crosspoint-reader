@@ -383,7 +383,12 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
 
 void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                        const char* btn4) const {
-  // Draw in the live device orientation so hints stay attached to the logical bottom of the UI.
+  // Landscape / Portrait 180° use orientation-aware placement in BaseTheme (vertical sides / top strip).
+  if (renderer.getOrientation() != GfxRenderer::Orientation::Portrait) {
+    BaseTheme::drawButtonHints(renderer, btn1, btn2, btn3, btn4);
+    return;
+  }
+
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   const int sidePadding = 20;
