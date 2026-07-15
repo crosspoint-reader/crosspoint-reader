@@ -250,15 +250,4 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
-# ── Arabic ─────────────────────────────────────────────────────────────
 
-  - name: Amiri
-    description: "Classical Naskh revival for Arabic script"
-    intervals: arabic,latin-ext
-    sizes: [12, 14, 16, 18]
-    intervals: "latin-ext,(0x0600-0x06FF),(0x0750-0x077F),(0x0870-0x089F),(0x08A0-0x08FF),(0xFE70-0xFEFF)"
-    styles:
-      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf"}
-      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf"}
-      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Italic.ttf"}
-      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-BoldItalic.ttf"}
