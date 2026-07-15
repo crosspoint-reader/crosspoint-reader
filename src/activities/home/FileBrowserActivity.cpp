@@ -300,7 +300,10 @@ void FileBrowserActivity::promptNewFolder() {
         if (dirPath.back() != '/') dirPath += '/';
         dirPath += name;
         // An already-existing folder counts as success: the user gets the folder they named.
-        if (!Storage.exists(dirPath.c_str()) && !Storage.mkdir(dirPath.c_str())) {
+        auto existing = Storage.open(dirPath.c_str());
+        const bool existsAsDir = existing && existing.isDirectory();
+        if (existing) existing.close();
+        if (!existsAsDir && !Storage.mkdir(dirPath.c_str())) {
           LOG_ERR("FileBrowser", "Failed to create folder: %s", dirPath.c_str());
           showMessage(StrId::STR_FOLDER_CREATE_FAILED);
         } else if (mode == Mode::PickFolder) {
