@@ -9,6 +9,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -209,28 +210,13 @@ void HomeActivity::loop() {
 
 void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  // Reserve space for front-button hints (bottom / top / left / right by orientation).
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
-                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
-
-  // Record the tile rect so storeCoverBuffer (called from the theme) knows
-  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
-  // instead of the 48 KB full framebuffer the previous bind captured.
-  coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
-  coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
-
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
-
-  // Build menu items dynamically
+  // Build menu items first so we can size the cover against visible rows.
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
                                         tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
@@ -246,15 +232,44 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin(), Book);
   }
 
-  GUI.drawButtonMenu(
-      renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
-      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
-      [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+  const int menuCount = static_cast<int>(menuItems.size());
+  const int rowStep = metrics.menuRowHeight + metrics.menuSpacing;
+  // Keep at least a few menu rows visible; shrink the cover in short landscape layouts.
+  constexpr int minVisibleMenuRows = 3;
+  const int minMenuHeight =
+      std::min(menuCount, minVisibleMenuRows) * rowStep + metrics.homeMenuTopOffset + metrics.verticalSpacing;
+
+  const int headerY = safe.y + metrics.topPadding;
+  const int coverY = safe.y + metrics.homeTopPadding;
+  int coverH = metrics.homeCoverTileHeight;
+  const int maxCoverH = (safe.y + safe.height) - coverY - minMenuHeight;
+  if (coverH > maxCoverH) {
+    coverH = std::max(0, maxCoverH);
+  }
+
+  GUI.drawHeader(renderer, Rect{safe.x, headerY, safe.width, metrics.homeTopPadding},
+                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+
+  // Record the tile rect so storeCoverBuffer (called from the theme) knows
+  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
+  // instead of the 48 KB full framebuffer the previous bind captured.
+  coverRectX = safe.x;
+  coverRectY = coverY;
+  coverRectW = safe.width;
+  coverRectH = coverH;
+
+  if (coverH > 0) {
+    GUI.drawRecentBookCover(renderer, Rect{safe.x, coverY, safe.width, coverH}, recentBooks, selectorIndex,
+                            coverRendered, coverBufferStored, bufferRestored,
+                            std::bind(&HomeActivity::storeCoverBuffer, this));
+  }
+
+  const int menuY = coverY + coverH + metrics.homeMenuTopOffset;
+  const int menuH = (safe.y + safe.height) - menuY;
+  GUI.drawButtonMenu(renderer, Rect{safe.x, menuY, safe.width, std::max(0, menuH)}, menuCount,
+                     metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
+                     [&menuItems](int index) { return std::string(menuItems[index]); },
+                     [&menuIcons](int index) { return menuIcons[index]; });
 
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

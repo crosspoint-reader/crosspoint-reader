@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -513,11 +514,15 @@ void LyraTheme::drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) c
 void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
-  for (int i = 0; i < buttonCount; ++i) {
+  const int rowStep = LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing;
+  const int pageItems = std::max(1, rect.height / rowStep);
+  const int safeSelectedIndex = std::max(0, selectedIndex);
+  const int pageStartIndex = (safeSelectedIndex / pageItems) * pageItems;
+
+  for (int i = pageStartIndex; i < buttonCount && i < pageStartIndex + pageItems; ++i) {
     int tileWidth = rect.width - LyraMetrics::values.contentSidePadding * 2;
     Rect tileRect = Rect{rect.x + LyraMetrics::values.contentSidePadding,
-                         rect.y + i * (LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing), tileWidth,
-                         LyraMetrics::values.menuRowHeight};
+                         rect.y + (i - pageStartIndex) * rowStep, tileWidth, LyraMetrics::values.menuRowHeight};
 
     const bool selected = selectedIndex == i;
 
@@ -541,5 +546,18 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     }
 
     renderer.drawText(UI_12_FONT_ID, textX, textY, label, true);
+  }
+
+  if (buttonCount > pageItems && pageItems > 0) {
+    const int barW = LyraMetrics::values.scrollBarWidth;
+    const int barX = rect.x + rect.width - LyraMetrics::values.scrollBarRightOffset - barW;
+    const int barY = rect.y;
+    const int barH = rect.height;
+    const int thumbH = std::max(10, (barH * pageItems) / buttonCount);
+    const int maxStart = std::max(1, buttonCount - pageItems);
+    const int maxTravel = std::max(1, barH - thumbH);
+    const int clampedStart = std::min(pageStartIndex, maxStart);
+    const int thumbY = barY + (clampedStart * maxTravel) / maxStart;
+    renderer.fillRect(barX, thumbY, barW, thumbH);
   }
 }

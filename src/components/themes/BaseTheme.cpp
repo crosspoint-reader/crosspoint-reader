@@ -712,9 +712,15 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
-  for (int i = 0; i < buttonCount; ++i) {
+  (void)rowIcon;
+  const int rowStep = BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing;
+  const int pageItems = std::max(1, (rect.height - BaseMetrics::values.verticalSpacing) / rowStep);
+  const int safeSelectedIndex = std::max(0, selectedIndex);
+  const int pageStartIndex = (safeSelectedIndex / pageItems) * pageItems;
+
+  for (int i = pageStartIndex; i < buttonCount && i < pageStartIndex + pageItems; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
-                      static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+                      static_cast<int>(i - pageStartIndex) * rowStep;
 
     const bool selected = selectedIndex == i;
 
@@ -735,6 +741,20 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
         tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
     // Invert text when the tile is selected, to contrast with the filled background
     renderer.drawText(UI_10_FONT_ID, textX, textY, label, selectedIndex != i);
+  }
+
+  // Scroll indicator when the menu does not fit (common in landscape).
+  if (buttonCount > pageItems && pageItems > 0) {
+    const int barW = BaseMetrics::values.scrollBarWidth;
+    const int barX = rect.x + rect.width - BaseMetrics::values.scrollBarRightOffset - barW;
+    const int barY = rect.y;
+    const int barH = rect.height;
+    const int thumbH = std::max(10, (barH * pageItems) / buttonCount);
+    const int maxStart = std::max(1, buttonCount - pageItems);
+    const int maxTravel = std::max(1, barH - thumbH);
+    const int clampedStart = std::min(pageStartIndex, maxStart);
+    const int thumbY = barY + (clampedStart * maxTravel) / maxStart;
+    renderer.fillRect(barX, thumbY, barW, thumbH);
   }
 }
 
