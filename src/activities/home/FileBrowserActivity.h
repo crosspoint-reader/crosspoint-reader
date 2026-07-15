@@ -15,8 +15,9 @@
 class FileBrowserActivity final : public Activity {
  public:
   // Books = standard reader browser; PickFirmware = filter to .bin only and return path via ActivityResult;
-  // PickFolder = directories only, with "Move here" / "New folder" rows on top; returns the chosen
-  // directory via FilePathResult (used as the destination picker when moving a file).
+  // PickFolder = same file listing as Books (so folders are distinguishable from books), plus
+  // "Move here" / "New folder" rows on top; returns the chosen directory via FilePathResult
+  // (used as the destination picker when moving a file).
   enum class Mode { Books, PickFirmware, PickFolder };
 
  private:
