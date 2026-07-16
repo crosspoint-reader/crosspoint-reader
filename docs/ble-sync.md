@@ -52,6 +52,25 @@ are released. In normal use this gives the effect of the X4 and companion reader
 staying synchronized at reading boundaries while avoiding an always-on radio
 and requiring no network infrastructure.
 
+### iOS background operation
+
+An iOS client can authorize the X4 once with Apple's
+[AccessorySetupKit](https://developer.apple.com/documentation/accessorysetupkit),
+declare the Core Bluetooth `bluetooth-central` background mode, and opt in to
+Core Bluetooth state preservation and restoration. It can then leave a pending
+connection to the authorized X4 without continuously scanning. When the X4 next
+advertises during one of its short sync windows, iOS can wake the suspended app
+or relaunch it after a system termination, exchange the compact position deltas,
+and suspend it again. The phone can therefore remain locked and put away; the
+reading app does not need to be open in the foreground.
+
+This is a client-platform capability rather than a special protocol message.
+Apple documents the background and restoration lifecycle in
+[Core Bluetooth Background Processing for iOS Apps](https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/CoreBluetooth_concepts/CoreBluetoothBackgroundProcessingForIOSApps/PerformingTasksWhileYourAppIsInTheBackground.html).
+An explicit user force-quit is the exception: iOS does not relaunch a
+force-quit app for Bluetooth work until the user opens it again. "Not open" or
+terminated by iOS is supported; swiped away by the user is not.
+
 ## Security model
 
 The current implementation does not request BLE bonding, authenticated pairing,
