@@ -209,7 +209,7 @@ void Manager::loop() {
   }
   // Lost the phone mid-sync before we finished exchanging.
   if (!connected && g_wasConnected && !g_gotPhoneManifest) {
-    finishWith(Phase::Failed, false, "phone disconnected during sync");
+    finishWith(Phase::Failed, false, "BLE peer disconnected during sync");
     return;
   }
   g_wasConnected = connected;

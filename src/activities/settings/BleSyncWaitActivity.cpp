@@ -53,14 +53,14 @@ void BleSyncWaitActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight}, "Syncing with phone",
-                 nullptr);
+  GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight},
+                 "Syncing with BLE peer", nullptr);
 
   const BleSync::Status s = BLE_SYNC.status();
   char msg[40];
   switch (s.phase) {
     case BleSync::Phase::Advertising:
-      std::snprintf(msg, sizeof(msg), "Connecting to phone\xE2\x80\xA6");
+      std::snprintf(msg, sizeof(msg), "Connecting to BLE peer\xE2\x80\xA6");
       break;
     case BleSync::Phase::Syncing:
       if (s.bookCount > 0)

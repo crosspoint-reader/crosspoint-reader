@@ -186,7 +186,7 @@ void BleSyncTestActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight}, "BLE Sync", nullptr);
 
   const char* status =
-      state_ == State::Connected ? "Phone connected - syncing" : "Broadcasting - open the app and tap Pair";
+      state_ == State::Connected ? "BLE peer connected - syncing" : "Broadcasting - waiting for a compatible client";
   const int lh = renderer.getLineHeight(UI_10_FONT_ID);
   const int cy = screen.y + screen.height / 4;
   renderer.drawCenteredText(UI_10_FONT_ID, cy, status, true);

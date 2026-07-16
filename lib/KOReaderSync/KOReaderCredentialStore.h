@@ -30,7 +30,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   std::string password;
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
-  bool bleSyncEnabled = false;                                      // BLE peer sync with the phone
+  bool bleSyncEnabled = false;                                      // Reading-position sync with a BLE peer
   bool sendMetadata = false;                                        // Send document metadata with progress sync
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
 
@@ -70,7 +70,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   void setMatchMethod(DocumentMatchMethod method);
   DocumentMatchMethod getMatchMethod() const { return matchMethod; }
 
-  // BLE reading-position sync (Bluetooth peer sync with the phone)
+  // BLE reading-position sync with a compatible client
   void setBleSyncEnabled(bool enabled) { bleSyncEnabled = enabled; }
   bool getBleSyncEnabled() const { return bleSyncEnabled; }
 

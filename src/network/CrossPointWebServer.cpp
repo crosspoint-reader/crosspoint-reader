@@ -616,7 +616,7 @@ void CrossPointWebServer::handleDownload() const {
 
 // GET /api/progress?path=<epub> — one book's saved reading position in the same
 // canonical form BLE sync speaks (crengine xpath + 0..1 percentage + title hash).
-// Lets the iOS WiFi sync seed a freshly downloaded book's resume position so it
+// Lets a compatible client seed a freshly downloaded book's resume position so it
 // opens where the X4 left off instead of on page 1. Read-only: reuses
 // BleProgress::getForPath (no renderer). 204 when the book has no saved progress.
 void CrossPointWebServer::handleGetProgress() const {
