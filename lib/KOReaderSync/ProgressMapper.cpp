@@ -709,11 +709,12 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
-  // Progress-based XPath correctly handles both <p> and <li> positions.
-  result.xpath = ChapterXPathResolver::findXPathForProgress(epub, pos.spineIndex, intra);
-  // Fall back to paragraph-index lookup when progress-based resolution fails.
-  if (result.xpath.empty() && pos.hasParagraphIndex && pos.paragraphIndex > 0) {
+  if (pos.hasParagraphIndex && pos.paragraphIndex > 0) {
     result.xpath = ChapterXPathResolver::findXPathForParagraph(epub, pos.spineIndex, pos.paragraphIndex);
+  }
+  // Fall back to progress-based XPath, then synthetic progress mapping.
+  if (result.xpath.empty()) {
+    result.xpath = ChapterXPathResolver::findXPathForProgress(epub, pos.spineIndex, intra);
   }
   if (result.xpath.empty()) {
     result.xpath = generateXPath(epub, pos.spineIndex, intra);

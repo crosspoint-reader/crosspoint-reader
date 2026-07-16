@@ -16,13 +16,15 @@
 #include "fontIds.h"
 
 namespace {
-// Rows 0-4 are always shown. "BLE Sync" (enable toggle) is always at IDX_BLE_SYNC;
+// Rows 0-6 are always shown. "BLE Sync" (enable toggle) is always at IDX_BLE_SYNC;
 // "BLE Pair" appears at IDX_BLE_PAIR only while BLE Sync is enabled.
-constexpr int BASE_ITEMS = 5;
+constexpr int BASE_ITEMS = 7;
 constexpr int IDX_BLE_SYNC = BASE_ITEMS;
 constexpr int IDX_BLE_PAIR = BASE_ITEMS + 1;
-const StrId baseNames[BASE_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+const StrId baseNames[BASE_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,
+                                     StrId::STR_SYNC_SERVER_URL,   StrId::STR_DOCUMENT_MATCHING,
+                                     StrId::STR_SEND_METADATA,     StrId::STR_SYNC_BEHAVIOR,
+                                     StrId::STR_AUTHENTICATE};
 
 int itemCount() { return KOREADER_STORE.getBleSyncEnabled() ? (BASE_ITEMS + 2) : (BASE_ITEMS + 1); }
 
@@ -113,6 +115,19 @@ void KOReaderSettingsActivity::handleSelection() {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (selectedIndex == 4) {
+    // Send Metadata - toggle on/off
+    KOREADER_STORE.setSendMetadata(!KOREADER_STORE.getSendMetadata());
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (selectedIndex == 5) {
+    // Sync behavior - toggle between Ask and Smart
+    const auto current = KOREADER_STORE.getSyncBehavior();
+    const auto newBehavior = (current == KOReaderSyncBehavior::ASK_EVERY_TIME) ? KOReaderSyncBehavior::SMART
+                                                                               : KOReaderSyncBehavior::ASK_EVERY_TIME;
+    KOREADER_STORE.setSyncBehavior(newBehavior);
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (selectedIndex == 6) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -171,6 +186,11 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
           return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME ? std::string(tr(STR_FILENAME))
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
+          return KOREADER_STORE.getSendMetadata() ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
+        } else if (index == 5) {
+          return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? std::string(tr(STR_SMART_SYNC))
+                                                                                 : std::string(tr(STR_ASK_EVERY_TIME));
+        } else if (index == 6) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         } else if (index == IDX_BLE_SYNC) {
           if (!KOREADER_STORE.getBleSyncEnabled()) return std::string("Disabled");

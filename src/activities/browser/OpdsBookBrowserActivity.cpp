@@ -1,11 +1,14 @@
 #include "OpdsBookBrowserActivity.h"
 
+#include <Arduino.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -14,12 +17,15 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
+#include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
-}
+constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
+constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
+}  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   Activity::onEnter();
@@ -193,7 +199,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
-  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(server.url, path);
+  std::string url = UrlUtils::buildUrl(server.url, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
   OpdsParser parser;
   {
@@ -216,13 +222,18 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   searchTemplate = parser.getSearchTemplate();
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
+  const bool feedTruncated = parser.truncated();
   entries = std::move(parser).getEntries();
 
+  entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
   if (!prevUrl.empty()) {
     entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl, ""});
   }
   if (!nextUrl.empty()) {
     entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
+  }
+  if (feedTruncated) {
+    LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
   selectorIndex = 0;
@@ -230,6 +241,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   requestUpdate();
 }
+
+void OpdsBookBrowserActivity::releaseEntries() { std::vector<OpdsEntry>().swap(entries); }
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
@@ -239,7 +252,7 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
-  entries.clear();
+  releaseEntries();
   selectorIndex = 0;
   requestUpdate(true);
   fetchFeed(currentPath);
@@ -253,7 +266,7 @@ void OpdsBookBrowserActivity::navigateBack() {
     navigationHistory.pop_back();
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
-    entries.clear();
+    releaseEntries();
     selectorIndex = 0;
     requestUpdate();
     fetchFeed(currentPath);
@@ -269,16 +282,44 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
+  // no std::string copy. exists()/mkdir() take const char*.
+  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  bool haveFolder = folder[0] != '\0';
+  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
+    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
+    // existing caller checks exists() before mkdir. On real failure, fall back
+    // to SD root so the download is never lost.
+    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
+    haveFolder = false;
+  }
+
+  // downloadToFile() needs a std::string, and titles are unbounded (a fixed
+  // char[] would truncate). Cold path (a multi-second download follows), so one
+  // reserve'd, in-place-appended owning string is the right call.
+  std::string filename;
+  filename.reserve(96);
+  if (haveFolder) filename += folder;
+  filename += '/';
+  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
+  int lastRenderedPercent = -1;
+  unsigned long lastProgressUpdateMs = 0;
   const auto result = HttpDownloader::downloadToFile(
       downloadUrl, filename,
-      [this](const size_t downloaded, const size_t total) {
+      [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
-        requestUpdate(true);
+        const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
+        const unsigned long now = millis();
+        if (percent >= 100 || lastRenderedPercent < 0 ||
+            percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
+            now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
+          lastRenderedPercent = percent;
+          lastProgressUpdateMs = now;
+          requestUpdate(true);
+        }
       },
       nullptr, server.username, server.password);
 
@@ -286,6 +327,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     clearBookCache(filename);
     state = BrowserState::BROWSING;
   } else {
+    LOG_ERR("OPDS", "Download failed: %d", static_cast<int>(result));
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
   }
@@ -340,6 +382,8 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
+  releaseEntries();
+  selectorIndex = 0;
   requestUpdate(true);
   fetchFeed(url);
 }

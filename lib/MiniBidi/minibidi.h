@@ -5,8 +5,10 @@
  * minibidi.h — standalone header for ESP32C3 BiDi calculations
  *
  * Derived from [mintty](https://github.com/mintty/mintty/) (Thomas Wolff, MIT licence).
- * Stripped of: Arabic shaping, box-drawing mirror, terminal dependencies,
- * GCC nested functions, VLAs, and non-Hebrew/English Unicode data.
+ * Includes: UAX#9 bidi (do_bidi) and Arabic contextual shaping (do_shape),
+ * both ported from mintty src/minibidi.c (Ahmad Khalifa, Thomas Wolff).
+ * Stripped of: box-drawing mirror, terminal dependencies, GCC nested
+ * functions, VLAs, and Unicode data for scripts CrossPoint doesn't render.
  */
 
 #include <stdbool.h>
@@ -34,13 +36,18 @@ typedef uint32_t ucschar; /* Unicode codepoint; BMP-only content fits uint16_t
 #define BIDI_MAX_LINE 128
 
 /* ── bidi_char ───────────────────────────────────────────────────────── */
-/* origwc: the codepoint as it came from the epub text stream
-   wc:     working codepoint (may be replaced by mirrored form after do_bidi)
-   index:  original logical position, so the caller can reorder glyphs */
+/* origwc:  the codepoint as it came from the epub text stream
+   wc:      working codepoint (may be replaced by mirrored form after
+            do_bidi, or by an Arabic contextual form after do_shape)
+   index:   original logical position, so the caller can reorder glyphs
+   joiners: ZWJ/ZWNJ context for Arabic shaping, mintty layout:
+            low nibble  = joiners that logically FOLLOW this character,
+            high nibble = joiners that logically PRECEDE this character */
 typedef struct {
   ucschar origwc;
   ucschar wc;
   uint16_t index;
+  uint8_t joiners;
 } bidi_char;
 
 /* ── Bidi character classes (UAX #9) ────────────────────────────────── */
@@ -71,6 +78,20 @@ enum {
   PDI, /* Pop Directional Isolate */
 };
 
+/* ── Arabic joining formatter flags (bidi_char.joiners nibbles) ─────── */
+/* Values match mintty's minibidi.h: ZWNJ 0x01, ZWJ 0x02.  do_shape()
+   compares nibble values directly, so these must not be changed. */
+enum {
+  ZWNJ = 0x01, /* U+200C ZERO WIDTH NON-JOINER */
+  ZWJ = 0x02,  /* U+200D ZERO WIDTH JOINER */
+};
+
+/* Sentinel written by do_shape() over the Alef absorbed into a Lam-Alef
+   ligature.  Callers must filter it out when emitting shaped text.
+   (Upstream mintty writes a space instead — a terminal must keep the cell;
+   a proportional-text renderer must drop the character entirely.) */
+#define LIGATURE_PLACEHOLDER 0xFFFFu
+
 /* ── Public API ──────────────────────────────────────────────────────── */
 
 /*
@@ -93,6 +114,32 @@ bool is_rtl_class(uchar bc);
  *   If no mirror exists, returns ch unchanged.
  */
 ucschar mirror(ucschar ch);
+
+/*
+ * do_shape(line, to, count)
+ *
+ *   Applies Arabic contextual shaping (and Lam-Alef ligation) to
+ *   `line[0..count-1]`, writing the result to `to[0..count-1]`.
+ *
+ *   MUST be called AFTER do_bidi(): the algorithm resolves joining from
+ *   VISUAL adjacency (line[i-1] is the visually-left neighbour, line[i+1]
+ *   the visually-right one), exactly like upstream mintty.
+ *
+ *   line:  visual-order input; the joiners field must be populated by the
+ *          caller (in logical order, before do_bidi) for ZWJ/ZWNJ support
+ *   to:    output buffer, same size as line; non-Arabic entries are copied
+ *          through unchanged.  An Alef absorbed by a Lam-Alef ligature is
+ *          replaced with LIGATURE_PLACEHOLDER — filter it on emission.
+ *   count: number of characters (≤ BIDI_MAX_LINE)
+ *
+ *   Returns 1.
+ *
+ *   Ported from mintty src/minibidi.c (Ahmad Khalifa, Thomas Wolff,
+ *   MIT licence), https://github.com/mintty/mintty — with CrossPoint
+ *   extensions for Perso-Arabic letters and in-stream diacritics, see
+ *   minibidi.c for details.
+ */
+int do_shape(bidi_char* line, bidi_char* to, int count);
 
 /*
  * do_bidi(autodir, paragraphLevel, line, count)

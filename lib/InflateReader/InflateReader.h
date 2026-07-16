@@ -13,6 +13,11 @@ enum class InflateStatus {
 
 // Streaming deflate decompressor wrapping uzlib.
 //
+// NOTE: retained ONLY for FontDecompressor's tiny one-shot flash-resident group
+// decompressions, where uzlib's ~1KB state beats tinfl's ~11KB on the
+// OOM-sensitive render path. All throughput paths (zip entries, PNG IDAT) use
+// InflateStream (lib/miniz), which decodes several times faster.
+//
 // Two modes:
 //   init(false)  — one-shot: input is a contiguous buffer, call read() once.
 //   init(true)   — streaming: allocates a 32KB ring buffer for back-references
