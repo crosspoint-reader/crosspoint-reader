@@ -175,9 +175,9 @@ Manager& Manager::instance() {
   return m;
 }
 
-void Manager::start(GfxRenderer& renderer, unsigned long deadlineMs, bool blocking) {
-  if (isActive()) return;
-  if (!KOREADER_STORE.getBleSyncEnabled()) return;
+bool Manager::start(GfxRenderer& renderer, unsigned long deadlineMs, bool blocking) {
+  if (isActive()) return false;
+  if (!KOREADER_STORE.getBleSyncEnabled()) return false;
 
   g_renderer = &renderer;
   g_blocking = blocking;
@@ -195,6 +195,7 @@ void Manager::start(GfxRenderer& renderer, unsigned long deadlineMs, bool blocki
   ble.begin("");  // advertise as x4-<mac>
   g_phase = Phase::Advertising;
   g_dirty = true;
+  return true;
 }
 
 void Manager::stop() {
@@ -238,13 +239,6 @@ void Manager::loop() {
     g_lastActivityMs = millis();
     bump();
   }
-  // Lost the phone mid-sync before we finished exchanging.
-  if (!connected && g_wasConnected && !g_gotPhoneManifest) {
-    finishWith(Phase::Failed, false, "BLE peer disconnected during sync");
-    return;
-  }
-  g_wasConnected = connected;
-
   if (connected && g_renderer) {
     // Send our MANIFEST; resend until the phone replies. The per-book PROGRESS
     // pushes happen only AFTER we receive the phone's manifest (below), which
@@ -258,8 +252,11 @@ void Manager::loop() {
       g_lastManifestMs = millis();
       g_lastActivityMs = millis();
     }
+  }
 
-    // 3. Drain inbound messages (MANIFEST / PROGRESS / WANT).
+  // Drain inbound messages even after the peer disconnects: the final write
+  // and the disconnect callback can arrive before this main-loop task runs.
+  if (g_renderer) {
     proto::ParsedMessage m;
     while (ble.takeReceivedMessage(m)) {
       g_lastActivityMs = millis();
@@ -320,10 +317,17 @@ void Manager::loop() {
         for (const auto& k : m.wantKeys) pushProgressFor(k);
       }
     }
-
-    // Resend any PROGRESS the phone hasn't ACKed yet (RF drop / subscribe race).
-    resendUnackedPushes();
   }
+
+  if (connected) resendUnackedPushes();
+
+  // Only decide that a disconnect failed after consuming everything received
+  // before it. A complete final manifest or PROGRESS must not be discarded.
+  if (!connected && g_wasConnected && !g_phoneManifestComplete) {
+    finishWith(Phase::Failed, false, "BLE peer disconnected during sync");
+    return;
+  }
+  g_wasConnected = connected;
 
   // Settle: both manifests fully exchanged (phone's ended with more=false) and
   // the line has gone quiet → done.
@@ -360,7 +364,7 @@ const std::string& Manager::lastError() const { return g_error; }
 
 bool shouldSyncBeforeOpen() {
   if (!KOREADER_STORE.getBleSyncEnabled()) return false;
-  if (Manager::instance().isActive()) return false;  // a sync is already running (e.g. boot bg)
+  if (Manager::instance().isActive()) return true;  // keep the book behind the wait until this run settles
   const unsigned long last = Manager::instance().lastSuccessMs();
   if (last == 0) return true;            // never synced this boot → sync now
   return (millis() - last) >= kFreshMs;  // stale → sync; super-recent → skip

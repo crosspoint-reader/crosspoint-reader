@@ -3,9 +3,9 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <cstdio>
 #include <cstring>
 
-#include "BleSyncTestActivity.h"
 #include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -143,6 +143,8 @@ void KOReaderSettingsActivity::handleSelection() {
       // Kick a BACKGROUND reconcile immediately (no reboot). The small top-left
       // indicator on this page reports progress; no full-screen takeover.
       BLE_SYNC.start(renderer, /*deadlineMs=*/25000, /*blocking=*/false);
+    } else {
+      BLE_SYNC.stop();
     }
     requestUpdate();
   } else if (selectedIndex == IDX_BLE_PAIR) {
@@ -191,10 +193,13 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
         } else if (index == 6) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         } else if (index == IDX_BLE_SYNC) {
-          if (!KOREADER_STORE.getBleSyncEnabled()) return std::string("Disabled");
+          if (!KOREADER_STORE.getBleSyncEnabled()) return std::string(tr(STR_DISABLED));
           // Surface the last sync error here (PROTOCOL-v2.md §5 — details in settings).
           const std::string& err = BLE_SYNC.lastError();
-          return err.empty() ? std::string("Enabled") : std::string("Enabled - ") + err;
+          if (err.empty()) return std::string(tr(STR_ENABLED));
+          char status[96];
+          std::snprintf(status, sizeof(status), tr(STR_ENABLED_ERROR_FORMAT), err.c_str());
+          return std::string(status);
         } else if (index == IDX_BLE_PAIR) {
           return std::string("");
         }

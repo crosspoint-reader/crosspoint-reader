@@ -91,24 +91,23 @@ struct BleSyncServiceImpl {
       log("inbound: unparseable payload dropped");
       return;
     }
-    if (m.protocolVersion > proto::kProtocolVersion) {
-      log("inbound: newer protocolVersion, dropped: " + m.type);
-      return;
-    }
     // BLE clock sync: advance our RTC-less clock and persisted floor whenever
     // the peer knows a later wall time. This also repairs time lost in deep sleep.
     const int64_t currentTime = static_cast<int64_t>(time(nullptr));
-    if (m.now > 1000000000 && m.now > currentTime) {
+    const bool clockWasUnset = currentTime <= BleClock::kValidFrom;
+    if (m.now > BleClock::kValidFrom && m.now <= BleClock::kValidUntil && m.now > currentTime) {
       struct timeval tv = {static_cast<time_t>(m.now), 0};
-      settimeofday(&tv, nullptr);
-      BleClock::writeFloor(m.now);  // v3: remember it across the next deep-sleep reset
-      log("clock advanced from BLE peer");
-      // Positions read before the clock arrived carry an explicit 0 stamp
-      // and would lose newest-wins forever. Stamp them "now" BEFORE this
-      // session reconciles, so the phone sees them as fresh.
-      const size_t fixed = BleProgress::backfillUnclockedTimestamps(static_cast<int64_t>(m.now));
-      if (fixed > 0) {
-        log("backfilled " + std::to_string(fixed) + " unclocked progress stamp(s)");
+      if (settimeofday(&tv, nullptr) == 0) {
+        BleClock::writeFloor(m.now);  // remember only an accepted clock
+        log("clock advanced from BLE peer");
+        // Backfill only on the first transition from no wall clock. Routine
+        // post-sleep corrections must not restamp old progress as newly edited.
+        if (clockWasUnset) {
+          const size_t fixed = BleProgress::backfillUnclockedTimestamps(m.now);
+          if (fixed > 0) log("backfilled " + std::to_string(fixed) + " unclocked progress stamp(s)");
+        }
+      } else {
+        log("clock update from BLE peer failed");
       }
     }
     if (m.type == proto::kTypePairAck || m.type == proto::kTypePairHello) {
@@ -189,8 +188,6 @@ class ServerCb : public NimBLEServerCallbacks {
     {
       std::lock_guard<std::mutex> lk(impl_->mtx);
       impl_->connected = false;
-      impl_->rxQueue.clear();  // drop stale frames; next connection starts clean
-      impl_->rxHasProgress = false;
     }
     impl_->log("phone disconnected (reason " + std::to_string(reason) + "); re-advertising");
     // Stay discoverable for the next rendezvous.
@@ -235,6 +232,16 @@ BleSyncService& BleSyncService::instance() {
 void BleSyncService::begin(const std::string& deviceId) {
   if (!impl_) impl_ = new BleSyncServiceImpl();
   if (impl_->running) return;
+
+  // A new manager run is the session boundary. Clear anything the preceding
+  // run deliberately left for its main-loop consumer; disconnect itself must
+  // not clear it because a final write can race that callback.
+  {
+    std::lock_guard<std::mutex> lk(impl_->mtx);
+    impl_->rxQueue.clear();
+    impl_->rxHasProgress = false;
+    impl_->ackCount = 0;
+  }
 
   impl_->deviceId = deviceId.empty() ? deriveDeviceId() : deviceId;
 

@@ -286,16 +286,18 @@ bool BleProgress::applyRemote(const KOReaderProgress& in, const std::string& rem
 
   const SavedProgressPosition sp{in.progress, in.percentage};
   const CrossPointPosition cp = ProgressMapper::toCrossPoint(epub, sp, renderer);
-  if (!EpubReaderUtils::saveProgress(*epub, cp.spineIndex, cp.pageNumber, 0)) {
+  if (!EpubReaderUtils::saveProgress(*epub, cp.spineIndex, cp.pageNumber, cp.totalPages)) {
     LOG_ERR("BleProg", "saveProgress failed");
     return false;
   }
   // The applied position carries the REMOTE's timestamp (saveProgress stamped
   // 'now'; overwrite so a later reconcile sees the true source time).
   writeProgressTime(epub->getCachePath(), in.timestamp);
-  // Tell an open reader on this book to reload the position (main-loop task,
-  // same task as the reconcile pump — plain assignment is safe).
-  APP_STATE.bleAppliedPath = path;
+  // Only a reader already holding this book in RAM needs a reload marker. Other
+  // books will read their newly written progress.bin normally when opened. This
+  // prevents later updates for unrelated books from overwriting the active
+  // book's marker without adding a heap-backed per-book queue on the C3.
+  if (APP_STATE.openEpubPath == path) APP_STATE.bleAppliedPath = path;
   LOG_DBG("BleProg", "applied %.1f%% -> spine=%d page=%d", in.percentage * 100, cp.spineIndex, cp.pageNumber);
   return true;
 }

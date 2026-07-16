@@ -2,6 +2,7 @@
 
 #include <Arduino.h>  // millis
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include <cstdio>
 
@@ -13,7 +14,7 @@
 
 BleSyncWaitActivity::BleSyncWaitActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
                                          unsigned long deadlineMs)
-    : Activity("Syncing", renderer, mappedInput), bookPath_(std::move(bookPath)), deadlineMs_(deadlineMs) {}
+    : Activity(tr(STR_BLE_SYNCING), renderer, mappedInput), bookPath_(std::move(bookPath)), deadlineMs_(deadlineMs) {}
 
 void BleSyncWaitActivity::onEnter() {
   Activity::onEnter();
@@ -54,37 +55,37 @@ void BleSyncWaitActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight},
-                 "Syncing with BLE peer", nullptr);
+                 tr(STR_BLE_SYNCING_WITH_PEER), nullptr);
 
   const BleSync::Status s = BLE_SYNC.status();
   char msg[40];
   switch (s.phase) {
     case BleSync::Phase::Advertising:
-      std::snprintf(msg, sizeof(msg), "Connecting to BLE peer\xE2\x80\xA6");
+      std::snprintf(msg, sizeof(msg), "%s", tr(STR_BLE_CONNECTING_TO_PEER));
       break;
     case BleSync::Phase::Syncing:
       if (s.bookCount > 0)
-        std::snprintf(msg, sizeof(msg), "Syncing %d of %d", s.bookIndex, s.bookCount);
+        std::snprintf(msg, sizeof(msg), tr(STR_BLE_SYNCING_BOOKS_FORMAT), s.bookIndex, s.bookCount);
       else
-        std::snprintf(msg, sizeof(msg), "Syncing\xE2\x80\xA6");
+        std::snprintf(msg, sizeof(msg), "%s", tr(STR_BLE_SYNCING));
       break;
     case BleSync::Phase::Success:
-      std::snprintf(msg, sizeof(msg), "Synced");
+      std::snprintf(msg, sizeof(msg), "%s", tr(STR_BLE_SYNCED));
       break;
     case BleSync::Phase::Failed:
-      std::snprintf(msg, sizeof(msg), "Sync failed");
+      std::snprintf(msg, sizeof(msg), "%s", tr(STR_SYNC_FAILED_MSG));
       break;
     default:
-      std::snprintf(msg, sizeof(msg), "Opening\xE2\x80\xA6");
+      std::snprintf(msg, sizeof(msg), "%s", tr(STR_OPENING));
       break;
   }
 
   const int lh = renderer.getLineHeight(UI_10_FONT_ID);
   const int cy = screen.y + screen.height / 3;
   renderer.drawCenteredText(UI_10_FONT_ID, cy, msg, true);
-  renderer.drawCenteredText(UI_10_FONT_ID, cy + lh * 2, "Press any key to skip", true);
+  renderer.drawCenteredText(UI_10_FONT_ID, cy + lh * 2, tr(STR_PRESS_ANY_KEY_TO_SKIP), true);
 
-  const auto labels = mappedInput.mapLabels("Skip", "Skip", "", "");
+  const auto labels = mappedInput.mapLabels(tr(STR_SKIP), tr(STR_SKIP), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

@@ -1,6 +1,7 @@
 #include "BleSyncIndicator.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 
 #include <cstdio>
 #include <string>
@@ -57,27 +58,27 @@ bool drawIndicator(GfxRenderer& renderer, int headerX, int headerY, int headerW,
   switch (s.phase) {
     case Phase::Advertising:
       ring(renderer, cx, cy, s.spin & 0x03);  // spinning C
-      label = "Sync\xE2\x80\xA6";             // "Sync…"
+      label = tr(STR_BLE_SYNCING);
       break;
     case Phase::Syncing:
       ring(renderer, cx, cy, s.spin & 0x03);
       if (s.bookCount > 0) {
         char b[16];
-        std::snprintf(b, sizeof(b), "Sync %d/%d", s.bookIndex, s.bookCount);
+        std::snprintf(b, sizeof(b), tr(STR_BLE_SYNC_COUNT_FORMAT), s.bookIndex, s.bookCount);
         label = b;
       } else {
-        label = "Sync\xE2\x80\xA6";
+        label = tr(STR_BLE_SYNCING);
       }
       break;
     case Phase::Success:
       ring(renderer, cx, cy, -1);
       checkmark(renderer, cx, cy);
-      label = "Synced";
+      label = tr(STR_BLE_SYNCED);
       break;
     case Phase::Failed:
       ring(renderer, cx, cy, -1);
       cross(renderer, cx, cy);
-      label = "Sync failed";
+      label = tr(STR_SYNC_FAILED_MSG);
       break;
     default:
       return false;

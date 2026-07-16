@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>  // v7 (same as firmware's KOReaderSyncClient)
 #include <esp_random.h>
 
+#include <cmath>
 #include <cstdio>
 #include <ctime>
 
@@ -153,26 +154,61 @@ ParsedMessage parseMessage(const std::string& json) {
   if (doc["dummyPosition"].is<JsonObject>()) {
     m.dummyPercentage = doc["dummyPosition"]["percentage"] | -1.0f;
   }
+  const JsonArray manifestRows = doc["books"].as<JsonArray>();
+  bool manifestRowsValid = !manifestRows.isNull() && manifestRows.size() <= 20;
   // v2 MANIFEST rows.
   m.more = doc["more"] | false;
-  if (doc["books"].is<JsonArray>()) {
-    for (JsonObject o : doc["books"].as<JsonArray>()) {
+  if (manifestRowsValid) {
+    m.books.reserve(manifestRows.size());
+    for (JsonObject o : manifestRows) {
       ManifestEntry e;
       e.titleHash = o["titleHash"] | "";
       e.document = o["document"] | "";
       e.updatedAt = o["updatedAt"] | (int64_t)0;
-      if (!e.titleHash.empty() || !e.document.empty()) m.books.push_back(std::move(e));
+      if ((e.titleHash.empty() && e.document.empty()) || e.updatedAt < 0) {
+        manifestRowsValid = false;
+      } else {
+        m.books.push_back(std::move(e));
+      }
     }
   }
   // v2 WANT keys.
-  if (doc["keys"].is<JsonArray>()) {
-    for (JsonVariant k : doc["keys"].as<JsonArray>()) {
+  const JsonArray wantKeys = doc["keys"].as<JsonArray>();
+  bool wantKeysValid = !wantKeys.isNull() && wantKeys.size() <= 20;
+  if (wantKeysValid) {
+    m.wantKeys.reserve(wantKeys.size());
+    for (JsonVariant k : wantKeys) {
       const std::string s = k | "";
-      if (!s.empty()) m.wantKeys.push_back(s);
+      if (s.empty()) {
+        wantKeysValid = false;
+      } else {
+        m.wantKeys.push_back(s);
+      }
     }
   }
-  // Minimum viable envelope: a type must be present.
-  m.ok = !m.type.empty();
+
+  // BLE writes are an external input boundary. Require the shared envelope and
+  // the fields that make each handled message safe to dispatch.
+  const bool envelopeValid = m.protocolVersion == kProtocolVersion && !m.messageId.empty() && !m.type.empty() &&
+                             !m.source.empty() && !m.deviceId.empty();
+  bool payloadValid = false;
+  if (m.type == kTypePairHello || m.type == kTypePairAck) {
+    payloadValid = true;
+  } else if (m.type == kTypeAck) {
+    payloadValid = !m.ackFor.empty();
+  } else if (m.type == kTypeDummyPosition) {
+    payloadValid = !m.dummyBookId.empty() && std::isfinite(m.dummyPercentage) && m.dummyPercentage >= 0.0f &&
+                   m.dummyPercentage <= 1.0f;
+  } else if (m.type == kTypeProgress) {
+    const bool hasIdentity = !m.document.empty() || !m.titleHash.empty();
+    payloadValid =
+        hasIdentity && std::isfinite(m.percentage) && m.percentage >= 0.0f && m.percentage <= 1.0f && m.updatedAt >= 0;
+  } else if (m.type == kTypeManifest) {
+    payloadValid = manifestRowsValid && doc["more"].is<bool>();
+  } else if (m.type == kTypeWant) {
+    payloadValid = wantKeysValid && !m.wantKeys.empty();
+  }
+  m.ok = envelopeValid && payloadValid;
   return m;
 }
 

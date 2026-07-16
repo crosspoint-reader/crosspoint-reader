@@ -21,7 +21,8 @@
 namespace BleClock {
 
 constexpr char kFloorPath[] = "/.crosspoint/ble-clock.bin";
-constexpr int64_t kValidFrom = 1000000000;  // 2001-09-09; below this = "clock unset"
+constexpr int64_t kValidFrom = 1000000000;   // 2001-09-09; below this = "clock unset"
+constexpr int64_t kValidUntil = 4102444800;  // 2100-01-01; reject poisoned peer clocks beyond this
 
 inline int64_t readFloor() {
   HalFile f;

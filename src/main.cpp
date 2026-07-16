@@ -21,7 +21,6 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #if ENABLE_BLE_SYNC
-#include "activities/settings/BleSyncTestActivity.h"
 #include "ble_sync/BleClock.h"
 #include "ble_sync/BleSyncManager.h"
 #include "ble_sync/BleSyncService.h"
@@ -222,8 +221,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   // this last position. Covers BOTH power-off and auto-sleep (both land here).
   // Blocking, but gives up in ~3s if no phone connects so power-off isn't held.
   if (APP_STATE.blePendingSync) {
-    APP_STATE.blePendingSync = false;
-    BLE_SYNC.start(renderer, /*deadlineMs=*/8000, /*blocking=*/true);
+    // A background run may have started before the reader saved its final page.
+    // Restart it so its manifest and pushes include that final position.
+    BLE_SYNC.stop();
+    if (BLE_SYNC.start(renderer, /*deadlineMs=*/8000, /*blocking=*/true)) APP_STATE.blePendingSync = false;
     const unsigned long syncStart = millis();
     // Sync SILENTLY — no display writes here: the sleep-screen / cover frame is
     // being drawn around this point and an extra displayBuffer corrupts its
@@ -621,8 +622,7 @@ void loop() {
   // on the library; it runs to its deadline (no early give-up), so a phone that
   // takes a few seconds to reconnect still gets the page. Zero cost when off.
   if (APP_STATE.blePendingSync && !activityManager.isReaderActivity()) {
-    APP_STATE.blePendingSync = false;
-    BLE_SYNC.start(renderer, /*deadlineMs=*/20000, /*blocking=*/false);
+    if (BLE_SYNC.start(renderer, /*deadlineMs=*/20000, /*blocking=*/false)) APP_STATE.blePendingSync = false;
   }
 #endif
 

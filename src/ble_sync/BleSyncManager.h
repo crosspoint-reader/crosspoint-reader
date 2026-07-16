@@ -43,7 +43,9 @@ class Manager {
   // Begin a background reconcile. `deadlineMs` bounds the whole run; `blocking`
   // marks a book-open/boot-to-book wait (affects only how the UI treats it).
   // No-op if a sync is already active or BLE sync is disabled.
-  void start(GfxRenderer& renderer, unsigned long deadlineMs, bool blocking);
+  // Returns true only when a fresh run was accepted. Callers that queue sync
+  // work must not consume their request when this returns false.
+  bool start(GfxRenderer& renderer, unsigned long deadlineMs, bool blocking);
 
   // Pump the state machine. Cheap no-op when idle. Call every main-loop iteration.
   void loop();
@@ -70,8 +72,8 @@ class Manager {
 };
 
 // True when opening a book should first run a BLOCKING sync (PROTOCOL-v2.md §5):
-// BLE Sync on, no reconcile already running, and no successful sync very recently
-// (the "super recent" freshness guard — skip the wait right after a boot sync).
+// BLE Sync on and either a reconcile is already active (wait for it) or no
+// successful sync completed very recently.
 bool shouldSyncBeforeOpen();
 
 }  // namespace BleSync
