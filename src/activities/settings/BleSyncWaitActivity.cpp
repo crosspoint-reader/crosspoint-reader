@@ -11,8 +11,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-BleSyncWaitActivity::BleSyncWaitActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                         std::string bookPath, unsigned long deadlineMs)
+BleSyncWaitActivity::BleSyncWaitActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
+                                         unsigned long deadlineMs)
     : Activity("Syncing", renderer, mappedInput), bookPath_(std::move(bookPath)), deadlineMs_(deadlineMs) {}
 
 void BleSyncWaitActivity::onEnter() {
@@ -53,8 +53,8 @@ void BleSyncWaitActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight},
-                 "Syncing with phone", nullptr);
+  GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight}, "Syncing with phone",
+                 nullptr);
 
   const BleSync::Status s = BLE_SYNC.status();
   char msg[40];

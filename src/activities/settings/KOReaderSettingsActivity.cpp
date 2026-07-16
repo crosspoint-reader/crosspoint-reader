@@ -21,9 +21,8 @@ namespace {
 constexpr int BASE_ITEMS = 7;
 constexpr int IDX_BLE_SYNC = BASE_ITEMS;
 constexpr int IDX_BLE_PAIR = BASE_ITEMS + 1;
-const StrId baseNames[BASE_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,
-                                     StrId::STR_SYNC_SERVER_URL,   StrId::STR_DOCUMENT_MATCHING,
-                                     StrId::STR_SEND_METADATA,     StrId::STR_SYNC_BEHAVIOR,
+const StrId baseNames[BASE_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL,
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,
                                      StrId::STR_AUTHENTICATE};
 
 int itemCount() { return KOREADER_STORE.getBleSyncEnabled() ? (BASE_ITEMS + 2) : (BASE_ITEMS + 1); }
@@ -169,9 +168,8 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, itemCount(),
-      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(nameForIndex(index))); }, nullptr,
-      nullptr,
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, itemCount(), static_cast<int>(selectedIndex),
+      [](int index) { return std::string(I18N.get(nameForIndex(index))); }, nullptr, nullptr,
       [this](int index) {
         // Draw status for each setting
         if (index == 0) {

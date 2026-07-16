@@ -28,8 +28,7 @@ bool getLocal(KOReaderProgress& out, std::string& titleHash, const std::string& 
 
 // Like getLocal but for an arbitrary book path (v2 multi-book). False if the
 // book can't be loaded or has no saved progress yet.
-bool getForPath(const std::string& path, KOReaderProgress& out, std::string& titleHash,
-                const std::string& deviceId);
+bool getForPath(const std::string& path, KOReaderProgress& out, std::string& titleHash, const std::string& deviceId);
 
 // v2: this device's manifest — most-recent-first, capped at maxN. Built from
 // RECENT_BOOKS (title_hash from cached title/author, no epub load) + each book's

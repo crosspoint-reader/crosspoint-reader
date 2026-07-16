@@ -126,8 +126,7 @@ void BleSyncTestActivity::loop() {
     }
 
     // 2. Send our MANIFEST; resend until the phone replies with its own.
-    const bool manifestDue =
-        !sentManifest_ || (!gotPhoneManifest_ && millis() - lastManifestMs_ > kResendMs);
+    const bool manifestDue = !sentManifest_ || (!gotPhoneManifest_ && millis() - lastManifestMs_ > kResendMs);
     if (manifestDue) {
       ble.sendManifest(BleProgress::buildLocalManifest(kMaxManifest), /*more=*/false);
       sentManifest_ = true;
@@ -187,11 +186,10 @@ void BleSyncTestActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight},
-                 "BLE Sync", nullptr);
+  GUI.drawHeader(renderer, Rect{screen.x, metrics.topPadding, screen.width, metrics.headerHeight}, "BLE Sync", nullptr);
 
-  const char* status = state_ == State::Connected ? "Phone connected - syncing"
-                                                  : "Broadcasting - open the app and tap Pair";
+  const char* status =
+      state_ == State::Connected ? "Phone connected - syncing" : "Broadcasting - open the app and tap Pair";
   const int lh = renderer.getLineHeight(UI_10_FONT_ID);
   const int cy = screen.y + screen.height / 4;
   renderer.drawCenteredText(UI_10_FONT_ID, cy, status, true);

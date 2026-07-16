@@ -19,8 +19,7 @@ class BleSyncTestActivity : public Activity {
  public:
   // autoExitMs > 0: auto-finish after that many ms (or shortly after the sync
   // settles) — used by the boot/exit auto-triggers. 0 = stay until Back.
-  explicit BleSyncTestActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                               unsigned long autoExitMs = 0);
+  explicit BleSyncTestActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, unsigned long autoExitMs = 0);
 
   void onEnter() override;
   void onExit() override;
@@ -32,12 +31,12 @@ class BleSyncTestActivity : public Activity {
   enum class State { Advertising, Connected };
 
   void startAdvertising();
-  void armReconcile();                                    // reset per-connection state
-  void pushProgressFor(const std::string& titleHash);     // send one book's PROGRESS (deduped)
+  void armReconcile();                                 // reset per-connection state
+  void pushProgressFor(const std::string& titleHash);  // send one book's PROGRESS (deduped)
 
   State state_ = State::Advertising;
 
-  bool everConnected_ = false;     // a phone connected at least once this screen session
+  bool everConnected_ = false;  // a phone connected at least once this screen session
 
   // Reconcile state (re-armed on each connection).
   bool pushedOpen_ = false;        // v1 fast-path push of the open book done

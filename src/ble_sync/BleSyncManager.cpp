@@ -220,8 +220,7 @@ void Manager::loop() {
     // means the phone has already subscribed — so a single send is reliable. (An
     // earlier one-shot "fast-path" push of the open book raced the subscription
     // and, worse, marked the book pushed so the reliable path was deduped away.)
-    const bool manifestDue =
-        !g_sentManifest || (!g_gotPhoneManifest && millis() - g_lastManifestMs > kResendMs);
+    const bool manifestDue = !g_sentManifest || (!g_gotPhoneManifest && millis() - g_lastManifestMs > kResendMs);
     if (manifestDue) {
       ble.sendManifest(BleProgress::buildLocalManifest(kMaxManifest), /*more=*/false);
       g_sentManifest = true;
@@ -295,8 +294,7 @@ void Manager::loop() {
 
   // Settle: both manifests fully exchanged (phone's ended with more=false) and
   // the line has gone quiet → done.
-  if (g_sentManifest && g_gotPhoneManifest && g_phoneManifestComplete &&
-      millis() - g_lastActivityMs > kSettleMs) {
+  if (g_sentManifest && g_gotPhoneManifest && g_phoneManifestComplete && millis() - g_lastActivityMs > kSettleMs) {
     finishWith(Phase::Success, true, "");
   }
 }
@@ -331,8 +329,8 @@ bool shouldSyncBeforeOpen() {
   if (!KOREADER_STORE.getBleSyncEnabled()) return false;
   if (Manager::instance().isActive()) return false;  // a sync is already running (e.g. boot bg)
   const unsigned long last = Manager::instance().lastSuccessMs();
-  if (last == 0) return true;                          // never synced this boot → sync now
-  return (millis() - last) >= kFreshMs;                // stale → sync; super-recent → skip
+  if (last == 0) return true;            // never synced this boot → sync now
+  return (millis() - last) >= kFreshMs;  // stale → sync; super-recent → skip
 }
 
 }  // namespace BleSync

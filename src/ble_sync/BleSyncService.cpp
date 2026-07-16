@@ -6,8 +6,8 @@
 
 #if ENABLE_BLE_SYNC
 
-#include <Logging.h>        // firmware LOG_DBG / LOG_ERR
-#include <NimBLEDevice.h>   // pin: h2zero/NimBLE-Arduino ^2.x  (API differs from 1.x!)
+#include <Logging.h>       // firmware LOG_DBG / LOG_ERR
+#include <NimBLEDevice.h>  // pin: h2zero/NimBLE-Arduino ^2.x  (API differs from 1.x!)
 #include <esp_mac.h>
 #include <sys/time.h>
 
@@ -49,7 +49,7 @@ struct BleSyncServiceImpl {
   float rxPercentage = -1.0f;
   int64_t rxUpdatedAt = 0;
   bool rxHasProgress = false;
-  int ackCount = 0;  // v3: phone ACKs this connection (reset on connect) — resend gating
+  int ackCount = 0;                          // v3: phone ACKs this connection (reset on connect) — resend gating
   std::deque<proto::ParsedMessage> rxQueue;  // v2: FIFO of app messages for the reconcile driver
   BleSyncService::LogHandler logHandler;
 
@@ -125,8 +125,7 @@ struct BleSyncServiceImpl {
       log("phone ACK for " + m.ackFor);
     } else if (m.type == proto::kTypeDummyPosition) {
       char buf[96];
-      std::snprintf(buf, sizeof(buf), "DUMMY_POSITION book=%s pct=%.3f",
-                    m.dummyBookId.c_str(), m.dummyPercentage);
+      std::snprintf(buf, sizeof(buf), "DUMMY_POSITION book=%s pct=%.3f", m.dummyBookId.c_str(), m.dummyPercentage);
       {
         std::lock_guard<std::mutex> lk(mtx);
         lastPhoneResponse = buf;
@@ -188,7 +187,7 @@ class ServerCb : public NimBLEServerCallbacks {
     {
       std::lock_guard<std::mutex> lk(impl_->mtx);
       impl_->connected = false;
-      impl_->rxQueue.clear();      // drop stale frames; next connection starts clean
+      impl_->rxQueue.clear();  // drop stale frames; next connection starts clean
       impl_->rxHasProgress = false;
     }
     impl_->log("phone disconnected (reason " + std::to_string(reason) + "); re-advertising");
@@ -419,7 +418,10 @@ void BleSyncService::setLogHandler(LogHandler handler) {
 #else  // ENABLE_BLE_SYNC == 0 — compile to no-ops, no NimBLE dependency.
 
 struct BleSyncServiceImpl {};
-BleSyncService& BleSyncService::instance() { static BleSyncService s; return s; }
+BleSyncService& BleSyncService::instance() {
+  static BleSyncService s;
+  return s;
+}
 void BleSyncService::begin(const std::string&) {}
 void BleSyncService::stop() {}
 bool BleSyncService::isRunning() const { return false; }
@@ -430,9 +432,7 @@ bool BleSyncService::isConnected() const { return false; }
 void BleSyncService::sendHasUpdate() {}
 void BleSyncService::sendNeedsUpdate() {}
 void BleSyncService::sendProgress(const std::string&, const std::string&, const std::string&, float, int64_t) {}
-bool BleSyncService::takeReceivedProgress(std::string&, std::string&, std::string&, float&, int64_t&) {
-  return false;
-}
+bool BleSyncService::takeReceivedProgress(std::string&, std::string&, std::string&, float&, int64_t&) { return false; }
 void BleSyncService::sendManifest(const std::vector<BleSyncProtocol::ManifestEntry>&, bool) {}
 void BleSyncService::sendWant(const std::vector<std::string>&) {}
 void BleSyncService::sendMessage(const std::string&) {}

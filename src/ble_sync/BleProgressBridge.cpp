@@ -11,11 +11,11 @@
 #include <functional>
 #include <memory>
 
-#include "CrossPointState.h"                 // APP_STATE.openEpubPath
-#include "KOReaderCredentialStore.h"         // KOREADER_STORE match method
-#include "KOReaderDocumentId.h"              // document hash
-#include "ProgressMapper.h"                  // toSavedProgress / toCrossPoint
-#include "RecentBooksStore.h"                // RECENT_BOOKS — the v2 book set
+#include "CrossPointState.h"                    // APP_STATE.openEpubPath
+#include "KOReaderCredentialStore.h"            // KOREADER_STORE match method
+#include "KOReaderDocumentId.h"                 // document hash
+#include "ProgressMapper.h"                     // toSavedProgress / toCrossPoint
+#include "RecentBooksStore.h"                   // RECENT_BOOKS — the v2 book set
 #include "activities/reader/EpubReaderUtils.h"  // saveProgress
 
 namespace {
@@ -238,8 +238,7 @@ size_t BleProgress::backfillUnclockedTimestamps(int64_t now) {
     HalFile probe;
     if (!Storage.openFileForRead("BleProg", cachePath + "/progress-time.bin", probe)) continue;
     uint8_t d[8] = {0};
-    const bool isZero = (probe.read(d, sizeof(d)) == 8) &&
-                        !(d[0] | d[1] | d[2] | d[3] | d[4] | d[5] | d[6] | d[7]);
+    const bool isZero = (probe.read(d, sizeof(d)) == 8) && !(d[0] | d[1] | d[2] | d[3] | d[4] | d[5] | d[6] | d[7]);
     if (!isZero) continue;
     writeProgressTime(cachePath, now);
     fixed++;
@@ -250,16 +249,15 @@ size_t BleProgress::backfillUnclockedTimestamps(int64_t now) {
   return fixed;
 }
 
-bool BleProgress::applyRemote(const KOReaderProgress& in, const std::string& remoteTitleHash,
-                              GfxRenderer& renderer) {
+bool BleProgress::applyRemote(const KOReaderProgress& in, const std::string& remoteTitleHash, GfxRenderer& renderer) {
   // Resolve the target book across RECENT_BOOKS (v2: not just the open book).
   // Prefer the currently/last-open book when it matches (cheapest, no scan).
   std::string path;
   const std::string openPath = APP_STATE.openEpubPath;
   if (!openPath.empty()) {
     if (auto openEpub = loadEpub(openPath)) {
-      const bool openMatch = (docHash(openPath) == in.document) ||
-                             (!remoteTitleHash.empty() && remoteTitleHash == titleHashOf(openEpub));
+      const bool openMatch =
+          (docHash(openPath) == in.document) || (!remoteTitleHash.empty() && remoteTitleHash == titleHashOf(openEpub));
       if (openMatch) path = openPath;
     }
   }

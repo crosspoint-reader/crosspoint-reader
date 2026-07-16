@@ -637,11 +637,11 @@ void CrossPointWebServer::handleGetProgress() const {
   }
 
   JsonDocument doc;
-  doc["document"] = prog.document.c_str();    // KOReader partial-MD5 (path identity)
-  doc["progress"] = prog.progress.c_str();    // crengine xpath
-  doc["percentage"] = prog.percentage;        // 0.0–1.0 whole-book
-  doc["timestamp"] = prog.timestamp;          // last-save unix seconds (0 = unclocked)
-  doc["titleHash"] = titleHash.c_str();       // MD5(norm title 0x1F author)
+  doc["document"] = prog.document.c_str();  // KOReader partial-MD5 (path identity)
+  doc["progress"] = prog.progress.c_str();  // crengine xpath
+  doc["percentage"] = prog.percentage;      // 0.0–1.0 whole-book
+  doc["timestamp"] = prog.timestamp;        // last-save unix seconds (0 = unclocked)
+  doc["titleHash"] = titleHash.c_str();     // MD5(norm title 0x1F author)
   String json;
   serializeJson(doc, json);
   server->send(200, "application/json", json);

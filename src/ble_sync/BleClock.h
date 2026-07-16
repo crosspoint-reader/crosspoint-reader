@@ -13,10 +13,10 @@
 #pragma once
 
 #include <HalStorage.h>
+#include <sys/time.h>
 
 #include <cstdint>
 #include <ctime>
-#include <sys/time.h>
 
 namespace BleClock {
 

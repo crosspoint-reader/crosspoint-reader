@@ -12,11 +12,11 @@ namespace {
 // Battery in the header: rect at (…, header.y + 14), 15x12, drawn with an
 // internal +6 → its icon centerline sits at header.y + 20. Match that band so the
 // sync glyph lines up with the battery and is the same visual size.
-constexpr int kBattTopOffset = 14;  // theme's battery rect top within the header
+constexpr int kBattTopOffset = 14;                // theme's battery rect top within the header
 constexpr int kBattCenterY = kBattTopOffset + 6;  // battery icon centerline (from header.y)
-constexpr int kLeftPad = 8;         // left inset (mirrors the battery's right inset)
-constexpr int kR = 7;               // glyph radius (~battery 15x12)
-constexpr int kStroke = 2;          // ring/line thickness
+constexpr int kLeftPad = 8;                       // left inset (mirrors the battery's right inset)
+constexpr int kR = 7;                             // glyph radius (~battery 15x12)
+constexpr int kStroke = 2;                        // ring/line thickness
 
 // The four quadrants as (xDir, yDir) sign pairs, in clockwise order starting
 // top-right. Omitting one gives a rotating "C" spinner.
@@ -57,7 +57,7 @@ bool drawIndicator(GfxRenderer& renderer, int headerX, int headerY, int headerW,
   switch (s.phase) {
     case Phase::Advertising:
       ring(renderer, cx, cy, s.spin & 0x03);  // spinning C
-      label = "Sync\xE2\x80\xA6";              // "Sync…"
+      label = "Sync\xE2\x80\xA6";             // "Sync…"
       break;
     case Phase::Syncing:
       ring(renderer, cx, cy, s.spin & 0x03);

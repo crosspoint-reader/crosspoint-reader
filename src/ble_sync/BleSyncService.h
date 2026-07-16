@@ -52,8 +52,8 @@ class BleSyncService {
   void sendProgress(const std::string& document, const std::string& titleHash, const std::string& xpointer,
                     float percentage, int64_t updatedAt);
   // If the phone sent a PROGRESS since the last call, fill args + return true (consumes it).
-  bool takeReceivedProgress(std::string& document, std::string& titleHash, std::string& xpointer,
-                            float& percentage, int64_t& updatedAt);
+  bool takeReceivedProgress(std::string& document, std::string& titleHash, std::string& xpointer, float& percentage,
+                            int64_t& updatedAt);
 
   // v2: send this device's book manifest (built with our deviceId + current clock).
   void sendManifest(const std::vector<BleSyncProtocol::ManifestEntry>& books, bool more);
@@ -86,5 +86,5 @@ class BleSyncService {
   BleSyncService(const BleSyncService&) = delete;
   BleSyncService& operator=(const BleSyncService&) = delete;
 
-  BleSyncServiceImpl* impl_ = nullptr;   // NimBLE handles hidden from callers
+  BleSyncServiceImpl* impl_ = nullptr;  // NimBLE handles hidden from callers
 };
