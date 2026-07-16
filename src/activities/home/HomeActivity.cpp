@@ -7,6 +7,8 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
+
+#include "ble_sync/BleSyncIndicator.h"
 #include <Xtc.h>
 
 #include <cstring>
@@ -217,6 +219,7 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
                  metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+  BleSync::drawIndicator(renderer, 0, metrics.topPadding, pageWidth, metrics.homeTopPadding);  // top-left sync (no-op when idle)
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait

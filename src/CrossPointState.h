@@ -16,6 +16,14 @@ class CrossPointState {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
+  // Runtime-only (never persisted): set when the reader exits a book with BLE Sync
+  // on, consumed by the main loop to launch a book-exit sync. Zero cost when off.
+  bool blePendingSync = false;
+  // Runtime-only: book path whose progress.bin a BLE reconcile just overwrote
+  // with the phone's newer position. Consumed by EpubReaderActivity::loop() to
+  // jump the open reader there — otherwise the stale in-RAM position survives
+  // and the exit save clobbers the applied one with a fresh timestamp.
+  std::string bleAppliedPath;
 
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.

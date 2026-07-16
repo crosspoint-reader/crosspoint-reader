@@ -5,17 +5,32 @@
 
 #include <cstring>
 
+#include "BleSyncTestActivity.h"
 #include "KOReaderAuthActivity.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "ble_sync/BleSyncIndicator.h"
+#include "ble_sync/BleSyncManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 5;
-const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
+// Rows 0-4 are always shown. "BLE Sync" (enable toggle) is always at IDX_BLE_SYNC;
+// "BLE Pair" appears at IDX_BLE_PAIR only while BLE Sync is enabled.
+constexpr int BASE_ITEMS = 5;
+constexpr int IDX_BLE_SYNC = BASE_ITEMS;
+constexpr int IDX_BLE_PAIR = BASE_ITEMS + 1;
+const StrId baseNames[BASE_ITEMS] = {StrId::STR_USERNAME, StrId::STR_PASSWORD, StrId::STR_SYNC_SERVER_URL,
                                      StrId::STR_DOCUMENT_MATCHING, StrId::STR_AUTHENTICATE};
+
+int itemCount() { return KOREADER_STORE.getBleSyncEnabled() ? (BASE_ITEMS + 2) : (BASE_ITEMS + 1); }
+
+StrId nameForIndex(int i) {
+  if (i < BASE_ITEMS) return baseNames[i];
+  if (i == IDX_BLE_SYNC) return StrId::STR_BLE_SYNC;
+  return StrId::STR_BLE_PAIR;
+}
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -40,12 +55,12 @@ void KOReaderSettingsActivity::loop() {
 
   // Handle navigation
   buttonNavigator.onNext([this] {
-    selectedIndex = (selectedIndex + 1) % MENU_ITEMS;
+    selectedIndex = (selectedIndex + 1) % itemCount();
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
-    selectedIndex = (selectedIndex + MENU_ITEMS - 1) % MENU_ITEMS;
+    selectedIndex = (selectedIndex + itemCount() - 1) % itemCount();
     requestUpdate();
   });
 }
@@ -104,6 +119,24 @@ void KOReaderSettingsActivity::handleSelection() {
       return;
     }
     startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+  } else if (selectedIndex == IDX_BLE_SYNC) {
+    // Toggle BLE Sync on/off. On ENABLE, open the sync screen immediately so the
+    // first sync happens now (no reboot needed); the boot hook re-syncs after.
+    const bool nowEnabled = !KOREADER_STORE.getBleSyncEnabled();
+    KOREADER_STORE.setBleSyncEnabled(nowEnabled);
+    KOREADER_STORE.saveToFile();
+    if (nowEnabled) {
+      // Kick a BACKGROUND reconcile immediately (no reboot). The small top-left
+      // indicator on this page reports progress; no full-screen takeover.
+      BLE_SYNC.start(renderer, /*deadlineMs=*/25000, /*blocking=*/false);
+    }
+    requestUpdate();
+  } else if (selectedIndex == IDX_BLE_PAIR) {
+    // Advertise for phone pairing: kick a background reconcile (the indicator on
+    // this page shows progress). Same path as enable — one code path, no
+    // full-screen takeover.
+    BLE_SYNC.start(renderer, /*deadlineMs=*/25000, /*blocking=*/false);
+    requestUpdate();
   }
 }
 
@@ -115,12 +148,14 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KOREADER_SYNC));
+  // Live sync indicator (top-left) while a reconcile started from this page runs.
+  BleSync::drawIndicator(renderer, 0, metrics.topPadding, pageWidth, metrics.headerHeight);
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEMS),
-      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(menuNames[index])); }, nullptr,
+      renderer, Rect{0, contentTop, pageWidth, contentHeight}, itemCount(),
+      static_cast<int>(selectedIndex), [](int index) { return std::string(I18N.get(nameForIndex(index))); }, nullptr,
       nullptr,
       [this](int index) {
         // Draw status for each setting
@@ -137,6 +172,13 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
                                                                                   : std::string(tr(STR_BINARY));
         } else if (index == 4) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+        } else if (index == IDX_BLE_SYNC) {
+          if (!KOREADER_STORE.getBleSyncEnabled()) return std::string("Disabled");
+          // Surface the last sync error here (PROTOCOL-v2.md §5 — details in settings).
+          const std::string& err = BLE_SYNC.lastError();
+          return err.empty() ? std::string("Enabled") : std::string("Enabled - ") + err;
+        } else if (index == IDX_BLE_PAIR) {
+          return std::string("");
         }
         return std::string(tr(STR_NOT_SET));
       },

@@ -20,6 +20,9 @@
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#if ENABLE_BLE_SYNC
+#include "ble_sync/BleSyncManager.h"
+#endif
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
@@ -199,6 +202,12 @@ void EpubReaderActivity::onEnter() {
 
   loadCachedBookmarks();
 
+  // NOTE: book-open sync is handled ONLY by the gate in ActivityManager::
+  // goToReader (blocking BleSyncWaitActivity when stale/never-synced), never
+  // here — a background start() on every open was a duplicate sync that also
+  // bypassed the freshness guard (PROTOCOL-v3 §1). The gate already ran (or
+  // deliberately skipped) a sync before this activity was entered.
+
   // Trigger first update
   requestUpdate();
 }
@@ -210,6 +219,10 @@ void EpubReaderActivity::onExit() {
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   APP_STATE.readerActivityLoadCount = 0;
+  // Book-exit BLE sync (PROTOCOL-v2.md §5): flag the main loop to push a quick
+  // sync once we're back at the library so the page just closed reaches the
+  // phone. Gated on the toggle — zero cost when BLE Sync is off.
+  if (KOREADER_STORE.getBleSyncEnabled()) APP_STATE.blePendingSync = true;
   APP_STATE.saveToFile();
 
   // Leaving mid-footnote loses the in-RAM return stack on deep sleep; persist the
@@ -237,6 +250,41 @@ void EpubReaderActivity::loop() {
     finish();
     return;
   }
+
+#if ENABLE_BLE_SYNC
+  // A BLE reconcile rewrote progress.bin with the phone's newer position.
+  // If it's THIS book, reload and jump — same task as the reconcile pump, so
+  // no race on the flag. Without this the stale in-RAM position survives and
+  // the exit save clobbers the phone's spot with a fresh timestamp.
+  if (!APP_STATE.bleAppliedPath.empty()) {
+    const bool forThisBook = APP_STATE.bleAppliedPath == epub->getPath();
+    APP_STATE.bleAppliedPath.clear();
+    if (forThisBook) {
+      HalFile pf;
+      if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", pf)) {
+        uint8_t d[6] = {0};
+        if (pf.read(d, 6) >= 4) {
+          const int spine = d[0] | (d[1] << 8);
+          const int page = d[2] | (d[3] << 8);
+          const CrossPointPosition cur = getCurrentPosition();
+          if (spine != cur.spineIndex || page != cur.pageNumber) {
+            LOG_INF("ERS", "BLE position applied: jumping to spine=%d page=%d", spine, page);
+            {
+              RenderLock lock(*this);
+              currentSpineIndex = spine;
+              nextPageNumber = page;
+              pendingPageJump.reset();
+              pendingAnchor.clear();
+              pendingPercentJump = false;
+              section.reset();
+            }
+            requestUpdate();
+          }
+        }
+      }
+    }
+  }
+#endif
 
   // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
   // finished. Two independent finished-book features key off this same condition.

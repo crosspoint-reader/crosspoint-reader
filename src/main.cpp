@@ -20,6 +20,12 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#if ENABLE_BLE_SYNC
+#include "activities/settings/BleSyncTestActivity.h"
+#include "ble_sync/BleClock.h"
+#include "ble_sync/BleSyncManager.h"
+#include "ble_sync/BleSyncService.h"
+#endif
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -251,6 +257,31 @@ void enterDeepSleep(bool fromTimeout = false) {
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
 
+#if ENABLE_BLE_SYNC
+  // Sleep/shutdown sync (PROTOCOL-v3 §5): the reader's onExit — run inside
+  // goToSleep() above — set blePendingSync. Push the final page to the phone
+  // BEFORE the chip resets on deep sleep. Otherwise it only reaches the phone on
+  // the next boot, and a phone read in between could win newest-wins and clobber
+  // this last position. Covers BOTH power-off and auto-sleep (both land here).
+  // Blocking, but gives up in ~3s if no phone connects so power-off isn't held.
+  if (APP_STATE.blePendingSync) {
+    APP_STATE.blePendingSync = false;
+    BLE_SYNC.start(renderer, /*deadlineMs=*/8000, /*blocking=*/true);
+    const unsigned long syncStart = millis();
+    // Sync SILENTLY — no display writes here: the sleep-screen / cover frame is
+    // being drawn around this point and an extra displayBuffer corrupts its
+    // refresh. The push still happens; the user just doesn't see an indicator.
+    while (BLE_SYNC.isActive()) {
+      BLE_SYNC.loop();
+      if (!BleSyncService::instance().isConnected() && millis() - syncStart > 3000) {
+        BLE_SYNC.stop();  // no phone in range — don't hold up sleep
+        break;
+      }
+      delay(10);
+    }
+  }
+#endif
+
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
   }
@@ -304,6 +335,14 @@ void setupDisplayAndFonts(bool seamless = false) {
 
 void setup() {
   t1 = millis();
+
+#if ENABLE_BLE_SYNC
+  // Build-Zero link probe: forces BleSyncService + NimBLE to link so this build
+  // proves flash/RAM fit. `kBleLinkProbe` is volatile => the optimizer cannot
+  // fold it to false, so begin() is retained; it is never actually executed.
+  static volatile bool kBleLinkProbe = false;
+  if (kBleLinkProbe) BleSyncService::instance().begin("");
+#endif
 
 #ifdef ENABLE_SERIAL_LOG
   // Earliest possible Serial setup. The 250 ms stall before begin() lets the
@@ -429,6 +468,14 @@ void setup() {
       break;
   }
 
+#if ENABLE_BLE_SYNC
+  // Seed the clock from the persisted floor BEFORE any book opens, so positions
+  // saved this boot (including boot-to-reader) carry a real timestamp and never
+  // stamp 0 (PROTOCOL-v3 §3). Gated on the toggle — zero cost when sync is off.
+  if (KOREADER_STORE.getBleSyncEnabled()) BleClock::seedFromFloor();
+#endif
+
+  bool bootToReader = false;
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
@@ -455,8 +502,20 @@ void setup() {
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
+    bootToReader = true;
     activityManager.goToReader(path);
   }
+
+#if ENABLE_BLE_SYNC
+  // Boot-time BLE sync — BACKGROUND (PROTOCOL-v2.md §5): the library shows
+  // immediately with a small top-left sync indicator; the reconcile runs behind
+  // it. Runs ONLY on a real boot to Home with the toggle ON — never on
+  // reader-resume, silent restart, recovery, or crash. ZERO cost when off.
+  if (KOREADER_STORE.getBleSyncEnabled() && resume != BootResume::Silent && !recoveryFirmwareMode &&
+      !HalSystem::isRebootFromPanic() && !bootToReader) {
+    BLE_SYNC.start(renderer, /*deadlineMs=*/25000, /*blocking=*/false);
+  }
+#endif
 
   if (resume == BootResume::Silent) {
     // Block until the first paint physically completes. refreshDisplay()
@@ -515,8 +574,13 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
-      activityManager.preventAutoSleep()) {
+  bool blocksAutoSleep = activityManager.preventAutoSleep();
+#if ENABLE_BLE_SYNC
+  // A background reconcile must not be cut short by the inactivity timeout. This
+  // only holds off AUTO sleep — the power-button sleep gesture below still works.
+  blocksAutoSleep = blocksAutoSleep || BLE_SYNC.isActive();
+#endif
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() || blocksAutoSleep) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
@@ -581,6 +645,27 @@ void loop() {
   const unsigned long activityStartTime = millis();
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
+
+#if ENABLE_BLE_SYNC
+  // Pump the background reconcile engine and repaint the current screen (so the
+  // top-left indicator advances) only when its status actually changed. Cheap
+  // no-op when no sync is running.
+  BLE_SYNC.loop();
+  // Indicator repaints stay off the reader: a book-open sync would otherwise
+  // flash the e-ink page on every state change. The reader repaints itself
+  // when an applied position makes it jump.
+  if (BLE_SYNC.statusDirty() && !activityManager.isReaderActivity()) activityManager.requestUpdate();
+
+  // Book-exit sync (PROTOCOL-v3 §2): the reader set blePendingSync on its way
+  // out. Now that we're back at the library (not in the reader), kick a BACKGROUND
+  // sync of the book just closed (+ any other changed books). The indicator shows
+  // on the library; it runs to its deadline (no early give-up), so a phone that
+  // takes a few seconds to reconnect still gets the page. Zero cost when off.
+  if (APP_STATE.blePendingSync && !activityManager.isReaderActivity()) {
+    APP_STATE.blePendingSync = false;
+    BLE_SYNC.start(renderer, /*deadlineMs=*/20000, /*blocking=*/false);
+  }
+#endif
 
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {

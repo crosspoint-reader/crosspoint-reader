@@ -86,6 +86,9 @@ class ActivityManager {
   void goToRecentBooks();
   void goToBrowser();
   void goToReader(std::string path);
+  // Open the reader WITHOUT the BLE book-open sync gate (used by BleSyncWaitActivity
+  // once its sync is done/skipped, so it doesn't re-enter the gate).
+  void goToReaderDirect(std::string path);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

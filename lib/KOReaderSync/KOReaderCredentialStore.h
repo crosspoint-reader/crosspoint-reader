@@ -21,6 +21,7 @@ class KOReaderCredentialStore {
   std::string password;
   std::string serverUrl;                                            // Custom sync server URL (empty = default)
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
+  bool bleSyncEnabled = false;                                      // BLE peer sync with the phone
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
@@ -63,6 +64,10 @@ class KOReaderCredentialStore {
   // Document matching method
   void setMatchMethod(DocumentMatchMethod method);
   DocumentMatchMethod getMatchMethod() const { return matchMethod; }
+
+  // BLE reading-position sync (Bluetooth peer sync with the phone)
+  void setBleSyncEnabled(bool enabled) { bleSyncEnabled = enabled; }
+  bool getBleSyncEnabled() const { return bleSyncEnabled; }
 };
 
 // Helper macro to access credential store

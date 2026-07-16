@@ -17,6 +17,10 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#if ENABLE_BLE_SYNC
+#include "ble_sync/BleSyncManager.h"
+#include "settings/BleSyncWaitActivity.h"
+#endif
 #include "util/FullScreenMessageActivity.h"
 
 void ActivityManager::begin() {
@@ -193,8 +197,21 @@ void ActivityManager::goToBrowser() {
   }
 }
 
-void ActivityManager::goToReader(std::string path) {
+void ActivityManager::goToReaderDirect(std::string path) {
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
+}
+
+void ActivityManager::goToReader(std::string path) {
+#if ENABLE_BLE_SYNC
+  // Book-open sync gate (PROTOCOL-v2.md §5): if this book hasn't been reconciled
+  // recently, hold the reader off behind a skippable wait that syncs it first —
+  // so it opens at the right page with no surprise mid-read jump.
+  if (BleSync::shouldSyncBeforeOpen()) {
+    replaceActivity(std::make_unique<BleSyncWaitActivity>(renderer, mappedInput, std::move(path)));
+    return;
+  }
+#endif
+  goToReaderDirect(std::move(path));
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {

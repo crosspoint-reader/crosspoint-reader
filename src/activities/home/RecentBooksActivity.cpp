@@ -9,6 +9,7 @@
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "ble_sync/BleSyncIndicator.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -129,6 +130,7 @@ void RecentBooksActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_MENU_RECENT_BOOKS));
+  BleSync::drawIndicator(renderer, 0, metrics.topPadding, pageWidth, metrics.headerHeight);  // top-left sync (no-op when idle)
 
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
