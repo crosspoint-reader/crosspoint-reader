@@ -21,7 +21,7 @@ namespace {
 constexpr unsigned long kResendMs = 700;    // resend our MANIFEST until the phone replies
 constexpr unsigned long kSettleMs = 1500;   // quiet window before we call the sync done
 constexpr unsigned long kNoPhoneMs = 8000;  // auto-trigger: give up if no phone ever connects
-constexpr size_t kMaxManifest = 20;         // books per MANIFEST (fits MTU 517)
+constexpr size_t kMaxManifest = 4;          // legacy screen sends one ATT-safe manifest page
 }  // namespace
 
 BleSyncTestActivity::BleSyncTestActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

@@ -47,6 +47,9 @@ std::string buildCapabilities() {
   doc["firmware"] = "crosspoint-ble-v1";
   JsonArray supports = doc["supports"].to<JsonArray>();
   supports.add("progress");
+  supports.add("manifest");
+  supports.add("want");
+  supports.add("peer_clock");
   std::string out;
   serializeJson(doc, out);
   return out;
@@ -56,6 +59,7 @@ std::string buildSyncState(bool paired, const std::string& lastPhoneId, const st
                            const std::string& lastAck) {
   JsonDocument doc;
   doc["paired"] = paired;
+  doc["lastPeerId"] = lastPhoneId;
   doc["lastPhoneId"] = lastPhoneId;
   doc["lastEvent"] = lastEvent;
   doc["lastAck"] = lastAck;

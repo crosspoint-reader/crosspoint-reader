@@ -95,12 +95,14 @@ struct BleSyncServiceImpl {
       log("inbound: newer protocolVersion, dropped: " + m.type);
       return;
     }
-    // BLE "NTP": set our clock from the phone's current time when we have none.
-    if (m.now > 1000000000 && time(nullptr) < 1000000000) {
+    // BLE clock sync: advance our RTC-less clock and persisted floor whenever
+    // the peer knows a later wall time. This also repairs time lost in deep sleep.
+    const int64_t currentTime = static_cast<int64_t>(time(nullptr));
+    if (m.now > 1000000000 && m.now > currentTime) {
       struct timeval tv = {static_cast<time_t>(m.now), 0};
       settimeofday(&tv, nullptr);
       BleClock::writeFloor(m.now);  // v3: remember it across the next deep-sleep reset
-      log("clock set from phone (BLE NTP)");
+      log("clock advanced from BLE peer");
       // Positions read before the clock arrived carry an explicit 0 stamp
       // and would lose newest-wins forever. Stamp them "now" BEFORE this
       // session reconciles, so the phone sees them as fresh.

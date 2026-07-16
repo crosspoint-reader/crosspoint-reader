@@ -18,7 +18,8 @@ constexpr unsigned long kResendMs = 700;       // resend our MANIFEST / un-ACKed
 constexpr unsigned long kSettleMs = 1500;      // quiet window before we call the sync done
 constexpr unsigned long kResultShowMs = 4000;  // how long the ✓/✗ glyph lingers
 constexpr unsigned long kFreshMs = 90000;      // "super recent" window — skip the book-open wait
-constexpr size_t kMaxManifest = 20;            // books per MANIFEST (fits MTU 517)
+constexpr size_t kMaxManifest = 20;            // most-recent books considered per reconcile
+constexpr size_t kManifestPageSize = 4;        // conservative JSON page that fits one ATT MTU 517 notification
 constexpr int kMaxPushAttempts = 3;            // resend a PROGRESS up to 3x (PROTOCOL-v3 §4)
 
 // Singleton state (only one Manager exists).
@@ -39,6 +40,7 @@ bool g_sentManifest = false;
 bool g_gotPhoneManifest = false;
 bool g_phoneManifestComplete = false;  // phone's manifest ended with more=false (§6)
 bool g_wasConnected = false;
+std::vector<proto::ManifestEntry> g_phoneManifest;
 
 // Books we've pushed this run, with resend bookkeeping (PROTOCOL-v3 §4).
 struct PushRec {
@@ -67,6 +69,7 @@ void resetRun() {
   g_gotPhoneManifest = false;
   g_phoneManifestComplete = false;
   g_wasConnected = false;
+  g_phoneManifest.clear();
   g_pushes.clear();
   g_booksSent = 0;
   g_booksApplied = 0;
@@ -135,6 +138,34 @@ void resendUnackedPushes() {
     }
   }
 }
+
+void sendLocalManifest() {
+  auto& ble = BleSyncService::instance();
+  const auto books = BleProgress::buildLocalManifest(kMaxManifest);
+  if (books.empty()) {
+    ble.sendManifest({}, /*more=*/false);
+    return;
+  }
+  for (size_t offset = 0; offset < books.size(); offset += kManifestPageSize) {
+    const size_t end = std::min(books.size(), offset + kManifestPageSize);
+    const std::vector<proto::ManifestEntry> page(books.begin() + offset, books.begin() + end);
+    ble.sendManifest(page, /*more=*/end < books.size());
+  }
+}
+
+void appendPhoneManifestPage(const std::vector<proto::ManifestEntry>& page) {
+  for (const auto& incoming : page) {
+    const auto existing = std::find_if(g_phoneManifest.begin(), g_phoneManifest.end(), [&incoming](const auto& book) {
+      return (!incoming.titleHash.empty() && book.titleHash == incoming.titleHash) ||
+             (incoming.titleHash.empty() && !incoming.document.empty() && book.document == incoming.document);
+    });
+    if (existing == g_phoneManifest.end()) {
+      g_phoneManifest.push_back(incoming);
+    } else {
+      *existing = incoming;
+    }
+  }
+}
 }  // namespace
 
 namespace BleSync {
@@ -188,7 +219,7 @@ void Manager::loop() {
   // advertises the whole time so a phone that takes a few seconds to reconnect
   // still gets in. No phone by the deadline → finish quietly as Idle (below).
   if (millis() - g_startMs > g_deadlineMs) {
-    if (g_everConnected && g_gotPhoneManifest) {
+    if (g_everConnected && g_phoneManifestComplete) {
       finishWith(Phase::Success, true, "");  // exchanged books, just ran long
     } else if (g_everConnected) {
       finishWith(Phase::Failed, false, "sync timed out mid-exchange");
@@ -222,7 +253,7 @@ void Manager::loop() {
     // and, worse, marked the book pushed so the reliable path was deduped away.)
     const bool manifestDue = !g_sentManifest || (!g_gotPhoneManifest && millis() - g_lastManifestMs > kResendMs);
     if (manifestDue) {
-      ble.sendManifest(BleProgress::buildLocalManifest(kMaxManifest), /*more=*/false);
+      sendLocalManifest();
       g_sentManifest = true;
       g_lastManifestMs = millis();
       g_lastActivityMs = millis();
@@ -234,13 +265,15 @@ void Manager::loop() {
       g_lastActivityMs = millis();
       if (m.type == proto::kTypeManifest) {
         g_gotPhoneManifest = true;
+        appendPhoneManifestPage(m.books);
         g_phoneManifestComplete = !m.more;  // wait for the last page before settling (§6)
+        if (!g_phoneManifestComplete) continue;
         const auto mine = BleProgress::buildLocalManifest(kMaxManifest);
         // Count books that need syncing in EITHER direction → the "x" in "i of x".
         int diff = 0;
         for (const auto& lb : mine) {
           int64_t phoneTs = -1;
-          for (const auto& pb : m.books) {
+          for (const auto& pb : g_phoneManifest) {
             if (pb.titleHash == lb.titleHash) {
               phoneTs = pb.updatedAt;
               break;
@@ -249,7 +282,7 @@ void Manager::loop() {
           if (lb.updatedAt > phoneTs || (phoneTs > lb.updatedAt && phoneTs > 0)) diff++;
         }
         // Books only the phone has that are newer than anything local.
-        for (const auto& pb : m.books) {
+        for (const auto& pb : g_phoneManifest) {
           bool inMine = false;
           for (const auto& lb : mine) {
             if (lb.titleHash == pb.titleHash) {
@@ -264,7 +297,7 @@ void Manager::loop() {
         for (const auto& lb : mine) {
           if (lb.updatedAt <= 0) continue;
           int64_t phoneTs = -1;
-          for (const auto& pb : m.books) {
+          for (const auto& pb : g_phoneManifest) {
             if (pb.titleHash == lb.titleHash) {
               phoneTs = pb.updatedAt;
               break;
