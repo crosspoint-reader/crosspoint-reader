@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 // On-disk filename format for books downloaded from an OPDS server. Stored as a
 // uint8_t in CrossPointSettings; cast to this enum at the call sites. `Count` is
@@ -12,7 +13,8 @@ enum class OpdsFilenameFormat : uint8_t {
   Count = 3,
 };
 
-// Composes and sanitizes the on-disk filename (including the ".epub" extension)
-// for a downloaded OPDS book, according to `format`. When the author is empty,
-// every format collapses to just the sanitized title. Pure: no I/O, no globals.
-std::string opdsBookFilename(const std::string& author, const std::string& title, OpdsFilenameFormat format);
+// Composes and sanitizes the on-disk filename for a downloaded OPDS book.
+// When the author is empty, every format collapses to just the sanitized title.
+// Pure: no I/O, no globals.
+std::string opdsBookFilename(const std::string& author, const std::string& title, OpdsFilenameFormat format,
+                             std::string_view extension = ".epub");

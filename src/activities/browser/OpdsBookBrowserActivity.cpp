@@ -8,6 +8,8 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <array>
+
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -62,13 +64,22 @@ void OpdsBookBrowserActivity::loop() {
     return;
   }
 
-  if (consumeConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
+  if (formatPopup.isActive()) {
+    const bool dismissingWithBack = mappedInput.wasPressed(MappedInputManager::Button::Back);
+    formatPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+    if (dismissingWithBack) consumeBack = true;
     return;
   }
-  if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    consumeBack = false;
-    return;
+
+  if (consumeConfirm) {
+    const bool released = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    if (released || !mappedInput.isPressed(MappedInputManager::Button::Confirm)) consumeConfirm = false;
+    if (released) return;
+  }
+  if (consumeBack) {
+    const bool released = mappedInput.wasReleased(MappedInputManager::Button::Back);
+    if (released || !mappedInput.isPressed(MappedInputManager::Button::Back)) consumeBack = false;
+    if (released) return;
   }
 
   if (state == BrowserState::ERROR) {
@@ -100,7 +111,7 @@ void OpdsBookBrowserActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
-        entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
+        entry.type == OpdsEntryType::BOOK ? chooseBookFormat(entry) : navigateToEntry(entry);
       }
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
@@ -130,6 +141,8 @@ void OpdsBookBrowserActivity::loop() {
 }
 
 void OpdsBookBrowserActivity::render(RenderLock&&) {
+  if (formatPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -273,7 +286,39 @@ void OpdsBookBrowserActivity::navigateBack() {
   }
 }
 
-void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
+void OpdsBookBrowserActivity::chooseBookFormat(const OpdsEntry& book) {
+  if (book.acquisitionLinks.empty()) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_DOWNLOAD_FAILED);
+    requestUpdate();
+    return;
+  }
+
+  if (book.acquisitionLinks.size() == 1) {
+    downloadBook(book, book.acquisitionLinks.front());
+    return;
+  }
+
+  std::array<const char*, 3> labels{};
+  for (size_t i = 0; i < book.acquisitionLinks.size(); ++i) {
+    labels[i] = opdsAcquisitionLabel(book.acquisitionLinks[i].format);
+  }
+
+  const int bookIndex = selectorIndex;
+  formatPopup.show(book.title.c_str(), labels.data(), static_cast<int>(book.acquisitionLinks.size()), 0,
+                   [this, bookIndex](const int formatIndex) {
+                     consumeConfirm = true;
+                     if (bookIndex < 0 || bookIndex >= static_cast<int>(entries.size())) return;
+                     const auto& selectedBook = entries[bookIndex];
+                     if (formatIndex < 0 || formatIndex >= static_cast<int>(selectedBook.acquisitionLinks.size())) {
+                       return;
+                     }
+                     downloadBook(selectedBook, selectedBook.acquisitionLinks[formatIndex]);
+                   });
+  requestUpdate();
+}
+
+void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcquisitionLink& acquisition) {
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
   downloadProgress = downloadTotal = 0;
@@ -281,7 +326,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
 
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
-  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
+  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, acquisition.href);
   // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
   // no std::string copy. exists()/mkdir() take const char*.
   const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
@@ -301,7 +346,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   filename.reserve(96);
   if (haveFolder) filename += folder;
   filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat),
+                               opdsAcquisitionExtension(acquisition.format));
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   int lastRenderedPercent = -1;

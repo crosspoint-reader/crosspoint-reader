@@ -3,7 +3,10 @@
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
+#include <cctype>
 #include <cstring>
+#include <string_view>
+#include <utility>
 
 namespace {
 constexpr size_t ENTRY_STORAGE_CAPACITY = 64;
@@ -14,7 +17,94 @@ constexpr size_t MAX_ID_CHARS = 128;
 constexpr size_t MAX_HREF_CHARS = 768;
 constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
 constexpr size_t MAX_PAGE_URL_CHARS = 768;
+constexpr size_t MAX_ACQUISITION_LINKS = 3;
+constexpr size_t MAX_ACQUISITION_HREF_CHARS = MAX_ENTRIES * MAX_HREF_CHARS;
+
+std::string_view mimeTypeToken(const char* type) {
+  if (!type) return {};
+
+  std::string_view token{type};
+  if (const size_t parameters = token.find(';'); parameters != std::string_view::npos) {
+    token = token.substr(0, parameters);
+  }
+  while (!token.empty() && std::isspace(static_cast<unsigned char>(token.front()))) token.remove_prefix(1);
+  while (!token.empty() && std::isspace(static_cast<unsigned char>(token.back()))) token.remove_suffix(1);
+  return token;
+}
+
+bool equalsIgnoreCase(const std::string_view value, const std::string_view expected) {
+  if (value.size() != expected.size()) return false;
+  for (size_t i = 0; i < value.size(); ++i) {
+    if (std::tolower(static_cast<unsigned char>(value[i])) != std::tolower(static_cast<unsigned char>(expected[i]))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+OpdsAcquisitionFormat formatFromMimeType(const std::string_view type) {
+  if (equalsIgnoreCase(type, "application/epub+zip")) return OpdsAcquisitionFormat::EPUB;
+  if (equalsIgnoreCase(type, "application/x-xtc+zip") || equalsIgnoreCase(type, "application/vnd.xteink.xtc")) {
+    return OpdsAcquisitionFormat::XTC;
+  }
+  if (equalsIgnoreCase(type, "application/x-xtch+zip") || equalsIgnoreCase(type, "application/vnd.xteink.xtch")) {
+    return OpdsAcquisitionFormat::XTCH;
+  }
+  return OpdsAcquisitionFormat::UNKNOWN;
+}
+
+bool hasSuffixIgnoreCase(const std::string_view value, const std::string_view suffix) {
+  return value.size() >= suffix.size() && equalsIgnoreCase(value.substr(value.size() - suffix.size()), suffix);
+}
+
+OpdsAcquisitionFormat formatFromUrl(const char* href) {
+  std::string_view path{href ? href : ""};
+  if (const size_t suffix = path.find_first_of("?#"); suffix != std::string_view::npos) {
+    path = path.substr(0, suffix);
+  }
+  while (!path.empty() && path.back() == '/') path.remove_suffix(1);
+  if (hasSuffixIgnoreCase(path, ".xtch")) return OpdsAcquisitionFormat::XTCH;
+  if (hasSuffixIgnoreCase(path, ".xtc")) return OpdsAcquisitionFormat::XTC;
+  return OpdsAcquisitionFormat::UNKNOWN;
+}
+
+OpdsAcquisitionFormat acquisitionFormat(const char* type, const char* href) {
+  const std::string_view mimeType = mimeTypeToken(type);
+  if (const auto format = formatFromMimeType(mimeType); format != OpdsAcquisitionFormat::UNKNOWN) return format;
+
+  const bool genericMime = mimeType.empty() || equalsIgnoreCase(mimeType, "application/octet-stream") ||
+                           equalsIgnoreCase(mimeType, "binary/octet-stream");
+  return genericMime ? formatFromUrl(href) : OpdsAcquisitionFormat::UNKNOWN;
+}
 }  // namespace
+
+const char* opdsAcquisitionExtension(const OpdsAcquisitionFormat format) {
+  switch (format) {
+    case OpdsAcquisitionFormat::EPUB:
+      return ".epub";
+    case OpdsAcquisitionFormat::XTC:
+      return ".xtc";
+    case OpdsAcquisitionFormat::XTCH:
+      return ".xtch";
+    case OpdsAcquisitionFormat::UNKNOWN:
+    default:
+      return "";
+  }
+}
+
+const char* opdsAcquisitionLabel(const OpdsAcquisitionFormat format) {
+  switch (format) {
+    case OpdsAcquisitionFormat::EPUB:
+      return "EPUB";
+    case OpdsAcquisitionFormat::XTC:
+      return "XTC";
+    case OpdsAcquisitionFormat::XTCH:
+      return "XTCH";
+    case OpdsAcquisitionFormat::UNKNOWN:
+    default:
+      return "";
+  }
+}
 
 OpdsParser::OpdsParser() {
   parser = XML_ParserCreate(nullptr);
@@ -82,6 +172,7 @@ void OpdsParser::clear() {
   prevPageUrl.clear();
   currentEntry = OpdsEntry{};
   currentText.clear();
+  acquisitionHrefChars = 0;
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
   collectCurrentEntry = false;
   feedTruncated = false;
@@ -131,7 +222,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
 
   if (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr) {
     const char* href = findAttribute(atts, "href");
-    if (href) {
+    if (href && href[0] != '\0') {
       const char* rel = findAttribute(atts, "rel");
       const char* type = findAttribute(atts, "type");
 
@@ -146,17 +237,30 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       }
 
       if (self->inEntry && self->collectCurrentEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-            strcmp(type, "application/epub+zip") == 0) {
-          // Prefer plain EPUB links over derived formats when multiple
-          // acquisition links are present for one entry.
-          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                            self->currentEntry.href.find("/epub/") != std::string::npos);
-          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
-            self->currentEntry.type = OpdsEntryType::BOOK;
-            assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
+        if (rel && strstr(rel, "opds-spec.org/acquisition") != nullptr) {
+          const auto format = acquisitionFormat(type, href);
+          const auto& links = self->currentEntry.acquisitionLinks;
+          bool alreadyHasFormat = false;
+          for (const auto& link : links) {
+            if (link.format == format) {
+              alreadyHasFormat = true;
+              break;
+            }
+          }
+
+          if (format != OpdsAcquisitionFormat::UNKNOWN && !alreadyHasFormat && links.size() < MAX_ACQUISITION_LINKS) {
+            const size_t hrefChars = strnlen(href, MAX_HREF_CHARS);
+            if (hrefChars <= MAX_ACQUISITION_HREF_CHARS - self->acquisitionHrefChars) {
+              OpdsAcquisitionLink link;
+              link.format = format;
+              link.href.assign(href, hrefChars);
+              self->acquisitionHrefChars += hrefChars;
+              self->currentEntry.acquisitionLinks.push_back(std::move(link));
+              self->currentEntry.type = OpdsEntryType::BOOK;
+              self->currentEntry.href.clear();
+            } else {
+              self->feedTruncated = true;
+            }
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
@@ -188,8 +292,15 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<OpdsParser*>(userData);
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
-    if (self->collectCurrentEntry && !self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
-      self->entries.push_back(self->currentEntry);
+    const bool hasTarget = self->currentEntry.type == OpdsEntryType::BOOK ? !self->currentEntry.acquisitionLinks.empty()
+                                                                          : !self->currentEntry.href.empty();
+    const bool storeEntry = self->collectCurrentEntry && !self->currentEntry.title.empty() && hasTarget;
+    if (storeEntry) {
+      self->entries.push_back(std::move(self->currentEntry));
+    } else {
+      for (const auto& link : self->currentEntry.acquisitionLinks) {
+        self->acquisitionHrefChars -= link.href.size();
+      }
     }
     self->inEntry = false;
     self->collectCurrentEntry = false;

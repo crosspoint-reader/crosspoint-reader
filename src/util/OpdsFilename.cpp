@@ -2,7 +2,8 @@
 
 #include "StringUtils.h"
 
-std::string opdsBookFilename(const std::string& author, const std::string& title, OpdsFilenameFormat format) {
+std::string opdsBookFilename(const std::string& author, const std::string& title, const OpdsFilenameFormat format,
+                             const std::string_view extension) {
   std::string base;
   switch (format) {
     case OpdsFilenameFormat::TitleAuthor:
@@ -16,8 +17,8 @@ std::string opdsBookFilename(const std::string& author, const std::string& title
       base = author.empty() ? title : author + " - " + title;
       break;
   }
-  // sanitizeFilename caps at 100 bytes and never returns empty (falls back to
-  // "book"); ".epub" is appended after so the extension is never truncated —
-  // identical treatment to the previous inline construction.
-  return StringUtils::sanitizeFilename(base) + ".epub";
+  // Keep the trusted format extension outside the 100-byte sanitized base.
+  std::string filename = StringUtils::sanitizeFilename(base);
+  filename.append(extension.data(), extension.size());
+  return filename;
 }
