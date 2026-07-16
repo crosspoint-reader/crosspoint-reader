@@ -149,6 +149,10 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
   }
+  // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
+  if (s.dictionaryName[0] != '\0') {
+    doc["dictionaryName"] = s.dictionaryName;
+  }
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -255,6 +259,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   } else if (storedFontFamily >= CrossPointSettings::BUILTIN_FONT_COUNT) {
     if (needsResave) *needsResave = true;
   }
+
+  // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
+  const char* dictName = doc["dictionaryName"] | "";
+  strncpy(s.dictionaryName, dictName, sizeof(s.dictionaryName) - 1);
+  s.dictionaryName[sizeof(s.dictionaryName) - 1] = '\0';
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
