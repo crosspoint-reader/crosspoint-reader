@@ -8,6 +8,7 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <algorithm>
 #include <array>
 
 #include "CrossPointSettings.h"
@@ -303,12 +304,13 @@ void OpdsBookBrowserActivity::chooseBookFormat(const OpdsEntry& book) {
   }
 
   std::array<const char*, 3> labels{};
-  for (size_t i = 0; i < book.acquisitionLinks.size(); ++i) {
+  const size_t linkCount = std::min(book.acquisitionLinks.size(), labels.size());
+  for (size_t i = 0; i < linkCount; ++i) {
     labels[i] = opdsAcquisitionLabel(book.acquisitionLinks[i].format);
   }
 
   const int bookIndex = selectorIndex;
-  formatPopup.show(book.title.c_str(), labels.data(), static_cast<int>(book.acquisitionLinks.size()), 0,
+  formatPopup.show(book.title.c_str(), labels.data(), static_cast<int>(linkCount), 0,
                    [this, bookIndex](const int formatIndex) {
                      consumeConfirm = true;
                      if (bookIndex < 0 || bookIndex >= static_cast<int>(entries.size())) return;
@@ -372,7 +374,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
         const unsigned long now = millis();
         if (percent >= 100 || lastRenderedPercent < 0 ||
             percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
-            now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
+            (total > 0 && now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS)) {
           lastRenderedPercent = percent;
           lastProgressUpdateMs = now;
           requestUpdate(true);

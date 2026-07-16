@@ -98,7 +98,7 @@ TEST(OpdsParser, NormalizesMimeTypesAndRecognizesVendorAliases) {
   EXPECT_EQ(links[1].format, OpdsAcquisitionFormat::XTCH);
 }
 
-TEST(OpdsParser, InfersXtcFormatsFromGenericOrMissingMimeTypes) {
+TEST(OpdsParser, InfersFormatsFromGenericOrMissingMimeTypes) {
   const auto feed = parseFeed(R"xml(
     <feed xmlns="http://www.w3.org/2005/Atom">
       <entry>
@@ -107,6 +107,8 @@ TEST(OpdsParser, InfersXtcFormatsFromGenericOrMissingMimeTypes) {
               href="/books/VOLUME.XTC?token=1#download"/>
         <link rel="http://opds-spec.org/acquisition"
               type="application/octet-stream" href="/books/volume.XTCH/?download=1"/>
+        <link rel="http://opds-spec.org/acquisition"
+              type="binary/octet-stream" href="/books/volume.EPUB#download"/>
       </entry>
     </feed>
   )xml");
@@ -114,9 +116,10 @@ TEST(OpdsParser, InfersXtcFormatsFromGenericOrMissingMimeTypes) {
   ASSERT_FALSE(feed.error);
   ASSERT_EQ(feed.entries.size(), 1u);
   const auto& links = feed.entries.front().acquisitionLinks;
-  ASSERT_EQ(links.size(), 2u);
+  ASSERT_EQ(links.size(), 3u);
   EXPECT_EQ(links[0].format, OpdsAcquisitionFormat::XTC);
   EXPECT_EQ(links[1].format, OpdsAcquisitionFormat::XTCH);
+  EXPECT_EQ(links[2].format, OpdsAcquisitionFormat::EPUB);
 }
 
 TEST(OpdsParser, IgnoresUnsupportedAndAmbiguousAcquisitionLinks) {
@@ -206,9 +209,8 @@ TEST(OpdsParser, BoundsAcquisitionUrls) {
       longUrl + "\"/></entry></feed>");
 
   ASSERT_FALSE(feed.error);
-  ASSERT_EQ(feed.entries.size(), 1u);
-  ASSERT_EQ(feed.entries.front().acquisitionLinks.size(), 1u);
-  EXPECT_EQ(feed.entries.front().acquisitionLinks.front().href.size(), 768u);
+  EXPECT_TRUE(feed.truncated);
+  EXPECT_TRUE(feed.entries.empty());
 }
 
 TEST(OpdsParser, CapsOversizedFeeds) {

@@ -65,6 +65,7 @@ OpdsAcquisitionFormat formatFromUrl(const char* href) {
   while (!path.empty() && path.back() == '/') path.remove_suffix(1);
   if (hasSuffixIgnoreCase(path, ".xtch")) return OpdsAcquisitionFormat::XTCH;
   if (hasSuffixIgnoreCase(path, ".xtc")) return OpdsAcquisitionFormat::XTC;
+  if (hasSuffixIgnoreCase(path, ".epub")) return OpdsAcquisitionFormat::EPUB;
   return OpdsAcquisitionFormat::UNKNOWN;
 }
 
@@ -249,8 +250,10 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
           }
 
           if (format != OpdsAcquisitionFormat::UNKNOWN && !alreadyHasFormat && links.size() < MAX_ACQUISITION_LINKS) {
-            const size_t hrefChars = strnlen(href, MAX_HREF_CHARS);
-            if (hrefChars <= MAX_ACQUISITION_HREF_CHARS - self->acquisitionHrefChars) {
+            const size_t hrefChars = strnlen(href, MAX_HREF_CHARS + 1);
+            if (hrefChars > MAX_HREF_CHARS) {
+              self->feedTruncated = true;
+            } else if (hrefChars <= MAX_ACQUISITION_HREF_CHARS - self->acquisitionHrefChars) {
               OpdsAcquisitionLink link;
               link.format = format;
               link.href.assign(href, hrefChars);
