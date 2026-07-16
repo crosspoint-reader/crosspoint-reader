@@ -23,6 +23,35 @@ contract later.
 Bookmarks, highlights, annotations, files, and account credentials are outside
 this protocol.
 
+## Purpose and user experience
+
+The purpose of this transport is to keep reading position synchronized between
+an X4 and a nearby compatible reader—for example KOReader on iOS or Android,
+another e-reader, or a future reading app—without Wi-Fi, internet access, a
+cloud service, or a shared KOReader Sync server.
+
+The user can stop reading on one system and continue on the other. During a
+sync, each side announces the books it knows and when each position last
+changed. Only differing positions are transferred, and the newest edit wins.
+Moving backward in a book is still a new edit, so it synchronizes correctly.
+
+CrossPoint does not keep BLE running continuously. Instead, it opens short,
+low-cost rendezvous windows at the moments a reading position is most useful:
+
+- after boot or wake, to reconcile recent books;
+- before opening a book when the last successful sync is stale or absent, so
+  the book can open at the peer's newer position;
+- after closing a book, to publish the position just reached;
+- when BLE sync is enabled or Pair is selected, for an immediate reconcile;
+- immediately before sleep, to make a final best-effort push.
+
+A compatible central scans in the background or foreground, reconnects during
+one of these windows, exchanges only compact JSON deltas, and disconnects after
+the libraries converge. CrossPoint then deinitializes BLE so the radio and heap
+are released. In normal use this gives the effect of the X4 and companion reader
+staying synchronized at reading boundaries while avoiding an always-on radio
+and requiring no network infrastructure.
+
 ## Security model
 
 The current implementation does not request BLE bonding, authenticated pairing,
