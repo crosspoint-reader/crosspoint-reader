@@ -24,6 +24,8 @@ constexpr char kFloorPath[] = "/.crosspoint/ble-clock.bin";
 constexpr int64_t kValidFrom = 1000000000;   // 2001-09-09; below this = "clock unset"
 constexpr int64_t kValidUntil = 4102444800;  // 2100-01-01; reject poisoned peer clocks beyond this
 
+inline bool isValidPeerTime(int64_t t) { return t > kValidFrom && t <= kValidUntil; }
+
 inline int64_t readFloor() {
   HalFile f;
   if (!Storage.openFileForRead("BleClk", kFloorPath, f)) return 0;
@@ -36,7 +38,7 @@ inline int64_t readFloor() {
 
 // Raise the floor to `t` (monotonic non-decreasing). No-op for an unset/older t.
 inline void writeFloor(int64_t t) {
-  if (t <= kValidFrom) return;
+  if (!isValidPeerTime(t)) return;
   if (t <= readFloor()) return;
   uint8_t d[8];
   for (int i = 0; i < 8; i++) d[i] = static_cast<uint8_t>((static_cast<uint64_t>(t) >> (8 * i)) & 0xFF);

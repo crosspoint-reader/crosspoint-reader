@@ -7,6 +7,8 @@
 #include <cstdio>
 #include <ctime>
 
+#include "BleClock.h"
+
 namespace BleSyncProtocol {
 
 std::string genMessageId() {
@@ -204,7 +206,11 @@ ParsedMessage parseMessage(const std::string& json) {
     payloadValid =
         hasIdentity && std::isfinite(m.percentage) && m.percentage >= 0.0f && m.percentage <= 1.0f && m.updatedAt >= 0;
   } else if (m.type == kTypeManifest) {
-    payloadValid = manifestRowsValid && doc["more"].is<bool>();
+    // Peer time is optional for interoperability, but when supplied it must be
+    // an integer in the same supported range used by the clock consumer.
+    const JsonVariantConst peerNow = doc["now"];
+    const bool peerNowValid = peerNow.isNull() || (peerNow.is<int64_t>() && BleClock::isValidPeerTime(m.now));
+    payloadValid = manifestRowsValid && doc["more"].is<bool>() && peerNowValid;
   } else if (m.type == kTypeWant) {
     payloadValid = wantKeysValid && !m.wantKeys.empty();
   }

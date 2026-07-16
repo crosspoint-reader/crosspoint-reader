@@ -95,7 +95,7 @@ struct BleSyncServiceImpl {
     // the peer knows a later wall time. This also repairs time lost in deep sleep.
     const int64_t currentTime = static_cast<int64_t>(time(nullptr));
     const bool clockWasUnset = currentTime <= BleClock::kValidFrom;
-    if (m.now > BleClock::kValidFrom && m.now <= BleClock::kValidUntil && m.now > currentTime) {
+    if (BleClock::isValidPeerTime(m.now) && m.now > currentTime) {
       struct timeval tv = {static_cast<time_t>(m.now), 0};
       if (settimeofday(&tv, nullptr) == 0) {
         BleClock::writeFloor(m.now);  // remember only an accepted clock
