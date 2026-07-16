@@ -40,6 +40,7 @@ void OpdsBookBrowserActivity::onEnter() {
   selectorIndex = 0;
   consumeConfirm = false;
   consumeBack = false;
+  downloadCancelRequested = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
   requestUpdate();
@@ -176,6 +177,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress,
                           downloadTotal);
     }
+    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
     return;
   }
@@ -322,6 +325,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
   downloadProgress = downloadTotal = 0;
+  downloadCancelRequested = false;
   requestUpdate(true);
 
   // Build full download URL relative to the current feed, not the root server URL
@@ -348,15 +352,22 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
   filename += '/';
   filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat),
                                opdsAcquisitionExtension(acquisition.format));
+  const std::string temporaryFilename = filename + ".part";
+  const std::string backupFilename = filename + ".bak";
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   int lastRenderedPercent = -1;
   unsigned long lastProgressUpdateMs = 0;
   const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
+      downloadUrl, temporaryFilename,
       [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
+        mappedInput.update();
+        if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+            mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+          downloadCancelRequested = true;
+        }
         const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
         const unsigned long now = millis();
         if (percent >= 100 || lastRenderedPercent < 0 ||
@@ -367,10 +378,31 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book, const OpdsAcqu
           requestUpdate(true);
         }
       },
-      nullptr, server.username, server.password);
+      &downloadCancelRequested, server.username, server.password);
 
   if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
+    const bool replacingExistingBook = Storage.exists(filename.c_str());
+    bool readyToPromote = true;
+    if (replacingExistingBook) {
+      Storage.remove(backupFilename.c_str());
+      readyToPromote = Storage.rename(filename.c_str(), backupFilename.c_str());
+    }
+
+    if (readyToPromote && Storage.rename(temporaryFilename.c_str(), filename.c_str())) {
+      if (replacingExistingBook) Storage.remove(backupFilename.c_str());
+      clearBookCache(filename);
+      state = BrowserState::BROWSING;
+    } else {
+      LOG_ERR("OPDS", "Failed to promote download: %s", temporaryFilename.c_str());
+      if (replacingExistingBook && !Storage.exists(filename.c_str())) {
+        Storage.rename(backupFilename.c_str(), filename.c_str());
+      }
+      Storage.remove(temporaryFilename.c_str());
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_DOWNLOAD_FAILED);
+    }
+  } else if (result == HttpDownloader::ABORTED) {
+    consumeBack = true;
     state = BrowserState::BROWSING;
   } else {
     LOG_ERR("OPDS", "Download failed: %d", static_cast<int>(result));
