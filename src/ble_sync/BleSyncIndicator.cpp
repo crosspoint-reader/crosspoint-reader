@@ -22,19 +22,19 @@ constexpr int kStroke = 2;                        // ring/line thickness
 // top-right. Omitting one gives a rotating "C" spinner.
 constexpr int kQuad[4][2] = {{1, -1}, {1, 1}, {-1, 1}, {-1, -1}};
 
-void ring(GfxRenderer& r, int cx, int cy, int skip /* -1 = full ring */) {
+void ring(const GfxRenderer& r, int cx, int cy, int skip /* -1 = full ring */) {
   for (int q = 0; q < 4; ++q) {
     if (q == skip) continue;
     r.drawArc(kR, cx, cy, kQuad[q][0], kQuad[q][1], kStroke, true);
   }
 }
 
-void checkmark(GfxRenderer& r, int cx, int cy) {
+void checkmark(const GfxRenderer& r, int cx, int cy) {
   r.drawLine(cx - 4, cy, cx - 1, cy + 4, kStroke, true);
   r.drawLine(cx - 1, cy + 4, cx + 4, cy - 4, kStroke, true);
 }
 
-void cross(GfxRenderer& r, int cx, int cy) {
+void cross(const GfxRenderer& r, int cx, int cy) {
   r.drawLine(cx - 4, cy - 4, cx + 4, cy + 4, kStroke, true);
   r.drawLine(cx + 4, cy - 4, cx - 4, cy + 4, kStroke, true);
 }

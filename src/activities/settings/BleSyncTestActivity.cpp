@@ -3,6 +3,7 @@
 #include <Arduino.h>  // millis
 #include <WiFi.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -66,9 +67,9 @@ void BleSyncTestActivity::onExit() {
 // Send one recent book's PROGRESS (loads the epub — heavy; deduped per key).
 void BleSyncTestActivity::pushProgressFor(const std::string& titleHash) {
   if (titleHash.empty()) return;
-  for (const auto& k : pushedKeys_) {
-    if (k == titleHash) return;  // already sent this connection
-  }
+  if (std::any_of(pushedKeys_.begin(), pushedKeys_.end(),
+                  [&titleHash](const std::string& key) { return key == titleHash; }))
+    return;  // already sent this connection
   const std::string path = BleProgress::pathForHash("", titleHash);
   if (path.empty()) return;
   KOReaderProgress kp;
@@ -144,13 +145,9 @@ void BleSyncTestActivity::loop() {
         const auto mine = BleProgress::buildLocalManifest(kMaxManifest);
         for (const auto& lb : mine) {
           if (lb.updatedAt <= 0) continue;  // nothing clocked to offer
-          int64_t phoneTs = -1;
-          for (const auto& pb : m.books) {
-            if (pb.titleHash == lb.titleHash) {
-              phoneTs = pb.updatedAt;
-              break;
-            }
-          }
+          const auto phoneBook = std::find_if(m.books.begin(), m.books.end(),
+                                              [&lb](const auto& book) { return book.titleHash == lb.titleHash; });
+          const int64_t phoneTs = phoneBook == m.books.end() ? -1 : phoneBook->updatedAt;
           if (lb.updatedAt > phoneTs) pushProgressFor(lb.titleHash);
         }
         changed = true;
