@@ -428,12 +428,21 @@ void DictionaryWordSelectActivity::loop() {
 
   if (words.empty()) return;
   if (handleCrossPageNavigation()) return;
-  if (mappedInput.wasPressed(MappedInputManager::Button::Left) && selected > 0) {
-    selected--;
+  // Step in reading order, not storage (visual) order. Within a row the two
+  // only differ by which key means forward, but at a row boundary stepping
+  // the storage index would jump from the last reading word of an RTL row to
+  // the first reading word of the *previous* row instead of onto the next.
+  const bool rtl = rowIsRtl(words[selected].row);
+  const bool fwdKey =
+      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Left : MappedInputManager::Button::Right);
+  const bool backKey =
+      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Right : MappedInputManager::Button::Left);
+  const int pos = readingPos[selected];
+  if (backKey && pos > 0) {
+    selected = readingOrder[pos - 1];
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) &&
-             selected + 1 < static_cast<int>(words.size())) {
-    selected++;
+  } else if (fwdKey && pos + 1 < static_cast<int>(words.size())) {
+    selected = readingOrder[pos + 1];
     requestUpdate();
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     moveVertical(-1);
