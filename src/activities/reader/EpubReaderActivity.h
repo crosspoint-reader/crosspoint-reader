@@ -109,7 +109,13 @@ class EpubReaderActivity final : public Activity {
   // batch path (16 KB scratch) viable during builds.
   static constexpr size_t BACKGROUND_BUILD_MIN_MAX_ALLOC = 16 * 1024;
   // Gate for a background build tick: true when the heap can take parse allocations.
+  // Updates buildHeapPaused as a side effect.
   bool buildTickHeapGate();
+  // True while the background build is gated on the heap floors. Lets skipLoopDelay()
+  // return the loop to normal delay/power-saving during the pause: isBuilding() stays
+  // true the whole time, and without this the loop would spin at full CPU speed doing
+  // no build work — indefinitely, if the build context itself keeps the heap low.
+  bool buildHeapPaused = false;
   // Heap floor for optional render-adjacent work (idle prewarm). Page
   // deserialization (TextBlock word vectors/strings) and glyph caching allocate
   // through throwing paths that abort() on OOM; skip deferrable work below it.
@@ -171,8 +177,10 @@ class EpubReaderActivity final : public Activity {
   // Full CPU speed + fast loop ticks while a section build runs: at the low-power
   // frequency a giant chapter's background rebuild stretches from ~40s to many
   // minutes, so the reader exits before it can finalize and the next open restarts
-  // it from page 0. Reverts to normal power behavior the moment the build finishes.
-  bool skipLoopDelay() override { return section && section->isBuilding(); }
+  // it from page 0. Reverts to normal power behavior the moment the build finishes,
+  // and while the build is heap-paused (no work is happening, so spinning at full
+  // speed would only burn battery; the paused gate still retries every loop pass).
+  bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;

@@ -260,12 +260,13 @@ void EpubReaderActivity::openReaderMenu() {
 bool EpubReaderActivity::buildTickHeapGate() {
   const size_t freeHeap = ESP.getFreeHeap();
   const size_t maxBlock = ESP.getMaxAllocHeap();
-  if (freeHeap >= BACKGROUND_BUILD_MIN_FREE_HEAP && maxBlock >= BACKGROUND_BUILD_MIN_MAX_ALLOC) {
-    return true;
-  }
   // Below the floors: just wait. The tick is deferrable — page-turn transients
-  // free up between turns and the tick retries every loop pass.
-  return false;
+  // free up between turns and the tick retries every loop pass. Track the
+  // paused state so skipLoopDelay() stops pinning the CPU at full speed while
+  // no build work is actually happening (the gate can stay closed for a long
+  // stretch if the retained build context itself holds the heap down).
+  buildHeapPaused = freeHeap < BACKGROUND_BUILD_MIN_FREE_HEAP || maxBlock < BACKGROUND_BUILD_MIN_MAX_ALLOC;
+  return !buildHeapPaused;
 }
 
 void EpubReaderActivity::loop() {
@@ -349,10 +350,12 @@ void EpubReaderActivity::loop() {
     RenderLock lock;
     // Re-check under the lock: render() (which also holds the RenderLock) may have finalized the
     // build between the outer isBuilding() check and acquiring the lock here, in which case
-    // buildSomeMore() would fail and wrongly reset the section. cppcheck can't see the cross-task
-    // mutation, so it flags this as always true.
+    // buildSomeMore() would fail and wrongly reset the section. The heap gate must be re-read
+    // too: a render that won the lock race can expand retained glyph buffers, invalidating the
+    // pre-lock heap reading. cppcheck can't see the cross-task mutation, so it flags this as
+    // always true.
     // cppcheck-suppress knownConditionTrueFalse
-    if (section->isBuilding()) {
+    if (section->isBuilding() && buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
@@ -1401,8 +1404,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   // Whole-plane buffering only pays when the BW refresh genuinely runs async
   // underneath it; on blocking panels (X3) it would just spend ~50 KB for the
-  // identical serial timing.
-  const bool overlapRefresh = tiledGrayscale && renderer.supportsAsyncRefresh();
+  // identical serial timing. Image pages take the blocking double-FAST path
+  // below (no async refresh is ever started), so they'd spend the buffers with
+  // nothing in flight to overlap.
+  const bool overlapRefresh = tiledGrayscale && renderer.supportsAsyncRefresh() && !pageHasImages;
   auto renderGrayscalePass = [&]() {
     if (needsTextGrayscale) {
       page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
@@ -1485,12 +1490,25 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Tiered on heap pressure: two plane buffers hide both plane renders
     // inside the refresh wait; one hides the LSB render (its buffer is reused
     // for MSB after streaming); none falls back to the strip-scratch flow with
-    // no overlap. The MSB buffer is only attempted when it leaves ~60 KB free
-    // so the pass never starves concurrent allocations. Blocking panels skip
-    // the buffers entirely (nothing to overlap).
-    auto lsbPlaneBuf = overlapRefresh ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
-    auto msbPlaneBuf =
-        (lsbPlaneBuf && ESP.getFreeHeap() >= planeBytes + 60000) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    // no overlap. Each buffer is only attempted when it leaves ~60 KB free so
+    // the pass never starves concurrent allocations: the next page re-render
+    // allocates through throwing std::string paths that abort() on OOM under
+    // -fno-exceptions, so a plane buffer that "fits" but eats the render
+    // headroom is worse than the strip fallback. Blocking panels skip the
+    // buffers entirely (nothing to overlap).
+    constexpr size_t PLANE_BUF_HEADROOM = 60000;
+    // Free-heap alone ignores fragmentation: taking the largest block for a
+    // plane can leave only slivers behind even when total headroom looks fine.
+    // Require the block to fit the plane with 16 KB contiguous to spare, which
+    // also keeps the advance-table batch scratch viable mid-render (same
+    // rationale as BACKGROUND_BUILD_MIN_MAX_ALLOC).
+    constexpr size_t PLANE_BUF_MAX_ALLOC_RESERVE = 16 * 1024;
+    const auto planeBufFits = [planeBytes] {
+      return ESP.getFreeHeap() >= planeBytes + PLANE_BUF_HEADROOM &&
+             ESP.getMaxAllocHeap() >= planeBytes + PLANE_BUF_MAX_ALLOC_RESERVE;
+    };
+    auto lsbPlaneBuf = (overlapRefresh && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
+    auto msbPlaneBuf = (lsbPlaneBuf && planeBufFits()) ? makeUniqueNoThrow<uint8_t[]>(planeBytes) : nullptr;
 
     if (lsbPlaneBuf) {
       renderPlaneToBuffer(true, lsbPlaneBuf.get());
