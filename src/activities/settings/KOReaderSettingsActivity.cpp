@@ -13,9 +13,10 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 6;
+constexpr int MENU_ITEMS = 7;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL,
-                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_AUTHENTICATE};
+                                     StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,
+                                     StrId::STR_AUTHENTICATE};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -103,6 +104,14 @@ void KOReaderSettingsActivity::handleSelection() {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (selectedIndex == 5) {
+    // Sync behavior - toggle between Ask and Smart
+    const auto current = KOREADER_STORE.getSyncBehavior();
+    const auto newBehavior = (current == KOReaderSyncBehavior::ASK_EVERY_TIME) ? KOReaderSyncBehavior::SMART
+                                                                               : KOReaderSyncBehavior::ASK_EVERY_TIME;
+    KOREADER_STORE.setSyncBehavior(newBehavior);
+    KOREADER_STORE.saveToFile();
+    requestUpdate();
+  } else if (selectedIndex == 6) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -143,6 +152,9 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
         } else if (index == 4) {
           return KOREADER_STORE.getSendMetadata() ? std::string(tr(STR_STATE_ON)) : std::string(tr(STR_STATE_OFF));
         } else if (index == 5) {
+          return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? std::string(tr(STR_SMART_SYNC))
+                                                                                 : std::string(tr(STR_ASK_EVERY_TIME));
+        } else if (index == 6) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));
