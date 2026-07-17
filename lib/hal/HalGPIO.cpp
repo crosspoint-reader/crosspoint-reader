@@ -260,16 +260,6 @@ bool HalGPIO::isXteinkDevice() const {
          BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
 }
 
-void HalGPIO::startDeepSleep() {
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  while (inputMgr.isPressed(BTN_POWER)) {
-    delay(50);
-    inputMgr.update();
-  }
-  freeink::PowerManager::armPowerButtonWakeup();
-  freeink::PowerManager::deepSleep();
-}
-
 bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
   // Boards without a power button (or M5Paper's latch circuit) cannot verify a
   // hold; treat the wake as valid.
