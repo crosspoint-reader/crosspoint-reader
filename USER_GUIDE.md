@@ -271,7 +271,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
-- **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
+- **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev" or "Both Next" to have either side button advance. You can still go back using the front button. You can also disable them entirely. This change is only in effect when reading.
 
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
   
