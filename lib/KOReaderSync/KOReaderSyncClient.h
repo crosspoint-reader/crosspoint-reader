@@ -40,7 +40,7 @@ struct KOReaderProgress {
   std::string deviceId;                          // Device ID
   int64_t timestamp;                             // Unix timestamp of last update
   std::optional<KOReaderMetadata> metadata;      // Optional document metadata
-  std::optional<KOReaderRichPosition> position;  // Optional rich position (upload only)
+  std::optional<KOReaderRichPosition> position;  // Optional rich position (crosspoint-sync servers only)
 };
 
 /**

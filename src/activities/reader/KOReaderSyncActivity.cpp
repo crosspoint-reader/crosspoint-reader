@@ -232,8 +232,19 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  // Prefer the exact spine/page from a crosspoint-sync rich position (lossless
+  // CrossPoint<->CrossPoint sync); fall back to the approximate XPath mapping
+  // for plain kosync servers or when the rich position cannot be applied.
+  std::optional<CrossPointPosition> richMapped;
+  if (remoteProgress.position.has_value()) {
+    richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
+  }
+  if (richMapped.has_value()) {
+    remotePosition = *richMapped;
+  } else {
+    SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
+    remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  }
 
   if (smartSyncEnabled()) {
     static constexpr float SAME_PROGRESS_EPSILON = 0.001f;  // 0.1 percentage points
