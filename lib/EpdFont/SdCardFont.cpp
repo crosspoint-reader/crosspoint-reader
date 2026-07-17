@@ -655,6 +655,41 @@ int32_t SdCardFont::findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) 
   return -1;
 }
 
+bool SdCardFont::readAdvance(uint32_t codepoint, uint8_t style, uint16_t* outAdvance) const {
+  if (!outAdvance || !loaded_) return false;
+
+  const uint8_t styleIdx = resolveStyle(style);
+  if (styleIdx >= MAX_STYLES || !styles_[styleIdx].present) return false;
+  if (advanceTableLookup(styleIdx, codepoint, outAdvance)) return true;
+
+  const auto& s = styles_[styleIdx];
+  if (!s.fullIntervals && !s.bmpIntervals) return false;
+
+  int32_t glyphIndex = findGlobalGlyphIndex(s, codepoint);
+  if (glyphIndex < 0 && codepoint != REPLACEMENT_GLYPH) {
+    glyphIndex = findGlobalGlyphIndex(s, REPLACEMENT_GLYPH);
+  }
+  if (glyphIndex < 0) return false;
+
+  HalFile file;
+  if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+    LOG_ERR("SDCF", "readAdvance: failed to open .cpfont for U+%04X style %u", codepoint, styleIdx);
+    return false;
+  }
+
+  const uint32_t fileOff = s.glyphsFileOffset + static_cast<uint32_t>(glyphIndex) * sizeof(EpdGlyph);
+  EpdGlyph glyph = {};
+  if (!file.seekSet(fileOff) || file.read(reinterpret_cast<uint8_t*>(&glyph), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
+    LOG_ERR("SDCF", "readAdvance: failed to read glyph for U+%04X style %u", codepoint, styleIdx);
+    file.close();
+    return false;
+  }
+  file.close();
+
+  *outAdvance = glyph.advanceX;
+  return true;
+}
+
 // --- Prewarm ---
 
 int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOnly) {
@@ -1098,10 +1133,21 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
     if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
     const auto& s = styles_[si];
 
-    // Stop fetching once the cache is full — further inserts would be dropped
-    // by the merge anyway. The renderer fast path tolerates missing entries
-    // (returns 0); the slow path is still correct for those codepoints.
-    if (advanceTableSize_[si] >= ADVANCE_CACHE_LIMIT) continue;
+    if (advanceTableSize_[si] >= ADVANCE_CACHE_LIMIT) {
+      bool cacheMissesRequestedCodepoint = false;
+      for (uint32_t i = 0; i < cpCount; i++) {
+        if (!advanceTableLookup(si, codepoints[i], nullptr)) {
+          cacheMissesRequestedCodepoint = true;
+          break;
+        }
+      }
+      if (!cacheMissesRequestedCodepoint) continue;
+
+      delete[] advanceTable_[si];
+      advanceTable_[si] = nullptr;
+      advanceTableSize_[si] = 0;
+      LOG_DBG("SDCF", "Advance table style %u: reset full cache for active text", si);
+    }
 
     // For each codepoint in `codepoints`, skip those already cached, then
     // resolve to a glyph index. Build a parallel array sorted by glyph index

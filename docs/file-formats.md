@@ -90,16 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 30
+### Version 31
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 30 is binary-identical to version 29. The version was bumped because
-Arabic contextual shaping changed text measurement (`getTextAdvanceX` now
-measures the shaped visual text), so word positions cached by v29 no longer
-match what `drawText` renders.
+Version 31 is binary-identical to version 30. The version was bumped so
+SD-card font layouts are rebuilt with corrected glyph-advance measurement for
+CJK-heavy text.
+
+Version 30 was bumped because Arabic contextual shaping changed text
+measurement (`getTextAdvanceX` measures the shaped visual text), so word
+positions cached by v29 no longer match what `drawText` renders.
 
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:

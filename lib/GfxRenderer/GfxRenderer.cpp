@@ -21,6 +21,20 @@ namespace {
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
   return font.resolveStyle(static_cast<uint8_t>(style));
 }
+
+int32_t resolveSdCardAdvanceFP(const SdCardFont& sdFont, const EpdFontFamily& font, const uint32_t cp,
+                               const EpdFontFamily::Style style, const uint8_t styleIdx) {
+  uint16_t advanceFP = sdFont.getAdvance(cp, styleIdx);
+  if (advanceFP != 0 || utf8IsCombiningMark(cp)) {
+    return advanceFP;
+  }
+  if (sdFont.readAdvance(cp, styleIdx, &advanceFP)) {
+    return advanceFP;
+  }
+
+  const EpdGlyph* glyph = font.getGlyph(cp, style);
+  return glyph ? glyph->advanceX : 0;
+}
 }  // namespace
 
 namespace {
@@ -1652,7 +1666,11 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
-    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+    uint16_t advanceFP = sdIt->second->getAdvance(' ', resolvedStyle);
+    if (advanceFP == 0) {
+      sdIt->second->readAdvance(' ', resolvedStyle, &advanceFP);
+    }
+    return fp4::toPixel(advanceFP);
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -1673,7 +1691,11 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
-    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+    uint16_t advanceFP = sdIt->second->getAdvance(' ', resolvedStyle);
+    if (advanceFP == 0) {
+      sdIt->second->readAdvance(' ', resolvedStyle, &advanceFP);
+    }
+    return fp4::toPixel(advanceFP);
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -1725,11 +1747,7 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
       if (BidiUtils::isTransparentMark(cp)) {
         continue;
       }
-      int32_t advFP = sdIt->second->getAdvance(cp, styleIdx);
-      if (advFP == 0 && !utf8IsCombiningMark(cp)) {
-        const EpdGlyph* glyph = font.getGlyph(cp, style);
-        advFP = glyph ? glyph->advanceX : 0;
-      }
+      const int32_t advFP = resolveSdCardAdvanceFP(*sdIt->second, font, cp, style, styleIdx);
       widthFP += isSupSub ? (advFP + 1) / 2 : advFP;
     }
     return fp4::toPixel(widthFP);

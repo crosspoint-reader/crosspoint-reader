@@ -57,6 +57,7 @@ class SdCardFont {
   // Look up advanceX for a codepoint from the advance table.
   // Returns the 12.4 fixed-point advance, or 0 if not found.
   uint16_t getAdvance(uint32_t codepoint, uint8_t style) const;
+  bool readAdvance(uint32_t codepoint, uint8_t style, uint16_t* outAdvance) const;
 
   // Returns true if advance table is populated for at least one style.
   bool hasAdvanceTable() const;
