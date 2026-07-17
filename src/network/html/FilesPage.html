@@ -134,6 +134,12 @@
     .folder-action-btn:hover {
       background-color: #d68910;
     }
+    .move-action-btn {
+      background-color: #3498db;
+    }
+    .move-action-btn:hover {
+      background-color: #2980b9;
+    }
     .delete-action-btn {
       background-color: #e74c3c;
     }
@@ -1518,6 +1524,7 @@
   <div class="action-buttons">
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
+    <button class="action-btn move-action-btn" onclick="openMoveSelectedModal()">📂 Move Selected</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
   </div>
 </div>
@@ -1798,10 +1805,10 @@
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
     <button class="modal-close" onclick="closeRenameModal()">&times;</button>
-    <h3>✏️ Rename File</h3>
+    <h3>✏️ Rename</h3>
     <div class="folder-form">
       <p class="file-info">Renaming <strong id="renameItemName"></strong></p>
-      <input type="text" id="renameNewName" class="folder-input" placeholder="New file name...">
+      <input type="text" id="renameNewName" class="folder-input" placeholder="New name...">
       <input type="hidden" id="renameItemPath">
       <button class="rename-btn-confirm" onclick="confirmRename()">Rename</button>
       <button class="delete-btn-cancel" onclick="closeRenameModal()">Cancel</button>
@@ -1813,12 +1820,11 @@
 <div class="modal-overlay" id="moveModal">
   <div class="modal">
     <button class="modal-close" onclick="closeMoveModal()">&times;</button>
-    <h3>📂 Move File</h3>
+    <h3>📂 Move</h3>
     <div class="folder-form">
       <p class="file-info">Moving <strong id="moveItemName"></strong></p>
       <input type="text" id="moveDestPath" class="folder-input" list="moveFolderOptions" placeholder="/Destination/Folder">
       <datalist id="moveFolderOptions"></datalist>
-      <input type="hidden" id="moveItemPath">
       <button class="move-btn-confirm" onclick="confirmMove()">Move</button>
       <button class="delete-btn-cancel" onclick="closeMoveModal()">Cancel</button>
     </div>
@@ -2050,7 +2056,11 @@
           fileTableContent += `<td><span class="file-icon">📁</span><a href="/files?path=${encodeURIComponent(folderPath)}" class="folder-link">${escapeHtml(file.name)}</a></td>`;
           fileTableContent += '<td><span class="folder-badge">FOLDER</span></td>';
           fileTableContent += '<td>-</td>';
-          fileTableContent += `<td class="actions-col"><div class="action-icon-group"><button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button></div></td>`;
+          fileTableContent += `<td class="actions-col"><div class="action-icon-group">`;
+          fileTableContent += `<button class="move-btn" onclick="openMoveModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Move folder">📂</button>`;
+          fileTableContent += `<button class="rename-btn" onclick="openRenameModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Rename folder">✏️</button>`;
+          fileTableContent += `<button class="delete-btn" onclick="openDeleteModal('${file.name.replaceAll("'", "\\'")}', '${folderPath.replaceAll("'", "\\'")}', true)" title="Delete folder">🗑️</button>`;
+          fileTableContent += `</div></td>`;
           fileTableContent += '</tr>';
         } else {
           let filePath = currentPath;
@@ -5800,8 +5810,8 @@ function retryAllFailedUploads() {
   }
 
   // Rename functions
-  function openRenameModal(name, path) {
-    document.getElementById('renameItemName').textContent = '📄 ' + name;
+  function openRenameModal(name, path, isFolder) {
+    document.getElementById('renameItemName').textContent = (isFolder ? '📁 ' : '📄 ') + name;
     document.getElementById('renameItemPath').value = path;
     document.getElementById('renameNewName').value = name;
     document.getElementById('renameModal').classList.add('open');
@@ -5825,7 +5835,7 @@ function retryAllFailedUploads() {
       return;
     }
     if (newName.includes('/') || newName.includes('\\')) {
-      alert('File name cannot include slashes.');
+      alert('Name cannot include slashes.');
       return;
     }
 
@@ -5915,9 +5925,28 @@ function retryAllFailedUploads() {
     });
   }
 
-  function openMoveModal(name, path) {
-    document.getElementById('moveItemName').textContent = '📄 ' + name;
-    document.getElementById('moveItemPath').value = path;
+  let moveItemsGlobal = [];
+
+  function openMoveModal(name, path, isFolder) {
+    openMoveModalForItems([{ name: name, path: path, isFolder: !!isFolder }]);
+  }
+
+  // Open move modal for currently selected checkboxes
+  function openMoveSelectedModal() {
+    const items = getSelectedItems();
+    if (items.length === 0) {
+      alert('Please select at least one item to move.');
+      return;
+    }
+    openMoveModalForItems(items);
+  }
+
+  function openMoveModalForItems(items) {
+    moveItemsGlobal = items;
+    const label = items.length === 1
+      ? (items[0].isFolder ? '📁 ' : '📄 ') + items[0].name
+      : items.length + ' items';
+    document.getElementById('moveItemName').textContent = label;
     document.getElementById('moveDestPath').value = currentPath === '/' ? '/' : currentPath;
     document.getElementById('moveModal').classList.add('open');
     loadMoveFolderOptions();
@@ -5930,37 +5959,47 @@ function retryAllFailedUploads() {
     document.getElementById('moveModal').classList.remove('open');
   }
 
-  function confirmMove() {
-    const path = document.getElementById('moveItemPath').value;
+  async function confirmMove() {
     const destPath = normalizePath(document.getElementById('moveDestPath').value);
 
     if (!destPath) {
       alert('Please enter a destination folder.');
       return;
     }
+    if (!moveItemsGlobal || moveItemsGlobal.length === 0) {
+      closeMoveModal();
+      return;
+    }
 
-    const formData = new FormData();
-    formData.append('path', path);
-    formData.append('dest', destPath);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', '/move', true);
-
-    xhr.onload = function() {
-      if (xhr.status === 200) {
-        window.location.reload();
-      } else {
-        alert('Failed to move: ' + xhr.responseText);
+    // Reject moving a folder into itself or its own subtree before hitting the server
+    for (const item of moveItemsGlobal) {
+      if (item.isFolder && (destPath === item.path || destPath.startsWith(item.path + '/'))) {
+        alert('Cannot move folder "' + item.name + '" into itself.');
+        return;
       }
-      closeMoveModal();
-    };
+    }
 
-    xhr.onerror = function() {
-      alert('Failed to move - network error');
-      closeMoveModal();
-    };
+    const failures = [];
+    // Move sequentially: the device serializes SD access, so parallel requests only add contention
+    for (const item of moveItemsGlobal) {
+      const formData = new FormData();
+      formData.append('path', item.path);
+      formData.append('dest', destPath);
+      try {
+        const res = await fetch('/move', { method: 'POST', body: formData });
+        if (!res.ok) {
+          failures.push(item.name + ': ' + await res.text());
+        }
+      } catch (e) {
+        failures.push(item.name + ': network error');
+      }
+    }
 
-    xhr.send(formData);
+    if (failures.length > 0) {
+      alert('Failed to move:\n' + failures.join('\n'));
+    }
+    closeMoveModal();
+    window.location.reload();
   }
   hydrate();
 </script>
