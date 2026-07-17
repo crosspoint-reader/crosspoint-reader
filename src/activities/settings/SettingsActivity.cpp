@@ -29,6 +29,28 @@
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
+namespace {
+// Combined value shown on the "Reader Font" action row, e.g. "Noto Serif, M"
+std::string readerFontValueText() {
+  const char* family;
+  if (SETTINGS.sdFontFamilyName[0] != '\0') {
+    family = SETTINGS.sdFontFamilyName;
+  } else {
+    family =
+        I18N.get(SETTINGS.fontFamily == CrossPointSettings::NOTOSANS ? StrId::STR_NOTO_SANS : StrId::STR_NOTO_SERIF);
+  }
+
+  static constexpr StrId sizeIds[] = {StrId::STR_SIZE_ABBR_SMALL, StrId::STR_SIZE_ABBR_MEDIUM,
+                                      StrId::STR_SIZE_ABBR_LARGE, StrId::STR_SIZE_ABBR_X_LARGE};
+  constexpr size_t sizeCount = sizeof(sizeIds) / sizeof(sizeIds[0]);
+  const size_t size = SETTINGS.fontSize < sizeCount ? SETTINGS.fontSize : CrossPointSettings::MEDIUM;
+
+  char buf[64];
+  snprintf(buf, sizeof(buf), "%s, %s", family, I18N.get(sizeIds[size]));
+  return std::string(buf);
+}
+}  // namespace
+
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   readerSettings.clear();
@@ -411,6 +433,8 @@ void SettingsActivity::render(RenderLock&&) {
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }
+        } else if (setting.type == SettingType::ACTION && setting.action == SettingAction::ReaderFont) {
+          valueText = readerFontValueText();
         }
         return valueText;
       },
