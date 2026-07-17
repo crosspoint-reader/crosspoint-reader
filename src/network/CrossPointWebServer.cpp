@@ -132,6 +132,11 @@ void CrossPointWebServer::begin() {
     return;
   }
 
+  // Add Access-Control-Allow-* headers to every response so web-based clients
+  // and PWAs on other origins can use the HTTP API. Preflight OPTIONS requests
+  // are answered in handleNotFound().
+  server->enableCORS(true);
+
   // Setup routes
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
@@ -353,6 +358,22 @@ void CrossPointWebServer::handleJszip() const {
 }
 
 void CrossPointWebServer::handleNotFound() const {
+  // CORS preflight: routes are registered per-method, so OPTIONS requests land
+  // here. The Access-Control-Allow-* headers are added by enableCORS().
+  if (server->method() == HTTP_OPTIONS) {
+    server->send(204, "text/plain", "");
+    return;
+  }
+
+  // in AP mode, redirect unmatched browser/captive-portal requests to "/" so the OS auto-opens the browser
+  // API requests (/api/*) still return 404 so XHR errors surface correctly
+  // see https://en.wikipedia.org/wiki/Captive_portal#Detection
+  if (apMode && !server->uri().startsWith("/api/")) {
+    server->sendHeader("Location", "/", true);
+    server->send(302, "text/plain", "");
+    return;
+  }
+
   String message = "404 Not Found\n\n";
   message += "URI: " + server->uri() + "\n";
   server->send(404, "text/plain", message);
@@ -662,17 +683,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
     LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
 
-    // Create file path
     String filePath = state.path;
     if (!filePath.endsWith("/")) filePath += "/";
     filePath += state.fileName;
 
-    // Check if file already exists - SD operations can be slow
     esp_task_wdt_reset();
     if (Storage.exists(filePath.c_str())) {
-      LOG_DBG("WEB", "[UPLOAD] Overwriting existing file: %s", filePath.c_str());
-      esp_task_wdt_reset();
-      Storage.remove(filePath.c_str());
+      state.error = "File already exists: " + state.fileName;
+      LOG_DBG("WEB", "[UPLOAD] Collision: %s", filePath.c_str());
+      return;
     }
 
     // Open file for writing - this can be slow due to FAT cluster allocation
@@ -740,7 +759,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
                 writePercent);
 
-        // Clear epub cache to prevent stale metadata issues when overwriting files
+        // Clear epub cache after uploading the file
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
@@ -1615,19 +1634,19 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsUploadPath = wsUploadPath.substring(0, wsUploadPath.length() - 1);
           }
 
-          // Build file path
           String filePath = wsUploadPath;
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += wsUploadFileName;
 
-          LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
-                  filePath.c_str());
-
-          // Check if file exists and remove it
           esp_task_wdt_reset();
           if (Storage.exists(filePath.c_str())) {
-            Storage.remove(filePath.c_str());
+            LOG_DBG("WS", "Upload collision: %s", filePath.c_str());
+            wsServer->sendTXT(num, "ERROR:File already exists: " + wsUploadFileName);
+            return;
           }
+
+          LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
+                  filePath.c_str());
 
           // Open file for writing
           esp_task_wdt_reset();
@@ -1712,7 +1731,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         LOG_DBG("WS", "Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)", wsUploadFileName.c_str(), wsUploadSize,
                 elapsed, kbps);
 
-        // Clear epub cache to prevent stale metadata issues when overwriting files
+        // Clear epub cache after uploading the file
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;

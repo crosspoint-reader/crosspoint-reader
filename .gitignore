@@ -2,6 +2,8 @@
 .idea
 .DS_Store
 .vscode
+open-x4-sdk
+fs_
 lib/EpdFont/fontsrc
 lib/I18n/I18nKeys.h
 lib/I18n/I18nStrings.h
