@@ -22,11 +22,19 @@ std::string buildDestination(const std::string& srcPath, const std::string& dstD
 // moves, its progress is lost).
 bool moveFile(const std::string& srcPath, const std::string& dstPath);
 
+// Progress reporting for moveFolder: done/total counted in files (not
+// directories). Called once with (0, total) after the pre-count, then once per
+// file migrated. Plain function pointer + context — no std::function.
+using ProgressCallback = void (*)(size_t done, size_t total, void* ctx);
+
 // Move (or rename) the folder srcPath to dstPath (both full paths, no trailing
 // slash), then walk the moved subtree and migrate cache dir, Recent Books
 // entry and the open-book resume pointer for every book inside. Returns false
 // when the folder rename itself fails or dstPath lies inside srcPath; cache
 // migration failures are non-fatal (affected books lose their progress).
-bool moveFolder(const std::string& srcPath, const std::string& dstPath);
+// When progressCb is set, the subtree is pre-counted (one extra traversal) so
+// the callback receives a true percentage denominator.
+bool moveFolder(const std::string& srcPath, const std::string& dstPath, ProgressCallback progressCb = nullptr,
+                void* progressCtx = nullptr);
 
 }  // namespace BookMover

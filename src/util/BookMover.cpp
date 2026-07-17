@@ -91,7 +91,45 @@ bool moveFile(const std::string& srcPath, const std::string& dstPath) {
   return true;
 }
 
-bool moveFolder(const std::string& srcPath, const std::string& dstPath) {
+// Count files (not directories) in the subtree at rootPath. Same iterative
+// walk as the migration pass; used to pre-compute the progress denominator.
+static size_t countFilesInTree(const std::string& rootPath, char* nameBuffer) {
+  size_t count = 0;
+  std::vector<std::string> stack;
+  stack.reserve(8);
+  stack.push_back(rootPath);
+
+  while (!stack.empty()) {
+    const std::string dirPath = std::move(stack.back());
+    stack.pop_back();
+
+    auto dir = Storage.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) {
+      continue;
+    }
+
+    for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+      entry.getName(nameBuffer, NAME_BUFFER_SIZE);
+      if (strcmp(nameBuffer, ".") == 0 || strcmp(nameBuffer, "..") == 0) {
+        continue;
+      }
+      if (entry.isDirectory()) {
+        std::string entryPath = dirPath;
+        if (entryPath.back() != '/') entryPath += '/';
+        entryPath += nameBuffer;
+        entry.close();
+        stack.push_back(std::move(entryPath));
+      } else {
+        entry.close();
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
+bool moveFolder(const std::string& srcPath, const std::string& dstPath, const ProgressCallback progressCb,
+                void* progressCtx) {
   if (srcPath == dstPath) return true;
   if (srcPath.empty() || srcPath == "/" || dstPath.empty() || dstPath == "/") {
     LOG_ERR("BookMover", "Refusing to move to/from root");
@@ -103,7 +141,17 @@ bool moveFolder(const std::string& srcPath, const std::string& dstPath) {
     return false;
   }
 
-  LOG_INF("BookMover", "Moving folder %s -> %s", srcPath.c_str(), dstPath.c_str());
+  // The folder move is a single FAT rename; the per-file work is the cache
+  // migration walk below, so progress is counted in files.
+  auto nameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
+
+  size_t totalFiles = 0;
+  if (progressCb && nameBuffer) {
+    totalFiles = countFilesInTree(srcPath, nameBuffer.get());
+    progressCb(0, totalFiles, progressCtx);
+  }
+
+  LOG_INF("BookMover", "Moving folder %s -> %s (%zu files)", srcPath.c_str(), dstPath.c_str(), totalFiles);
   if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
     LOG_ERR("BookMover", "Failed to move folder");
     return false;
@@ -112,12 +160,12 @@ bool moveFolder(const std::string& srcPath, const std::string& dstPath) {
   // The folder has moved, so every book inside now lives at a new path and its
   // path-hash-keyed cache must be re-keyed. Walk the moved subtree iteratively
   // (explicit stack, no recursion — task stacks are small).
-  auto nameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
   if (!nameBuffer) {
     LOG_ERR("BookMover", "OOM: name buffer; folder moved but reading progress not migrated");
     return true;
   }
 
+  size_t doneFiles = 0;
   std::vector<std::string> stack;
   stack.reserve(8);
   stack.push_back(dstPath);
@@ -150,6 +198,10 @@ bool moveFolder(const std::string& srcPath, const std::string& dstPath) {
         // Old path = same entry with the source folder prefix restored.
         const std::string oldEntryPath = srcPath + entryPath.substr(dstPath.size());
         migrateBookState(oldEntryPath, entryPath);
+        doneFiles++;
+        if (progressCb) {
+          progressCb(doneFiles, totalFiles, progressCtx);
+        }
       }
     }
   }

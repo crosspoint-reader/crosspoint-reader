@@ -259,6 +259,36 @@ void FileBrowserActivity::promptDelete(const std::string& entry, const std::stri
   startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
 }
 
+// Blocks the main task in BookMover::moveFolder while the render task draws a
+// percentage bar (progress = files migrated / files in the subtree, which
+// BookMover pre-counts because a callback is passed).
+bool FileBrowserActivity::moveFolderWithProgress(const std::string& srcPath, const std::string& dstPath) {
+  {
+    RenderLock lock(*this);
+    moveInProgress = true;
+    moveDone = 0;
+    moveTotal = 0;
+    lastRenderedPercent = 101;
+  }
+  requestUpdateAndWait();
+
+  auto progressCb = +[](size_t done, size_t total, void* ctx) {
+    auto* self = static_cast<FileBrowserActivity*>(ctx);
+    self->moveDone = done;
+    self->moveTotal = total;
+    // immediate=true: wake the render task directly. We're in a tight sync
+    // loop so the main loop won't drain the requestedUpdate flag for us.
+    self->requestUpdate(true);
+  };
+  const bool ok = BookMover::moveFolder(srcPath, dstPath, progressCb, this);
+
+  {
+    RenderLock lock(*this);
+    moveInProgress = false;
+  }
+  return ok;
+}
+
 // Opens a destination picker (this same activity in PickFolder mode) and moves
 // srcPath there, migrating the book cache(s) so reading progress is kept.
 // Folders move with their whole subtree; BookMover::moveFolder rejects a
@@ -279,7 +309,7 @@ void FileBrowserActivity::promptMoveDestination(const std::string& srcPath, cons
                              return;
                            }
                            const std::string dstPath = BookMover::buildDestination(srcPath, dstDir);
-                           const bool moved = isDirectory ? BookMover::moveFolder(srcPath, dstPath)
+                           const bool moved = isDirectory ? moveFolderWithProgress(srcPath, dstPath)
                                                           : BookMover::moveFile(srcPath, dstPath);
                            if (moved) {
                              loadFiles();
@@ -312,7 +342,7 @@ void FileBrowserActivity::promptRenameFolder(const std::string& srcPath) {
           return;
         }
         const std::string dstPath = srcPath.substr(0, srcPath.find_last_of('/') + 1) + name;
-        if (Storage.exists(dstPath.c_str()) || !BookMover::moveFolder(srcPath, dstPath)) {
+        if (Storage.exists(dstPath.c_str()) || !moveFolderWithProgress(srcPath, dstPath)) {
           showMessage(StrId::STR_RENAME_FAILED);
         } else {
           loadFiles();
@@ -531,6 +561,27 @@ std::string getFileExtension(const std::string& filename) {
 }
 
 void FileBrowserActivity::render(RenderLock&&) {
+  if (moveInProgress) {
+    // Throttle redraws to once per percent (each one is a display refresh).
+    const unsigned int pct =
+        moveTotal > 0 ? static_cast<unsigned int>((moveDone * 100) / moveTotal) : (moveDone > 0 ? 100 : 0);
+    if (pct == lastRenderedPercent) return;
+    lastRenderedPercent = pct;
+
+    renderer.clearScreen();
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const auto pageWidth = renderer.getScreenWidth();
+    const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const auto top = (renderer.getScreenHeight() - lineHeight) / 2;
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_MOVING), true, EpdFontFamily::BOLD);
+    GUI.drawProgressBar(renderer,
+                        Rect{metrics.contentSidePadding, top + lineHeight + metrics.verticalSpacing,
+                             pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
+                        pct, 100);
+    renderer.displayBuffer();
+    return;
+  }
+
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
   renderer.clearScreen();

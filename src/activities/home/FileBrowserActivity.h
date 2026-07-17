@@ -48,6 +48,17 @@ class FileBrowserActivity final : public Activity {
   bool popupVisible = false;
   unsigned long popupTime = 0;
 
+  // Folder-move progress: BookMover::moveFolder blocks the main task while the
+  // render task draws a percentage bar from these fields (same pattern as
+  // SdFirmwareUpdateActivity's flash progress).
+  bool moveInProgress = false;
+  size_t moveDone = 0;
+  size_t moveTotal = 0;
+  unsigned int lastRenderedPercent = 101;
+
+  // Runs BookMover::moveFolder with the percentage-bar progress screen up.
+  bool moveFolderWithProgress(const std::string& srcPath, const std::string& dstPath);
+
   // Rows prepended to the list in PickFolder mode ("Move here", "New folder").
   size_t syntheticCount() const { return mode == Mode::PickFolder ? 2 : 0; }
 
