@@ -1794,6 +1794,10 @@ int GfxRenderer::getLineHeight(const int fontId) const {
   return fontIt->second.getData(EpdFontFamily::REGULAR)->advanceY;
 }
 
+int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
+  return static_cast<int>(getLineHeight(fontId) * compression + 0.5f);
+}
+
 int GfxRenderer::getTextHeight(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {
