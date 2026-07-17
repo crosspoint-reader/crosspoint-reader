@@ -50,12 +50,6 @@ void ReaderFontActivity::onEnter() {
   usableHeight = renderer.getScreenHeight() - afterHeader - bottomReserved;
   previewHeight = usableHeight * metrics_.previewHeightPercent / 100;
 
-  // Save original settings so Back can revert both dimensions
-  originalFontFamily_ = SETTINGS.fontFamily;
-  originalFontSize_ = SETTINGS.fontSize;
-  strncpy(originalSdFontFamilyName_, SETTINGS.sdFontFamilyName, sizeof(originalSdFontFamilyName_) - 1);
-  originalSdFontFamilyName_[sizeof(originalSdFontFamilyName_) - 1] = '\0';
-
   // Build font family list
   fonts_.clear();
   fonts_.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + (registry_ ? registry_->getFamilyCount() : 0));
@@ -81,8 +75,6 @@ void ReaderFontActivity::onEnter() {
 
   currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
   currentSizeIndex_ = findCurrentFontSizeIndex(SETTINGS.fontSize, sizes_.size());
-  previewFamilyIndex_ = currentFamilyIndex_;
-  previewSizeIndex_ = currentSizeIndex_;
   navFamily_ = currentFamilyIndex_ + 1;
   navSize_ = currentSizeIndex_ + 1;
 
@@ -101,7 +93,7 @@ int ReaderFontActivity::navIndex() const { return tab_ == Tab::Family ? navFamil
 
 void ReaderFontActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    revertAndExit();
+    finish();
     return;
   }
 
@@ -113,20 +105,16 @@ void ReaderFontActivity::loop() {
 
     const int itemIndex = navIndex() - 1;
     if (tab_ == Tab::Family) {
-      if (itemIndex == previewFamilyIndex_) {
-        // Already previewed: apply the pending family + size combination
-        finish();
-        return;
+      if (itemIndex != currentFamilyIndex_) {
+        applyFamily(itemIndex);
+        requestUpdate();
       }
-      previewFamily(itemIndex);
     } else {
-      if (itemIndex == previewSizeIndex_) {
-        finish();
-        return;
+      if (itemIndex != currentSizeIndex_) {
+        applySize(itemIndex);
+        requestUpdate();
       }
-      previewSize(itemIndex);
     }
-    requestUpdate();
     return;
   }
 
@@ -148,8 +136,8 @@ void ReaderFontActivity::loop() {
   buttonNavigator_.onPreviousContinuous([this] { switchTab(); });
 }
 
-void ReaderFontActivity::previewFamily(int listIndex) {
-  previewFamilyIndex_ = listIndex;
+void ReaderFontActivity::applyFamily(int listIndex) {
+  currentFamilyIndex_ = listIndex;
   const auto& font = fonts_[listIndex];
   if (font.isBuiltin) {
     SETTINGS.fontFamily = font.settingIndex;
@@ -165,6 +153,12 @@ void ReaderFontActivity::previewFamily(int listIndex) {
   }
 }
 
+void ReaderFontActivity::applySize(int listIndex) {
+  currentSizeIndex_ = listIndex;
+  SETTINGS.fontSize = sizes_[listIndex].settingIndex;
+  sdFontSystem.ensureLoaded(renderer);
+}
+
 void ReaderFontActivity::switchTab() {
   // Stay on the tab bar if focused there; otherwise land on the first item of
   // the new tab (mirrors SettingsActivity category switching).
@@ -172,21 +166,6 @@ void ReaderFontActivity::switchTab() {
   tab_ = (tab_ == Tab::Family) ? Tab::Size : Tab::Family;
   navIndex() = onTabBar ? 0 : 1;
   requestUpdate();
-}
-
-void ReaderFontActivity::previewSize(int listIndex) {
-  previewSizeIndex_ = listIndex;
-  SETTINGS.fontSize = sizes_[listIndex].settingIndex;
-  sdFontSystem.ensureLoaded(renderer);
-}
-
-void ReaderFontActivity::revertAndExit() {
-  SETTINGS.fontFamily = originalFontFamily_;
-  SETTINGS.fontSize = originalFontSize_;
-  strncpy(SETTINGS.sdFontFamilyName, originalSdFontFamilyName_, sizeof(SETTINGS.sdFontFamilyName) - 1);
-  SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-  sdFontSystem.ensureLoaded(renderer);
-  finish();
 }
 
 void ReaderFontActivity::renderPreviewPane(int top, int height) const {
@@ -199,12 +178,12 @@ void ReaderFontActivity::renderPreviewPane(int top, int height) const {
   const int labelGap = 4;
   const int labelReserved = labelH + labelGap + metrics_.previewPadding;
 
-  // Label always shows the full pending combination, e.g. Preview "Noto Sans, Large"
-  const char* familyName = (previewFamilyIndex_ >= 0 && previewFamilyIndex_ < static_cast<int>(fonts_.size()))
-                               ? fonts_[previewFamilyIndex_].name.c_str()
+  // Label always shows the full selected combination, e.g. Preview "Noto Sans, Large"
+  const char* familyName = (currentFamilyIndex_ >= 0 && currentFamilyIndex_ < static_cast<int>(fonts_.size()))
+                               ? fonts_[currentFamilyIndex_].name.c_str()
                                : "";
-  const char* sizeName = (previewSizeIndex_ >= 0 && previewSizeIndex_ < static_cast<int>(sizes_.size()))
-                             ? sizes_[previewSizeIndex_].name.c_str()
+  const char* sizeName = (currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
+                             ? sizes_[currentSizeIndex_].name.c_str()
                              : "";
   char labelBuf[128];
   snprintf(labelBuf, sizeof(labelBuf), "%s \"%s, %s\"", tr(STR_PREVIEW), familyName, sizeName);
@@ -265,33 +244,17 @@ void ReaderFontActivity::render(RenderLock&&) {
     GUI.drawList(
         renderer, listRect, static_cast<int>(fonts_.size()), selectedItem,
         [this](int index) { return fonts_[index].name; }, nullptr, nullptr,
-        [this](int index) -> std::string {
-          if (index == previewFamilyIndex_ && index != currentFamilyIndex_) return tr(STR_PREVIEW);
-          if (index == currentFamilyIndex_) return tr(STR_SELECTED);
-          return "";
-        },
-        true);
+        [this](int index) -> std::string { return index == currentFamilyIndex_ ? tr(STR_SELECTED) : ""; }, true);
   } else {
     GUI.drawList(
         renderer, listRect, static_cast<int>(sizes_.size()), selectedItem,
         [this](int index) { return sizes_[index].name; }, nullptr, nullptr,
-        [this](int index) -> std::string {
-          if (index == previewSizeIndex_ && index != currentSizeIndex_) return tr(STR_PREVIEW);
-          if (index == currentSizeIndex_) return tr(STR_SELECTED);
-          return "";
-        },
-        true);
+        [this](int index) -> std::string { return index == currentSizeIndex_ ? tr(STR_SELECTED) : ""; }, true);
   }
 
-  // Confirm hint: on the tab bar it names the tab it switches to; on a
-  // previewed item it applies, otherwise it previews.
-  const char* confirmLabel;
-  if (onTabBar) {
-    confirmLabel = (tab_ == Tab::Family) ? tr(STR_SIZE) : tr(STR_FAMILY);
-  } else {
-    const int previewedIndex = (tab_ == Tab::Family) ? previewFamilyIndex_ : previewSizeIndex_;
-    confirmLabel = (selectedItem == previewedIndex) ? tr(STR_SELECT) : tr(STR_PREVIEW);
-  }
+  // Confirm hint: on the tab bar it names the tab it switches to; on a list
+  // item it selects (applies immediately).
+  const char* confirmLabel = onTabBar ? ((tab_ == Tab::Family) ? tr(STR_SIZE) : tr(STR_FAMILY)) : tr(STR_SELECT);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
