@@ -40,7 +40,7 @@ class FileBrowserActivity final : public Activity {
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
 
-  // Long-press entry menu (Books mode): move / delete / new folder.
+  // Long-press entry menu (Books mode): rename (folders) / move / delete / new folder.
   OptionPopup optionPopup;
 
   // Timed feedback popup (e.g. "Move failed").
@@ -57,7 +57,8 @@ class FileBrowserActivity final : public Activity {
 
   void showFileMenu(const std::string& entry);
   void promptDelete(const std::string& entry, const std::string& fullPath);
-  void promptMoveDestination(const std::string& srcPath);
+  void promptMoveDestination(const std::string& srcPath, bool isDirectory);
+  void promptRenameFolder(const std::string& srcPath);
   void promptNewFolder();
   void showMessage(StrId msgId);
 

@@ -3,15 +3,18 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <functional>
+#include <vector>
 
 #include "CrossPointState.h"
 #include "RecentBooksStore.h"
 
 namespace {
 constexpr const char* CACHE_ROOT = "/.crosspoint";
-}
+constexpr size_t NAME_BUFFER_SIZE = 500;
+}  // namespace
 
 namespace BookMover {
 
@@ -55,6 +58,26 @@ std::string buildDestination(const std::string& srcPath, const std::string& dstD
   return dstPath;
 }
 
+// Re-key the cache dir and repoint Recent Books / the resume pointer after a
+// file has already been renamed from oldPath to newPath. No-op for file types
+// without a cache; a failed cache rename is non-fatal (progress is lost).
+static void migrateBookState(const std::string& oldPath, const std::string& newPath) {
+  const std::string oldCachePath = cachePathFor(oldPath);
+  const std::string newCachePath = cachePathFor(newPath);
+  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
+    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
+      LOG_ERR("BookMover", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(),
+              newCachePath.c_str());
+    }
+  }
+
+  RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
+  if (APP_STATE.openEpubPath == oldPath) {
+    APP_STATE.openEpubPath = newPath;
+    APP_STATE.saveToFile();
+  }
+}
+
 bool moveFile(const std::string& srcPath, const std::string& dstPath) {
   if (srcPath == dstPath) return true;
 
@@ -64,20 +87,71 @@ bool moveFile(const std::string& srcPath, const std::string& dstPath) {
     return false;
   }
 
-  // Re-key the cache dir so reading progress survives the move.
-  const std::string oldCachePath = cachePathFor(srcPath);
-  const std::string newCachePath = cachePathFor(dstPath);
-  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
-    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
-      LOG_ERR("BookMover", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(),
-              newCachePath.c_str());
-    }
+  migrateBookState(srcPath, dstPath);
+  return true;
+}
+
+bool moveFolder(const std::string& srcPath, const std::string& dstPath) {
+  if (srcPath == dstPath) return true;
+  if (srcPath.empty() || srcPath == "/" || dstPath.empty() || dstPath == "/") {
+    LOG_ERR("BookMover", "Refusing to move to/from root");
+    return false;
+  }
+  // Moving a folder into its own subtree would orphan it on the FAT chain.
+  if (dstPath.rfind(srcPath + "/", 0) == 0) {
+    LOG_ERR("BookMover", "Cannot move folder into itself: %s -> %s", srcPath.c_str(), dstPath.c_str());
+    return false;
   }
 
-  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
-  if (APP_STATE.openEpubPath == srcPath) {
-    APP_STATE.openEpubPath = dstPath;
-    APP_STATE.saveToFile();
+  LOG_INF("BookMover", "Moving folder %s -> %s", srcPath.c_str(), dstPath.c_str());
+  if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
+    LOG_ERR("BookMover", "Failed to move folder");
+    return false;
+  }
+
+  // The folder has moved, so every book inside now lives at a new path and its
+  // path-hash-keyed cache must be re-keyed. Walk the moved subtree iteratively
+  // (explicit stack, no recursion — task stacks are small).
+  auto nameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
+  if (!nameBuffer) {
+    LOG_ERR("BookMover", "OOM: name buffer; folder moved but reading progress not migrated");
+    return true;
+  }
+
+  std::vector<std::string> stack;
+  stack.reserve(8);
+  stack.push_back(dstPath);
+
+  while (!stack.empty()) {
+    const std::string dirPath = std::move(stack.back());
+    stack.pop_back();
+
+    auto dir = Storage.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) {
+      LOG_ERR("BookMover", "Failed to open dir during cache migration: %s", dirPath.c_str());
+      continue;
+    }
+
+    for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+      entry.getName(nameBuffer.get(), NAME_BUFFER_SIZE);
+      if (strcmp(nameBuffer.get(), ".") == 0 || strcmp(nameBuffer.get(), "..") == 0) {
+        continue;
+      }
+      std::string entryPath = dirPath;
+      if (entryPath.back() != '/') entryPath += '/';
+      entryPath += nameBuffer.get();
+
+      const bool isDir = entry.isDirectory();
+      entry.close();
+
+      if (isDir) {
+        stack.push_back(std::move(entryPath));
+      } else {
+        // Old path = same entry with the source folder prefix restored.
+        const std::string oldEntryPath = srcPath + entryPath.substr(dstPath.size());
+        migrateBookState(oldEntryPath, entryPath);
+      }
+    }
   }
   return true;
 }

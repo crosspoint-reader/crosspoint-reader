@@ -195,33 +195,40 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
 // Defined below render()'s helpers; used here for the menu title.
 std::string getFileName(std::string filename);
 
-// Long-press menu on a Books-mode entry: Move (files only) / Delete / New folder.
+// Long-press menu on a Books-mode entry: Rename (folders only) / Move / Delete / New folder.
 void FileBrowserActivity::showFileMenu(const std::string& entry) {
   const bool isDirectory = entry.back() == '/';
   std::string cleanBasePath = basepath;
   if (cleanBasePath.back() != '/') cleanBasePath += "/";
   const std::string fullPath = cleanBasePath + entry;
+  // Move/rename take the path without the trailing slash directory marker.
+  std::string cleanFullPath = fullPath;
+  if (isDirectory) cleanFullPath.pop_back();
 
-  // Moving directories is out: every book inside would need its cache re-keyed.
-  const char* options[3];
+  const char* options[4];
   int count = 0;
-  const int moveIdx = isDirectory ? -1 : count;
-  if (!isDirectory) options[count++] = tr(STR_MOVE);
+  const int renameIdx = isDirectory ? count : -1;
+  if (isDirectory) options[count++] = tr(STR_RENAME);
+  const int moveIdx = count;
+  options[count++] = tr(STR_MOVE);
   const int deleteIdx = count;
   options[count++] = tr(STR_DELETE);
   const int newFolderIdx = count;
   options[count++] = tr(STR_NEW_FOLDER);
 
-  optionPopup.show(getFileName(entry).c_str(), options, count, 0,
-                   [this, entry, fullPath, moveIdx, deleteIdx, newFolderIdx](const int sel) {
-                     if (sel == moveIdx) {
-                       promptMoveDestination(fullPath);
-                     } else if (sel == deleteIdx) {
-                       promptDelete(entry, fullPath);
-                     } else if (sel == newFolderIdx) {
-                       promptNewFolder();
-                     }
-                   });
+  optionPopup.show(
+      getFileName(entry).c_str(), options, count, 0,
+      [this, entry, fullPath, cleanFullPath, isDirectory, renameIdx, moveIdx, deleteIdx, newFolderIdx](const int sel) {
+        if (sel == renameIdx) {
+          promptRenameFolder(cleanFullPath);
+        } else if (sel == moveIdx) {
+          promptMoveDestination(cleanFullPath, isDirectory);
+        } else if (sel == deleteIdx) {
+          promptDelete(entry, fullPath);
+        } else if (sel == newFolderIdx) {
+          promptNewFolder();
+        }
+      });
   requestUpdate();
 }
 
@@ -253,10 +260,12 @@ void FileBrowserActivity::promptDelete(const std::string& entry, const std::stri
 }
 
 // Opens a destination picker (this same activity in PickFolder mode) and moves
-// srcPath there, migrating the book cache so reading progress is kept.
-void FileBrowserActivity::promptMoveDestination(const std::string& srcPath) {
+// srcPath there, migrating the book cache(s) so reading progress is kept.
+// Folders move with their whole subtree; BookMover::moveFolder rejects a
+// destination inside the moved folder itself (surfaces as "Move failed").
+void FileBrowserActivity::promptMoveDestination(const std::string& srcPath, const bool isDirectory) {
   startActivityForResult(std::make_unique<FileBrowserActivity>(renderer, mappedInput, basepath, Mode::PickFolder),
-                         [this, srcPath](const ActivityResult& res) {
+                         [this, srcPath, isDirectory](const ActivityResult& res) {
                            if (res.isCancelled) {
                              requestUpdate();
                              return;
@@ -269,7 +278,10 @@ void FileBrowserActivity::promptMoveDestination(const std::string& srcPath) {
                              requestUpdate();
                              return;
                            }
-                           if (BookMover::moveFile(srcPath, BookMover::buildDestination(srcPath, dstDir))) {
+                           const std::string dstPath = BookMover::buildDestination(srcPath, dstDir);
+                           const bool moved = isDirectory ? BookMover::moveFolder(srcPath, dstPath)
+                                                          : BookMover::moveFile(srcPath, dstPath);
+                           if (moved) {
                              loadFiles();
                              if (files.empty()) {
                                selectorIndex = 0;
@@ -281,6 +293,33 @@ void FileBrowserActivity::promptMoveDestination(const std::string& srcPath) {
                            }
                            requestUpdate(true);
                          });
+}
+
+// Keyboard prompt prefilled with the folder's current name; renames in place
+// via BookMover::moveFolder so books inside keep their reading progress.
+void FileBrowserActivity::promptRenameFolder(const std::string& srcPath) {
+  const std::string oldName = srcPath.substr(srcPath.find_last_of('/') + 1);
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_FOLDER_NAME), oldName, 64, InputType::Text),
+      [this, srcPath, oldName](const ActivityResult& res) {
+        if (res.isCancelled) {
+          requestUpdate();
+          return;
+        }
+        const std::string name = StringUtils::sanitizeFilename(std::get<KeyboardResult>(res.data).text);
+        if (name.empty() || name == oldName) {
+          requestUpdate();
+          return;
+        }
+        const std::string dstPath = srcPath.substr(0, srcPath.find_last_of('/') + 1) + name;
+        if (Storage.exists(dstPath.c_str()) || !BookMover::moveFolder(srcPath, dstPath)) {
+          showMessage(StrId::STR_RENAME_FAILED);
+        } else {
+          loadFiles();
+          selectorIndex = findEntry(name + "/");
+        }
+        requestUpdate(true);
+      });
 }
 
 void FileBrowserActivity::promptNewFolder() {
