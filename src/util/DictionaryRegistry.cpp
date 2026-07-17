@@ -11,7 +11,10 @@
 namespace DictionaryRegistry {
 namespace {
 
-constexpr const char* DICT_ROOT = "/dictionaries";
+// Dictionaries are looked up in both roots, in order. The hidden variant
+// lets users keep the folder out of the file browser (hidden by default,
+// see FileBrowserActivity's showHiddenFiles check).
+constexpr const char* DICT_ROOTS[] = {"/dictionaries", "/.dictionaries"};
 
 // Find the single .idx stem inside one dictionary folder. Returns false when
 // the folder holds no .idx or more than one distinct stem (ambiguous).
@@ -60,27 +63,29 @@ void discover(std::vector<DictionaryEntry>& out) {
   out.clear();
   out.reserve(8);
 
-  auto rootDir = Storage.open(DICT_ROOT);
-  if (!rootDir || !rootDir.isDirectory()) {
-    LOG_DBG("DREG", "No %s directory on SD card", DICT_ROOT);
-    return;
-  }
+  for (const char* dictRoot : DICT_ROOTS) {
+    auto rootDir = Storage.open(dictRoot);
+    if (!rootDir || !rootDir.isDirectory()) {
+      LOG_DBG("DREG", "No %s directory on SD card", dictRoot);
+      continue;
+    }
 
-  rootDir.rewindDirectory();
-  char name[128];
-  for (auto entry = rootDir.openNextFile(); entry; entry = rootDir.openNextFile()) {
-    entry.getName(name, sizeof(name));
-    if (!entry.isDirectory() || name[0] == '.') continue;
+    rootDir.rewindDirectory();
+    char name[128];
+    for (auto entry = rootDir.openNextFile(); entry; entry = rootDir.openNextFile()) {
+      entry.getName(name, sizeof(name));
+      if (!entry.isDirectory() || name[0] == '.') continue;
 
-    std::string folderPath = std::string(DICT_ROOT) + "/" + name;
-    std::string stem;
-    if (!findStem(folderPath.c_str(), stem)) continue;
+      std::string folderPath = std::string(dictRoot) + "/" + name;
+      std::string stem;
+      if (!findStem(folderPath.c_str(), stem)) continue;
 
-    DictionaryEntry e;
-    e.name = name;
-    e.stem = std::move(stem);
-    out.push_back(std::move(e));
-    LOG_DBG("DREG", "Found dictionary: %s", name);
+      DictionaryEntry e;
+      e.name = name;
+      e.stem = std::move(stem);
+      out.push_back(std::move(e));
+      LOG_DBG("DREG", "Found dictionary: %s", name);
+    }
   }
 
   // Case-insensitive sort by folder name (matches FileBrowserActivity ordering).
@@ -92,13 +97,17 @@ void discover(std::vector<DictionaryEntry>& out) {
 bool resolveBasePath(const char* folderName, std::string& basePathOut) {
   if (!folderName || folderName[0] == '\0') return false;
   // folderName is persisted in the settings JSON: reject separators and dot
-  // prefixes so a crafted value cannot escape /dictionaries/.
+  // prefixes so a crafted value cannot escape the dictionary roots.
   if (folderName[0] == '.' || strpbrk(folderName, "/\\") != nullptr) return false;
-  std::string folderPath = std::string(DICT_ROOT) + "/" + folderName;
-  std::string stem;
-  if (!findStem(folderPath.c_str(), stem)) return false;
-  basePathOut = folderPath + "/" + stem;
-  return true;
+
+  for (const char* dictRoot : DICT_ROOTS) {
+    std::string folderPath = std::string(dictRoot) + "/" + folderName;
+    std::string stem;
+    if (!findStem(folderPath.c_str(), stem)) continue;
+    basePathOut = folderPath + "/" + stem;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace DictionaryRegistry
