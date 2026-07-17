@@ -15,6 +15,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["serverUrl"] = getServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
   doc["sendMetadata"] = getSendMetadata();
+  doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
@@ -34,6 +35,18 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
     setMatchMethod(DocumentMatchMethod::FILENAME);
   }
   setSendMetadata(doc["sendMetadata"] | false);
+
+  const JsonVariantConst behaviorValue = doc["syncBehavior"];
+  const bool missingBehavior = behaviorValue.isNull();
+  uint8_t behavior = behaviorValue | static_cast<uint8_t>(KOReaderSyncBehavior::ASK_EVERY_TIME);
+  if (behavior <= static_cast<uint8_t>(KOReaderSyncBehavior::SMART)) {
+    setSyncBehavior(static_cast<KOReaderSyncBehavior>(behavior));
+    needsResave = needsResave || missingBehavior;
+  } else {
+    LOG_DBG("KRS", "Invalid syncBehavior %u in JSON, resetting to ASK_EVERY_TIME", behavior);
+    setSyncBehavior(KOReaderSyncBehavior::ASK_EVERY_TIME);
+    needsResave = true;
+  }
 
   if (needsResave) {
     LOG_DBG("KRS", "Resaved KOReader credentials to update format");
@@ -104,4 +117,12 @@ void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
 void KOReaderCredentialStore::setSendMetadata(bool enabled) {
   sendMetadata = enabled;
   LOG_DBG("KRS", "Set send metadata: %s", enabled ? "true" : "false");
+}
+
+void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
+  if (static_cast<uint8_t>(behavior) > static_cast<uint8_t>(KOReaderSyncBehavior::SMART)) {
+    behavior = KOReaderSyncBehavior::ASK_EVERY_TIME;
+  }
+  syncBehavior = behavior;
+  LOG_DBG("KRS", "Set sync behavior: %s", behavior == KOReaderSyncBehavior::SMART ? "Smart" : "Ask");
 }
