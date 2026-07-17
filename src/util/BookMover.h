@@ -29,11 +29,13 @@ using ProgressCallback = void (*)(size_t done, size_t total, void* ctx);
 
 // Move (or rename) the folder srcPath to dstPath (both full paths, no trailing
 // slash), then walk the moved subtree and migrate cache dir, Recent Books
-// entry and the open-book resume pointer for every book inside. Returns false
-// when the folder rename itself fails or dstPath lies inside srcPath; cache
-// migration failures are non-fatal (affected books lose their progress).
-// When progressCb is set, the subtree is pre-counted (one extra traversal) so
-// the callback receives a true percentage denominator.
+// entry and the open-book resume pointer for every book inside. The subtree is
+// pre-walked (one extra traversal) before the rename, both as a pre-flight
+// check and to give progressCb a true percentage denominator. Returns false —
+// with nothing renamed — when dstPath lies inside srcPath, the pre-flight
+// walk cannot complete (OOM or unreadable directory), or the folder rename
+// itself fails. A failed cache-dir rename during migration remains non-fatal
+// (the affected book moves, its progress is lost).
 bool moveFolder(const std::string& srcPath, const std::string& dstPath, ProgressCallback progressCb = nullptr,
                 void* progressCtx = nullptr);
 

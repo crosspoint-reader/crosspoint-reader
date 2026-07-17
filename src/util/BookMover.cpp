@@ -92,9 +92,11 @@ bool moveFile(const std::string& srcPath, const std::string& dstPath) {
 }
 
 // Count files (not directories) in the subtree at rootPath. Same iterative
-// walk as the migration pass; used to pre-compute the progress denominator.
-static size_t countFilesInTree(const std::string& rootPath, char* nameBuffer) {
-  size_t count = 0;
+// walk as the migration pass; pre-computes the progress denominator and
+// doubles as a pre-flight check that the whole tree is traversable. Returns
+// false when any directory fails to open (count is then unreliable).
+static bool countFilesInTree(const std::string& rootPath, char* nameBuffer, size_t& count) {
+  count = 0;
   std::vector<std::string> stack;
   stack.reserve(8);
   stack.push_back(rootPath);
@@ -105,7 +107,8 @@ static size_t countFilesInTree(const std::string& rootPath, char* nameBuffer) {
 
     auto dir = Storage.open(dirPath.c_str());
     if (!dir || !dir.isDirectory()) {
-      continue;
+      LOG_ERR("BookMover", "Cannot open dir: %s", dirPath.c_str());
+      return false;
     }
 
     for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
@@ -125,7 +128,7 @@ static size_t countFilesInTree(const std::string& rootPath, char* nameBuffer) {
       }
     }
   }
-  return count;
+  return true;
 }
 
 bool moveFolder(const std::string& srcPath, const std::string& dstPath, const ProgressCallback progressCb,
@@ -141,13 +144,26 @@ bool moveFolder(const std::string& srcPath, const std::string& dstPath, const Pr
     return false;
   }
 
-  // The folder move is a single FAT rename; the per-file work is the cache
-  // migration walk below, so progress is counted in files.
+  // Allocate the walk buffer and pre-validate the whole subtree BEFORE the
+  // rename: once the rename commits, an unreadable directory or a missing
+  // buffer would leave books inside with orphaned caches and no way back.
+  // The per-book mappings themselves are not staged in RAM — they are a
+  // deterministic prefix swap re-derived during the post-rename walk, and
+  // staging them would cost O(files) heap. The pre-pass also provides the
+  // true progress denominator (progress is counted in files; the folder move
+  // itself is a single FAT rename).
   auto nameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
+  if (!nameBuffer) {
+    LOG_ERR("BookMover", "OOM: name buffer; folder not moved");
+    return false;
+  }
 
   size_t totalFiles = 0;
-  if (progressCb && nameBuffer) {
-    totalFiles = countFilesInTree(srcPath, nameBuffer.get());
+  if (!countFilesInTree(srcPath, nameBuffer.get(), totalFiles)) {
+    LOG_ERR("BookMover", "Subtree not fully readable; folder not moved");
+    return false;
+  }
+  if (progressCb) {
     progressCb(0, totalFiles, progressCtx);
   }
 
@@ -159,12 +175,8 @@ bool moveFolder(const std::string& srcPath, const std::string& dstPath, const Pr
 
   // The folder has moved, so every book inside now lives at a new path and its
   // path-hash-keyed cache must be re-keyed. Walk the moved subtree iteratively
-  // (explicit stack, no recursion — task stacks are small).
-  if (!nameBuffer) {
-    LOG_ERR("BookMover", "OOM: name buffer; folder moved but reading progress not migrated");
-    return true;
-  }
-
+  // (explicit stack, no recursion — task stacks are small). The subtree was
+  // validated traversable just above, so failures here are unexpected.
   size_t doneFiles = 0;
   std::vector<std::string> stack;
   stack.reserve(8);
