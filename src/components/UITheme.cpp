@@ -49,14 +49,22 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentMetrics = &Lyra3CoversMetrics::values;
       break;
   }
+  metricsValid = false;
 }
 
-ThemeMetrics UITheme::getMetrics() const {
-  ThemeMetrics metrics = *currentMetrics;
-  if (gpio.hasTouch()) {
-    metrics.buttonHintsHeight = 0;
+const ThemeMetrics& UITheme::getMetrics() const {
+  // hasTouch() can flip once touch init completes after static construction, so the
+  // cached copy is refreshed when the flag differs instead of copying the struct per call.
+  const bool touch = gpio.hasTouch();
+  if (!metricsValid || touch != metricsForTouch) {
+    adjustedMetrics = *currentMetrics;
+    if (touch) {
+      adjustedMetrics.buttonHintsHeight = 0;
+    }
+    metricsForTouch = touch;
+    metricsValid = true;
   }
-  return metrics;
+  return adjustedMetrics;
 }
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,

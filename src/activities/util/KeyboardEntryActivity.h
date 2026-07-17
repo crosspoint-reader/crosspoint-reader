@@ -2,6 +2,7 @@
 #include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 
+#include <atomic>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -79,8 +80,9 @@ class KeyboardEntryActivity : public Activity {
 
   // loop() runs on the main task while render() rebuilds the interaction
   // table on the render task; routing against a half-built table would read
-  // torn entries, so taps are dropped during the rebuild window.
-  volatile bool interactionsReady = false;
+  // torn entries, so taps are dropped during the rebuild window. atomic (not
+  // volatile) so the flag also orders the table writes on dual-core targets.
+  std::atomic<bool> interactionsReady{false};
 
   int delPressCount = 0;
   bool hintVisible = false;

@@ -203,19 +203,23 @@ MappedInputManager::RowTouch MappedInputManager::colTouch(int& col, const int le
   return RowTouch::None;
 }
 
-MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
+bool MappedInputManager::decodeSwipe(int& sx, int& sy, int& ex, int& ey) const {
   float nxs = 0.0f;
   float nys = 0.0f;
   float nxe = 0.0f;
   float nye = 0.0f;
-  if (!gpio.wasSwipe(nxs, nys, nxe, nye)) return SwipeDir::None;
+  if (!gpio.wasSwipe(nxs, nys, nxe, nye)) return false;
+  renderer.tapToLogical(nxs, nys, sx, sy);
+  renderer.tapToLogical(nxe, nye, ex, ey);
+  return true;
+}
 
+MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
   int sx = 0;
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  renderer.tapToLogical(nxs, nys, sx, sy);
-  renderer.tapToLogical(nxe, nye, ex, ey);
+  if (!decodeSwipe(sx, sy, ex, ey)) return SwipeDir::None;
   const int dx = ex - sx;
   const int dy = ey - sy;
   if (std::abs(dx) >= std::abs(dy)) {
@@ -228,17 +232,11 @@ bool MappedInputManager::wasBackGesture() const {
   // Back = left-to-right swipe starting near the left edge. Edge-anchored so that
   // mid-screen horizontal swipes stay available to activities that consume
   // SwipeDir::Left/Right (e.g. percent selection, image viewer).
-  float nxs = 0.0f;
-  float nys = 0.0f;
-  float nxe = 0.0f;
-  float nye = 0.0f;
-  if (!gpio.wasSwipe(nxs, nys, nxe, nye)) return false;
   int sx = 0;
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  renderer.tapToLogical(nxs, nys, sx, sy);
-  renderer.tapToLogical(nxe, nye, ex, ey);
+  if (!decodeSwipe(sx, sy, ex, ey)) return false;
   const bool hit = sx <= renderer.getScreenWidth() * LEFT_EDGE_BACK_GESTURE_FRAC_X && ex > sx &&
                    std::abs(ex - sx) > std::abs(ey - sy);
   if (hit) rememberTouchHeldTime();
@@ -247,17 +245,11 @@ bool MappedInputManager::wasBackGesture() const {
 
 bool MappedInputManager::wasMenuGesture() const {
   // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
-  float nxs = 0.0f;
-  float nys = 0.0f;
-  float nxe = 0.0f;
-  float nye = 0.0f;
-  if (!gpio.wasSwipe(nxs, nys, nxe, nye)) return false;
   int sx = 0;
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  renderer.tapToLogical(nxs, nys, sx, sy);
-  renderer.tapToLogical(nxe, nye, ex, ey);
+  if (!decodeSwipe(sx, sy, ex, ey)) return false;
   const int topEdgeBottom = static_cast<int>(renderer.getScreenHeight() * TOP_EDGE_MENU_GESTURE_FRAC_Y);
   const bool hit = sy <= topEdgeBottom && ey > sy && std::abs(ey - sy) > std::abs(ex - sx);
   if (hit) rememberTouchHeldTime();
@@ -265,17 +257,11 @@ bool MappedInputManager::wasMenuGesture() const {
 }
 
 bool MappedInputManager::wasHomeGesture() const {
-  float nxs = 0.0f;
-  float nys = 0.0f;
-  float nxe = 0.0f;
-  float nye = 0.0f;
-  if (gpio.wasSwipe(nxs, nys, nxe, nye)) {
-    int sx = 0;
-    int sy = 0;
-    int ex = 0;
-    int ey = 0;
-    renderer.tapToLogical(nxs, nys, sx, sy);
-    renderer.tapToLogical(nxe, nye, ex, ey);
+  int sx = 0;
+  int sy = 0;
+  int ex = 0;
+  int ey = 0;
+  if (decodeSwipe(sx, sy, ex, ey)) {
     const int bottomEdgeTop =
         renderer.getScreenHeight() - static_cast<int>(renderer.getScreenHeight() * BOTTOM_EDGE_BACK_GESTURE_FRAC_Y);
     if (sy >= bottomEdgeTop && ey < sy && std::abs(ey - sy) > std::abs(ex - sx)) {
