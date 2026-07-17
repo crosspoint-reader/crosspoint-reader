@@ -899,6 +899,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const fui::KeyboardLayout& layout = currentLayout();
   props.layout = &layout;
   props.keyAction = ACTION_KEY;  // one action id; loop() dispatches on key value
+  props.okLabel = tr(STR_OK_BUTTON);
+  props.shiftLabel = tr(STR_KEY_SHIFT);
+  // Match the label to the layer the mode key leads back from: the symbols
+  // layer and the URL snippet panel both label it "abc" in the static tables.
+  props.modeLabel =
+      (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
