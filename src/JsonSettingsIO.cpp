@@ -150,6 +150,9 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
   }
 
+  doc["clockAnchorEpoch"] = s.clockAnchorEpoch;
+  doc["clockDriftPpm"] = s.clockDriftPpm;
+
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
   doc["language"] = (s.language < getLanguageCount()) ? LANGUAGE_CODES[s.language] : "EN";
@@ -255,6 +258,9 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   } else if (storedFontFamily >= CrossPointSettings::BUILTIN_FONT_COUNT) {
     if (needsResave) *needsResave = true;
   }
+
+  s.clockAnchorEpoch = doc["clockAnchorEpoch"] | static_cast<uint32_t>(0);
+  s.clockDriftPpm = doc["clockDriftPpm"] | static_cast<int32_t>(0);
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
