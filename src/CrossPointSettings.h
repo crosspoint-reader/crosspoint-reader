@@ -29,8 +29,8 @@ class CrossPointSettings {
     LIGHT = 1,
     CUSTOM = 2,
     COVER = 3,
-    BLANK = 4,
-    COVER_CUSTOM = 5,
+    COVER_CUSTOM = 4,
+    BLANK = 5,
     QUICK_RESUME = 6,
     SLEEP_SCREEN_MODE_COUNT
   };
