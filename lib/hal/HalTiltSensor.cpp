@@ -18,6 +18,11 @@ void HalTiltSensor::begin() {
   if (_available) {
     _initMs = millis();
     _lastPollMs = millis();
+    // begin() leaves the sensors sampling; stand them by until tilt page turn
+    // actually wakes them, so a disabled IMU doesn't drain the battery.
+    if (!_sdkImu.sleep()) {
+      LOG_ERR("GYR", "IMU standby failed");
+    }
     LOG_INF("GYR", "SDK IMU initialized");
     return;
   }
@@ -26,6 +31,11 @@ void HalTiltSensor::begin() {
 
 bool HalTiltSensor::wake() {
   if (!_available) {
+    return false;
+  }
+
+  if (!_sdkImu.wake()) {
+    LOG_ERR("GYR", "IMU wake failed");
     return false;
   }
 
@@ -38,6 +48,11 @@ bool HalTiltSensor::wake() {
 
 bool HalTiltSensor::deepSleep() {
   if (!_available) {
+    return false;
+  }
+
+  if (!_sdkImu.sleep()) {
+    LOG_ERR("GYR", "IMU sleep failed");
     return false;
   }
 
