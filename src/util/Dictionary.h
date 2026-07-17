@@ -1,5 +1,6 @@
 #pragma once
 
+#include <EpdFontFamily.h>
 #include <HalStorage.h>
 
 #include <cstdint>
@@ -14,6 +15,30 @@ struct DictLocation {
   // Set when the search was cut short by an .idx open or seek failure rather than
   // reaching a verdict, so a failed search isn't reported as a genuine miss.
   bool readError = false;
+};
+
+struct MetadataString {
+  std::string word;
+  int fontId;
+  int16_t x;
+  int16_t y;
+  EpdFontFamily::Style style;
+};
+
+struct DictionaryPageMetdata {
+  MetadataString headword;
+  MetadataString pageNums;
+};
+
+struct WordBox {
+  int fontId;
+  int16_t x;
+  int16_t y;
+  int16_t width;
+  uint16_t row;
+  std::string text;
+  EpdFontFamily::Style style;
+  bool selectable = true;
 };
 
 // Slim StarDict reader: exact-match lookup with a mini stemming fallback.
@@ -73,6 +98,11 @@ class Dictionary {
   static std::string cleanWord(const char* word);
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
+  // Longest measurable/drawable span. Wrapped lines stay under the screen width
+  // (far below this); only pathological unbreakable tokens are split at this cap.
+  static constexpr size_t MAX_LINE_BYTES = 191;
+  // Body text left/right inset, matching the reader's default feel.
+  static constexpr int SIDE_PADDING = 20;
 
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;

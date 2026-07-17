@@ -22,6 +22,16 @@ class DictionaryWordSelectActivity final : public Activity {
         marginLeft(marginLeft),
         marginTop(marginTop) {}
 
+  explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                        std::vector<WordBox> words, DictionaryPageMetdata* metadata, int rowCount,
+                                        int marginLeft, int marginTop)
+      : Activity("DictionaryWordSelect", renderer, mappedInput),
+        words(std::move(words)),
+        metadata(metadata),
+        rowCount(rowCount),
+        marginLeft(marginLeft),
+        marginTop(marginTop) {}
+
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
@@ -29,14 +39,6 @@ class DictionaryWordSelectActivity final : public Activity {
  private:
   // Screen box of one selectable word. `text` points into the owned Page's
   // TextBlock arena (NUL-terminated), valid for this activity's lifetime.
-  struct WordBox {
-    int16_t x;
-    int16_t y;
-    int16_t width;
-    uint16_t row;
-    const char* text;
-    EpdFontFamily::Style style;
-  };
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
 
@@ -49,6 +51,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void drawHints() const;
 
   std::unique_ptr<Page> page;
+  DictionaryPageMetdata* metadata = nullptr;
   const int marginLeft;
   const int marginTop;
   int fontId = 0;

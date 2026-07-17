@@ -47,7 +47,7 @@ void DictionaryWordSelectActivity::onEnter() {
   // fast path (drawHighlightWithSnapshot skips the read), keeping the
   // full-repaint path as the fallback.
   snapshot = makeUniqueNoThrow<uint8_t[]>(SNAPSHOT_CAPACITY);
-  extractWords();
+  if (page != nullptr) extractWords();
   // Start on the middle row's word nearest mid-screen instead of top-left:
   // any word on the page is then at most half a page of moves away.
   if (!words.empty()) {
@@ -88,6 +88,7 @@ void DictionaryWordSelectActivity::extractWords() {
       box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
       box.y = static_cast<int16_t>(line->yPos + marginTop + rubyShift);
       box.style = block->wordStyle(i);
+      box.fontId = fontId;
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
       box.text = text;
@@ -104,7 +105,7 @@ void DictionaryWordSelectActivity::extractWords() {
   if (styleMask == 0) styleMask = 0x01;  // REGULAR
   renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
   for (auto& word : words) {
-    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
+    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text.c_str(), word.style));
   }
 }
 
@@ -173,7 +174,7 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  const bool found = ok && dict.lookup(words[selected].text.c_str(), definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -314,7 +315,7 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   snapshotIdx = saved ? selected : -1;
 
   renderer.fillRect(hx, hy, hw, hh, true);
-  renderer.drawText(fontId, word.x, word.y, word.text, false, word.style);
+  renderer.drawText(fontId, word.x, word.y, word.text.c_str(), false, word.style);
   return saved;
 }
 
@@ -347,7 +348,8 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     // The full path's PrewarmScope cleared the glyph cache on exit; batch-load
     // just the highlighted word's glyphs before drawing them white-on-black.
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, words[selected].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
+        fontId, words[selected].text.c_str(),
+        static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
     if (drawHighlightWithSnapshot()) {
       drawHints();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -360,11 +362,23 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
 
   // Same prewarm-scan-then-render pass the reader uses, so SD-card fonts hit
   // the in-RAM glyph cache during the real draw.
-  auto* fcm = renderer.getFontCacheManager();
-  auto scope = fcm->createPrewarmScope();
-  page->render(renderer, fontId, marginLeft, marginTop);
-  scope.endScanAndPrewarm();
-  page->render(renderer, fontId, marginLeft, marginTop);
+  if (page != nullptr) {
+    auto* fcm = renderer.getFontCacheManager();
+    auto scope = fcm->createPrewarmScope();
+    page->render(renderer, fontId, marginLeft, marginTop);
+    scope.endScanAndPrewarm();
+    page->render(renderer, fontId, marginLeft, marginTop);
+  } else {
+    if (metadata != nullptr) {
+      auto& headword = metadata->headword;
+      auto& pageNums = metadata->pageNums;
+      renderer.drawText(headword.fontId, headword.x, headword.y, headword.word.c_str(), true, headword.style);
+      renderer.drawText(pageNums.fontId, pageNums.x, pageNums.y, pageNums.word.c_str(), true, pageNums.style);
+    }
+    for (auto& word : words) {
+      renderer.drawText(fontId, word.x, word.y, word.text.c_str(), true, word.style);
+    }
+  }
 
   if (!words.empty()) {
     drawHighlightWithSnapshot();
