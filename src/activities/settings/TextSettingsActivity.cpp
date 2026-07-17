@@ -75,7 +75,7 @@ void TextSettingsActivity::onEnter() {
 
   currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
   currentSizeIndex_ = findCurrentFontSizeIndex(SETTINGS.fontSize, sizes_.size());
-  for (int& s : selectedIndex_) s = 1;                                      // default to the first list row
+  std::fill(std::begin(selectedIndex_), std::end(selectedIndex_), 1);       // default to the first list row
   selectedIndex_[static_cast<int>(Tab::Family)] = currentFamilyIndex_ + 1;  // Family/Size open on current selection
   selectedIndex_[static_cast<int>(Tab::Size)] = currentSizeIndex_ + 1;
 
