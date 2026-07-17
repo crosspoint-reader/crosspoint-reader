@@ -382,12 +382,12 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    const bool needsClockSync = !SETTINGS.clockHasBeenSynced || !halClock.isHardwareAvailable();
+    if (needsClockSync) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
+        SETTINGS.clockAnchorEpoch = halClock.getAnchorEpoch();
+        SETTINGS.clockDriftPpm = halClock.getDriftPpm();
         SETTINGS.saveToFile();
       }
     }
