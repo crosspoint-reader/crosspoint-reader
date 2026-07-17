@@ -16,11 +16,11 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
-#include "ReaderFontActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
+#include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -28,28 +28,6 @@
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
-
-namespace {
-// Combined value shown on the "Reader Font" action row, e.g. "Noto Serif, M"
-std::string readerFontValueText() {
-  const char* family;
-  if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    family = SETTINGS.sdFontFamilyName;
-  } else {
-    family =
-        I18N.get(SETTINGS.fontFamily == CrossPointSettings::NOTOSANS ? StrId::STR_NOTO_SANS : StrId::STR_NOTO_SERIF);
-  }
-
-  static constexpr StrId sizeIds[] = {StrId::STR_SIZE_ABBR_SMALL, StrId::STR_SIZE_ABBR_MEDIUM,
-                                      StrId::STR_SIZE_ABBR_LARGE, StrId::STR_SIZE_ABBR_X_LARGE};
-  constexpr size_t sizeCount = sizeof(sizeIds) / sizeof(sizeIds[0]);
-  const size_t size = SETTINGS.fontSize < sizeCount ? SETTINGS.fontSize : CrossPointSettings::MEDIUM;
-
-  char buf[64];
-  snprintf(buf, sizeof(buf), "%s, %s", family, I18N.get(sizeIds[size]));
-  return std::string(buf);
-}
-}  // namespace
 
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
@@ -66,9 +44,13 @@ void SettingsActivity::rebuildSettingsLists() {
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
-      // Family and size are merged into the combined "Reader Font" submenu
-      // inserted below; they stay in the shared list for the web settings API.
-      if (setting.nameId == StrId::STR_FONT_FAMILY || setting.nameId == StrId::STR_FONT_SIZE) {
+      // Settings merged into "Text Settings"
+      // (they stay in the shared list for the web settings API)
+      if (setting.nameId == StrId::STR_FONT_FAMILY || setting.nameId == StrId::STR_FONT_SIZE ||
+          setting.nameId == StrId::STR_LINE_SPACING || setting.nameId == StrId::STR_EXTRA_SPACING ||
+          setting.nameId == StrId::STR_PARA_ALIGNMENT || setting.nameId == StrId::STR_SCREEN_MARGIN ||
+          setting.nameId == StrId::STR_FOCUS_READING || setting.nameId == StrId::STR_HYPHENATION ||
+          setting.nameId == StrId::STR_EMBEDDED_STYLE || setting.nameId == StrId::STR_TEXT_AA) {
         continue;
       }
       readerSettings.push_back(setting);
@@ -93,8 +75,8 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  // Combined family + size submenu first, "Manage Fonts" right after it so users discover it naturally
-  readerSettings.insert(readerSettings.begin(), SettingInfo::Action(StrId::STR_READER_FONT, SettingAction::ReaderFont));
+  readerSettings.insert(readerSettings.begin(),
+                        SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
@@ -311,9 +293,9 @@ void SettingsActivity::toggleCurrentSetting() {
                                  rebuildSettingsLists();
                                });
         break;
-      case SettingAction::ReaderFont:
-        startActivityForResult(std::make_unique<ReaderFontActivity>(renderer, mappedInput, &sdFontSystem.registry(),
-                                                                    ReaderFontActivity::Tab::Family),
+      case SettingAction::TextSettings:
+        startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                                                      TextSettingsActivity::Tab::Family),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsLists();
@@ -433,8 +415,6 @@ void SettingsActivity::render(RenderLock&&) {
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }
-        } else if (setting.type == SettingType::ACTION && setting.action == SettingAction::ReaderFont) {
-          valueText = readerFontValueText();
         }
         return valueText;
       },
