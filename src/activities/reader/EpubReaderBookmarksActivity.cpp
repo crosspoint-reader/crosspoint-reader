@@ -14,9 +14,6 @@
 
 namespace {
 constexpr int ENTER_DELETE_MODE_MS = 700;
-constexpr int DELETE_MODE_OFF = 0;
-constexpr int DELETE_MODE_DISPLAY = 1;
-constexpr int DELETE_MODE_CONFIRM = 2;
 
 // Layout constants used in renderScreen
 constexpr int LINE_HEIGHT = 60;
@@ -83,42 +80,13 @@ void EpubReaderBookmarksActivity::loop() {
     finish();
   };
 
-  // Delete confirmation mode
-  if (confirmingDelete >= DELETE_MODE_DISPLAY) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (confirmingDelete == DELETE_MODE_DISPLAY) {
-        confirmingDelete = DELETE_MODE_CONFIRM;  // first confirmation, update text
-        requestUpdate();
-        return;
-      }
-      bookmarks.erase(bookmarks.begin() + selectorIndex);
-      const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
-      Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
-      if (!JsonSettingsIO::saveBookmarks(bookmarks, path.c_str())) {
-        LOG_ERR("EPB", "Failed to save bookmarks after delete");
-      }
-
-      // Move selector up if we deleted the last item
-      if (selectorIndex >= bookmarks.size() && selectorIndex > 0) {
-        selectorIndex--;
-      }
-
-      if (bookmarks.empty()) {
-        ActivityResult result;
-        result.isCancelled = true;
-        setResult(std::move(result));
-        finish();
-        return;
-      }
-
-      requestUpdate();
-      confirmingDelete = DELETE_MODE_OFF;
-      return;
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      requestUpdate();
-      confirmingDelete = DELETE_MODE_OFF;
-      return;
-    }
+  // Delete confirmation popup
+  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (confirmingDelete) {
+    // Popup dismissed without a selection (Back button or tap outside): cancel delete
+    confirmingDelete = false;
+    requestUpdate();
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -182,7 +150,15 @@ void EpubReaderBookmarksActivity::loop() {
     if (bookmarks.empty()) {
       return;
     }
-    confirmingDelete = DELETE_MODE_DISPLAY;
+    confirmingDelete = true;
+    const char* options[] = {tr(STR_CANCEL), tr(STR_DELETE)};
+    confirmPopup.show(tr(STR_CONFIRM_DELETE_BOOKMARK), options, 2, 0, [this](int idx) {
+      confirmingDelete = false;
+      if (idx == 1) {
+        deleteSelectedBookmark();
+      }
+      requestUpdate();
+    });
     requestUpdate();
   }
 
@@ -207,6 +183,27 @@ void EpubReaderBookmarksActivity::loop() {
                                                        GUI.getListPageItems(getListHeight(renderer), true));
     requestUpdate();
   });
+}
+
+void EpubReaderBookmarksActivity::deleteSelectedBookmark() {
+  bookmarks.erase(bookmarks.begin() + selectorIndex);
+  const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
+  Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
+  if (!JsonSettingsIO::saveBookmarks(bookmarks, path.c_str())) {
+    LOG_ERR("EPB", "Failed to save bookmarks after delete");
+  }
+
+  // Move selector up if we deleted the last item
+  if (selectorIndex >= bookmarks.size() && selectorIndex > 0) {
+    selectorIndex--;
+  }
+
+  if (bookmarks.empty()) {
+    ActivityResult result;
+    result.isCancelled = true;
+    setResult(std::move(result));
+    finish();
+  }
 }
 
 void EpubReaderBookmarksActivity::render(RenderLock&&) {
@@ -238,10 +235,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_BOOKMARKS), true, EpdFontFamily::BOLD);
 
   const auto getBookmarkTitle = [this](int index) {
-    return bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index).summary;
+    return bookmarks.at(confirmingDelete ? selectorIndex : index).summary;
   };
   const auto getBookmarkSubtitle = [this](int index) {
-    auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
+    auto bookmark = bookmarks.at(confirmingDelete ? selectorIndex : index);
     auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.computedSpineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
     std::string subtitle = std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - ";
@@ -257,12 +254,9 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   };
 
   if (numBookmarks > 0) {
-    if (confirmingDelete >= DELETE_MODE_DISPLAY) {
-      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2 - LINE_HEIGHT * 2, contentWidth, LINE_HEIGHT},
-                       tr(STR_CONFIRM_DELETE_BOOKMARK));
-
-      // render list with just the selected item for the user to confirm to delete
-      GUI.drawList(renderer, Rect{contentX, pageHeight / 2, contentWidth, LINE_HEIGHT}, 1, 0, getBookmarkTitle,
+    if (confirmingDelete) {
+      // Render just the selected item near the top; the confirmation popup occupies the center
+      GUI.drawList(renderer, Rect{contentX, listY, contentWidth, LINE_HEIGHT}, 1, 0, getBookmarkTitle,
                    getBookmarkSubtitle, getBookmarkIcon);
     } else {
       GUI.drawList(renderer, Rect{contentX, listY, contentWidth, listHeight}, numBookmarks, selectorIndex,
@@ -273,10 +267,10 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
     }
   }
 
-  const auto backLabel = confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_CANCEL) : tr(STR_BACK);
-  const auto confirmLabel =
-      bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_SELECT)) : "";
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  if (confirmPopup.processRender(renderer, mappedInput)) return;
+
+  const auto confirmLabel = bookmarks.size() > 0 ? tr(STR_SELECT) : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
