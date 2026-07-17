@@ -467,18 +467,14 @@ void FontDownloadActivity::loop() {
       const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
       const int contentHeight =
           renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-      int touched = -1;
-      if (mappedInput.wasListItemTouchedDown(touched, listSize, selectedIndex_, contentTop, contentHeight, true)) {
-        if (selectedIndex_ != touched) {
-          selectedIndex_ = touched;
-          requestUpdate();
-        }
-        return;
-      }
-      if (mappedInput.wasListItemTapped(touched, listSize, selectedIndex_, contentTop, contentHeight, true)) {
-        selectedIndex_ = touched;
-        activateSelected();
-        return;
+      switch (handleListTouch(selectedIndex_, listSize, contentTop, contentHeight, true)) {
+        case ListTouchResult::Activated:
+          activateSelected();
+          return;
+        case ListTouchResult::Consumed:
+          return;
+        case ListTouchResult::None:
+          break;
       }
 
       const auto swipe = mappedInput.wasSwipe();

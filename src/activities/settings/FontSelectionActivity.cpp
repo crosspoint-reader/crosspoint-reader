@@ -112,18 +112,14 @@ void FontSelectionActivity::loop() {
       UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, previewHeight + metrics_.verticalSpacing);
   const int listTop = afterHeader + previewHeight + metrics_.verticalSpacing;
   const int listHeight = usableHeight - previewHeight - metrics_.verticalSpacing;
-  int touched = -1;
-  if (mappedInput.wasListItemTouchedDown(touched, listSize, selectedIndex_, listTop, listHeight, false)) {
-    if (selectedIndex_ != touched) {
-      selectedIndex_ = touched;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(touched, listSize, selectedIndex_, listTop, listHeight, false)) {
-    selectedIndex_ = touched;
-    activateSelected();
-    return;
+  switch (handleListTouch(selectedIndex_, listSize, listTop, listHeight, false)) {
+    case ListTouchResult::Activated:
+      activateSelected();
+      return;
+    case ListTouchResult::Consumed:
+      return;
+    case ListTouchResult::None:
+      break;
   }
 
   const auto swipe = mappedInput.wasSwipe();

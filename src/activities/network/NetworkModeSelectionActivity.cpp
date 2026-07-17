@@ -50,18 +50,14 @@ void NetworkModeSelectionActivity::loop() {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  int touched = -1;
-  if (mappedInput.wasListItemTouchedDown(touched, MENU_ITEM_COUNT, selectedIndex, contentTop, contentHeight, true)) {
-    if (selectedIndex != touched) {
-      selectedIndex = touched;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(touched, MENU_ITEM_COUNT, selectedIndex, contentTop, contentHeight, true)) {
-    selectedIndex = touched;
-    selectCurrent();
-    return;
+  switch (handleListTouch(selectedIndex, MENU_ITEM_COUNT, contentTop, contentHeight, true)) {
+    case ListTouchResult::Activated:
+      selectCurrent();
+      return;
+    case ListTouchResult::Consumed:
+      return;
+    case ListTouchResult::None:
+      break;
   }
 
   // Handle navigation

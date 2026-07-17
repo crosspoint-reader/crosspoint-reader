@@ -693,20 +693,12 @@ void WifiSelectionActivity::loop() {
       const int contentTop =
           screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
       const int contentHeight = screen.height - contentTop - metrics.verticalSpacing * 2;
-      int touched = -1;
-      if (mappedInput.wasListItemTouchedDown(touched, static_cast<int>(networks.size()),
-                                             static_cast<int>(selectedNetworkIndex), contentTop, contentHeight,
-                                             false)) {
-        if (selectedNetworkIndex != static_cast<size_t>(touched)) {
-          selectedNetworkIndex = touched;
-          requestUpdate();
-        }
-        return;
-      }
-      if (mappedInput.wasListItemTapped(touched, static_cast<int>(networks.size()),
-                                        static_cast<int>(selectedNetworkIndex), contentTop, contentHeight, false)) {
-        selectedNetworkIndex = touched;
-        selectNetwork(selectedNetworkIndex);
+      int touchSel = static_cast<int>(selectedNetworkIndex);
+      const auto listTouch =
+          handleListTouch(touchSel, static_cast<int>(networks.size()), contentTop, contentHeight, false);
+      if (listTouch != ListTouchResult::None) {
+        selectedNetworkIndex = static_cast<size_t>(touchSel);
+        if (listTouch == ListTouchResult::Activated) selectNetwork(selectedNetworkIndex);
         return;
       }
 

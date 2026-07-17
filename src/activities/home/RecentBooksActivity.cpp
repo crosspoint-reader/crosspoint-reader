@@ -75,20 +75,15 @@ void RecentBooksActivity::loop() {
     }
   }
 
-  int tapped = -1;
-  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(recentBooks.size()), static_cast<int>(selectorIndex),
-                                         contentTop, contentHeight, true)) {
-    if (selectorIndex != static_cast<size_t>(tapped)) {
-      selectorIndex = tapped;
-      requestUpdate();
+  int touchSel = static_cast<int>(selectorIndex);
+  const auto listTouch =
+      handleListTouch(touchSel, static_cast<int>(recentBooks.size()), contentTop, contentHeight, true);
+  if (listTouch != ListTouchResult::None) {
+    selectorIndex = static_cast<size_t>(touchSel);
+    if (listTouch == ListTouchResult::Activated) {
+      LOG_DBG("RBA", "Tapped recent book: %s", recentBooks[selectorIndex].path.c_str());
+      onSelectBook(recentBooks[selectorIndex].path);
     }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(recentBooks.size()), static_cast<int>(selectorIndex),
-                                    contentTop, contentHeight, true)) {
-    selectorIndex = tapped;
-    LOG_DBG("RBA", "Tapped recent book: %s", recentBooks[selectorIndex].path.c_str());
-    onSelectBook(recentBooks[selectorIndex].path);
     return;
   }
 

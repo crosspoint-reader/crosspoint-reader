@@ -279,19 +279,11 @@ void FileBrowserActivity::loop() {
     return;
   };
 
-  int tapped = -1;
-  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(files.size()), static_cast<int>(selectorIndex),
-                                         contentTop, contentHeight, false)) {
-    if (selectorIndex != static_cast<size_t>(tapped)) {
-      selectorIndex = tapped;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(files.size()), static_cast<int>(selectorIndex), contentTop,
-                                    contentHeight, false)) {
-    selectorIndex = tapped;
-    activateSelected();
+  int touchSel = static_cast<int>(selectorIndex);
+  const auto listTouch = handleListTouch(touchSel, static_cast<int>(files.size()), contentTop, contentHeight, false);
+  if (listTouch != ListTouchResult::None) {
+    selectorIndex = static_cast<size_t>(touchSel);
+    if (listTouch == ListTouchResult::Activated) activateSelected();
     return;
   }
 

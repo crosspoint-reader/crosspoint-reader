@@ -101,20 +101,14 @@ void EpubReaderMenuActivity::loop() {
   const int contentTop =
       screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
-  int tapped = 0;
-  if (mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(menuItems.size()), selectedIndex, contentTop,
-                                         contentHeight, false)) {
-    if (selectedIndex != tapped) {
-      selectedIndex = tapped;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(tapped, static_cast<int>(menuItems.size()), selectedIndex, contentTop,
-                                    contentHeight, false)) {
-    selectedIndex = tapped;
-    activateSelected();
-    return;
+  switch (handleListTouch(selectedIndex, static_cast<int>(menuItems.size()), contentTop, contentHeight, false)) {
+    case ListTouchResult::Activated:
+      activateSelected();
+      return;
+    case ListTouchResult::Consumed:
+      return;
+    case ListTouchResult::None:
+      break;
   }
 
   const auto swipe = mappedInput.wasSwipe();

@@ -54,18 +54,14 @@ void OpdsServerListActivity::loop() {
     const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
     const int contentHeight =
         renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-    int touched = -1;
-    if (mappedInput.wasListItemTouchedDown(touched, itemCount, selectedIndex, contentTop, contentHeight, true)) {
-      if (selectedIndex != touched) {
-        selectedIndex = touched;
-        requestUpdate();
-      }
-      return;
-    }
-    if (mappedInput.wasListItemTapped(touched, itemCount, selectedIndex, contentTop, contentHeight, true)) {
-      selectedIndex = touched;
-      activateSelected();
-      return;
+    switch (handleListTouch(selectedIndex, itemCount, contentTop, contentHeight, true)) {
+      case ListTouchResult::Activated:
+        activateSelected();
+        return;
+      case ListTouchResult::Consumed:
+        return;
+      case ListTouchResult::None:
+        break;
     }
 
     const int pageItems = GUI.getListPageItems(contentHeight, true);

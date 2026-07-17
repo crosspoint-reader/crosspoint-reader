@@ -360,7 +360,40 @@ std::string KeyboardEntryActivity::displayTextForCurrentState() const {
   return displayText;
 }
 
+int KeyboardEntryActivity::measureRange(std::string& s, const int start, const int end) const {
+  if (end <= start) return 0;
+  // s[end] is writable even at s.length() (the terminator slot); only '\0' may
+  // be written there, which is exactly what the measurement needs.
+  const char saved = s[end];
+  s[end] = '\0';
+  const int width = renderer.getTextAdvanceX(UI_12_FONT_ID, s.c_str() + start, EpdFontFamily::REGULAR);
+  s[end] = saved;
+  return width;
+}
+
+int KeyboardEntryActivity::lineBreakEnd(std::string& s, const int start, const int maxWidth) const {
+  const int len = static_cast<int>(s.length());
+  if (measureRange(s, start, len) <= maxWidth) return len;
+  int lo = start + 1;
+  int hi = len - 1;
+  int best = start + 1;
+  while (lo <= hi) {
+    const int mid = lo + (hi - lo) / 2;
+    if (measureRange(s, start, mid) <= maxWidth) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best;
+}
+
 bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, size_t& position) const {
+  // Key taps are the overwhelmingly common case; they land on the keyboard,
+  // never the text field, so skip the wrap/measure work entirely.
+  if (y >= keyboardRect().y) return false;
+
   const int pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
@@ -381,61 +414,54 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
   const int textAreaWidth = pageWidth - 2 * effectiveMargin - toggleReserve;
   const int maxLineWidth = textAreaWidth;
   const bool centerText = metrics.keyboardCenteredText;
-  const std::string displayText = displayTextForCurrentState();
+  std::string displayText = displayTextForCurrentState();
 
   int lineStartIdx = 0;
-  int lineEndIdx = static_cast<int>(displayText.length());
   int lineY = inputStartY;
   int lastLineStartIdx = 0;
-  int lastLineEndIdx = lineEndIdx;
+  int lastLineEndIdx = static_cast<int>(displayText.length());
   int lastLineStartX = effectiveMargin;
   int lastLineWidth = 0;
 
   while (true) {
-    std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
-    const int textWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
-    if (textWidth <= maxLineWidth) {
-      const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
-      lastLineStartIdx = lineStartIdx;
-      lastLineEndIdx = lineEndIdx;
-      lastLineStartX = lineStartX;
-      lastLineWidth = textWidth;
+    const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
+    const int textWidth = measureRange(displayText, lineStartIdx, lineEndIdx);
+    const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
+    lastLineStartIdx = lineStartIdx;
+    lastLineEndIdx = lineEndIdx;
+    lastLineStartX = lineStartX;
+    lastLineWidth = textWidth;
 
-      if (y >= lineY - metrics.verticalSpacing && y < lineY + lineHeight + metrics.verticalSpacing) {
-        if (x <= lineStartX) {
-          position = static_cast<size_t>(lineStartIdx);
-          return true;
-        }
-        if (x >= lineStartX + textWidth) {
-          position = static_cast<size_t>(lineEndIdx);
-          return true;
-        }
-
-        int previousWidth = 0;
-        for (int i = lineStartIdx; i < lineEndIdx; i++) {
-          const std::string throughChar = displayText.substr(lineStartIdx, i - lineStartIdx + 1);
-          const int nextWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, throughChar.c_str(), EpdFontFamily::REGULAR);
-          const int midpoint = lineStartX + previousWidth + (nextWidth - previousWidth) / 2;
-          if (x < midpoint) {
-            position = static_cast<size_t>(i);
-            return true;
-          }
-          previousWidth = nextWidth;
-        }
+    if (y >= lineY - metrics.verticalSpacing && y < lineY + lineHeight + metrics.verticalSpacing) {
+      if (x <= lineStartX) {
+        position = static_cast<size_t>(lineStartIdx);
+        return true;
+      }
+      if (x >= lineStartX + textWidth) {
         position = static_cast<size_t>(lineEndIdx);
         return true;
       }
 
-      if (lineEndIdx == static_cast<int>(displayText.length())) {
-        break;
+      int previousWidth = 0;
+      for (int i = lineStartIdx; i < lineEndIdx; i++) {
+        const int nextWidth = measureRange(displayText, lineStartIdx, i + 1);
+        const int midpoint = lineStartX + previousWidth + (nextWidth - previousWidth) / 2;
+        if (x < midpoint) {
+          position = static_cast<size_t>(i);
+          return true;
+        }
+        previousWidth = nextWidth;
       }
-
-      lineY += lineHeight;
-      lineStartIdx = lineEndIdx;
-      lineEndIdx = static_cast<int>(displayText.length());
-    } else {
-      lineEndIdx -= 1;
+      position = static_cast<size_t>(lineEndIdx);
+      return true;
     }
+
+    if (lineEndIdx == static_cast<int>(displayText.length())) {
+      break;
+    }
+
+    lineY += lineHeight;
+    lineStartIdx = lineEndIdx;
   }
 
   const int underlineBottom = lineY + lineHeight + metrics.verticalSpacing + 8;
@@ -697,16 +723,16 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   }
 
   int lineStartIdx = 0;
-  int lineEndIdx = displayText.length();
   int textWidth = 0;
   int cursorPixelX = effectiveMargin;
   int cursorLineY = inputStartY;
   bool cursorDrawn = false;
 
   while (true) {
-    std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
+    const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
+    const std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
     textWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
-    if (textWidth <= maxLineWidth) {
+    {
       const bool isLastLine = (lineEndIdx == static_cast<int>(displayText.length()));
       bool isCursorLine = false;
       if (!cursorDrawn && cursorPos >= lineStartIdx &&
@@ -755,15 +781,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       } else {
         renderer.drawText(UI_12_FONT_ID, lineStartX, inputStartY + inputHeight, lineText.c_str());
       }
-      if (lineEndIdx == displayText.length()) {
+      if (lineEndIdx == static_cast<int>(displayText.length())) {
         break;
       }
 
       inputHeight += lineHeight;
       lineStartIdx = lineEndIdx;
-      lineEndIdx = displayText.length();
-    } else {
-      lineEndIdx -= 1;
     }
   }
 

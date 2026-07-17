@@ -44,17 +44,11 @@ void KOReaderSettingsActivity::loop() {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  int touched = -1;
-  if (mappedInput.wasListItemTouchedDown(touched, MENU_ITEMS, selectedIndex, contentTop, contentHeight, false)) {
-    if (selectedIndex != touched) {
-      selectedIndex = touched;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(touched, MENU_ITEMS, selectedIndex, contentTop, contentHeight, false)) {
-    selectedIndex = touched;
-    activateSelected();
+  int touchSel = static_cast<int>(selectedIndex);
+  const auto listTouch = handleListTouch(touchSel, MENU_ITEMS, contentTop, contentHeight, false);
+  if (listTouch != ListTouchResult::None) {
+    selectedIndex = static_cast<size_t>(touchSel);
+    if (listTouch == ListTouchResult::Activated) activateSelected();
     return;
   }
 

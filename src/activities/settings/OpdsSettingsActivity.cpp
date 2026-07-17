@@ -54,19 +54,11 @@ void OpdsSettingsActivity::loop() {
       renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   const int menuItems = getMenuItemCount();
 
-  int touched = -1;
-  if (mappedInput.wasListItemTouchedDown(touched, menuItems, static_cast<int>(selectedIndex), contentTop, contentHeight,
-                                         false)) {
-    if (selectedIndex != static_cast<size_t>(touched)) {
-      selectedIndex = static_cast<size_t>(touched);
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(touched, menuItems, static_cast<int>(selectedIndex), contentTop, contentHeight,
-                                    false)) {
-    selectedIndex = static_cast<size_t>(touched);
-    handleSelection();
+  int touchSel = static_cast<int>(selectedIndex);
+  const auto listTouch = handleListTouch(touchSel, menuItems, contentTop, contentHeight, false);
+  if (listTouch != ListTouchResult::None) {
+    selectedIndex = static_cast<size_t>(touchSel);
+    if (listTouch == ListTouchResult::Activated) handleSelection();
     return;
   }
 

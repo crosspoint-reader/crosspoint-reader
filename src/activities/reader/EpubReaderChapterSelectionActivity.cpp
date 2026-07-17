@@ -56,18 +56,14 @@ void EpubReaderChapterSelectionActivity::loop() {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
-  int tapped = 0;
-  if (mappedInput.wasListItemTouchedDown(tapped, totalItems, selectorIndex, contentTop, contentHeight, false)) {
-    if (selectorIndex != tapped) {
-      selectorIndex = tapped;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasListItemTapped(tapped, totalItems, selectorIndex, contentTop, contentHeight, false)) {
-    selectorIndex = tapped;
-    selectChapter();
-    return;
+  switch (handleListTouch(selectorIndex, totalItems, contentTop, contentHeight, false)) {
+    case ListTouchResult::Activated:
+      selectChapter();
+      return;
+    case ListTouchResult::Consumed:
+      return;
+    case ListTouchResult::None:
+      break;
   }
 
   const auto swipe = mappedInput.wasSwipe();
