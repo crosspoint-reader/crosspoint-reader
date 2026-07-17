@@ -16,7 +16,7 @@ Not supported: `.syn` synonym files (ignored), dictionaries with 64-bit index of
 
 ## Setting Up a Dictionary
 
-1. Copy your dictionary folder(s) to `/dictionaries/` on the SD card — one dictionary per folder, e.g. `/dictionaries/webster/webster.idx` + `webster.dict.dz`.
+1. Copy your dictionary folder(s) to `/dictionaries/` on the SD card — one dictionary per folder, e.g. `/dictionaries/webster/webster.idx` + `webster.dict.dz`. A hidden `/.dictionaries/` folder (dot-prefixed) works the same way, for keeping it out of the file browser.
 2. Open **Settings → Reader → Dictionary** on the device.
 3. Select a dictionary from the list, or **None** to disable lookups.
 
