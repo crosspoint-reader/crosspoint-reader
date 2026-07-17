@@ -56,9 +56,9 @@ class OptionPopup {
     int tx = 0;
     int ty = 0;
     if (input.wasScreenTouchDown(tx, ty)) {
-      const auto& layout = getLayout(input.getRenderer());
-      for (int i = 0; i < static_cast<int>(layout.options.size()); i++) {
-        if (contains(layout.options[i], tx, ty)) {
+      const auto& hitLayout = getLayout(input.getRenderer());
+      for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
+        if (contains(hitLayout.options[i], tx, ty)) {
           if (selectedIndex != i) {
             selectedIndex = i;
             requestUpdate();
@@ -69,9 +69,9 @@ class OptionPopup {
       return true;
     }
     if (input.wasScreenTapped(tx, ty)) {
-      const auto& layout = getLayout(input.getRenderer());
-      for (int i = 0; i < static_cast<int>(layout.options.size()); i++) {
-        if (contains(layout.options[i], tx, ty)) {
+      const auto& hitLayout = getLayout(input.getRenderer());
+      for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
+        if (contains(hitLayout.options[i], tx, ty)) {
           selectedIndex = i;
           active = false;
           if (onSelectCallback) onSelectCallback(selectedIndex);
@@ -80,7 +80,7 @@ class OptionPopup {
         }
       }
       // Taps on the dialog chrome (title, padding) keep the popup open; taps outside dismiss it
-      if (contains(layout.dialog, tx, ty)) return true;
+      if (contains(hitLayout.dialog, tx, ty)) return true;
       active = false;
       requestUpdate();
       return true;
