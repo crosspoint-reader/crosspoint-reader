@@ -66,7 +66,8 @@ class TextSettingsActivity final : public Activity {
   std::vector<SizeEntry> sizes_;
 
   Tab tab_;
-  int selectedIndex_[static_cast<int>(Tab::Count)] = {};  // per-Tab nav position (0 = tab bar, 1..N = row); set in onEnter
+  int selectedIndex_[static_cast<int>(Tab::Count)] =
+      {};  // per-Tab nav position (0 = tab bar, 1..N = row); set in onEnter
   int currentFamilyIndex_ = 0;
   int currentSizeIndex_ = 0;
 
