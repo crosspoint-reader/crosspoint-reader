@@ -20,6 +20,7 @@ static uint8_t decToBcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
 void HalClock::begin() {
   if (!gpio.deviceIsX3()) {
     _available = false;
+    _softwareClockSynced = (time(nullptr) > 1577836800L);
     return;
   }
 
@@ -48,21 +49,43 @@ void HalClock::begin() {
 }
 
 bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
-  if (!_available) return false;
+  if (!_available && !_softwareClockSynced) return false;
 
-  const unsigned long now = millis();
-  if (_lastPollMs != 0 && (now - _lastPollMs) < CLOCK_POLL_MS) {
+  const unsigned long nowMs = millis();
+  if (_hasCachedTime && _lastPollMs != 0 && (nowMs - _lastPollMs) < CLOCK_POLL_MS) {
     hour = _cachedHour;
     minute = _cachedMinute;
     return true;
   }
 
-  // Read 3 bytes starting at register 0x00: seconds, minutes, hours
+  if (!_available) {
+    const time_t raw = time(nullptr);
+    if (raw <= 1577836800L) {
+      if (_hasCachedTime) { _lastPollMs = nowMs; hour = _cachedHour; minute = _cachedMinute; return true; }
+      return false;
+    }
+    time_t display = raw;
+    if (_anchorEpoch > 0 && _driftPpm != 0) {
+      const int32_t elapsed = static_cast<int32_t>(static_cast<uint32_t>(raw) - _anchorEpoch);
+      const int32_t corrected = static_cast<int32_t>((int64_t)elapsed * 1000000 / (1000000 + _driftPpm));
+      display = static_cast<time_t>(_anchorEpoch) + corrected;
+    }
+    struct tm tm_info;
+    gmtime_r(&display, &tm_info);
+    _cachedHour = static_cast<uint8_t>(tm_info.tm_hour);
+    _cachedMinute = static_cast<uint8_t>(tm_info.tm_min);
+    _hasCachedTime = true;
+    _lastPollMs = nowMs;
+    hour = _cachedHour;
+    minute = _cachedMinute;
+    return true;
+  }
+
   Wire.beginTransmission(I2C_ADDR_DS3231);
   Wire.write(DS3231_SEC_REG);
   if (Wire.endTransmission(false) != 0) {
     if (!_hasCachedTime) return false;
-    _lastPollMs = now;
+    _lastPollMs = nowMs;
     hour = _cachedHour;
     minute = _cachedMinute;
     return true;
@@ -70,7 +93,7 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)3);
   if (Wire.available() < 3) {
     if (!_hasCachedTime) return false;
-    _lastPollMs = now;
+    _lastPollMs = nowMs;
     hour = _cachedHour;
     minute = _cachedMinute;
     return true;
@@ -92,7 +115,7 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
     // 24h mode: bits 5-0 = hours (0-23)
     _cachedHour = bcdToDec(rawHour & 0x3F);
   }
-  _lastPollMs = now;
+  _lastPollMs = nowMs;
   _hasCachedTime = true;
 
   hour = _cachedHour;
@@ -150,12 +173,12 @@ bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
 }
 
 bool HalClock::syncFromNTP() {
-  if (!_available) return false;
-
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;
   }
+
+  const uint32_t preSyncEpoch = static_cast<uint32_t>(time(nullptr));
 
   LOG_INF("CLK", "Starting NTP sync...");
   configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
@@ -168,11 +191,27 @@ bool HalClock::syncFromNTP() {
       struct tm timeinfo;
       gmtime_r(&now, &timeinfo);
 
-      if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
-        LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-        return true;
+      if (_available) {
+        if (!writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) return false;
+        LOG_INF("CLK", "DS3231 set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+      } else {
+        const uint32_t trueNow = static_cast<uint32_t>(now);
+        if (_anchorEpoch > 0) {
+          const int32_t actualElapsed = static_cast<int32_t>(trueNow - _anchorEpoch);
+          const int32_t rtcElapsed = static_cast<int32_t>(preSyncEpoch - _anchorEpoch);
+          if (actualElapsed > 3600 && rtcElapsed > 0) {
+            int32_t newPpm = static_cast<int32_t>((int64_t)(rtcElapsed - actualElapsed) * 1000000 / actualElapsed);
+            newPpm = newPpm > 100000 ? 100000 : (newPpm < -100000 ? -100000 : newPpm);
+            _driftPpm = newPpm;
+            LOG_INF("CLK", "Drift updated: %d ppm", _driftPpm);
+          }
+        }
+        _anchorEpoch = trueNow;
+        _softwareClockSynced = true;
+        _lastPollMs = 0;
+        LOG_INF("CLK", "Software clock synced to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
       }
-      return false;
+      return true;
     }
     delay(100);
   }
