@@ -258,11 +258,29 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   const auto htmlDir = epub->getCachePath() + "/html";
   const auto htmlPath = htmlDir + "/" + std::to_string(spineIndex) + ".html";
   const auto tmpHtmlPath = htmlDir + "/.tmp_" + std::to_string(spineIndex) + ".html";
+  const auto sanitizedHtmlPath = htmlDir + "/.tmp_" + std::to_string(spineIndex) + ".xml";
 
   // Create cache directory if it doesn't exist
   {
     const auto sectionsDir = epub->getCachePath() + "/sections";
     Storage.mkdir(sectionsDir.c_str());
+  }
+
+  // Belt-and-braces sweep of a stale sidecar from a crash on THIS spine's own previous attempt.
+  // It only helps the three paths below that can return before the sanitize call is even reached
+  // (unzip failure, binTmpPath() open failure, BuildContext OOM) -- any build that gets as far as
+  // the sanitize call already self-heals: openFileForWrite() below is O_TRUNC, and the sanitize
+  // call's own else-branch plus the parser-OOM early return and the 3 lifecycle removals
+  // (finalize/suspend/abandon) cover the rest.
+  // A sidecar orphaned by a crash on a spine that is never reopened is NOT reached by this sweep
+  // (startBuild(spineIndex) never runs for it) and is only cleaned by Epub::clearCache() wiping the
+  // whole cache dir. That residue -- one deterministic path per spine, one chapter's bytes each, on
+  // a multi-GB SD -- is knowingly accepted: a bounded sweep at book-open time (e.g.
+  // BookMetadataCache::cleanupTmpFiles()-style, looping spineCount known fixed paths) was considered
+  // and rejected -- up to ~400 Storage.exists() SD lookups on a large book, on every open, costs
+  // more than the residue.
+  if (Storage.exists(sanitizedHtmlPath.c_str())) {
+    Storage.remove(sanitizedHtmlPath.c_str());
   }
 
   // Reuse the previously unzipped HTML if we already have it. The unzipped HTML is keyed only on the
@@ -357,7 +375,11 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   // streaming pass). Only redirect the parser to the sidecar when something actually changed;
   // already-well-formed chapters parse the raw file directly. The sidecar is removed by
   // finalizeBuild/suspendBuild/abandonBuild via ctx->sanitizedPath.
-  const auto sanitizedHtmlPath = htmlDir + "/.tmp_" + std::to_string(spineIndex) + ".xml";
+  //
+  // The sidecar is intentionally never persisted alongside htmlPath: it's a pure, deterministic
+  // function of its source, so caching it would only double the html-cache disk footprint and add
+  // a second cache-coherency surface to invalidate, in exchange for skipping a streaming pass that
+  // is cheap next to the layout work a rebuild is already doing.
   bool sanitizationModified = false;
   const bool sanitizationOk =
       ChapterHtmlSlimParser::selfCloseVoidElements(ctx->parsePath, sanitizedHtmlPath, sanitizationModified);
