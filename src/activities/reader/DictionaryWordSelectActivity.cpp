@@ -234,6 +234,25 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   return saved;
 }
 
+// Front-button bar (Back/Confirm/Left/Right). Drawn last on every repaint
+// path, including the differential highlight-only path, so it always ends
+// up as the top layer even when a highlighted word's box falls under a
+// hint's screen area. No side-button hints: Up/Down row jump has no spare
+// screen area on this page (it reuses the reader's full-bleed layout), and
+// a hint box there would hide text instead of sitting in a reserved gutter.
+void DictionaryWordSelectActivity::drawHints() const {
+  // No selectable word on this page: Confirm/Left/Right are all no-ops
+  // (guarded by words.empty() in loop()/performLookup), so only Back does
+  // anything and only Back is hinted.
+  if (words.empty()) {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
 void DictionaryWordSelectActivity::render(RenderLock&&) {
   // Differential fast path: only the highlight moved and the framebuffer
   // still holds a clean page (no popup or sub-activity since the last full
@@ -246,6 +265,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     renderer.getFontCacheManager()->prewarmCache(
         fontId, words[selected].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
     if (drawHighlightWithSnapshot()) {
+      drawHints();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
       return;
     }
@@ -265,6 +285,8 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   if (!words.empty()) {
     drawHighlightWithSnapshot();
   }
+
+  drawHints();
 
   if (popup != Popup::None) {
     // The popup overdraws the page, so the snapshot no longer matches the

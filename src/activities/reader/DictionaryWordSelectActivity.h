@@ -44,6 +44,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void moveVertical(int direction);
   void performLookup();
   bool drawHighlightWithSnapshot();
+  void drawHints() const;
 
   std::unique_ptr<Page> page;
   const int marginLeft;
