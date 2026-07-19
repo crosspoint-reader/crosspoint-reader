@@ -68,6 +68,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void toggleHighlight();
   bool saveHighlight();
   bool drawHighlightWithSnapshot();
+  void drawHints() const;
   void paintWordBox(int idx, bool highlighted, int rangeLo, int rangeHi);
   void resetCursorToMiddle();
   bool rowIsRtl(uint16_t row) const;

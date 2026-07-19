@@ -5,11 +5,21 @@
 #include <ObfuscationUtils.h>
 
 namespace {
-// Default sync server URL
-constexpr char DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
+// Default sync server URL. crosspoint-sync speaks the full KOSync protocol, so
+// pointing at any other kosync server (e.g. https://sync.koreader.rocks:443)
+// still works via the custom server URL setting.
+constexpr char DEFAULT_SERVER_URL[] = "https://sync.crosspointreader.com";
+
+// Default before config version 2. Configs saved without a version stamp and an
+// empty serverUrl were implicitly syncing here — they get pinned on upgrade.
+constexpr char LEGACY_DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
+
+// Bumped when a change to defaults would alter behavior for existing configs.
+constexpr uint8_t CONFIG_VERSION = 2;
 }  // namespace
 
 void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
+  doc["cfgVersion"] = CONFIG_VERSION;
   doc["username"] = getUsername();
   doc["password_obf"] = obfuscation::obfuscateToBase64(getPassword());
   doc["serverUrl"] = getServerUrl();
@@ -26,6 +36,19 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
 
   setCredentials(user, pass);
   setServerUrl(doc["serverUrl"] | "");
+
+  // The default server changed in config v2 (sync.koreader.rocks -> crosspoint-sync).
+  // A pre-v2 config with credentials and no explicit URL was actively syncing
+  // against the old default — pin that URL so the upgrade doesn't switch servers
+  // out from under the user. Fresh setups get the new default.
+  const uint8_t cfgVersion = doc["cfgVersion"] | (uint8_t)1;
+  if (cfgVersion < CONFIG_VERSION) {
+    if (getServerUrl().empty() && hasCredentials()) {
+      LOG_DBG("KRS", "Pre-v2 config used the old default server; pinning %s", LEGACY_DEFAULT_SERVER_URL);
+      setServerUrl(LEGACY_DEFAULT_SERVER_URL);
+    }
+    needsResave = true;  // stamp cfgVersion so this migration runs once
+  }
 
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
   if (method <= static_cast<uint8_t>(DocumentMatchMethod::BINARY)) {

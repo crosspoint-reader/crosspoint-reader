@@ -523,6 +523,28 @@ void DictionaryWordSelectActivity::paintWordBox(const int idx, const bool highli
   renderer.drawText(fontId, word.x, word.y, word.text, !highlighted, word.style);
 }
 
+// Front-button bar (Back/Confirm/Left/Right). Drawn last on every repaint
+// path, including the differential highlight-only paths, so it always ends
+// up as the top layer even when a highlighted word's box falls under a
+// hint's screen area. No side-button hints: Up/Down row jump has no spare
+// screen area on this page (it reuses the reader's full-bleed layout), and
+// a hint box there would hide text instead of sitting in a reserved gutter.
+void DictionaryWordSelectActivity::drawHints() const {
+  // No selectable word on this page: Confirm/Left/Right are all no-ops
+  // (guarded by words.empty() in loop()/performLookup), so only Back does
+  // anything and only Back is hinted.
+  if (words.empty()) {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
+  // Confirm's meaning depends on the mode: lookup, highlight, or both
+  // (the mixed mode hints the long-press lookup; a short press highlights).
+  const char* confirmLabel = (mode == Mode::Highlight) ? tr(STR_HIGHLIGHT) : tr(STR_LOOKUP);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
 void DictionaryWordSelectActivity::render(RenderLock&&) {
   // Incremental selection repaint: the framebuffer holds a clean page with
   // reading positions [drawnLo, drawnHi] highlighted; repaint only the words
@@ -539,6 +561,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     }
     drawnLo = lo;
     drawnHi = hi;
+    drawHints();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return;
   }
@@ -554,6 +577,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     renderer.getFontCacheManager()->prewarmCache(
         fontId, words[selected].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
     if (drawHighlightWithSnapshot()) {
+      drawHints();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
       return;
     }
@@ -583,6 +607,8 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
       drawnLo = drawnHi = -1;
     }
   }
+
+  drawHints();
 
   if (popup != Popup::None) {
     // The popup overdraws the page, so the snapshot no longer matches the
