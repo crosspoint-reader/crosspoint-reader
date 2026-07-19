@@ -10,9 +10,11 @@
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const bool hasBookmarks)
+                                               const bool hasFootnotes, const bool hasBookmarks,
+                                               const bool hasReturnPoint, std::string returnLabel)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReturnPoint)),
+      returnLabel(std::move(returnLabel)),
       title(title),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
@@ -20,9 +22,14 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                     bool hasBookmarks) {
+                                                                                     bool hasBookmarks,
+                                                                                     bool hasReturnPoint) {
   std::vector<MenuItem> items;
-  items.reserve(12);
+  items.reserve(14);
+  if (hasReturnPoint) {
+    items.push_back({MenuAction::RETURN_TO_PREVIOUS, StrId::STR_RETURN_TO_PREVIOUS});
+    items.push_back({MenuAction::STAY_HERE, StrId::STR_STAY_HERE});
+  }
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -127,7 +134,14 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   GUI.drawList(
       renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
-      [this](int index) { return I18N.get(menuItems[index].labelId); }, nullptr, nullptr,
+      [this](int index) -> std::string {
+        // Use the chapter-specific Return label when the reader injected one.
+        if (menuItems[index].action == MenuAction::RETURN_TO_PREVIOUS && !returnLabel.empty()) {
+          return returnLabel;
+        }
+        return I18N.get(menuItems[index].labelId);
+      },
+      nullptr, nullptr,
       [this](int index) {
         const auto value = menuItems[index].action;
         if (value == MenuAction::ROTATE_SCREEN) {
