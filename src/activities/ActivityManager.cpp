@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "Activity.h"
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
@@ -20,6 +21,14 @@
 #include "util/FullScreenMessageActivity.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
+
+ActivityManager::ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
+    : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
+  assert(renderingMutex != nullptr && "Failed to create rendering mutex");
+  stackActivities.reserve(10);
+}
+
+ActivityManager::~ActivityManager() { assert(false); /* should never be called */ }
 
 void ActivityManager::begin() {
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
