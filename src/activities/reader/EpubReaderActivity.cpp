@@ -20,6 +20,7 @@
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
@@ -257,6 +258,37 @@ void EpubReaderActivity::openReaderMenu() {
                          });
 }
 
+void EpubReaderActivity::openWordSelect(const DictionaryWordSelectActivity::Mode mode) {
+  // Pure dictionary mode is useless without a dictionary; the mixed mode can
+  // still highlight, so it opens and only the lookup path reports an error.
+  if (mode == DictionaryWordSelectActivity::Mode::Dictionary && SETTINGS.dictionaryName[0] == '\0') {
+    showDictionaryMessage = true;
+    dictionaryMessageTime = millis();
+    requestUpdate();
+    return;
+  }
+  if (!section) return;
+  auto page = section->loadPage(section->currentPage);
+  if (!page) return;
+
+  // Word geometry must match render(): viewable-area margins plus screen margin.
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "";
+
+  // section.get() outlives the sub-activity (the reader is paused beneath it)
+  // and enables highlight selections that continue onto the following pages.
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop, mode,
+                             epub->getTitle(), std::move(chapterTitle), section.get(), section->currentPage),
+                         [this](const ActivityResult&) { requestUpdate(); });
+}
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
@@ -379,6 +411,11 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showDictionaryMessage = false;
+    requestUpdate();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
@@ -440,6 +477,27 @@ void EpubReaderActivity::loop() {
             ignoreNextConfirmRelease = true;  // sync launched or error shown; suppress menu open
             return;
           }
+        }
+        break;
+      case CrossPointSettings::LP_MENU_DICTIONARY:
+      case CrossPointSettings::LP_MENU_HIGHLIGHT:
+      case CrossPointSettings::LP_MENU_DICT_HIGHLIGHT:
+        // Hold ~0.4s starts word selection on the current page (dictionary
+        // lookup, passage highlighting, or both).
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
+          ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
+          switch (SETTINGS.longPressMenuFunction) {
+            case CrossPointSettings::LP_MENU_HIGHLIGHT:
+              openWordSelect(DictionaryWordSelectActivity::Mode::Highlight);
+              break;
+            case CrossPointSettings::LP_MENU_DICT_HIGHLIGHT:
+              openWordSelect(DictionaryWordSelectActivity::Mode::DictionaryHighlight);
+              break;
+            default:
+              openWordSelect(DictionaryWordSelectActivity::Mode::Dictionary);
+              break;
+          }
+          return;
         }
         break;
       case CrossPointSettings::LP_MENU_DISABLED:
@@ -708,6 +766,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
+      openWordSelect(DictionaryWordSelectActivity::Mode::Dictionary);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
@@ -1299,6 +1361,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  }
+
+  if (showDictionaryMessage) {
+    GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
 }
 
