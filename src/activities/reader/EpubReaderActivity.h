@@ -146,6 +146,16 @@ class EpubReaderActivity final : public Activity {
   // whole HTML must be inflated before page 1 can lay out (the giant single-spine case), which is
   // a multi-second wait. Normal chapters are well under this and stay popup-free.
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;
+  // Deadline backstop for the predictive gates above: if the blocking build-to-target still
+  // hasn't produced the landing page this long after the build started, surface the popup
+  // mid-build. Builds that finish under the deadline stay popup-free.
+  static constexpr unsigned long BUILD_POPUP_DEADLINE_MS = 1000;
+  // True only during onEnter's blocking build-to-target phase, until the popup has been
+  // drawn. Gates showBuildPopup() so the parser's popup callback (which persists into
+  // background buildSomeMore chunks) can never draw over a displayed page.
+  bool buildPopupPending = false;
+  // Draw the indexing popup mid-build (parser image-probe callback and deadline backstop).
+  void showBuildPopup();
   // Remap the cached relative reading position once the section's real page count is known
   // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
   // No-op while the section is still building or when the pagination is unchanged (plain resume).

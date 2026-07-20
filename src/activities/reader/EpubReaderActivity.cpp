@@ -157,6 +157,11 @@ void EpubReaderActivity::onEnter() {
   }
 
   ImageBlock::clearSessionRenderFailures();
+  // Lazy image extraction: section builds only header-probe images, so the first
+  // render of an image page pulls the file out of the EPUB through this hook.
+  ImageBlock::setExtractor(epub.get(), [](void* ctx, const char* src, const char* dest) {
+    return static_cast<Epub*>(ctx)->extractItemToFile(src, dest);
+  });
 
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
@@ -208,6 +213,10 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  // The extractor holds a raw pointer to this activity's epub; drop it before
+  // the activity (and the shared_ptr) goes away.
+  ImageBlock::setExtractor(nullptr, nullptr);
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -268,6 +277,18 @@ bool EpubReaderActivity::buildTickHeapGate() {
   // stretch if the retained build context itself holds the heap down).
   buildHeapPaused = freeHeap < BACKGROUND_BUILD_MIN_FREE_HEAP || maxBlock < BACKGROUND_BUILD_MIN_MAX_ALLOC;
   return !buildHeapPaused;
+}
+
+void EpubReaderActivity::showBuildPopup() {
+  // Mid-build indexing popup: only during onEnter's blocking build-to-target phase
+  // (buildPopupPending), at most once, and only when the framebuffer isn't on loan.
+  // If it fires while the loan is active (e.g. the parser's size-based call during
+  // startBuild), pending stays set and the deadline check retries after the loan.
+  if (!buildPopupPending || !renderer.hasFrameBuffer()) return;
+  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts.
+  pagesUntilFullRefresh = 1;
+  buildPopupPending = false;
 }
 
 void EpubReaderActivity::openDictionaryWordSelect() {
@@ -1183,18 +1204,29 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts under the page.
             pagesUntilFullRefresh = 1;
           }
-          // Lend the framebuffer's 48 KB to the blocking pre-render burst
-          // (startBuild inflates the whole spine HTML — the memory peak). The
-          // background buildSomeMore chunks in loop() do NOT get the loan: they
-          // deliberately interleave with page renders. Restored before render.
-          GfxRenderer::FrameBufferLoan loan(renderer);
-          if (!section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                   SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+          // Mid-build popup surfacing for slow builds the predictive gates can't
+          // see (image extraction/probing inside a single page, or any chunk
+          // overrunning the deadline). The parser fires the callback before the
+          // first image probe; buildPopupPending gates it to this blocking phase
+          // so a background build in loop() can never draw over a displayed page.
+          buildPopupPending = !showPopup;
+          const unsigned long buildStartMs = millis();
+          bool started;
+          {
+            // Lend the framebuffer's 48 KB to startBuild only (the spine HTML
+            // inflation peak). The chunk loop below runs without it so the popup
+            // can draw mid-build; background chunks never had the loan either.
+            GfxRenderer::FrameBufferLoan loan(renderer);
+            started = section->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                                          SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                                          viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                          SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                                          [this] { showBuildPopup(); });
+          }
+          if (!started) {
             LOG_ERR("ERS", "Failed to start section build");
             section.reset();
-            loan.end();  // restore before anything draws (showBuildError renders a popup)
+            buildPopupPending = false;
             showBuildError();
             return;
           }
@@ -1203,15 +1235,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             // Anchor jump: build until the anchor's page is laid out (usually page 0), checking a
             // partial's on-disk anchor map too so an already-indexed anchor resolves immediately.
             // Otherwise: build until the target page exists. loop() builds the rest behind it.
+            if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
+              // The predictive gates guessed fast but the build blew the silent budget.
+              showBuildPopup();
+            }
             if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
               LOG_ERR("ERS", "Failed during incremental section build");
               section.reset();
-              loan.end();  // restore before anything draws (showBuildError renders a popup)
+              buildPopupPending = false;
               showBuildError();
               return;
             }
           }
-          loan.end();
+          buildPopupPending = false;
         }
       }
     } else {

@@ -17,7 +17,10 @@ namespace {
 // v30: Arabic shaping changed both drawing and measurement (getTextAdvanceX now
 //      measures the shaped visual text); cached word positions from v29 no longer
 //      match what drawText renders.
-constexpr uint8_t SECTION_FILE_VERSION = 31;
+// v32: ImageBlock serializes the book-internal source href after the cache path
+//      (lazy extraction: images are header-probed at build time and extracted on
+//      first render).
+constexpr uint8_t SECTION_FILE_VERSION = 32;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

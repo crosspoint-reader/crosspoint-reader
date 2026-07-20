@@ -6,6 +6,7 @@
 #include <Serialization.h>
 
 #include <cstdlib>
+#include <new>
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
@@ -15,8 +16,16 @@
 // - uint16_t height
 // - uint8_t pixels[...] - 2 bits per pixel, packed (4 pixels per byte), row-major order
 
-ImageBlock::ImageBlock(const std::string& imagePath, int16_t width, int16_t height)
-    : imagePath(imagePath), width(width), height(height) {}
+ImageBlock::ImageBlock(const std::string& imagePath, const std::string& srcPath, int16_t width, int16_t height)
+    : imagePath(imagePath), srcPath(srcPath), width(width), height(height) {}
+
+void* ImageBlock::extractCtx = nullptr;
+ImageBlock::ExtractFn ImageBlock::extractFn = nullptr;
+
+void ImageBlock::setExtractor(void* ctx, ExtractFn fn) {
+  extractCtx = ctx;
+  extractFn = fn;
+}
 
 bool ImageBlock::imageExists() const { return Storage.exists(imagePath.c_str()); }
 
@@ -225,6 +234,15 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;  // Successfully rendered from cache
   }
 
+  // The build only header-probed the image for dimensions; pull the actual
+  // file out of the book now, on first visit to the page.
+  if (!srcPath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
+    LOG_DBG("IMG", "Lazy-extracting %s -> %s", srcPath.c_str(), imagePath.c_str());
+    if (!extractFn(extractCtx, srcPath.c_str(), imagePath.c_str())) {
+      LOG_ERR("IMG", "Lazy extraction failed: %s", srcPath.c_str());
+    }
+  }
+
   // No cache - need to decode the image
   // Check if image file exists
   HalFile file;
@@ -280,6 +298,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
 bool ImageBlock::serialize(HalFile& file) {
   serialization::writeString(file, imagePath);
+  serialization::writeString(file, srcPath);
   serialization::writePod(file, width);
   serialization::writePod(file, height);
   return true;
@@ -287,9 +306,11 @@ bool ImageBlock::serialize(HalFile& file) {
 
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   std::string path;
+  std::string src;
   serialization::readString(file, path);
+  serialization::readString(file, src);
   int16_t w, h;
   serialization::readPod(file, w);
   serialization::readPod(file, h);
-  return std::unique_ptr<ImageBlock>(new ImageBlock(path, w, h));
+  return std::unique_ptr<ImageBlock>(new (std::nothrow) ImageBlock(path, src, w, h));
 }
