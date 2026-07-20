@@ -14,8 +14,8 @@ Please confirm:
 - [ ] This PR is **not** an interactive app, writing tool, RSS/news/browser, media playback, or PDF feature.
 - [ ] The stock firmware does not already handle this well, **and** no other popular CrossPoint fork already does
       (or, if one does, I explain why CrossPoint still needs it below).
-- [ ] If this PR touches `open-x4-sdk/`, `lib/hal/`, the bootloader, OTA, or recovery code, I have coordinated with
-      the relevant maintainer (currently @jeremydk for SDK abstraction and bootloader work).
+- [ ] If this PR touches `freeink-sdk/`, `lib/hal/`, the bootloader, OTA, or recovery code, I have coordinated with
+      the relevant maintainer.
 
 **If this PR was opened against the previous (broader) scope and was already in flight under Phase 0, link the
 relevant Discussion or issue so reviewers can see the history.**
