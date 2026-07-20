@@ -4,7 +4,7 @@
 
 #include "I18nKeys.h"
 /**
- * Internationalization (i18n) system for CrossPoint Reader
+ * Internationalization (i18n) system for CrossVi
  */
 
 class I18n {

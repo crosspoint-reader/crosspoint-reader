@@ -47,7 +47,7 @@ def create_epub(filename, title, chapters):
 <package version="2.0" xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:title>{title}</dc:title>
-    <dc:creator>CrossPoint Test Generator</dc:creator>
+    <dc:creator>CrossVi Test Generator</dc:creator>
     <dc:language>en</dc:language>
     <dc:identifier id="bookid">test-supsub-001</dc:identifier>
   </metadata>

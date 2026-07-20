@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Files - CrossPoint Reader</title>
+  <title>Files - CrossVi</title>
   <script src="/js/jszip.min.js"></script>
   <style>
     :root {
@@ -1501,7 +1501,7 @@
   </style>
 </head>
 <body>
-<h1>📚 CrossPoint Reader</h1>
+<h1>📚 CrossVi</h1>
 
 <div class="nav-links">
   <a href="/">Home</a>
@@ -1547,7 +1547,7 @@
 
 <div class="card">
   <p style="text-align: center; color: #95a5a6; margin: 0;">
-    CrossPoint E-Reader • Open Source
+    CrossVi • Open Source
   </p>
 </div>
 
@@ -1846,7 +1846,7 @@
 
   if (currentPath !== '/') {
     const leaf = currentPath.split('/').filter(Boolean).pop();
-    if (leaf) document.title = leaf + ' - Files - CrossPoint Reader';
+    if (leaf) document.title = leaf + ' - Files - CrossVi';
   }
 
   // Network status monitoring
@@ -1934,7 +1934,7 @@
   }
 
   async function hydrate() {
-    // Fetch CrossPoint version
+    // Fetch CrossVi version
     fetchVersion();
 
     // Close modals when clicking overlay - call proper cleanup functions
@@ -3405,7 +3405,7 @@ const logSection = document.getElementById('log-section');
 const logContainer = document.getElementById('log-container');
 const exportLogCheckbox = document.getElementById('export-log-checkbox');
 
-// CrossPoint version (fetched from API)
+// CrossVi version (fetched from API)
 let crosspointVersion = 'Unknown';
 
 // Fetch version from API
@@ -3752,7 +3752,7 @@ function exportLogToFile(filename = null, isBatch = false) {
   }
   // Extract text from log entries
   const entries = logContainer.querySelectorAll('.log-entry');
-  let logText = `CrossPoint Reader ${crosspointVersion} - EPUB Conversion Log\n`;
+  let logText = `CrossVi ${crosspointVersion} - EPUB Conversion Log\n`;
   logText += `Generated: ${new Date().toLocaleString()}\n`;
   logText += `${'='.repeat(60)}\n\n`;
 
@@ -5037,7 +5037,7 @@ async function convertEpubFile(file, progressCallback) {
         let modified = false;
 
         // Remove width/height attributes from ALL img tags (dimensions may have changed)
-        // This prevents CrossPoint and other readers from using wrong dimensions
+        // This prevents CrossVi and other readers from using wrong dimensions
         const allImgElements = doc.querySelectorAll('img');
         for (const img of allImgElements) {
           if (img.hasAttribute('width')) { img.removeAttribute('width'); modified = true; }

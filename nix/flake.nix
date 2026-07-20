@@ -1,5 +1,5 @@
 {
-  description = "CrossPoint Reader development environment";
+  description = "CrossVi development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

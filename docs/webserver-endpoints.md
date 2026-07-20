@@ -1,14 +1,14 @@
 # Webserver Endpoints
 
 This document describes the HTTP, WebSocket, WebDAV, and discovery endpoints
-available while CrossPoint Reader is in File Transfer or Calibre Wireless mode.
+available while CrossVi is in File Transfer or Calibre Wireless mode.
 
 - HTTP server: port 80
 - WebSocket upload server: port 81
 - UDP discovery listener: port 8134
 - WebDAV: port 80, handled by the same HTTP server
 
-Examples use `crosspoint.local`. If mDNS does not resolve on your network, use
+Examples use the retained compatibility hostname `crosspoint.local`. If mDNS does not resolve on your network, use
 the IP address shown on the device screen.
 
 ## HTTP Pages
@@ -489,7 +489,7 @@ The final field is the WebSocket upload port.
 
 ### Access Point Mode (AP)
 
-- Device creates an open hotspot named `CrossPoint-Reader`.
+- Device creates an open hotspot named `CrossVi`.
 - The device shows a Wi-Fi QR code and URL QR code.
 - The fallback IP is typically `192.168.4.1`.
 - `/api/status` returns `"mode": "AP"` and `"rssi": 0`.

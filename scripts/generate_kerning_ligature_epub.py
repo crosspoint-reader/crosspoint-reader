@@ -205,7 +205,7 @@ def create_cover_image():
     _draw_text_centered(draw, subtitle_y, "A Typographer\u2019s Compendium",
                         font_subtitle, text_color, width)
 
-    _draw_text_centered(draw, height - 70, "CROSSPOINT TEST FIXTURES",
+    _draw_text_centered(draw, height - 70, "CROSSVI TEST FIXTURES",
                         font_author, text_color, width)
 
     buf = io.BytesIO()
@@ -214,7 +214,7 @@ def create_cover_image():
 
 BOOK_UUID = str(uuid.uuid4())
 TITLE = "Kerning &amp; Ligature Edge Cases"
-AUTHOR = "Crosspoint Test Fixtures"
+AUTHOR = "CrossVi Test Fixtures"
 DATE = datetime.now().strftime("%Y-%m-%d")
 
 # ── XHTML content pages ──────────────────────────────────────────────

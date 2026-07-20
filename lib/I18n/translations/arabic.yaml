@@ -2,7 +2,7 @@ _language_name: "العربية"
 _language_code: "AR"
 _order: "28"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "CrossVi"
 STR_BOOTING: "جاري بدء التشغيل"
 STR_SLEEPING: "وضع السكون"
 STR_ENTERING_SLEEP: "جاري الدخول في وضع السكون"

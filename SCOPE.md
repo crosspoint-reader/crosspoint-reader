@@ -1,6 +1,6 @@
-# Project Vision & Scope: CrossPoint Reader
+# Project Vision & Scope: CrossVi
 
-The goal of CrossPoint Reader is to create an efficient, open-source reading experience for the Xteink X4. We believe a
+The goal of CrossVi is to create an efficient, open-source reading experience for the Xteink X4. We believe a
 dedicated e-reader should do one thing exceptionally well: **facilitate focused reading.**
 
 ## 1. Core Mission
@@ -47,13 +47,13 @@ usability over "swiss-army-knife" functionality.
 
 ### In-scope — Technically Unsupported
 
-*These features align with CrossPoint's goals but are impractical on the current hardware or produce poor UX.*
+*These features align with CrossVi's goals but are impractical on the current hardware or produce poor UX.*
 
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text — resulting in constant panning and zooming that makes for a poor reading experience on e-ink.
 
 ## 3. Idea Evaluation
 
-While I appreciate the desire to add new and exciting features to CrossPoint Reader, CrossPoint Reader is designed to be
+While I appreciate the desire to add new and exciting features to CrossVi, CrossVi is designed to be
 a lightweight, reliable, and performant e-reader. Things which distract or compromise the device's core mission will not
 be accepted. As a guiding question, consider if your idea improve the "core reading experience" for the average user,
 and, critically, not distract from that reading experience.

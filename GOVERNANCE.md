@@ -1,6 +1,6 @@
 # Project Governance & Community Principles
 
-CrossPoint Reader is a community-driven, open-source project. Our goal is to provide a high-quality, open-source
+CrossVi is a community-driven, open-source project. Our goal is to provide a high-quality, open-source
 firmware alternative for the Xteink X4 hardware. To keep this project productive and welcoming as we grow, we ask all
 contributors to follow these principles.
 
@@ -14,11 +14,11 @@ Technical discussions can get heated, but they should never be personal.
   etc.) are not welcome here and will be moderated.
 
 ### 2. A "Do-ocracy" with Guidance
-CrossPoint thrives because people step up to build what they want to see.
+CrossVi thrives because people step up to build what they want to see.
 - If you want a feature, the best way to get it is to start an
-  [Idea Discussion](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas) or open a PR.
+  [Idea Discussion](https://github.com/tvhdc/crossvi/discussions/categories/ideas) or open a PR.
 - If you want to report a bug, check for duplicates and create an
-  [Issue](https://github.com/crosspoint-reader/crosspoint-reader/issues).
+  [Issue](https://github.com/tvhdc/crossvi/issues).
 - While we encourage experimentation, the maintainers reserve the right to guide the project’s technical direction to
   ensure stability on the ESP32-C3’s constrained hardware.
 - For more guidance on the scope of the project, see the [SCOPE.md](SCOPE.md) document.

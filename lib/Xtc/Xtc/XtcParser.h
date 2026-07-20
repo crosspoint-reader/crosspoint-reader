@@ -2,7 +2,7 @@
  * XtcParser.h
  *
  * XTC file parsing and page data extraction
- * XTC ebook support for CrossPoint Reader
+ * XTC ebook support for CrossVi
  */
 
 #pragma once

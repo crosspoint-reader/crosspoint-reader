@@ -2,7 +2,7 @@ _language_name: "Norsk bokmål"
 _language_code: "NB"
 _order: "26"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "CrossVi"
 STR_BOOTING: "STARTER"
 STR_SLEEPING: "HVILER"
 STR_ENTERING_SLEEP: "Går i hvilemodus"

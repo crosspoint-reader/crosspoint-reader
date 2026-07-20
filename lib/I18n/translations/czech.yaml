@@ -2,7 +2,7 @@ _language_name: "Čeština"
 _language_code: "CS"
 _order: "4"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "CrossVi"
 STR_BOOTING: "SPUŠTĚNÍ"
 STR_SLEEPING: "SPÁNEK"
 STR_ENTERING_SLEEP: "Vstup do režimu spánku"

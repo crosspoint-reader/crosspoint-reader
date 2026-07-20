@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).parent.parent
 SOURCE_MD = ROOT / "USER_GUIDE.md"
-OUTPUT_EPUB = ROOT / "CrossPoint_User_Guide.epub"
+OUTPUT_EPUB = ROOT / "CrossVi_User_Guide.epub"
 LOGO_PNG = ROOT / "src/images/Logo120.png"
 
 # Portrait cover dimensions matching the X4 display (480×800)
@@ -145,7 +145,7 @@ def make_cover_png() -> bytes:
         font_title = ImageFont.load_default()
         font_sub = font_title
 
-    title = 'CrossPoint'
+    title = 'CrossVi'
     subtitle = 'User Guide'
 
     # Draw title text
@@ -204,7 +204,7 @@ def preprocess_callouts(text: str) -> str:
 def strip_toc(text: str) -> str:
     """Remove the inline TOC list that follows the H1 heading."""
     return re.sub(
-        r'(\n# CrossPoint User Guide\n)(.*?)(\n## 1\.)',
+        r'(\n# CrossVi User Guide\n)(.*?)(\n## 1\.)',
         lambda m: m.group(1) + m.group(3),
         text,
         flags=re.DOTALL,
@@ -218,7 +218,7 @@ def split_chapters(html: str):
     positions = [(m.start(), m.group(0), m.group(2)) for m in pattern.finditer(html)]
 
     if not positions:
-        return [('intro', 'CrossPoint User Guide', html)]
+        return [('intro', 'CrossVi User Guide', html)]
 
     intro_html = html[:positions[0][0]].strip()
     if intro_html:
@@ -262,10 +262,10 @@ def build_epub():
     body_html = md.convert(source)
 
     book = epub.EpubBook()
-    book.set_identifier('crosspoint-user-guide-v1')
-    book.set_title('CrossPoint User Guide')
+    book.set_identifier('crossvi-user-guide-v1')
+    book.set_title('CrossVi User Guide')
     book.set_language('en')
-    book.add_author('CrossPoint Reader Project')
+    book.add_author('CrossVi Project')
 
     style = epub.EpubItem(
         uid='style',
@@ -275,7 +275,7 @@ def build_epub():
     )
     book.add_item(style)
 
-    # Full-size cover image (480×800) — used by CrossPoint for home-screen thumbnail.
+    # Full-size cover image (480×800) — used by the firmware for home-screen thumbnails.
     # uid='cover-image' matches the EPUB 2 <meta name="cover" content="cover-image"/> value.
     cover_png_bytes = make_cover_png()
     cover_img_item = epub.EpubItem(
@@ -286,15 +286,15 @@ def build_epub():
     )
     cover_img_item.properties = ['cover-image']  # EPUB 3 manifest property
     book.add_item(cover_img_item)
-    # EPUB 2 cover declaration — CrossPoint's Tier 1 OPF lookup
+    # EPUB 2 cover declaration for the firmware's Tier 1 OPF lookup.
     book.add_metadata('OPF', 'meta', '', {'name': 'cover', 'content': 'cover-image'})
 
     # Cover page XHTML — first readable page in the spine
-    cover_page = epub.EpubHtml(title='CrossPoint User Guide', file_name='cover.xhtml', lang='en')
+    cover_page = epub.EpubHtml(title='CrossVi User Guide', file_name='cover.xhtml', lang='en')
     cover_page.content = make_xhtml(
-        'CrossPoint User Guide',
+        'CrossVi User Guide',
         '<div class="cover-page">'
-        '<img src="images/cover.png" alt="CrossPoint User Guide cover"/>'
+        '<img src="images/cover.png" alt="CrossVi User Guide cover"/>'
         '</div>',
     )
     cover_page.add_item(style)
@@ -316,7 +316,7 @@ def build_epub():
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
 
-    # nav is excluded from the spine — CrossPoint locates it via properties="nav" in
+    # nav is excluded from the spine — the firmware locates it via properties="nav" in
     # the manifest and does not respect linear="no", so omitting it prevents it from
     # appearing as a readable page. Cover is the first spine item.
     book.spine = [cover_page] + epub_chapters

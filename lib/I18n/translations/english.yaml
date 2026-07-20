@@ -2,7 +2,7 @@ _language_name: "English"
 _language_code: "EN"
 _order: "0"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "CrossVi"
 STR_BOOTING: "BOOTING"
 STR_SLEEPING: "SLEEPING"
 STR_ENTERING_SLEEP: "Going to sleep"

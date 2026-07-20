@@ -2,7 +2,7 @@ _language_name: "עברית"
 _language_code: "HE"
 _order: "23"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "CrossVi"
 STR_BOOTING: "מפעיל..."
 STR_SLEEPING: "מצב שינה"
 STR_ENTERING_SLEEP: "עובר למצב שינה"

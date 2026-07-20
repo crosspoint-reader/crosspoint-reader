@@ -1,4 +1,4 @@
-# CrossPoint Reader: Claude Code skills
+# CrossVi: Claude Code skills
 
 Project skills for Claude Code. Claude auto-discovers them and loads one when the
 task matches its `description`; you do not invoke them by hand. They encode how

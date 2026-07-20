@@ -1,4 +1,4 @@
-# SD Card Font Families for CrossPoint Reader
+# SD Card Font Families for CrossVi
 #
 # This file is the single source of truth for which fonts are generated,
 # how they're sourced, and how they're described in the download manifest.
@@ -250,4 +250,3 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
-

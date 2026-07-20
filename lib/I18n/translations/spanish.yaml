@@ -2,7 +2,7 @@ _language_name: "Español"
 _language_code: "ES"
 _order: "1"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "CrossVi"
 STR_BOOTING: "Iniciando..."
 STR_SLEEPING: "Suspendido"
 STR_ENTERING_SLEEP: "Entrando en suspensión"

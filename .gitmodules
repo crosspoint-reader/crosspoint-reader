@@ -1,4 +1,4 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/tvhdc/inkpivot-sdk.git
-	branch = inkpivot/ui-stability
+	url = https://github.com/tvhdc/crossvi-sdk.git
+	branch = crossvi/ui-stability

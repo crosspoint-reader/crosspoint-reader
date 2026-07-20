@@ -81,7 +81,7 @@ jobs:
           gh release create "$VERSIONED" dist/* \
             --repo "${{ env.FONTS_REPO }}" \
             --title "$TITLE" \
-            --notes "Pre-built \`.cpfont\` font files for CrossPoint Reader.
+            --notes "Pre-built \`.cpfont\` font files compatible with CrossVi.
 
           Download individual files or use **Settings > System > Manage Fonts** on the device.
 

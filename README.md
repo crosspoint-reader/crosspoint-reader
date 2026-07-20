@@ -1,12 +1,10 @@
-# InkPivot Reader
+# CrossVi
 
-**Turn pages, not wait times.**
+[![Support upstream CrossPoint contributors](https://img.shields.io/badge/Support_upstream-CrossPoint-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
-[![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
+CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader), created for the Vietnamese community and future feature development. It keeps the open, hackable reading experience for Xteink e-paper devices while focusing on faster text layout, safer SD-card I/O, resilient caches, and low-risk runtime improvements.
 
-InkPivot Reader is a performance-focused community fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) for Xteink e-paper devices. It keeps the open, hackable reading experience while focusing on faster text layout, safer SD-card I/O, resilient caches, and low-risk runtime improvements.
-
-The original CrossPoint project and community remain the foundation of this firmware. InkPivot preserves its MIT license, device support, file formats, and on-card `.crosspoint` data layout so improvements can stay easy to compare and contribute upstream.
+The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, file formats, technical identifiers, and on-card `.crosspoint` data layout so improvements remain compatible and easy to contribute upstream.
 
 > **Current validation status:** host tests, static analysis, and ESP32-C3 firmware builds are verified; testing on physical X3/X4 hardware is still pending.
 
@@ -16,7 +14,7 @@ The original CrossPoint project and community remain the foundation of this firm
 
 > If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
 
-## What can InkPivot do?
+## What can CrossVi do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
 
@@ -58,7 +56,7 @@ The original CrossPoint project and community remain the foundation of this firm
 
 Some Xteink units purchased from third-party stores (e.g. AliExpress) ship with USB flashing locked from the factory.
 If your device is locked, you will need to use the **Xteink Unlocker** tool available at
-https://crosspointreader.com/#unlock-tool before you can flash CrossPoint.
+https://crosspointreader.com/#unlock-tool before you can flash a supported firmware.
 
 **You do not need this tool if you bought your device directly from xteink.com.** Those units are not locked.
 
@@ -70,7 +68,7 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 > 
 > **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
 > 
-> **InkPivot is a community fork and is not currently on that supported list. Do not use it as the unlock payload for a USB-locked device.**
+> **CrossVi is an independent fork and is not currently on that supported list. Do not use it as the unlock payload for a USB-locked device.**
 >
 > Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
 > stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
@@ -78,18 +76,15 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 
 ## Install firmware
 
-### Web installer (recommended)
+### Web installer
 
 1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), and choose an official CrossPoint release.
+2. Download `firmware.bin` from the [CrossVi Releases page](https://github.com/tvhdc/crossvi/releases), a local build, or a continuous integration artifact.
+3. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), click "Custom .bin", and upload `firmware.bin`.
 
-### Web installer (specific version)
+> CrossVi does not yet publish a hardware-validated release. Do not flash it to a USB-locked device.
 
-1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Download a `firmware.bin` from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), local build, or continuous integration artifact.
-3. Go to https://crosspointreader.com/#flash-tools, select device (X3 or X4), click "Custom .bin" and upload a `firmware.bin`.
-
-### Revert to Official Firmware
+### Revert to official CrossPoint firmware
 
 To revert to the official firmware, you can also flash the latest official firmware using https://crosspointreader.com/#flash-tools.
 
@@ -101,7 +96,7 @@ To revert to the official firmware, you can also flash the latest official firmw
 pip install esptool
 ```
 
-2. Download `firmware.bin` from the [releases page](https://github.com/crosspoint-reader/crosspoint-reader/releases).
+2. Download `firmware.bin` from the [CrossVi Releases page](https://github.com/tvhdc/crossvi/releases).
 3. Connect your device via USB-C.
 4. Find the device port. On Linux, run `dmesg` after connecting. On macOS:
 
@@ -159,8 +154,8 @@ Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` 
 ### Setup
 
 ```bash
-git clone --recursive https://github.com/tvhdc/inkpivot-reader
-cd inkpivot-reader
+git clone --recursive https://github.com/tvhdc/crossvi
+cd crossvi
 
 # if cloned without --recursive:
 git submodule update --init --recursive
@@ -225,7 +220,7 @@ Minor adjustments may be required for Windows.
 
 ## Internals
 
-InkPivot inherits CrossPoint Reader's aggressive SD-card caching to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
+CrossVi inherits CrossPoint Reader's aggressive SD-card caching to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
 
 ### Data caching
 
@@ -257,7 +252,7 @@ For more details on the internal file structures, see the [file formats document
 
 ## Contributing
 
-Contributions are welcome. If you're new to the codebase, start with the [contributing docs](./docs/contributing/README.md). For things to work on, check the [ideas discussion board](https://github.com/crosspoint-reader/crosspoint-reader/discussions/categories/ideas) — leave a comment before starting so we don't duplicate effort.
+Contributions are welcome. If you're new to the codebase, start with the [contributing docs](./docs/contributing/README.md). For things to work on, check the [CrossVi ideas board](https://github.com/tvhdc/crossvi/discussions/categories/ideas) — leave a comment before starting so we don't duplicate effort.
 
 Everyone here is a volunteer, so please be respectful and patient. For governance and community expectations, see [GOVERNANCE.md](./GOVERNANCE.md).
 
@@ -265,7 +260,7 @@ Everyone here is a volunteer, so please be respectful and patient. For governanc
 
 ## Community forks
 
-One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossPoint's [scope](./SCOPE.md), check out the community forks:
+One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossVi's [scope](./SCOPE.md), check out these sibling CrossPoint forks:
 
 - [CrossInk](https://github.com/uxjulia/CrossInk) — Typography and reading tracking: Bionic Reading (bolds word stems to create fixation points), guide dots between words, improved paragraph indents, and replaces the default fonts with ChareInk/Lexend/Bitter.
 
@@ -283,12 +278,12 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [t5s3-reader](https://github.com/ShallowGreen123/t5s3-reader) — Crosspoint port for LilyGo T5 ePaper S3 / T5S3 4.7-inch e-paper device.
 
-**Note:** Many of these features will make their way into CrossPoint over time. We maintain a slower pace to ensure rock-solid stability and squash bugs before they reach your device.
+**Note:** Some of these features may reach upstream CrossPoint or CrossVi over time. CrossVi favours stability before changes reach devices.
 
 Want to build your own device? Be sure to check out the [de-link](https://github.com/iandchasse/de-link) project.
 
 ---
 
-InkPivot Reader is an independent community fork. It is **not affiliated with Xteink or any device manufacturer**.
+CrossVi is an independent fork of CrossPoint Reader, created for the Vietnamese community and future feature development. It is **not affiliated with Xteink or any device manufacturer**.
 
 Huge shoutout to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader), which inspired this project.

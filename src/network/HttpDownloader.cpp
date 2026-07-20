@@ -58,7 +58,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       LOG_ERR("HTTP", "wolfSSL bad URL: %s", url.c_str());
       return HttpDownloader::HTTP_ERROR;
     }
-    http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+    http.addHeader("User-Agent", "CrossVi-ESP32-" CROSSPOINT_VERSION);
     if (!username.empty() && !password.empty()) {
       const std::string credentials = username + ":" + password;
       const String encoded = base64::encode(credentials.c_str());
@@ -134,7 +134,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     return HttpDownloader::HTTP_ERROR;
   }
 
-  esp_http_client_set_header(client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+  esp_http_client_set_header(client, "User-Agent", "CrossVi-ESP32-" CROSSPOINT_VERSION);
   if (!username.empty() && !password.empty()) {
     // Preemptive Basic auth, like the prior addHeader; don't wait for a 401.
     const std::string credentials = username + ":" + password;

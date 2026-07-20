@@ -8,10 +8,10 @@
 namespace {
 
 const char* kRealisticPretty = R"({
-  "url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345",
-  "assets_url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345/assets",
-  "upload_url": "https://uploads.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345/assets{?name,label}",
-  "html_url": "https://github.com/crosspoint-reader/crosspoint-reader/releases/tag/v2.4.1",
+  "url": "https://api.github.com/repos/tvhdc/crossvi/releases/12345",
+  "assets_url": "https://api.github.com/repos/tvhdc/crossvi/releases/12345/assets",
+  "upload_url": "https://uploads.github.com/repos/tvhdc/crossvi/releases/12345/assets{?name,label}",
+  "html_url": "https://github.com/tvhdc/crossvi/releases/tag/v2.4.1",
   "id": 12345,
   "author": {
     "login": "releasebot",
@@ -25,17 +25,17 @@ const char* kRealisticPretty = R"({
   "node_id": "RE_kwDOAbCdEf4AADBN",
   "tag_name": "v2.4.1",
   "target_commitish": "main",
-  "name": "CrossPoint Reader v2.4.1",
+  "name": "CrossVi v2.4.1",
   "draft": false,
   "prerelease": false,
   "created_at": "2026-04-28T10:00:00Z",
   "published_at": "2026-04-28T10:30:00Z",
   "assets": [
     {
-      "url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/assets/100001",
+      "url": "https://api.github.com/repos/tvhdc/crossvi/releases/assets/100001",
       "id": 100001,
       "node_id": "RA_kwDOAbCdEf4AAGHR",
-      "name": "crosspoint-reader-v2.4.1-source.zip",
+      "name": "crossvi-v2.4.1-source.zip",
       "label": null,
       "uploader": {
         "login": "releasebot",
@@ -49,10 +49,10 @@ const char* kRealisticPretty = R"({
       "download_count": 42,
       "created_at": "2026-04-28T10:15:00Z",
       "updated_at": "2026-04-28T10:15:30Z",
-      "browser_download_url": "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/crosspoint-reader-v2.4.1-source.zip"
+      "browser_download_url": "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/crossvi-v2.4.1-source.zip"
     },
     {
-      "url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/assets/100002",
+      "url": "https://api.github.com/repos/tvhdc/crossvi/releases/assets/100002",
       "id": 100002,
       "node_id": "RA_kwDOAbCdEf4AAGHS",
       "name": "firmware.bin",
@@ -69,10 +69,10 @@ const char* kRealisticPretty = R"({
       "download_count": 187,
       "created_at": "2026-04-28T10:16:00Z",
       "updated_at": "2026-04-28T10:16:45Z",
-      "browser_download_url": "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin"
+      "browser_download_url": "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/firmware.bin"
     },
     {
-      "url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/assets/100003",
+      "url": "https://api.github.com/repos/tvhdc/crossvi/releases/assets/100003",
       "id": 100003,
       "node_id": "RA_kwDOAbCdEf4AAGHR",
       "name": "checksums.sha256",
@@ -89,14 +89,14 @@ const char* kRealisticPretty = R"({
       "download_count": 15,
       "created_at": "2026-04-28T10:17:00Z",
       "updated_at": "2026-04-28T10:17:10Z",
-      "browser_download_url": "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/checksums.sha256"
+      "browser_download_url": "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/checksums.sha256"
     }
   ],
-  "tarball_url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/tarball/v2.4.1",
-  "zipball_url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/zipball/v2.4.1",
-  "body": "## What's Changed\n\n* Fixed orientation crash (#123)\n* Improved EPUB rendering performance\n* Added Serbian translation\n\n**Full Changelog**: https://github.com/crosspoint-reader/crosspoint-reader/compare/v2.4.0...v2.4.1",
+  "tarball_url": "https://api.github.com/repos/tvhdc/crossvi/tarball/v2.4.1",
+  "zipball_url": "https://api.github.com/repos/tvhdc/crossvi/zipball/v2.4.1",
+  "body": "## What's Changed\n\n* Fixed orientation crash (#123)\n* Improved EPUB rendering performance\n* Added Serbian translation\n\n**Full Changelog**: https://github.com/tvhdc/crossvi/compare/v2.4.0...v2.4.1",
   "reactions": {
-    "url": "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345/reactions",
+    "url": "https://api.github.com/repos/tvhdc/crossvi/releases/12345/reactions",
     "total_count": 5,
     "+1": 3,
     "-1": 0,
@@ -110,7 +110,7 @@ const char* kRealisticPretty = R"({
 })";
 
 const char* kRealisticMinified =
-    R"({"url":"https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345","assets_url":"https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345/assets","id":12345,"author":{"login":"releasebot","id":99887766,"node_id":"MDQ6VXNlcjk5ODg3NzY2","type":"User","site_admin":false},"tag_name":"v2.4.1","target_commitish":"main","name":"CrossPoint Reader v2.4.1","draft":false,"prerelease":false,"assets":[{"url":"https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/assets/100001","id":100001,"name":"crosspoint-reader-v2.4.1-source.zip","uploader":{"login":"releasebot","id":99887766},"content_type":"application/zip","state":"uploaded","size":2048576,"download_count":42,"browser_download_url":"https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/crosspoint-reader-v2.4.1-source.zip"},{"url":"https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/assets/100002","id":100002,"name":"firmware.bin","uploader":{"login":"releasebot","id":99887766},"content_type":"application/octet-stream","state":"uploaded","size":1572864,"download_count":187,"browser_download_url":"https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin"},{"url":"https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/assets/100003","id":100003,"name":"checksums.sha256","uploader":{"login":"releasebot","id":99887766},"content_type":"text/plain","state":"uploaded","size":192,"download_count":15,"browser_download_url":"https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/checksums.sha256"}],"body":"## What's Changed\n\n* Fixed orientation crash","reactions":{"url":"https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/12345/reactions","total_count":5,"+1":3}})";
+    R"({"url":"https://api.github.com/repos/tvhdc/crossvi/releases/12345","assets_url":"https://api.github.com/repos/tvhdc/crossvi/releases/12345/assets","id":12345,"author":{"login":"releasebot","id":99887766,"node_id":"MDQ6VXNlcjk5ODg3NzY2","type":"User","site_admin":false},"tag_name":"v2.4.1","target_commitish":"main","name":"CrossVi v2.4.1","draft":false,"prerelease":false,"assets":[{"url":"https://api.github.com/repos/tvhdc/crossvi/releases/assets/100001","id":100001,"name":"crossvi-v2.4.1-source.zip","uploader":{"login":"releasebot","id":99887766},"content_type":"application/zip","state":"uploaded","size":2048576,"download_count":42,"browser_download_url":"https://github.com/tvhdc/crossvi/releases/download/v2.4.1/crossvi-v2.4.1-source.zip"},{"url":"https://api.github.com/repos/tvhdc/crossvi/releases/assets/100002","id":100002,"name":"firmware.bin","uploader":{"login":"releasebot","id":99887766},"content_type":"application/octet-stream","state":"uploaded","size":1572864,"download_count":187,"browser_download_url":"https://github.com/tvhdc/crossvi/releases/download/v2.4.1/firmware.bin"},{"url":"https://api.github.com/repos/tvhdc/crossvi/releases/assets/100003","id":100003,"name":"checksums.sha256","uploader":{"login":"releasebot","id":99887766},"content_type":"text/plain","state":"uploaded","size":192,"download_count":15,"browser_download_url":"https://github.com/tvhdc/crossvi/releases/download/v2.4.1/checksums.sha256"}],"body":"## What's Changed\n\n* Fixed orientation crash","reactions":{"url":"https://api.github.com/repos/tvhdc/crossvi/releases/12345/reactions","total_count":5,"+1":3}})";
 
 void feedChunked(ReleaseJsonParser& p, const char* json, size_t chunkSize) {
   size_t len = strlen(json);
@@ -130,7 +130,7 @@ TEST(ReleaseJsonParser, RealisticPrettyPrinted) {
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
   EXPECT_STREQ(p.getFirmwareUrl(),
-               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+               "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -142,7 +142,7 @@ TEST(ReleaseJsonParser, RealisticMinified) {
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
   EXPECT_STREQ(p.getFirmwareUrl(),
-               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+               "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -268,7 +268,7 @@ TEST(ReleaseJsonParser, ChunkedFeedingSmallChunks) {
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
   EXPECT_STREQ(p.getFirmwareUrl(),
-               "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin");
+               "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -291,7 +291,7 @@ TEST(ReleaseJsonParser, ChunkedFeedingVariousChunkSizes) {
     EXPECT_TRUE(p.foundFirmware()) << "chunkSize=" << chunkSize;
     EXPECT_STREQ(p.getTagName(), "v2.4.1") << "chunkSize=" << chunkSize;
     EXPECT_STREQ(p.getFirmwareUrl(),
-                 "https://github.com/crosspoint-reader/crosspoint-reader/releases/download/v2.4.1/firmware.bin")
+                 "https://github.com/tvhdc/crossvi/releases/download/v2.4.1/firmware.bin")
         << "chunkSize=" << chunkSize;
     EXPECT_EQ(p.getFirmwareSize(), 1572864u) << "chunkSize=" << chunkSize;
   }

@@ -90,7 +90,7 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
-      - name: Build CrossPoint
+      - name: Build CrossVi
         run: |
           set -euo pipefail
           pio run | tee pio.log
@@ -112,7 +112,7 @@ jobs:
       - name: Upload firmware.bin artifact
         uses: actions/upload-artifact@v6
         with:
-          name: firmware.bin
+          name: CrossVi-firmware
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
 

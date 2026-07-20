@@ -1,7 +1,7 @@
 /**
  * XtcReaderActivity.h
  *
- * XTC ebook reader activity for CrossPoint Reader
+ * XTC ebook reader activity for CrossVi
  * Displays pre-rendered XTC pages on e-ink display
  */
 

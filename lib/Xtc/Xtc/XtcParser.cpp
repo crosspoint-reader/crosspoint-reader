@@ -2,7 +2,7 @@
  * XtcParser.cpp
  *
  * XTC file parsing implementation
- * XTC ebook support for CrossPoint Reader
+ * XTC ebook support for CrossVi
  */
 
 #include "XtcParser.h"

@@ -16,12 +16,12 @@ This document shows common issues and possible solutions while using the device 
 
 1. Verify both devices are on the correct network
    - Check your computer/phone Wi-Fi settings
-   - In **Join Network** mode, your computer/phone and CrossPoint Reader must be on the same Wi-Fi network
-   - In **Create Hotspot** mode, your computer/phone must be connected to the `CrossPoint-Reader` hotspot
+   - In **Join Network** mode, your computer/phone and CrossVi must be on the same Wi-Fi network
+   - In **Create Hotspot** mode, your computer/phone must be connected to the `CrossVi` hotspot
 2. Double-check the IP address
    - Make sure you typed it correctly
    - Include `http://` at the beginning
-   - Try the displayed IP address if `http://crosspoint.local/` does not resolve
+   - Try the displayed IP address if the retained compatibility hostname `http://crosspoint.local/` does not resolve
 3. Try disabling VPN if you're using one
 4. Some networks have "client isolation" enabled - use Create Hotspot mode or check with your network administrator
 
