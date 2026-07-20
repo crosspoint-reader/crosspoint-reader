@@ -158,6 +158,24 @@ cd crosspoint-reader
 git submodule update --init --recursive
 ```
 
+### Nix/NixOS
+
+Nix/NixOS users can enter the development shell with either `nix develop` (flakes) or `nix-shell`:
+
+```bash
+nix develop -f nix
+# or
+nix-shell nix
+```
+
+To flash a connected ESP32-C3 device, enable PlatformIO's udev rules in your NixOS configuration:
+
+```nix
+services.udev.packages = with pkgs; [ platformio-core.udev ];
+```
+
+After rebuilding the system configuration, reconnect the device or reload udev rules.
+
 ### Build / flash / monitor
 
 ```bash
