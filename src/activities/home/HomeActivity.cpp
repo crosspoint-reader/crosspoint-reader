@@ -17,8 +17,19 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/BookReadingStats.h"
+#include "activities/reader/GlobalReadingStats.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+
+namespace {
+bool hasUsableBitmapThumbnail(const std::string& path) {
+  HalFile file;
+  if (!Storage.openFileForRead("HOME", path, file)) return false;
+  Bitmap bitmap(file);
+  return bitmap.parseHeaders() == BmpReaderError::Ok;
+}
+}  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
@@ -51,6 +62,35 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   }
 }
 
+void HomeActivity::loadBookSummary() {
+  bookSummary = {};
+
+  const GlobalReadingStats localStats = GlobalReadingStats::load();
+  const GlobalReadingStats globalStats =
+      GlobalReadingStats::hasSyncedStats() ? GlobalReadingStats::loadAggregated(localStats) : localStats;
+  bookSummary.globalReadingSeconds = globalStats.totalReadingSeconds;
+  bookSummary.globalPagesTurned = globalStats.totalPagesTurned;
+  ReadingStatsDateTime now;
+  if (getCurrentLocalReadingStatsDateTime(now)) {
+    bookSummary.currentStreak = globalStats.currentReadingStreak(&now.date);
+  }
+
+  if (recentBooks.empty() || !FsHelpers::hasEpubExtension(recentBooks[0].path)) return;
+
+  // Epub's constructor only derives the cache key; it does not open or parse
+  // the book, so Dashboard never indexes book contents during Home startup.
+  const Epub recentEpub(recentBooks[0].path, "/.crosspoint");
+  const BookReadingStats stats = BookReadingStats::load(recentEpub.getCachePath());
+  bookSummary.bookReadingSeconds = stats.totalReadingSeconds;
+  bookSummary.bookPagesTurned = stats.totalPagesTurned;
+  bookSummary.bookSessions = stats.sessionCount;
+  bookSummary.estimatedTimeLeftSeconds = stats.estimatedTimeLeftSeconds;
+
+  // A reliable percentage needs loaded EPUB metadata plus validated progress.
+  // Do not add that I/O to Home merely to guess a number.
+  bookSummary.hasProgress = false;
+}
+
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
   bool showingLoading = false;
@@ -60,10 +100,19 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   for (RecentBook& book : recentBooks) {
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
+      const bool thumbnailExists = Storage.exists(coverPath.c_str());
+      const bool validateThumbnail = SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DASHBOARD;
+      const bool thumbnailUsable = thumbnailExists && (!validateThumbnail || hasUsableBitmapThumbnail(coverPath));
+      if (thumbnailExists && !thumbnailUsable && !Storage.remove(coverPath.c_str())) {
+        LOG_ERR("HOME", "Could not remove invalid cover thumbnail: %s", coverPath.c_str());
+      }
+      if (!thumbnailUsable) {
         // If epub, try to load the metadata for title/author and cover
         if (FsHelpers::hasEpubExtension(book.path)) {
           Epub epub(book.path, "/.crosspoint");
+          // Thumbnail decoding is one of Home's largest transient allocations.
+          // Drop the reusable cover snapshot first so both do not coexist.
+          freeCoverBuffer();
           // Skip loading css since we only need metadata here
           epub.load(false, true);
 
@@ -82,6 +131,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
           requestUpdate();
         } else if (FsHelpers::hasXtcExtension(book.path)) {
           // Handle XTC file
+          freeCoverBuffer();
           Xtc xtc(book.path, "/.crosspoint");
           if (xtc.load()) {
             // Try to generate thumbnail image for Continue Reading card
@@ -115,6 +165,13 @@ void HomeActivity::onEnter() {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
+  // Keep the feature isolated: existing home themes must not pay any stats or
+  // synced-snapshot SD I/O when Dashboard is not selected.
+  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DASHBOARD) {
+    loadBookSummary();
+  } else {
+    bookSummary = {};
+  }
 
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
@@ -232,14 +289,15 @@ void HomeActivity::render(RenderLock&&) {
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
   // instead of the 48 KB full framebuffer the previous bind captured.
-  coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
-  coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
+  const Rect homeTile{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight};
+  const Rect cacheRect = GUI.getHomeCoverCacheRect(homeTile);
+  coverRectX = cacheRect.x;
+  coverRectY = cacheRect.y;
+  coverRectW = cacheRect.width;
+  coverRectH = cacheRect.height;
 
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
+  GUI.drawHomeContent(renderer, homeTile, recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+                      std::bind(&HomeActivity::storeCoverBuffer, this), bookSummary);
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),

@@ -7,6 +7,8 @@
 #include <utility>
 #include <variant>
 
+#include "activities/reader/PerBookReaderSettings.h"
+
 struct WifiResult {
   bool connected = false;
   std::string ssid;
@@ -40,6 +42,33 @@ struct PageResult {
   uint32_t page = 0;
 };
 
+struct ReaderSettingsResult {
+  PerBookReaderSettings settings;
+};
+
+struct ClippingSelectionResult {
+  std::string text;
+  uint16_t startWordIndex = 0;
+  uint16_t endWordIndex = 0;
+  uint16_t startPage = 0;
+  uint16_t endPage = 0;
+  uint16_t pageCount = 1;
+  uint16_t startPageWordIndex = 0;
+  uint16_t endPageWordIndex = 0;
+  uint16_t paragraphIndex = UINT16_MAX;
+  uint16_t wordCount = 0;
+  uint32_t pageFingerprint = 0;
+};
+
+struct ClippingJumpResult {
+  uint16_t spineIndex = 0;
+  uint16_t startPage = 0;
+  uint16_t pageCount = 1;
+  uint16_t paragraphIndex = UINT16_MAX;
+  uint16_t clippingIndex = 0;
+  uint32_t pageFingerprint = 0;
+};
+
 struct ProgressChangeResult {
   int spineIndex = 0;
   int page = 0;
@@ -63,9 +92,9 @@ struct FilePathResult {
   std::string path;
 };
 
-using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
+                                   IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
+                                   FilePathResult, ReaderSettingsResult, ClippingSelectionResult, ClippingJumpResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

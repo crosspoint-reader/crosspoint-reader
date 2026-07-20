@@ -149,6 +149,10 @@ class Section {
   // Look up the page number for a synthetic paragraph index from XPath p[N].
   std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;
 
+  // Resolve a paragraph only when exactly one rendered page ends within it.
+  // Long paragraphs can span multiple pages and are intentionally ambiguous.
+  std::optional<uint16_t> getUniquePageForParagraphIndex(uint16_t pIndex) const;
+
   // Look up the page number for a running list-item index from the li LUT.
   std::optional<uint16_t> getPageForListItemIndex(uint16_t liIndex) const;
 

@@ -14,6 +14,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookPathMoveUtils.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -116,8 +117,9 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
 
   if (!file.isDirectory()) {
     file.close();
-    clearBookCache(fullPath);
-    return Storage.remove(fullPath.c_str());
+    if (!Storage.remove(fullPath.c_str())) return false;
+    removeBookUserStateAfterDelete(fullPath);
+    return true;
   }
   file.close();
 
@@ -174,11 +176,11 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
       if (isDir) {
         stack.push_back({std::move(entryPath), false});
       } else {
-        clearBookCache(entryPath);
         if (!Storage.remove(entryPath.c_str())) {
           LOG_ERR("FileBrowser", "Failed to remove file: %s", entryPath.c_str());
           return false;
         }
+        removeBookUserStateAfterDelete(entryPath);
       }
     }
   }

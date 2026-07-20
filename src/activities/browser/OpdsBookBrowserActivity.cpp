@@ -17,6 +17,7 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookPathMoveUtils.h"
 #include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
@@ -324,7 +325,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       nullptr, server.username, server.password);
 
   if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
+    resetBookUserStateAfterReplacement(filename);
     state = BrowserState::BROWSING;
   } else {
     LOG_ERR("OPDS", "Download failed: %d", static_cast<int>(result));

@@ -73,6 +73,7 @@ class HalFile : public Print {
   HalFile& operator=(const HalFile&) = delete;
 
   void flush();
+  bool sync();
   size_t getName(char* name, size_t len);
   size_t size();
   size_t fileSize();

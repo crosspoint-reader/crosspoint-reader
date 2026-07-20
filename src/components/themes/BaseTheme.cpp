@@ -12,6 +12,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "activities/home/HomeBookSummary.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
@@ -660,6 +661,15 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     renderer.drawCenteredText(UI_12_FONT_ID, y, tr(STR_NO_OPEN_BOOK));
     renderer.drawCenteredText(UI_10_FONT_ID, y + renderer.getLineHeight(UI_12_FONT_ID), tr(STR_START_READING));
   }
+}
+
+void BaseTheme::drawHomeContent(GfxRenderer& renderer, const Rect rect, const std::vector<RecentBook>& recentBooks,
+                                const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
+                                bool& bufferRestored, std::function<bool()> storeCoverBuffer,
+                                const HomeBookSummary& summary) const {
+  (void)summary;
+  drawRecentBookCover(renderer, rect, recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+                      std::move(storeCoverBuffer));
 }
 
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,

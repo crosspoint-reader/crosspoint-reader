@@ -10,6 +10,8 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "PerBookReaderSettingsBridge.h"
+#include "PerBookReaderSettingsStore.h"
 #include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
@@ -18,6 +20,7 @@
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
+#include "util/BookCacheUtils.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -28,7 +31,8 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
 
-std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
+std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, PerBookReaderSettings& globalSettings,
+                                               PerBookReaderSettings& bookSettings, bool& settingsWritable) {
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
@@ -39,6 +43,29 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     LOG_ERR("READER", "Failed to allocate EPUB object");
     return nullptr;
   }
+
+  globalSettings = captureReaderSettings();
+  bookSettings = globalSettings;
+  // An interrupted cache clear may have already moved the settings/statistics
+  // files into a sibling staging directory. Recover them before any loader can
+  // create replacement state; if recovery is ambiguous, fail closed.
+  if (!recoverBookCacheUserState(epub->getCachePath(), path)) {
+    LOG_ERR("READER", "Could not recover staged per-book state: %s", epub->getCachePath().c_str());
+    return nullptr;
+  }
+  const auto settingsStatus = PerBookReaderSettingsStore::load(epub->getCachePath(), bookSettings);
+  settingsWritable = settingsStatus != PerBookReaderSettingsStore::LoadStatus::NEWER_VERSION &&
+                     settingsStatus != PerBookReaderSettingsStore::LoadStatus::IO_ERROR;
+  if (settingsStatus == PerBookReaderSettingsStore::LoadStatus::LOADED ||
+      settingsStatus == PerBookReaderSettingsStore::LoadStatus::LOADED_BACKUP ||
+      settingsStatus == PerBookReaderSettingsStore::LoadStatus::LOADED_TEMP) {
+    if (bookSettings.hasReaderOverrides) applyReaderSettings(bookSettings);
+  } else {
+    bookSettings = globalSettings;
+  }
+  // A per-book SD font must be active before layout starts. Invalid book-only
+  // choices are cleared in memory without leaking the override to settings.json.
+  sdFontSystem.ensureLoaded(renderer, false);
   // First open: building the spine/TOC index (book.bin) takes a couple of seconds. Show the
   // indexing popup so it isn't a silent wait on the home screen. The cachePath/hash is known at
   // construction, so this check is valid before load(); a cached open loads in a blink -> no popup.
@@ -60,6 +87,8 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   }
 
   LOG_ERR("READER", "Failed to load epub");
+  applyReaderSettings(globalSettings);
+  sdFontSystem.ensureLoaded(renderer);
   return nullptr;
 }
 
@@ -107,10 +136,12 @@ void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
   activityManager.goToFileBrowser(std::move(initialPath));
 }
 
-void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
+void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub, PerBookReaderSettings globalSettings,
+                                      PerBookReaderSettings bookSettings, const bool settingsWritable) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub)));
+  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(
+      renderer, mappedInput, std::move(epub), std::move(globalSettings), std::move(bookSettings), settingsWritable));
 }
 
 void ReaderActivity::onGoToBmpViewer(const std::string& path) {
@@ -137,12 +168,12 @@ void ReaderActivity::onEnter() {
     return;
   }
 
-  sdFontSystem.ensureLoaded(renderer);
-
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {
+    sdFontSystem.ensureLoaded(renderer);
     onGoToBmpViewer(initialBookPath);
   } else if (isXtcFile(initialBookPath)) {
+    sdFontSystem.ensureLoaded(renderer);
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {
       onGoBack();
@@ -150,6 +181,7 @@ void ReaderActivity::onEnter() {
     }
     onGoToXtcReader(std::move(xtc));
   } else if (isTxtFile(initialBookPath)) {
+    sdFontSystem.ensureLoaded(renderer);
     auto txt = loadTxt(initialBookPath);
     if (!txt) {
       onGoBack();
@@ -157,12 +189,15 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
-    auto epub = loadEpub(initialBookPath);
+    PerBookReaderSettings globalSettings;
+    PerBookReaderSettings bookSettings;
+    bool settingsWritable = true;
+    auto epub = loadEpub(initialBookPath, globalSettings, bookSettings, settingsWritable);
     if (!epub) {
       onGoBack();
       return;
     }
-    onGoToEpubReader(std::move(epub));
+    onGoToEpubReader(std::move(epub), std::move(globalSettings), std::move(bookSettings), settingsWritable);
   }
 }
 

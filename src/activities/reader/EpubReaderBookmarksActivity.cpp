@@ -29,7 +29,9 @@ void EpubReaderBookmarksActivity::onEnter() {
     return;
   }
 
-  const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
+  const std::string canonicalPath = BookmarkUtil::getBookmarkPath(epubPath);
+  const std::string legacyPath = BookmarkUtil::getLegacyBookmarkPath(epubPath);
+  const std::string path = Storage.exists(canonicalPath.c_str()) ? canonicalPath : legacyPath;
   if (Storage.exists(path.c_str())) {
     String json = Storage.readFile(path.c_str());
     if (json.isEmpty()) {

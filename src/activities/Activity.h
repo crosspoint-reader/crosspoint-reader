@@ -30,6 +30,10 @@ class Activity {
   virtual ~Activity() = default;
   virtual void onEnter();
   virtual void onExit();
+  // Called while this activity remains alive underneath a child activity.
+  // Readers use these hooks to exclude menus and dialogs from active reading time.
+  virtual void onPause() {}
+  virtual void onResume() {}
   virtual void loop() {}
 
   virtual void render(RenderLock&&) {}

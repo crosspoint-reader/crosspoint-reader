@@ -8,7 +8,7 @@ CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspo
 
 The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, file formats, technical identifiers, and on-card `.crosspoint` data layout so improvements remain compatible and easy to contribute upstream.
 
-> **Current validation status:** host tests, static analysis, and ESP32-C3 firmware builds are verified; testing on physical X3/X4 hardware is still pending.
+> **Current validation status:** core codecs, storage recovery, layout mapping, and protocol state machines have host tests, static analysis, and ESP32-C3 build validation. End-to-end UI, ESP-NOW radio, e-paper refresh, power-loss behavior, and memory use still require testing on physical X3/X4 hardware.
 
 **Target devices:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
 
@@ -19,6 +19,10 @@ The original CrossPoint project and community remain the foundation of this firm
 ## What can CrossVi do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
+
+- **EPUB reading tools**: create and revisit clippings, view per-book and all-time reading statistics, and keep a separate reader profile for each EPUB without changing the device-wide defaults.
+
+- **Dashboard home theme**: a compact overview of the latest book and reading totals. Enable it under **Settings → Display → UI Theme → Dashboard**.
 
 - **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
 
@@ -41,10 +45,13 @@ The original CrossPoint project and community remain the foundation of this firm
   - Calibre wireless connect flow
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
   - OTA update checks and installs from GitHub releases
+  - Experimental Nearby Sync between two CrossVi readers: manually exchange an exact-book reading position or a separate reading-statistics snapshot without an internet connection
 
 - **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
 - **Localization**: 30 UI languages and counting, including Vietnamese. RTL support.
+
+> **Safety boundaries for the new reading tools:** clipping selection is limited to the current rendered page, and a saved highlight is shown only when the page layout can be matched exactly. Nearby position sync requires the same complete EPUB file, a usable paragraph anchor in the target chapter's current local layout, and explicit confirmation on both devices; it refuses to guess a page when those checks are unavailable. Nearby traffic is not encrypted, so use it only with a trusted reader nearby.
 
 ### Coming soon:
 
@@ -224,29 +231,35 @@ Minor adjustments may be required for Windows.
 
 CrossVi inherits CrossPoint Reader's aggressive SD-card caching to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
 
-### Data caching
+### SD-card working data
 
 The first time chapters of a book are loaded, they are cached to the SD card. Subsequent loads are served from the
-cache. This cache directory exists at `.crosspoint` on the SD card. The structure is as follows:
+cache. The same `.crosspoint` directory also contains settings and reader data that are **not disposable cache**. Its main structure is:
 
 ```text
 .crosspoint/
-├── epub_<hash>/         # one directory per book, named by content hash
-│   ├── progress.bin     # reading position (chapter, page, etc.)
+├── epub_<path-hash>/    # one directory per book path
+│   ├── progress.bin     # saved reading position
+│   ├── crossvi_reader_settings.bin  # per-book reader profile
+│   ├── stats_v5.bin     # per-book reading statistics
 │   ├── cover.bmp        # generated cover image
-│   ├── book.bin         # metadata: title, author, spine, TOC
-│   ├── css_rules.cache  # parsed CSS rule cache
-│   ├── img_*            # rendered image cache files
-│   └── sections/        # per-chapter layout cache
+│   ├── book.bin         # generated title, author, spine, and TOC metadata
+│   ├── css_rules.cache  # generated parsed-CSS cache
+│   ├── img_*            # generated image cache files
+│   └── sections/        # generated per-chapter layout cache
 │       ├── 0.bin
 │       ├── 1.bin
 │       └── ...
-├── settings.json        # device settings
-├── state.json           # resume/runtime state
+├── bookmarks/           # bookmark JSON files
+├── clippings/           # saved EPUB passages
+├── synced_stats/        # separate Nearby statistics snapshots
+├── global_stats.bin     # local all-time reading statistics
+├── settings.bin/json    # device settings and compatibility fallback
+├── state.bin/json       # resume/runtime state and compatibility fallback
 └── recent.json          # recent books list
 ```
 
-Removing `/.crosspoint` clears all cached metadata and forces a full regeneration on next open. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching caches; manual SD-card edits may leave stale cache directories behind.
+Do **not** delete all of `/.crosspoint` as routine cache troubleshooting: that is effectively a reader-data reset and removes settings, positions, bookmarks, clippings, and statistics. Use the firmware's cache command first. It preserves per-book profiles and reading statistics, but rebuilding a book cache may reset its saved position. For the narrowest manual layout reset, back up the SD card and move only that book's `sections/` directory aside. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching state; manual SD-card edits may leave stale path-keyed directories behind.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 
@@ -264,7 +277,7 @@ Everyone here is a volunteer, so please be respectful and patient. For governanc
 
 One of the best things about open source is that anyone can take the code in a different direction. If you need something outside CrossVi's [scope](./SCOPE.md), check out these sibling CrossPoint forks:
 
-- [CrossInk](https://github.com/uxjulia/CrossInk) — Typography and reading tracking: Bionic Reading (bolds word stems to create fixation points), guide dots between words, improved paragraph indents, and replaces the default fonts with ChareInk/Lexend/Bitter.
+- [CrossInk](https://github.com/uxjulia/CrossInk) — Its Dashboard, clipping, Nearby Sync, reading-statistics, and per-book-settings work informed CrossVi's independently reviewed implementations. CrossInk also explores Bionic Reading, guide dots, paragraph typography, and alternative fonts.
 
 - [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes via SD card.
 

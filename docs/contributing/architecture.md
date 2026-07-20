@@ -143,16 +143,24 @@ Typical persisted areas on SD:
 
 ```text
 /.crosspoint/
-  epub_<hash>/
+  epub_<path-hash>/
     book.bin
     css_rules.cache
     progress.bin
+    crossvi_reader_settings.bin
+    stats_v5.bin
     cover.bmp
     sections/*.bin
     img_* cache files
+  bookmarks/
+  clippings/
+  synced_stats/
+  global_stats.bin
   settings.json
   state.json
 ```
+
+Only files such as generated layouts, images, and parsed metadata are disposable cache. The same tree also stores reader settings, progress, bookmarks, clippings, and statistics, so deleting `/.crosspoint` is a data reset rather than a routine cache clear.
 
 `sections/*.bin` contains rendered pages plus anchor, paragraph, and list-item
 lookup tables used for TOC/footnote jumps and KOReader sync refinement. For

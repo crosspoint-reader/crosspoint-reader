@@ -128,7 +128,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
   * lib/I18n/: Internationalization (translations in `translations/*.yaml`, generated string tables)
 * src/activities/: UI logic using the Activity Lifecycle (onEnter, loop, onExit)
 * freeink-sdk/: Low-level SDK (EInkDisplay, InputManager, BatteryMonitor, SDCardManager)
-* .crosspoint/: SD-based binary cache for EPUB metadata and pre-rendered layout sections
+* .crosspoint/: SD-based generated caches plus reader settings, progress, bookmarks, clippings, and statistics
 
 ### Hardware Abstraction Layer (HAL)
 
@@ -564,8 +564,8 @@ clang-format -i src/**/*.cpp src/**/*.h
    - Set pointers to `nullptr` after `free()`
 
 4. **Corrupt Cache Files**:
-   - Delete `.crosspoint/` directory on SD card
-   - Forces clean re-parse of all EPUBs
+   - Use the firmware cache command or move aside only the affected book's generated `sections/` directory after backing up the SD card
+   - Never treat all of `.crosspoint/` as cache; it also holds settings, progress, bookmarks, clippings, and statistics
    - Check file format versions in [docs/file-formats.md](../docs/file-formats.md)
 
 5. **Watchdog Timeout**:
@@ -804,7 +804,7 @@ build_flags =
 6. 🔲 **Device**: Test on hardware
 7. 🔲 **Orientations**: Verify all 4 modes (Portrait/Inverted/Landscape CW/CCW)
 8. 🔲 **Heap**: `ESP.getFreeHeap()` > 50KB, no leaks
-9. 🔲 **Cache**: If EPUB modified, delete `.crosspoint/` and verify re-parse
+9. 🔲 **Cache**: If EPUB content changed, use the firmware cache command or isolate only that book's generated layout cache and verify re-parse
 
 ### CI/CD Pipeline Awareness
 
@@ -849,9 +849,9 @@ build_flags =
 
 **Location**: `.crosspoint/` directory on SD card root
 
-**Structure**: `.crosspoint/epub_<hash>/{book.bin, progress.bin, cover.bmp, sections/*.bin}`
+**Structure**: `.crosspoint/epub_<path-hash>/{book.bin, progress.bin, crossvi_reader_settings.bin, stats_v5.bin, cover.bmp, sections/*.bin}` plus global bookmarks, clippings, settings, and statistics
 
-**Hash**: `std::hash<std::string>{}(filepath)` → Moving/renaming file = new hash = lost progress
+**Hash**: `std::hash<std::string>{}(filepath)`. CrossVi migrates path-keyed reader state for moves performed through its own UI/WebDAV handlers; out-of-band SD-card renames do not get that transaction.
 
 ### Cache Invalidation Rules
 
@@ -867,20 +867,18 @@ build_flags =
 3. **Viewport dimensions change**:
    - Screen orientation change
    - Display resolution change
-4. **Book file modified**:
-   - Moved, renamed, or content changed (new hash)
+4. **Book file replaced through CrossVi's upload/download handlers**:
+   - The old path-keyed cache and user state are reset after the new file is committed
+   - A manual same-path replacement on the SD card keeps the same path hash and may require an explicit cache rebuild
 
-**Manual Cache Clear** (safe operations):
+**Manual Cache Isolation** (recoverable operations; back up the SD card first):
 ```bash
-# Delete ALL caches (forces full regeneration)
-rm -rf /path/to/sd/.crosspoint/
-
-# Delete specific book cache
-rm -rf /path/to/sd/.crosspoint/epub_<hash>/
-
-# Keep progress, delete only rendered sections
-rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
+# Narrowest layout reset: keep the old generated sections recoverable
+mv /path/to/sd/.crosspoint/epub_<path-hash>/sections \
+   /path/to/sd/.crosspoint/epub_<path-hash>/sections.bad
 ```
+
+Never remove all of `.crosspoint/` for routine cache testing. That deletes user data. The firmware cache command preserves per-book settings and statistics, but may reset the saved position.
 
 **When to Clear Cache**:
 - EPUB parsing errors after code changes to `lib/Epub/`

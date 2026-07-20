@@ -1,8 +1,15 @@
 # File Formats
 
-These formats describe the SD-card cache files under `/.crosspoint/epub_<hash>/`.
+These formats describe the SD-card cache files under `/.crosspoint/epub_<path-hash>/`.
 All POD fields are written in the ESP32 little-endian representation used by
 `Serialization.h`; strings are length-prefixed UTF-8.
+
+The directory name is derived from the book path, not its content. CrossVi also
+stores non-disposable reader data in this tree: `progress.bin`,
+`crossvi_reader_settings.bin`, `stats_v5.bin`, `/.crosspoint/bookmarks/`,
+`/.crosspoint/clippings/`, `/.crosspoint/global_stats.bin`, and
+`/.crosspoint/synced_stats/`. Do not treat the entire `/.crosspoint` directory
+as disposable cache.
 
 ## `book.bin`
 

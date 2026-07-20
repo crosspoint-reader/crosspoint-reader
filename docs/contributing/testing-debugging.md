@@ -40,7 +40,7 @@ python3 scripts/debugging_monitor.py
 - Exact steps to reproduce
 - Expected vs actual behavior
 - Serial logs from boot through failure
-- Whether issue reproduces after clearing `.crosspoint/` cache on SD card
+- Whether the issue reproduces after using the firmware's book-cache command or moving aside only the affected book's generated `sections/` directory (after an SD-card backup)
 
 ## Common troubleshooting references
 

@@ -39,6 +39,12 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t);
+
+template <typename T>
+bool readPodExact(HalFile& file, T& value) {
+  value = {};
+  return file.read(&value, sizeof(value)) == static_cast<int>(sizeof(value));
+}
 }  // namespace
 
 // Out-of-line so the unique_ptr<ChapterHtmlSlimParser> in BuildContext can be
@@ -849,35 +855,64 @@ std::optional<uint16_t> Section::getPageForParagraphIndex(const uint16_t pIndex)
   return resultPage;
 }
 
+std::optional<uint16_t> Section::getUniquePageForParagraphIndex(const uint16_t pIndex) const {
+  HalFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) return std::nullopt;
+
+  const uint64_t fileSize = f.fileSize64();
+  uint32_t paragraphLutOffset = 0;
+  if (!f.seek(HEADER_SIZE - sizeof(uint32_t) * 2) || !readPodExact(f, paragraphLutOffset)) return std::nullopt;
+  if (paragraphLutOffset == 0 || paragraphLutOffset >= fileSize) return std::nullopt;
+
+  uint16_t count = 0;
+  if (!f.seek(paragraphLutOffset) || !readPodExact(f, count)) return std::nullopt;
+  const uint64_t lutEnd =
+      static_cast<uint64_t>(paragraphLutOffset) + sizeof(uint16_t) + (static_cast<uint64_t>(count) * sizeof(uint16_t));
+  if (count == 0 || lutEnd > fileSize) return std::nullopt;
+
+  std::optional<uint16_t> result;
+  for (uint16_t page = 0; page < count; ++page) {
+    uint16_t pageParagraphIndex = 0;
+    if (!readPodExact(f, pageParagraphIndex)) return std::nullopt;
+    if (pageParagraphIndex != pIndex) continue;
+    if (result.has_value()) return std::nullopt;
+    result = page;
+  }
+  return result;
+}
+
 std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) const {
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {
     return std::nullopt;
   }
 
-  const uint32_t fileSize = f.size();
-  f.seek(HEADER_SIZE - sizeof(uint32_t) * 2);
-  uint32_t paragraphLutOffset;
-  serialization::readPod(f, paragraphLutOffset);
+  const uint64_t fileSize = f.fileSize64();
+  uint32_t paragraphLutOffset = 0;
+  if (!f.seek(HEADER_SIZE - sizeof(uint32_t) * 2) || !readPodExact(f, paragraphLutOffset)) {
+    return std::nullopt;
+  }
   if (paragraphLutOffset == 0 || paragraphLutOffset >= fileSize) {
     return std::nullopt;
   }
 
-  f.seek(paragraphLutOffset);
-  uint16_t count;
-  serialization::readPod(f, count);
+  uint16_t count = 0;
+  if (!f.seek(paragraphLutOffset) || !readPodExact(f, count)) return std::nullopt;
   if (count == 0 || page >= count) {
     return std::nullopt;
   }
 
-  const uint32_t entryEnd = paragraphLutOffset + sizeof(uint16_t) + (page + 1) * sizeof(uint16_t);
+  const uint64_t entryEnd = static_cast<uint64_t>(paragraphLutOffset) + sizeof(uint16_t) +
+                            (static_cast<uint64_t>(page) + 1U) * sizeof(uint16_t);
   if (entryEnd > fileSize) {
     return std::nullopt;
   }
 
-  f.seek(paragraphLutOffset + sizeof(uint16_t) + page * sizeof(uint16_t));
-  uint16_t pIdx;
-  serialization::readPod(f, pIdx);
+  const uint64_t entryOffset =
+      static_cast<uint64_t>(paragraphLutOffset) + sizeof(uint16_t) + (static_cast<uint64_t>(page) * sizeof(uint16_t));
+  if (entryOffset > static_cast<uint64_t>(SIZE_MAX) || !f.seek(static_cast<size_t>(entryOffset))) return std::nullopt;
+  uint16_t pIdx = 0;
+  if (!readPodExact(f, pIdx)) return std::nullopt;
   return pIdx;
 }
 

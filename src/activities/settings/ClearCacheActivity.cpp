@@ -5,6 +5,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <vector>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -89,30 +91,30 @@ void ClearCacheActivity::clearCache() {
   clearedCount = 0;
   failedCount = 0;
   char name[128];
+  std::vector<std::string> cachePaths;
 
-  // Iterate through all entries in the directory
+  // Collect paths first. The preservation helper creates a sibling staging
+  // directory, so do not mutate this directory while its iterator is open.
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
-    file.getName(name, sizeof(name));
-    String itemName(name);
+    const bool isDirectory = file.isDirectory();
+    const size_t nameLength = file.getName(name, sizeof(name));
+    file.close();
 
-    // Only delete directories matching known book cache names.
-    if (file.isDirectory() && isBookCacheDirectoryName(itemName.c_str())) {
-      String fullPath = "/.crosspoint/" + itemName;
-      LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
-
-      file.close();  // Close before attempting to delete
-
-      if (Storage.removeDir(fullPath.c_str())) {
-        clearedCount++;
-      } else {
-        LOG_ERR("CLEAR_CACHE", "Failed to remove: %s", fullPath.c_str());
-        failedCount++;
-      }
-    } else {
-      file.close();
+    if (isDirectory && nameLength > 0 && nameLength < sizeof(name) && isBookCacheDirectoryName(name)) {
+      cachePaths.emplace_back(std::string("/.crosspoint/") + name);
     }
   }
   root.close();
+
+  for (const std::string& fullPath : cachePaths) {
+    LOG_DBG("CLEAR_CACHE", "Removing cache: %s", fullPath.c_str());
+    if (clearBookCacheDirectoryPreservingUserState(fullPath)) {
+      clearedCount++;
+    } else {
+      LOG_ERR("CLEAR_CACHE", "Failed to remove: %s", fullPath.c_str());
+      failedCount++;
+    }
+  }
 
   LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
 

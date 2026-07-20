@@ -105,6 +105,10 @@ void ActivityManager::loop() {
 
         // Request an update to ensure the popped activity gets re-rendered
         if (pendingAction == PendingAction::None) {
+          // Match onPause() from the Push path. Run without the render lock so
+          // activities may safely perform their normal resume work.
+          lock.unlock();
+          currentActivity->onResume();
           requestUpdate();
         }
 
@@ -125,6 +129,9 @@ void ActivityManager::loop() {
           stackActivities.pop_back();
         }
       } else if (pendingAction == PendingAction::Push) {
+        // The current activity stays alive, but is no longer visible while the
+        // child is on top of it.
+        currentActivity->onPause();
         // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
         LOG_DBG("ACT", "Pushed to activity stack, new size = %zu", stackActivities.size());

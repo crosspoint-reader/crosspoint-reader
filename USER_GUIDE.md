@@ -47,6 +47,10 @@ Welcome to the **CrossVi** firmware. This guide outlines the hardware controls, 
   - [5. Reader Menu](#5-reader-menu)
     - [5.1 Chapter Selection](#51-chapter-selection)
     - [5.2 Bookmarks](#52-bookmarks)
+    - [5.3 Per-book settings](#53-per-book-settings)
+    - [5.4 Reading statistics](#54-reading-statistics)
+    - [5.5 Clippings](#55-clippings)
+    - [5.6 Nearby position sync](#56-nearby-position-sync)
   - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
   - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
@@ -115,6 +119,8 @@ The Recent Books screen lists the most recently opened books in a chronological 
 ### 3.5 File Transfer Screen
 
 The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
+
+The same mode chooser also contains **Nearby reading stats (Experimental)**. It exchanges a manually confirmed statistics snapshot directly with another nearby CrossVi reader. A received snapshot is stored separately and contributes to the Dashboard totals; it never overwrites the statistics recorded by this device.
 
 See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
 
@@ -223,6 +229,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Lyra" - The CrossVi theme featuring rounded elements and menu icons
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "RoundedRaff" - A rounded theme with additional visual styling
+  - "Dashboard" - Shows the latest book together with per-book and all-time reading totals on the Home screen. It does not replace or alter the sleep screen.
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   
@@ -610,6 +617,10 @@ Available options include:
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
 - **Footnotes** – Navigate to the footnotes for the current section *(only shown in books that contain footnotes)*.
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
+- **Book settings** – Keep reader settings for this EPUB separate from the device-wide defaults.
+- **Reading statistics** – Show statistics for the current EPUB and the combined device totals.
+- **Create clipping** – Select and save a passage from the currently rendered page.
+- **Clippings** – Browse, open, jump to, or delete passages saved for this EPUB.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
 - **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
@@ -617,7 +628,8 @@ Available options include:
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
-- **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
+- **Nearby position (Experimental)** – Exchange the current position with another nearby CrossVi reader that has the exact same complete EPUB file.
+- **Delete Book Cache** – Rebuild generated data for the current book. Per-book settings and reading statistics are preserved, but the locally saved reading position may be reset.
 
 Press **Back** at any time to close the menu and return to your current page.
 
@@ -641,6 +653,32 @@ To open bookmarks, press **Confirm** while inside a book. Then navigate to the *
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
 
+### 5.3 Per-book settings
+
+Open **Book settings** from an EPUB's Reader Menu and enable **Use settings for this book**. Changes made on this screen apply only to that EPUB. Turning the option off restores the device-wide Reader defaults while keeping the custom profile available in case you enable it again. **Reset** removes the book-specific profile.
+
+The profile includes typography, margins, paragraph layout, orientation, image/text rendering options, and the book's auto-page-turn rate. CrossVi restores the global settings whenever you leave the EPUB, including sleep and sync paths, so a profile cannot leak into another book.
+
+### 5.4 Reading statistics
+
+Statistics are currently recorded for EPUB reading. Timing starts only after a page has rendered successfully and stops when you open a menu, leave the reader, or the visible interval becomes idle. Very short opens are filtered out: at least 10 active seconds are needed to save duration, and at least 60 active seconds are needed to count a session.
+
+Time-of-day, day-of-week, and reading-streak views require a valid device date and time. Total active time and page-turn counts still work when the clock is unavailable. Nearby statistics are additive display snapshots; they do not modify local counters.
+
+### 5.5 Clippings
+
+Choose **Create clipping**, move the cursor to the first word, press **Confirm**, move to the last word, and press **Confirm** again. Selection is deliberately limited to the current rendered page and to 512 bytes of UTF-8 text. Up to 64 passages are stored for each book.
+
+Open **Clippings** to read saved text. Press **Confirm** from a clipping's detail screen to return to its location. Hold **Confirm** and complete the two-step prompt to delete it. CrossVi shows an underline only when it can match the saved pagination exactly; after font, margin, orientation, or layout changes, the saved text remains available but CrossVi does not guess where to draw a highlight.
+
+### 5.6 Nearby position sync
+
+On both readers, open the same complete EPUB and select **Nearby position (Experimental)**. Start the radio manually, compare the four-digit code shown on both devices, and continue only if it matches. Each side must explicitly share, and the receiving reader must explicitly apply the incoming position.
+
+The EPUB is hashed from the complete file, not matched by filename. A different edition or modified copy is rejected. The pairing code and peer/session binding prevent accidental cross-talk, but Nearby Sync traffic is not encrypted and is not designed to resist a malicious nearby device. Use it only with someone you trust.
+
+CrossVi applies a received position only when it can resolve the sender's paragraph anchor against a finalized chapter cache built with the current per-book layout. If that exact source-based mapping is unavailable, it asks you to open/build the target chapter first instead of scaling or copying an approximate page number.
+
 ## 6. Current Limitations & Roadmap
 
 Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
@@ -648,7 +686,7 @@ Please note that this firmware is currently in active development. The following
 * **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
 * **Unsupported Image Formats:** Most JPG and PNG images in EPUBs render correctly. GIFs and progressive JPEGs are not supported and will fall back to an `[Image]` placeholder.
 * 
-* **Dictionary Lookup:** Inline word lookup is not yet implemented.
+* **Hardware validation:** Core codecs, storage-recovery paths, layout mapping, and Nearby protocol state machines have automated host tests, and the complete firmware is build-checked. End-to-end UI, ESP-NOW radio, e-paper refresh, power-loss behavior, and real memory margins still require validation on physical X3 and X4 hardware before a stable release.
 
 ---
 
@@ -701,4 +739,6 @@ Press **Ctrl-C** or close the graph window to exit.
 
 If the device is stuck in a bootloop, press and release the Reset button. Then, press and hold on to the configured Back button and the Power Button to boot to the Home Screen.
 
-There can be issues with broken cache or config. In this case, delete the `.crosspoint` directory on your SD card (or consider deleting only `settings.json`, `state.json`, or `epub_*` cache directories in the `.crosspoint/` folder).
+For a broken book layout, first use **Delete Book Cache** for that book. This preserves its per-book profile and reading statistics, although its locally saved position may reset. If the UI is unavailable, back up the SD card and move only the matching `/.crosspoint/epub_<path-hash>/sections/` directory aside before retrying.
+
+Do **not** delete the whole `.crosspoint` directory as a normal troubleshooting step. It also contains device settings, resume state, bookmarks, clippings, and reading statistics. Removing it is a full reader-data reset; make a complete backup first if that is explicitly what you intend.

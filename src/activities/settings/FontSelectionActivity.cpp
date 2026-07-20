@@ -32,8 +32,10 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
 }  // namespace
 
 FontSelectionActivity::FontSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const SdCardFontRegistry* registry)
-    : Activity("FontSelect", renderer, mappedInput), registry_(registry) {}
+                                             const SdCardFontRegistry* registry, const bool persistInvalidSelection)
+    : Activity("FontSelect", renderer, mappedInput),
+      registry_(registry),
+      persistInvalidSelection_(persistInvalidSelection) {}
 
 void FontSelectionActivity::onEnter() {
   Activity::onEnter();
@@ -75,7 +77,7 @@ void FontSelectionActivity::loop() {
     SETTINGS.fontFamily = originalFontFamily_;
     strncpy(SETTINGS.sdFontFamilyName, originalSdFontFamilyName_, sizeof(SETTINGS.sdFontFamilyName) - 1);
     SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-    sdFontSystem.ensureLoaded(renderer);
+    sdFontSystem.ensureLoaded(renderer, persistInvalidSelection_);
     finish();
     return;
   }
@@ -95,7 +97,7 @@ void FontSelectionActivity::loop() {
         if (sdIdx < static_cast<int>(families.size())) {
           strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
           SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-          sdFontSystem.ensureLoaded(renderer);
+          sdFontSystem.ensureLoaded(renderer, persistInvalidSelection_);
         }
       }
       requestUpdate();
