@@ -7,6 +7,7 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
 
 void RecentBooksStore::toJson(JsonDocument& doc) const {
@@ -17,6 +18,7 @@ void RecentBooksStore::toJson(JsonDocument& doc) const {
     obj["title"] = book.title;
     obj["author"] = book.author;
     obj["coverBmpPath"] = book.coverBmpPath;
+    obj["pinned"] = book.pinned;
   }
 }
 
@@ -33,6 +35,7 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     book.title = obj["title"] | "";
     book.author = obj["author"] | "";
     book.coverBmpPath = obj["coverBmpPath"] | "";
+    book.pinned = obj["pinned"] | false;
     recentBooks.push_back(book);
   }
 
@@ -40,20 +43,36 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
   return true;
 }
 
-void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
-                               const std::string& coverBmpPath) {
+bool RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
+                               const std::string& coverBmpPath, bool pinned) {
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
-  // Remove existing entry if present
-  auto it =
-      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  // auto find = std::bind(findEntry, std::placeholders::_1, std::cref(path), true);
+  //  If existing entry is pinned, exit early
+  // auto it = std::find_if(recentBooks.begin(), recentBooks.end(), find);
+  auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
+                         [&](const RecentBook& book) { return book.path == path && book.pinned; });
+  if (it != recentBooks.end()) {
+    return true;
+  }
+
+  // find = std::bind(findEntry, std::placeholders::_1, std::cref(path), false);
+  //  Remove existing entry if present
+  // it = std::find_if(recentBooks.begin(), recentBooks.end(), find);
+  it = std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
     recentBooks.erase(it);
   }
 
+  it = std::ranges::find_if(recentBooks, [&](bool bln) { return !bln; }, &RecentBook::pinned);
+
+  if (it == recentBooks.end()) {
+    return false;
+  }
+
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  recentBooks.insert(it, {path, title, author, coverBmpPath, pinned});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -61,6 +80,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   }
 
   saveToFile();
+  return true;
 }
 
 void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
@@ -111,6 +131,33 @@ bool RecentBooksStore::pruneMissing() {
   return recentBooks.size() != before;
 }
 
+void RecentBooksStore::pinBook(const std::string& path) {
+  auto it = std::ranges::find_if(recentBooks, [&](const std::string pth) { return pth == path; }, &RecentBook::path);
+  if (it == recentBooks.end() || it->pinned) {
+    return;
+  }
+
+  // Not worth deleting then re-adding
+  std::string title = it->title;
+  std::string author = it->author;
+  std::string coverBmpPath = it->coverBmpPath;
+  LOG_DBG("HI", "%s", path.c_str());
+  LOG_DBG("HI", "Book pinning: %s, %s", it->title.c_str(), it->author.c_str());
+  addBook(path, title, author, coverBmpPath, true);
+}
+
+void RecentBooksStore::unpinBook(const std::string& path) {
+  auto it = std::ranges::find_if(recentBooks, [&](std::string pth) { return pth == path; }, &RecentBook::path);
+  if (it == recentBooks.end() || !it->pinned) {
+    return;
+  }
+  std::string title = it->title;
+  std::string author = it->author;
+  std::string coverBmpPath = it->coverBmpPath;
+  removeByPath(path);
+  addBook(path, title, author, coverBmpPath, false);
+}
+
 RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
   std::string lastBookFileName = "";
   const size_t lastSlash = path.find_last_of('/');
@@ -137,4 +184,10 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     return RecentBook{path, lastBookFileName, "", ""};
   }
   return RecentBook{path, "", "", ""};
+}
+
+static bool findEntry(const RecentBook& book, const std::string& path, bool pinnedOnly) {
+  bool ret = book.path == path;
+  if (pinnedOnly) return ret && book.pinned;
+  return ret;
 }

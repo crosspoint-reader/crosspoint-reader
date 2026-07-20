@@ -10,13 +10,14 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
-
+  bool pinned = false;
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
 
 class RecentBooksStore : public PersistableStore<RecentBooksStore> {
  private:
   std::vector<RecentBook> recentBooks;
+  static bool findEntry(const RecentBook& book, const std::string& path, bool pinnedOnly);
 
   static constexpr int MAX_RECENT_BOOKS = 10;
 
@@ -31,8 +32,9 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   bool fromJson(JsonVariantConst doc);
 
   // Add a book to the recent list (moves to front if already exists)
-  void addBook(const std::string& path, const std::string& title, const std::string& author,
-               const std::string& coverBmpPath);
+  // This will return false if unable to add (all recent books are pinned)
+  bool addBook(const std::string& path, const std::string& title, const std::string& author,
+               const std::string& coverBmpPath, bool pinned = false);
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
@@ -47,6 +49,14 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   // Persists on success. Keeps the entry's list position (does not reorder).
   void updatePath(const std::string& oldPath, const std::string& newPath, const std::string& oldCachePath,
                   const std::string& newCachePath);
+
+  // Pin a book to recent items
+  // This will pin an existing book on the recent items list to the bottom of
+  // the pinned books
+  void pinBook(const std::string& path);
+
+  // This will unpin a book - it will require the pin to be undone
+  void unpinBook(const std::string& path);
 
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);
