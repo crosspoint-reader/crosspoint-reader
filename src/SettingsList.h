@@ -14,6 +14,7 @@
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "activities/settings/SettingsActivity.h"
+#include "util/DictionaryRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -91,6 +92,47 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   return s;
 }
 
+// Build the dictionary selection setting dynamically from the folders discovered
+// under /dictionaries. "None" plus one option per dictionary; the selected folder
+// name persists in SETTINGS.dictionaryName (saved/loaded manually in
+// JsonSettingsIO — the generic loop skips dynamic entries).
+inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& dictionaries) {
+  std::vector<std::string> folderNames;
+  folderNames.reserve(dictionaries.size());
+  std::transform(dictionaries.begin(), dictionaries.end(), std::back_inserter(folderNames),
+                 [](const DictionaryEntry& d) { return d.name; });
+
+  SettingInfo s;
+  s.nameId = StrId::STR_DICTIONARY;
+  s.type = SettingType::ENUM;
+  s.enumStringValues.reserve(folderNames.size() + 1);
+  s.enumStringValues.push_back(I18N.get(StrId::STR_NONE_OPT));
+  s.enumStringValues.insert(s.enumStringValues.end(), folderNames.begin(), folderNames.end());
+  s.category = StrId::STR_CAT_READER;
+
+  s.valueGetter = [folderNames]() -> uint8_t {
+    for (size_t i = 0; i < folderNames.size(); i++) {
+      // Compare within the settings field capacity: an over-long folder name is
+      // stored truncated, and must still match its list entry.
+      if (strncmp(folderNames[i].c_str(), SETTINGS.dictionaryName, sizeof(SETTINGS.dictionaryName) - 1) == 0) {
+        return static_cast<uint8_t>(i + 1);
+      }
+    }
+    return 0;  // "None", also when the stored folder no longer exists
+  };
+
+  s.valueSetter = [folderNames](uint8_t v) {
+    if (v == 0 || v > folderNames.size()) {
+      SETTINGS.dictionaryName[0] = '\0';
+      return;
+    }
+    strncpy(SETTINGS.dictionaryName, folderNames[v - 1].c_str(), sizeof(SETTINGS.dictionaryName) - 1);
+    SETTINGS.dictionaryName[sizeof(SETTINGS.dictionaryName) - 1] = '\0';
+  };
+
+  return s;
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -100,7 +142,8 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // SdCardFontRegistry is supplied AND has SD card fonts installed, the
 // font-family entry is replaced in a per-call copy with a registry-aware
 // version. Callers without SD fonts pay only a vector copy.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr) {
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     std::vector<SettingInfo> v = {
         // --- Display ---
@@ -176,14 +219,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                          {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION}, "longPressMenuFunction",
-                          StrId::STR_CAT_CONTROLS),
+                          {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY},
+                          "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(
             StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
+                            "backShortToFileBrowser", StrId::STR_CAT_CONTROLS),
 
         // --- System ---
         SettingInfo::Value(
@@ -321,6 +366,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     if (it != v.end()) {
       *it = buildFontFamilySetting(registry);
     }
+  }
+  if (dictionaries && !dictionaries->empty()) {
+    // Insert at the end of the Reader category (just before the first Controls entry).
+    auto it =
+        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.category == StrId::STR_CAT_CONTROLS; });
+    v.insert(it, buildDictionarySetting(*dictionaries));
   }
   return v;
 }
