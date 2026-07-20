@@ -348,8 +348,8 @@ void Epub::parseCssFiles() const {
     LOG_ERR("EBP", "Failed to save CSS rules to cache");
   }
 
-  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files (%zu identical duplicates skipped)",
-          cssParser->ruleCount(), cssFiles.size(), skippedDuplicates);
+  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files (%zu identical duplicates skipped)", cssParser->ruleCount(),
+          cssFiles.size(), skippedDuplicates);
   cssParser->clear();
 }
 

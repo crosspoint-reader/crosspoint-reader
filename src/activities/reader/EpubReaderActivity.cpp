@@ -1471,6 +1471,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto t0 = millis();
   const int fontId = SETTINGS.getReaderFontId();
 
+  // The image pixel-cache RAM slot lives for exactly one page render (it feeds
+  // the BW double-refresh and every grayscale band pass); release it on every
+  // exit so nothing stays resident across page turns.
+  struct PxcSlotGuard {
+    ~PxcSlotGuard() { ImageBlock::releaseRenderCache(); }
+  } pxcSlotGuard;
+
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();

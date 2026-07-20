@@ -3,9 +3,11 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <new>
 
 #include "Epub/converters/DirectPixelWriter.h"
@@ -88,8 +90,113 @@ void rememberImageFailure(const std::string& path) {
   failedImageHashes[failedImageCount++] = imagePathHash(path);
 }
 
+// --- Per-page-render RAM slot for the pixel cache ----------------------------
+// The tiled grayscale flow re-renders an image page once for the BW
+// double-refresh and again for every band of both gray planes, and each pass
+// re-read the whole .pxc off SD (~100 ms for a full-page image, ~13 passes).
+// Column clipping cannot reduce the SD traffic: the row stride (~100 B) is
+// smaller than an SD sector, so every sector is touched regardless of the band
+// window. Instead the first pass loads the payload into RAM and later passes
+// render from it. Chunked allocation because a single full-image block (up to
+// 96 KB) rarely fits the fragmented mid-render heap; each chunk is heap-gated
+// and any failure falls back to the streaming path unchanged. The reader
+// releases the slot when the page render completes, so nothing stays resident
+// across page turns.
+constexpr size_t PXC_CHUNK_SHIFT = 14;  // 16 KB chunks
+constexpr size_t PXC_CHUNK_SIZE = 1u << PXC_CHUNK_SHIFT;
+constexpr size_t PXC_MAX_CHUNKS = 6;  // 96 KB: a full-screen 2bpp image
+constexpr size_t PXC_HEAP_RESERVE = 24 * 1024;
+constexpr size_t PXC_MAX_ALLOC_RESERVE = 8 * 1024;
+// Rows can straddle a chunk boundary; they are reassembled into a stack
+// buffer. (screenWidth + 3) / 4 caps at 200 B for an 800px panel.
+constexpr int PXC_MAX_BYTES_PER_ROW = 208;
+
+std::unique_ptr<uint8_t[]> pxcChunks[PXC_MAX_CHUNKS];
+uint64_t pxcSlotHash = 0;
+uint16_t pxcSlotWidth = 0;
+uint16_t pxcSlotHeight = 0;
+
+void releasePxcSlot() {
+  for (auto& chunk : pxcChunks) chunk.reset();
+  pxcSlotHash = 0;
+  pxcSlotWidth = 0;
+  pxcSlotHeight = 0;
+}
+
+const uint8_t* pxcRowPtr(size_t rowStart, int bytesPerRow, uint8_t* tempRow) {
+  const size_t chunk = rowStart >> PXC_CHUNK_SHIFT;
+  const size_t offset = rowStart & (PXC_CHUNK_SIZE - 1);
+  if (offset + bytesPerRow <= PXC_CHUNK_SIZE) {
+    return pxcChunks[chunk].get() + offset;
+  }
+  const size_t firstPart = PXC_CHUNK_SIZE - offset;
+  memcpy(tempRow, pxcChunks[chunk].get() + offset, firstPart);
+  memcpy(tempRow + firstPart, pxcChunks[chunk + 1].get(), bytesPerRow - firstPart);
+  return tempRow;
+}
+
+// cacheFile is positioned just past the header. True when the slot holds the
+// full pixel payload for this cache path afterward.
+bool loadPxcSlot(uint64_t cacheHash, HalFile& cacheFile, uint16_t cachedWidth, uint16_t cachedHeight, int bytesPerRow) {
+  releasePxcSlot();
+  if (bytesPerRow > PXC_MAX_BYTES_PER_ROW) {
+    return false;
+  }
+  size_t remaining = (size_t)bytesPerRow * cachedHeight;
+  const size_t chunkCount = (remaining + PXC_CHUNK_SIZE - 1) >> PXC_CHUNK_SHIFT;
+  if (chunkCount == 0 || chunkCount > PXC_MAX_CHUNKS) {
+    return false;
+  }
+  for (size_t i = 0; i < chunkCount; i++) {
+    const size_t want = remaining < PXC_CHUNK_SIZE ? remaining : PXC_CHUNK_SIZE;
+    if (ESP.getFreeHeap() < remaining + PXC_HEAP_RESERVE || ESP.getMaxAllocHeap() < want + PXC_MAX_ALLOC_RESERVE) {
+      releasePxcSlot();
+      return false;
+    }
+    pxcChunks[i] = makeUniqueNoThrow<uint8_t[]>(want);
+    if (!pxcChunks[i] || cacheFile.read(pxcChunks[i].get(), want) != static_cast<int>(want)) {
+      releasePxcSlot();
+      return false;
+    }
+    remaining -= want;
+  }
+  pxcSlotHash = cacheHash;
+  pxcSlotWidth = cachedWidth;
+  pxcSlotHeight = cachedHeight;
+  return true;
+}
+
+void renderRowsFromPxcSlot(GfxRenderer& renderer, int x, int y) {
+  const int bytesPerRow = (pxcSlotWidth + 3) / 4;
+  uint8_t tempRow[PXC_MAX_BYTES_PER_ROW];
+
+  DirectPixelWriter pw;
+  pw.init(renderer);
+
+  for (int row = 0; row < pxcSlotHeight; row++) {
+    const uint8_t* rowBuffer = pxcRowPtr((size_t)row * bytesPerRow, bytesPerRow, tempRow);
+    pw.beginRow(y + row);
+    int colStart, colEnd;
+    pw.bandColRange(x, pxcSlotWidth, colStart, colEnd);
+    for (int col = colStart; col < colEnd; col++) {
+      const int byteIdx = col >> 2;            // col / 4
+      const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
+      const uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+      pw.writePixel(x + col, pixelValue);
+    }
+  }
+}
+
 bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x, int y, int expectedWidth,
                      int expectedHeight) {
+  // A later pass of the same page render: the payload is already in RAM, skip
+  // the file entirely.
+  const uint64_t cacheHash = imagePathHash(cachePath);
+  if (pxcSlotHash == cacheHash && pxcSlotWidth != 0) {
+    renderRowsFromPxcSlot(renderer, x, y);
+    return true;
+  }
+
   HalFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
     return false;
@@ -107,12 +214,24 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
 
   LOG_DBG("IMG", "Loading from cache: %s (%dx%d)", cachePath.c_str(), cachedWidth, cachedHeight);
 
-  // Read several rows per SD access. A full-page image is re-rendered on every
-  // grayscale strip pass (~14x per page), and a one-row-per-read loop here means
-  // cachedHeight (~728) tiny reads through the storage mutex + SdFat each time —
-  // the dominant cost of displaying an image page. Batching rows into a ~4KB
-  // buffer cuts that to ~20 reads per pass without holding the whole image.
   const int bytesPerRow = (cachedWidth + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
+
+  // First pass of a page render: try to pull the payload into the RAM slot so
+  // the remaining ~12 passes skip SD entirely.
+  if (loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
+    renderRowsFromPxcSlot(renderer, x, y);
+    LOG_DBG("IMG", "Cache render complete (payload now in RAM)");
+    return true;
+  }
+
+  // Streaming fallback (slot didn't fit). A failed slot load may have consumed
+  // part of the payload; rewind to just past the header.
+  cacheFile.seek(4);
+
+  // Read several rows per SD access. A one-row-per-read loop here means
+  // cachedHeight (~728) tiny reads through the storage mutex + SdFat; batching
+  // rows into a ~4KB buffer cuts that to ~20 reads per pass without holding the
+  // whole image.
   int rowsPerRead = 4096 / bytesPerRow;
   if (rowsPerRead < 1) rowsPerRead = 1;
   if (rowsPerRead > cachedHeight) rowsPerRead = cachedHeight;
@@ -184,6 +303,8 @@ bool ImageBlock::hasValidCache() const {
 bool ImageBlock::needsDecode() const { return !imageFailedThisSession(imagePath) && !hasValidCache(); }
 
 void ImageBlock::clearSessionRenderFailures() { failedImageCount = 0; }
+
+void ImageBlock::releaseRenderCache() { releasePxcSlot(); }
 
 void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
   renderer.fillRect(x, y, width, height, true);
