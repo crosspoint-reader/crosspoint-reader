@@ -31,3 +31,4 @@ lib/EpdFont/scripts/output/
 /dependencies.lock
 /sdkconfig.default
 /sdkconfig.defaults
+sdkconfig.sticky
