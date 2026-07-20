@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <limits>
 
 struct ZipInflateCtx {
   HalFile* file = nullptr;
@@ -374,7 +375,11 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
   const auto deflatedDataSize = fileStat.compressedSize;
   const auto inflatedDataSize = fileStat.uncompressedSize;
-  const auto dataSize = trailingNullByte ? inflatedDataSize + 1 : inflatedDataSize;
+  if (trailingNullByte && inflatedDataSize == std::numeric_limits<size_t>::max()) {
+    LOG_ERR("ZIP", "File is too large to null-terminate safely");
+    return nullptr;
+  }
+  const size_t dataSize = static_cast<size_t>(inflatedDataSize) + (trailingNullByte ? 1U : 0U);
   const auto data = static_cast<uint8_t*>(malloc(dataSize));
   if (data == nullptr) {
     LOG_ERR("ZIP", "Failed to allocate memory for output buffer (%zu bytes)", dataSize);

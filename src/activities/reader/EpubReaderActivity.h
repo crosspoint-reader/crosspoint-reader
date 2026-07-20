@@ -144,11 +144,13 @@ class EpubReaderActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
-  // Full CPU speed + fast loop ticks while a section build runs: at the low-power
-  // frequency a giant chapter's background rebuild stretches from ~40s to many
-  // minutes, so the reader exits before it can finalize and the next open restarts
-  // it from page 0. Reverts to normal power behavior the moment the build finishes.
-  bool skipLoopDelay() override { return section && section->isBuilding(); }
+  // Full CPU speed only while the incremental builder can make progress. Once
+  // the five-page window is full, normal loop delay saves power until the
+  // reader advances and opens more work for the builder.
+  bool skipLoopDelay() override {
+    return section && section->isBuilding() &&
+           (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  }
   bool isReaderActivity() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;

@@ -11,6 +11,7 @@ class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
+  int lastSavedPage = -1;
   int totalPages = 1;
   int pagesUntilFullRefresh = 0;
 
@@ -35,10 +36,10 @@ class TxtReaderActivity final : public Activity {
 
   void initializeReader();
   bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
-  void buildPageIndex();
+  bool buildPageIndex();
   bool loadPageIndexCache();
   void savePageIndexCache() const;
-  void saveProgress() const;
+  bool saveProgress() const;
   void loadProgress();
 
  public:

@@ -83,6 +83,7 @@ class HalFile : public Print {
   bool seekSet(size_t offset);
   int available() const;
   size_t position() const;
+  // Returns a non-negative byte count; SdFat block-read errors are normalized to 0.
   int read(void* buf, size_t count);
   int read();  // read a single byte
   size_t write(const void* buf, size_t count);

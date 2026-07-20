@@ -1,4 +1,4 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/Free-Ink/freeink-sdk.git
-	branch = main
+	url = https://github.com/tvhdc/inkpivot-sdk.git
+	branch = inkpivot/ui-stability

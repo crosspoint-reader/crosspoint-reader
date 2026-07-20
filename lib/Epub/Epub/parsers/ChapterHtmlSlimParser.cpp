@@ -366,9 +366,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   // Extract class, style, id, and dir attributes for CSS/RTL processing
-  std::string classAttr;
-  std::string styleAttr;
-  std::string dirAttr;
+  const char* classAttr = "";
+  const char* styleAttr = "";
+  const char* dirAttr = "";
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
@@ -412,18 +412,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   CssStyle cssStyle;
   if (self->cssParser) {
     cssStyle = self->cssParser->resolveStyle(name, classAttr);
-    if (!styleAttr.empty()) {
+    if (*styleAttr != '\0') {
       CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
       cssStyle.applyOver(inlineStyle);
     }
   }
 
   // HTML dir attribute overrides CSS direction (case-insensitive per HTML spec)
-  if (!dirAttr.empty()) {
-    if (strcasecmp(dirAttr.c_str(), "rtl") == 0) {
+  if (*dirAttr != '\0') {
+    if (strcasecmp(dirAttr, "rtl") == 0) {
       cssStyle.direction = CssTextDirection::Rtl;
       cssStyle.defined.direction = 1;
-    } else if (strcasecmp(dirAttr.c_str(), "ltr") == 0) {
+    } else if (strcasecmp(dirAttr, "ltr") == 0) {
       cssStyle.direction = CssTextDirection::Ltr;
       cssStyle.defined.direction = 1;
     }

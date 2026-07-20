@@ -630,7 +630,10 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   while (srcFile.available()) {
     esp_task_wdt_reset();
     int bytesRead = srcFile.read(buf, sizeof(buf));
-    if (bytesRead <= 0) break;
+    if (bytesRead <= 0) {
+      copyOk = false;
+      break;
+    }
     size_t written = dstFile.write(buf, bytesRead);
     if (written != (size_t)bytesRead) {
       copyOk = false;
@@ -639,7 +642,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   srcFile.close();
-  dstFile.close();
+  copyOk = dstFile.close() && copyOk;
 
   if (copyOk) {
     s.send(dstExists ? 204 : 201);

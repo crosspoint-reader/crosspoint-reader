@@ -305,10 +305,14 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out) 
     return false;
   }
 
-  dict.seekSet(offset);
+  if (!dict.seekSet(offset)) return false;
+  if (size == 0) {
+    out.clear();
+    return true;
+  }
   out.assign(size, '\0');
   const int bytesRead = dict.read(&out[0], size);
-  if (bytesRead < 0) {
+  if (bytesRead <= 0) {
     out.clear();
     return false;
   }

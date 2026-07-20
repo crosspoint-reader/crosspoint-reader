@@ -18,6 +18,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ProgressFile.h"
+#include "ProgressFileCodec.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "XtcReaderChapterSelectionActivity.h"
@@ -165,7 +166,9 @@ void XtcReaderActivity::render(RenderLock&&) {
   }
 
   renderPage();
-  saveProgress();
+  if (currentPage != lastSavedPage && saveProgress()) {
+    lastSavedPage = currentPage;
+  }
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
@@ -309,24 +312,21 @@ void XtcReaderActivity::renderPage() {
     // Optimized grayscale rendering without storeBwBuffer (saves 48KB peak memory)
     // Flow: BW display → LSB/MSB passes → grayscale display → re-render BW for next frame
 
-    // Count pixel distribution for debugging
+    // Count pixel distribution for debugging while doing the required BW
+    // pass, rather than scanning the whole frame a second time.
     uint32_t pixelCounts[4] = {0, 0, 0, 0};
-    for (uint16_t y = 0; y < pageHeight; y++) {
-      for (uint16_t x = 0; x < pageWidth; x++) {
-        pixelCounts[getPixelValue(x, y)]++;
-      }
-    }
-    LOG_DBG("XTR", "Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu", pixelCounts[0],
-            pixelCounts[1], pixelCounts[2], pixelCounts[3]);
-
     // Pass 1: BW buffer - draw all non-white pixels as black
     for (uint16_t y = 0; y < pageHeight; y++) {
       for (uint16_t x = 0; x < pageWidth; x++) {
-        if (getPixelValue(x, y) >= 1) {
+        const uint8_t pixelValue = getPixelValue(x, y);
+        pixelCounts[pixelValue]++;
+        if (pixelValue >= 1) {
           renderer.drawPixel(x, y, true);
         }
       }
     }
+    LOG_DBG("XTR", "Pixel distribution: White=%lu, DarkGrey=%lu, LightGrey=%lu, Black=%lu", pixelCounts[0],
+            pixelCounts[1], pixelCounts[2], pixelCounts[3]);
 
     if (pagesUntilFullRefresh <= 1) {
       // Periodic ghost cleanup: scrub via the normal path, then run the
@@ -421,15 +421,14 @@ void XtcReaderActivity::renderPage() {
   LOG_DBG("XTR", "Rendered page %lu/%lu (%u-bit)", currentPage + 1, xtc->getPageCount(), bitDepth);
 }
 
-void XtcReaderActivity::saveProgress() const {
+bool XtcReaderActivity::saveProgress() const {
   uint8_t data[4];
-  data[0] = currentPage & 0xFF;
-  data[1] = (currentPage >> 8) & 0xFF;
-  data[2] = (currentPage >> 16) & 0xFF;
-  data[3] = (currentPage >> 24) & 0xFF;
+  ProgressFileCodec::encodePage(currentPage, data);
   if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
     LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
+    return false;
   }
+  return true;
 }
 
 void XtcReaderActivity::loadProgress() {
@@ -437,12 +436,14 @@ void XtcReaderActivity::loadProgress() {
   if (Storage.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
     if (f.read(data, 4) == 4) {
-      currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+      currentPage = ProgressFileCodec::decodePage(data);
       LOG_DBG("XTR", "Loaded progress: page %lu", currentPage);
 
       // Validate page number
       if (currentPage >= xtc->getPageCount()) {
         currentPage = 0;
+      } else {
+        lastSavedPage = currentPage;
       }
     }
     f.close();

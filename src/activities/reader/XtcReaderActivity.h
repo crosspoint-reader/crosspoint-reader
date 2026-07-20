@@ -19,6 +19,7 @@ class XtcReaderActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;
+  uint32_t lastSavedPage = static_cast<uint32_t>(-1);
   int pagesUntilFullRefresh = 0;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
@@ -35,7 +36,7 @@ class XtcReaderActivity final : public Activity {
   void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
-  void saveProgress() const;
+  bool saveProgress() const;
   void loadProgress();
 
  public:

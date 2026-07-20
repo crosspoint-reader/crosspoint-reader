@@ -11,13 +11,36 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 8;  // v8: TOC/book titles stored NFC-composed
+constexpr uint8_t BOOK_CACHE_VERSION = 9;                  // v9: bounded header plus trailing commit marker
+constexpr uint32_t BOOK_CACHE_COMMIT_MARKER = 0x424D434B;  // "BMCK"
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
 // Buffer size for the buildBookBin streams. 3 buffers x 4KB, transient (freed on
 // return); 4KB = 8 SD sectors per transfer, enough to stop the sector-cache thrash.
 constexpr size_t BUILD_IO_BUFFER_SIZE = 4096;
+constexpr size_t BOOK_CACHE_FIXED_HEADER_SIZE =
+    sizeof(BOOK_CACHE_VERSION) + sizeof(uint32_t) + sizeof(uint16_t) + sizeof(uint16_t);
+constexpr size_t BOOK_CACHE_MIN_METADATA_SIZE = sizeof(uint32_t) * 5;
+constexpr size_t BOOK_CACHE_MAX_METADATA_SIZE = 64 * 1024;
+constexpr size_t BOOK_CACHE_MIN_FILE_SIZE =
+    BOOK_CACHE_FIXED_HEADER_SIZE + BOOK_CACHE_MIN_METADATA_SIZE + sizeof(BOOK_CACHE_COMMIT_MARKER);
+
+template <typename T>
+bool readPodExact(HalFile& file, T& value) {
+  return file.read(&value, sizeof(value)) == static_cast<int>(sizeof(value));
+}
+
+bool readBoundedString(HalFile& file, const size_t endPosition, std::string& value) {
+  uint32_t length = 0;
+  if (!readPodExact(file, length)) return false;
+
+  const size_t position = file.position();
+  if (position > endPosition || length > endPosition - position) return false;
+
+  value.resize(length);
+  return length == 0 || file.read(value.data(), length) == static_cast<int>(length);
+}
 
 // Entry (de)serializers, templated so they run over HalFile and the Buffered*
 // wrappers alike (two instantiations each -- a few hundred bytes of flash, in
@@ -165,6 +188,15 @@ bool BookMetadataCache::endWrite() {
 }
 
 bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
+  const uint64_t metadataSize64 = BOOK_CACHE_MIN_METADATA_SIZE + static_cast<uint64_t>(metadata.title.size()) +
+                                  metadata.author.size() + metadata.language.size() + metadata.coverItemHref.size() +
+                                  metadata.textReferenceHref.size();
+  if (metadataSize64 > BOOK_CACHE_MAX_METADATA_SIZE) {
+    LOG_ERR("BMC", "Book metadata is too large to cache safely (%llu bytes)",
+            static_cast<unsigned long long>(metadataSize64));
+    return false;
+  }
+
   // Open all three files, writing to meta, reading from spine and toc
   if (!Storage.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
@@ -193,9 +225,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
 
   constexpr uint32_t headerASize =
       sizeof(BOOK_CACHE_VERSION) + /* LUT Offset */ sizeof(uint32_t) + sizeof(spineCount) + sizeof(tocCount);
-  const uint32_t metadataSize = metadata.title.size() + metadata.author.size() + metadata.language.size() +
-                                metadata.coverItemHref.size() + metadata.textReferenceHref.size() +
-                                sizeof(uint32_t) * 5;
+  const uint32_t metadataSize = static_cast<uint32_t>(metadataSize64);
   const uint32_t lutSize = sizeof(uint32_t) * spineCount + sizeof(uint32_t) * tocCount;
   const uint32_t lutOffset = headerASize + metadataSize;
 
@@ -347,14 +377,17 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     writeTocEntryTo(bookOut, tocEntry);
   }
 
+  // Written last so a torn/short build can never be mistaken for a complete
+  // cache on the next boot.
+  serialization::writePod(bookOut, BOOK_CACHE_COMMIT_MARKER);
   const bool written = bookOut.flush();
 
   // Explicit close() required: member variables persist beyond function scope
-  bookFile.close();
+  const bool closed = bookFile.close();
   spineFile.close();
   tocFile.close();
 
-  if (!written) {
+  if (!written || !closed) {
     // A short write (card full/removed) would leave a truncated book.bin that
     // still passes the version check on load; remove it so the next open rebuilds.
     LOG_ERR("BMC", "Failed writing book.bin, removing truncated file");
@@ -458,28 +491,63 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 /* ============= READING / LOADING FUNCTIONS ================ */
 
 bool BookMetadataCache::load() {
+  loaded = false;
+  coreMetadata = {};
   if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
   }
 
-  uint8_t version;
-  serialization::readPod(bookFile, version);
-  if (version != BOOK_CACHE_VERSION) {
-    LOG_DBG("BMC", "Cache version mismatch: expected %d, got %d", BOOK_CACHE_VERSION, version);
-    // Explicit close() required: member variable persists beyond function scope
+  const auto fail = [this]() {
     bookFile.close();
     return false;
+  };
+
+  const size_t fileSize = bookFile.size();
+  if (fileSize < BOOK_CACHE_MIN_FILE_SIZE) {
+    LOG_DBG("BMC", "Cache file is truncated");
+    return fail();
   }
 
-  serialization::readPod(bookFile, lutOffset);
-  serialization::readPod(bookFile, spineCount);
-  serialization::readPod(bookFile, tocCount);
+  uint32_t commitMarker = 0;
+  if (!bookFile.seek(fileSize - sizeof(commitMarker)) || !readPodExact(bookFile, commitMarker) ||
+      commitMarker != BOOK_CACHE_COMMIT_MARKER || !bookFile.seek(0)) {
+    LOG_DBG("BMC", "Cache commit marker is missing");
+    return fail();
+  }
 
-  serialization::readString(bookFile, coreMetadata.title);
-  serialization::readString(bookFile, coreMetadata.author);
-  serialization::readString(bookFile, coreMetadata.language);
-  serialization::readString(bookFile, coreMetadata.coverItemHref);
-  serialization::readString(bookFile, coreMetadata.textReferenceHref);
+  uint8_t version = 0;
+  if (!readPodExact(bookFile, version)) return fail();
+  if (version != BOOK_CACHE_VERSION) {
+    LOG_DBG("BMC", "Cache version mismatch: expected %d, got %d", BOOK_CACHE_VERSION, version);
+    return fail();
+  }
+
+  if (!readPodExact(bookFile, lutOffset) || !readPodExact(bookFile, spineCount) || !readPodExact(bookFile, tocCount)) {
+    return fail();
+  }
+
+  const size_t minimumLutOffset = BOOK_CACHE_FIXED_HEADER_SIZE + BOOK_CACHE_MIN_METADATA_SIZE;
+  if (lutOffset < minimumLutOffset || lutOffset - BOOK_CACHE_FIXED_HEADER_SIZE > BOOK_CACHE_MAX_METADATA_SIZE) {
+    LOG_DBG("BMC", "Cache metadata bounds are invalid");
+    return fail();
+  }
+
+  const uint64_t lutSize = static_cast<uint64_t>(spineCount + tocCount) * sizeof(uint32_t);
+  const uint64_t dataEnd = fileSize - sizeof(BOOK_CACHE_COMMIT_MARKER);
+  if (static_cast<uint64_t>(lutOffset) + lutSize > dataEnd) {
+    LOG_DBG("BMC", "Cache LUT bounds are invalid");
+    return fail();
+  }
+
+  if (!readBoundedString(bookFile, lutOffset, coreMetadata.title) ||
+      !readBoundedString(bookFile, lutOffset, coreMetadata.author) ||
+      !readBoundedString(bookFile, lutOffset, coreMetadata.language) ||
+      !readBoundedString(bookFile, lutOffset, coreMetadata.coverItemHref) ||
+      !readBoundedString(bookFile, lutOffset, coreMetadata.textReferenceHref) || bookFile.position() != lutOffset) {
+    LOG_DBG("BMC", "Cache metadata is truncated or malformed");
+    coreMetadata = {};
+    return fail();
+  }
 
   loaded = true;
   LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);

@@ -97,6 +97,11 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_
   }
 }
 
+bool GfxRenderer::hasSdCardAdvanceTable(const int fontId) const {
+  const auto it = sdCardFonts_.find(fontId);
+  return it != sdCardFonts_.end() && it->second->hasAdvanceTable();
+}
+
 void GfxRenderer::ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
                                         uint8_t styleMask) const {
   auto it = sdCardFonts_.find(fontId);

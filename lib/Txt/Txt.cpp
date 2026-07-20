@@ -122,10 +122,21 @@ bool Txt::generateCoverBmp() const {
     if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), dst)) {
       return false;
     }
+    bool copyOk = true;
     uint8_t buffer[1024];
     while (src.available()) {
-      size_t bytesRead = src.read(buffer, sizeof(buffer));
-      dst.write(buffer, bytesRead);
+      const int bytesRead = src.read(buffer, sizeof(buffer));
+      if (bytesRead <= 0 || dst.write(buffer, static_cast<size_t>(bytesRead)) != static_cast<size_t>(bytesRead)) {
+        copyOk = false;
+        break;
+      }
+    }
+    src.close();
+    copyOk = dst.close() && copyOk;
+    if (!copyOk) {
+      Storage.remove(getCoverBmpPath().c_str());
+      LOG_ERR("TXT", "Failed to copy BMP cover image");
+      return false;
     }
     LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
@@ -184,6 +195,6 @@ bool Txt::readContent(uint8_t* buffer, size_t offset, size_t length) const {
     return false;
   }
 
-  size_t bytesRead = file.read(buffer, length);
-  return bytesRead > 0;
+  const int bytesRead = file.read(buffer, length);
+  return bytesRead >= 0 && static_cast<size_t>(bytesRead) == length;
 }
