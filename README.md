@@ -1,8 +1,10 @@
 # CrossVi
 
+[**English**](README.md) | [Tiếng Việt](README.vi.md)
+
 [![Support upstream CrossPoint contributors](https://img.shields.io/badge/Support_upstream-CrossPoint-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
-CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader), created for the Vietnamese community and future feature development. It keeps the open, hackable reading experience for Xteink e-paper devices while focusing on faster text layout, safer SD-card I/O, resilient caches, and low-risk runtime improvements.
+CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) for readers and contributors worldwide. It keeps the open, hackable reading experience for Xteink e-paper devices while focusing on faster text layout, safer SD-card I/O, resilient caches, and carefully developed new features.
 
 The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, file formats, technical identifiers, and on-card `.crosspoint` data layout so improvements remain compatible and easy to contribute upstream.
 
@@ -42,7 +44,7 @@ The original CrossPoint project and community remain the foundation of this firm
 
 - **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-- **Localization**: 24 UI languages and counting. RTL support.
+- **Localization**: 30 UI languages and counting, including Vietnamese. RTL support.
 
 ### Coming soon:
 
@@ -284,6 +286,6 @@ Want to build your own device? Be sure to check out the [de-link](https://github
 
 ---
 
-CrossVi is an independent fork of CrossPoint Reader, created for the Vietnamese community and future feature development. It is **not affiliated with Xteink or any device manufacturer**.
+CrossVi is an independent fork of CrossPoint Reader, developed as an international open-source project. It is **not affiliated with Xteink or any device manufacturer**.
 
 Huge shoutout to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader), which inspired this project.
