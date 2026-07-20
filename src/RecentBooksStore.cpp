@@ -48,29 +48,25 @@ bool RecentBooksStore::addBook(const std::string& path, const std::string& title
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
-  // auto find = std::bind(findEntry, std::placeholders::_1, std::cref(path), true);
-  //  If existing entry is pinned, exit early
-  // auto it = std::find_if(recentBooks.begin(), recentBooks.end(), find);
+  // If existing entry is pinned, exit early
   auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
                          [&](const RecentBook& book) { return book.path == path && book.pinned; });
   if (it != recentBooks.end()) {
     return true;
   }
 
-  // find = std::bind(findEntry, std::placeholders::_1, std::cref(path), false);
   //  Remove existing entry if present
-  // it = std::find_if(recentBooks.begin(), recentBooks.end(), find);
   it = std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
     recentBooks.erase(it);
   }
 
-  it = std::ranges::find_if(recentBooks, [&](bool bln) { return !bln; }, &RecentBook::pinned);
-
-  if (it == recentBooks.end()) {
+  // find first unpinned entry
+  it = std::ranges::find_if(recentBooks, [](bool bln) { return !bln; }, &RecentBook::pinned);
+  auto index = std::distance(recentBooks.begin(), it);
+  if (index > MAX_RECENT_BOOKS) {
     return false;
   }
-
   // Add to front
   recentBooks.insert(it, {path, title, author, coverBmpPath, pinned});
 
@@ -184,10 +180,4 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
     return RecentBook{path, lastBookFileName, "", ""};
   }
   return RecentBook{path, "", "", ""};
-}
-
-static bool findEntry(const RecentBook& book, const std::string& path, bool pinnedOnly) {
-  bool ret = book.path == path;
-  if (pinnedOnly) return ret && book.pinned;
-  return ret;
 }

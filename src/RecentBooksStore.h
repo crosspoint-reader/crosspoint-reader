@@ -17,7 +17,6 @@ struct RecentBook {
 class RecentBooksStore : public PersistableStore<RecentBooksStore> {
  private:
   std::vector<RecentBook> recentBooks;
-  static bool findEntry(const RecentBook& book, const std::string& path, bool pinnedOnly);
 
   static constexpr int MAX_RECENT_BOOKS = 10;
 
