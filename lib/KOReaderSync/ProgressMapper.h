@@ -3,7 +3,10 @@
 #include <GfxRenderer.h>
 
 #include <memory>
+#include <optional>
 #include <string>
+
+#include "KOReaderSyncClient.h"
 
 /**
  * CrossPoint position representation.
@@ -64,6 +67,20 @@ class ProgressMapper {
   static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& savedPos,
                                          GfxRenderer& renderer, int currentSpineIndex = -1,
                                          int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
+
+  /**
+   * Convert a rich CrossPoint position (downloaded from a crosspoint-sync
+   * server) directly to a CrossPoint position, without XPath approximation.
+   * When the local layout matches the uploader's (same spine page count) the
+   * page transfers losslessly; otherwise the paragraph LUT or the intra-spine
+   * page fraction is used.
+   *
+   * @return The position, or std::nullopt when the rich position cannot be
+   *         applied (spine out of range, no section cache) and the caller
+   *         should fall back to toCrossPoint().
+   */
+  static std::optional<CrossPointPosition> fromRichPosition(const std::shared_ptr<Epub>& epub,
+                                                            const KOReaderRichPosition& rich, GfxRenderer& renderer);
 
  private:
   /**

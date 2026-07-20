@@ -35,23 +35,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .progressBarMarginTop = 1,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
-                                 .keyboardKeyWidth = 22,
-                                 .keyboardKeyHeight = 30,
+                                 .keyboardKeyHeight = 36,
                                  .keyboardKeySpacing = 10,
-                                 .keyboardBottomKeyHeight = 30,
-                                 .keyboardBottomKeySpacing = 5,
-                                 .keyboardBottomAligned = true,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = 0,
                                  .keyboardTextFieldWidthPercent = 85,
-                                 .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 10,
-                                 .keyboardFillUnselected = true,
-                                 .keyboardOutlineAllUnselected = true,
-                                 .keyboardDrawSpecialOutlineWhenUnselected = true,
-                                 .keyboardSecondaryLabelRightPadding = 3,
-                                 .keyboardSecondaryLabelTopPadding = 1,
-                                 .keyboardMinArrowHeadSize = 1,
+                                 .keyboardWidthPercent = 94,
                                  .popupTopOffsetRatio = 0.12f,
                                  .popupMarginX = 20,
                                  .popupMarginY = 14,
@@ -89,6 +78,8 @@ class RoundedRaffTheme : public BaseTheme {
                   const char* subtitle = nullptr) const override;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
                   bool selected) const override;
+  bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
+                         int& index) const override;
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
@@ -97,9 +88,8 @@ class RoundedRaffTheme : public BaseTheme {
                       const std::function<UIIcon(int index)>& rowIcon) const override;
   void drawTextField(const GfxRenderer& renderer, Rect rect, int textWidth, bool cursorMode = false,
                      int contentStartX = 0, int contentWidth = 0) const override;
-  void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, bool isSelected,
-                       const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
-                       bool inactiveSelection = false) const override;
+  int getListRowStep(bool hasSubtitle) const override;
+  int getListPageItems(int contentHeight, bool hasSubtitle) const override;
   void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                 const std::function<std::string(int index)>& rowTitle,
                 const std::function<std::string(int index)>& rowSubtitle = nullptr,
