@@ -11,13 +11,17 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookMover.h"
+#include "util/StringUtils.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+constexpr unsigned long POPUP_MSG_MS = 2000;
 }  // namespace
 
 void FileBrowserActivity::loadFiles() {
@@ -46,6 +50,8 @@ void FileBrowserActivity::loadFiles() {
     if (file.isDirectory()) {
       files.emplace_back(std::string(fileNameBuffer.get()) + "/");
     } else {
+      // PickFolder lists the same files as Books mode so the user can tell
+      // folders apart; Confirm on one drops the moved book into this folder.
       std::string_view filename{fileNameBuffer.get()};
       if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
@@ -186,7 +192,216 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
   return true;
 }
 
+// Defined below render()'s helpers; used here for the menu title.
+std::string getFileName(std::string filename);
+
+// Long-press menu on a Books-mode entry: Rename (folders only) / Move / Delete / New folder.
+void FileBrowserActivity::showFileMenu(const std::string& entry) {
+  const bool isDirectory = entry.back() == '/';
+  std::string cleanBasePath = basepath;
+  if (cleanBasePath.back() != '/') cleanBasePath += "/";
+  const std::string fullPath = cleanBasePath + entry;
+  // Move/rename take the path without the trailing slash directory marker.
+  std::string cleanFullPath = fullPath;
+  if (isDirectory) cleanFullPath.pop_back();
+
+  const char* options[4];
+  int count = 0;
+  const int renameIdx = isDirectory ? count : -1;
+  if (isDirectory) options[count++] = tr(STR_RENAME);
+  const int moveIdx = count;
+  options[count++] = tr(STR_MOVE);
+  const int deleteIdx = count;
+  options[count++] = tr(STR_DELETE);
+  const int newFolderIdx = count;
+  options[count++] = tr(STR_NEW_FOLDER);
+
+  optionPopup.show(
+      getFileName(entry).c_str(), options, count, 0,
+      [this, entry, fullPath, cleanFullPath, isDirectory, renameIdx, moveIdx, deleteIdx, newFolderIdx](const int sel) {
+        if (sel == renameIdx) {
+          promptRenameFolder(cleanFullPath);
+        } else if (sel == moveIdx) {
+          promptMoveDestination(cleanFullPath, isDirectory);
+        } else if (sel == deleteIdx) {
+          promptDelete(entry, fullPath);
+        } else if (sel == newFolderIdx) {
+          promptNewFolder();
+        }
+      });
+  requestUpdate();
+}
+
+void FileBrowserActivity::promptDelete(const std::string& entry, const std::string& fullPath) {
+  auto handler = [this, fullPath](const ActivityResult& res) {
+    if (!res.isCancelled) {
+      LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
+      if (removeDirFile(fullPath)) {
+        LOG_DBG("FileBrowser", "Deleted successfully");
+        loadFiles();
+        if (files.empty()) {
+          selectorIndex = 0;
+        } else if (selectorIndex >= files.size()) {
+          // Move selection to the new "last" item
+          selectorIndex = files.size() - 1;
+        }
+
+        requestUpdate(true);
+      } else {
+        LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
+      }
+    } else {
+      LOG_DBG("FileBrowser", "Delete cancelled by user");
+    }
+  };
+
+  std::string heading = tr(STR_DELETE) + std::string("? ");
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+}
+
+// Blocks the main task in BookMover::moveFolder while the render task draws a
+// percentage bar (progress = files migrated / files in the subtree, which
+// BookMover pre-counts because a callback is passed).
+bool FileBrowserActivity::moveFolderWithProgress(const std::string& srcPath, const std::string& dstPath) {
+  {
+    RenderLock lock(*this);
+    moveInProgress = true;
+    moveDone = 0;
+    moveTotal = 0;
+    lastRenderedPercent = 101;
+  }
+  requestUpdateAndWait();
+
+  auto progressCb = +[](size_t done, size_t total, void* ctx) {
+    auto* self = static_cast<FileBrowserActivity*>(ctx);
+    self->moveDone = done;
+    self->moveTotal = total;
+    // immediate=true: wake the render task directly. We're in a tight sync
+    // loop so the main loop won't drain the requestedUpdate flag for us.
+    self->requestUpdate(true);
+  };
+  const bool ok = BookMover::moveFolder(srcPath, dstPath, progressCb, this);
+
+  {
+    RenderLock lock(*this);
+    moveInProgress = false;
+  }
+  return ok;
+}
+
+// Opens a destination picker (this same activity in PickFolder mode) and moves
+// srcPath there, migrating the book cache(s) so reading progress is kept.
+// Folders move with their whole subtree; BookMover::moveFolder rejects a
+// destination inside the moved folder itself (surfaces as "Move failed").
+void FileBrowserActivity::promptMoveDestination(const std::string& srcPath, const bool isDirectory) {
+  startActivityForResult(std::make_unique<FileBrowserActivity>(renderer, mappedInput, basepath, Mode::PickFolder),
+                         [this, srcPath, isDirectory](const ActivityResult& res) {
+                           if (res.isCancelled) {
+                             requestUpdate();
+                             return;
+                           }
+                           std::string dstDir = std::get<FilePathResult>(res.data).path;
+                           if (dstDir.size() > 1 && dstDir.back() == '/') dstDir.pop_back();
+                           std::string srcDir = srcPath.substr(0, srcPath.find_last_of('/'));
+                           if (srcDir.empty()) srcDir = "/";
+                           if (dstDir == srcDir) {  // dropped where it already lives: nothing to do
+                             requestUpdate();
+                             return;
+                           }
+                           const std::string dstPath = BookMover::buildDestination(srcPath, dstDir);
+                           const bool moved = isDirectory ? moveFolderWithProgress(srcPath, dstPath)
+                                                          : BookMover::moveFile(srcPath, dstPath);
+                           if (moved) {
+                             loadFiles();
+                             if (files.empty()) {
+                               selectorIndex = 0;
+                             } else if (selectorIndex >= files.size()) {
+                               selectorIndex = files.size() - 1;
+                             }
+                           } else {
+                             showMessage(StrId::STR_MOVE_FAILED);
+                           }
+                           requestUpdate(true);
+                         });
+}
+
+// Keyboard prompt prefilled with the folder's current name; renames in place
+// via BookMover::moveFolder so books inside keep their reading progress.
+void FileBrowserActivity::promptRenameFolder(const std::string& srcPath) {
+  const std::string oldName = srcPath.substr(srcPath.find_last_of('/') + 1);
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_FOLDER_NAME), oldName, 64, InputType::Text),
+      [this, srcPath, oldName](const ActivityResult& res) {
+        if (res.isCancelled) {
+          requestUpdate();
+          return;
+        }
+        const std::string name = StringUtils::sanitizeFilename(std::get<KeyboardResult>(res.data).text);
+        if (name.empty() || name == oldName) {
+          requestUpdate();
+          return;
+        }
+        const std::string dstPath = srcPath.substr(0, srcPath.find_last_of('/') + 1) + name;
+        if (Storage.exists(dstPath.c_str()) || !moveFolderWithProgress(srcPath, dstPath)) {
+          showMessage(StrId::STR_RENAME_FAILED);
+        } else {
+          loadFiles();
+          selectorIndex = findEntry(name + "/");
+        }
+        requestUpdate(true);
+      });
+}
+
+void FileBrowserActivity::promptNewFolder() {
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_FOLDER_NAME), "", 64, InputType::Text),
+      [this](const ActivityResult& res) {
+        if (res.isCancelled) {
+          requestUpdate();
+          return;
+        }
+        const std::string name = StringUtils::sanitizeFilename(std::get<KeyboardResult>(res.data).text);
+        if (name.empty()) {
+          requestUpdate();
+          return;
+        }
+        std::string dirPath = basepath;
+        if (dirPath.back() != '/') dirPath += '/';
+        dirPath += name;
+        // An already-existing folder counts as success: the user gets the folder they named.
+        auto existing = Storage.open(dirPath.c_str());
+        const bool existsAsDir = existing && existing.isDirectory();
+        if (existing) existing.close();
+        if (!existsAsDir && !Storage.mkdir(dirPath.c_str())) {
+          LOG_ERR("FileBrowser", "Failed to create folder: %s", dirPath.c_str());
+          showMessage(StrId::STR_FOLDER_CREATE_FAILED);
+        } else if (mode == Mode::PickFolder) {
+          // Jump straight into the new folder so "Move here" drops the book in it.
+          basepath = std::move(dirPath);
+          loadFiles();
+          selectorIndex = 0;
+        } else {
+          loadFiles();
+          selectorIndex = findEntry(name + "/");
+        }
+        requestUpdate(true);
+      });
+}
+
+void FileBrowserActivity::showMessage(const StrId msgId) {
+  popupMsgId = msgId;
+  popupVisible = true;
+  popupTime = millis();
+}
+
 void FileBrowserActivity::loop() {
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
+  if (popupVisible && millis() - popupTime >= POPUP_MSG_MS) {
+    popupVisible = false;
+    requestUpdate(true);
+  }
+
   // Long press BACK (1s+) goes to root folder (Books mode only).
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
   if (mode == Mode::Books && mappedInput.isPressed(MappedInputManager::Button::Back) &&
@@ -211,6 +426,34 @@ void FileBrowserActivity::loop() {
       lockNextConfirmRelease = false;
       return;
     }
+
+    // Folder picker: Confirm enters a directory; on the "Move here" row or on
+    // any file it drops the moved book into the folder being viewed (the files
+    // are listed so the user can tell folders apart, and landing on one of the
+    // books already there is a natural "this is the right shelf" signal).
+    if (mode == Mode::PickFolder) {
+      if (selectorIndex == 1) {  // "New folder"
+        promptNewFolder();
+        return;
+      }
+      const bool onDirectory = selectorIndex >= 2 && files[selectorIndex - 2].back() == '/';
+      if (onDirectory) {
+        const std::string dirEntry = files[selectorIndex - 2];
+        if (basepath.back() != '/') basepath += "/";
+        basepath += dirEntry.substr(0, dirEntry.length() - 1);
+        loadFiles();
+        selectorIndex = 0;
+        requestUpdate();
+        return;
+      }
+      // "Move here" row or a file row: return the folder being viewed.
+      ActivityResult res{FilePathResult{basepath}};
+      res.isCancelled = false;
+      setResult(std::move(res));
+      finish();
+      return;
+    }
+
     if (files.empty()) return;
 
     const std::string& entry = files[selectorIndex];
@@ -228,36 +471,8 @@ void FileBrowserActivity::loop() {
     }
 
     if (mode == Mode::Books && mappedInput.getHeldTime() >= GO_HOME_MS) {
-      // --- LONG PRESS ACTION: DELETE FILE OR DIRECTORY ---
-      std::string cleanBasePath = basepath;
-      if (cleanBasePath.back() != '/') cleanBasePath += "/";
-      const std::string fullPath = cleanBasePath + entry;
-
-      auto handler = [this, fullPath](const ActivityResult& res) {
-        if (!res.isCancelled) {
-          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-          if (removeDirFile(fullPath)) {
-            LOG_DBG("FileBrowser", "Deleted successfully");
-            loadFiles();
-            if (files.empty()) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
-              // Move selection to the new "last" item
-              selectorIndex = files.size() - 1;
-            }
-
-            requestUpdate(true);
-          } else {
-            LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
-          }
-        } else {
-          LOG_DBG("FileBrowser", "Delete cancelled by user");
-        }
-      };
-
-      std::string heading = tr(STR_DELETE) + std::string("? ");
-
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+      // --- LONG PRESS ACTION: ENTRY MENU (move / delete / new folder) ---
+      showFileMenu(entry);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
@@ -287,11 +502,12 @@ void FileBrowserActivity::loop() {
 
         const auto pos = oldPath.find_last_of('/');
         const std::string dirName = oldPath.substr(pos + 1) + "/";
-        selectorIndex = findEntry(dirName);
+        selectorIndex = findEntry(dirName) + syntheticCount();
+        if (selectorIndex >= files.size() + syntheticCount()) selectorIndex = 0;
 
         requestUpdate();
-      } else if (mode == Mode::PickFirmware) {
-        // Firmware picker at root: cancel back to caller instead of going home.
+      } else if (mode != Mode::Books) {
+        // Pickers at root: cancel back to caller instead of going home.
         ActivityResult res;
         res.isCancelled = true;
         setResult(std::move(res));
@@ -302,7 +518,7 @@ void FileBrowserActivity::loop() {
     }
   }
 
-  int listSize = static_cast<int>(files.size());
+  int listSize = static_cast<int>(files.size() + syntheticCount());
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
@@ -345,16 +561,47 @@ std::string getFileExtension(const std::string& filename) {
 }
 
 void FileBrowserActivity::render(RenderLock&&) {
+  if (moveInProgress) {
+    // Throttle redraws to once per percent (each one is a display refresh).
+    const unsigned int pct =
+        moveTotal > 0 ? static_cast<unsigned int>((moveDone * 100) / moveTotal) : (moveDone > 0 ? 100 : 0);
+    if (pct == lastRenderedPercent) return;
+    lastRenderedPercent = pct;
+
+    renderer.clearScreen();
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const auto pageWidth = renderer.getScreenWidth();
+    const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+    const auto top = (renderer.getScreenHeight() - lineHeight) / 2;
+    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_MOVING), true, EpdFontFamily::BOLD);
+    GUI.drawProgressBar(renderer,
+                        Rect{metrics.contentSidePadding, top + lineHeight + metrics.verticalSpacing,
+                             pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
+                        pct, 100);
+    renderer.displayBuffer();
+    return;
+  }
+
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  std::string folderName =
-      (mode == Mode::PickFirmware)
-          ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
-          : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
+  std::string folderName;
+  switch (mode) {
+    case Mode::PickFirmware:
+      folderName = tr(STR_SELECT_FIRMWARE_FILE);
+      break;
+    case Mode::PickFolder:
+      folderName = tr(STR_MOVE_TO);
+      break;
+    case Mode::Books:
+      folderName = (basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1);
+      break;
+  }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
@@ -362,15 +609,33 @@ void FileBrowserActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
-  if (files.empty()) {
+  const size_t listCount = files.size() + syntheticCount();
+  if (listCount == 0) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
+    // In PickFolder mode the first two rows are the "Move here" / "New folder"
+    // actions; real directory entries follow, shifted by syntheticCount().
+    const auto entryAt = [this](const int index) -> const std::string& { return files[index - syntheticCount()]; };
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); }, false);
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, listCount, selectorIndex,
+        [this, entryAt](int index) {
+          if (static_cast<size_t>(index) < syntheticCount()) {
+            return std::string(index == 0 ? tr(STR_MOVE_HERE) : tr(STR_NEW_FOLDER));
+          }
+          return getFileName(entryAt(index));
+        },
+        nullptr,
+        [this, entryAt](int index) {
+          // Synthetic action rows borrow the folder icon.
+          if (static_cast<size_t>(index) < syntheticCount()) return UITheme::getFileIcon("/");
+          return UITheme::getFileIcon(entryAt(index));
+        },
+        [this, entryAt](int index) {
+          if (static_cast<size_t>(index) < syntheticCount()) return std::string();
+          return getFileExtension(entryAt(index));
+        },
+        false);
   }
 
   // Full path display
@@ -401,16 +666,28 @@ void FileBrowserActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
-  // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
-  // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
+  const char* backLabel = (basepath == "/") ? (mode == Mode::Books ? tr(STR_HOME) : tr(STR_BACK)) : tr(STR_BACK);
+  // In picker modes, Confirm on a selectable row returns to the caller (not "open"); show
+  // STR_SELECT instead. Directories in the pickers still descend, so keep STR_OPEN there.
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
-                                            files.empty() ? "" : tr(STR_DIR_DOWN));
+  const bool syntheticSelected = selectorIndex < syntheticCount();
+  // In the folder picker, Confirm over a file drops the moved book here.
+  const bool moveHereOnFile = mode == Mode::PickFolder && !syntheticSelected && listCount > 0 &&
+                              files[selectorIndex - syntheticCount()].back() != '/';
+  const char* confirmLabel = (listCount == 0)                               ? ""
+                             : moveHereOnFile                               ? tr(STR_MOVE_HERE)
+                             : (selectingFirmwareFile || syntheticSelected) ? tr(STR_SELECT)
+                                                                            : tr(STR_OPEN);
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, listCount == 0 ? "" : tr(STR_DIR_UP),
+                                            listCount == 0 ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+
+  if (popupVisible) {
+    // drawPopup overlays the framebuffer and refreshes the display itself.
+    GUI.drawPopup(renderer, I18N.get(popupMsgId));
+  }
 }
 
 size_t FileBrowserActivity::findEntry(const std::string& name) const {
