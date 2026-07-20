@@ -1,16 +1,22 @@
-# CrossPoint Reader
+# InkPivot Reader
+
+**Turn pages, not wait times.**
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
-CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
+InkPivot Reader is a performance-focused community fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) for Xteink e-paper devices. It keeps the open, hackable reading experience while focusing on faster text layout, safer SD-card I/O, resilient caches, and low-risk runtime improvements.
 
-**Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
+The original CrossPoint project and community remain the foundation of this firmware. InkPivot preserves its MIT license, device support, file formats, and on-card `.crosspoint` data layout so improvements can stay easy to compare and contribute upstream.
 
-![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
+> **Current validation status:** host tests, static analysis, and ESP32-C3 firmware builds are verified; testing on physical X3/X4 hardware is still pending.
+
+**Target devices:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
+
+![CrossPoint Reader on an Xteink device (upstream project image)](./docs/images/cover.jpg)
 
 > If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
 
-## What can CrossPoint do?
+## What can InkPivot do?
 
 - **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
 
@@ -64,6 +70,8 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 > 
 > **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
 > 
+> **InkPivot is a community fork and is not currently on that supported list. Do not use it as the unlock payload for a USB-locked device.**
+>
 > Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
 > stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
 > the firmware you flashed doesn't support OTA, **there is no way out**.
@@ -151,8 +159,8 @@ Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` 
 ### Setup
 
 ```bash
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader
-cd crosspoint-reader
+git clone --recursive https://github.com/tvhdc/inkpivot-reader
+cd inkpivot-reader
 
 # if cloned without --recursive:
 git submodule update --init --recursive
@@ -217,7 +225,7 @@ Minor adjustments may be required for Windows.
 
 ## Internals
 
-CrossPoint Reader is pretty aggressive about caching data down to the SD card to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
+InkPivot inherits CrossPoint Reader's aggressive SD-card caching to minimise RAM usage. The ESP32-C3 only has ~380KB of usable RAM, so we have to be careful. A lot of the decisions made in the design of the firmware were based on this constraint.
 
 ### Data caching
 
@@ -281,6 +289,6 @@ Want to build your own device? Be sure to check out the [de-link](https://github
 
 ---
 
-CrossPoint Reader is **not affiliated with Xteink or any device manufacturer**.
+InkPivot Reader is an independent community fork. It is **not affiliated with Xteink or any device manufacturer**.
 
 Huge shoutout to [diy-esp32-epub-reader](https://github.com/atomic14/diy-esp32-epub-reader), which inspired this project.
