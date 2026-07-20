@@ -245,10 +245,13 @@ void enterDeepSleep(bool fromTimeout = false) {
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
 
-  // Always dump the frame (not just for quick resume): a clock peek restores the
-  // sleep screen from this file, whatever mode drew it. Only the quick-resume
-  // load path consumes/removes it; peek reads leave it in place.
-  saveSleepFrameBuffer();
+  // Dump the frame when something can consume it: quick-resume boots restore
+  // from it, and a clock peek restores the sleep screen from it (whatever mode
+  // drew it — peek reads leave the file in place, quick-resume loads remove
+  // it). With both features off this is skipped: no extra SD write per sleep.
+  if (isQuickResumeSleep || clockPeekArmed()) {
+    saveSleepFrameBuffer();
+  }
 
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
