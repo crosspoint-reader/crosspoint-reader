@@ -914,11 +914,11 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   if (isForwardTurn) {
     // Advance within the section while there are (or may still be) more pages: either a built
-    // page ahead, or the section is still building (windowed), in which case more pages exist
+    // page ahead, or the section is still building/partial (windowed), in which case more pages exist
     // beyond the current watermark and render()'s ensure-built pump will lay them out. Only when
     // the section is fully built AND we're on its last page do we move to the next spine -- using
     // the live pageCount alone would mistake the build watermark for the end of a giant spine.
-    if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
+    if (section->currentPage < section->pageCount - 1 || section->isBuilding() || section->isPartial()) {
       section->currentPage++;
     } else {
       // We don't want to delete the section mid-render, so grab the semaphore
