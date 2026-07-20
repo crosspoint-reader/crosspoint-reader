@@ -217,8 +217,8 @@ static bool peekLoadSleepFrame() {
   return bytesRead == bufferSize;
 }
 
-// Whether sleeps should stay in true deep sleep with the side-button peek wake
-// armed. Opt-in via settings, X3-only (needs the DS3231 for a trustworthy time)
+// Whether sleeps should arm the side-button peek wake alongside the power
+// button. Opt-in via settings, X3-only (needs the RTC for a trustworthy time)
 // and backs off if the burst guard tripped. RTC memory is garbage after a
 // battery power-cycle, which reads as "not disarmed" — exactly the
 // re-arm-on-real-wake behavior we want.

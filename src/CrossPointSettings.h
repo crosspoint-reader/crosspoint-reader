@@ -211,8 +211,8 @@ class CrossPointSettings {
   // Date display format (used by the sleep clock peek face)
   uint8_t dateFormat = DATE_FORMAT_ISO;
   // Wake on the side page-turn button while asleep to flash the time (X3 only,
-  // requires DS3231 RTC). Keeps the device in deep sleep instead of powering
-  // off, which costs ~12.8uA of standby drain while armed.
+  // requires the RTC). Opt-in because it makes a second button wake-capable —
+  // an accidental side-button press in a bag briefly wakes the device.
   uint8_t sleepClockPeek = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.

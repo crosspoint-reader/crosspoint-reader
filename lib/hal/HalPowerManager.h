@@ -40,7 +40,10 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
-  void startDeepSleep(HalGPIO& gpio) const;
+  // armClockPeek: additionally arm BUTTON_ADC_PIN_2 as a wake source, letting
+  // BTN_DOWN (the side page-turn button) wake the device for a clock peek.
+  // X3-only; callers gate on deviceIsX3() + the sleepClockPeek setting.
+  void startDeepSleep(HalGPIO& gpio, bool armClockPeek = false) const;
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
