@@ -90,17 +90,18 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 31
+### Version 32
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 31 is binary-identical to version 30. The version was bumped because
+Version 32 is binary-identical to version 31. The version was bumped because
 simple HTML table rows are now laid out as positioned columns rather than
-flattened paragraphs with synthetic row/cell labels, so cached v30 pages must
-be rebuilt. Version 30 similarly invalidated v29 positions after Arabic
-contextual shaping changed text measurement.
+flattened paragraphs with synthetic row/cell labels, so cached v31 pages must
+be rebuilt. Version 31 preserved word continuation when splitting long CJK
+text at `MAX_WORD_SIZE`; version 30 similarly invalidated v29 positions after
+Arabic contextual shaping changed text measurement.
 
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:
