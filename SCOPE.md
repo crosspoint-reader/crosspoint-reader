@@ -72,10 +72,6 @@ If you are unsure whether your idea falls into one of these categories, open a D
 * **Reference Tools:** Local, offline dictionary lookup.
 * **Memory, Flash, and Code Quality:** Refactors and cleanups that reduce resource use or improve maintainability,
   even without a user-visible feature.
-* **Bootloader / Recovery Bridge:** A new bootloader (or bootloader-adjacent recovery flow) that helps users on
-  locked devices reach other community firmware safely. CrossPoint should be a *bridge*, not a trap: even users who
-  ultimately choose a different fork should be able to get there without bricking the device or ending up in a stuck
-  state. This is explicitly in-scope because it serves the broader ESP32 e-reader community, not just our users.
 
 ### Out-of-Scope
 
@@ -90,7 +86,6 @@ If you are unsure whether your idea falls into one of these categories, open a D
 * **Media Playback:** No audio players or audiobooks.
 * **Complex Annotation:** No typed-out notes.
 * **Duplication of stock firmware behavior** that already works well.
-* **Duplication of features already solved well by other popular CrossPoint forks.**
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather
   than reflowable text, resulting in constant panning and zooming that makes for a poor reading experience on e-ink.
   Out of scope on the current hardware class.
@@ -99,7 +94,7 @@ If you are unsure whether your idea falls into one of these categories, open a D
 
 Before proposing a feature, ask:
 
-1. Does the stock firmware already handle this well? If yes, we pass.
+1. Does the stock firmware already handle this well? We should hit that bar or surpass it.
 2. Does another popular CrossPoint fork already handle this well? If yes, we usually defer.
 3. Does it improve the core reading experience, or reduce memory / flash / code complexity?
 4. Is it in one of the temporarily closed areas (new themes, new network connectors)? If yes, wait.
@@ -132,26 +127,10 @@ card. This directly supports the current focus on flash footprint and code clean
 To support the broader range of ESP32-based e-reader hardware, the SDK layers (display, input, storage, battery,
 etc.) need to be abstracted away from Xteink-specific assumptions and made pluggable per device.
 
-* **Status:** [@jeremydk](https://github.com/jeremydk) is actively working on this.
-* **How to help:** Coordinate with jeremydk before opening PRs that touch `open-x4-sdk/` or `lib/hal/` so the work
-  does not collide. Smaller adjacent cleanups (removing hardcoded assumptions, tightening HAL boundaries) are welcome
-  if scoped against the in-flight direction.
-
-### Bootloader / Recovery Bridge for Locked Devices
-
-We want CrossPoint to act as a bridge for users on locked or hard-to-flash devices, so they can reach *any*
-community firmware (not only ours) without bricking the device. The aim is a bootloader or recovery-flash workflow
-that:
-
-* Gets users off stock onto something open with minimal risk.
-* Lets users switch between community firmwares (including non-CrossPoint forks) without specialized tooling.
-* Provides a recoverable fallback if a flash goes wrong, instead of leaving the device in a stuck state.
-
-* **Status:** [@jeremydk](https://github.com/jeremydk) is currently handling this alongside the SDK abstraction
-  work. Coordinate with him before opening PRs that touch bootloader, OTA, or recovery-partition code. Contributors
-  with ESP32 bootloader / OTA experience are welcome to help; open a Discussion to plug in.
-* **Why it matters:** Community firmware adoption is gated by how scary the first flash is. Making that step safe is
-  worth more to the ecosystem than any single feature we could add to the reader.
+* **Status:** [@itsthisjustin](https://github.com/itsthisjustin) is actively working on this.
+* **How to help:** Coordinate with itsthisjustin before opening PRs that touch `freeink-sdk/` or `lib/hal/` so the
+  work does not collide. Smaller adjacent cleanups (removing hardcoded assumptions, tightening HAL boundaries) are
+  welcome if scoped against the in-flight direction.
 
 ### Identifying Other Stock-Firmware Gaps
 
@@ -163,6 +142,8 @@ so future work has a clear target list. Particularly interested in:
   non-Latin font work that nobody is handling well today.
 * **Other gaps:** Rendering edge cases, accessibility issues, input quirks, anything stock does badly and existing
   forks have not fixed.
+
+* **Status:** [@uxjulia](https://github.com/uxjulia) is coordinating this effort.
 
 If you can read or use the device in one of these languages, your feedback (even without code) is genuinely useful.
 Open a Discussion with concrete examples (screenshots, sample EPUBs, expected vs actual behavior) and we will
