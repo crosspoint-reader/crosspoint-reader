@@ -238,6 +238,11 @@ void FileBrowserActivity::loop() {
       const std::string fullPath = cleanBasePath + entry;
 
       auto handler = [this, fullPath](const ActivityResult& res) {
+        // The confirmation popup acts on button press; if that button is still
+        // held when we resume, swallow its release so it doesn't also act here
+        // (Back would go up a directory, Confirm would open the selection).
+        lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
+        lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
         if (!res.isCancelled) {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           if (removeDirFile(fullPath)) {

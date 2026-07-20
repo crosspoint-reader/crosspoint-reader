@@ -64,7 +64,24 @@ bool EpubReaderMenuActivity::handleHomeGesture() {
 }
 
 void EpubReaderMenuActivity::loop() {
-  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
+    // The popup acts on button press; if that input closed it, the trailing
+    // release must be swallowed below (Back would close the menu, Confirm
+    // would re-activate the selected item).
+    popupClosing = !optionPopup.isActive();
+    return;
+  }
+  if (popupClosing) {
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      return;  // closing press still held
+    }
+    popupClosing = false;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      return;  // swallow the release that closed the popup
+    }
+  }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     closeCancelled();
