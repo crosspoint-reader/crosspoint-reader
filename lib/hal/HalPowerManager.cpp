@@ -58,12 +58,6 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
-  // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
-  while (gpio.isPressed(HalGPIO::BTN_POWER)) {
-    delay(50);
-    gpio.update();
-  }
-
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
   // doesn't hold power domains that interfere with USB-powered GPIO wake.
@@ -92,8 +86,9 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // guarantees that ordering).
   freeink::PowerManager::powerDownRailsForSleep();
 
-  freeink::PowerManager::armPowerButtonWakeup();
-  freeink::PowerManager::deepSleep();
+  // Waits for the power button to be physically released (so holding it doesn't
+  // immediately wake the device again), then arms the wake source and sleeps.
+  freeink::PowerManager::deepSleepUntilPowerButton();
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
