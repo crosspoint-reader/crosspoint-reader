@@ -750,20 +750,41 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
 }
 
 void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const {
+  constexpr int MAX_STATUS_LINES = 2;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = screen->y + (screen->height - height) / 2;
+  const int maxStatusWidth = screen->width - metrics->contentSidePadding * 2;
 
   if (state == WifiSelectionState::SCANNING) {
-    UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top,
-                              autoConnecting ? tr(STR_FINDING_SAVED_WIFI) : tr(STR_SCANNING));
+    const char* statusText = autoConnecting ? tr(STR_FINDING_SAVED_WIFI) : tr(STR_SCANNING);
+    if (renderer.getTextWidth(UI_10_FONT_ID, statusText) <= maxStatusWidth) {
+      UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top, statusText);
+    } else {
+      const auto lines = renderer.wrappedText(UI_10_FONT_ID, statusText, maxStatusWidth, MAX_STATUS_LINES);
+      const int wrappedTop = screen->y + (screen->height - static_cast<int>(lines.size()) * height) / 2;
+      for (size_t i = 0; i < lines.size(); ++i) {
+        UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, wrappedTop + static_cast<int>(i) * height,
+                                  lines[i].c_str());
+      }
+    }
     if (autoConnecting) {
       const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else {
-    UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 40,
-                              autoConnecting ? tr(STR_CONNECTING_SAVED_WIFI) : tr(STR_CONNECTING), true,
-                              EpdFontFamily::BOLD);
+    const char* statusText = autoConnecting ? tr(STR_CONNECTING_SAVED_WIFI) : tr(STR_CONNECTING);
+    if (renderer.getTextWidth(UI_12_FONT_ID, statusText, EpdFontFamily::BOLD) <= maxStatusWidth) {
+      UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 40, statusText, true, EpdFontFamily::BOLD);
+    } else {
+      const int statusLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+      const auto lines =
+          renderer.wrappedText(UI_12_FONT_ID, statusText, maxStatusWidth, MAX_STATUS_LINES, EpdFontFamily::BOLD);
+      const int wrappedTop = top - metrics->verticalSpacing - static_cast<int>(lines.size()) * statusLineHeight;
+      for (size_t i = 0; i < lines.size(); ++i) {
+        UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, wrappedTop + static_cast<int>(i) * statusLineHeight,
+                                  lines[i].c_str(), true, EpdFontFamily::BOLD);
+      }
+    }
 
     std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
     if (ssidInfo.length() > 25) {
