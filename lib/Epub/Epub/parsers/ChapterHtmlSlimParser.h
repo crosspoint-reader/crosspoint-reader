@@ -77,9 +77,14 @@ class ChapterHtmlSlimParser {
   CssTextDirection effectiveDirection = CssTextDirection::Ltr;
   bool effectiveSup = false;
   bool effectiveSub = false;
+  static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
+  static constexpr size_t MAX_GRID_TABLE_CELL_WORDS = 32;
+  static constexpr size_t MAX_GRID_TABLE_CELL_BYTES = 512;
   int tableDepth = 0;
-  int tableRowIndex = 0;
-  int tableColIndex = 0;
+  bool insideTableCell = false;
+  bool tableRowStacked = false;
+  size_t tableCellTextBytes = 0;
+  std::vector<std::unique_ptr<ParsedText>> tableRowCells;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
@@ -112,6 +117,10 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
   void flushPartWordBuffer();
+  void fallbackTableRowToStacked();
+  void closeTableCell();
+  void finishTableRow();
+  void addTableRowSeparator();
   void makePages();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);

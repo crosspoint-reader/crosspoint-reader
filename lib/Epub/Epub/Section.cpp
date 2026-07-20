@@ -17,7 +17,9 @@ namespace {
 // v30: Arabic shaping changed both drawing and measurement (getTextAdvanceX now
 //      measures the shaped visual text); cached word positions from v29 no longer
 //      match what drawText renders.
-constexpr uint8_t SECTION_FILE_VERSION = 30;
+// v31: Simple HTML table rows are laid out as positioned columns instead of
+//      flattened paragraphs with synthetic row/cell labels.
+constexpr uint8_t SECTION_FILE_VERSION = 31;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
