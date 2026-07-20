@@ -28,6 +28,7 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/boot_sleep/SleepActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -119,6 +120,19 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 
+// Clock peek (side page-turn button from sleep flashes the time). RTC memory
+// survives true deep sleep, which is the only way a ClockPeek wake can happen. If the button
+// ladder ever floats low during sleep the device would wake in a loop — cap
+// consecutive peeks within the same clock minute, then re-sleep with the peek
+// wake disarmed until the next power-button wake.
+RTC_NOINIT_ATTR uint32_t clockPeekMagic;
+RTC_NOINIT_ATTR uint32_t clockPeekBurst;
+RTC_NOINIT_ATTR uint32_t clockPeekLastMinute;
+constexpr uint32_t CLOCK_PEEK_MAGIC = 0xC10CFEEC;
+constexpr uint32_t CLOCK_PEEK_DISARMED = 0xD15AB1ED;
+constexpr uint32_t CLOCK_PEEK_MAX_BURST = 5;
+constexpr unsigned long CLOCK_PEEK_HOLD_MS = 4000;
+
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
 // plain boot shows the splash. See setup() for the resolution.
@@ -191,6 +205,28 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
+// Like loadSleepFrameBuffer() but leaves the file on the SD card: a clock peek
+// reads the frame twice (overlay, then restore) and must not consume the copy a
+// quick-resume wake will want later.
+static bool peekLoadSleepFrame() {
+  HalFile file;
+  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
+  const size_t bufferSize = display.getBufferSize();
+  const size_t bytesRead = file.read(display.getFrameBuffer(), bufferSize);
+  file.close();
+  return bytesRead == bufferSize;
+}
+
+// Whether sleeps should stay in true deep sleep with the side-button peek wake
+// armed. Opt-in via settings, X3-only (needs the DS3231 for a trustworthy time)
+// and backs off if the burst guard tripped. RTC memory is garbage after a
+// battery power-cycle, which reads as "not disarmed" — exactly the
+// re-arm-on-real-wake behavior we want.
+static bool clockPeekArmed() {
+  return SETTINGS.sleepClockPeek == 1 && gpio.deviceIsX3() && halClock.isAvailable() &&
+         clockPeekMagic != CLOCK_PEEK_DISARMED;
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -209,9 +245,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
 
-  if (isQuickResumeSleep) {
-    saveSleepFrameBuffer();
-  }
+  // Always dump the frame (not just for quick resume): a clock peek restores the
+  // sleep screen from this file, whatever mode drew it. Only the quick-resume
+  // load path consumes/removes it; peek reads leave it in place.
+  saveSleepFrameBuffer();
 
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
@@ -224,7 +261,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
-  powerManager.startDeepSleep(gpio);
+  powerManager.startDeepSleep(gpio, clockPeekArmed());
 }
 
 void setupDisplayAndFonts(bool seamless = false) {
@@ -258,6 +295,202 @@ void setupDisplayAndFonts(bool seamless = false) {
   sdFontSystem.begin(renderer);
 
   LOG_DBG("MAIN", "Fonts setup");
+}
+
+// --- Clock peek rendering helpers ---
+
+// 7-segment style block digit drawn with fillRect. Segment bits:
+// 0=top 1=top-right 2=bottom-right 3=bottom 4=bottom-left 5=top-left 6=middle.
+static void drawBlockDigit(int x, int y, int w, int h, uint8_t digit) {
+  static constexpr uint8_t SEGS[10] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F};
+  const uint8_t s = SEGS[digit % 10];
+  const int t = w / 5;  // stroke thickness
+  if (s & 0x01) renderer.fillRect(x, y, w, t);
+  if (s & 0x02) renderer.fillRect(x + w - t, y, t, h / 2);
+  if (s & 0x04) renderer.fillRect(x + w - t, y + h / 2, t, h / 2);
+  if (s & 0x08) renderer.fillRect(x, y + h - t, w, t);
+  if (s & 0x10) renderer.fillRect(x, y + h / 2, t, h / 2);
+  if (s & 0x20) renderer.fillRect(x, y, t, h / 2);
+  if (s & 0x40) renderer.fillRect(x, y + (h - t) / 2, w, t);
+}
+
+// Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm), and back.
+// Used to roll the UTC date over to the local date across midnight.
+static int32_t daysFromCivil(int y, int m, int d) {
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = static_cast<unsigned>(y - era * 400);
+  const unsigned doy = (153 * static_cast<unsigned>(m + (m > 2 ? -3 : 9)) + 2) / 5 + static_cast<unsigned>(d) - 1;
+  const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + static_cast<int32_t>(doe) - 719468;
+}
+
+static void civilFromDays(int32_t z, int& y, int& m, int& d) {
+  z += 719468;
+  const int era = (z >= 0 ? z : z - 146096) / 146097;
+  const unsigned doe = static_cast<unsigned>(z - era * 146097);
+  const unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+  const unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+  const unsigned mp = (5 * doy + 2) / 153;
+  d = static_cast<int>(doy - (153 * mp + 2) / 5 + 1);
+  m = static_cast<int>(mp + (mp < 10 ? 3 : -9));
+  y = static_cast<int>(yoe) + era * 400 + (m <= 2);
+}
+
+// BTN_DOWN (side button) pressed while asleep: flash a dedicated clock screen —
+// huge stacked HH/MM block digits plus weekday and date — then go straight back
+// to deep sleep. Never returns. Runs after storage/settings/clock init but
+// before any activity exists.
+static void runClockPeek() {
+  uint8_t hour = 0;
+  uint8_t minute = 0;
+  const bool haveTime = halClock.getTime(hour, minute);
+  const uint32_t minuteOfDay = static_cast<uint32_t>(hour) * 60 + minute;
+
+  // Burst guard (see the RTC_NOINIT block above): repeated peeks within the same
+  // clock minute mean either a floating ladder pin or a stuck button.
+  if (clockPeekMagic != CLOCK_PEEK_MAGIC || clockPeekLastMinute != minuteOfDay) {
+    clockPeekMagic = CLOCK_PEEK_MAGIC;
+    clockPeekBurst = 0;
+    clockPeekLastMinute = minuteOfDay;
+  }
+  clockPeekBurst++;
+
+  if (!haveTime || clockPeekBurst > CLOCK_PEEK_MAX_BURST) {
+    LOG_ERR("MAIN", "Clock peek disarmed (haveTime=%d burst=%u)", haveTime, clockPeekBurst);
+    clockPeekMagic = CLOCK_PEEK_DISARMED;
+    halTiltSensor.deepSleep();
+    powerManager.startDeepSleep(gpio, false);
+  }
+
+  // Convert RTC UTC time to local time, rolling the date across midnight.
+  const int offsetMinutes = (static_cast<int>(SETTINGS.clockUtcOffsetQ) - 48) * 15;
+  int localMinutes = static_cast<int>(hour) * 60 + static_cast<int>(minute) + offsetMinutes;
+  int dayShift = 0;
+  while (localMinutes < 0) {
+    localMinutes += 24 * 60;
+    dayShift--;
+  }
+  while (localMinutes >= 24 * 60) {
+    localMinutes -= 24 * 60;
+    dayShift++;
+  }
+  int displayHour = localMinutes / 60;
+  const int displayMinute = localMinutes % 60;
+
+  // 12h mode shows a small inline AM/PM; 24h mode keeps the leading zero.
+  const bool use12Hour = SETTINGS.clockFormat == 1;
+  bool isPm = false;
+  if (use12Hour) {
+    isPm = displayHour >= 12;
+    displayHour = displayHour % 12;
+    if (displayHour == 0) displayHour = 12;
+  }
+
+  // Local calendar date + weekday. Only valid once an NTP sync has written the
+  // DS3231 date registers; omit both lines otherwise.
+  uint16_t utcYear = 0;
+  uint8_t utcMonth = 0, utcDay = 0;
+  char weekdayLine[32] = {0};
+  char dateLine[16] = {0};
+  if (halClock.getDate(utcYear, utcMonth, utcDay)) {
+    static constexpr StrId WEEKDAYS[7] = {StrId::STR_WEEKDAY_SUNDAY,   StrId::STR_WEEKDAY_MONDAY,
+                                          StrId::STR_WEEKDAY_TUESDAY,  StrId::STR_WEEKDAY_WEDNESDAY,
+                                          StrId::STR_WEEKDAY_THURSDAY, StrId::STR_WEEKDAY_FRIDAY,
+                                          StrId::STR_WEEKDAY_SATURDAY};
+    const int32_t days = daysFromCivil(utcYear, utcMonth, utcDay) + dayShift;
+    int ly, lm, ld;
+    civilFromDays(days, ly, lm, ld);
+    const int weekday = static_cast<int>(((days % 7) + 11) % 7);  // 1970-01-01 was a Thursday
+    snprintf(weekdayLine, sizeof(weekdayLine), "%s", I18N.get(WEEKDAYS[weekday]));
+    switch (SETTINGS.dateFormat) {
+      case CrossPointSettings::DATE_FORMAT_DMY:
+        snprintf(dateLine, sizeof(dateLine), "%02d-%02d-%04d", ld, lm, ly);
+        break;
+      case CrossPointSettings::DATE_FORMAT_MDY:
+        snprintf(dateLine, sizeof(dateLine), "%02d/%02d/%04d", lm, ld, ly);
+        break;
+      case CrossPointSettings::DATE_FORMAT_ISO:
+      default:
+        snprintf(dateLine, sizeof(dateLine), "%04d-%02d-%02d", ly, lm, ld);
+        break;
+    }
+  }
+
+  setupDisplayAndFonts(/*seamless=*/true);
+  renderer.clearScreen();  // dedicated white clock screen
+
+  // Centered stack: WEEKDAY (big) / H:MM + inline small AM/PM (biggest) / date
+  // (small). The time row is measured glyph-by-glyph — 3-digit times center
+  // exactly, no reserved slot for a leading hour digit.
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int digitW = pageWidth * 17 / 100;  // ~90px on the X3
+  const int digitH = digitW * 9 / 5;        // ~160px
+  const int gap = pageWidth * 5 / 200;      // ~13px between glyphs
+  const int colonW = pageWidth * 5 / 100;
+  const int stroke = digitW / 5;
+  // AM/PM matches HalClock::formatTime's fixed English marker.
+  const char* const ampm = isPm ? "PM" : "AM";
+  const int ampmGap = use12Hour ? gap : 0;
+  const int ampmW = use12Hour ? renderer.getTextWidth(NOTOSANS_18_FONT_ID, ampm, EpdFontFamily::BOLD) : 0;
+  const int hourDigits = (use12Hour && displayHour < 10) ? 1 : 2;
+  const int rowW = hourDigits * digitW + colonW + 2 * digitW + (hourDigits + 2) * gap + ampmGap + ampmW;
+
+  const bool haveDate = weekdayLine[0] != '\0';
+  const int bigLineH = renderer.getLineHeight(NOTOSANS_18_FONT_ID);
+  const int smallLineH = renderer.getLineHeight(NOTOSANS_12_FONT_ID);
+  const int gapAbove = pageHeight * 5 / 100;
+  const int gapBelow = pageHeight * 6 / 100;
+  const int blockH = digitH + (haveDate ? bigLineH + gapAbove + gapBelow + smallLineH : 0);
+  int y = (pageHeight - blockH) / 2;
+
+  if (haveDate) {
+    renderer.drawCenteredText(NOTOSANS_18_FONT_ID, y, weekdayLine, true, EpdFontFamily::BOLD);
+    y += bigLineH + gapAbove;
+  }
+
+  int x = (pageWidth - rowW) / 2;
+  if (hourDigits == 2) {
+    drawBlockDigit(x, y, digitW, digitH, displayHour / 10);
+    x += digitW + gap;
+  }
+  drawBlockDigit(x, y, digitW, digitH, displayHour % 10);
+  x += digitW + gap;
+  renderer.fillRect(x + (colonW - stroke) / 2, y + digitH / 3 - stroke / 2, stroke, stroke);
+  renderer.fillRect(x + (colonW - stroke) / 2, y + 2 * digitH / 3 - stroke / 2, stroke, stroke);
+  x += colonW + gap;
+  drawBlockDigit(x, y, digitW, digitH, displayMinute / 10);
+  x += digitW + gap;
+  drawBlockDigit(x, y, digitW, digitH, displayMinute % 10);
+  if (use12Hour) {
+    x += digitW + ampmGap;
+    // Inline AM/PM, small, seated on the digits' baseline.
+    renderer.drawText(NOTOSANS_18_FONT_ID, x, y + digitH - bigLineH, ampm, true, EpdFontFamily::BOLD);
+  }
+
+  if (haveDate) {
+    renderer.drawCenteredText(NOTOSANS_12_FONT_ID, y + digitH + gapBelow, dateLine);
+  }
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+
+  delay(CLOCK_PEEK_HOLD_MS);
+
+  // Put the untouched sleep screen back before sleeping so the peek leaves no
+  // trace. Quick-resume sleeps restore from the 1-bit frame dump (that IS the
+  // sleep screen). Everything else re-renders properly: cover/custom screens are
+  // drawn in grayscale, which the dump can't represent — restoring it leaves a
+  // washed-out cover.
+  const bool quickResumeSleep = !APP_STATE.showBootScreen;
+  if (quickResumeSleep && peekLoadSleepFrame()) {
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  } else {
+    SleepActivity restoreSleepScreen(renderer, mappedInputManager, /*fromTimeout=*/false, /*quiet=*/true);
+    restoreSleepScreen.onEnter();
+  }
+  halTiltSensor.deepSleep();
+  display.deepSleep();
+  powerManager.startDeepSleep(gpio, clockPeekArmed());
 }
 
 void setup() {
@@ -321,13 +554,17 @@ void setup() {
       LOG_DBG("MAIN", "Verifying power button press duration");
       if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
                                         SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
-        powerManager.startDeepSleep(gpio);
+        powerManager.startDeepSleep(gpio, clockPeekArmed());
       }
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-      powerManager.startDeepSleep(gpio);
+      powerManager.startDeepSleep(gpio, clockPeekArmed());
+      break;
+    case HalGPIO::WakeupReason::ClockPeek:
+      LOG_DBG("MAIN", "Wakeup reason: Clock peek (side button)");
+      runClockPeek();  // never returns
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot
@@ -335,6 +572,10 @@ void setup() {
     default:
       break;
   }
+
+  // Any full boot is a real wake: reset the clock-peek burst guard and re-arm.
+  clockPeekMagic = CLOCK_PEEK_MAGIC;
+  clockPeekBurst = 0;
 
   // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
   // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB

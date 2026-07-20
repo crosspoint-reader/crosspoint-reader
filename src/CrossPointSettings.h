@@ -73,6 +73,7 @@ class CrossPointSettings {
   };
 
   enum STATUS_BAR_CLOCK_MODE { STATUS_BAR_CLOCK_HIDE = 0, STATUS_BAR_CLOCK_RIGHT = 1, STATUS_BAR_CLOCK_LEFT = 2 };
+  enum DATE_FORMAT { DATE_FORMAT_ISO = 0, DATE_FORMAT_DMY = 1, DATE_FORMAT_MDY = 2, DATE_FORMAT_COUNT };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -207,6 +208,12 @@ class CrossPointSettings {
   uint8_t clockUtcOffsetQ = 48;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
+  // Date display format (used by the sleep clock peek face)
+  uint8_t dateFormat = DATE_FORMAT_ISO;
+  // Wake on the side page-turn button while asleep to flash the time (X3 only,
+  // requires DS3231 RTC). Keeps the device in deep sleep instead of powering
+  // off, which costs ~12.8uA of standby drain while armed.
+  uint8_t sleepClockPeek = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;
