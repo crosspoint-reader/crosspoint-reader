@@ -8,6 +8,8 @@
 
 #include <cstring>
 
+#include "../../../../src/fontIds.h"
+
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
   size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
@@ -38,8 +40,9 @@ void TextBlock::bindArenaPointers() {
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle)
-    : blockStyle(blockStyle) {
+                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
+                     std::vector<std::string> rubyTexts)
+    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {
   // Focus annotations are optional: empty vectors mean no word in this block has a split.
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
@@ -108,6 +111,13 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   }
 }
 
+bool TextBlock::hasRuby() const {
+  for (const auto& rt : rubyTexts) {
+    if (!rt.empty()) return true;
+  }
+  return false;
+}
+
 void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
   if (!isValid) {
     LOG_ERR("TXB", "Render skipped: invalid block");
@@ -116,6 +126,84 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
 
   const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
+
+  // Resolve ruby collisions left-to-right to prevent adjacent ruby texts from overlapping
+  struct RubyDrawInfo {
+    int x;
+    int width;
+    std::string text;
+    BidiUtils::BidiBaseDir baseDir;
+  };
+  std::vector<int> wordShiftArr(numWords, 0);
+  std::vector<RubyDrawInfo> rubies(numWords);
+  if (hasRuby()) {
+    int accumulatedShift = 0;
+    int lastEnd = -9999;
+    for (uint16_t i = 0; i < numWords; i++) {
+      wordShiftArr[i] = accumulatedShift;
+      if (i < rubyTexts.size() && !rubyTexts[i].empty() && (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
+        // Find the group size (how many words are part of this ruby annotation)
+        int groupWordCount = 1;
+        while (i + groupWordCount < numWords && (wordStyle(i + groupWordCount) & EpdFontFamily::RUBY_CONTINUE) != 0) {
+          groupWordCount++;
+        }
+
+        // Compute actual width for the group
+        int groupActualWidth = 0;
+        for (int k = 0; k < groupWordCount; ++k) {
+          groupActualWidth += renderer.getTextAdvanceX(fontId, wordText(i + k), wordStyle(i + k));
+        }
+
+        const char* word = wordText(i);
+        const int leaderWordX = xposArr[i] + x;
+        const int leaderWordX_shifted = leaderWordX + accumulatedShift;
+        const auto baseDir =
+            static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));
+        const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+        const int screenWidth = renderer.getScreenWidth();
+
+        int rubyX = 0;
+        int groupDrawX = 0;
+        if (rubyWidth > groupActualWidth) {
+          rubyX = leaderWordX_shifted - (rubyWidth - groupActualWidth) / 2;
+          if (i == 0) {
+            rubyX = std::max(leaderWordX_shifted, rubyX);
+          }
+          if (rubyX < lastEnd) {
+            rubyX = lastEnd;
+          }
+          groupDrawX = rubyX + (rubyWidth - groupActualWidth) / 2;
+        } else {
+          groupDrawX = leaderWordX_shifted;
+          rubyX = groupDrawX + (groupActualWidth - rubyWidth) / 2;
+          if (i == 0) {
+            rubyX = std::max(leaderWordX_shifted, rubyX);
+          }
+          if (rubyX < lastEnd) {
+            const int push = lastEnd - rubyX;
+            rubyX = lastEnd;
+            groupDrawX += push;
+          }
+        }
+        rubyX = std::max(0, std::min(rubyX, screenWidth - rubyWidth));
+        // Keep groupDrawX aligned if rubyX was clamped by screen edges
+        if (rubyWidth > groupActualWidth) {
+          groupDrawX = rubyX + (rubyWidth - groupActualWidth) / 2;
+        }
+
+        rubies[i] = {rubyX, rubyWidth, rubyTexts[i], baseDir};
+        lastEnd = rubyX + rubyWidth;
+
+        // Propagate shift to all words in the group and subsequent words
+        const int groupShift = groupDrawX - leaderWordX;
+        accumulatedShift = groupShift;
+        for (int k = 0; k < groupWordCount; ++k) {
+          wordShiftArr[i + k] = accumulatedShift;
+        }
+        i += groupWordCount - 1;
+      }
+    }
+  }
 
   struct DecorationLineTracker {
     EpdFontFamily::Style style;
@@ -161,12 +249,15 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     // drawText, so these offsets are chosen relative to the full-size ascender:
     //   SUP: raise by 40% of ascender — sits clearly above the cap-height
     //   SUB: lower by 25% of ascender — descends below baseline without clashing with ascenders below
-    int wordY = y;
+    const int rubyShift = getRubyShift(ascender);
+    int wordY = y + rubyShift;
     if ((currentStyle & EpdFontFamily::SUP) != 0) {
       wordY -= ascender * 2 / 5;
     } else if ((currentStyle & EpdFontFamily::SUB) != 0) {
       wordY += ascender / 4;
     }
+
+    const int drawX = wordX + wordShiftArr[i];
 
     if (boundary > 0) {
       // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
@@ -182,11 +273,18 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
           std::min<size_t>({static_cast<size_t>(boundary), static_cast<size_t>(wordTextLen(i)), sizeof(boldBuf) - 1});
       memcpy(boldBuf, word, boldLen);
       boldBuf[boldLen] = '\0';
-      renderer.drawText(fontId, wordX, wordY, boldBuf, true, boldStyle, baseDir);
-      const int suffixX = wordX + focusSuffixXArr[i];
+      renderer.drawText(fontId, drawX, wordY, boldBuf, true, boldStyle, baseDir);
+      const int suffixX = drawX + focusSuffixXArr[i];
       renderer.drawText(fontId, suffixX, wordY, word + boldLen, true, currentStyle, baseDir);
     } else {
-      renderer.drawText(fontId, wordX, wordY, word, true, currentStyle, baseDir);
+      renderer.drawText(fontId, drawX, wordY, word, true, currentStyle, baseDir);
+    }
+
+    // Horizontal ruby text rendering
+    if (i < rubyTexts.size() && !rubyTexts[i].empty() && (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
+      const int rubyY = wordY - ascender;
+      renderer.drawText(fontId, rubies[i].x, rubyY, rubies[i].text.c_str(), true, EpdFontFamily::SUP,
+                        rubies[i].baseDir);
     }
 
     if (scanning) {
@@ -194,7 +292,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     }
 
     if (EpdFontFamily::hasTextDecoration(currentStyle)) {
-      int lineStartX = wordX;
+      int lineStartX = drawX;
       int lineWidth = renderer.getTextWidth(fontId, word, currentStyle, baseDir);
 
       if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
@@ -253,6 +351,11 @@ bool TextBlock::serialize(HalFile& file) const {
       LOG_ERR("TXB", "Serialization failed: arena write (%u bytes)", static_cast<uint32_t>(size));
       return false;
     }
+  }
+
+  // Ruby text data
+  for (size_t i = 0; i < numWords; i++) {
+    serialization::writeString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string());
   }
 
   // Style (alignment + margins/padding/indent)
@@ -331,6 +434,13 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
       }
     }
   }
+
+  // Ruby text data
+  std::vector<std::string> rubyTexts(wc);
+  for (auto& rt : rubyTexts) {
+    serialization::readString(file, rt);
+  }
+  block->rubyTexts = std::move(rubyTexts);
 
   // Style (alignment + margins/padding/indent)
   BlockStyle& blockStyle = block->blockStyle;
