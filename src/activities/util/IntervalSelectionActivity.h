@@ -43,6 +43,7 @@ class IntervalSelectionActivity final : public Activity {
   int largeStep;
   bool readerActivity;
   bool ignoreConfirmRelease;
+  bool draggingBar = false;
   ButtonNavigator buttonNavigator;
 
   void adjustValue(int delta);

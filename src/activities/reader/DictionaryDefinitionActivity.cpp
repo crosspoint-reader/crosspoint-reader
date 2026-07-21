@@ -164,6 +164,23 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  // Same tap zones as the reader page turns: left third = previous page,
+  // the rest = next. Back is the usual left-edge swipe.
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    if (tx < renderer.getScreenWidth() / 3) {
+      if (currentPage > 0) {
+        currentPage--;
+        requestUpdate();
+      }
+    } else if (currentPage + 1 < totalPages) {
+      currentPage++;
+      requestUpdate();
+    }
+    return;
+  }
+
   buttonNavigator.onNext([this] {
     if (currentPage + 1 < totalPages) {
       currentPage++;
