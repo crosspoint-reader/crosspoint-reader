@@ -9,9 +9,10 @@
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
 
-// Button-driven word selection over the current reader page: Left/Right step
-// through words in reading order, Up/Down jump rows, Confirm looks the word up
-// and opens DictionaryDefinitionActivity, Back returns to the reader.
+// Word selection over the current reader page: Left/Right step through words
+// in reading order, Up/Down jump rows, Confirm looks the word up and opens
+// DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
+// touch-down moves the highlight and a tap on a word looks it up directly.
 class DictionaryWordSelectActivity final : public Activity {
  public:
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -41,6 +42,7 @@ class DictionaryWordSelectActivity final : public Activity {
 
   void extractWords();
   int closestInRow(uint16_t row, int centerX) const;
+  int wordAt(int x, int y) const;
   void moveVertical(int direction);
   void performLookup();
   bool drawHighlightWithSnapshot();

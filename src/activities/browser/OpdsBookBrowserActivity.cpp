@@ -14,6 +14,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "components/icons/search24.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
@@ -23,8 +24,22 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
+constexpr int HEADER_Y = 15;
+constexpr int HEADER_X = 16;
+constexpr int SEARCH_ICON_SIZE = 24;
+constexpr int SEARCH_ICON_MARGIN = 14;
+constexpr int SEARCH_ICON_Y = 15;
 constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
 constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
+
+Rect searchIconRect(const GfxRenderer& renderer) {
+  return Rect{renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN, SEARCH_ICON_Y, SEARCH_ICON_SIZE + 8,
+              SEARCH_ICON_SIZE + 8};
+}
+
+bool contains(const Rect& rect, const int x, const int y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
 }  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
@@ -72,7 +87,9 @@ void OpdsBookBrowserActivity::loop() {
   }
 
   if (state == BrowserState::ERROR) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(tx, ty)) {
       if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
         state = BrowserState::LOADING;
         statusMessage = tr(STR_LOADING);
@@ -97,18 +114,59 @@ void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::DOWNLOADING) return;
 
   if (state == BrowserState::BROWSING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    auto activateSelected = [this] {
       if (!entries.empty()) {
         const auto& entry = entries[selectorIndex];
         entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
       }
+    };
+
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      activateSelected();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
     }
 
+    int tx = 0;
+    int ty = 0;
+    if (!searchTemplate.empty() && mappedInput.wasScreenTapped(tx, ty) && contains(searchIconRect(renderer), tx, ty)) {
+      launchSearch();
+      return;
+    }
+
     if (!entries.empty()) {
+      int row = -1;
+      const auto touch = mappedInput.rowTouch(row, /*top=*/60, /*rowStep=*/30, PAGE_ITEMS);
+      if (touch != MappedInputManager::RowTouch::None) {
+        const int touched = selectorIndex / PAGE_ITEMS * PAGE_ITEMS + row;
+        if (touched >= 0 && touched < static_cast<int>(entries.size())) {
+          if (touch == MappedInputManager::RowTouch::Down) {
+            if (selectorIndex != touched) {
+              selectorIndex = touched;
+              requestUpdate();
+            }
+          } else {
+            selectorIndex = touched;
+            activateSelected();
+          }
+          return;
+        }
+      }
+
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up) {
+        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        requestUpdate();
+        return;
+      }
+      if (swipe == MappedInputManager::SwipeDir::Down) {
+        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
+        requestUpdate();
+        return;
+      }
+
       buttonNavigator.onNextRelease([this] {
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
         requestUpdate();
@@ -136,7 +194,14 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
   // Show server name in header if available, otherwise generic title
   const char* headerTitle = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
+  const int headerRightInset = searchTemplate.empty() ? HEADER_X : (SEARCH_ICON_SIZE + SEARCH_ICON_MARGIN * 2 + 8);
+  const auto clippedHeader =
+      renderer.truncatedText(UI_12_FONT_ID, headerTitle, pageWidth - HEADER_X - headerRightInset, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, HEADER_X, HEADER_Y, clippedHeader.c_str(), true, EpdFontFamily::BOLD);
+  if (!searchTemplate.empty()) {
+    const auto rect = searchIconRect(renderer);
+    renderer.drawIcon(Search24Icon.bits, rect.x + 4, rect.y + 4, Search24Icon.w);
+  }
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
@@ -149,6 +214,9 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   if (state == BrowserState::ERROR) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_ERROR_MSG));
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
+    if (mappedInput.hasTouch()) {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 40, tr(STR_TAP_TO_RETRY));
+    }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();

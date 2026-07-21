@@ -1,7 +1,11 @@
 #pragma once
 
+#include <GfxRenderer.h>
+
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
+
+struct Rect;
 
 // Dedicated UTC offset picker for the status bar clock.
 // Three editable fields (sign, hours, minutes); Confirm cycles fields, Up/Down adjust the active one.
@@ -34,4 +38,6 @@ class ClockOffsetActivity final : public Activity {
   void saveToSettings() const;
   void adjustActiveField(int delta);
   void clampForSign();
+  bool fieldFromPoint(int x, int y, Field& field) const;
+  void getTouchControlRects(Rect& minusRect, Rect& plusRect) const;
 };

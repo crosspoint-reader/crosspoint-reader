@@ -1154,12 +1154,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         }
         self->partWordBufferIndex = safeLen;
         self->flushPartWordBuffer();
+        self->nextWordContinues = true;
         for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
         }
         self->partWordBufferIndex = overflow;
       } else {
         self->flushPartWordBuffer();
+        self->nextWordContinues = true;
       }
     }
 

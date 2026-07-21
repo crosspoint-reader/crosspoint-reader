@@ -22,12 +22,17 @@ void ConfirmationActivity::onEnter() {
     safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
   }
 
-  int totalHeight = 0;
-  if (!safeHeading.empty()) totalHeight += lineHeight;
-  if (!safeBody.empty()) totalHeight += lineHeight;
-  if (!safeHeading.empty() && !safeBody.empty()) totalHeight += spacing;
+  // Text sits in the upper part of the screen so the confirmation popup
+  // (centered) doesn't cover it.
+  startY = renderer.getScreenHeight() / 6;
 
-  startY = (renderer.getScreenHeight() - totalHeight) / 2;
+  const char* options[] = {I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM)};
+  confirmPopup.show(safeHeading.c_str(), options, 2, 0, [this](int idx) {
+    ActivityResult res;
+    res.isCancelled = (idx != 1);
+    setResult(std::move(res));
+    finish();
+  });
 
   requestUpdate(true);
 }
@@ -48,27 +53,17 @@ void ConfirmationActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(fontId, currentY, safeBody.c_str(), true, EpdFontFamily::REGULAR);
   }
 
-  // Draw UI Elements
-  const auto labels = mappedInput.mapLabels("", "", I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (confirmPopup.processRender(renderer, mappedInput)) return;
 
   renderer.displayBuffer(HalDisplay::RefreshMode::FAST_REFRESH);
 }
 
 void ConfirmationActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    ActivityResult res;
-    res.isCancelled = false;
-    setResult(std::move(res));
-    finish();
-    return;
-  }
+  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-    ActivityResult res;
-    res.isCancelled = true;
-    setResult(std::move(res));
-    finish();
-    return;
-  }
+  // Popup dismissed without a selection (Back button or tap outside): cancel.
+  ActivityResult res;
+  res.isCancelled = true;
+  setResult(std::move(res));
+  finish();
 }

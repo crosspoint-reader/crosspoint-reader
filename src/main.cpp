@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <BoardConfig.h>
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
@@ -260,6 +261,8 @@ void setupDisplayAndFonts(bool seamless = false) {
 }
 
 void setup() {
+  BoardConfig::holdPowerRails();
+
   t1 = millis();
 
 #ifdef ENABLE_SERIAL_LOG
@@ -270,7 +273,9 @@ void setup() {
   // worked without the delay because USB was already enumerated.
   delay(250);
   Serial.begin(115200);
+#if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
+#endif
 #endif
 
   HalSystem::begin();
@@ -444,6 +449,7 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
+  gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
@@ -474,7 +480,7 @@ void loop() {
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
       activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity

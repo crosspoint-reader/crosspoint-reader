@@ -71,16 +71,7 @@ void FontSelectionActivity::onEnter() {
 void FontSelectionActivity::onExit() { Activity::onExit(); }
 
 void FontSelectionActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    SETTINGS.fontFamily = originalFontFamily_;
-    strncpy(SETTINGS.sdFontFamilyName, originalSdFontFamilyName_, sizeof(SETTINGS.sdFontFamilyName) - 1);
-    SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-    sdFontSystem.ensureLoaded(renderer);
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  auto activateSelected = [this] {
     if (selectedIndex_ == previewFontIndex_) {
       handleSelection();
     } else {
@@ -100,12 +91,48 @@ void FontSelectionActivity::loop() {
       }
       requestUpdate();
     }
+  };
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    SETTINGS.fontFamily = originalFontFamily_;
+    strncpy(SETTINGS.sdFontFamilyName, originalSdFontFamilyName_, sizeof(SETTINGS.sdFontFamilyName) - 1);
+    SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
+    sdFontSystem.ensureLoaded(renderer);
+    finish();
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    activateSelected();
     return;
   }
 
   const int listSize = static_cast<int>(fonts_.size());
   const int pageItems =
       UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, previewHeight + metrics_.verticalSpacing);
+  const int listTop = afterHeader + previewHeight + metrics_.verticalSpacing;
+  const int listHeight = usableHeight - previewHeight - metrics_.verticalSpacing;
+  switch (handleListTouch(selectedIndex_, listSize, listTop, listHeight, false)) {
+    case ListTouchResult::Activated:
+      activateSelected();
+      return;
+    case ListTouchResult::Consumed:
+      return;
+    case ListTouchResult::None:
+      break;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectedIndex_ = ButtonNavigator::nextPageIndex(selectedIndex_, listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectedIndex_ = ButtonNavigator::previousPageIndex(selectedIndex_, listSize, pageItems);
+    requestUpdate();
+    return;
+  }
 
   buttonNavigator_.onNextRelease([this, listSize] {
     selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
