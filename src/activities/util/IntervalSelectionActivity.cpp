@@ -22,7 +22,12 @@ void IntervalSelectionActivity::onEnter() {
 }
 
 void IntervalSelectionActivity::adjustValue(const int delta) {
-  value = clampedValue(value + delta);
+  const int candidate = value + delta;
+  if (minBoundaryLabelId != StrId::STR_NONE_OPT && candidate > minValue && candidate < minValue + smallStep) {
+    value = delta > 0 ? minValue + smallStep : minValue;
+  } else {
+    value = clampedValue(candidate);
+  }
   requestUpdate();
 }
 
@@ -82,7 +87,9 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, I18N.get(titleId), true, EpdFontFamily::BOLD);
 
   char formattedValue[32];
-  if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
+  if (minBoundaryLabelId != StrId::STR_NONE_OPT && value == minValue) {
+    snprintf(formattedValue, sizeof(formattedValue), "%s", I18N.get(minBoundaryLabelId));
+  } else if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
     snprintf(formattedValue, sizeof(formattedValue), "%s", I18N.get(maxBoundaryLabelId));
   } else if (valueFormatId != StrId::STR_NONE_OPT) {
     snprintf(formattedValue, sizeof(formattedValue), I18N.get(valueFormatId), static_cast<unsigned int>(value));

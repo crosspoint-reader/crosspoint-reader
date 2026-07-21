@@ -1171,6 +1171,11 @@ void CrossPointWebServer::handleDelete() const {
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
+      if (!canDeleteOrRelocateBookFile(itemPath.c_str())) {
+        failedItems += itemPath + " (book statistics recovery pending); ";
+        allSuccess = false;
+        continue;
+      }
       success = Storage.remove(itemPath.c_str());
       if (success) removeBookUserStateAfterDelete(itemPath.c_str());
     }

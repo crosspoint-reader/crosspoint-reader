@@ -3,6 +3,7 @@ add_executable(ReadingStatsTest
   ${REPO_ROOT}/src/activities/reader/BookReadingStats.cpp
   ${REPO_ROOT}/src/activities/reader/GlobalReadingStats.cpp
   ${REPO_ROOT}/src/activities/reader/ReadingStatsCodec.cpp
+  ${REPO_ROOT}/src/activities/reader/ReadingStatsCompletionTransaction.cpp
   ${REPO_ROOT}/src/activities/reader/ReadingStatsModels.cpp
   ${REPO_ROOT}/src/activities/reader/ReadingStatsStorage.cpp
   ${REPO_ROOT}/src/activities/reader/ReadingStatsUtils.cpp

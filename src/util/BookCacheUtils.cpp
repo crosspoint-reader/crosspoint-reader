@@ -31,12 +31,16 @@ constexpr size_t MOVE_READY_HEADER_SIZE = MOVE_READY_MAGIC.size() + (sizeof(uint
 constexpr size_t MAX_MOVE_PATH_BYTES = 512;
 constexpr char VERSIONED_STATS_PREFIX[] = "stats_v";
 constexpr std::array<const char*, 3> VERSIONED_STATS_SUFFIXES = {".bin", ".bin.bak", ".bin.tmp"};
-constexpr std::array<const char*, 12> USER_STATE_FILES = {"progress.bin",
+constexpr std::array<const char*, 16> USER_STATE_FILES = {"progress.bin",
                                                           "progress.bin.bak",
                                                           "progress.bin.tmp",
                                                           "reader_settings.bin",
                                                           "reader_settings.bin.bak",
                                                           "reader_settings.bin.tmp",
+                                                          "reader_settings.bin.crossink-v1.orig",
+                                                          "reader_settings.bin.crossink-v1.orig.tmp",
+                                                          "reader_settings.bin.crossink-v2.orig",
+                                                          "reader_settings.bin.crossink-v2.orig.tmp",
                                                           "crossvi_reader_settings.bin",
                                                           "crossvi_reader_settings.bin.bak",
                                                           "crossvi_reader_settings.bin.tmp",

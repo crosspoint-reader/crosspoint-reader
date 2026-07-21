@@ -156,6 +156,7 @@ bool HalFile::seekCur(int64_t offset) { HAL_FILE_WRAPPED_CALL(seekCur, offset); 
 bool HalFile::seekSet(size_t offset) { HAL_FILE_WRAPPED_CALL(seekSet, offset); }
 int HalFile::available() const { HAL_FILE_WRAPPED_CALL(available, ); }
 size_t HalFile::position() const { HAL_FILE_WRAPPED_CALL(position, ); }
+uint8_t HalFile::getError() const { HAL_FILE_WRAPPED_CALL(getError, ); }
 int HalFile::read(void* buf, size_t count) {
   HalStorage::StorageLock lock;
   assert(impl != nullptr);

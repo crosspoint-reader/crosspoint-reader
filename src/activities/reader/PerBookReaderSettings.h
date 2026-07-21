@@ -11,7 +11,8 @@ struct PerBookReaderSettings {
   static constexpr size_t SD_FONT_NAME_CAPACITY = 32;
 
   bool hasReaderOverrides = false;
-  bool hasAutoPageTurnRate = false;
+  bool hasAutoPageTurnInterval = false;
+  bool autoPageTurnStartsOnOpen = false;
 
   uint8_t fontFamily = 0;
   uint8_t fontSize = 1;
@@ -25,8 +26,8 @@ struct PerBookReaderSettings {
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
   uint8_t imageRendering = 0;
-  // Stored as pages per minute instead of a menu index so menu reordering cannot change its meaning.
-  uint8_t autoPageTurnRate = 0;
+  // Stored as seconds instead of a menu index so menu reordering cannot change its meaning.
+  uint8_t autoPageTurnSeconds = 0;
   std::array<char, SD_FONT_NAME_CAPACITY> sdFontFamilyName{};
 
   bool operator==(const PerBookReaderSettings&) const = default;

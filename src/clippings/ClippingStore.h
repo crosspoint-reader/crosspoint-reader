@@ -9,6 +9,9 @@
 
 class ClippingStore {
  public:
+  static constexpr size_t MAX_CATALOG_BOOKS = 32;
+  static constexpr size_t MAX_CATALOG_DIRECTORY_ENTRIES = 128;
+
   enum class LoadResult : uint8_t {
     Ready,
     Loaded,
@@ -40,6 +43,38 @@ class ClippingStore {
     IoError,
   };
 
+  enum class CatalogLoadResult : uint8_t {
+    Loaded,
+    DirectoryMissing,
+    IoError,
+  };
+
+  enum class ExportResult : uint8_t {
+    Exported,
+    Empty,
+    CatalogIncomplete,
+    SourceChanged,
+    NoAvailableName,
+    IoError,
+  };
+
+  struct CatalogEntry {
+    ClippingCodec::BookMetadata book;
+    std::string sourcePath;
+    ClippingCodec::Format format = ClippingCodec::Format::Current;
+    uint32_t fileLength = 0;
+    uint32_t newestTimestamp = 0;
+    uint16_t clippingCount = 0;
+    bool bookExists = false;
+  };
+
+  struct Catalog {
+    std::vector<CatalogEntry> entries;
+    uint16_t skippedBooks = 0;
+    bool directoryTruncated = false;
+    bool entryNameTruncated = false;
+  };
+
   LoadResult loadForBook(const std::string& filePath, const std::string& title, const std::string& author,
                          const std::string& bookType = "epub");
   // Removes canonical/backup/temp only after every existing file validates as
@@ -54,6 +89,13 @@ class ClippingStore {
   // or mismatched files fail closed and remain in their current location.
   static bool quarantineFilesForBook(const std::string& filePath, const std::string& quarantineDirectory,
                                      const std::string& bookType = "epub");
+  // Scans exact canonical/.bak/.tmp clipping names without changing, promoting,
+  // or migrating any file. At most MAX_CATALOG_BOOKS valid book stores are
+  // retained; the report exposes every bounded/truncated case to callers.
+  static CatalogLoadResult loadCatalog(Catalog& catalog);
+  // Revalidates and streams a complete catalog into a new root-level text file.
+  // Existing exports and CrossInk's /My Clippings.txt are never overwritten.
+  static ExportResult exportCatalog(const Catalog& catalog, std::string& outputPath);
   void unload();
 
   AddResult add(const ClippingCodec::ClippingMetadata& clipping, std::string_view text);
@@ -80,6 +122,8 @@ class ClippingStore {
   const ClippingCodec::ClippingMetadata* at(size_t index) const;
   const std::vector<ClippingCodec::ClippingMetadata>& entries() const { return index_.clippings; }
   const ClippingCodec::BookMetadata& book() const { return book_; }
+  ClippingCodec::Format format() const { return index_.format; }
+  uint32_t fileLength() const { return index_.fileLength; }
   ClippingCodec::Status lastCodecStatus() const { return lastCodecStatus_; }
   const std::string& path() const { return storePath_; }
 

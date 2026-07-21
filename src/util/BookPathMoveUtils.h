@@ -43,6 +43,11 @@ bool recoverInterruptedBookFileReplacement(const std::string& bookPath);
 // files; browsers and book scanners must never expose them for mutation.
 bool isBookFileTransactionArtifact(const char* fileName);
 
+// Must be checked before physically deleting an EPUB. Move/replace helpers
+// also enforce this internally. A pending completion transaction keeps its
+// exact cache path authoritative until recovery succeeds.
+bool canDeleteOrRelocateBookFile(const std::string& bookPath);
+
 // Call only after the backing file has been successfully deleted or replaced.
 // Removes path-keyed data so a future unrelated book at the same path cannot
 // inherit it. Cleanup is best-effort and never removes another path's state.

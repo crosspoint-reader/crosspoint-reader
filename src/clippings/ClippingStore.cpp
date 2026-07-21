@@ -6,8 +6,11 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
+#include <ctime>
 #include <limits>
 #include <numeric>
+#include <string_view>
 #include <utility>
 
 namespace {
@@ -338,6 +341,175 @@ bool sameTextPayloads(HalFile& source, const ClippingCodec::Index& sourceIndex, 
   return true;
 }
 
+bool hasSuffix(const std::string_view value, const std::string_view suffix) {
+  return value.size() >= suffix.size() && value.substr(value.size() - suffix.size()) == suffix;
+}
+
+bool parseCatalogFileName(const std::string_view name, std::string& canonicalName) {
+  std::string_view base = name;
+  if (hasSuffix(base, ".bak") || hasSuffix(base, ".tmp")) base.remove_suffix(4);
+  if (!hasSuffix(base, ".bin")) return false;
+
+  const std::string_view stem = base.substr(0, base.size() - 4);
+  const size_t separator = stem.rfind('_');
+  if (separator == std::string_view::npos || separator == 0 || separator > ClippingCodec::MAX_BOOK_TYPE_BYTES ||
+      separator + 1 >= stem.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < separator; ++i) {
+    const char c = stem[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))) return false;
+  }
+
+  const std::string_view checksum = stem.substr(separator + 1);
+  if (checksum.size() > 10 || (checksum.size() > 1 && checksum.front() == '0')) return false;
+  uint64_t value = 0;
+  for (const char c : checksum) {
+    if (c < '0' || c > '9') return false;
+    value = value * 10 + static_cast<uint64_t>(c - '0');
+    if (value > std::numeric_limits<uint32_t>::max()) return false;
+  }
+  canonicalName.assign(base);
+  return true;
+}
+
+ClippingCodec::Status inspectCatalogPath(const std::string& path, const std::string& canonicalPath,
+                                         ClippingStore::CatalogEntry& entry) {
+  HalFile file;
+  if (!Storage.openFileForRead("CLIP", path, file)) return ClippingCodec::Status::IoError;
+  ClippingCodec::Index index;
+  ClippingCodec::Status status = inspectOpenFile(file, index);
+  if (!file.close() && status == ClippingCodec::Status::Ok) status = ClippingCodec::Status::IoError;
+  if (status != ClippingCodec::Status::Ok) return status;
+  if (ClippingCodec::filePathForBook(index.book.path, index.book.bookType) != canonicalPath) {
+    return ClippingCodec::Status::Corrupt;
+  }
+  entry.book = std::move(index.book);
+  entry.sourcePath = path;
+  entry.format = index.format;
+  entry.fileLength = index.fileLength;
+  if (index.format == ClippingCodec::Format::Current) {
+    for (const auto& clipping : index.clippings) {
+      entry.newestTimestamp = std::max(entry.newestTimestamp, clipping.timestamp);
+    }
+  }
+  entry.clippingCount = static_cast<uint16_t>(index.clippings.size());
+  HalFile book = Storage.open(entry.book.path.c_str());
+  if (book) {
+    const bool regularFile = !book.isDirectory();
+    entry.bookExists = book.close() && regularFile;
+  }
+  return ClippingCodec::Status::Ok;
+}
+
+bool resolveCatalogBase(const std::string& canonicalName, ClippingStore::CatalogEntry& entry) {
+  const std::string canonicalPath = std::string(ClippingCodec::DIRECTORY) + "/" + canonicalName;
+  const std::string backupPath = canonicalPath + ".bak";
+  const std::string tempPath = canonicalPath + ".tmp";
+
+  if (Storage.exists(canonicalPath.c_str())) {
+    const ClippingCodec::Status status = inspectCatalogPath(canonicalPath, canonicalPath, entry);
+    if (status == ClippingCodec::Status::Ok) return true;
+    if (protectedSiblingForWrite(status)) return false;
+  }
+
+  ClippingStore::CatalogEntry backupEntry;
+  ClippingCodec::Status backupStatus = ClippingCodec::Status::BadMagic;
+  if (Storage.exists(backupPath.c_str())) {
+    backupStatus = inspectCatalogPath(backupPath, canonicalPath, backupEntry);
+    if (protectedSiblingForWrite(backupStatus)) return false;
+  }
+
+  ClippingStore::CatalogEntry tempEntry;
+  ClippingCodec::Status tempStatus = ClippingCodec::Status::BadMagic;
+  if (Storage.exists(tempPath.c_str())) {
+    tempStatus = inspectCatalogPath(tempPath, canonicalPath, tempEntry);
+    if (protectedSiblingForWrite(tempStatus)) return false;
+  }
+
+  if (backupStatus == ClippingCodec::Status::Ok) {
+    entry = std::move(backupEntry);
+    return true;
+  }
+  if (tempStatus == ClippingCodec::Status::Ok) {
+    entry = std::move(tempEntry);
+    return true;
+  }
+  return false;
+}
+
+bool sameCatalogEntry(const ClippingStore::CatalogEntry& left, const ClippingStore::CatalogEntry& right) {
+  return left.sourcePath == right.sourcePath && left.format == right.format && left.fileLength == right.fileLength &&
+         left.newestTimestamp == right.newestTimestamp && left.clippingCount == right.clippingCount &&
+         sameBook(left.book, right.book);
+}
+
+bool sameCatalogSnapshot(const ClippingStore::Catalog& left, const ClippingStore::Catalog& right) {
+  if (left.entries.size() != right.entries.size()) return false;
+  return std::all_of(left.entries.begin(), left.entries.end(), [&](const ClippingStore::CatalogEntry& expected) {
+    return std::any_of(right.entries.begin(), right.entries.end(),
+                       [&](const ClippingStore::CatalogEntry& current) { return sameCatalogEntry(expected, current); });
+  });
+}
+
+bool writeExportText(HalFile& file, const std::string_view text, uint64_t& length, uint32_t& checksum) {
+  if (text.size() > std::numeric_limits<uint64_t>::max() - length ||
+      file.write(text.data(), text.size()) != text.size()) {
+    return false;
+  }
+  checksum = ClippingCodec::crc32(reinterpret_cast<const uint8_t*>(text.data()), text.size(), checksum);
+  length += text.size();
+  return true;
+}
+
+bool writeExportField(HalFile& file, const std::string_view label, const std::string_view value, uint64_t& length,
+                      uint32_t& checksum) {
+  std::string line(label);
+  line.reserve(label.size() + value.size() + 1);
+  const size_t valueOffset = line.size();
+  line.resize(valueOffset + value.size());
+  std::transform(value.begin(), value.end(), line.begin() + static_cast<std::ptrdiff_t>(valueOffset),
+                 [](const char c) { return c == '\r' || c == '\n' ? ' ' : c; });
+  line.push_back('\n');
+  return writeExportText(file, line, length, checksum);
+}
+
+std::string formattedUtcTimestamp(const uint32_t timestamp, const ClippingCodec::Format format) {
+  if (format != ClippingCodec::Format::Current) return "Unknown (legacy)";
+  constexpr uint32_t EARLIEST_PLAUSIBLE_EPOCH = 1577836800U;  // 2020-01-01
+  constexpr uint32_t LATEST_PLAUSIBLE_EPOCH = 4102444799U;    // 2099-12-31
+  if (timestamp < EARLIEST_PLAUSIBLE_EPOCH || timestamp > LATEST_PLAUSIBLE_EPOCH) return "Unknown";
+  const time_t raw = static_cast<time_t>(timestamp);
+  std::tm utc{};
+  if (!gmtime_r(&raw, &utc)) return "Unknown";
+  char buffer[32]{};
+  const int written = std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d UTC", utc.tm_year + 1900,
+                                    utc.tm_mon + 1, utc.tm_mday, utc.tm_hour, utc.tm_min);
+  return written > 0 && static_cast<size_t>(written) < sizeof(buffer) ? std::string(buffer) : "Unknown";
+}
+
+bool checksumFile(const std::string& path, const uint64_t expectedLength, const uint32_t expectedChecksum) {
+  HalFile file;
+  if (!Storage.openFileForRead("CLIP", path, file)) return false;
+  if (file.fileSize64() != expectedLength) {
+    file.close();
+    return false;
+  }
+  std::array<uint8_t, 128> buffer{};
+  uint64_t remaining = expectedLength;
+  uint32_t checksum = 0;
+  while (remaining > 0) {
+    const size_t chunk = static_cast<size_t>(std::min<uint64_t>(remaining, buffer.size()));
+    if (file.read(buffer.data(), chunk) != static_cast<int>(chunk)) {
+      file.close();
+      return false;
+    }
+    checksum = ClippingCodec::crc32(buffer.data(), chunk, checksum);
+    remaining -= chunk;
+  }
+  return file.close() && checksum == expectedChecksum;
+}
+
 }  // namespace
 
 ClippingStore::LoadResult ClippingStore::loadForBook(const std::string& filePath, const std::string& title,
@@ -541,6 +713,233 @@ bool ClippingStore::quarantineFilesForBook(const std::string& filePath, const st
     }
   }
   return true;
+}
+
+ClippingStore::CatalogLoadResult ClippingStore::loadCatalog(Catalog& catalog) {
+  catalog = {};
+  if (!Storage.exists(ClippingCodec::DIRECTORY)) return CatalogLoadResult::DirectoryMissing;
+
+  HalFile directory = Storage.open(ClippingCodec::DIRECTORY);
+  if (!directory || !directory.isDirectory()) {
+    if (directory) directory.close();
+    return CatalogLoadResult::IoError;
+  }
+
+  std::vector<std::string> canonicalNames;
+  canonicalNames.reserve(MAX_CATALOG_BOOKS);
+  char name[64]{};
+  size_t directoryEntries = 0;
+  while (true) {
+    HalFile file = directory.openNextFile();
+    if (!file) {
+      // SdFat uses a closed file for both normal EOF and an open/read error;
+      // the parent directory retains the error bits that distinguish them.
+      if (directory.getError() != 0) {
+        directory.close();
+        return CatalogLoadResult::IoError;
+      }
+      break;
+    }
+    if (directoryEntries == MAX_CATALOG_DIRECTORY_ENTRIES) {
+      catalog.directoryTruncated = true;
+      if (!file.close()) {
+        directory.close();
+        return CatalogLoadResult::IoError;
+      }
+      break;
+    }
+    ++directoryEntries;
+    const size_t nameLength = file.getName(name, sizeof(name));
+    if (nameLength == 0) {
+      // SdFat returns zero (without setting an error bit) when the provided
+      // buffer cannot hold a UTF-8 filename. Keep scanning, but mark the
+      // catalog incomplete so Export All remains fail-closed.
+      const bool readError = file.getError() != 0;
+      const bool closed = file.close();
+      if (readError || !closed) {
+        directory.close();
+        return CatalogLoadResult::IoError;
+      }
+      catalog.entryNameTruncated = true;
+      continue;
+    }
+    if (nameLength >= sizeof(name)) {
+      catalog.entryNameTruncated = true;
+      if (!file.close()) {
+        directory.close();
+        return CatalogLoadResult::IoError;
+      }
+      continue;
+    }
+
+    std::string canonicalName;
+    const bool recognized = parseCatalogFileName(std::string_view(name, nameLength), canonicalName);
+    if (!file.close()) {
+      directory.close();
+      return CatalogLoadResult::IoError;
+    }
+    if (!recognized) continue;
+
+    const auto position = std::lower_bound(canonicalNames.begin(), canonicalNames.end(), canonicalName);
+    if (position != canonicalNames.end() && *position == canonicalName) continue;
+    if (canonicalNames.size() < MAX_CATALOG_BOOKS) {
+      canonicalNames.insert(position, std::move(canonicalName));
+    } else {
+      catalog.directoryTruncated = true;
+      if (position != canonicalNames.end()) {
+        canonicalNames.pop_back();
+        canonicalNames.insert(std::lower_bound(canonicalNames.begin(), canonicalNames.end(), canonicalName),
+                              std::move(canonicalName));
+      }
+    }
+  }
+  if (!directory.close()) return CatalogLoadResult::IoError;
+
+  catalog.entries.reserve(canonicalNames.size());
+  for (const std::string& canonicalName : canonicalNames) {
+    CatalogEntry entry;
+    if (!resolveCatalogBase(canonicalName, entry)) {
+      if (catalog.skippedBooks != std::numeric_limits<uint16_t>::max()) ++catalog.skippedBooks;
+      continue;
+    }
+    if (entry.clippingCount > 0) catalog.entries.push_back(std::move(entry));
+  }
+  std::sort(catalog.entries.begin(), catalog.entries.end(), [](const CatalogEntry& left, const CatalogEntry& right) {
+    if (left.book.title != right.book.title) return left.book.title < right.book.title;
+    return left.book.path < right.book.path;
+  });
+  return CatalogLoadResult::Loaded;
+}
+
+ClippingStore::ExportResult ClippingStore::exportCatalog(const Catalog& catalog, std::string& outputPath) {
+  outputPath.clear();
+  if (catalog.entries.size() > MAX_CATALOG_BOOKS || catalog.directoryTruncated || catalog.entryNameTruncated ||
+      catalog.skippedBooks != 0) {
+    return ExportResult::CatalogIncomplete;
+  }
+  if (catalog.entries.empty()) return ExportResult::Empty;
+
+  // The Saved Items screen may have been open while WebDAV or another task
+  // changed the clipping directory. Re-scan here so "Export all" never treats
+  // a stale UI snapshot as the complete set of stores.
+  Catalog currentCatalog;
+  const CatalogLoadResult currentLoad = loadCatalog(currentCatalog);
+  if (currentLoad == CatalogLoadResult::IoError) return ExportResult::IoError;
+  if (currentLoad != CatalogLoadResult::Loaded || currentCatalog.directoryTruncated ||
+      currentCatalog.entryNameTruncated || currentCatalog.skippedBooks != 0 ||
+      !sameCatalogSnapshot(catalog, currentCatalog)) {
+    return ExportResult::SourceChanged;
+  }
+
+  for (size_t i = 0; i < catalog.entries.size(); ++i) {
+    const CatalogEntry& expected = catalog.entries[i];
+    const std::string canonicalPath = ClippingCodec::filePathForBook(expected.book.path, expected.book.bookType);
+    const std::string prefix = std::string(ClippingCodec::DIRECTORY) + "/";
+    if (canonicalPath.empty() || canonicalPath.compare(0, prefix.size(), prefix) != 0) {
+      return ExportResult::SourceChanged;
+    }
+    CatalogEntry current;
+    if (!resolveCatalogBase(canonicalPath.substr(prefix.size()), current) || !sameCatalogEntry(current, expected)) {
+      return ExportResult::SourceChanged;
+    }
+    for (size_t previous = 0; previous < i; ++previous) {
+      if (catalog.entries[previous].sourcePath == expected.sourcePath) return ExportResult::SourceChanged;
+    }
+  }
+
+  std::string finalPath;
+  std::string stagingPath;
+  for (unsigned suffix = 1; suffix <= 999; ++suffix) {
+    finalPath = suffix == 1 ? "/CrossVi Clippings.txt" : "/CrossVi Clippings (" + std::to_string(suffix) + ").txt";
+    stagingPath = std::string(ClippingCodec::DIRECTORY) + "/.crossvi-export-" + std::to_string(suffix) + ".tmp";
+    if (!Storage.exists(finalPath.c_str()) && !Storage.exists(stagingPath.c_str())) break;
+    if (suffix == 999) return ExportResult::NoAvailableName;
+  }
+
+  HalFile output = Storage.open(stagingPath.c_str(), O_RDWR | O_CREAT | O_EXCL);
+  if (!output) return ExportResult::IoError;
+  bool outputOpen = true;
+  const auto fail = [&](const ExportResult result) {
+    if (outputOpen) {
+      output.close();
+      outputOpen = false;
+    }
+    if (Storage.exists(stagingPath.c_str())) Storage.remove(stagingPath.c_str());
+    return result;
+  };
+
+  uint64_t outputLength = 0;
+  uint32_t outputChecksum = 0;
+  if (!writeExportText(output, "CrossVi Clippings\n==================\n\n", outputLength, outputChecksum)) {
+    return fail(ExportResult::IoError);
+  }
+
+  for (const CatalogEntry& expected : catalog.entries) {
+    HalFile source;
+    if (!Storage.openFileForRead("CLIP", expected.sourcePath, source)) return fail(ExportResult::SourceChanged);
+    ClippingCodec::Index index;
+    if (inspectOpenFile(source, index) != ClippingCodec::Status::Ok || index.format != expected.format ||
+        index.fileLength != expected.fileLength || index.clippings.size() != expected.clippingCount ||
+        !sameBook(index.book, expected.book)) {
+      source.close();
+      return fail(ExportResult::SourceChanged);
+    }
+    HalSourceContext context{&source};
+    const ClippingCodec::Source clippingSource{&context, index.fileLength, halReadAt};
+    for (const ClippingCodec::ClippingMetadata& clipping : index.clippings) {
+      std::string text;
+      if (ClippingCodec::readText(clippingSource, clipping, text) != ClippingCodec::Status::Ok ||
+          !writeExportField(output, "Title: ", index.book.title, outputLength, outputChecksum) ||
+          !writeExportField(output, "Author: ", index.book.author, outputLength, outputChecksum) ||
+          (!clipping.chapterTitle.empty() &&
+           !writeExportField(output, "Chapter: ", clipping.chapterTitle, outputLength, outputChecksum)) ||
+          !writeExportField(output, "Created: ", formattedUtcTimestamp(clipping.timestamp, index.format), outputLength,
+                            outputChecksum)) {
+        source.close();
+        return fail(ExportResult::IoError);
+      }
+
+      char position[128]{};
+      const int positionLength =
+          clipping.startPage == clipping.endPage
+              ? std::snprintf(position, sizeof(position), "Section %u, page %u, words %u-%u", clipping.spineIndex + 1U,
+                              clipping.startPage + 1U, clipping.startWordIndex + 1U, clipping.endWordIndex + 1U)
+              : std::snprintf(position, sizeof(position), "Section %u, pages %u-%u, words %u-%u",
+                              clipping.spineIndex + 1U, clipping.startPage + 1U, clipping.endPage + 1U,
+                              clipping.startWordIndex + 1U, clipping.endWordIndex + 1U);
+      if (positionLength <= 0 || static_cast<size_t>(positionLength) >= sizeof(position) ||
+          !writeExportField(output, "Position: ", std::string_view(position, static_cast<size_t>(positionLength)),
+                            outputLength, outputChecksum) ||
+          !writeExportText(output, "\n", outputLength, outputChecksum) ||
+          !writeExportText(output, text, outputLength, outputChecksum) ||
+          !writeExportText(output, "\n\n==========\n\n", outputLength, outputChecksum)) {
+        source.close();
+        return fail(ExportResult::IoError);
+      }
+    }
+    if (!source.close()) return fail(ExportResult::IoError);
+  }
+
+  output.flush();
+  const bool durable = output.sync();
+  const bool closed = output.close();
+  outputOpen = false;
+  Catalog finalCatalog;
+  const CatalogLoadResult finalLoad = loadCatalog(finalCatalog);
+  if (!durable || !closed || !checksumFile(stagingPath, outputLength, outputChecksum) ||
+      finalLoad != CatalogLoadResult::Loaded || finalCatalog.directoryTruncated || finalCatalog.entryNameTruncated ||
+      finalCatalog.skippedBooks != 0 || !sameCatalogSnapshot(catalog, finalCatalog) ||
+      Storage.exists(finalPath.c_str()) || !Storage.rename(stagingPath.c_str(), finalPath.c_str())) {
+    if (Storage.exists(stagingPath.c_str())) Storage.remove(stagingPath.c_str());
+    return ExportResult::IoError;
+  }
+  if (!checksumFile(finalPath, outputLength, outputChecksum)) {
+    Storage.remove(finalPath.c_str());
+    return ExportResult::IoError;
+  }
+
+  outputPath = std::move(finalPath);
+  return ExportResult::Exported;
 }
 
 void ClippingStore::unload() {
@@ -796,11 +1195,11 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
     return RekeyResult::IoError;
   }
 
-  const uint32_t fileLength = static_cast<uint32_t>(fileLength64);
+  const uint32_t encodedFileLength = static_cast<uint32_t>(fileLength64);
   const uint32_t recordsOffset = static_cast<uint32_t>(recordsOffset64);
   const uint32_t textsOffset = static_cast<uint32_t>(textsOffset64);
   std::array<uint8_t, ClippingCodec::HEADER_SIZE> header{};
-  ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), fileLength, 0,
+  ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), encodedFileLength, 0,
                               static_cast<uint32_t>(encodedMetadata.size()), recordsOffset, textsOffset, header);
   bool writeOk = writeExact(output, header.data(), header.size());
   uint32_t payloadChecksum = 0;
@@ -829,11 +1228,11 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
     }
   }
 
-  if (writeOk && output.position() == fileLength) {
-    ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), fileLength, payloadChecksum,
+  if (writeOk && output.position() == encodedFileLength) {
+    ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), encodedFileLength, payloadChecksum,
                                 static_cast<uint32_t>(encodedMetadata.size()), recordsOffset, textsOffset, header);
     writeOk = output.seek(0) && writeExact(output, header.data(), header.size()) && output.sync() &&
-              output.fileSize64() == fileLength;
+              output.fileSize64() == encodedFileLength;
   } else {
     writeOk = false;
   }
@@ -847,7 +1246,7 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
   ClippingCodec::Index verifiedTemp;
   lastCodecStatus_ = inspectPath(destinationTemp, verifiedTemp);
   if (lastCodecStatus_ != ClippingCodec::Status::Ok ||
-      !sameRekeyedIndex(verifiedTemp, destinationBook, target, fileLength)) {
+      !sameRekeyedIndex(verifiedTemp, destinationBook, target, encodedFileLength)) {
     Storage.remove(destinationTemp.c_str());
     if (lastCodecStatus_ == ClippingCodec::Status::Ok) lastCodecStatus_ = ClippingCodec::Status::Corrupt;
     return RekeyResult::IoError;
@@ -862,7 +1261,7 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
   ClippingCodec::Index verifiedFinal;
   lastCodecStatus_ = inspectPath(destinationPath, verifiedFinal);
   bool finalOk = lastCodecStatus_ == ClippingCodec::Status::Ok &&
-                 sameRekeyedIndex(verifiedFinal, destinationBook, target, fileLength);
+                 sameRekeyedIndex(verifiedFinal, destinationBook, target, encodedFileLength);
   HalFile destinationFile;
   if (finalOk) {
     finalOk = Storage.openFileForRead("CLIP", destinationPath, destinationFile) &&
@@ -1044,11 +1443,11 @@ bool ClippingStore::rewrite(std::vector<ClippingCodec::ClippingMetadata> target,
     return false;
   }
 
-  const uint32_t fileLength = static_cast<uint32_t>(fileLength64);
+  const uint32_t encodedFileLength = static_cast<uint32_t>(fileLength64);
   const uint32_t recordsOffset = static_cast<uint32_t>(recordsOffset64);
   const uint32_t textsOffset = static_cast<uint32_t>(textsOffset64);
   std::array<uint8_t, ClippingCodec::HEADER_SIZE> header{};
-  ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), fileLength, 0,
+  ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), encodedFileLength, 0,
                               static_cast<uint32_t>(encodedMetadata.size()), recordsOffset, textsOffset, header);
   bool writeOk = writeExact(output, header.data(), header.size());
   uint32_t payloadChecksum = 0;
@@ -1082,11 +1481,11 @@ bool ClippingStore::rewrite(std::vector<ClippingCodec::ClippingMetadata> target,
     }
   }
 
-  if (writeOk && output.position() == fileLength) {
-    ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), fileLength, payloadChecksum,
+  if (writeOk && output.position() == encodedFileLength) {
+    ClippingCodec::encodeHeader(static_cast<uint16_t>(target.size()), encodedFileLength, payloadChecksum,
                                 static_cast<uint32_t>(encodedMetadata.size()), recordsOffset, textsOffset, header);
     writeOk = output.seek(0) && writeExact(output, header.data(), header.size()) && output.sync() &&
-              output.fileSize64() == fileLength;
+              output.fileSize64() == encodedFileLength;
   } else {
     writeOk = false;
   }
@@ -1100,7 +1499,7 @@ bool ClippingStore::rewrite(std::vector<ClippingCodec::ClippingMetadata> target,
 
   ClippingCodec::Index verifiedTemp;
   lastCodecStatus_ = inspectPath(tempPath, verifiedTemp);
-  if (lastCodecStatus_ != ClippingCodec::Status::Ok || verifiedTemp.fileLength != fileLength ||
+  if (lastCodecStatus_ != ClippingCodec::Status::Ok || verifiedTemp.fileLength != encodedFileLength ||
       verifiedTemp.book.path != book_.path || verifiedTemp.clippings.size() != target.size()) {
     Storage.remove(tempPath.c_str());
     return false;
@@ -1124,7 +1523,7 @@ bool ClippingStore::rewrite(std::vector<ClippingCodec::ClippingMetadata> target,
 
   ClippingCodec::Index verifiedFinal;
   lastCodecStatus_ = inspectPath(storePath_, verifiedFinal);
-  if (lastCodecStatus_ != ClippingCodec::Status::Ok || verifiedFinal.fileLength != fileLength ||
+  if (lastCodecStatus_ != ClippingCodec::Status::Ok || verifiedFinal.fileLength != encodedFileLength ||
       verifiedFinal.book.path != book_.path || verifiedFinal.clippings.size() != target.size()) {
     const bool removedInvalidFinal = Storage.remove(storePath_.c_str());
     const bool restoredCanonical =

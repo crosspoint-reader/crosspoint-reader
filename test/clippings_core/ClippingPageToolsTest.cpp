@@ -25,6 +25,30 @@ Page makePage(const int focusSuffix = 0, const int leftMargin = 0, const bool wi
   return page;
 }
 
+Page makeWordPage(const size_t count) {
+  std::vector<std::string> words(count, "x");
+  std::vector<int16_t> positions(count, 0);
+  std::vector<EpdFontFamily::Style> styles(count, EpdFontFamily::REGULAR);
+  auto block = std::make_shared<TextBlock>(std::move(words), std::move(positions), std::move(styles));
+  Page page;
+  page.elements.push_back(std::make_shared<PageLine>(std::move(block), 5, 20));
+  return page;
+}
+
+ClippingCodec::ClippingMetadata clippingForWord(const uint16_t word, const uint32_t fingerprint) {
+  ClippingCodec::ClippingMetadata clipping;
+  clipping.spineIndex = 2;
+  clipping.startPage = 3;
+  clipping.endPage = 3;
+  clipping.pageCount = 10;
+  clipping.startWordIndex = word;
+  clipping.endWordIndex = word;
+  clipping.wordCount = 1;
+  clipping.textLength = 1;
+  clipping.pageFingerprint = fingerprint;
+  return clipping;
+}
+
 }  // namespace
 
 TEST(ClippingPageTools, FingerprintCoversRenderContextAndAvailableLayoutData) {
@@ -68,4 +92,75 @@ TEST(ClippingPageTools, BuildsHighlightsOnlyForTheExactFingerprint) {
   EXPECT_EQ(
       ClippingPageTools::buildExactHighlightPlan(renderer, page, 101, 12, 18, {clipping}, 2, 3, fingerprint ^ 1U).count,
       0U);
+}
+
+TEST(ClippingPageTools, UsesFocusSplitGeometryForBoldPrefixAndRegularSuffix) {
+  auto block =
+      std::make_shared<TextBlock>(std::vector<std::string>{"abcdef"}, std::vector<int16_t>{0},
+                                  std::vector<EpdFontFamily::Style>{EpdFontFamily::REGULAR},
+                                  std::vector<uint8_t>{2}, std::vector<uint16_t>{18});
+  Page page;
+  page.elements.push_back(std::make_shared<PageLine>(std::move(block), 5, 20));
+  GfxRenderer renderer(480, 800, 24);
+  const uint32_t fingerprint = ClippingPageTools::fingerprint(page, renderer, 101, 0, 0);
+
+  const auto plan = ClippingPageTools::buildExactHighlightPlan(renderer, page, 101, 0, 0,
+                                                               {clippingForWord(0, fingerprint)}, 2, 3, fingerprint);
+
+  ASSERT_EQ(plan.count, 1U);
+  EXPECT_EQ(plan.lines[0].left, 5);
+  // The stub's regular suffix is 4 * 6 px; its bold-prefix layout offset is 18 px.
+  EXPECT_EQ(plan.lines[0].right, 5 + 18 + 4 * 6 - 1);
+}
+
+TEST(ClippingPageTools, HighlightsTheSeventeenthAndAllSixtyFourStoredClippings) {
+  const Page page = makeWordPage(ClippingCodec::MAX_CLIPPINGS_PER_BOOK);
+  GfxRenderer renderer(480, 800, 24);
+  const uint32_t pageFingerprint = ClippingPageTools::fingerprint(page, renderer, 101, 0, 0);
+  std::vector<ClippingCodec::ClippingMetadata> clippings;
+  clippings.reserve(ClippingCodec::MAX_CLIPPINGS_PER_BOOK);
+  for (uint16_t word = 0; word < ClippingCodec::MAX_CLIPPINGS_PER_BOOK; ++word) {
+    clippings.push_back(clippingForWord(word, pageFingerprint));
+  }
+
+  const auto plan =
+      ClippingPageTools::buildExactHighlightPlan(renderer, page, 101, 0, 0, clippings, 2, 3, pageFingerprint);
+  EXPECT_EQ(plan.count, ClippingCodec::MAX_CLIPPINGS_PER_BOOK);
+  EXPECT_FALSE(plan.truncated);
+  EXPECT_EQ(plan.lines[16].left, 5);
+
+  clippings[16].pageFingerprint ^= 1U;
+  const auto mismatched =
+      ClippingPageTools::buildExactHighlightPlan(renderer, page, 101, 0, 0, clippings, 2, 3, pageFingerprint);
+  EXPECT_EQ(mismatched.count, ClippingCodec::MAX_CLIPPINGS_PER_BOOK - 1);
+}
+
+TEST(ClippingPageTools, ReportsGeometryTruncationAtItsFixedMemoryLimit) {
+  const Page page = makeWordPage(ClippingPageTools::HighlightPlan::MAX_LINES + 1);
+  GfxRenderer renderer(480, 800, 24);
+  const uint32_t pageFingerprint = ClippingPageTools::fingerprint(page, renderer, 101, 0, 0);
+  auto clipping = clippingForWord(0, pageFingerprint);
+  clipping.endWordIndex = static_cast<uint16_t>(ClippingPageTools::HighlightPlan::MAX_LINES);
+  clipping.wordCount = static_cast<uint16_t>(ClippingPageTools::HighlightPlan::MAX_LINES + 1);
+
+  const auto plan =
+      ClippingPageTools::buildExactHighlightPlan(renderer, page, 101, 0, 0, {clipping}, 2, 3, pageFingerprint);
+  EXPECT_EQ(plan.count, ClippingPageTools::HighlightPlan::MAX_LINES);
+  EXPECT_TRUE(plan.truncated);
+}
+
+TEST(ClippingPageTools, TruncationNoticeIsOncePerRecentPageWithinFixedMemory) {
+  ClippingPageTools::HighlightNoticeTracker tracker;
+  EXPECT_TRUE(tracker.markIfNew(2, 3, 100));
+  EXPECT_FALSE(tracker.markIfNew(2, 3, 100));
+  EXPECT_TRUE(tracker.markIfNew(2, 3, 101));  // changed layout is a new identity
+  EXPECT_TRUE(tracker.markIfNew(2, 4, 100));
+  EXPECT_FALSE(tracker.markIfNew(0, 0, 0));
+
+  for (size_t i = 3; i < ClippingPageTools::HighlightNoticeTracker::MAX_TRACKED_PAGES + 1; ++i) {
+    EXPECT_TRUE(tracker.markIfNew(7, static_cast<uint16_t>(i), static_cast<uint32_t>(1000 + i)));
+  }
+  // The oldest identity can be reported again after the fixed-size ring has
+  // evicted it; memory use never grows with page count.
+  EXPECT_TRUE(tracker.markIfNew(2, 3, 100));
 }

@@ -22,7 +22,8 @@ struct KeyboardResult {
 struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
-  uint8_t pageTurnOption = 0;
+  uint8_t autoPageTurnSeconds = 0;
+  bool autoPageTurnChanged = false;
 };
 
 struct ChapterResult {
@@ -61,11 +62,31 @@ struct ClippingSelectionResult {
 };
 
 struct ClippingJumpResult {
+  // Complete in-memory identity of the store entry selected by the user. The
+  // reader must re-open the store and compare every field before changing the
+  // reading position; none of these values is a trusted navigation command on
+  // its own.
+  std::string bookTitle;
+  std::string bookAuthor;
+  std::string bookPath;
+  std::string bookType;
+  std::string storePath;
+  std::string chapterTitle;
+  uint32_t storeFileLength = 0;
+  uint8_t storeFormat = UINT8_MAX;
+  uint16_t clippingIndex = 0;
   uint16_t spineIndex = 0;
   uint16_t startPage = 0;
+  uint16_t endPage = 0;
   uint16_t pageCount = 1;
+  uint16_t startWordIndex = 0;
+  uint16_t endWordIndex = 0;
+  uint16_t wordCount = 0;
   uint16_t paragraphIndex = UINT16_MAX;
-  uint16_t clippingIndex = 0;
+  uint32_t timestamp = 0;
+  uint32_t textOffset = 0;
+  uint16_t textLength = 0;
+  uint32_t textCrc32 = 0;
   uint32_t pageFingerprint = 0;
 };
 

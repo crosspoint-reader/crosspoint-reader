@@ -39,7 +39,8 @@ void BookReaderSettingsActivity::onEnter() {
 void BookReaderSettingsActivity::setCustomEnabled(const bool enabled) {
   if (enabled == customEnabled) return;
   if (!enabled) {
-    savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnRate, savedCustom.autoPageTurnRate);
+    savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval, savedCustom.autoPageTurnSeconds,
+                                        savedCustom.autoPageTurnStartsOnOpen);
     applyReaderSettings(globalDefaults);
   } else {
     applyReaderSettings(savedCustom);
@@ -50,7 +51,8 @@ void BookReaderSettingsActivity::setCustomEnabled(const bool enabled) {
 
 void BookReaderSettingsActivity::finishWithResult() {
   if (customEnabled) {
-    savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnRate, savedCustom.autoPageTurnRate);
+    savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval, savedCustom.autoPageTurnSeconds,
+                                        savedCustom.autoPageTurnStartsOnOpen);
   }
   savedCustom.hasReaderOverrides = customEnabled;
   setResult(ReaderSettingsResult{savedCustom});
@@ -86,7 +88,7 @@ void BookReaderSettingsActivity::toggleSelected() {
   if (selectedIndex == static_cast<int>(settings.size()) + 1) {
     applyReaderSettings(globalDefaults);
     // Reset means remove the complete book profile, including its independent
-    // auto-page-turn rate. Merely disabling custom typography preserves the
+    // auto-page-turn interval. Merely disabling custom typography preserves the
     // snapshot; Reset is the explicit destructive action.
     savedCustom = captureReaderSettings(false, false, 0);
     customEnabled = false;
@@ -102,7 +104,8 @@ void BookReaderSettingsActivity::toggleSelected() {
         std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry(), false),
         [this](const ActivityResult&) {
           customEnabled = true;
-          savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnRate, savedCustom.autoPageTurnRate);
+          savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval,
+                                              savedCustom.autoPageTurnSeconds, savedCustom.autoPageTurnStartsOnOpen);
           requestUpdate();
         });
     return;
@@ -117,8 +120,9 @@ void BookReaderSettingsActivity::toggleSelected() {
       optionPopup.show(setting.nameId, setting.enumValues.data(), static_cast<int>(setting.enumValues.size()), current,
                        [this, valuePtr](const int value) {
                          SETTINGS.*valuePtr = static_cast<uint8_t>(value);
-                         savedCustom =
-                             captureReaderSettings(true, savedCustom.hasAutoPageTurnRate, savedCustom.autoPageTurnRate);
+                         savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval,
+                                                             savedCustom.autoPageTurnSeconds,
+                                                             savedCustom.autoPageTurnStartsOnOpen);
                          requestUpdate();
                        });
       requestUpdate();
@@ -131,7 +135,8 @@ void BookReaderSettingsActivity::toggleSelected() {
                                        ? setting.valueRange.min
                                        : current + setting.valueRange.step;
   }
-  savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnRate, savedCustom.autoPageTurnRate);
+  savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval, savedCustom.autoPageTurnSeconds,
+                                      savedCustom.autoPageTurnStartsOnOpen);
   requestUpdate();
 }
 

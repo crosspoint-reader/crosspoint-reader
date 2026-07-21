@@ -19,6 +19,7 @@
 #include "CrossPointState.h"
 #include "Epub/SourceIdentityStore.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/ReadingStatsCompletionTransaction.h"
 #include "clippings/ClippingStore.h"
 
 namespace {
@@ -301,7 +302,13 @@ bool isBookFileTransactionArtifact(const char* fileName) {
          name.find(".crossvi-invalid-publish") != std::string_view::npos;
 }
 
+bool canDeleteOrRelocateBookFile(const std::string& bookPath) {
+  return !FsHelpers::hasEpubExtension(bookPath) ||
+         ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(Epub(bookPath, CACHE_ROOT).getCachePath());
+}
+
 bool recoverInterruptedBookFileReplacement(const std::string& bookPath) {
+  if (!canDeleteOrRelocateBookFile(bookPath)) return false;
   const std::string oldBookPath = hiddenBookFileSibling(bookPath, REPLACED_BOOK_SUFFIX);
   const std::string pendingPath = hiddenBookFileSibling(bookPath, REPLACEMENT_PENDING_SUFFIX);
   const bool pending = Storage.exists(pendingPath.c_str());
@@ -513,6 +520,11 @@ BookPathMoveResult moveBookFilePreservingUserState(const std::string& sourcePath
 
   const std::string sourceCachePath = bookCachePath(sourcePath);
   const std::string destinationCachePath = bookCachePath(destinationPath);
+  if (sourceKind == CacheBackedBookKind::Epub &&
+      (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(sourceCachePath) ||
+       !ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(destinationCachePath))) {
+    return BookPathMoveResult::StateUnavailable;
+  }
   if (!prepareBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath)) {
     return BookPathMoveResult::StateUnavailable;
   }
@@ -624,6 +636,7 @@ bool removeBookUserStateAfterDelete(const std::string& bookPath) {
   }
 
   const std::string cachePath = Epub(bookPath, CACHE_ROOT).getCachePath();
+  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(cachePath)) return false;
   // Validate/remove external clipping state first and quarantine the cache
   // last. If an earlier step fails, the old source-identity sidecar remains in
   // the canonical cache so every future open continues to fail closed.
@@ -651,6 +664,7 @@ bool resetBookUserStateAfterReplacement(const std::string& bookPath) {
   }
 
   const std::string cachePath = bookCachePath(bookPath);
+  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(cachePath)) return false;
   const bool hasState = hasBookUserState(bookPath, cachePath, true);
   // Establish a durable fail-closed barrier first, including for legacy paths
   // that had external state but no cache yet. A reset at any later boundary

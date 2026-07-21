@@ -16,8 +16,9 @@
 
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
+struct ClippingJumpResult;
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, SAVED_ITEMS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
 
 /**
  * ActivityManager
@@ -85,8 +86,10 @@ class ActivityManager {
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
+  void goToSavedClippings();
   void goToBrowser();
   void goToReader(std::string path);
+  void goToReader(std::string path, ClippingJumpResult clippingJump);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

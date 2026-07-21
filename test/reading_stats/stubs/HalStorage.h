@@ -57,14 +57,16 @@ class HalStorage {
     return true;
   }
   bool remove(const char* path) {
-    if (failNextRemove_) {
+    ++removeCalls_;
+    if (failNextRemove_ || (failRemoveCall_ != 0 && removeCalls_ == failRemoveCall_)) {
       failNextRemove_ = false;
       return false;
     }
     return files_.erase(path) != 0;
   }
   bool rename(const char* oldPath, const char* newPath) {
-    if (failNextRename_) {
+    ++renameCalls_;
+    if (failNextRename_ || (failRenameCall_ != 0 && renameCalls_ == failRenameCall_)) {
       failNextRename_ = false;
       return false;
     }
@@ -116,11 +118,7 @@ class HalStorage {
     files_.clear();
     directories_.clear();
     unreadablePaths_.clear();
-    shortWriteNext_ = false;
-    failSyncNext_ = false;
-    failNextRename_ = false;
-    failNextRemove_ = false;
-    corruptNextRename_ = false;
+    resetFaultInjection();
   }
   void setFile(const std::string& path, std::vector<uint8_t> bytes) { files_[path] = std::move(bytes); }
   const std::vector<uint8_t>& file(const std::string& path) const { return files_.at(path); }
@@ -130,6 +128,25 @@ class HalStorage {
   void failRenameOnce() { failNextRename_ = true; }
   void failRemoveOnce() { failNextRemove_ = true; }
   void corruptRenameOnce() { corruptNextRename_ = true; }
+  void shortWriteOnCall(const size_t call) { shortWriteCall_ = call; }
+  void failSyncOnCall(const size_t call) { failSyncCall_ = call; }
+  void failRenameOnCall(const size_t call) { failRenameCall_ = call; }
+  void failRemoveOnCall(const size_t call) { failRemoveCall_ = call; }
+  void resetFaultInjection() {
+    shortWriteNext_ = false;
+    failSyncNext_ = false;
+    failNextRename_ = false;
+    failNextRemove_ = false;
+    corruptNextRename_ = false;
+    shortWriteCall_ = 0;
+    failSyncCall_ = 0;
+    failRenameCall_ = 0;
+    failRemoveCall_ = 0;
+    writeCalls_ = 0;
+    syncCalls_ = 0;
+    renameCalls_ = 0;
+    removeCalls_ = 0;
+  }
 
  private:
   friend class HalFile;
@@ -141,6 +158,14 @@ class HalStorage {
   bool failNextRename_ = false;
   bool failNextRemove_ = false;
   bool corruptNextRename_ = false;
+  size_t shortWriteCall_ = 0;
+  size_t failSyncCall_ = 0;
+  size_t failRenameCall_ = 0;
+  size_t failRemoveCall_ = 0;
+  size_t writeCalls_ = 0;
+  size_t syncCalls_ = 0;
+  size_t renameCalls_ = 0;
+  size_t removeCalls_ = 0;
 
   HalFile makeFile(const std::string& path, const bool writable) {
     HalFile file;
@@ -167,8 +192,10 @@ inline int HalFile::read(void* data, const size_t length) {
 
 inline size_t HalFile::write(const void* data, const size_t length) {
   if (!open_ || !writable_ || directory_) return 0;
+  ++storage_->writeCalls_;
   size_t written = length;
-  if (storage_->shortWriteNext_) {
+  if (storage_->shortWriteNext_ ||
+      (storage_->shortWriteCall_ != 0 && storage_->writeCalls_ == storage_->shortWriteCall_)) {
     storage_->shortWriteNext_ = false;
     written = length == 0 ? 0 : length - 1;
   }
@@ -186,9 +213,12 @@ inline size_t HalFile::fileSize() const {
 
 inline bool HalFile::sync() {
   if (!open_) return false;
-  if (!storage_->failSyncNext_) return true;
-  storage_->failSyncNext_ = false;
-  return false;
+  ++storage_->syncCalls_;
+  if (storage_->failSyncNext_ || (storage_->failSyncCall_ != 0 && storage_->syncCalls_ == storage_->failSyncCall_)) {
+    storage_->failSyncNext_ = false;
+    return false;
+  }
+  return true;
 }
 
 inline bool HalFile::close() {

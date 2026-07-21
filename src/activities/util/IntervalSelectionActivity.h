@@ -14,11 +14,13 @@ class IntervalSelectionActivity final : public Activity {
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
                                      int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
                                      bool readerActivity = false, bool ignoreInitialConfirmRelease = false,
-                                     StrId maxBoundaryLabelId = StrId::STR_NONE_OPT)
+                                     StrId maxBoundaryLabelId = StrId::STR_NONE_OPT,
+                                     StrId minBoundaryLabelId = StrId::STR_NONE_OPT)
       : Activity(activityName, renderer, mappedInput),
         titleId(titleId),
         valueFormatId(valueFormatId),
         maxBoundaryLabelId(maxBoundaryLabelId),
+        minBoundaryLabelId(minBoundaryLabelId),
         value(initialValue),
         minValue(minValue),
         maxValue(maxValue),
@@ -36,6 +38,7 @@ class IntervalSelectionActivity final : public Activity {
   StrId titleId;
   StrId valueFormatId;
   StrId maxBoundaryLabelId;
+  StrId minBoundaryLabelId;
   int value;
   int minValue;
   int maxValue;

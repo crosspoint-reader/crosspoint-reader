@@ -92,6 +92,10 @@ TEST_F(BookCacheUtilsTest, ClearsDerivedCacheAndPreservesAllSupportedUserState) 
                                           "reader_settings.bin",
                                           "reader_settings.bin.bak",
                                           "reader_settings.bin.tmp",
+                                          "reader_settings.bin.crossink-v1.orig",
+                                          "reader_settings.bin.crossink-v1.orig.tmp",
+                                          "reader_settings.bin.crossink-v2.orig",
+                                          "reader_settings.bin.crossink-v2.orig.tmp",
                                           "crossvi_reader_settings.bin",
                                           "crossvi_reader_settings.bin.bak",
                                           "crossvi_reader_settings.bin.tmp",
@@ -137,6 +141,10 @@ TEST_F(BookCacheUtilsTest, WhitelistStagesOnlyExactNamesAndPreservesUnknownLooka
                                               "reader_settings.bin",
                                               "reader_settings.bin.bak",
                                               "reader_settings.bin.tmp",
+                                              "reader_settings.bin.crossink-v1.orig",
+                                              "reader_settings.bin.crossink-v1.orig.tmp",
+                                              "reader_settings.bin.crossink-v2.orig",
+                                              "reader_settings.bin.crossink-v2.orig.tmp",
                                               "crossvi_reader_settings.bin",
                                               "crossvi_reader_settings.bin.bak",
                                               "crossvi_reader_settings.bin.tmp",
@@ -155,6 +163,10 @@ TEST_F(BookCacheUtilsTest, WhitelistStagesOnlyExactNamesAndPreservesUnknownLooka
                                             "mystats_v5.bin",
                                             "progress.bin.old",
                                             "reader_settings.bin.old",
+                                            "reader_settings.bin.crossink-v0.orig",
+                                            "reader_settings.bin.crossink-v1.orig.bak",
+                                            "reader_settings.bin.crossink-v2.orig.old",
+                                            "reader_settings.bin.crossink-v3.orig",
                                             "crossvi_reader_settings.bin.old",
                                             "source_identity.bin.old"};
 
@@ -515,6 +527,10 @@ TEST_F(BookCacheUtilsTest, MovesOnlyVerifiedUserStateAndLeavesTheSourceAuthorita
   put("progress.bin", 3);
   put("book.bin", 4);
   put("reader_settings.bin", 7);
+  put("reader_settings.bin.crossink-v1.orig", 13);
+  put("reader_settings.bin.crossink-v1.orig.tmp", 14);
+  put("reader_settings.bin.crossink-v2.orig", 15);
+  put("reader_settings.bin.crossink-v2.orig.tmp", 16);
   put("source_identity.bin", 8);
   put(".crossvi_replaced_clippings.bin", 11);
   put(".crossvi_replaced_bookmark.json", 12);
@@ -531,6 +547,10 @@ TEST_F(BookCacheUtilsTest, MovesOnlyVerifiedUserStateAndLeavesTheSourceAuthorita
   EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/crossvi_reader_settings.bin").c_str()));
   EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/progress.bin").c_str()));
   EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/reader_settings.bin").c_str()));
+  EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/reader_settings.bin.crossink-v1.orig").c_str()));
+  EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/reader_settings.bin.crossink-v1.orig.tmp").c_str()));
+  EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/reader_settings.bin.crossink-v2.orig").c_str()));
+  EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/reader_settings.bin.crossink-v2.orig.tmp").c_str()));
   EXPECT_TRUE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/source_identity.bin").c_str()));
   EXPECT_FALSE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/.crossvi_replaced_clippings.bin").c_str()));
   EXPECT_FALSE(Storage.exists((std::string(MOVE_STAGING_PATH) + "/.crossvi_replaced_bookmark.json").c_str()));
@@ -545,6 +565,10 @@ TEST_F(BookCacheUtilsTest, MovesOnlyVerifiedUserStateAndLeavesTheSourceAuthorita
   EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/crossvi_reader_settings.bin"), bytes(2));
   EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/progress.bin"), bytes(3));
   EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/reader_settings.bin"), bytes(7));
+  EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/reader_settings.bin.crossink-v1.orig"), bytes(13));
+  EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/reader_settings.bin.crossink-v1.orig.tmp"), bytes(14));
+  EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/reader_settings.bin.crossink-v2.orig"), bytes(15));
+  EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/reader_settings.bin.crossink-v2.orig.tmp"), bytes(16));
   EXPECT_EQ(Storage.file(std::string(MOVED_CACHE_PATH) + "/source_identity.bin"), bytes(8));
   EXPECT_FALSE(Storage.exists((std::string(MOVED_CACHE_PATH) + "/book.bin").c_str()));
   EXPECT_EQ(Storage.file(destinationBookmark), bytes(6));

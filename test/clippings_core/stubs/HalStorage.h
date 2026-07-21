@@ -3,12 +3,21 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <initializer_list>
+#include <limits>
 #include <map>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
+
+using oflag_t = uint8_t;
+inline constexpr oflag_t O_RDONLY = 0x01;
+inline constexpr oflag_t O_RDWR = 0x02;
+inline constexpr oflag_t O_CREAT = 0x10;
+inline constexpr oflag_t O_TRUNC = 0x20;
+inline constexpr oflag_t O_EXCL = 0x40;
 
 class HalStorage;
 
@@ -27,6 +36,10 @@ class HalFile {
   size_t position() const { return position_; }
   size_t fileSize() const;
   uint64_t fileSize64() const { return fileSize(); }
+  size_t getName(char* name, size_t length) const;
+  uint8_t getError() const { return error_; }
+  bool isDirectory() const { return open_ && directory_; }
+  HalFile openNextFile();
   bool sync();
   bool close();
   explicit operator bool() const { return open_; }
@@ -37,7 +50,11 @@ class HalFile {
   std::string path_;
   size_t position_ = 0;
   bool writable_ = false;
+  bool directory_ = false;
   bool open_ = false;
+  uint8_t error_ = 0;
+  std::vector<std::string> directoryEntries_;
+  size_t nextDirectoryEntry_ = 0;
 };
 
 class HalStorage {
@@ -81,6 +98,20 @@ class HalStorage {
     }
     return true;
   }
+  HalFile open(const char* path, const oflag_t flags = O_RDONLY) {
+    if ((flags & O_CREAT) != 0) {
+      if (exclusiveCollisionPath_ == path) {
+        files_[path] = std::move(exclusiveCollisionBytes_);
+        exclusiveCollisionPath_.clear();
+      }
+      if (directories_.count(path) != 0 || ((flags & O_EXCL) != 0 && files_.count(path) != 0)) return {};
+      if (files_.count(path) == 0 || (flags & O_TRUNC) != 0) files_[path].clear();
+      return makeFile(path, true);
+    }
+    if (directories_.count(path) != 0) return makeFile(path, false, true);
+    if (files_.count(path) != 0) return makeFile(path, false);
+    return {};
+  }
   bool openFileForRead(const char*, const std::string& path, HalFile& file) {
     if (unreadablePaths_.count(path) != 0) return false;
     const auto found = files_.find(path);
@@ -102,7 +133,11 @@ class HalStorage {
     failSyncNext_ = false;
     failNextRename_ = false;
     failNextRemove_ = false;
+    failDirectoryIterationAfter_ = std::numeric_limits<size_t>::max();
     corruptNextRename_ = false;
+    corruptWritableCloseNext_ = false;
+    exclusiveCollisionPath_.clear();
+    exclusiveCollisionBytes_.clear();
     renameCalls_ = 0;
     failRenameCalls_.clear();
   }
@@ -116,7 +151,13 @@ class HalStorage {
     for (const size_t call : relativeCalls) failRenameCalls_.insert(renameCalls_ + call);
   }
   void failRemoveOnce() { failNextRemove_ = true; }
+  void failDirectoryIterationAfter(const size_t successfulEntries) { failDirectoryIterationAfter_ = successfulEntries; }
   void corruptRenameOnce() { corruptNextRename_ = true; }
+  void corruptWriteOnCloseOnce() { corruptWritableCloseNext_ = true; }
+  void collideExclusiveOpenOnce(std::string path, std::vector<uint8_t> bytes) {
+    exclusiveCollisionPath_ = std::move(path);
+    exclusiveCollisionBytes_ = std::move(bytes);
+  }
 
  private:
   friend class HalFile;
@@ -127,16 +168,36 @@ class HalStorage {
   bool failSyncNext_ = false;
   bool failNextRename_ = false;
   bool failNextRemove_ = false;
+  size_t failDirectoryIterationAfter_ = std::numeric_limits<size_t>::max();
   bool corruptNextRename_ = false;
+  bool corruptWritableCloseNext_ = false;
+  std::string exclusiveCollisionPath_;
+  std::vector<uint8_t> exclusiveCollisionBytes_;
   size_t renameCalls_ = 0;
   std::set<size_t> failRenameCalls_;
 
-  HalFile makeFile(const std::string& path, const bool writable) {
+  HalFile makeFile(const std::string& path, const bool writable, const bool directory = false) {
     HalFile file;
     file.storage_ = this;
     file.path_ = path;
     file.writable_ = writable;
+    file.directory_ = directory;
     file.open_ = true;
+    if (directory) {
+      const std::string prefix = path == "/" ? "/" : path + "/";
+      std::set<std::string> entries;
+      const auto collect = [&](const std::string& candidate) {
+        if (candidate.compare(0, prefix.size(), prefix) != 0) return;
+        const std::string remainder = candidate.substr(prefix.size());
+        if (!remainder.empty() && remainder.find('/') == std::string::npos) entries.insert(candidate);
+      };
+      for (const auto& [candidate, bytes] : files_) {
+        static_cast<void>(bytes);
+        collect(candidate);
+      }
+      for (const std::string& candidate : directories_) collect(candidate);
+      file.directoryEntries_.assign(entries.begin(), entries.end());
+    }
     return file;
   }
 };
@@ -170,8 +231,35 @@ inline size_t HalFile::write(const void* data, const size_t length) {
 }
 
 inline size_t HalFile::fileSize() const {
-  if (!open_) return 0;
+  if (!open_ || directory_) return 0;
   return storage_->files_.at(path_).size();
+}
+
+inline size_t HalFile::getName(char* name, const size_t length) const {
+  if (!open_ || !name || length == 0) return 0;
+  const size_t separator = path_.find_last_of('/');
+  const std::string leaf = separator == std::string::npos ? path_ : path_.substr(separator + 1);
+  // Match SdFat: an undersized destination is cleared and reported as zero,
+  // not as a successful truncated name.
+  if (leaf.size() >= length) {
+    name[0] = '\0';
+    return 0;
+  }
+  const size_t copied = std::min(leaf.size(), length - 1);
+  std::memcpy(name, leaf.data(), copied);
+  name[copied] = '\0';
+  return copied;
+}
+
+inline HalFile HalFile::openNextFile() {
+  if (open_ && directory_ && nextDirectoryEntry_ == storage_->failDirectoryIterationAfter_) {
+    storage_->failDirectoryIterationAfter_ = std::numeric_limits<size_t>::max();
+    error_ = 1;
+    return {};
+  }
+  if (!open_ || !directory_ || nextDirectoryEntry_ >= directoryEntries_.size()) return {};
+  const std::string& entry = directoryEntries_[nextDirectoryEntry_++];
+  return storage_->makeFile(entry, false, storage_->directories_.count(entry) != 0);
 }
 
 inline bool HalFile::sync() {
@@ -183,6 +271,15 @@ inline bool HalFile::sync() {
 
 inline bool HalFile::close() {
   const bool wasOpen = open_;
+  if (wasOpen && writable_ && storage_->corruptWritableCloseNext_) {
+    storage_->corruptWritableCloseNext_ = false;
+    auto& bytes = storage_->files_.at(path_);
+    if (bytes.empty()) {
+      bytes.push_back(0xFF);
+    } else {
+      bytes.back() ^= 0xFF;
+    }
+  }
   open_ = false;
   return wasOpen;
 }

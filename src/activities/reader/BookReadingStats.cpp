@@ -8,6 +8,7 @@
 #include <string>
 
 #include "ReadingStatsCodec.h"
+#include "ReadingStatsCompletionTransaction.h"
 #include "ReadingStatsStorage.h"
 
 namespace {
@@ -114,6 +115,10 @@ BookReadingStats BookReadingStats::load(const std::string& cachePath, LoadStatus
 }
 
 bool BookReadingStats::save(const std::string& cachePath) const {
+  if (!ReadingStatsCompletionTransaction::permitsBookWrite(cachePath, *this)) {
+    LOG_ERR(LOG_TAG, "Refusing to overwrite a pending completion transaction: %s", cachePath.c_str());
+    return false;
+  }
   const std::string path = cachePath + "/" + CURRENT_FILE_NAME;
   BookReadingStats existing;
   const LoadOutcome primary = loadPath(path, existing);
@@ -145,6 +150,10 @@ bool BookReadingStats::save(const std::string& cachePath) const {
 }
 
 bool BookReadingStats::remove(const std::string& cachePath) {
+  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(cachePath)) {
+    LOG_ERR(LOG_TAG, "Refusing to reset stats with a pending completion transaction: %s", cachePath.c_str());
+    return false;
+  }
   // Inspect every file before deleting any of them. A reset must not partly
   // delete known-good state before discovering an unreadable, corrupt, or
   // newer legacy file that CrossVi cannot safely classify.

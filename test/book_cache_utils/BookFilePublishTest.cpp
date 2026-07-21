@@ -1,3 +1,4 @@
+#include <Epub.h>
 #include <HalStorage.h>
 #include <Xtc.h>
 #include <gtest/gtest.h>
@@ -8,6 +9,7 @@
 
 #include "BookPathMoveUtils.h"
 #include "BookmarkUtil.h"
+#include "activities/reader/ReadingStatsCompletionTransaction.h"
 
 namespace {
 
@@ -188,6 +190,27 @@ TEST(BookFilePublishEpubRecoveryTest, OwnedBackupIsDeletedBeforePendingMarker) {
   EXPECT_TRUE(Storage.exists(pendingPath));
   EXPECT_TRUE(recoverInterruptedBookFileReplacement(bookPath));
   EXPECT_FALSE(Storage.exists(pendingPath));
+}
+
+TEST(BookFilePublishEpubRecoveryTest, PendingStatsBlocksOnlyItsExactEpubCache) {
+  Storage.reset();
+  Storage.addDirectory("/books");
+  Storage.addDirectory("/read");
+  Storage.addDirectory("/.crosspoint");
+  const std::string bookA = "/books/a.epub";
+  const std::string bookB = "/books/b.epub";
+  const std::string cacheA = Epub(bookA, "/.crosspoint").getCachePath();
+  const std::string cacheB = Epub(bookB, "/.crosspoint").getCachePath();
+  Storage.setFile(bookA, std::vector<unsigned char>{'E', 'P', 'U', 'B'});
+
+  ReadingStatsCompletionTransaction::blockCacheForTest(cacheA);
+  EXPECT_FALSE(canDeleteOrRelocateBookFile(bookA));
+  EXPECT_TRUE(canDeleteOrRelocateBookFile(bookB));
+  EXPECT_EQ(moveBookFilePreservingUserState(bookA, "/read/a.epub"), BookPathMoveResult::StateUnavailable);
+  EXPECT_TRUE(Storage.exists(bookA));
+  EXPECT_FALSE(Storage.exists("/read/a.epub"));
+  EXPECT_NE(cacheA, cacheB);
+  ReadingStatsCompletionTransaction::clearBlockedCacheForTest();
 }
 
 TEST(BookFilePublishCopySafetyTest, ExistingDestinationSurvivesBackupRenameFailure) {

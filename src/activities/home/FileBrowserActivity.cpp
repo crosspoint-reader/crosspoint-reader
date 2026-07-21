@@ -118,6 +118,7 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
 
   if (!file.isDirectory()) {
     file.close();
+    if (!canDeleteOrRelocateBookFile(fullPath)) return false;
     if (!Storage.remove(fullPath.c_str())) return false;
     removeBookUserStateAfterDelete(fullPath);
     return true;
@@ -177,6 +178,10 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
       if (isDir) {
         stack.push_back({std::move(entryPath), false});
       } else {
+        if (!canDeleteOrRelocateBookFile(entryPath)) {
+          LOG_ERR("FileBrowser", "Refusing to delete book with pending statistics: %s", entryPath.c_str());
+          return false;
+        }
         if (!Storage.remove(entryPath.c_str())) {
           LOG_ERR("FileBrowser", "Failed to remove file: %s", entryPath.c_str());
           return false;

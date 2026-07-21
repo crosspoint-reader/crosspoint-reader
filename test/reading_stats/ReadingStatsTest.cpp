@@ -3,6 +3,7 @@
 
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <vector>
@@ -11,6 +12,7 @@
 #include "GlobalReadingStats.h"
 #include "ReadingSessionTracker.h"
 #include "ReadingStatsCodec.h"
+#include "ReadingStatsCompletionTransaction.h"
 #include "ReadingStatsStorage.h"
 #include "ReadingStatsUtils.h"
 #include "activities/network/NearbyStatsPolicy.h"
@@ -64,7 +66,335 @@ BookReadingStats bookStatsWithSeconds(const uint32_t seconds) {
   stats.totalReadingSeconds = seconds;
   return stats;
 }
+
+constexpr char COMPLETION_CACHE_PATH[] = "/.crosspoint/epub_12345";
+constexpr char BOOK_STATS_PATH[] = "/.crosspoint/epub_12345/stats_v5.bin";
+constexpr char GLOBAL_STATS_PATH[] = "/.crosspoint/global_stats.bin";
+constexpr char COMPLETION_MARKER_PATH[] = "/.crosspoint/stats_completion.txn";
+constexpr char COMPLETION_MARKER_TEMP_PATH[] = "/.crosspoint/stats_completion.txn.tmp";
+
+struct CompletionTransition {
+  BookReadingStats oldBook;
+  BookReadingStats newBook;
+  GlobalReadingStats oldGlobal;
+  GlobalReadingStats newGlobal;
+};
+
+CompletionTransition completionTransition(const uint32_t completedBooks = 7) {
+  CompletionTransition transition;
+  transition.oldBook.totalReadingSeconds = 123;
+  transition.oldBook.totalPagesTurned = 9;
+  transition.oldBook.estimatedTimeLeftSeconds = 456;
+  transition.newBook = transition.oldBook;
+  transition.newBook.isCompleted = true;
+  transition.newBook.estimatedTimeLeftSeconds = 0;
+  transition.newBook.finishedDate = {2026, 7, 21};
+  transition.oldGlobal.totalReadingSeconds = 999;
+  transition.oldGlobal.totalPagesTurned = 42;
+  transition.oldGlobal.completedBooks = completedBooks;
+  transition.newGlobal = transition.oldGlobal;
+  transition.newGlobal.completedBooks =
+      completedBooks == std::numeric_limits<uint32_t>::max() ? completedBooks : completedBooks + 1;
+  return transition;
+}
+
+void seedCompletionTransition(const CompletionTransition& transition) {
+  Storage.reset();
+  Storage.setFile(BOOK_STATS_PATH, asVector(ReadingStatsCodec::encode(transition.oldBook)));
+  Storage.setFile(GLOBAL_STATS_PATH, asVector(ReadingStatsCodec::encode(transition.oldGlobal)));
+}
+
+void expectStoredTransition(const CompletionTransition& transition, const bool completed) {
+  BookReadingStats::LoadStatus bookStatus = BookReadingStats::LoadStatus::Invalid;
+  GlobalReadingStats::LoadStatus globalStatus = GlobalReadingStats::LoadStatus::Invalid;
+  const BookReadingStats book = BookReadingStats::load(COMPLETION_CACHE_PATH, &bookStatus);
+  const GlobalReadingStats global = GlobalReadingStats::load(&globalStatus);
+  ASSERT_TRUE(BookReadingStats::isTrustedLoadStatus(bookStatus));
+  ASSERT_TRUE(GlobalReadingStats::isTrustedLoadStatus(globalStatus));
+  expectBookStatsEqual(book, completed ? transition.newBook : transition.oldBook);
+  expectGlobalStatsEqual(global, completed ? transition.newGlobal : transition.oldGlobal);
+}
+
+uint32_t markerCrc32(const uint8_t* data, const size_t size) {
+  uint32_t crc = UINT32_MAX;
+  for (size_t i = 0; i < size; ++i) {
+    crc ^= data[i];
+    for (uint8_t bit = 0; bit < 8; ++bit) crc = (crc >> 1U) ^ (0xEDB88320U & (0U - (crc & 1U)));
+  }
+  return ~crc;
+}
+
+void writeMarkerCrc(std::vector<uint8_t>& marker) {
+  const uint32_t crc = markerCrc32(marker.data(), marker.size() - 4);
+  for (size_t i = 0; i < 4; ++i) marker[marker.size() - 4 + i] = static_cast<uint8_t>(crc >> (i * 8));
+}
 }  // namespace
+
+TEST(ReadingStatsCompletionTransaction, CommitsBothFilesAndSaturatesCompletedBooks) {
+  for (const uint32_t initial : {7u, std::numeric_limits<uint32_t>::max()}) {
+    const CompletionTransition transition = completionTransition(initial);
+    seedCompletionTransition(transition);
+    EXPECT_TRUE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                          transition.oldGlobal, transition.newGlobal));
+    expectStoredTransition(transition, true);
+    EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
+    EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_TEMP_PATH));
+  }
+}
+
+TEST(ReadingStatsCompletionTransaction, SupportsExplicitIncompleteWithoutUnderflow) {
+  CompletionTransition transition = completionTransition(0);
+  transition.oldBook = transition.newBook;
+  transition.oldGlobal = transition.newGlobal;
+  transition.oldGlobal.completedBooks = 0;
+  transition.newBook = transition.oldBook;
+  transition.newBook.isCompleted = false;
+  transition.newBook.finishedDate.clear();
+  transition.newGlobal = transition.oldGlobal;
+  transition.newGlobal.completedBooks = 0;
+  seedCompletionTransition(transition);
+
+  EXPECT_TRUE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                        transition.oldGlobal, transition.newGlobal));
+  expectStoredTransition(transition, true);
+  EXPECT_EQ(GlobalReadingStats::load().completedBooks, 0u);
+}
+
+TEST(ReadingStatsCompletionTransaction, RejectsUnrelatedMutations) {
+  CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  ++transition.newGlobal.totalReadingSeconds;
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
+  expectStoredTransition(completionTransition(), false);
+
+  transition = completionTransition();
+  ++transition.newBook.sessionCount;
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversEveryPublishBoundary) {
+  const CompletionTransition transition = completionTransition();
+  for (size_t failedRename = 1; failedRename <= 5; ++failedRename) {
+    seedCompletionTransition(transition);
+    Storage.failRenameOnCall(failedRename);
+    EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(
+        COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook, transition.oldGlobal, transition.newGlobal));
+    Storage.resetFaultInjection();
+    if (failedRename == 1) {
+      EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+                ReadingStatsCompletionTransaction::RecoveryResult::NoMarker);
+      expectStoredTransition(transition, false);
+    } else {
+      ASSERT_TRUE(Storage.exists(COMPLETION_MARKER_PATH));
+      EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+                ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+      expectStoredTransition(transition, true);
+    }
+  }
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversWriteAndSyncFailuresAtEveryFile) {
+  const CompletionTransition transition = completionTransition();
+  for (size_t failedWrite = 1; failedWrite <= 3; ++failedWrite) {
+    seedCompletionTransition(transition);
+    Storage.shortWriteOnCall(failedWrite);
+    EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(
+        COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook, transition.oldGlobal, transition.newGlobal));
+    Storage.resetFaultInjection();
+    if (failedWrite == 1) {
+      expectStoredTransition(transition, false);
+    } else {
+      EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+                ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+      expectStoredTransition(transition, true);
+    }
+
+    seedCompletionTransition(transition);
+    Storage.failSyncOnCall(failedWrite);
+    EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(
+        COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook, transition.oldGlobal, transition.newGlobal));
+    Storage.resetFaultInjection();
+    if (failedWrite == 1) {
+      expectStoredTransition(transition, false);
+    } else {
+      EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+                ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+      expectStoredTransition(transition, true);
+    }
+  }
+}
+
+TEST(ReadingStatsCompletionTransaction, ReplaysCommittedMarkerWithoutDoubleCounting) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  Storage.failRemoveOnCall(1);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  ASSERT_TRUE(Storage.exists(COMPLETION_MARKER_PATH));
+  const std::vector<uint8_t> replay = Storage.file(COMPLETION_MARKER_PATH);
+  expectStoredTransition(transition, true);
+
+  Storage.resetFaultInjection();
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  Storage.setFile(COMPLETION_MARKER_PATH, replay);
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  expectStoredTransition(transition, true);
+}
+
+TEST(ReadingStatsCompletionTransaction, RejectsCorruptNewerAndMismatchedMarkers) {
+  const CompletionTransition transition = completionTransition();
+  const auto preparePending = [&] {
+    seedCompletionTransition(transition);
+    Storage.failRenameOnCall(2);
+    EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(
+        COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook, transition.oldGlobal, transition.newGlobal));
+    Storage.resetFaultInjection();
+    ASSERT_TRUE(Storage.exists(COMPLETION_MARKER_PATH));
+  };
+
+  preparePending();
+  std::vector<uint8_t> marker = Storage.file(COMPLETION_MARKER_PATH);
+  marker.back() ^= 0x80;
+  Storage.setFile(COMPLETION_MARKER_PATH, marker);
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+  expectStoredTransition(transition, false);
+
+  preparePending();
+  marker = Storage.file(COMPLETION_MARKER_PATH);
+  marker[4] = 2;
+  Storage.setFile(COMPLETION_MARKER_PATH, marker);
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+  expectStoredTransition(transition, false);
+
+  preparePending();
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover("/.crosspoint/epub_99999"),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+  expectStoredTransition(transition, false);
+
+  preparePending();
+  BookReadingStats different = transition.oldBook;
+  ++different.totalReadingSeconds;
+  Storage.setFile(BOOK_STATS_PATH, asVector(ReadingStatsCodec::encode(different)));
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+  EXPECT_EQ(GlobalReadingStats::load().completedBooks, transition.oldGlobal.completedBooks);
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversPendingBookIndependentOfTheCurrentReader) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+
+  // A caller-bound attempt for another book stays fail-closed, while the
+  // marker-bound entry point used by EpubReaderActivity safely recovers A.
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover("/.crosspoint/epub_99999"),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recoverPending(),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  expectStoredTransition(transition, true);
+}
+
+TEST(ReadingStatsCompletionTransaction, RejectsValidCrcMarkerOutsideEpubCacheNamespace) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+
+  std::vector<uint8_t> marker = Storage.file(COMPLETION_MARKER_PATH);
+  constexpr char forgedPath[] = "/.crosspoint/evil_12345";
+  static_assert(sizeof(forgedPath) == sizeof(COMPLETION_CACHE_PATH));
+  memcpy(marker.data() + 8, forgedPath, sizeof(forgedPath) - 1);
+  writeMarkerCrc(marker);
+  Storage.setFile(COMPLETION_MARKER_PATH, marker);
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recoverPending(),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+  expectStoredTransition(transition, false);
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversMarkerTempAndProtectsMissingIdentity) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+  const std::vector<uint8_t> marker = Storage.file(COMPLETION_MARKER_PATH);
+  ASSERT_TRUE(Storage.remove(COMPLETION_MARKER_PATH));
+  Storage.setFile(COMPLETION_MARKER_TEMP_PATH, marker);
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  expectStoredTransition(transition, true);
+
+  CompletionTransition missing = completionTransition(0);
+  missing.oldBook = {};
+  missing.newBook = missing.oldBook;
+  missing.newBook.isCompleted = true;
+  missing.oldGlobal = {};
+  missing.newGlobal = missing.oldGlobal;
+  missing.newGlobal.completedBooks = 1;
+  Storage.reset();
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, missing.oldBook, missing.newBook,
+                                                         missing.oldGlobal, missing.newGlobal));
+  Storage.resetFaultInjection();
+  Storage.setFile(BOOK_STATS_PATH, asVector(ReadingStatsCodec::encode(missing.oldBook)));
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
+            ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
+}
+
+TEST(ReadingStatsCompletionTransaction, PublishesRecoveredStatsTempsBeforeRemovingMarker) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+
+  ASSERT_TRUE(Storage.remove(BOOK_STATS_PATH));
+  ASSERT_TRUE(Storage.remove(GLOBAL_STATS_PATH));
+  Storage.setFile(std::string(BOOK_STATS_PATH) + ".tmp", asVector(ReadingStatsCodec::encode(transition.newBook)));
+  Storage.setFile(std::string(GLOBAL_STATS_PATH) + ".tmp", asVector(ReadingStatsCodec::encode(transition.newGlobal)));
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recoverPending(),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  EXPECT_TRUE(Storage.exists(BOOK_STATS_PATH));
+  EXPECT_TRUE(Storage.exists(GLOBAL_STATS_PATH));
+  const std::string bookTempPath = std::string(BOOK_STATS_PATH) + ".tmp";
+  const std::string globalTempPath = std::string(GLOBAL_STATS_PATH) + ".tmp";
+  EXPECT_FALSE(Storage.exists(bookTempPath.c_str()));
+  EXPECT_FALSE(Storage.exists(globalTempPath.c_str()));
+  expectStoredTransition(transition, true);
+}
+
+TEST(ReadingStatsCompletionTransaction, PendingMarkerBlocksUnrelatedWritesAndBookReset) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+
+  GlobalReadingStats unrelatedGlobal = transition.oldGlobal;
+  ++unrelatedGlobal.totalReadingSeconds;
+  EXPECT_FALSE(unrelatedGlobal.save());
+  BookReadingStats unrelatedBook = transition.oldBook;
+  ++unrelatedBook.totalReadingSeconds;
+  EXPECT_FALSE(unrelatedBook.save(COMPLETION_CACHE_PATH));
+  EXPECT_FALSE(BookReadingStats::remove(COMPLETION_CACHE_PATH));
+  expectStoredTransition(transition, false);
+}
 
 TEST(ReadingStatsCodec, BookV5RoundTripPreservesCrossInkLayout) {
   BookReadingStats input;

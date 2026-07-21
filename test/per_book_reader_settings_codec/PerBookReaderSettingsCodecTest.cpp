@@ -16,7 +16,8 @@ using namespace PerBookReaderSettingsCodec;
 PerBookReaderSettings populatedSettings() {
   PerBookReaderSettings settings;
   settings.hasReaderOverrides = true;
-  settings.hasAutoPageTurnRate = true;
+  settings.hasAutoPageTurnInterval = true;
+  settings.autoPageTurnStartsOnOpen = true;
   settings.fontFamily = 1;
   settings.fontSize = 3;
   settings.lineSpacing = 2;
@@ -29,7 +30,7 @@ PerBookReaderSettings populatedSettings() {
   settings.extraParagraphSpacing = 0;
   settings.textAntiAliasing = 0;
   settings.imageRendering = 2;
-  settings.autoPageTurnRate = 12;
+  settings.autoPageTurnSeconds = 120;
   setPerBookSdFontFamilyName(settings, "Noto Sans VN");
   return settings;
 }
@@ -54,8 +55,8 @@ TEST(PerBookReaderSettingsCodec, UsesStableExactByteLayout) {
   Encoded encoded;
   ASSERT_TRUE(encode(populatedSettings(), encoded));
 
-  const Encoded expected = {0x43, 0x56, 0x52, 0x53, 0x01, 0x2E, 0x00, 0x75, 0x44, 0x31, 0x3F, 0x03, 0x01, 0x03, 0x02,
-                            0x04, 0x03, 0x28, 0x00, 0x01, 0x01, 0x00, 0x00, 0x02, 0x0C, 0x4E, 0x6F, 0x74, 0x6F, 0x20,
+  const Encoded expected = {0x43, 0x56, 0x52, 0x53, 0x02, 0x2E, 0x00, 0x69, 0x6F, 0x4E, 0xA0, 0x07, 0x01, 0x03, 0x02,
+                            0x04, 0x03, 0x28, 0x00, 0x01, 0x01, 0x00, 0x00, 0x02, 0x78, 0x4E, 0x6F, 0x74, 0x6F, 0x20,
                             0x53, 0x61, 0x6E, 0x73, 0x20, 0x56, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   EXPECT_EQ(encoded, expected);
@@ -108,7 +109,7 @@ TEST(PerBookReaderSettingsCodec, RejectsOutOfRangeValuesWithValidCrc) {
       std::pair{size_t{3}, uint8_t{3}},    std::pair{size_t{4}, uint8_t{5}},  std::pair{size_t{5}, uint8_t{4}},
       std::pair{size_t{6}, uint8_t{41}},   std::pair{size_t{7}, uint8_t{2}},  std::pair{size_t{8}, uint8_t{2}},
       std::pair{size_t{9}, uint8_t{2}},    std::pair{size_t{10}, uint8_t{2}}, std::pair{size_t{11}, uint8_t{2}},
-      std::pair{size_t{12}, uint8_t{3}},   std::pair{size_t{13}, uint8_t{2}}, std::pair{size_t{45}, uint8_t{'x'}},
+      std::pair{size_t{12}, uint8_t{3}},   std::pair{size_t{13}, uint8_t{4}}, std::pair{size_t{45}, uint8_t{'x'}},
   };
   for (const auto& [offset, value] : invalidValues) {
     auto corrupt = encoded;
@@ -118,15 +119,69 @@ TEST(PerBookReaderSettingsCodec, RejectsOutOfRangeValuesWithValidCrc) {
   }
 
   auto invalid = populatedSettings();
-  invalid.autoPageTurnRate = 2;
+  invalid.autoPageTurnSeconds = 4;
   EXPECT_FALSE(encode(invalid, encoded));
+
+  invalid = populatedSettings();
+  invalid.hasAutoPageTurnInterval = false;
+  EXPECT_FALSE(encode(invalid, encoded));
+
+  invalid = populatedSettings();
+  invalid.sdFontFamilyName[0] = static_cast<char>(0xC0);
+  invalid.sdFontFamilyName[1] = '\0';
+  std::fill(invalid.sdFontFamilyName.begin() + 2, invalid.sdFontFamilyName.end(), '\0');
+  EXPECT_FALSE(encode(invalid, encoded));
+
+  auto corrupt = encoded;
+  ASSERT_TRUE(encode(populatedSettings(), corrupt));
+  corrupt[PAYLOAD_OFFSET + 14] = 0xC0;
+  corrupt[PAYLOAD_OFFSET + 15] = 0;
+  std::fill(corrupt.begin() + static_cast<std::ptrdiff_t>(PAYLOAD_OFFSET + 16), corrupt.end(), 0);
+  refreshCrc(corrupt);
+  EXPECT_EQ(decode(corrupt.data(), corrupt.size(), decoded), DecodeStatus::INVALID_VALUE);
+}
+
+TEST(PerBookReaderSettingsCodec, ReadsVersionOneRatesAsSecondsAndKeepsLegacyAutoStart) {
+  const std::array<std::pair<uint8_t, uint8_t>, 4> ratesToSeconds = {
+      std::pair{uint8_t{1}, uint8_t{60}},
+      std::pair{uint8_t{3}, uint8_t{20}},
+      std::pair{uint8_t{6}, uint8_t{10}},
+      std::pair{uint8_t{12}, uint8_t{5}},
+  };
+  for (const auto& [rate, seconds] : ratesToSeconds) {
+    Encoded encoded{};
+    ASSERT_TRUE(encode(populatedSettings(), encoded));
+    encoded[VERSION_OFFSET] = LEGACY_VERSION;
+    encoded[PAYLOAD_OFFSET] = 0x03;
+    encoded[PAYLOAD_OFFSET + 13] = rate;
+    refreshCrc(encoded);
+
+    PerBookReaderSettings decoded;
+    ASSERT_EQ(decode(encoded.data(), encoded.size(), decoded), DecodeStatus::OK) << static_cast<int>(rate);
+    EXPECT_TRUE(decoded.hasAutoPageTurnInterval);
+    EXPECT_TRUE(decoded.autoPageTurnStartsOnOpen);
+    EXPECT_EQ(decoded.autoPageTurnSeconds, seconds);
+  }
+}
+
+TEST(PerBookReaderSettingsCodec, RejectsInvalidVersionOneRate) {
+  Encoded encoded{};
+  ASSERT_TRUE(encode(populatedSettings(), encoded));
+  encoded[VERSION_OFFSET] = LEGACY_VERSION;
+  encoded[PAYLOAD_OFFSET] = 0x03;
+  encoded[PAYLOAD_OFFSET + 13] = 2;
+  refreshCrc(encoded);
+
+  PerBookReaderSettings decoded;
+  EXPECT_EQ(decode(encoded.data(), encoded.size(), decoded), DecodeStatus::INVALID_VALUE);
 }
 
 TEST(PerBookReaderSettingsCodec, DefaultsAndSdFontAreAlwaysTerminated) {
   PerBookReaderSettings defaults;
   EXPECT_FALSE(defaults.hasReaderOverrides);
-  EXPECT_FALSE(defaults.hasAutoPageTurnRate);
-  EXPECT_EQ(defaults.autoPageTurnRate, 0);
+  EXPECT_FALSE(defaults.hasAutoPageTurnInterval);
+  EXPECT_FALSE(defaults.autoPageTurnStartsOnOpen);
+  EXPECT_EQ(defaults.autoPageTurnSeconds, 0);
   EXPECT_EQ(defaults.sdFontFamilyName.front(), '\0');
   EXPECT_EQ(defaults.sdFontFamilyName.back(), '\0');
 

@@ -465,6 +465,10 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     }
   } else {
     file.close();
+    if (!canDeleteOrRelocateBookFile(path.c_str())) {
+      s.send(409, "text/plain", "Book statistics recovery is still pending");
+      return;
+    }
     if (Storage.remove(path.c_str())) {
       removeBookUserStateAfterDelete(path.c_str());
       s.send(204);

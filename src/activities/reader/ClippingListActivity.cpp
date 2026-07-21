@@ -114,12 +114,35 @@ void ClippingListActivity::finishWithJump() {
   const auto* clipping = store_.at(static_cast<size_t>(selectedIndex_));
   if (!clipping) return;
 
+  std::string text;
+  if (!store_.readText(static_cast<size_t>(selectedIndex_), text)) {
+    deleteFailed_ = true;
+    requestUpdate();
+    return;
+  }
+
   ClippingJumpResult jump;
+  jump.bookTitle = store_.book().title;
+  jump.bookAuthor = store_.book().author;
+  jump.bookPath = store_.book().path;
+  jump.bookType = store_.book().bookType;
+  jump.storePath = store_.path();
+  jump.chapterTitle = clipping->chapterTitle;
+  jump.storeFileLength = store_.fileLength();
+  jump.storeFormat = static_cast<uint8_t>(store_.format());
+  jump.clippingIndex = static_cast<uint16_t>(selectedIndex_);
   jump.spineIndex = clipping->spineIndex;
   jump.startPage = clipping->startPage;
+  jump.endPage = clipping->endPage;
   jump.pageCount = clipping->pageCount;
+  jump.startWordIndex = clipping->startWordIndex;
+  jump.endWordIndex = clipping->endWordIndex;
+  jump.wordCount = clipping->wordCount;
   jump.paragraphIndex = clipping->paragraphIndex;
-  jump.clippingIndex = static_cast<uint16_t>(selectedIndex_);
+  jump.timestamp = clipping->timestamp;
+  jump.textOffset = clipping->textOffset;
+  jump.textLength = clipping->textLength;
+  jump.textCrc32 = ClippingCodec::crc32(reinterpret_cast<const uint8_t*>(text.data()), text.size());
   jump.pageFingerprint = clipping->pageFingerprint;
   setResult(std::move(jump));
   finish();

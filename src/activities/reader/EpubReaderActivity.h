@@ -15,6 +15,7 @@
 #include "ProgressMapper.h"
 #include "ReadingSessionTracker.h"
 #include "activities/Activity.h"
+#include "clippings/ClippingPageTools.h"
 #include "clippings/ClippingStore.h"
 
 class EpubReaderActivity final : public Activity {
@@ -68,7 +69,7 @@ class EpubReaderActivity final : public Activity {
   PerBookReaderSettings globalReaderSettings;
   PerBookReaderSettings bookReaderSettings;
   bool bookSettingsWritable = true;
-  uint8_t autoPageTurnRate = 0;
+  uint8_t autoPageTurnSeconds = 0;
   bool pendingBookSettingsSaveError = false;
   bool pendingCacheClearError = false;
 
@@ -83,19 +84,29 @@ class EpubReaderActivity final : public Activity {
     JumpUnavailable,
   };
   ClippingNotice pendingClippingNotice = ClippingNotice::None;
+  bool pendingClippingHighlightsTruncatedNotice = false;
+  std::optional<ClippingJumpResult> initialClippingJump;
   struct PendingClippingJump {
     uint16_t spineIndex = 0;
     uint16_t page = 0;
-    uint16_t pageCount = 0;
-    uint16_t paragraphIndex = UINT16_MAX;
     uint32_t pageFingerprint = 0;
+    int fallbackSpineIndex = 0;
+    int fallbackPage = 0;
+    int fallbackCachedSpineIndex = 0;
+    int fallbackCachedChapterPageCount = 0;
   };
   std::optional<PendingClippingJump> pendingClippingJump;
+  ClippingPageTools::HighlightNoticeTracker clippingHighlightNotices;
 
   BookReadingStats bookReadingStats;
   GlobalReadingStats globalReadingStats;
   bool bookReadingStatsWritable = true;
   bool globalReadingStatsWritable = true;
+  // Prevent a broken/newer stats file or transient SD failure from causing an
+  // unbounded completion retry on every loop tick. Leaving the end screen
+  // permits one deliberate retry; reopening the book naturally resets it.
+  bool completionAttemptBlocked = false;
+  bool pendingStatsCompletionError = false;
   ReadingSessionTracker readingSessionTracker;
   uint32_t sessionReadingSeconds = 0;
   // Time-bucket/history changes are accumulated per actually visible page
@@ -139,8 +150,8 @@ class EpubReaderActivity final : public Activity {
   int lastSavedPage = -1;
   int lastSavedPageCount = -1;
 
-  void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
-                      int orientedMarginBottom, int orientedMarginLeft);
+  bool renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
+                      int orientedMarginBottom, int orientedMarginLeft, uint32_t* pageFingerprintOut);
   void renderStatusBar() const;
   // Pages laid out per incremental-build pump: on the render path (catching up to the page
   // being shown) and per loop() tick (background build of a large chapter). Kept small so a
@@ -190,10 +201,17 @@ class EpubReaderActivity final : public Activity {
   void openReadingStats();
   void openClippingSelection();
   void openClippings();
-  void applyPendingClippingJump(int marginLeft, int marginTop);
+  bool validateClippingJump(const ClippingJumpResult& jump) const;
+  void armClippingJump(const ClippingJumpResult& jump);
+  bool abortPendingClippingJump();
+  // Returns true when an invalid target restored the previous section and this
+  // render must restart there. The page fingerprint is intentionally checked
+  // later against the exact Page instance that will be rendered.
+  bool preparePendingClippingJump();
   bool persistBookReaderSettings();
   void invalidateReaderLayout();
-  void toggleAutoPageTurn(uint8_t selectedPageTurnOption, bool persist = true);
+  void applyAutoPageTurnRuntime(uint8_t seconds, bool active);
+  void updateAutoPageTurnFromMenu(uint8_t seconds);
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();
   void addBookmark();
@@ -216,12 +234,14 @@ class EpubReaderActivity final : public Activity {
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
                               PerBookReaderSettings globalReaderSettings, PerBookReaderSettings bookReaderSettings,
-                              bool bookSettingsWritable)
+                              bool bookSettingsWritable,
+                              std::optional<ClippingJumpResult> initialClippingJump = std::nullopt)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
         globalReaderSettings(std::move(globalReaderSettings)),
         bookReaderSettings(std::move(bookReaderSettings)),
-        bookSettingsWritable(bookSettingsWritable) {}
+        bookSettingsWritable(bookSettingsWritable),
+        initialClippingJump(std::move(initialClippingJump)) {}
   void onEnter() override;
   void onExit() override;
   void onPause() override;

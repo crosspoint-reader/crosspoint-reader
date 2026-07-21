@@ -35,8 +35,8 @@ class EpubReaderMenuActivity final : public Activity {
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const uint8_t currentPageTurnOption,
-                                  const bool hasFootnotes, bool hasBookmarks);
+                                  const uint8_t currentOrientation, const uint8_t currentAutoPageTurnSeconds,
+                                  bool autoPageTurnActive, const bool hasFootnotes, bool hasBookmarks);
 
   void onEnter() override;
   void onExit() override;
@@ -60,11 +60,14 @@ class EpubReaderMenuActivity final : public Activity {
   OptionPopup optionPopup;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
-  uint8_t selectedPageTurnOption = 0;
+  uint8_t selectedAutoPageTurnSeconds = 0;
+  bool selectedAutoPageTurnActive = false;
+  bool autoPageTurnChanged = false;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
-  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;
+
+  std::string autoPageTurnValue() const;
 };

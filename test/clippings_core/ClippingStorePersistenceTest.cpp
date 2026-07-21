@@ -922,3 +922,309 @@ TEST_F(ClippingStorePersistenceTest, RekeyOfFreshEmptyStoreChangesKeyWithoutCrea
   EXPECT_FALSE(Storage.exists(storePath().c_str()));
   EXPECT_TRUE(Storage.exists(movedStorePath().c_str()));
 }
+
+TEST_F(ClippingStorePersistenceTest, CatalogReadsCanonicalBackupAndMissingBooksWithoutChangingStorage) {
+  const auto canonical = createCanonicalFor(BOOK_PATH, "đoạn một");
+  const std::string backupBook = "/Books/không còn trên thẻ.epub";
+  const std::string backupPath = ClippingCodec::filePathForBook(backupBook);
+  const auto backup = createCanonicalFor(backupBook, "đoạn hai");
+  ASSERT_TRUE(Storage.remove(backupPath.c_str()));
+  Storage.setFile(backupPath + ".bak", backup);
+  Storage.setFile(BOOK_PATH, {'e', 'p', 'u', 'b'});
+  Storage.setFile(storePath() + ".move", {'n', 'o', 't', 'e'});
+  Storage.setFile(storePath() + ".crossink-v1.orig", canonical);
+  Storage.setFile(std::string(ClippingCodec::DIRECTORY) + "/random.bin.orig", canonical);
+
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(catalog.entries.size(), 2U);
+  EXPECT_EQ(catalog.skippedBooks, 0U);
+  EXPECT_FALSE(catalog.directoryTruncated);
+  EXPECT_FALSE(catalog.entryNameTruncated);
+  const auto backupEntry = std::find_if(catalog.entries.begin(), catalog.entries.end(),
+                                        [&](const auto& entry) { return entry.book.path == backupBook; });
+  ASSERT_NE(backupEntry, catalog.entries.end());
+  EXPECT_EQ(backupEntry->sourcePath, backupPath + ".bak");
+  EXPECT_FALSE(backupEntry->bookExists);
+  EXPECT_FALSE(Storage.exists(backupBook.c_str()));
+  EXPECT_FALSE(Storage.exists(backupPath.c_str()));
+  EXPECT_EQ(Storage.file(backupPath + ".bak"), backup);
+  EXPECT_EQ(Storage.file(storePath()), canonical);
+  const auto canonicalEntry = std::find_if(catalog.entries.begin(), catalog.entries.end(),
+                                           [](const auto& entry) { return entry.book.path == BOOK_PATH; });
+  ASSERT_NE(canonicalEntry, catalog.entries.end());
+  EXPECT_TRUE(canonicalEntry->bookExists);
+  EXPECT_EQ(canonicalEntry->newestTimestamp, 42U);
+}
+
+TEST_F(ClippingStorePersistenceTest, CatalogUsesBackupThenTempOnlyForRecoverableCanonicalDamage) {
+  const auto valid = createCanonical();
+  auto corrupt = valid;
+  corrupt.pop_back();
+  Storage.setFile(storePath(), corrupt);
+  Storage.setFile(storePath() + ".bak", valid);
+
+  ClippingStore::Catalog fromBackup;
+  ASSERT_EQ(ClippingStore::loadCatalog(fromBackup), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(fromBackup.entries.size(), 1U);
+  EXPECT_EQ(fromBackup.entries[0].sourcePath, storePath() + ".bak");
+  EXPECT_EQ(Storage.file(storePath()), corrupt);
+
+  Storage.reset();
+  Storage.mkdir("/.crosspoint");
+  Storage.mkdir(ClippingCodec::DIRECTORY);
+  Storage.setFile(storePath() + ".tmp", valid);
+  ClippingStore::Catalog fromTemp;
+  ASSERT_EQ(ClippingStore::loadCatalog(fromTemp), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(fromTemp.entries.size(), 1U);
+  EXPECT_EQ(fromTemp.entries[0].sourcePath, storePath() + ".tmp");
+  EXPECT_FALSE(Storage.exists(storePath().c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, CatalogFailsClosedOnNewerUnreadableAndMisnamedStores) {
+  const auto valid = createCanonical();
+  auto newer = valid;
+  newer[4] = static_cast<uint8_t>(ClippingCodec::VERSION + 1);
+  newer[5] = 0;
+  Storage.setFile(storePath(), newer);
+  Storage.setFile(storePath() + ".bak", valid);
+
+  ClippingStore::Catalog newerCatalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(newerCatalog), ClippingStore::CatalogLoadResult::Loaded);
+  EXPECT_TRUE(newerCatalog.entries.empty());
+  EXPECT_EQ(newerCatalog.skippedBooks, 1U);
+  EXPECT_EQ(Storage.file(storePath()), newer);
+
+  Storage.reset();
+  Storage.mkdir("/.crosspoint");
+  Storage.mkdir(ClippingCodec::DIRECTORY);
+  Storage.setFile(storePath(), valid);
+  Storage.setFile(storePath() + ".bak", valid);
+  Storage.makeUnreadable(storePath());
+  ClippingStore::Catalog unreadableCatalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(unreadableCatalog), ClippingStore::CatalogLoadResult::Loaded);
+  EXPECT_TRUE(unreadableCatalog.entries.empty());
+  EXPECT_EQ(unreadableCatalog.skippedBooks, 1U);
+
+  Storage.reset();
+  Storage.mkdir("/.crosspoint");
+  Storage.mkdir(ClippingCodec::DIRECTORY);
+  const std::string misnamed = std::string(ClippingCodec::DIRECTORY) + "/epub_1.bin";
+  Storage.setFile(misnamed, valid);
+  ClippingStore::Catalog misnamedCatalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(misnamedCatalog), ClippingStore::CatalogLoadResult::Loaded);
+  EXPECT_TRUE(misnamedCatalog.entries.empty());
+  EXPECT_EQ(misnamedCatalog.skippedBooks, 1U);
+  EXPECT_EQ(Storage.file(misnamed), valid);
+}
+
+TEST_F(ClippingStorePersistenceTest, CatalogReportsItsBookAndDirectoryEntryBounds) {
+  for (size_t index = 0; index < ClippingStore::MAX_CATALOG_BOOKS + 1; ++index) {
+    createCanonicalFor("/Books/catalog-" + std::to_string(index) + ".epub", "x");
+  }
+  Storage.setFile(std::string(ClippingCodec::DIRECTORY) + "/" + std::string(80, 'x'), {'x'});
+
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  EXPECT_EQ(catalog.entries.size(), ClippingStore::MAX_CATALOG_BOOKS);
+  EXPECT_TRUE(catalog.directoryTruncated);
+  EXPECT_TRUE(catalog.entryNameTruncated);
+}
+
+TEST_F(ClippingStorePersistenceTest, CatalogBoundsDirectoryIoEvenWhenEntriesAreUnknown) {
+  Storage.mkdir("/.crosspoint");
+  Storage.mkdir(ClippingCodec::DIRECTORY);
+  for (size_t index = 0; index < ClippingStore::MAX_CATALOG_DIRECTORY_ENTRIES + 1; ++index) {
+    Storage.setFile(std::string(ClippingCodec::DIRECTORY) + "/noise-" + std::to_string(index) + ".dat", {'x'});
+  }
+
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  EXPECT_TRUE(catalog.entries.empty());
+  EXPECT_TRUE(catalog.directoryTruncated);
+  EXPECT_EQ(catalog.skippedBooks, 0U);
+}
+
+TEST_F(ClippingStorePersistenceTest, CatalogReportsMissingAndInvalidDirectories) {
+  ClippingStore::Catalog catalog;
+  EXPECT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::DirectoryMissing);
+
+  Storage.setFile(ClippingCodec::DIRECTORY, {});
+  EXPECT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::IoError);
+}
+
+TEST_F(ClippingStorePersistenceTest, CatalogFailsClosedWhenDirectoryIterationStopsOnIoError) {
+  createCanonicalFor(BOOK_PATH, "một");
+  createCanonicalFor("/Books/thứ hai.epub", "hai");
+  Storage.failDirectoryIterationAfter(1);
+
+  ClippingStore::Catalog catalog;
+  EXPECT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::IoError);
+  EXPECT_TRUE(catalog.entries.empty());
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportStreamsAValidatedCatalogWithoutOverwritingAnyExistingFile) {
+  ClippingStore first;
+  ASSERT_EQ(first.loadForBook(BOOK_PATH, "Sách\nViệt", "Tác giả\rViệt"), ClippingStore::LoadResult::Ready);
+  ASSERT_EQ(first.add(sampleClipping(1704067200U), "đoạn tiếng Việt"), ClippingStore::AddResult::Added);
+  const auto firstCanonical = Storage.file(storePath());
+
+  const std::string secondBook = "/Books/thứ hai.epub";
+  ClippingStore second;
+  ASSERT_EQ(second.loadForBook(secondBook, "Sách thứ hai", "Tác giả"), ClippingStore::LoadResult::Ready);
+  ASSERT_EQ(second.add(sampleClipping(43), "nội dung thứ hai"), ClippingStore::AddResult::Added);
+  const std::string secondPath = ClippingCodec::filePathForBook(secondBook);
+  const auto secondCanonical = Storage.file(secondPath);
+
+  const std::vector<uint8_t> crossInkExport{'o', 'l', 'd'};
+  const std::vector<uint8_t> crossViExport{'k', 'e', 'e', 'p'};
+  const std::vector<uint8_t> foreignStaging{'f', 'o', 'r', 'e', 'i', 'g', 'n'};
+  Storage.setFile("/My Clippings.txt", crossInkExport);
+  Storage.setFile("/CrossVi Clippings.txt", crossViExport);
+  const std::string stagingOne = std::string(ClippingCodec::DIRECTORY) + "/.crossvi-export-1.tmp";
+  Storage.setFile(stagingOne, foreignStaging);
+
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(catalog.entries.size(), 2U);
+  std::string outputPath;
+  ASSERT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::Exported);
+  EXPECT_EQ(outputPath, "/CrossVi Clippings (2).txt");
+  const auto& outputBytes = Storage.file(outputPath);
+  const std::string output(outputBytes.begin(), outputBytes.end());
+  EXPECT_NE(output.find("CrossVi Clippings"), std::string::npos);
+  EXPECT_NE(output.find("Title: Sách Việt"), std::string::npos);
+  EXPECT_NE(output.find("Author: Tác giả Việt"), std::string::npos);
+  EXPECT_NE(output.find("Created: 2024-01-01 00:00 UTC"), std::string::npos);
+  EXPECT_NE(output.find("Position: Section 2, page 3, words 5-7"), std::string::npos);
+  EXPECT_NE(output.find("đoạn tiếng Việt"), std::string::npos);
+  EXPECT_NE(output.find("nội dung thứ hai"), std::string::npos);
+  EXPECT_EQ(Storage.file("/My Clippings.txt"), crossInkExport);
+  EXPECT_EQ(Storage.file("/CrossVi Clippings.txt"), crossViExport);
+  EXPECT_EQ(Storage.file(stagingOne), foreignStaging);
+  EXPECT_EQ(Storage.file(storePath()), firstCanonical);
+  EXPECT_EQ(Storage.file(secondPath), secondCanonical);
+  EXPECT_FALSE(Storage.exists((std::string(ClippingCodec::DIRECTORY) + "/.crossvi-export-2.tmp").c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportNeverPresentsCrossInkMonotonicSecondsAsARealDate) {
+  Storage.mkdir("/.crosspoint");
+  Storage.mkdir(ClippingCodec::DIRECTORY);
+  Storage.setFile(storePath(), makeLegacy(2, BOOK_PATH, "đoạn legacy"));
+
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(catalog.entries.size(), 1U);
+  EXPECT_EQ(catalog.entries[0].format, ClippingCodec::Format::CrossInkV2);
+  EXPECT_EQ(catalog.entries[0].newestTimestamp, 0U);
+  std::string outputPath;
+  ASSERT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::Exported);
+  const auto& bytes = Storage.file(outputPath);
+  const std::string output(bytes.begin(), bytes.end());
+  EXPECT_NE(output.find("Created: Unknown (legacy)"), std::string::npos);
+  EXPECT_EQ(output.find("1970-"), std::string::npos);
+  EXPECT_NE(output.find("đoạn legacy"), std::string::npos);
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportRefusesIncompleteOrChangedCatalogsBeforeCreatingOutput) {
+  const auto valid = createCanonical();
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(catalog.entries.size(), 1U);
+  auto corrupt = valid;
+  corrupt.pop_back();
+  Storage.setFile(storePath(), corrupt);
+
+  std::string outputPath = "stale";
+  EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::SourceChanged);
+  EXPECT_TRUE(outputPath.empty());
+  EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+
+  Storage.setFile(storePath(), valid);
+  catalog.skippedBooks = 1;
+  EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::CatalogIncomplete);
+  EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+
+  catalog.skippedBooks = 0;
+  catalog.entryNameTruncated = true;
+  EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::CatalogIncomplete);
+  EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportRefusesAStaleCatalogThatOmitsANewBook) {
+  createCanonical();
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  ASSERT_EQ(catalog.entries.size(), 1U);
+  createCanonicalFor("/Books/new-after-screen-open.epub", "mới");
+
+  std::string outputPath;
+  EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::SourceChanged);
+  EXPECT_TRUE(outputPath.empty());
+  EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportFailsClosedWhenItsFreshDirectoryScanHitsIoError) {
+  createCanonical();
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  Storage.failDirectoryIterationAfter(0);
+
+  std::string outputPath;
+  EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::IoError);
+  EXPECT_TRUE(outputPath.empty());
+  EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportExclusiveCreatePreservesAStagingCollision) {
+  createCanonical();
+  ClippingStore::Catalog catalog;
+  ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+  const std::string staging = std::string(ClippingCodec::DIRECTORY) + "/.crossvi-export-1.tmp";
+  const std::vector<uint8_t> foreign{'f', 'o', 'r', 'e', 'i', 'g', 'n'};
+  Storage.collideExclusiveOpenOnce(staging, foreign);
+
+  std::string outputPath;
+  EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::IoError);
+  EXPECT_TRUE(outputPath.empty());
+  EXPECT_EQ(Storage.file(staging), foreign);
+  EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+}
+
+TEST_F(ClippingStorePersistenceTest, ExportFaultsLeaveSourcesAndFinalNamespaceUntouched) {
+  enum class Failure { ShortWrite, Sync, StagingCorruption, Rename, FinalCorruption };
+  for (const Failure failure :
+       {Failure::ShortWrite, Failure::Sync, Failure::StagingCorruption, Failure::Rename, Failure::FinalCorruption}) {
+    SCOPED_TRACE(static_cast<int>(failure));
+    Storage.reset();
+    const auto canonical = createCanonical();
+    ClippingStore::Catalog catalog;
+    ASSERT_EQ(ClippingStore::loadCatalog(catalog), ClippingStore::CatalogLoadResult::Loaded);
+    ASSERT_EQ(catalog.entries.size(), 1U);
+
+    switch (failure) {
+      case Failure::ShortWrite:
+        Storage.shortWriteOnce();
+        break;
+      case Failure::Sync:
+        Storage.failSyncOnce();
+        break;
+      case Failure::StagingCorruption:
+        Storage.corruptWriteOnCloseOnce();
+        break;
+      case Failure::Rename:
+        Storage.failRenameOnce();
+        break;
+      case Failure::FinalCorruption:
+        Storage.corruptRenameOnce();
+        break;
+    }
+
+    std::string outputPath;
+    EXPECT_EQ(ClippingStore::exportCatalog(catalog, outputPath), ClippingStore::ExportResult::IoError);
+    EXPECT_TRUE(outputPath.empty());
+    EXPECT_EQ(Storage.file(storePath()), canonical);
+    EXPECT_FALSE(Storage.exists("/CrossVi Clippings.txt"));
+    EXPECT_FALSE(Storage.exists((std::string(ClippingCodec::DIRECTORY) + "/.crossvi-export-1.tmp").c_str()));
+  }
+}

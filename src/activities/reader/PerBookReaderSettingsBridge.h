@@ -6,11 +6,13 @@
 #include "PerBookReaderSettings.h"
 
 inline PerBookReaderSettings captureReaderSettings(const bool hasOverrides = false,
-                                                   const bool hasAutoPageTurnRate = false,
-                                                   const uint8_t autoPageTurnRate = 0) {
+                                                   const bool hasAutoPageTurnInterval = false,
+                                                   const uint8_t autoPageTurnSeconds = 0,
+                                                   const bool autoPageTurnStartsOnOpen = false) {
   PerBookReaderSettings out;
   out.hasReaderOverrides = hasOverrides;
-  out.hasAutoPageTurnRate = hasAutoPageTurnRate;
+  out.hasAutoPageTurnInterval = hasAutoPageTurnInterval;
+  out.autoPageTurnStartsOnOpen = hasAutoPageTurnInterval && autoPageTurnStartsOnOpen;
   out.fontFamily = SETTINGS.fontFamily;
   out.fontSize = SETTINGS.fontSize;
   out.lineSpacing = SETTINGS.lineSpacing;
@@ -23,7 +25,7 @@ inline PerBookReaderSettings captureReaderSettings(const bool hasOverrides = fal
   out.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
   out.textAntiAliasing = SETTINGS.textAntiAliasing;
   out.imageRendering = SETTINGS.imageRendering;
-  out.autoPageTurnRate = hasAutoPageTurnRate ? autoPageTurnRate : 0;
+  out.autoPageTurnSeconds = hasAutoPageTurnInterval ? autoPageTurnSeconds : 0;
   std::strncpy(out.sdFontFamilyName.data(), SETTINGS.sdFontFamilyName, out.sdFontFamilyName.size() - 1);
   out.sdFontFamilyName.back() = '\0';
   return out;

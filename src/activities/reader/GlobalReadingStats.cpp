@@ -12,6 +12,7 @@
 #include <string>
 
 #include "ReadingStatsCodec.h"
+#include "ReadingStatsCompletionTransaction.h"
 #include "ReadingStatsStorage.h"
 
 namespace {
@@ -204,6 +205,10 @@ GlobalReadingStats GlobalReadingStats::loadAggregated(const GlobalReadingStats& 
 }
 
 bool GlobalReadingStats::save() const {
+  if (!ReadingStatsCompletionTransaction::permitsGlobalWrite(*this)) {
+    LOG_ERR(LOG_TAG, "Refusing to overwrite a pending completion transaction");
+    return false;
+  }
   GlobalReadingStats existing;
   const LoadOutcome primary = loadPath(GLOBAL_STATS_PATH, existing);
   if (ReadingStatsStorage::isProtectedExistingFile(primary.readResult,

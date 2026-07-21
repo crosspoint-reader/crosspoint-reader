@@ -132,17 +132,9 @@ HighlightPlan buildExactHighlightPlan(GfxRenderer& renderer, const Page& page, c
   HighlightPlan plan;
   if (pageFingerprint == 0 || maxHighlights == 0) return plan;
 
-  std::array<const ClippingCodec::ClippingMetadata*, 16> matches{};
-  const size_t matchLimit = std::min(maxHighlights, matches.size());
-  size_t matchCount = 0;
-  for (const auto& clipping : clippings) {
-    if (matchCount == matchLimit) break;
-    if (clipping.spineIndex == spineIndex && clipping.startPage == pageIndex && clipping.endPage == pageIndex &&
-        clipping.pageFingerprint == pageFingerprint) {
-      matches[matchCount++] = &clipping;
-    }
-  }
-  if (matchCount == 0) return plan;
+  const size_t scanLimit = std::min(clippings.size(), static_cast<size_t>(ClippingCodec::MAX_CLIPPINGS_PER_BOOK));
+  const size_t matchLimit = std::min(maxHighlights, static_cast<size_t>(ClippingCodec::MAX_CLIPPINGS_PER_BOOK));
+  if (matchLimit == 0) return plan;
 
   const int lineHeight = renderer.getLineHeight(fontId);
   if (lineHeight <= 0) return plan;
@@ -158,18 +150,36 @@ HighlightPlan buildExactHighlightPlan(GfxRenderer& renderer, const Page& page, c
       if (!hasVisibleText(text)) continue;
       const uint32_t currentWord = pageWordIndex++;
       bool selected = false;
-      for (size_t match = 0; match < matchCount; ++match) {
-        selected = currentWord >= matches[match]->startWordIndex && currentWord <= matches[match]->endWordIndex;
-        if (selected) break;
+      size_t matchesSeen = 0;
+      for (size_t index = 0; index < scanLimit && matchesSeen < matchLimit; ++index) {
+        const auto& clipping = clippings[index];
+        if (clipping.spineIndex != spineIndex || clipping.startPage != pageIndex || clipping.endPage != pageIndex ||
+            clipping.pageFingerprint != pageFingerprint) {
+          continue;
+        }
+        ++matchesSeen;
+        if (currentWord >= clipping.startWordIndex && currentWord <= clipping.endWordIndex) {
+          selected = true;
+          break;
+        }
       }
       if (!selected) continue;
 
       const int left = line.xPos + block->wordXpos(i) + marginLeft;
-      const int width = renderer.getTextAdvanceX(fontId, block->wordText(i), block->wordStyle(i));
+      int width = renderer.getTextAdvanceX(fontId, block->wordText(i), block->wordStyle(i));
+      if (block->focusBoundary(i) > 0) {
+        const size_t suffixOffset = std::min<size_t>(block->focusBoundary(i), text.size());
+        width = static_cast<int>(block->focusSuffixX(i)) +
+                std::max(0, renderer.getTextAdvanceX(fontId, block->wordText(i) + suffixOffset,
+                                                     block->wordStyle(i)));
+      }
       const int right = std::min(renderer.getScreenWidth(), left + std::max(1, width));
       const int y = std::clamp(line.yPos + marginTop + lineHeight - 2, 0, renderer.getScreenHeight() - 1);
       if (right > left && right > 0 && left < renderer.getScreenWidth()) {
-        if (plan.count == plan.lines.size()) return plan;
+        if (plan.count == plan.lines.size()) {
+          plan.truncated = true;
+          return plan;
+        }
         plan.lines[plan.count++] = {static_cast<int16_t>(std::max(0, left)), static_cast<int16_t>(right - 1),
                                     static_cast<int16_t>(y)};
       }

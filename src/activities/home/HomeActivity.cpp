@@ -23,6 +23,7 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ProgressFile.h"
+#include "activities/reader/ReadingStatsCompletionTransaction.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -53,7 +54,7 @@ bool validateDashboardProgressCandidate(const uint8_t* data, const size_t size, 
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 5;  // File Browser, Recents, Saved Items, File transfer, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -218,6 +219,11 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
+  if (ReadingStatsCompletionTransaction::recoverPending() ==
+      ReadingStatsCompletionTransaction::RecoveryResult::Blocked) {
+    LOG_ERR("HOME", "Pending reading-statistics transaction remains blocked");
+  }
+
   hasOpdsServers = OPDS_STORE.hasServers();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -316,6 +322,9 @@ void HomeActivity::loop() {
         case HomeMenuItem::RECENTS:
           onRecentsOpen();
           break;
+        case HomeMenuItem::SAVED_ITEMS:
+          onSavedItemsOpen();
+          break;
         case HomeMenuItem::OPDS_BROWSER:
           onOpdsBrowserOpen();
           break;
@@ -357,13 +366,13 @@ void HomeActivity::render(RenderLock&&) {
                       std::bind(&HomeActivity::storeCoverBuffer, this), bookSummary);
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_SAVED_ITEMS),
+                                        tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Recent, Bookmark, Transfer, Settings};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 3, Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -402,6 +411,8 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+
+void HomeActivity::onSavedItemsOpen() { activityManager.goToSavedClippings(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

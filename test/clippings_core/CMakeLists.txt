@@ -50,3 +50,34 @@ target_link_libraries(ClippingPageToolsTest PRIVATE
 )
 
 gtest_discover_tests(ClippingPageToolsTest)
+
+add_executable(SavedClippingsModelTest
+  SavedClippingsModelTest.cpp
+)
+
+target_include_directories(SavedClippingsModelTest PRIVATE
+  ${REPO_ROOT}/src
+)
+
+target_link_libraries(SavedClippingsModelTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(SavedClippingsModelTest)
+
+add_executable(ClippingJumpValidationTest
+  ClippingJumpValidationTest.cpp
+  ${REPO_ROOT}/src/clippings/ClippingCodec.cpp
+)
+
+target_include_directories(ClippingJumpValidationTest PRIVATE
+  ${REPO_ROOT}/src
+)
+
+target_link_libraries(ClippingJumpValidationTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(ClippingJumpValidationTest)

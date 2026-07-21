@@ -91,6 +91,36 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, PerBookR
     return nullptr;
   }
 
+  // CrossInk's legacy file remains authoritative and immutable. Migration is
+  // best-effort after source identity is proven; any failure only falls back
+  // to CrossVi/global settings and must never prevent the book from opening.
+  const auto migrationStatus = PerBookReaderSettingsStore::migrateCrossInk(epub->getCachePath(), globalSettings);
+  switch (migrationStatus) {
+    case PerBookReaderSettingsStore::MigrationStatus::MIGRATED:
+      LOG_DBG("READER", "Migrated CrossInk reader settings: %s", path.c_str());
+      break;
+    case PerBookReaderSettingsStore::MigrationStatus::NEWER_CROSSINK_VERSION:
+      LOG_ERR("READER", "Preserving unsupported newer CrossInk reader settings: %s", path.c_str());
+      break;
+    case PerBookReaderSettingsStore::MigrationStatus::INVALID_LEGACY_FILE:
+      LOG_ERR("READER", "Preserving invalid CrossInk reader settings without migration: %s", path.c_str());
+      break;
+    case PerBookReaderSettingsStore::MigrationStatus::BACKUP_CONFLICT:
+      LOG_ERR("READER", "CrossInk reader settings backup conflicts; preserving both files: %s", path.c_str());
+      break;
+    case PerBookReaderSettingsStore::MigrationStatus::IO_ERROR:
+    case PerBookReaderSettingsStore::MigrationStatus::SAVE_FAILED:
+      LOG_ERR("READER", "Could not safely migrate CrossInk reader settings (status %u): %s",
+              static_cast<unsigned>(migrationStatus), path.c_str());
+      break;
+    case PerBookReaderSettingsStore::MigrationStatus::INVALID_DEFAULTS:
+      LOG_ERR("READER", "Current reader defaults are invalid; CrossInk settings were preserved: %s", path.c_str());
+      break;
+    case PerBookReaderSettingsStore::MigrationStatus::NO_LEGACY_FILE:
+    case PerBookReaderSettingsStore::MigrationStatus::CROSSVI_FILE_PRESENT:
+      break;
+  }
+
   const BookMetadataCache::LoadStatus cacheStatus = epub->inspectCache();
   if (cacheStatus == BookMetadataCache::LoadStatus::NewerVersion ||
       cacheStatus == BookMetadataCache::LoadStatus::IoError) {
@@ -200,8 +230,9 @@ void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub, PerBookReaderS
                                       PerBookReaderSettings bookSettings, const bool settingsWritable) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(
-      renderer, mappedInput, std::move(epub), std::move(globalSettings), std::move(bookSettings), settingsWritable));
+  activityManager.replaceActivity(
+      std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub), std::move(globalSettings),
+                                           std::move(bookSettings), settingsWritable, std::move(initialClippingJump)));
 }
 
 void ReaderActivity::onGoToBmpViewer(const std::string& path) {
@@ -226,6 +257,17 @@ void ReaderActivity::onEnter() {
   if (initialBookPath.empty()) {
     goToLibrary();  // Start from root when entering via Browse
     return;
+  }
+
+  if (initialClippingJump &&
+      (initialClippingJump->bookPath != initialBookPath || initialClippingJump->bookType != "epub" ||
+       !FsHelpers::hasEpubExtension(initialBookPath))) {
+    // The overload is only a transport. ReaderActivity remains the dispatch
+    // boundary and never forwards a clipping target into a different reader
+    // type. For an EPUB path, retain the rejected payload so EpubReaderActivity
+    // can open normal progress and surface JumpUnavailable.
+    LOG_ERR("READER", "Rejected clipping jump for mismatched reader dispatch: %s", initialBookPath.c_str());
+    if (!FsHelpers::hasEpubExtension(initialBookPath)) initialClippingJump.reset();
   }
 
   currentBookPath = initialBookPath;

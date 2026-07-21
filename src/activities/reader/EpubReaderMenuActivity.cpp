@@ -3,20 +3,26 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+#include <cstdio>
+
 #include "MappedInputManager.h"
+#include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const uint8_t currentPageTurnOption, const bool hasFootnotes,
-                                               const bool hasBookmarks)
+                                               const uint8_t currentAutoPageTurnSeconds, const bool autoPageTurnActive,
+                                               const bool hasFootnotes, const bool hasBookmarks)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks)),
       title(title),
       pendingOrientation(currentOrientation),
-      selectedPageTurnOption(currentPageTurnOption),
+      selectedAutoPageTurnSeconds(
+          currentAutoPageTurnSeconds == 0 ? 0 : std::clamp<uint8_t>(currentAutoPageTurnSeconds, 5, 120)),
+      selectedAutoPageTurnActive(autoPageTurnActive && selectedAutoPageTurnSeconds != 0),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
@@ -39,7 +45,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::BOOK_SETTINGS, StrId::STR_BOOK_READER_SETTINGS});
   items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_INTERVAL});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
@@ -84,22 +90,31 @@ void EpubReaderMenuActivity::loop() {
     }
 
     if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
-      optionPopup.show(I18N.get(StrId::STR_AUTO_TURN_PAGES_PER_MIN), pageTurnLabels.data(),
-                       static_cast<int>(pageTurnLabels.size()), selectedPageTurnOption, [this](int idx) {
-                         selectedPageTurnOption = idx;
-                         requestUpdate();
-                       });
-      requestUpdate();
+      startActivityForResult(std::make_unique<IntervalSelectionActivity>(
+                                 renderer, mappedInput, "AutoPageTurnInterval", StrId::STR_AUTO_TURN_INTERVAL,
+                                 selectedAutoPageTurnSeconds, 0, 120, 5, 15, StrId::STR_AUTO_TURN_SECONDS_FORMAT, true,
+                                 true, StrId::STR_NONE_OPT, StrId::STR_STATE_OFF),
+                             [this](const ActivityResult& result) {
+                               if (!result.isCancelled) {
+                                 const uint32_t selected = std::get<IntervalResult>(result.data).value;
+                                 selectedAutoPageTurnSeconds =
+                                     selected == 0 ? 0 : static_cast<uint8_t>(std::clamp<uint32_t>(selected, 5, 120));
+                                 selectedAutoPageTurnActive = selectedAutoPageTurnSeconds != 0;
+                                 autoPageTurnChanged = true;
+                               }
+                               requestUpdate();
+                             });
       return;
     }
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedAutoPageTurnSeconds,
+                         autoPageTurnChanged});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
-    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+    result.data = MenuResult{-1, pendingOrientation, selectedAutoPageTurnSeconds, autoPageTurnChanged};
     setResult(std::move(result));
     finish();
     return;
@@ -136,14 +151,13 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   GUI.drawList(
       renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, menuItems.size(), selectedIndex,
       [this](int index) { return I18N.get(menuItems[index].labelId); }, nullptr, nullptr,
-      [this](int index) {
+      [this](int index) -> std::string {
         const auto value = menuItems[index].action;
         if (value == MenuAction::ROTATE_SCREEN) {
           // Render current orientation value on the right edge of the content area.
           return I18N.get(orientationLabels[pendingOrientation]);
         } else if (value == MenuAction::AUTO_PAGE_TURN) {
-          // Render current page turn value on the right edge of the content area.
-          return pageTurnLabels[selectedPageTurnOption];
+          return autoPageTurnValue();
         } else {
           return "";
         }
@@ -155,4 +169,12 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+}
+
+std::string EpubReaderMenuActivity::autoPageTurnValue() const {
+  if (!selectedAutoPageTurnActive) return I18N.get(StrId::STR_STATE_OFF);
+  char formatted[24];
+  snprintf(formatted, sizeof(formatted), I18N.get(StrId::STR_AUTO_TURN_SECONDS_FORMAT),
+           static_cast<unsigned>(selectedAutoPageTurnSeconds));
+  return formatted;
 }
