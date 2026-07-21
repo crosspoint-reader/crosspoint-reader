@@ -1,0 +1,13 @@
+{
+  "name": "CrossVi Simulator",
+  "version": "1.1.0",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Julia Nguyen"
+    }
+  ],
+  "build": {
+    "extraScript": "run_simulator.py"
+  }
+}

@@ -8,7 +8,7 @@ CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspo
 
 The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, technical identifiers, protocols, and on-card `.crosspoint` data layout. New protected formats are written beside retained legacy data so migration remains non-destructive.
 
-> **Current validation status:** core codecs, storage recovery, layout mapping, and protocol state machines have host tests, static analysis, and ESP32-C3 build validation. End-to-end UI, ESP-NOW radio, e-paper refresh, power-loss behavior, and memory use still require the [X3/X4 hardware checklist](./docs/contributing/hardware-validation.md) before a stable release.
+> **Current validation status:** core codecs, storage recovery, layout mapping, and protocol state machines have host tests, static analysis, and ESP32-C3 build validation. The production UI can also be exercised in the model-specific X3/X4 desktop simulator. ESP-NOW radio, physical e-paper refresh, power-loss behavior, and device memory use still require the [X3/X4 hardware checklist](./docs/contributing/hardware-validation.md) before a stable release.
 
 **Target devices:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
 
@@ -193,6 +193,25 @@ After rebuilding the system configuration, reconnect the device or reload udev r
 ```bash
 pio run --target upload
 ```
+
+### Desktop UI simulator (no device required)
+
+Run the real CrossVi UI, renderer, fonts, themes, image decoders, and input
+mapping in an interactive desktop window:
+
+```bash
+python3 scripts/run_simulator.py x3
+python3 scripts/run_simulator.py x4
+```
+
+Click the labeled hardware buttons or use `Esc`, `Enter`, the arrow keys, and
+`P`. Press `F12` to save a framebuffer-only pixel capture. X3 and X4 are
+separate native targets with their exact `792x528` and `800x480` physical
+buffers; the control sidebar is outside the captured UI.
+
+See the [X3/X4 simulator guide](./docs/contributing/simulator.md) for virtual SD
+cards, adding test books, screenshot paths, regression tests, and the hardware
+limits that a desktop cannot reproduce.
 
 ### Contributor pre-PR checks
 

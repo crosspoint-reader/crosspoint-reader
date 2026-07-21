@@ -1,0 +1,16 @@
+{
+  "x3": {
+    "logical_width": 528,
+    "logical_height": 792,
+    "framebuffer_bytes": 52272,
+    "sha256": "df999ffd5e782151bd913fdf9b50dd263d62fc9e74d616e5042dbee4fb61f3dd",
+    "bmp_sha256": "6d540a261c58b46cf530706c699d3947bdf194dbb7abfcb27d1ecd671de56eb9"
+  },
+  "x4": {
+    "logical_width": 480,
+    "logical_height": 800,
+    "framebuffer_bytes": 48000,
+    "sha256": "51e5bf9aef02e383f0a4c172297089882d13e0d9611eb4d0dce941249ecb8d9b",
+    "bmp_sha256": "f463c34597ef24708facad4e89f8968fb116e9804f489422f282a463d4652b19"
+  }
+}

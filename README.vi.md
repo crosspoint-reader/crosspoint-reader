@@ -6,7 +6,7 @@ CrossVi là phần mềm hệ thống (firmware) mã nguồn mở dành cho máy
 
 CrossVi có giao diện tiếng Việt và được khởi xướng bởi một lập trình viên Việt Nam, nhưng **không chỉ dành cho người Việt**. Firmware hỗ trợ 30 ngôn ngữ và chào đón cả người dùng lẫn người đóng góp trên toàn thế giới.
 
-> **Tình trạng hiện tại:** mã nguồn đã vượt qua kiểm thử tự động và biên dịch firmware thành công, nhưng vẫn chưa được kiểm tra trên máy X3/X4 thật. Hiện chưa có bản phát hành ổn định được khuyến nghị cho người dùng phổ thông.
+> **Tình trạng hiện tại:** mã nguồn đã vượt qua kiểm thử tự động, biên dịch firmware thành công và giao diện có thể chạy trong trình mô phỏng riêng cho X3/X4. Dự án vẫn chưa được kiểm tra đầy đủ trên máy thật, nên hiện chưa có bản phát hành ổn định được khuyến nghị cho người dùng phổ thông.
 
 ## CrossVi làm được gì?
 
@@ -102,6 +102,33 @@ Không đổi tên `firmware.bin` nếu cập nhật từ thẻ nhớ hoặc tra
 - Trao đổi ý tưởng hoặc đặt câu hỏi tại [GitHub Discussions](https://github.com/tvhdc/crossvi/discussions).
 
 Tài liệu sử dụng chi tiết hiện có tại [CrossVi User Guide](USER_GUIDE.md).
+
+## Xem và bấm thử giao diện khi chưa có máy
+
+Bạn có thể chạy chính giao diện CrossVi trên máy tính, không phải một bản vẽ
+lại bằng web. Trình mô phỏng dùng đúng mã hiển thị, phông chữ, biểu tượng, giao
+diện và cách xử lý nút của firmware.
+
+Mở Terminal trong thư mục CrossVi rồi chạy một trong hai lệnh:
+
+```sh
+python3 scripts/run_simulator.py x3
+python3 scripts/run_simulator.py x4
+```
+
+Trong cửa sổ hiện ra, bạn có thể bấm trực tiếp các nút ở cột bên phải. Bàn phím
+cũng dùng được: `Esc` là Quay lại, `Enter` là Chọn, các phím mũi tên là nút điều
+hướng/chuyển trang và `P` là nút nguồn. Nhấn `F12` để chụp riêng phần giao diện
+đúng từng pixel.
+
+Dữ liệu thử của hai máy nằm riêng trong `.simulator-data/x3` và
+`.simulator-data/x4`. Bạn có thể chép sách vào đó rồi mở bằng **Browse Files**.
+
+X3 và X4 được build riêng với đúng kích thước màn hình của từng máy; X3 không
+phải ảnh X4 bị co lại. Tuy vậy, máy tính không thể tái tạo màu mực, bóng mờ,
+thời gian làm tươi e-paper, nguồn điện, lỗi thẻ nhớ vật lý hoặc sóng Nearby
+Sync. Xem [hướng dẫn trình mô phỏng](docs/contributing/simulator.md) nếu bạn muốn
+đổi thư mục sách, vị trí ảnh chụp hoặc chạy kiểm thử giao diện.
 
 ## Dành cho người muốn phát triển
 

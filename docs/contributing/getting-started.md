@@ -66,6 +66,9 @@ chmod +x .githooks/pre-commit
 pio run
 ```
 
+To run the firmware UI without a device, continue with the
+[desktop simulator guide](./simulator.md).
+
 ## Flash
 
 ```sh

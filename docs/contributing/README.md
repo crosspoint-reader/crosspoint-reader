@@ -7,6 +7,7 @@ It is written for software developers who may be new to embedded development.
 - [Architecture Overview](./architecture.md)
 - [Development Workflow](./development-workflow.md)
 - [Testing and Debugging](./testing-debugging.md)
+- [X3/X4 Desktop UI Simulator](./simulator.md)
 - [EPUB Index Benchmark on X3/X4](./epub-index-benchmark.md)
 - [CrossVi Hardware Validation Checklist](./hardware-validation.md)
 

@@ -143,6 +143,41 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build/test --output-on-failure -j
 
+  simulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install simulator dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libssl-dev
+          python -m pip install -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-simulator-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-simulator-${{ runner.os }}-
+
+      - name: Build and test X3/X4 simulator
+        run: python3 scripts/test_simulator.py
+
+      - name: Upload pixel captures
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: CrossVi-simulator-smoke
+          path: build/simulator-tests/*/screenshots/*
+          if-no-files-found: warn
+
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
   test-status:
@@ -151,6 +186,7 @@ jobs:
       - build
       - clang-format
       - cppcheck
+      - simulator
       - unit-tests
     if: always()
     runs-on: ubuntu-latest

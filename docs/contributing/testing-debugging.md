@@ -2,6 +2,11 @@
 
 CrossVi runs on real hardware, so debugging usually combines local build checks and on-device logs.
 
+For layout and interaction work without hardware, use the
+[X3/X4 desktop UI simulator](./simulator.md). It runs the production renderer
+and Activities with clickable controls and exact model-specific framebuffer
+dimensions.
+
 ## Local checks
 
 Make sure `clang-format` 21+ is installed and available in `PATH` before running the formatting step.
@@ -11,6 +16,7 @@ If needed, see [Getting Started](./getting-started.md).
 ./bin/clang-format-fix
 pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run
+python3 scripts/test_simulator.py
 ```
 
 ## Flash and monitor
