@@ -17,8 +17,27 @@ class ZipFile {
 
   struct ZipDetails {
     uint32_t centralDirOffset;
+    uint32_t centralDirSize;
     uint16_t totalEntries;
     bool isSet;
+  };
+
+  // Cheap, content-sensitive identity for a ZIP archive. The central directory
+  // includes every entry's path, sizes, local-header offset, and CRC32, so this
+  // detects normal EPUB replacements without reading the compressed payload.
+  struct SourceIdentity {
+    uint64_t fileSize = 0;
+    uint32_t centralDirOffset = 0;
+    uint32_t centralDirSize = 0;
+    uint16_t totalEntries = 0;
+    uint64_t centralDirHash = 0;
+
+    bool operator==(const SourceIdentity& other) const {
+      return fileSize == other.fileSize && centralDirOffset == other.centralDirOffset &&
+             centralDirSize == other.centralDirSize && totalEntries == other.totalEntries &&
+             centralDirHash == other.centralDirHash;
+    }
+    bool operator!=(const SourceIdentity& other) const { return !(*this == other); }
   };
 
   // Target for batch uncompressed size lookup (sorted by hash, then len)
@@ -41,7 +60,7 @@ class ZipFile {
  private:
   const std::string& filePath;
   HalFile file;
-  ZipDetails zipDetails = {0, 0, false};
+  ZipDetails zipDetails = {0, 0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
   // Cursor for sequential central-dir scanning optimization
@@ -61,6 +80,7 @@ class ZipFile {
   bool open();
   bool close();
   bool loadAllFileStatSlims();
+  bool getSourceIdentity(SourceIdentity& identity);
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.

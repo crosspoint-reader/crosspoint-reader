@@ -11,6 +11,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <numeric>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@
 
 namespace {
 
+constexpr char CACHE_ROOT[] = "/.crosspoint";
 constexpr char CLEAR_STAGING_PREFIX[] = ".crossvi_clear_";
 constexpr char MOVE_STAGING_PREFIX[] = ".crossvi_move_";
 constexpr char MOVE_CLEANUP_PREFIX[] = ".crossvi_cleanup_";
@@ -29,8 +31,25 @@ constexpr size_t MOVE_READY_HEADER_SIZE = MOVE_READY_MAGIC.size() + (sizeof(uint
 constexpr size_t MAX_MOVE_PATH_BYTES = 512;
 constexpr char VERSIONED_STATS_PREFIX[] = "stats_v";
 constexpr std::array<const char*, 3> VERSIONED_STATS_SUFFIXES = {".bin", ".bin.bak", ".bin.tmp"};
-constexpr std::array<const char*, 3> READER_SETTINGS_FILES = {
-    "crossvi_reader_settings.bin", "crossvi_reader_settings.bin.bak", "crossvi_reader_settings.bin.tmp"};
+constexpr std::array<const char*, 12> USER_STATE_FILES = {"progress.bin",
+                                                          "progress.bin.bak",
+                                                          "progress.bin.tmp",
+                                                          "reader_settings.bin",
+                                                          "reader_settings.bin.bak",
+                                                          "reader_settings.bin.tmp",
+                                                          "crossvi_reader_settings.bin",
+                                                          "crossvi_reader_settings.bin.bak",
+                                                          "crossvi_reader_settings.bin.tmp",
+                                                          "source_identity.bin",
+                                                          "source_identity.bin.bak",
+                                                          "source_identity.bin.tmp"};
+constexpr std::array<const char*, 5> REPLACEMENT_USER_STATE_FILES = {
+    ".crossvi_replaced_clippings.bin", ".crossvi_replaced_clippings.bin.bak", ".crossvi_replaced_clippings.bin.tmp",
+    ".crossvi_replaced_clippings.move", ".crossvi_replaced_bookmark.json"};
+constexpr std::array<const char*, 12> DERIVED_CACHE_FILES = {
+    "book.bin",        "index.bin",  "spine.bin.tmp", "toc.bin.tmp", ".items.bin",     ".tmp.css",
+    "css_rules.cache", ".cover.jpg", ".cover.png",    "cover.bmp",   "cover_crop.bmp", "thumb_[HEIGHT].bmp"};
+constexpr std::array<const char*, 2> DERIVED_CACHE_DIRECTORIES = {"html", "sections"};
 
 struct CacheEntry {
   std::string name;
@@ -86,6 +105,68 @@ bool readDirectory(const std::string& path, std::vector<CacheEntry>& entries) {
   return directory.close();
 }
 
+bool isDecimalRange(const std::string& value, const size_t begin, const size_t end) {
+  return begin < end &&
+         std::all_of(
+             value.begin() + static_cast<std::ptrdiff_t>(begin), value.begin() + static_cast<std::ptrdiff_t>(end),
+             [](const char character) { return character >= '0' && character <= '9'; });
+}
+
+bool hasAsciiCaseInsensitiveSuffix(const std::string& value, const char* suffix) {
+  const size_t suffixLength = strlen(suffix);
+  if (value.size() < suffixLength) return false;
+  const size_t offset = value.size() - suffixLength;
+  for (size_t index = 0; index < suffixLength; ++index) {
+    const char left = value[offset + index];
+    const char right = suffix[index];
+    const char foldedLeft = left >= 'A' && left <= 'Z' ? static_cast<char>(left + ('a' - 'A')) : left;
+    if (foldedLeft != right) return false;
+  }
+  return true;
+}
+
+bool isGeneratedImageCacheFileName(const std::string& name) {
+  constexpr size_t PREFIX_LENGTH = sizeof("img_") - 1;
+  if (name.compare(0, PREFIX_LENGTH, "img_") != 0) return false;
+  const size_t separator = name.find('_', PREFIX_LENGTH);
+  const size_t extension = name.rfind('.');
+  if (separator == std::string::npos || extension == std::string::npos || separator >= extension ||
+      !isDecimalRange(name, PREFIX_LENGTH, separator) || !isDecimalRange(name, separator + 1, extension)) {
+    return false;
+  }
+  return hasAsciiCaseInsensitiveSuffix(name, ".jpg") || hasAsciiCaseInsensitiveSuffix(name, ".jpeg") ||
+         hasAsciiCaseInsensitiveSuffix(name, ".png") || hasAsciiCaseInsensitiveSuffix(name, ".pxc");
+}
+
+bool isKnownDerivedCacheEntry(const CacheEntry& entry) {
+  if (entry.directory) {
+    return std::any_of(DERIVED_CACHE_DIRECTORIES.begin(), DERIVED_CACHE_DIRECTORIES.end(),
+                       [&](const char* candidate) { return entry.name == candidate; });
+  }
+  if (std::any_of(DERIVED_CACHE_FILES.begin(), DERIVED_CACHE_FILES.end(),
+                  [&](const char* candidate) { return entry.name == candidate; })) {
+    return true;
+  }
+  constexpr size_t THUMB_PREFIX_LENGTH = sizeof("thumb_") - 1;
+  constexpr size_t THUMB_SUFFIX_LENGTH = sizeof(".bmp") - 1;
+  return isGeneratedImageCacheFileName(entry.name) ||
+         (entry.name.size() > THUMB_PREFIX_LENGTH + THUMB_SUFFIX_LENGTH &&
+          entry.name.compare(0, THUMB_PREFIX_LENGTH, "thumb_") == 0 &&
+          entry.name.compare(entry.name.size() - THUMB_SUFFIX_LENGTH, THUMB_SUFFIX_LENGTH, ".bmp") == 0 &&
+          isDecimalRange(entry.name, THUMB_PREFIX_LENGTH, entry.name.size() - THUMB_SUFFIX_LENGTH));
+}
+
+void purgeKnownDerivedCacheEntries(const std::string& archivePath) {
+  std::vector<CacheEntry> entries;
+  if (!readDirectory(archivePath, entries)) return;
+  for (const CacheEntry& entry : entries) {
+    if (!isKnownDerivedCacheEntry(entry)) continue;
+    const std::string path = archivePath + "/" + entry.name;
+    const bool removed = entry.directory ? Storage.removeDir(path.c_str()) : Storage.remove(path.c_str());
+    if (!removed) LOG_ERR("BookCache", "Could not purge archived derived cache entry: %s", path.c_str());
+  }
+}
+
 bool isVersionedStatsFileName(const std::string& name) {
   constexpr size_t prefixLength = sizeof(VERSIONED_STATS_PREFIX) - 1;
   if (name.compare(0, prefixLength, VERSIONED_STATS_PREFIX) != 0) return false;
@@ -102,18 +183,37 @@ bool isVersionedStatsFileName(const std::string& name) {
   return false;
 }
 
+bool isReplacementUserStateFileName(const std::string& name) {
+  for (const char* candidate : REPLACEMENT_USER_STATE_FILES) {
+    const size_t length = strlen(candidate);
+    if (name == candidate) return true;
+    // Retain every generated non-overwriting collision slot through a cache
+    // clear while a replacement transaction is waiting to commit.
+    if (name.size() > length + 1 && name.compare(0, length, candidate) == 0 && name[length] == '.' &&
+        std::all_of(name.begin() + static_cast<std::ptrdiff_t>(length + 1), name.end(),
+                    [](const char character) { return character >= '0' && character <= '9'; })) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool isUserStateFileName(const std::string& name) {
-  if (name == "stats.bin" || isVersionedStatsFileName(name)) return true;
-  return std::any_of(READER_SETTINGS_FILES.begin(), READER_SETTINGS_FILES.end(),
+  if (name == "stats.bin" || isVersionedStatsFileName(name) || isReplacementUserStateFileName(name)) return true;
+  return std::any_of(USER_STATE_FILES.begin(), USER_STATE_FILES.end(),
                      [&name](const char* candidate) { return name == candidate; });
 }
 
 bool isMovableUserStateFileName(const std::string& name) {
-  return isUserStateFileName(name) || name == "progress.bin" || name == "progress.bin.tmp";
+  return !isReplacementUserStateFileName(name) && isUserStateFileName(name);
 }
 
 bool isMoveStagingFileName(const std::string& name) {
   return name == MOVE_READY_MARKER || name == MOVE_BOOKMARK_PAYLOAD || isMovableUserStateFileName(name);
+}
+
+bool isReplacementMoveFileName(const std::string& name) {
+  return isMoveStagingFileName(name) || isReplacementUserStateFileName(name);
 }
 
 std::string childPath(const std::string& directory, const std::string& name) {
@@ -223,19 +323,52 @@ uint16_t decodeUint16(const uint8_t* input) {
 bool validMoveIdentity(const MoveIdentity& identity) {
   const std::array<const std::string*, 4> paths = {&identity.sourceBookPath, &identity.destinationBookPath,
                                                    &identity.sourceCachePath, &identity.destinationCachePath};
+  enum class CacheKind : uint8_t { None, Epub, Xtc, Text };
+  const auto cacheKind = [](const std::string& bookPath) {
+    if (FsHelpers::hasEpubExtension(bookPath)) return CacheKind::Epub;
+    if (FsHelpers::hasXtcExtension(bookPath)) return CacheKind::Xtc;
+    if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) return CacheKind::Text;
+    return CacheKind::None;
+  };
+  const auto matchesCacheKey = [&](const std::string& bookPath, const std::string& cachePath) {
+    constexpr char CACHE_PREFIX[] = "/.crosspoint/";
+    constexpr size_t prefixLength = sizeof(CACHE_PREFIX) - 1;
+    if (cachePath.compare(0, prefixLength, CACHE_PREFIX) != 0 ||
+        cachePath.find('/', prefixLength) != std::string::npos) {
+      return false;
+    }
+    switch (cacheKind(bookPath)) {
+      case CacheKind::Epub:
+        return cachePath == Epub(bookPath, CACHE_ROOT).getCachePath();
+      case CacheKind::Xtc:
+        return cachePath == Xtc(bookPath, CACHE_ROOT).getCachePath();
+      case CacheKind::Text:
+        return cachePath == Txt(bookPath, CACHE_ROOT).getCachePath();
+      case CacheKind::None:
+        return false;
+    }
+    return false;
+  };
+  const CacheKind sourceKind = cacheKind(identity.sourceBookPath);
   return identity.sourceBookPath != identity.destinationBookPath &&
-         identity.sourceCachePath != identity.destinationCachePath &&
-         std::all_of(paths.begin(), paths.end(), [](const std::string* path) {
-           return path && !path->empty() && *path != "/" && path->size() <= MAX_MOVE_PATH_BYTES;
-         });
+         identity.sourceCachePath != identity.destinationCachePath && sourceKind != CacheKind::None &&
+         sourceKind == cacheKind(identity.destinationBookPath) &&
+         std::all_of(paths.begin(), paths.end(),
+                     [](const std::string* path) {
+                       return path && !path->empty() && *path != "/" && path->size() <= MAX_MOVE_PATH_BYTES &&
+                              path->find('\0') == std::string::npos;
+                     }) &&
+         matchesCacheKey(identity.sourceBookPath, identity.sourceCachePath) &&
+         matchesCacheKey(identity.destinationBookPath, identity.destinationCachePath);
 }
 
 std::vector<uint8_t> encodeMoveIdentity(const MoveIdentity& identity) {
   if (!validMoveIdentity(identity)) return {};
   const std::array<const std::string*, 4> paths = {&identity.sourceBookPath, &identity.destinationBookPath,
                                                    &identity.sourceCachePath, &identity.destinationCachePath};
-  size_t totalSize = MOVE_READY_HEADER_SIZE;
-  for (const std::string* path : paths) totalSize += path->size();
+  const size_t totalSize =
+      std::accumulate(paths.begin(), paths.end(), MOVE_READY_HEADER_SIZE,
+                      [](const size_t total, const std::string* path) { return total + path->size(); });
 
   std::vector<uint8_t> encoded(totalSize);
   std::copy(MOVE_READY_MAGIC.begin(), MOVE_READY_MAGIC.end(), encoded.begin());
@@ -343,7 +476,7 @@ bool validateMoveStaging(const std::string& stagingPath, const MoveIdentity& exp
 bool canDiscardInterruptedMoveStaging(const std::string& stagingPath, const MoveIdentity& identity) {
   std::vector<CacheEntry> entries;
   if (!readDirectory(stagingPath, entries)) return false;
-  for (const CacheEntry& entry : entries) {
+  return std::all_of(entries.begin(), entries.end(), [&](const CacheEntry& entry) {
     if (entry.directory || entry.name == MOVE_READY_MARKER ||
         (entry.name != MOVE_BOOKMARK_PAYLOAD && !isMovableUserStateFileName(entry.name))) {
       return false;
@@ -352,16 +485,13 @@ bool canDiscardInterruptedMoveStaging(const std::string& stagingPath, const Move
     if (entry.name == MOVE_BOOKMARK_PAYLOAD) {
       const std::string sourcePath = sourceBookmarkPathFor(identity.sourceBookPath);
       if (Storage.exists(sourcePath.c_str())) {
-        if (!filesEqual(sourcePath, stagedPath)) return false;
-      } else if (!destinationNeedsEmptyBookmarkPayload(identity) || !BookmarkUtil::isEmptyBookmarkFile(stagedPath)) {
-        return false;
+        return filesEqual(sourcePath, stagedPath);
       }
-    } else {
-      const std::string sourcePath = childPath(identity.sourceCachePath, entry.name);
-      if (!Storage.exists(sourcePath.c_str()) || !filesEqual(sourcePath, stagedPath)) return false;
+      return destinationNeedsEmptyBookmarkPayload(identity) && BookmarkUtil::isEmptyBookmarkFile(stagedPath);
     }
-  }
-  return true;
+    const std::string sourcePath = childPath(identity.sourceCachePath, entry.name);
+    return Storage.exists(sourcePath.c_str()) && filesEqual(sourcePath, stagedPath);
+  });
 }
 
 bool isNonAuthoritativePreparedMove(const std::string& stagingPath, const MoveIdentity& identity) {
@@ -416,24 +546,25 @@ bool mergePreparedMoveIntoDerivedCache(const std::string& stagingPath, const Mov
 
   std::vector<CacheEntry> destinationEntries;
   if (!readDirectory(identity.destinationCachePath, destinationEntries)) return false;
-  for (const CacheEntry& entry : destinationEntries) {
-    if (entry.directory || !isMovableUserStateFileName(entry.name)) continue;
-    const std::string stagedPath = childPath(stagingPath, entry.name);
-    const std::string destinationPath = childPath(identity.destinationCachePath, entry.name);
-    if (!Storage.exists(stagedPath.c_str()) || !filesEqual(stagedPath, destinationPath)) return false;
+  if (!std::all_of(destinationEntries.begin(), destinationEntries.end(), [&](const CacheEntry& entry) {
+        if (entry.directory || !isMovableUserStateFileName(entry.name)) return true;
+        const std::string stagedPath = childPath(stagingPath, entry.name);
+        const std::string destinationPath = childPath(identity.destinationCachePath, entry.name);
+        return Storage.exists(stagedPath.c_str()) && filesEqual(stagedPath, destinationPath);
+      })) {
+    return false;
   }
 
   std::vector<CacheEntry> stagedEntries;
   if (!readDirectory(stagingPath, stagedEntries)) return false;
-  for (const CacheEntry& entry : stagedEntries) {
-    if (entry.directory || !isMoveStagingFileName(entry.name)) return false;
-    const std::string sourcePath = childPath(stagingPath, entry.name);
-    const std::string destinationPath = childPath(identity.destinationCachePath, entry.name);
-    if (Storage.exists(destinationPath.c_str())) {
-      if (!filesEqual(sourcePath, destinationPath)) return false;
-    } else if (!copyFileExact(sourcePath, destinationPath)) {
-      return false;
-    }
+  if (!std::all_of(stagedEntries.begin(), stagedEntries.end(), [&](const CacheEntry& entry) {
+        if (entry.directory || !isMoveStagingFileName(entry.name)) return false;
+        const std::string sourcePath = childPath(stagingPath, entry.name);
+        const std::string destinationPath = childPath(identity.destinationCachePath, entry.name);
+        return Storage.exists(destinationPath.c_str()) ? filesEqual(sourcePath, destinationPath)
+                                                       : copyFileExact(sourcePath, destinationPath);
+      })) {
+    return false;
   }
   const std::string cleanupPath = moveCleanupPathFor(identity.destinationCachePath);
   if (cleanupPath.empty() || Storage.exists(cleanupPath.c_str()) ||
@@ -461,15 +592,15 @@ bool cleanupMergedMoveCopy(const std::string& cleanupPath, const std::string& de
   }
   std::vector<CacheEntry> entries;
   if (!readDirectory(cleanupPath, entries)) return false;
-  for (const CacheEntry& entry : entries) {
-    if (entry.directory || !isMoveStagingFileName(entry.name)) return false;
-    if (entry.name == MOVE_READY_MARKER) continue;
-    const std::string destination = entry.name == MOVE_BOOKMARK_PAYLOAD
-                                        ? BookmarkUtil::getBookmarkPath(destinationBookPath)
-                                        : childPath(destinationCachePath, entry.name);
-    if (!Storage.exists(destination.c_str()) || !filesEqual(childPath(cleanupPath, entry.name), destination)) {
-      return false;
-    }
+  if (!std::all_of(entries.begin(), entries.end(), [&](const CacheEntry& entry) {
+        if (entry.directory || !isMoveStagingFileName(entry.name)) return false;
+        if (entry.name == MOVE_READY_MARKER) return true;
+        const std::string destination = entry.name == MOVE_BOOKMARK_PAYLOAD
+                                            ? BookmarkUtil::getBookmarkPath(destinationBookPath)
+                                            : childPath(destinationCachePath, entry.name);
+        return Storage.exists(destination.c_str()) && filesEqual(childPath(cleanupPath, entry.name), destination);
+      })) {
+    return false;
   }
   return Storage.removeDir(cleanupPath.c_str());
 }
@@ -490,7 +621,7 @@ bool readOwnedMoveDirectory(const std::string& path, const std::string& destinat
   std::vector<CacheEntry> entries;
   if (!readDirectory(path, entries)) return false;
   return std::all_of(entries.begin(), entries.end(),
-                     [](const CacheEntry& entry) { return !entry.directory && isMoveStagingFileName(entry.name); });
+                     [](const CacheEntry& entry) { return !entry.directory && isReplacementMoveFileName(entry.name); });
 }
 
 std::string replacementDiscardPathFor(const std::string& path, const unsigned attempt) {
@@ -506,7 +637,9 @@ bool quarantineReplacementDirectory(const std::string& path) {
   if (!Storage.exists(path.c_str())) return true;
   if (!isDirectory(path)) return false;
 
-  constexpr unsigned MAX_DISCARD_SLOTS = 4;
+  // A replacement is rare; 256 preserved generations is generous while
+  // bounding SD exists() calls if the archive namespace is pathological.
+  constexpr unsigned MAX_DISCARD_SLOTS = 256;
   for (unsigned attempt = 0; attempt < MAX_DISCARD_SLOTS; ++attempt) {
     const std::string discardPath = replacementDiscardPathFor(path, attempt);
     if (discardPath.empty()) return false;
@@ -516,10 +649,14 @@ bool quarantineReplacementDirectory(const std::string& path) {
     if (Storage.exists(discardPath.c_str())) continue;
     if (!Storage.rename(path.c_str(), discardPath.c_str())) return false;
     // The rename is the safety boundary: recovery no longer recognises these
-    // bytes. Recursive deletion may be retried by a later reset.
-    if (!Storage.removeDir(discardPath.c_str())) {
-      LOG_ERR("BookCache", "Replacement state quarantined but not deleted: %s", discardPath.c_str());
-    }
+    // bytes. Keep the orphan intact; progress, settings, and statistics are
+    // user data and must not be permanently deleted merely because a different
+    // EPUB appeared at the same path.
+    LOG_DBG("BookCache", "Replacement state quarantined at: %s", discardPath.c_str());
+    // The rename above is the safety boundary. Reclaim only cache entries whose
+    // names are owned by the EPUB renderer; user state, migration files,
+    // transaction markers and unknown bytes remain available for recovery.
+    purgeKnownDerivedCacheEntries(discardPath);
     return true;
   }
   return false;
@@ -527,14 +664,16 @@ bool quarantineReplacementDirectory(const std::string& path) {
 
 bool discardOrphanedMoveSource(const MoveIdentity& identity) {
   if (Storage.exists(identity.sourceBookPath.c_str())) return true;
-  bool discarded = true;
+  const std::string archivePath =
+      Storage.exists(identity.sourceCachePath.c_str()) ? identity.sourceCachePath : identity.destinationCachePath;
+  // Preserve any source-path bookmark bytes inside a cache that is about to be
+  // quarantined. It may usually be a duplicate of the verified move payload,
+  // but exact preservation avoids relying on that timing assumption.
+  if (!BookmarkUtil::quarantineCanonicalForReplacement(identity.sourceBookPath, archivePath)) return false;
   if (Storage.exists(identity.sourceCachePath.c_str())) {
-    discarded = quarantineReplacementDirectory(identity.sourceCachePath) && discarded;
+    return quarantineReplacementDirectory(identity.sourceCachePath);
   }
-  // The old source path no longer owns any bookmarks. Keep an ambiguous
-  // legacy file for compatibility, but hide it behind verified empty state.
-  discarded = BookmarkUtil::writeEmptyCanonicalBookmark(identity.sourceBookPath) && discarded;
-  return discarded;
+  return true;
 }
 
 bool discardMovesWhoseSourceWasReplaced(const std::string& bookPath) {
@@ -575,7 +714,7 @@ bool discardMovesWhoseSourceWasReplaced(const std::string& bookPath) {
     if (moveStaging || moveCleanup) {
       std::vector<CacheEntry> children;
       if (!readDirectory(path, children) || !std::all_of(children.begin(), children.end(), [](const CacheEntry& child) {
-            return !child.directory && isMoveStagingFileName(child.name);
+            return !child.directory && isReplacementMoveFileName(child.name);
           })) {
         continue;
       }
@@ -588,8 +727,14 @@ bool discardMovesWhoseSourceWasReplaced(const std::string& bookPath) {
 
   bool discarded = true;
   for (const PendingDiscard& item : pending) {
+    // Co-locate the exact bookmark bytes with the move package before making
+    // either path inactive. A reset between these steps retries from the same
+    // verified package and never publishes the inactive payload as a move.
+    if (!BookmarkUtil::quarantineCanonicalForReplacement(item.identity.destinationBookPath, item.path)) {
+      discarded = false;
+      continue;
+    }
     discarded = quarantineReplacementDirectory(item.path) && discarded;
-    discarded = BookmarkUtil::writeEmptyCanonicalBookmark(item.identity.destinationBookPath) && discarded;
   }
   return discarded;
 }
@@ -612,11 +757,12 @@ bool restoreStagedUserState(const std::string& cachePath, const std::string& sta
     LOG_ERR("BookCache", "Could not read cache-clear staging directory: %s", stagingPath.c_str());
     return false;
   }
-  for (const CacheEntry& entry : entries) {
-    if (entry.directory || !isUserStateFileName(entry.name)) {
-      LOG_ERR("BookCache", "Unexpected cache-clear staging entry; leaving staging untouched: %s", entry.name.c_str());
-      return false;
-    }
+  if (!std::all_of(entries.begin(), entries.end(), [](const CacheEntry& entry) {
+        if (!entry.directory && isUserStateFileName(entry.name)) return true;
+        LOG_ERR("BookCache", "Unexpected cache-clear staging entry; leaving staging untouched: %s", entry.name.c_str());
+        return false;
+      })) {
+    return false;
   }
 
   if (!entries.empty()) {
@@ -667,19 +813,19 @@ bool clearDerivedCacheEntries(const std::string& cachePath) {
   std::vector<CacheEntry> entries;
   if (!readDirectory(cachePath, entries)) return false;
 
-  for (const CacheEntry& entry : entries) {
+  return std::all_of(entries.begin(), entries.end(), [&](const CacheEntry& entry) {
     if (!entry.directory && isUserStateFileName(entry.name)) {
       LOG_ERR("BookCache", "User state appeared while clearing cache; aborting: %s", entry.name.c_str());
       return false;
     }
+    if (!isKnownDerivedCacheEntry(entry)) return true;
     const std::string path = childPath(cachePath, entry.name);
     const bool removed = entry.directory ? Storage.removeDir(path.c_str()) : Storage.remove(path.c_str());
     if (!removed) {
       LOG_ERR("BookCache", "Could not remove derived cache entry: %s", path.c_str());
-      return false;
     }
-  }
-  return true;
+    return removed;
+  });
 }
 
 }  // namespace
@@ -864,7 +1010,7 @@ bool resetBookCacheUserStateAfterReplacement(const std::string& rawCachePath, co
   // Unknown recognised recovery data must remain visible so the Reader fails
   // closed. Do not clear the canonical cache and accidentally hide evidence of
   // an ownership conflict.
-  if (fatalConflict) return false;
+  if (fatalConflict || !cleanupOk) return false;
 
   bool discarded = true;
   if (Storage.exists(moveStagingPath.c_str())) {
@@ -873,14 +1019,14 @@ bool resetBookCacheUserStateAfterReplacement(const std::string& rawCachePath, co
   if (Storage.exists(clearStagingPath.c_str())) {
     discarded = quarantineReplacementDirectory(clearStagingPath) && discarded;
   }
-  if (Storage.exists(moveCleanupPath.c_str()) && cleanupOk) {
+  if (Storage.exists(moveCleanupPath.c_str())) {
     discarded = quarantineReplacementDirectory(moveCleanupPath) && discarded;
-  }
-  if (Storage.exists(cachePath.c_str())) {
-    discarded = quarantineReplacementDirectory(cachePath) && discarded;
   }
   if (!discarded) return false;
 
+  // Resolve every related transaction while the canonical source-identity
+  // sidecar still blocks the replacement from opening. These operations may
+  // fail safely and be retried after a reset.
   for (const MoveIdentity& identity : ownedMoves) {
     discarded = discardOrphanedMoveSource(identity) && discarded;
   }
@@ -888,7 +1034,12 @@ bool resetBookCacheUserStateAfterReplacement(const std::string& rawCachePath, co
   // destination key. Scan only exact, valid identities whose destination book
   // is still absent; malformed or ambiguous entries remain untouched.
   discarded = discardMovesWhoseSourceWasReplaced(bookPath) && discarded;
-  return discarded && cleanupOk;
+  if (!discarded) return false;
+
+  // Commit boundary. Once the canonical cache (and its mismatch barrier) is
+  // inactive, all external state has already been quarantined or shadowed.
+  // Nothing that can fail may follow this atomic rename.
+  return quarantineReplacementDirectory(cachePath);
 }
 
 bool prepareBookCacheUserStateMove(const std::string& rawSourceCachePath, const std::string& rawDestinationCachePath,
@@ -1039,7 +1190,10 @@ bool completeBookCacheUserStateMove(const std::string& rawSourceCachePath, const
     return false;
   }
   if (!BookmarkUtil::ensureLegacyBookmarkShadowed(sourceBookPath)) return false;
-  if (Storage.exists(identity.sourceCachePath.c_str()) && !Storage.removeDir(identity.sourceCachePath.c_str())) {
+  // The source key may contain a settings format introduced by newer firmware.
+  // Archive it atomically and purge only known derived files; never recursively
+  // delete unknown bytes just because the book path changed.
+  if (Storage.exists(identity.sourceCachePath.c_str()) && !quarantineReplacementDirectory(identity.sourceCachePath)) {
     return false;
   }
 

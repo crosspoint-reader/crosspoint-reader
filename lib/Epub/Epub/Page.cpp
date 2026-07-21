@@ -6,7 +6,16 @@
 
 #include <new>
 
+#include "BoundedFileReader.h"
+#include "SectionCacheValidator.h"
+
 namespace {
+
+static_assert(TAG_PageLine == 1 && TAG_PageImage == 2 && TAG_PageHorizontalRule == 3,
+              "Section cache validator tag layout mismatch");
+static_assert(Page::MAX_FOOTNOTES_PER_PAGE == SectionCacheValidation::MAX_FOOTNOTES_PER_PAGE &&
+                  sizeof(FootnoteEntry::number) + sizeof(FootnoteEntry::href) == SectionCacheValidation::FOOTNOTE_BYTES,
+              "Section cache validator footnote layout mismatch");
 
 template <typename Predicate>
 void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
@@ -32,13 +41,12 @@ bool PageLine::serialize(HalFile& file) {
   return block->serialize(file);
 }
 
-std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
-  int16_t xPos;
-  int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+std::unique_ptr<PageLine> PageLine::deserialize(BoundedFileReader& reader) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  if (!reader.readPod(xPos) || !reader.readPod(yPos)) return nullptr;
 
-  auto tb = TextBlock::deserialize(file);
+  auto tb = TextBlock::deserialize(reader);
   if (!tb) {
     LOG_ERR("PGE", "Deserialization failed: null TextBlock");
     return nullptr;
@@ -69,14 +77,15 @@ bool PageImage::serialize(HalFile& file) {
   return imageBlock->serialize(file);
 }
 
-std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
-  int16_t xPos;
-  int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+std::unique_ptr<PageImage> PageImage::deserialize(BoundedFileReader& reader) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  if (!reader.readPod(xPos) || !reader.readPod(yPos)) return nullptr;
 
-  auto ib = ImageBlock::deserialize(file);
-  return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
+  auto ib = ImageBlock::deserialize(reader);
+  if (!ib) return nullptr;
+  auto* image = new (std::nothrow) PageImage(std::move(ib), xPos, yPos);
+  return std::unique_ptr<PageImage>(image);
 }
 
 void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
@@ -96,15 +105,14 @@ bool PageHorizontalRule::serialize(HalFile& file) {
   return true;
 }
 
-std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& file) {
+std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(BoundedFileReader& reader) {
   int16_t xPos = 0;
   int16_t yPos = 0;
   uint16_t width = 0;
   uint8_t thickness = 0;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
-  serialization::readPod(file, width);
-  serialization::readPod(file, thickness);
+  if (!reader.readPod(xPos) || !reader.readPod(yPos) || !reader.readPod(width) || !reader.readPod(thickness)) {
+    return nullptr;
+  }
 
   if (width == 0 || thickness == 0) {
     LOG_ERR("PGE", "Deserialization failed: invalid horizontal rule metadata (width=%u thickness=%u)", width,
@@ -141,6 +149,10 @@ void Page::renderWithImagePlaceholders(GfxRenderer& renderer, const int fontId, 
 }
 
 bool Page::serialize(HalFile& file) const {
+  if (elements.size() > SectionCacheValidation::MAX_PAGE_ELEMENTS) {
+    LOG_ERR("PGE", "Serialization failed: too many elements (%u)", static_cast<unsigned>(elements.size()));
+    return false;
+  }
   const uint16_t count = elements.size();
   serialization::writePod(file, count);
 
@@ -168,30 +180,37 @@ bool Page::serialize(HalFile& file) const {
   return true;
 }
 
-std::unique_ptr<Page> Page::deserialize(HalFile& file) {
-  auto page = std::unique_ptr<Page>(new Page());
+std::unique_ptr<Page> Page::deserialize(BoundedFileReader& reader) {
+  auto page = std::unique_ptr<Page>(new (std::nothrow) Page());
+  if (!page) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate Page");
+    return nullptr;
+  }
 
-  uint16_t count;
-  serialization::readPod(file, count);
+  uint16_t count = 0;
+  if (!reader.readPod(count) || count > SectionCacheValidation::MAX_PAGE_ELEMENTS) {
+    LOG_ERR("PGE", "Deserialization failed: invalid element count %u", count);
+    return nullptr;
+  }
 
   for (uint16_t i = 0; i < count; i++) {
-    uint8_t tag;
-    serialization::readPod(file, tag);
+    uint8_t tag = 0;
+    if (!reader.readPod(tag)) return nullptr;
 
     if (tag == TAG_PageLine) {
-      auto pl = PageLine::deserialize(file);
+      auto pl = PageLine::deserialize(reader);
       if (!pl) {
         return nullptr;
       }
       page->elements.push_back(std::move(pl));
     } else if (tag == TAG_PageImage) {
-      auto pi = PageImage::deserialize(file);
+      auto pi = PageImage::deserialize(reader);
       if (!pi) {
         return nullptr;
       }
       page->elements.push_back(std::move(pi));
     } else if (tag == TAG_PageHorizontalRule) {
-      auto rule = PageHorizontalRule::deserialize(file);
+      auto rule = PageHorizontalRule::deserialize(reader);
       if (!rule) {
         return nullptr;
       }
@@ -203,8 +222,8 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   // Deserialize footnotes
-  uint16_t fnCount;
-  serialization::readPod(file, fnCount);
+  uint16_t fnCount = 0;
+  if (!reader.readPod(fnCount)) return nullptr;
   if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
     LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
     return nullptr;
@@ -212,8 +231,7 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   page->footnotes.resize(fnCount);
   for (uint16_t i = 0; i < fnCount; i++) {
     auto& entry = page->footnotes[i];
-    if (file.read(entry.number, sizeof(entry.number)) != sizeof(entry.number) ||
-        file.read(entry.href, sizeof(entry.href)) != sizeof(entry.href)) {
+    if (!reader.readBytes(entry.number, sizeof(entry.number)) || !reader.readBytes(entry.href, sizeof(entry.href))) {
       LOG_ERR("PGE", "Failed to read footnote %u", i);
       return nullptr;
     }
@@ -221,5 +239,5 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
     entry.href[sizeof(entry.href) - 1] = '\0';
   }
 
-  return page;
+  return reader.atEnd() ? std::move(page) : nullptr;
 }

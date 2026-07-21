@@ -1,7 +1,9 @@
 #pragma once
 
 #include <Print.h>
+#include <ZipFile.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -9,8 +11,6 @@
 
 #include "Epub/BookMetadataCache.h"
 #include "Epub/css/CssParser.h"
-
-class ZipFile;
 
 class Epub {
   // the ncx file (EPUB 2)
@@ -29,7 +29,14 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // One central-directory scan is shared by preflight, sidecar binding, and
+  // book.bin validation. A separate forced scan at the end detects a source
+  // that changed while the EPUB was being opened or indexed.
+  mutable ZipFile::SourceIdentity sourceIdentitySnapshot{};
+  mutable bool hasSourceIdentitySnapshot = false;
 
+  bool ensureSourceIdentitySnapshot() const;
+  bool sourceStillMatchesSnapshot() const;
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
   bool parseTocNcxFile() const;
@@ -38,12 +45,19 @@ class Epub {
   void parseCssFiles() const;
 
  public:
+  enum class SourceBindingStatus : uint8_t { Match, Missing, Mismatch, NewerVersion, Invalid, IoError };
+
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
     // create a cache key based on the filepath
     cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
   }
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
+  // Read-only preflight used before loading path-keyed user state. A source
+  // mismatch means a different EPUB now occupies this path.
+  BookMetadataCache::LoadStatus inspectCache();
+  SourceBindingStatus inspectSourceBinding() const;
+  bool bindCurrentSource() const;
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool clearCache() const;
   void setupCacheDir() const;

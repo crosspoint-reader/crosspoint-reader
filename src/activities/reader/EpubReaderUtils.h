@@ -21,7 +21,10 @@ inline bool saveProgress(const Epub& epub, int spineIndex, int pageNumber, int p
   data[3] = (pageNumber >> 8) & 0xFF;
   data[4] = pageCount & 0xFF;
   data[5] = (pageCount >> 8) & 0xFF;
-  if (!ProgressFile::writeAtomic(epub.getCachePath(), data, sizeof(data))) {
+  const int spineCount = epub.getSpineItemsCount();
+  const ProgressFile::EpubBounds bounds{spineCount > 0 ? static_cast<uint32_t>(spineCount) : 0};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validateEpubBounds, &bounds};
+  if (!ProgressFile::writeAtomic(epub.getCachePath(), data, sizeof(data), validator)) {
     return false;
   }
   LOG_DBG("ERS", "Progress saved: spine=%d page=%d", spineIndex, pageNumber);

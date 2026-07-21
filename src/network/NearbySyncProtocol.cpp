@@ -9,7 +9,7 @@ constexpr uint8_t MAGIC[4] = {'C', 'V', 'N', 'S'};
 constexpr size_t OFFSET_VERSION = 4;
 constexpr size_t OFFSET_KIND = 5;
 constexpr size_t OFFSET_TYPE = 6;
-constexpr size_t OFFSET_RESERVED = 7;
+constexpr size_t OFFSET_ROLE = 7;
 constexpr size_t OFFSET_PAYLOAD_SIZE = 8;
 constexpr size_t OFFSET_SESSION = 10;
 constexpr size_t OFFSET_SEQUENCE = 14;
@@ -48,7 +48,20 @@ bool isValidKind(const NearbySync::Kind kind) {
 
 bool isValidPacketType(const NearbySync::PacketType type) {
   return type == NearbySync::PacketType::Hello || type == NearbySync::PacketType::Bind ||
-         type == NearbySync::PacketType::Offer || type == NearbySync::PacketType::Ack;
+         type == NearbySync::PacketType::Offer || type == NearbySync::PacketType::Ack ||
+         type == NearbySync::PacketType::Complete;
+}
+
+bool isValidRole(const NearbySync::Role role) {
+  return role == NearbySync::Role::Sender || role == NearbySync::Role::Receiver;
+}
+
+bool isValidDirection(const NearbySync::PacketType type, const NearbySync::Role role) {
+  if (type == NearbySync::PacketType::Offer || type == NearbySync::PacketType::Complete) {
+    return role == NearbySync::Role::Sender;
+  }
+  if (type == NearbySync::PacketType::Ack) return role == NearbySync::Role::Receiver;
+  return true;
 }
 
 bool isValidUnicastMac(const NearbySync::MacAddress& mac) {
@@ -109,7 +122,8 @@ bool encodePacket(const PacketHeader& header, const uint8_t* payload, const size
   outputSize = 0;
   if (!output || payloadSize > MAX_PAYLOAD_BYTES || capacity < HEADER_BYTES + payloadSize ||
       (payloadSize > 0 && !payload) || !isValidKind(header.kind) || !isValidPacketType(header.type) ||
-      header.sessionId == 0 || header.sequence == 0 || !isValidUnicastMac(header.senderMac)) {
+      !isValidRole(header.role) || !isValidDirection(header.type, header.role) || header.sessionId == 0 ||
+      header.sequence == 0 || !isValidUnicastMac(header.senderMac)) {
     return false;
   }
 
@@ -118,7 +132,7 @@ bool encodePacket(const PacketHeader& header, const uint8_t* payload, const size
   output[OFFSET_VERSION] = PROTOCOL_VERSION;
   output[OFFSET_KIND] = static_cast<uint8_t>(header.kind);
   output[OFFSET_TYPE] = static_cast<uint8_t>(header.type);
-  output[OFFSET_RESERVED] = 0;
+  output[OFFSET_ROLE] = static_cast<uint8_t>(header.role);
   writeLe16(output, OFFSET_PAYLOAD_SIZE, static_cast<uint16_t>(payloadSize));
   writeLe32(output, OFFSET_SESSION, header.sessionId);
   writeLe16(output, OFFSET_SEQUENCE, header.sequence);
@@ -140,7 +154,9 @@ DecodeResult decodePacket(const uint8_t* data, const size_t size, DecodedPacket&
   if (!isValidKind(kind)) return DecodeResult::BadKind;
   const PacketType type = static_cast<PacketType>(data[OFFSET_TYPE]);
   if (!isValidPacketType(type)) return DecodeResult::BadType;
-  if (data[OFFSET_RESERVED] != 0) return DecodeResult::BadReserved;
+  const Role role = static_cast<Role>(data[OFFSET_ROLE]);
+  if (!isValidRole(role)) return DecodeResult::BadRole;
+  if (!isValidDirection(type, role)) return DecodeResult::BadDirection;
 
   const size_t payloadSize = readLe16(data, OFFSET_PAYLOAD_SIZE);
   if (payloadSize > MAX_PAYLOAD_BYTES || size != HEADER_BYTES + payloadSize) return DecodeResult::BadLength;
@@ -148,6 +164,7 @@ DecodeResult decodePacket(const uint8_t* data, const size_t size, DecodedPacket&
   PacketHeader header;
   header.kind = kind;
   header.type = type;
+  header.role = role;
   header.sessionId = readLe32(data, OFFSET_SESSION);
   header.sequence = readLe16(data, OFFSET_SEQUENCE);
   memcpy(header.senderMac.data(), data + OFFSET_MAC, header.senderMac.size());
@@ -288,19 +305,21 @@ void PeerBinding::reset() {
   bound_ = false;
   transportMac_ = {};
   deviceMac_ = {};
+  role_ = Role::Sender;
   sessionId_ = 0;
   lastSequence_ = 0;
 }
 
 bool PeerBinding::bind(const MacAddress& transportMac, const PacketHeader& header) {
   if (bound_) return accept(transportMac, header);
-  if (!isValidUnicastMac(transportMac) || !isValidUnicastMac(header.senderMac) || header.sessionId == 0 ||
-      header.sequence == 0) {
+  if (!isValidUnicastMac(transportMac) || !isValidUnicastMac(header.senderMac) || !isValidRole(header.role) ||
+      header.sessionId == 0 || header.sequence == 0) {
     return false;
   }
   bound_ = true;
   transportMac_ = transportMac;
   deviceMac_ = header.senderMac;
+  role_ = header.role;
   sessionId_ = header.sessionId;
   lastSequence_ = header.sequence;
   return true;
@@ -313,7 +332,8 @@ bool PeerBinding::accept(const MacAddress& transportMac, const PacketHeader& hea
 }
 
 bool PeerBinding::matches(const MacAddress& transportMac, const PacketHeader& header) const {
-  return bound_ && transportMac == transportMac_ && header.senderMac == deviceMac_ && header.sessionId == sessionId_;
+  return bound_ && transportMac == transportMac_ && header.senderMac == deviceMac_ && header.role == role_ &&
+         header.sessionId == sessionId_;
 }
 
 }  // namespace NearbySync

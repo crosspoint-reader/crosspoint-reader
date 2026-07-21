@@ -15,6 +15,10 @@ class BookmarkUtil {
   static bool isEmptyBookmarkFile(const std::string& path);
   static bool writeEmptyBookmarkFile(const std::string& path);
   static bool writeEmptyCanonicalBookmark(const std::string& bookPath);
+  // Archives the collision-resistant canonical file inside the old book cache,
+  // then publishes a verified empty tombstone via temp+rename. Safe to retry
+  // after any rename boundary; the ambiguous legacy fallback is never moved.
+  static bool quarantineCanonicalForReplacement(const std::string& bookPath, const std::string& cachePath);
   // Keep an existing legacy fallback from resurfacing after a move. Any old
   // canonical at this path is deliberately replaced with verified empty data.
   static bool ensureLegacyBookmarkShadowed(const std::string& bookPath);

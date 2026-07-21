@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <utility>
 
 std::string BookmarkUtil::getBookmarksDir() { return "/.crosspoint/bookmarks/"; }
 
@@ -72,6 +73,54 @@ bool BookmarkUtil::writeEmptyCanonicalBookmark(const std::string& bookPath) {
     return false;
   }
   return writeEmptyBookmarkFile(getBookmarkPath(bookPath));
+}
+
+bool BookmarkUtil::quarantineCanonicalForReplacement(const std::string& bookPath, const std::string& cachePath) {
+  constexpr char ROOT[] = "/.crosspoint";
+  // A replacement is rare; 256 preserved generations is generous while
+  // bounding SD exists() calls if the archive namespace is pathological.
+  constexpr unsigned MAX_ORPHAN_SLOTS = 256;
+  if (bookPath.empty() || cachePath.empty() || cachePath == "/" || !Storage.exists(cachePath.c_str())) return false;
+
+  const std::string canonical = getBookmarkPath(bookPath);
+  const std::string pending = canonical + ".crossvi_replacement.tmp";
+  if (Storage.exists(canonical.c_str()) && !isEmptyBookmarkFile(canonical)) {
+    std::string destination;
+    for (unsigned slot = 0; slot < MAX_ORPHAN_SLOTS; ++slot) {
+      std::string candidate = cachePath + "/.crossvi_replaced_bookmark.json";
+      if (slot > 0) candidate += "." + std::to_string(slot + 1);
+      if (!Storage.exists(candidate.c_str())) {
+        destination = std::move(candidate);
+        break;
+      }
+    }
+    if (destination.empty() || !Storage.rename(canonical.c_str(), destination.c_str())) return false;
+  }
+
+  if (Storage.exists(canonical.c_str())) {
+    if (!isEmptyBookmarkFile(canonical)) return false;
+    if (!Storage.exists(pending.c_str())) return true;
+    // The verified canonical tombstone is authoritative. Any leftover pending
+    // file, including a truncated one, is unpublished and safe to discard.
+    return Storage.remove(pending.c_str());
+  }
+
+  const std::string directory = getBookmarksDir();
+  if ((!Storage.exists(ROOT) && !Storage.mkdir(ROOT)) ||
+      (!Storage.exists(directory.c_str()) && !Storage.mkdir(directory.c_str()))) {
+    return false;
+  }
+  if (Storage.exists(pending.c_str())) {
+    // This name is exclusively our unpublished tombstone. A short write or
+    // power loss may leave it truncated; the archived canonical bookmark and
+    // source-identity barrier remain authoritative, so rebuilding the temp is
+    // both safe and necessary for retry to make progress.
+    if (!isEmptyBookmarkFile(pending) && !Storage.remove(pending.c_str())) return false;
+    if (!Storage.exists(pending.c_str()) && !writeEmptyBookmarkFile(pending)) return false;
+  } else if (!writeEmptyBookmarkFile(pending)) {
+    return false;
+  }
+  return Storage.rename(pending.c_str(), canonical.c_str()) && isEmptyBookmarkFile(canonical);
 }
 
 bool BookmarkUtil::ensureLegacyBookmarkShadowed(const std::string& bookPath) {

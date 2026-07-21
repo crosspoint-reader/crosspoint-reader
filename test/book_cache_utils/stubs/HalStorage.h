@@ -24,10 +24,11 @@ class HalFile {
   size_t getName(char* destination, size_t capacity) const;
   HalFile openNextFile();
   uint64_t fileSize64() const;
+  size_t available() const { return open_ && !directory_ ? static_cast<size_t>(fileSize64()) - position_ : 0; }
   int read(void* destination, size_t length);
   size_t write(const void* source, size_t length);
   void flush() {}
-  bool sync() { return open_; }
+  bool sync();
   bool close() {
     const bool wasOpen = open_;
     open_ = false;
@@ -62,6 +63,7 @@ class HalStorage {
   }
 
   bool exists(const char* path) const { return files_.count(path) != 0 || directories_.count(path) != 0; }
+  bool exists(const std::string& path) const { return exists(path.c_str()); }
 
   bool mkdir(const char* path, bool = true) {
     if (exists(path)) return false;
@@ -88,6 +90,7 @@ class HalStorage {
     if (shouldFailDelete(path)) return false;
     return files_.erase(path) != 0;
   }
+  bool remove(const std::string& path) { return remove(path.c_str()); }
 
   bool removeDir(const char* path) {
     if (shouldFailDelete(path) || directories_.count(path) == 0) return false;
@@ -117,6 +120,7 @@ class HalStorage {
 
   bool rename(const char* oldPath, const char* newPath) {
     ++renameCalls_;
+    renameHistory_.emplace_back(oldPath, newPath);
     if (failRenameCall_ != 0 && renameCalls_ == failRenameCall_) return false;
     if (exists(newPath) || directories_.count(parentPath(newPath)) == 0) return false;
     const auto source = files_.find(oldPath);
@@ -155,6 +159,9 @@ class HalStorage {
     directories_.insert(movedDirectories.begin(), movedDirectories.end());
     return true;
   }
+  bool rename(const std::string& oldPath, const std::string& newPath) {
+    return rename(oldPath.c_str(), newPath.c_str());
+  }
 
   bool openFileForRead(const char*, const std::string& path, HalFile& file) {
     if (files_.count(path) == 0) return false;
@@ -173,10 +180,13 @@ class HalStorage {
     files_.clear();
     directories_.clear();
     renameCalls_ = 0;
+    renameHistory_.clear();
     failRenameCall_ = 0;
     failDeletePath_.clear();
     failDeleteCount_ = 0;
     failRmdirOnce_ = false;
+    shortWriteOnce_ = false;
+    failSyncOnce_ = false;
     directories_.insert("/");
   }
 
@@ -206,22 +216,28 @@ class HalStorage {
   }
 
   void failRenameOnCall(const size_t call) { failRenameCall_ = call; }
+  const std::vector<std::pair<std::string, std::string>>& renameHistory() const { return renameHistory_; }
   void failDeletePathOnce(std::string path) { failDeletePathTimes(std::move(path), 1); }
   void failDeletePathTimes(std::string path, const size_t count) {
     failDeletePath_ = std::move(path);
     failDeleteCount_ = count;
   }
   void failRmdirOnce() { failRmdirOnce_ = true; }
+  void shortWriteOnce() { shortWriteOnce_ = true; }
+  void failSyncOnce() { failSyncOnce_ = true; }
 
  private:
   friend class HalFile;
   std::map<std::string, std::vector<unsigned char>> files_;
   std::set<std::string> directories_;
   size_t renameCalls_ = 0;
+  std::vector<std::pair<std::string, std::string>> renameHistory_;
   size_t failRenameCall_ = 0;
   std::string failDeletePath_;
   size_t failDeleteCount_ = 0;
   bool failRmdirOnce_ = false;
+  bool shortWriteOnce_ = false;
+  bool failSyncOnce_ = false;
 
   static std::string withTrailingSlash(const std::string& path) { return path.back() == '/' ? path : path + "/"; }
 
@@ -304,11 +320,25 @@ inline int HalFile::read(void* destination, const size_t length) {
 
 inline size_t HalFile::write(const void* source, const size_t length) {
   if (!open_ || directory_ || !writable_ || !storage_) return 0;
+  size_t written = length;
+  if (storage_->shortWriteOnce_) {
+    storage_->shortWriteOnce_ = false;
+    written = length == 0 ? 0 : length - 1;
+  }
   auto& content = storage_->files_[path_];
-  if (position_ + length > content.size()) content.resize(position_ + length);
-  std::copy_n(static_cast<const unsigned char*>(source), length, content.data() + position_);
-  position_ += length;
-  return length;
+  if (position_ + written > content.size()) content.resize(position_ + written);
+  std::copy_n(static_cast<const unsigned char*>(source), written, content.data() + position_);
+  position_ += written;
+  return written;
+}
+
+inline bool HalFile::sync() {
+  if (!open_ || !storage_) return false;
+  if (storage_->failSyncOnce_) {
+    storage_->failSyncOnce_ = false;
+    return false;
+  }
+  return true;
 }
 
 #define Storage HalStorage::getInstance()

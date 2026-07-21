@@ -21,6 +21,7 @@
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookPathMoveUtils.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -33,6 +34,10 @@ bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasB
 
 std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, PerBookReaderSettings& globalSettings,
                                                PerBookReaderSettings& bookSettings, bool& settingsWritable) {
+  if (!recoverInterruptedBookFileReplacement(path)) {
+    LOG_ERR("READER", "Could not recover interrupted EPUB replacement: %s", path.c_str());
+    return nullptr;
+  }
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
@@ -53,6 +58,46 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, PerBookR
     LOG_ERR("READER", "Could not recover staged per-book state: %s", epub->getCachePath().c_str());
     return nullptr;
   }
+
+  Epub::SourceBindingStatus bindingStatus = epub->inspectSourceBinding();
+  if (bindingStatus == Epub::SourceBindingStatus::Mismatch) {
+    const std::string staleCachePath = epub->getCachePath();
+    // Quarantine all old path-keyed state before the new EPUB can inherit it.
+    // A partial cleanup is a hard failure: the old identity remains the proof
+    // needed to retry safely on a later open.
+    if (!resetBookUserStateAfterReplacement(path) || Storage.exists(staleCachePath.c_str())) {
+      LOG_ERR("READER", "Could not quarantine stale state for replaced EPUB: %s", path.c_str());
+      return nullptr;
+    }
+    epub = makeUniqueNoThrow<Epub>(path, "/.crosspoint");
+    if (!epub) return nullptr;
+    bindingStatus = Epub::SourceBindingStatus::Missing;
+  } else if (bindingStatus == Epub::SourceBindingStatus::NewerVersion ||
+             bindingStatus == Epub::SourceBindingStatus::Invalid ||
+             bindingStatus == Epub::SourceBindingStatus::IoError) {
+    LOG_ERR("READER", "EPUB source identity cannot be handled safely (status %u)",
+            static_cast<unsigned>(bindingStatus));
+    return nullptr;
+  }
+
+  if (bindingStatus == Epub::SourceBindingStatus::Missing) {
+    // One-time migration for books whose cache/user state predates source
+    // identities (including a cache cleared on older firmware). A replacement
+    // before this first adoption is fundamentally unknowable.
+    LOG_DBG("READER", "Adopting source identity for legacy EPUB state: %s", path.c_str());
+  }
+  if (!epub->bindCurrentSource() || epub->inspectSourceBinding() != Epub::SourceBindingStatus::Match) {
+    LOG_ERR("READER", "Could not persist EPUB source identity: %s", path.c_str());
+    return nullptr;
+  }
+
+  const BookMetadataCache::LoadStatus cacheStatus = epub->inspectCache();
+  if (cacheStatus == BookMetadataCache::LoadStatus::NewerVersion ||
+      cacheStatus == BookMetadataCache::LoadStatus::IoError) {
+    LOG_ERR("READER", "EPUB cache cannot be handled safely (status %u)", static_cast<unsigned>(cacheStatus));
+    return nullptr;
+  }
+
   const auto settingsStatus = PerBookReaderSettingsStore::load(epub->getCachePath(), bookSettings);
   settingsWritable = settingsStatus != PerBookReaderSettingsStore::LoadStatus::NEWER_VERSION &&
                      settingsStatus != PerBookReaderSettingsStore::LoadStatus::IO_ERROR;
@@ -66,10 +111,9 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, PerBookR
   // A per-book SD font must be active before layout starts. Invalid book-only
   // choices are cleared in memory without leaking the override to settings.json.
   sdFontSystem.ensureLoaded(renderer, false);
-  // First open: building the spine/TOC index (book.bin) takes a couple of seconds. Show the
-  // indexing popup so it isn't a silent wait on the home screen. The cachePath/hash is known at
-  // construction, so this check is valid before load(); a cached open loads in a blink -> no popup.
-  const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
+  // Missing, legacy, or malformed derived metadata is rebuilt below. Show the
+  // indexing popup for all of those cases, not only a physically missing file.
+  const bool uncached = cacheStatus != BookMetadataCache::LoadStatus::Loaded;
   if (uncached) {
     GUI.drawPopup(renderer, tr(STR_INDEXING));
   }
@@ -93,6 +137,10 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path, PerBookR
 }
 
 std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
+  if (!recoverInterruptedBookFileReplacement(path)) {
+    LOG_ERR("READER", "Could not recover interrupted XTC replacement: %s", path.c_str());
+    return nullptr;
+  }
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
@@ -101,6 +149,10 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
   auto xtc = makeUniqueNoThrow<Xtc>(path, "/.crosspoint");
   if (!xtc) {
     LOG_ERR("READER", "Failed to allocate XTC object");
+    return nullptr;
+  }
+  if (!recoverBookCacheUserState(xtc->getCachePath(), path)) {
+    LOG_ERR("READER", "Could not recover staged XTC state: %s", xtc->getCachePath().c_str());
     return nullptr;
   }
   if (xtc->load()) {
@@ -112,6 +164,10 @@ std::unique_ptr<Xtc> ReaderActivity::loadXtc(const std::string& path) {
 }
 
 std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
+  if (!recoverInterruptedBookFileReplacement(path)) {
+    LOG_ERR("READER", "Could not recover interrupted text replacement: %s", path.c_str());
+    return nullptr;
+  }
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
@@ -120,6 +176,10 @@ std::unique_ptr<Txt> ReaderActivity::loadTxt(const std::string& path) {
   auto txt = makeUniqueNoThrow<Txt>(path, "/.crosspoint");
   if (!txt) {
     LOG_ERR("READER", "Failed to allocate TXT object");
+    return nullptr;
+  }
+  if (!recoverBookCacheUserState(txt->getCachePath(), path)) {
+    LOG_ERR("READER", "Could not recover staged TXT state: %s", txt->getCachePath().c_str());
     return nullptr;
   }
   if (txt->load()) {

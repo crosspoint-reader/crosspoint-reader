@@ -7,7 +7,7 @@
 
 namespace NearbySync {
 
-constexpr uint8_t PROTOCOL_VERSION = 2;
+constexpr uint8_t PROTOCOL_VERSION = 3;
 constexpr size_t HEADER_BYTES = 26;
 constexpr size_t MAX_PACKET_BYTES = 250;
 constexpr size_t MAX_PAYLOAD_BYTES = MAX_PACKET_BYTES - HEADER_BYTES;
@@ -19,7 +19,8 @@ constexpr uint32_t PERCENTAGE_SCALE = 1000000;
 using MacAddress = std::array<uint8_t, 6>;
 
 enum class Kind : uint8_t { Position = 1, Stats = 2 };
-enum class PacketType : uint8_t { Hello = 1, Bind = 2, Offer = 3, Ack = 4 };
+enum class PacketType : uint8_t { Hello = 1, Bind = 2, Offer = 3, Ack = 4, Complete = 5 };
+enum class Role : uint8_t { Sender = 1, Receiver = 2 };
 
 enum class DecodeResult : uint8_t {
   Ok,
@@ -29,7 +30,8 @@ enum class DecodeResult : uint8_t {
   BadVersion,
   BadKind,
   BadType,
-  BadReserved,
+  BadRole,
+  BadDirection,
   BadLength,
   BadIdentity,
   BadCrc,
@@ -38,6 +40,7 @@ enum class DecodeResult : uint8_t {
 struct PacketHeader {
   Kind kind = Kind::Position;
   PacketType type = PacketType::Hello;
+  Role role = Role::Sender;
   uint32_t sessionId = 0;
   uint16_t sequence = 0;
   MacAddress senderMac{};
@@ -105,6 +108,7 @@ class PeerBinding {
   bool isBound() const { return bound_; }
   const MacAddress& transportMac() const { return transportMac_; }
   const MacAddress& deviceMac() const { return deviceMac_; }
+  Role role() const { return role_; }
   uint32_t sessionId() const { return sessionId_; }
   uint16_t lastSequence() const { return lastSequence_; }
 
@@ -112,6 +116,7 @@ class PeerBinding {
   bool bound_ = false;
   MacAddress transportMac_{};
   MacAddress deviceMac_{};
+  Role role_ = Role::Sender;
   uint32_t sessionId_ = 0;
   uint16_t lastSequence_ = 0;
 };

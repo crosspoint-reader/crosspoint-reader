@@ -6,6 +6,7 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -15,6 +16,7 @@
 
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
+#include "activities/network/NearbyStatsPolicy.h"
 #include "activities/reader/ReadingStatsCodec.h"
 #include "activities/reader/ReadingStatsStorage.h"
 #include "components/UITheme.h"
@@ -58,20 +60,49 @@ std::string formatStatsSummary(const GlobalReadingStats& stats) {
   return value;
 }
 
-bool inspectReplaceableStatsFile(const std::string& path, bool* currentFormat = nullptr) {
-  if (currentFormat) *currentFormat = false;
+std::string formatStatsTime(const GlobalReadingStats& stats) {
+  char value[64];
+  const uint32_t hours = stats.totalReadingSeconds / 3600u;
+  const uint32_t minutes = stats.totalReadingSeconds % 3600u / 60u;
+  snprintf(value, sizeof(value), tr(STR_NEARBY_STATS_TIME_FORMAT), static_cast<unsigned long>(hours),
+           static_cast<unsigned long>(minutes));
+  return value;
+}
+
+std::string formatStatsHistory(const GlobalReadingStats& stats) {
+  char value[80];
+  snprintf(value, sizeof(value), tr(STR_NEARBY_STATS_HISTORY_FORMAT), static_cast<unsigned long>(stats.completedBooks),
+           static_cast<unsigned>(stats.displayLongestReadingStreak()));
+  return value;
+}
+
+std::string deviceName(const NearbySync::MacAddress& mac) {
+  char value[24];
+  snprintf(value, sizeof(value), "CrossVi-%02X%02X%02X", mac[3], mac[4], mac[5]);
+  return value;
+}
+
+std::string labeled(const char* label, const std::string& value) { return std::string(label) + ": " + value; }
+
+enum class StatsFileDecision : uint8_t { Replaceable, Regression, Protected };
+
+StatsFileDecision inspectStatsFile(const std::string& path, const GlobalReadingStats& incoming,
+                                   bool* supportedFormat = nullptr) {
+  if (supportedFormat) *supportedFormat = false;
   ReadingStatsCodec::GlobalBytes bytes{};
   const ReadingStatsStorage::ReadOutcome read = ReadingStatsStorage::read(path.c_str(), bytes.data(), bytes.size());
-  if (ReadingStatsStorage::isProtectedExistingFile(read.result, false)) return false;
-  if (read.result != ReadingStatsStorage::ReadResult::Ok) return true;
+  if (ReadingStatsStorage::isProtectedExistingFile(read.result, false)) return StatsFileDecision::Protected;
+  if (read.result != ReadingStatsStorage::ReadResult::Ok) return StatsFileDecision::Replaceable;
 
   GlobalReadingStats decoded;
   const ReadingStatsDecodeResult result = ReadingStatsCodec::decode(bytes.data(), read.size, decoded);
   if (ReadingStatsStorage::isProtectedExistingFile(read.result, result == ReadingStatsDecodeResult::NewerFormat)) {
-    return false;
+    return StatsFileDecision::Protected;
   }
-  if (currentFormat) *currentFormat = result == ReadingStatsDecodeResult::Ok;
-  return true;
+  if (result != ReadingStatsDecodeResult::Ok) return StatsFileDecision::Replaceable;
+  if (supportedFormat) *supportedFormat = true;
+  return NearbyStatsPolicy::doesNotRegress(incoming, decoded) ? StatsFileDecision::Replaceable
+                                                              : StatsFileDecision::Regression;
 }
 }  // namespace
 
@@ -87,11 +118,8 @@ void NearbyStatsSyncActivity::onEnter() {
 #endif
   GlobalReadingStats::LoadStatus statsStatus = GlobalReadingStats::LoadStatus::Missing;
   localStats_ = GlobalReadingStats::load(&statsStatus);
-  if (!GlobalReadingStats::isTrustedLoadStatus(statsStatus)) {
-    if (errorMessage_.empty()) setError(tr(STR_NEARBY_ERROR_LOCAL_STATS_INVALID));
-  } else {
-    localOffer_ = ReadingStatsCodec::encode(localStats_);
-  }
+  localStatsTrusted_ = GlobalReadingStats::isTrustedLoadStatus(statsStatus);
+  if (localStatsTrusted_) localOffer_ = ReadingStatsCodec::encode(localStats_);
   requestUpdate();
 }
 
@@ -118,16 +146,22 @@ void NearbyStatsSyncActivity::loop() {
     exitActivity();
     return;
   }
-  if (!mappedInput.wasPressed(MappedInputManager::Button::Confirm) || !errorMessage_.empty()) return;
+  if (!errorMessage_.empty()) return;
+
+  if (exchange_.state() == NearbySyncExchange::State::Idle) {
+    const bool receive = mappedInput.wasPressed(MappedInputManager::Button::NavPrevious);
+    const bool send = mappedInput.wasPressed(MappedInputManager::Button::NavNext);
+    if (receive || send) startExchange(receive ? NearbySync::Role::Receiver : NearbySync::Role::Sender);
+    return;
+  }
+
+  if (!mappedInput.wasPressed(MappedInputManager::Button::Confirm)) return;
   switch (exchange_.state()) {
-    case NearbySyncExchange::State::Idle:
-      startExchange();
-      break;
     case NearbySyncExchange::State::Pairing:
-      if (!exchange_.confirmShare(now)) setError(tr(STR_NEARBY_ERROR_PROTOCOL));
+      if (!exchange_.confirmPairing(now)) setError(tr(STR_NEARBY_ERROR_PROTOCOL));
       break;
     case NearbySyncExchange::State::OfferReady:
-      acceptPeerStats();
+      if (!peerStatsRegresses_ && !peerStatsStorageProtected_) acceptPeerStats();
       break;
     default:
       break;
@@ -145,12 +179,16 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
   int y = screen.y + metrics.topPadding + metrics.headerHeight + 56;
   auto line = [&](const std::string& text, const bool bold = false) {
     if (text.empty()) return;
-    UITheme::drawCenteredText(renderer, screen, bold ? UI_10_FONT_ID : SMALL_FONT_ID, y, text.c_str(), true,
-                              bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
-    y += renderer.getLineHeight(bold ? UI_10_FONT_ID : SMALL_FONT_ID) + metrics.verticalSpacing;
+    const int font = bold ? UI_10_FONT_ID : SMALL_FONT_ID;
+    const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    const std::string safe = renderer.truncatedText(font, text.c_str(), std::max(0, screen.width - 24), style);
+    UITheme::drawCenteredText(renderer, screen, font, y, safe.c_str(), true, style);
+    y += renderer.getLineHeight(font) + metrics.verticalSpacing;
   };
 
   std::string confirmLabel;
+  std::string previousLabel;
+  std::string nextLabel;
   if (!errorMessage_.empty()) {
     line(tr(STR_ERROR_MSG), true);
     line(errorMessage_);
@@ -158,37 +196,69 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
     switch (exchange_.state()) {
       case NearbySyncExchange::State::Idle:
         line(tr(STR_NEARBY_STATS_READY), true);
-        line(formatStatsSummary(localStats_));
+        line(localStatsTrusted_ ? formatStatsSummary(localStats_) : tr(STR_NEARBY_LOCAL_STATS_UNAVAILABLE));
+        line(tr(STR_NEARBY_CHOOSE_DIRECTION));
         line(tr(STR_NEARBY_MANUAL_ONLY));
         line(tr(STR_NEARBY_TRUST_WARNING));
-        confirmLabel = tr(STR_NEARBY_START);
+        previousLabel = tr(STR_NEARBY_RECEIVE);
+        nextLabel = tr(STR_NEARBY_SEND);
         break;
       case NearbySyncExchange::State::Discovering:
         line(tr(STR_NEARBY_DISCOVERING), true);
-        line(tr(STR_NEARBY_OPEN_ON_BOTH));
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_ROLE_SENDER) : tr(STR_NEARBY_ROLE_RECEIVER));
+        line(tr(STR_NEARBY_CHOOSE_OPPOSITE));
         break;
       case NearbySyncExchange::State::Pairing: {
         line(tr(STR_NEARBY_VERIFY_CODE), true);
-        line(exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName());
+        const std::string peer = exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName();
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_ROLE_SENDER) : tr(STR_NEARBY_ROLE_RECEIVER));
+        line(labeled(
+            exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_TO_DEVICE) : tr(STR_NEARBY_FROM_DEVICE),
+            peer));
         char code[16];
         snprintf(code, sizeof(code), "%04u", static_cast<unsigned>(exchange_.pairingCode()));
         line(code, true);
-        line(tr(STR_NEARBY_CODE_HINT));
-        confirmLabel = tr(STR_NEARBY_SHARE);
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_PAIR_SEND_HINT)
+                                                          : tr(STR_NEARBY_PAIR_RECEIVE_HINT));
+        confirmLabel = tr(STR_CONFIRM);
         break;
       }
+      case NearbySyncExchange::State::WaitingForAck:
+        line(tr(STR_NEARBY_SENDING_STATS), true);
+        line(labeled(tr(STR_NEARBY_TO_DEVICE),
+                     exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName()));
+        line(formatStatsTime(localStats_));
+        line(formatStatsSummary(localStats_));
+        line(formatStatsHistory(localStats_));
+        line(tr(STR_NEARBY_WAITING_FOR_RECEIVER));
+        break;
       case NearbySyncExchange::State::WaitingForOffer:
-        line(tr(STR_NEARBY_WAITING), true);
-        line(exchange_.peerAcceptedLocalOffer() ? tr(STR_NEARBY_PEER_ACCEPTED) : tr(STR_NEARBY_WAITING_HINT));
+        line(tr(STR_NEARBY_WAITING_FOR_SENDER), true);
+        line(labeled(tr(STR_NEARBY_FROM_DEVICE),
+                     exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName()));
         break;
       case NearbySyncExchange::State::OfferReady:
         line(tr(STR_NEARBY_STATS_FOUND), true);
+        line(labeled(tr(STR_NEARBY_FROM_DEVICE),
+                     exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName()));
+        line(formatStatsTime(peerStats_));
         line(formatStatsSummary(peerStats_));
-        line(tr(STR_NEARBY_STATS_SAVE_HINT));
-        confirmLabel = tr(STR_NEARBY_SAVE);
+        line(formatStatsHistory(peerStats_));
+        if (peerStatsStorageProtected_) {
+          line(tr(STR_NEARBY_STATS_PROTECTED_BLOCKED), true);
+        } else if (peerStatsRegresses_) {
+          line(tr(STR_NEARBY_STATS_REGRESSION_BLOCKED), true);
+        } else {
+          line(tr(STR_NEARBY_STATS_SAVE_HINT));
+          confirmLabel = tr(STR_NEARBY_SAVE);
+        }
+        break;
+      case NearbySyncExchange::State::WaitingForComplete:
+        line(tr(STR_NEARBY_WAITING_FOR_SENDER), true);
         break;
       case NearbySyncExchange::State::Accepted:
-        line(tr(STR_NEARBY_STATS_SAVED), true);
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_STATS_SENT) : tr(STR_NEARBY_STATS_SAVED),
+             true);
         line(tr(STR_NEARBY_RESTARTING));
         break;
       case NearbySyncExchange::State::Error:
@@ -196,7 +266,8 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel.c_str(), "", "");
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), confirmLabel.c_str(), previousLabel.c_str(), nextLabel.c_str());
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
@@ -207,12 +278,19 @@ bool NearbyStatsSyncActivity::preventAutoSleep() {
 
 bool NearbyStatsSyncActivity::skipLoopDelay() {
   return exchange_.state() == NearbySyncExchange::State::Discovering ||
-         exchange_.state() == NearbySyncExchange::State::WaitingForOffer;
+         exchange_.state() == NearbySyncExchange::State::WaitingForAck ||
+         exchange_.state() == NearbySyncExchange::State::WaitingForOffer ||
+         exchange_.state() == NearbySyncExchange::State::WaitingForComplete;
 }
 
-void NearbyStatsSyncActivity::startExchange() {
-  if (!exchange_.start(NearbySync::Kind::Stats, localMac_, "CrossVi", localOffer_.data(), localOffer_.size(),
-                       millis())) {
+void NearbyStatsSyncActivity::startExchange(const NearbySync::Role role) {
+  if (role == NearbySync::Role::Sender && !localStatsTrusted_) {
+    setError(tr(STR_NEARBY_ERROR_LOCAL_STATS_INVALID));
+    return;
+  }
+  const bool sender = role == NearbySync::Role::Sender;
+  if (!exchange_.start(NearbySync::Kind::Stats, role, localMac_, deviceName(localMac_),
+                       sender ? localOffer_.data() : nullptr, sender ? localOffer_.size() : 0, millis())) {
     setError(exchangeErrorMessage(exchange_.error()));
   }
   requestUpdate();
@@ -227,7 +305,23 @@ bool NearbyStatsSyncActivity::preparePeerStats() {
     return false;
   }
   peerStatsReady_ = true;
+  inspectPeerStatsStorage();
   return true;
+}
+
+void NearbyStatsSyncActivity::inspectPeerStatsStorage() {
+  peerStatsRegresses_ = false;
+  peerStatsStorageProtected_ = false;
+  rotateExistingPeerStats_ = false;
+
+  const std::string path = statsPath(exchange_.peerDeviceMac());
+  const StatsFileDecision primary = inspectStatsFile(path, peerStats_, &rotateExistingPeerStats_);
+  const StatsFileDecision temporary = inspectStatsFile(path + ".tmp", peerStats_);
+  const StatsFileDecision backup = inspectStatsFile(path + ".bak", peerStats_);
+  peerStatsStorageProtected_ = primary == StatsFileDecision::Protected || temporary == StatsFileDecision::Protected ||
+                               backup == StatsFileDecision::Protected;
+  peerStatsRegresses_ = primary == StatsFileDecision::Regression || temporary == StatsFileDecision::Regression ||
+                        backup == StatsFileDecision::Regression;
 }
 
 bool NearbyStatsSyncActivity::savePeerStats() {
@@ -237,21 +331,25 @@ bool NearbyStatsSyncActivity::savePeerStats() {
   }
 
   const std::string path = statsPath(exchange_.peerDeviceMac());
-  const std::string tempPath = path + ".tmp";
   const std::string backupPath = path + ".bak";
-  bool rotateExisting = false;
-  if (!inspectReplaceableStatsFile(path, &rotateExisting) || !inspectReplaceableStatsFile(tempPath) ||
-      !inspectReplaceableStatsFile(backupPath)) {
-    LOG_ERR(LOG_TAG, "Refusing to overwrite unreadable or newer peer stats: %s", path.c_str());
+  inspectPeerStatsStorage();
+  if (peerStatsStorageProtected_ || peerStatsRegresses_) {
+    LOG_ERR(LOG_TAG, "Refusing unsafe peer stats replacement: %s", path.c_str());
     return false;
   }
-  return ReadingStatsStorage::writeAtomic(path.c_str(), backupPath.c_str(), rotateExisting, exchange_.peerOffer(),
-                                          exchange_.peerOfferSize());
+  return ReadingStatsStorage::writeAtomic(path.c_str(), backupPath.c_str(), rotateExistingPeerStats_,
+                                          exchange_.peerOffer(), exchange_.peerOfferSize());
 }
 
 void NearbyStatsSyncActivity::acceptPeerStats() {
   if (!savePeerStats()) {
-    setError(tr(STR_NEARBY_ERROR_STATS_SAVE));
+    if (peerStatsStorageProtected_) {
+      setError(tr(STR_NEARBY_STATS_PROTECTED_BLOCKED));
+    } else if (peerStatsRegresses_) {
+      setError(tr(STR_NEARBY_STATS_REGRESSION_BLOCKED));
+    } else {
+      setError(tr(STR_NEARBY_ERROR_STATS_SAVE));
+    }
     return;
   }
   if (!exchange_.acknowledgePeerOffer(millis())) setError(tr(STR_NEARBY_ERROR_PROTOCOL));

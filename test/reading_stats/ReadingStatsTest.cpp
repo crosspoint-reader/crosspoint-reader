@@ -13,6 +13,7 @@
 #include "ReadingStatsCodec.h"
 #include "ReadingStatsStorage.h"
 #include "ReadingStatsUtils.h"
+#include "activities/network/NearbyStatsPolicy.h"
 
 namespace {
 void expectBookStatsEqual(const BookReadingStats& lhs, const BookReadingStats& rhs) {
@@ -155,6 +156,68 @@ TEST(ReadingStatsStorage, ProtectsUnreadableOversizedAndNewerSiblingFiles) {
   EXPECT_TRUE(ReadingStatsStorage::isProtectedExistingFile(ReadResult::IoError, false));
 }
 
+TEST(NearbyStatsPolicy, AllowsOnlyNonRegressingCumulativeSnapshots) {
+  GlobalReadingStats existing;
+  existing.totalSessions = 10;
+  existing.totalReadingSeconds = 20;
+  existing.totalPagesTurned = 30;
+  existing.completedBooks = 4;
+  existing.timeOfDaySeconds = {5, 6, 7, 8};
+  existing.dayOfWeekSeconds = {9, 10, 11, 12, 13, 14, 15};
+  existing.longestReadingStreak = 3;
+
+  GlobalReadingStats incoming = existing;
+  EXPECT_TRUE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  ++incoming.totalSessions;
+  ++incoming.totalReadingSeconds;
+  ++incoming.totalPagesTurned;
+  ++incoming.completedBooks;
+  for (uint32_t& seconds : incoming.timeOfDaySeconds) ++seconds;
+  for (uint32_t& seconds : incoming.dayOfWeekSeconds) ++seconds;
+  ++incoming.longestReadingStreak;
+  EXPECT_TRUE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.totalSessions;
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.totalReadingSeconds;
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.totalPagesTurned;
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.completedBooks;
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.timeOfDaySeconds[2];
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.dayOfWeekSeconds[5];
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+
+  incoming = existing;
+  --incoming.longestReadingStreak;
+  EXPECT_FALSE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+}
+
+TEST(NearbyStatsPolicy, IgnoresTheNonMonotonicRollingHistoryWindow) {
+  GlobalReadingStats existing;
+  existing.readingHistoryAnchorDay = 100;
+  existing.readingHistoryBits.fill(0xFF);
+
+  GlobalReadingStats incoming = existing;
+  incoming.readingHistoryAnchorDay = 200;
+  incoming.readingHistoryBits.fill(0);
+  EXPECT_TRUE(NearbyStatsPolicy::doesNotRegress(incoming, existing));
+}
+
 TEST(ReadingStatsModels, AggregationAndBucketsSaturateInsteadOfWrapping) {
   constexpr uint32_t MAX = std::numeric_limits<uint32_t>::max();
   GlobalReadingStats total;
@@ -284,6 +347,52 @@ TEST(ReadingStatsPersistence, BookNeverDeletesProtectedFiles) {
   EXPECT_FALSE(BookReadingStats{}.save("/book"));
   EXPECT_FALSE(BookReadingStats::remove("/book"));
   EXPECT_EQ(Storage.file(TEMP), valid);
+}
+
+TEST(ReadingStatsPersistence, BookRemovePreflightsCorruptAndNewerLegacyFiles) {
+  const std::vector<uint8_t> valid = asVector(ReadingStatsCodec::encode(BookReadingStats{}));
+  auto newerBytes = valid;
+  newerBytes[0] = BookReadingStats::CURRENT_FILE_VERSION + 1;
+
+  for (const char* legacyPath : {"/book/stats_v4.bin", "/book/stats.bin"}) {
+    Storage.reset();
+    Storage.setFile("/book/stats_v5.bin", valid);
+    Storage.setFile(legacyPath, {BookReadingStats::CURRENT_FILE_VERSION});
+    EXPECT_FALSE(BookReadingStats::remove("/book"));
+    EXPECT_EQ(Storage.file("/book/stats_v5.bin"), valid);
+    EXPECT_EQ(Storage.file(legacyPath), std::vector<uint8_t>{BookReadingStats::CURRENT_FILE_VERSION});
+
+    Storage.reset();
+    Storage.setFile("/book/stats_v5.bin", valid);
+    Storage.setFile(legacyPath, newerBytes);
+    EXPECT_FALSE(BookReadingStats::remove("/book"));
+    EXPECT_EQ(Storage.file("/book/stats_v5.bin"), valid);
+    EXPECT_EQ(Storage.file(legacyPath), newerBytes);
+  }
+
+  Storage.reset();
+  Storage.setFile("/book/stats_v5.bin", valid);
+  Storage.setFile("/book/stats.bin", valid);
+  Storage.makeUnreadable("/book/stats.bin");
+  EXPECT_FALSE(BookReadingStats::remove("/book"));
+  EXPECT_EQ(Storage.file("/book/stats_v5.bin"), valid);
+  EXPECT_EQ(Storage.file("/book/stats.bin"), valid);
+
+  Storage.reset();
+  auto previous = valid;
+  previous.resize(69);
+  previous[0] = 4;
+  const std::vector<uint8_t> legacy{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  for (const char* path : {"/book/stats_v5.bin", "/book/stats_v5.bin.tmp", "/book/stats_v5.bin.bak"}) {
+    Storage.setFile(path, valid);
+  }
+  Storage.setFile("/book/stats_v4.bin", previous);
+  Storage.setFile("/book/stats.bin", legacy);
+  EXPECT_TRUE(BookReadingStats::remove("/book"));
+  for (const char* path : {"/book/stats_v5.bin", "/book/stats_v5.bin.tmp", "/book/stats_v5.bin.bak",
+                           "/book/stats_v4.bin", "/book/stats.bin"}) {
+    EXPECT_FALSE(Storage.exists(path));
+  }
 }
 
 TEST(ReadingStatsPersistence, GlobalReportsTrustedRecoverySource) {
@@ -437,6 +546,46 @@ TEST(ReadingStatsHistory, RejectsFutureDatedHistoryAsCurrent) {
 
   const ReadingStatsDate januarySecond{2024, 1, 2};
   EXPECT_EQ(stats.currentReadingStreak(&januarySecond), 1);
+}
+
+TEST(ReadingStatsHistory, FutureClockCannotEraseOrHideKnownStreak) {
+  GlobalReadingStats stats;
+  stats.recordReadingSpan({{2024, 1, 1}, 12, 0, 0}, 60);
+  stats.recordReadingSpan({{2024, 1, 2}, 12, 0, 0}, 60);
+
+  const uint32_t validAnchor = stats.readingHistoryAnchorDay;
+  const auto validBits = stats.readingHistoryBits;
+  stats.recordReadingSpan({{2099, 1, 1}, 12, 0, 0}, 60);
+  EXPECT_EQ(stats.readingHistoryAnchorDay, validAnchor);
+  EXPECT_EQ(stats.readingHistoryBits, validBits);
+
+  const ReadingStatsDate januaryThird{2024, 1, 3};
+  stats.recordReadingSpan({januaryThird, 12, 0, 0}, 60);
+  EXPECT_EQ(stats.currentReadingStreak(&januaryThird), 3);
+
+  // A smaller clock jump remains representable in the rolling window. Ignore
+  // its future bit when showing the streak for the actual current day.
+  stats.recordReadingSpan({{2024, 1, 10}, 12, 0, 0}, 60);
+  EXPECT_EQ(stats.currentReadingStreak(&januaryThird), 3);
+}
+
+TEST(ReadingStatsHistory, DistantPeerClockCannotReanchorLocalHistory) {
+  GlobalReadingStats local;
+  local.totalReadingSeconds = std::numeric_limits<uint32_t>::max() - 5;
+  local.recordReadingSpan({{2024, 1, 1}, 23, 59, 59}, 2);
+  const uint32_t validAnchor = local.readingHistoryAnchorDay;
+  const auto validBits = local.readingHistoryBits;
+
+  GlobalReadingStats peer;
+  peer.totalReadingSeconds = 10;
+  peer.recordReadingSpan({{2099, 1, 1}, 12, 0, 0}, 60);
+  local.merge(peer);
+
+  EXPECT_EQ(local.totalReadingSeconds, std::numeric_limits<uint32_t>::max());
+  EXPECT_EQ(local.readingHistoryAnchorDay, validAnchor);
+  EXPECT_EQ(local.readingHistoryBits, validBits);
+  const ReadingStatsDate januarySecond{2024, 1, 2};
+  EXPECT_EQ(local.currentReadingStreak(&januarySecond), 2);
 }
 
 TEST(ReadingSessionTracker, CountsOnlyVisiblePagesAndOnlyForwardDwellAsPageRead) {

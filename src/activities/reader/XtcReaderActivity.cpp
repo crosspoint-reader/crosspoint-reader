@@ -424,7 +424,9 @@ void XtcReaderActivity::renderPage() {
 bool XtcReaderActivity::saveProgress() const {
   uint8_t data[4];
   ProgressFileCodec::encodePage(currentPage, data);
-  if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
+  const ProgressFile::PageBounds bounds{xtc->getPageCount()};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validatePageBounds, &bounds};
+  if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data), validator)) {
     LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
     return false;
   }
@@ -432,21 +434,17 @@ bool XtcReaderActivity::saveProgress() const {
 }
 
 void XtcReaderActivity::loadProgress() {
-  HalFile f;
-  if (Storage.openFileForRead("XTR", xtc->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    if (f.read(data, 4) == 4) {
-      currentPage = ProgressFileCodec::decodePage(data);
-      LOG_DBG("XTR", "Loaded progress: page %lu", currentPage);
-
-      // Validate page number
-      if (currentPage >= xtc->getPageCount()) {
-        currentPage = 0;
-      } else {
-        lastSavedPage = currentPage;
-      }
-    }
-    f.close();
+  uint8_t data[4]{};
+  const ProgressFile::PageBounds bounds{xtc->getPageCount()};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validatePageBounds, &bounds};
+  const ProgressFile::LoadResult progress = ProgressFile::loadPage(xtc->getCachePath(), data, sizeof(data), validator);
+  if (progress) {
+    currentPage = ProgressFileCodec::decodePage(data);
+    LOG_DBG("XTR", "Loaded progress: page %lu", currentPage);
+    lastSavedPage = currentPage;
+  } else if (progress.source == ProgressFile::LoadSource::Invalid ||
+             progress.source == ProgressFile::LoadSource::IoError) {
+    LOG_ERR("XTR", "No valid progress copy could be read");
   }
 }
 

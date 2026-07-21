@@ -1,5 +1,8 @@
 add_executable(DashboardLayoutTest
   DashboardLayoutTest.cpp
+  SectionCacheLayoutTest.cpp
+  SectionCacheValidatorTest.cpp
+  ${REPO_ROOT}/lib/Epub/Epub/SectionCacheValidator.cpp
 )
 
 target_include_directories(DashboardLayoutTest PRIVATE

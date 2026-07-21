@@ -6,6 +6,8 @@
 
 #include "Block.h"
 
+class BoundedFileReader;
+
 class ImageBlock final : public Block {
  public:
   ImageBlock(const std::string& imagePath, int16_t width, int16_t height);
@@ -26,7 +28,7 @@ class ImageBlock final : public Block {
 
   void render(GfxRenderer& renderer, const int x, const int y);
   bool serialize(HalFile& file);
-  static std::unique_ptr<ImageBlock> deserialize(HalFile& file);
+  static std::unique_ptr<ImageBlock> deserialize(BoundedFileReader& reader);
 
  private:
   std::string imagePath;

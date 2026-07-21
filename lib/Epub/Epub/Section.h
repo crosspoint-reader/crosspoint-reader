@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Epub.h"
+#include "Epub/SectionCacheValidator.h"
 
 class Page;
 class GfxRenderer;
@@ -65,6 +66,8 @@ class Section {
   // Parse watermark from the partial's trailer, for estimating the total page count.
   uint32_t partialBytesConsumed_ = 0;
   uint32_t partialTotalBytes_ = 0;
+  SectionCacheValidation::Layout cacheLayout_{};
+  bool cacheLayoutValid_ = false;
   bool finalizeBuild();
   // Write the LUTs/anchor map (and, for a partial, the watermark trailer), patch the
   // header, stamp the version byte, and swap the tmp .bin over filePath.
@@ -88,7 +91,7 @@ class Section {
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                        uint8_t imageRendering, bool focusReadingEnabled);
-  bool clearCache() const;
+  bool clearCache();
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                          uint8_t imageRendering, bool focusReadingEnabled,
@@ -145,6 +148,10 @@ class Section {
 
   // Get the page count from the section cache file without fully loading it.
   std::optional<uint16_t> getCachedPageCount() const;
+  // Same read-only probe for callers that only have a cache path. Partial or
+  // malformed section files return no value and are never mistaken for a
+  // finalized chapter total.
+  static std::optional<uint16_t> getCachedPageCount(const std::string& cachePath, int spineIndex);
 
   // Look up the page number for a synthetic paragraph index from XPath p[N].
   std::optional<uint16_t> getPageForParagraphIndex(uint16_t pIndex) const;

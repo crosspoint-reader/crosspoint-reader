@@ -8,6 +8,7 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include "Epub/SourceIdentityStore.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
@@ -316,9 +317,77 @@ void Epub::parseCssFiles() const {
   cssParser->clear();
 }
 
+bool Epub::ensureSourceIdentitySnapshot() const {
+  if (hasSourceIdentitySnapshot) return true;
+  ZipFile currentFile(filepath);
+  if (!currentFile.getSourceIdentity(sourceIdentitySnapshot)) return false;
+  hasSourceIdentitySnapshot = true;
+  return true;
+}
+
+bool Epub::sourceStillMatchesSnapshot() const {
+  if (!hasSourceIdentitySnapshot) return false;
+  ZipFile currentFile(filepath);
+  ZipFile::SourceIdentity current;
+  return currentFile.getSourceIdentity(current) && current == sourceIdentitySnapshot;
+}
+
+Epub::SourceBindingStatus Epub::inspectSourceBinding() const {
+  if (!ensureSourceIdentitySnapshot()) return SourceBindingStatus::IoError;
+
+  // A power loss after the durable replacement marker was published but
+  // before the backing file changed leaves the old EPUB authoritative. Restore
+  // its retained identity instead of misclassifying it as a replacement.
+  switch (SourceIdentityStore::recoverReplacement(cachePath, sourceIdentitySnapshot)) {
+    case SourceIdentityStore::RecoverReplacementStatus::RestoredCurrentSource:
+    case SourceIdentityStore::RecoverReplacementStatus::NotPrepared:
+    case SourceIdentityStore::RecoverReplacementStatus::ReplacementPublished:
+      break;
+    case SourceIdentityStore::RecoverReplacementStatus::NewerVersion:
+      return SourceBindingStatus::NewerVersion;
+    case SourceIdentityStore::RecoverReplacementStatus::Invalid:
+      return SourceBindingStatus::Invalid;
+    case SourceIdentityStore::RecoverReplacementStatus::IoError:
+      return SourceBindingStatus::IoError;
+  }
+
+  ZipFile::SourceIdentity stored;
+  switch (SourceIdentityStore::load(cachePath, stored)) {
+    case SourceIdentityStore::LoadStatus::Primary:
+    case SourceIdentityStore::LoadStatus::Backup:
+    case SourceIdentityStore::LoadStatus::Temp:
+      return stored == sourceIdentitySnapshot ? SourceBindingStatus::Match : SourceBindingStatus::Mismatch;
+    case SourceIdentityStore::LoadStatus::Missing:
+      return SourceBindingStatus::Missing;
+    case SourceIdentityStore::LoadStatus::NewerVersion:
+      return SourceBindingStatus::NewerVersion;
+    case SourceIdentityStore::LoadStatus::Invalid:
+      return SourceBindingStatus::Invalid;
+    case SourceIdentityStore::LoadStatus::IoError:
+      return SourceBindingStatus::IoError;
+  }
+  return SourceBindingStatus::IoError;
+}
+
+bool Epub::bindCurrentSource() const {
+  if (!ensureSourceIdentitySnapshot()) return false;
+  const SourceIdentityStore::SaveStatus saved = SourceIdentityStore::save(cachePath, sourceIdentitySnapshot);
+  return saved == SourceIdentityStore::SaveStatus::Saved || saved == SourceIdentityStore::SaveStatus::Unchanged;
+}
+
+BookMetadataCache::LoadStatus Epub::inspectCache() {
+  if (!ensureSourceIdentitySnapshot()) return BookMetadataCache::LoadStatus::IoError;
+  bookMetadataCache.reset(new BookMetadataCache(cachePath));
+  return bookMetadataCache->load(sourceIdentitySnapshot);
+}
+
 // load in the meta data for the epub file
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
+
+  // The durable sidecar survives a derived-cache clear. Refuse to load any
+  // metadata or user state unless it still identifies this exact EPUB.
+  if (inspectSourceBinding() != SourceBindingStatus::Match) return false;
 
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
@@ -326,7 +395,8 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   cssParser.reset(new CssParser(cachePath));
 
   // Try to load existing cache first
-  if (bookMetadataCache->load()) {
+  const BookMetadataCache::LoadStatus cacheStatus = bookMetadataCache->load(sourceIdentitySnapshot);
+  if (cacheStatus == BookMetadataCache::LoadStatus::Loaded) {
     if (!skipLoadingCss) {
       // Rebuild CSS cache when missing or when cache version changed (loadFromCache removes stale file)
       if (!cssParser->hasCache() || !cssParser->loadFromCache()) {
@@ -343,7 +413,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         bookMetadataCache.reset();
         parseCssFiles();
         bookMetadataCache.reset(new BookMetadataCache(cachePath));
-        if (!bookMetadataCache->load()) {
+        if (bookMetadataCache->load(sourceIdentitySnapshot) != BookMetadataCache::LoadStatus::Loaded) {
           LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
           return false;
         }
@@ -356,8 +426,20 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     // resident pins tens of KB for the whole reading session (more on warm resume into
     // an already-cached chapter, where createSectionFile never runs to clear it).
     cssParser->clear();
+    if (!sourceStillMatchesSnapshot()) {
+      LOG_ERR("EBP", "EPUB changed while cache was loading");
+      return false;
+    }
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
     return true;
+  }
+
+  // The durable sidecar above is authoritative for user state. A mismatched
+  // book.bin is therefore only stale derived data and may be rebuilt. Newer
+  // formats and I/O failures remain protected from downgrade/rewrite.
+  if (cacheStatus == BookMetadataCache::LoadStatus::NewerVersion ||
+      cacheStatus == BookMetadataCache::LoadStatus::IoError) {
+    return false;
   }
 
   // If we didn't load from cache above and we aren't allowed to build, fail now
@@ -368,6 +450,27 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   // Cache doesn't exist or is invalid, build it
   LOG_DBG("EBP", "Cache not found, building spine/TOC cache");
   setupCacheDir();
+
+  // Bind the whole indexing attempt to one source snapshot. buildBookBin()
+  // rechecks this before publishing, and the final load checks it once more.
+  if (!ensureSourceIdentitySnapshot()) {
+    LOG_ERR("EBP", "Could not identify EPUB before indexing");
+    return false;
+  }
+
+  // Any metadata rebuild invalidates all section/CSS output, even when CSS is
+  // disabled. User state lives in separate files and is deliberately retained
+  // for legacy/invalid derived caches.
+  const std::string sectionsPath = cachePath + "/sections";
+  if (Storage.exists(sectionsPath.c_str()) && !Storage.removeDir(sectionsPath.c_str())) {
+    LOG_ERR("EBP", "Could not invalidate stale section cache");
+    return false;
+  }
+  cssParser->deleteCache();
+  if (cssParser->hasCache()) {
+    LOG_ERR("EBP", "Could not invalidate stale CSS cache");
+    return false;
+  }
 
   const uint32_t indexingStart = millis();
 
@@ -435,7 +538,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   // Build final book.bin
   const uint32_t buildStart = millis();
-  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata)) {
+  if (!bookMetadataCache->buildBookBin(filepath, bookMetadata, sourceIdentitySnapshot)) {
     LOG_ERR("EBP", "Could not update mappings and sizes");
     return false;
   }
@@ -455,8 +558,13 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   // Reload the cache from disk so it's in the correct state
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
-  if (!bookMetadataCache->load()) {
+  if (bookMetadataCache->load(sourceIdentitySnapshot) != BookMetadataCache::LoadStatus::Loaded) {
     LOG_ERR("EBP", "Failed to reload cache after writing");
+    return false;
+  }
+
+  if (!sourceStillMatchesSnapshot()) {
+    LOG_ERR("EBP", "EPUB changed while indexing");
     return false;
   }
 

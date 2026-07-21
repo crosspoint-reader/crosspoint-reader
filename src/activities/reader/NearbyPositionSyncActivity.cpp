@@ -50,20 +50,26 @@ std::string formatPage(const CrossPointPosition& position, const float percentag
            static_cast<double>(percentage * 100.0F));
   return value;
 }
+
+std::string deviceName(const NearbySync::MacAddress& mac) {
+  char value[24];
+  snprintf(value, sizeof(value), "CrossVi-%02X%02X%02X", mac[3], mac[4], mac[5]);
+  return value;
+}
+
+std::string labeled(const char* label, const std::string& value) { return std::string(label) + ": " + value; }
 }  // namespace
 
 NearbyPositionSyncActivity::NearbyPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                       std::shared_ptr<Epub> epub,
-                                                       const CrossPointPosition localPosition,
+                                                       std::shared_ptr<Epub> epub, CrossPointPosition localPosition,
                                                        SavedProgressPosition localSavedPosition,
-                                                       std::string localChapterName,
-                                                       const NearbyReaderLayout localLayout)
+                                                       std::string localChapterName, NearbyReaderLayout localLayout)
     : Activity("NearbyPositionSync", renderer, mappedInput),
       epub_(std::move(epub)),
-      localPosition_(localPosition),
+      localPosition_(std::move(localPosition)),
       localSavedPosition_(std::move(localSavedPosition)),
       localChapterName_(std::move(localChapterName)),
-      localLayout_(localLayout) {}
+      localLayout_(std::move(localLayout)) {}
 
 void NearbyPositionSyncActivity::onEnter() {
   Activity::onEnter();
@@ -98,17 +104,25 @@ void NearbyPositionSyncActivity::loop() {
     exitActivity();
     return;
   }
-  if (!mappedInput.wasPressed(MappedInputManager::Button::Confirm) || !errorMessage_.empty()) return;
+  if (!errorMessage_.empty()) return;
 
-  switch (exchange_.state()) {
-    case NearbySyncExchange::State::Idle:
+  if (exchange_.state() == NearbySyncExchange::State::Idle) {
+    const bool receive = mappedInput.wasPressed(MappedInputManager::Button::NavPrevious);
+    const bool send = mappedInput.wasPressed(MappedInputManager::Button::NavNext);
+    if (receive || send) {
       // startExchange() must show the preparing screen synchronously, so it
       // manages its own lock and cannot be called while this one is held.
       lock.unlock();
-      startExchange();
-      return;
+      startExchange(receive ? NearbySync::Role::Receiver : NearbySync::Role::Sender);
+    }
+    return;
+  }
+
+  if (!mappedInput.wasPressed(MappedInputManager::Button::Confirm)) return;
+
+  switch (exchange_.state()) {
     case NearbySyncExchange::State::Pairing:
-      if (!exchange_.confirmShare(now)) setError(tr(STR_NEARBY_ERROR_PROTOCOL));
+      if (!exchange_.confirmPairing(now)) setError(tr(STR_NEARBY_ERROR_PROTOCOL));
       break;
     case NearbySyncExchange::State::OfferReady:
       applyPeerPosition();
@@ -129,12 +143,16 @@ void NearbyPositionSyncActivity::render(RenderLock&&) {
   int y = screen.y + metrics.topPadding + metrics.headerHeight + 56;
   auto line = [&](const std::string& text, const bool bold = false) {
     if (text.empty()) return;
-    UITheme::drawCenteredText(renderer, screen, bold ? UI_10_FONT_ID : SMALL_FONT_ID, y, text.c_str(), true,
-                              bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
-    y += renderer.getLineHeight(bold ? UI_10_FONT_ID : SMALL_FONT_ID) + metrics.verticalSpacing;
+    const int font = bold ? UI_10_FONT_ID : SMALL_FONT_ID;
+    const auto style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    const std::string safe = renderer.truncatedText(font, text.c_str(), std::max(0, screen.width - 24), style);
+    UITheme::drawCenteredText(renderer, screen, font, y, safe.c_str(), true, style);
+    y += renderer.getLineHeight(font) + metrics.verticalSpacing;
   };
 
   std::string confirmLabel;
+  std::string previousLabel;
+  std::string nextLabel;
   if (!errorMessage_.empty()) {
     line(tr(STR_ERROR_MSG), true);
     line(errorMessage_);
@@ -145,40 +163,68 @@ void NearbyPositionSyncActivity::render(RenderLock&&) {
     switch (exchange_.state()) {
       case NearbySyncExchange::State::Idle:
         line(tr(STR_NEARBY_POSITION_READY), true);
+        line(tr(STR_NEARBY_CHOOSE_DIRECTION));
         line(tr(STR_NEARBY_MANUAL_ONLY));
         line(tr(STR_NEARBY_TRUST_WARNING));
-        confirmLabel = tr(STR_NEARBY_START);
+        previousLabel = tr(STR_NEARBY_RECEIVE);
+        nextLabel = tr(STR_NEARBY_SEND);
         break;
       case NearbySyncExchange::State::Discovering:
         line(tr(STR_NEARBY_DISCOVERING), true);
-        line(tr(STR_NEARBY_OPEN_ON_BOTH));
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_ROLE_SENDER) : tr(STR_NEARBY_ROLE_RECEIVER));
+        line(tr(STR_NEARBY_CHOOSE_OPPOSITE));
         break;
       case NearbySyncExchange::State::Pairing: {
         line(tr(STR_NEARBY_VERIFY_CODE), true);
-        line(exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName());
+        const std::string peer = exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName();
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_ROLE_SENDER) : tr(STR_NEARBY_ROLE_RECEIVER));
+        line(labeled(
+            exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_TO_DEVICE) : tr(STR_NEARBY_FROM_DEVICE),
+            peer));
         char code[16];
         snprintf(code, sizeof(code), "%04u", static_cast<unsigned>(exchange_.pairingCode()));
         line(code, true);
-        line(tr(STR_NEARBY_CODE_HINT));
-        confirmLabel = tr(STR_NEARBY_SHARE);
+        line(exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_PAIR_SEND_HINT)
+                                                          : tr(STR_NEARBY_PAIR_RECEIVE_HINT));
+        confirmLabel = tr(STR_CONFIRM);
+        break;
+      }
+      case NearbySyncExchange::State::WaitingForAck: {
+        const std::string peer = exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName();
+        line(tr(STR_NEARBY_SENDING_POSITION), true);
+        line(labeled(tr(STR_NEARBY_TO_DEVICE), peer));
+        if (epub_) line(labeled(tr(STR_NEARBY_BOOK_LABEL), epub_->getTitle()));
+        line(localChapterName_);
+        line(formatPage(localPosition_, localSavedPosition_.percentage));
+        line(tr(STR_NEARBY_WAITING_FOR_RECEIVER));
         break;
       }
       case NearbySyncExchange::State::WaitingForOffer:
-        line(tr(STR_NEARBY_WAITING), true);
-        line(exchange_.peerAcceptedLocalOffer() ? tr(STR_NEARBY_PEER_ACCEPTED) : tr(STR_NEARBY_WAITING_HINT));
+        line(tr(STR_NEARBY_WAITING_FOR_SENDER), true);
+        line(labeled(tr(STR_NEARBY_FROM_DEVICE),
+                     exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName()));
         break;
       case NearbySyncExchange::State::OfferReady:
         line(tr(STR_NEARBY_POSITION_FOUND), true);
-        line(std::string(tr(STR_LOCAL_LABEL)) + " " + localChapterName_);
-        line(formatPage(localPosition_, localSavedPosition_.percentage));
-        line(std::string(tr(STR_REMOTE_LABEL)) + " " + peerChapterName_);
-        line(formatPage(peerPosition_,
-                        static_cast<float>(peerOffer_.percentageQ) / static_cast<float>(NearbySync::PERCENTAGE_SCALE)));
+        line(labeled(tr(STR_NEARBY_FROM_DEVICE),
+                     exchange_.peerName().empty() ? tr(STR_NEARBY_UNKNOWN_READER) : exchange_.peerName()));
+        if (epub_) line(labeled(tr(STR_NEARBY_BOOK_LABEL), epub_->getTitle()));
+        line(labeled(tr(STR_NEARBY_CURRENT_POSITION),
+                     formatPage(localPosition_, localSavedPosition_.percentage) + " · " + localChapterName_));
+        line(labeled(tr(STR_NEARBY_INCOMING_POSITION),
+                     formatPage(peerPosition_, static_cast<float>(peerOffer_.percentageQ) /
+                                                   static_cast<float>(NearbySync::PERCENTAGE_SCALE)) +
+                         " · " + peerChapterName_));
         line(tr(STR_NEARBY_APPLY_POSITION_HINT));
         confirmLabel = tr(STR_NEARBY_APPLY);
         break;
+      case NearbySyncExchange::State::WaitingForComplete:
+        line(tr(STR_NEARBY_WAITING_FOR_SENDER), true);
+        break;
       case NearbySyncExchange::State::Accepted:
-        line(tr(STR_NEARBY_POSITION_SAVED), true);
+        line(
+            exchange_.role() == NearbySync::Role::Sender ? tr(STR_NEARBY_POSITION_SENT) : tr(STR_NEARBY_POSITION_SAVED),
+            true);
         line(tr(STR_NEARBY_RESTARTING));
         break;
       case NearbySyncExchange::State::Error:
@@ -186,7 +232,8 @@ void NearbyPositionSyncActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel.c_str(), "", "");
+  const auto labels =
+      mappedInput.mapLabels(tr(STR_BACK), confirmLabel.c_str(), previousLabel.c_str(), nextLabel.c_str());
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
@@ -197,20 +244,27 @@ bool NearbyPositionSyncActivity::preventAutoSleep() {
 
 bool NearbyPositionSyncActivity::skipLoopDelay() {
   return exchange_.state() == NearbySyncExchange::State::Discovering ||
-         exchange_.state() == NearbySyncExchange::State::WaitingForOffer;
+         exchange_.state() == NearbySyncExchange::State::WaitingForAck ||
+         exchange_.state() == NearbySyncExchange::State::WaitingForOffer ||
+         exchange_.state() == NearbySyncExchange::State::WaitingForComplete;
 }
 
-bool NearbyPositionSyncActivity::prepareLocalOffer() {
+bool NearbyPositionSyncActivity::prepareExchange(const NearbySync::Role role) {
   if (!epub_) return false;
-  if (localPosition_.spineIndex < 0 || localPosition_.spineIndex > UINT16_MAX || localPosition_.pageNumber < 0 ||
-      localPosition_.pageNumber >= UINT16_MAX || !localPosition_.hasParagraphIndex ||
-      localPosition_.paragraphIndex == 0 || localLayout_.viewportWidth == 0 || localLayout_.viewportHeight == 0 ||
-      !std::isfinite(localSavedPosition_.percentage)) {
-    setError(tr(STR_NEARBY_ERROR_POSITION_NOT_READY));
-    return false;
+  localOfferSize_ = 0;
+  if (role == NearbySync::Role::Sender) {
+    if (localPosition_.spineIndex < 0 || localPosition_.spineIndex > UINT16_MAX || localPosition_.pageNumber < 0 ||
+        localPosition_.pageNumber >= UINT16_MAX || !localPosition_.hasParagraphIndex ||
+        localPosition_.paragraphIndex == 0 || localLayout_.viewportWidth == 0 || localLayout_.viewportHeight == 0 ||
+        !std::isfinite(localSavedPosition_.percentage)) {
+      setError(tr(STR_NEARBY_ERROR_POSITION_NOT_READY));
+      return false;
+    }
   }
+
   documentFingerprint_ = calculateNearbyDocumentFingerprint(epub_->getPath());
   if (documentFingerprint_.empty()) return false;
+  if (role == NearbySync::Role::Receiver) return true;
 
   NearbySync::PositionOffer offer;
   offer.documentHash = documentFingerprint_;
@@ -277,7 +331,7 @@ bool NearbyPositionSyncActivity::preparePeerPosition() {
   return true;
 }
 
-void NearbyPositionSyncActivity::startExchange() {
+void NearbyPositionSyncActivity::startExchange(const NearbySync::Role role) {
   {
     RenderLock lock(*this);
     preparing_ = true;
@@ -285,14 +339,15 @@ void NearbyPositionSyncActivity::startExchange() {
   requestUpdateAndWait();
 
   RenderLock lock(*this);
-  if (!prepareLocalOffer()) {
+  if (!prepareExchange(role)) {
     preparing_ = false;
     if (errorMessage_.empty()) setError(tr(STR_NEARBY_ERROR_FINGERPRINT));
     return;
   }
   preparing_ = false;
-  if (!exchange_.start(NearbySync::Kind::Position, localMac_, "CrossVi", localOfferBytes_.data(), localOfferSize_,
-                       millis())) {
+  const bool sender = role == NearbySync::Role::Sender;
+  if (!exchange_.start(NearbySync::Kind::Position, role, localMac_, deviceName(localMac_),
+                       sender ? localOfferBytes_.data() : nullptr, sender ? localOfferSize_ : 0, millis())) {
     setError(exchangeErrorMessage(exchange_.error()));
   }
   requestUpdate();

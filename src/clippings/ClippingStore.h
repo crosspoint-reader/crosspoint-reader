@@ -47,6 +47,13 @@ class ClippingStore {
   // its identity names this exact destination. Corrupt, unreadable, newer,
   // mismatched, or CRC-colliding data is preserved rather than guessed at.
   static bool removeFilesForBook(const std::string& filePath, const std::string& bookType = "epub");
+  static bool hasFilesForBook(const std::string& filePath, const std::string& bookType = "epub");
+  // Moves every exactly-owned canonical/backup/temp/move file into an inactive
+  // directory without deleting it. Each rename is independently verifiable and
+  // the operation may be retried after power loss. Unreadable, corrupt, newer,
+  // or mismatched files fail closed and remain in their current location.
+  static bool quarantineFilesForBook(const std::string& filePath, const std::string& quarantineDirectory,
+                                     const std::string& bookType = "epub");
   void unload();
 
   AddResult add(const ClippingCodec::ClippingMetadata& clipping, std::string_view text);

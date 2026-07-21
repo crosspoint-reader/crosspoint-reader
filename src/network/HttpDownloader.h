@@ -39,9 +39,12 @@ class HttpDownloader {
                        const std::string& password = "");
 
   /**
-   * Download a file to the SD card with optional credentials.
+   * Download a file to the SD card with optional credentials. Set
+   * overwriteExisting=false for caller-reserved transaction paths: an existing
+   * file is then preserved and FILE_ERROR is returned.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
-                                      const std::string& username = "", const std::string& password = "");
+                                      const std::string& username = "", const std::string& password = "",
+                                      bool overwriteExisting = true);
 };

@@ -117,6 +117,7 @@ uint32_t fingerprint(const Page& page, const GfxRenderer& renderer, const int fo
                          renderer.getLineHeight(fontId), marginLeft, marginTop);
 }
 
+// cppcheck-suppress constParameterReference; keep the public drawing API's mutable renderer reference.
 void HighlightPlan::draw(GfxRenderer& renderer) const {
   for (size_t i = 0; i < count; ++i) {
     renderer.drawLine(lines[i].left, lines[i].y, lines[i].right, lines[i].y, 2, true);

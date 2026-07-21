@@ -27,10 +27,15 @@ class NearbyStatsSyncActivity final : public Activity {
   GlobalReadingStats localStats_{};
   GlobalReadingStats peerStats_{};
   std::string errorMessage_;
+  bool localStatsTrusted_ = false;
   bool peerStatsReady_ = false;
+  bool peerStatsRegresses_ = false;
+  bool peerStatsStorageProtected_ = false;
+  bool rotateExistingPeerStats_ = false;
 
-  void startExchange();
+  void startExchange(NearbySync::Role role);
   bool preparePeerStats();
+  void inspectPeerStatsStorage();
   bool savePeerStats();
   void acceptPeerStats();
   void handleExchangeState();

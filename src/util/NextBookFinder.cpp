@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <string_view>
 
+#include "BookPathMoveUtils.h"
 #include "CrossPointSettings.h"
 
 namespace {
@@ -57,7 +58,7 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
       continue;
     }
     file.getName(nameBuffer.get(), NAME_BUFFER_SIZE);
-    if (!SETTINGS.showHiddenFiles && nameBuffer[0] == '.') {
+    if (isBookFileTransactionArtifact(nameBuffer.get()) || (!SETTINGS.showHiddenFiles && nameBuffer[0] == '.')) {
       continue;
     }
     if (!isSupportedBookFile(nameBuffer.get())) {

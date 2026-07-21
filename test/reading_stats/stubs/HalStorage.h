@@ -72,6 +72,11 @@ class HalStorage {
     if (found == files_.end() || files_.count(newPath) != 0) return false;
     files_.emplace(newPath, std::move(found->second));
     files_.erase(found);
+    if (corruptNextRename_) {
+      corruptNextRename_ = false;
+      auto& bytes = files_.at(newPath);
+      if (!bytes.empty()) bytes.back() ^= 0xFF;
+    }
     return true;
   }
   HalFile open(const char* path) {
@@ -115,6 +120,7 @@ class HalStorage {
     failSyncNext_ = false;
     failNextRename_ = false;
     failNextRemove_ = false;
+    corruptNextRename_ = false;
   }
   void setFile(const std::string& path, std::vector<uint8_t> bytes) { files_[path] = std::move(bytes); }
   const std::vector<uint8_t>& file(const std::string& path) const { return files_.at(path); }
@@ -123,6 +129,7 @@ class HalStorage {
   void failSyncOnce() { failSyncNext_ = true; }
   void failRenameOnce() { failNextRename_ = true; }
   void failRemoveOnce() { failNextRemove_ = true; }
+  void corruptRenameOnce() { corruptNextRename_ = true; }
 
  private:
   friend class HalFile;
@@ -133,6 +140,7 @@ class HalStorage {
   bool failSyncNext_ = false;
   bool failNextRename_ = false;
   bool failNextRemove_ = false;
+  bool corruptNextRename_ = false;
 
   HalFile makeFile(const std::string& path, const bool writable) {
     HalFile file;

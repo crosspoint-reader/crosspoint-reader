@@ -56,9 +56,9 @@ class NearbyPositionSyncActivity final : public Activity {
   bool preparing_ = false;
   bool peerPositionReady_ = false;
 
-  bool prepareLocalOffer();
+  bool prepareExchange(NearbySync::Role role);
   bool preparePeerPosition();
-  void startExchange();
+  void startExchange(NearbySync::Role role);
   void applyPeerPosition();
   void handleExchangeState();
   void setError(const std::string& message);

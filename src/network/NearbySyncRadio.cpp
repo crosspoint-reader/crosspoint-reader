@@ -103,7 +103,7 @@ SemaphoreHandle_t callbackGuard = nullptr;
 
 void onEspNowReceive(const esp_now_recv_info_t* info, const uint8_t* data, const int length) {
   if (!callbackGuard || xSemaphoreTake(callbackGuard, 0) != pdTRUE) return;
-  NearbySyncRadio* radio = activeRadio;
+  const NearbySyncRadio* radio = activeRadio;
   if (radio && info && info->src_addr && data && length > 0) {
     // Keep the guard until enqueue returns. stop() takes the same guard before
     // clearing activeRadio, so an activity cannot delete its event queue while

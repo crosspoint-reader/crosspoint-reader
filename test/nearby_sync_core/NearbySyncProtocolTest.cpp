@@ -14,8 +14,8 @@ constexpr NearbySync::MacAddress PEER_MAC{0x06, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
 constexpr NearbySync::MacAddress TRANSPORT_MAC{0x0A, 0x01, 0x02, 0x03, 0x04, 0x05};
 
 NearbySync::PacketHeader header(const NearbySync::PacketType type = NearbySync::PacketType::Offer,
-                                const uint16_t sequence = 7) {
-  return {NearbySync::Kind::Position, type, 0x12345678U, sequence, LOCAL_MAC};
+                                const uint16_t sequence = 7, const NearbySync::Role role = NearbySync::Role::Sender) {
+  return {NearbySync::Kind::Position, type, role, 0x12345678U, sequence, LOCAL_MAC};
 }
 
 std::vector<uint8_t> packetFor(const NearbySync::PacketHeader& packetHeader, const std::vector<uint8_t>& payload) {
@@ -36,6 +36,7 @@ TEST(NearbySyncPacket, RoundTripsHeaderAndPayload) {
   ASSERT_EQ(NearbySync::decodePacket(encoded.data(), encoded.size(), decoded), NearbySync::DecodeResult::Ok);
   EXPECT_EQ(decoded.header.kind, NearbySync::Kind::Position);
   EXPECT_EQ(decoded.header.type, NearbySync::PacketType::Offer);
+  EXPECT_EQ(decoded.header.role, NearbySync::Role::Sender);
   EXPECT_EQ(decoded.header.sessionId, 0x12345678U);
   EXPECT_EQ(decoded.header.sequence, 7);
   EXPECT_EQ(decoded.header.senderMac, LOCAL_MAC);
@@ -54,7 +55,7 @@ TEST(NearbySyncPacket, RejectsCorruptionAndTrailingBytes) {
   EXPECT_EQ(NearbySync::decodePacket(encoded.data(), encoded.size(), decoded), NearbySync::DecodeResult::BadLength);
 }
 
-TEST(NearbySyncPacket, RejectsReservedIdentityAndInvalidArguments) {
+TEST(NearbySyncPacket, RejectsInvalidRoleIdentityAndArguments) {
   std::array<uint8_t, NearbySync::MAX_PACKET_BYTES> buffer{};
   size_t size = 99;
   auto invalid = header();
@@ -62,10 +63,34 @@ TEST(NearbySyncPacket, RejectsReservedIdentityAndInvalidArguments) {
   EXPECT_FALSE(NearbySync::encodePacket(invalid, nullptr, 0, buffer.data(), buffer.size(), size));
   EXPECT_EQ(size, 0U);
 
-  auto encoded = packetFor(header(), {});
-  encoded[7] = 1;
+  auto encoded = packetFor(header(NearbySync::PacketType::Hello), {});
+  encoded[7] = 0;
   NearbySync::DecodedPacket decoded;
-  EXPECT_EQ(NearbySync::decodePacket(encoded.data(), encoded.size(), decoded), NearbySync::DecodeResult::BadReserved);
+  EXPECT_EQ(NearbySync::decodePacket(encoded.data(), encoded.size(), decoded), NearbySync::DecodeResult::BadRole);
+
+  invalid = header();
+  invalid.role = static_cast<NearbySync::Role>(99);
+  EXPECT_FALSE(NearbySync::encodePacket(invalid, nullptr, 0, buffer.data(), buffer.size(), size));
+}
+
+TEST(NearbySyncPacket, RejectsWrongPacketDirectionAndVersionTwo) {
+  std::array<uint8_t, NearbySync::MAX_PACKET_BYTES> buffer{};
+  size_t size = 0;
+  EXPECT_FALSE(NearbySync::encodePacket(header(NearbySync::PacketType::Offer, 7, NearbySync::Role::Receiver), nullptr,
+                                        0, buffer.data(), buffer.size(), size));
+  EXPECT_FALSE(
+      NearbySync::encodePacket(header(NearbySync::PacketType::Ack), nullptr, 0, buffer.data(), buffer.size(), size));
+  EXPECT_FALSE(NearbySync::encodePacket(header(NearbySync::PacketType::Complete, 7, NearbySync::Role::Receiver),
+                                        nullptr, 0, buffer.data(), buffer.size(), size));
+
+  auto encoded = packetFor(header(NearbySync::PacketType::Hello, 7, NearbySync::Role::Receiver), {});
+  encoded[6] = static_cast<uint8_t>(NearbySync::PacketType::Offer);
+  NearbySync::DecodedPacket decoded;
+  EXPECT_EQ(NearbySync::decodePacket(encoded.data(), encoded.size(), decoded), NearbySync::DecodeResult::BadDirection);
+
+  encoded = packetFor(header(NearbySync::PacketType::Hello), {});
+  encoded[4] = 2;
+  EXPECT_EQ(NearbySync::decodePacket(encoded.data(), encoded.size(), decoded), NearbySync::DecodeResult::BadVersion);
 }
 
 TEST(NearbySyncSequence, HandlesReplayAndWrap) {
@@ -83,6 +108,7 @@ TEST(NearbySyncBinding, PinsBothMacAddressesSessionAndSequence) {
   EXPECT_TRUE(binding.isBound());
   EXPECT_EQ(binding.transportMac(), TRANSPORT_MAC);
   EXPECT_EQ(binding.deviceMac(), LOCAL_MAC);
+  EXPECT_EQ(binding.role(), NearbySync::Role::Sender);
   EXPECT_EQ(binding.sessionId(), first.sessionId);
 
   EXPECT_FALSE(binding.accept(TRANSPORT_MAC, first));
@@ -95,6 +121,10 @@ TEST(NearbySyncBinding, PinsBothMacAddressesSessionAndSequence) {
   next = first;
   next.sequence = 14;
   next.senderMac = PEER_MAC;
+  EXPECT_FALSE(binding.accept(TRANSPORT_MAC, next));
+  next = first;
+  next.sequence = 14;
+  next.role = NearbySync::Role::Receiver;
   EXPECT_FALSE(binding.accept(TRANSPORT_MAC, next));
   next = first;
   next.sequence = 14;

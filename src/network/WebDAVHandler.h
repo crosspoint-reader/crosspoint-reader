@@ -17,6 +17,7 @@ class WebDAVHandler : public RequestHandler {
   String _putPath;
   bool _putOk = false;
   bool _putExisted = false;
+  bool _putOwnsTemp = false;
 
   // WebDAV method handlers
   void handleOptions(WebServer& s);

@@ -66,7 +66,13 @@ void ClearCacheActivity::render(RenderLock&&) {
   if (state == FAILED) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_CLEAR_CACHE_FAILED), true,
                               EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, tr(STR_CHECK_SERIAL_OUTPUT));
+    if (clearedCount > 0 || failedCount > 0) {
+      const std::string resultText = std::to_string(clearedCount) + " " + std::string(tr(STR_ITEMS_REMOVED)) + ", " +
+                                     std::to_string(failedCount) + " " + std::string(tr(STR_FAILED_LOWER));
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, resultText.c_str());
+    } else {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, tr(STR_CHECK_SERIAL_OUTPUT));
+    }
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -118,7 +124,10 @@ void ClearCacheActivity::clearCache() {
 
   LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
 
-  state = SUCCESS;
+  // Do not report a partially failed SD operation as successful. Some derived
+  // caches may already be gone, but all preserved user state remains staged or
+  // restored by the per-book helper.
+  state = failedCount == 0 ? SUCCESS : FAILED;
   requestUpdate();
 }
 

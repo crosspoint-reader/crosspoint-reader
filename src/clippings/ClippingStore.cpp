@@ -7,12 +7,17 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <numeric>
 #include <utility>
 
 namespace {
 
-constexpr std::array<uint8_t, 5> REKEY_MAGIC = {'C', 'V', 'C', 'R', '1'};
+constexpr std::array<uint8_t, 4> REKEY_MAGIC = {'C', 'V', 'C', 'R'};
+constexpr uint8_t REKEY_VERSION_V1 = '1';
+constexpr uint8_t REKEY_VERSION_V2 = '2';
 constexpr size_t REKEY_PATH_LIMIT = 512;
+constexpr size_t REKEY_BASE_HEADER_SIZE = REKEY_MAGIC.size() + 1 + 8;
+constexpr size_t REKEY_V2_HEADER_SIZE = REKEY_BASE_HEADER_SIZE + sizeof(uint32_t);
 
 struct RekeyIdentity {
   std::string sourceBook;
@@ -26,18 +31,33 @@ bool operator==(const RekeyIdentity& left, const RekeyIdentity& right) {
          left.sourceStore == right.sourceStore && left.destinationStore == right.destinationStore;
 }
 
-std::vector<uint8_t> encodeRekeyIdentity(const RekeyIdentity& identity) {
+bool validRekeyIdentity(const RekeyIdentity& identity, const std::string_view bookType) {
   const std::array<const std::string*, 4> paths = {&identity.sourceBook, &identity.destinationBook,
                                                    &identity.sourceStore, &identity.destinationStore};
-  size_t size = REKEY_MAGIC.size() + 8;
-  for (const std::string* path : paths) {
-    if (path->empty() || path->size() > REKEY_PATH_LIMIT) return {};
-    size += path->size();
+  const bool pathsValid = std::all_of(paths.begin(), paths.end(), [](const std::string* path) {
+    return !path->empty() && path->size() <= REKEY_PATH_LIMIT && ClippingCodec::isValidUtf8(*path);
+  });
+  if (!pathsValid) return false;
+  if (identity.sourceBook == identity.destinationBook || identity.sourceStore == identity.destinationStore) {
+    return false;
   }
+  const std::string expectedSource = ClippingCodec::filePathForBook(identity.sourceBook, bookType);
+  const std::string expectedDestination = ClippingCodec::filePathForBook(identity.destinationBook, bookType);
+  return !expectedSource.empty() && !expectedDestination.empty() && identity.sourceStore == expectedSource &&
+         identity.destinationStore == expectedDestination;
+}
+
+std::vector<uint8_t> encodeRekeyIdentity(const RekeyIdentity& identity, const std::string_view bookType) {
+  if (!validRekeyIdentity(identity, bookType)) return {};
+  const std::array<const std::string*, 4> paths = {&identity.sourceBook, &identity.destinationBook,
+                                                   &identity.sourceStore, &identity.destinationStore};
+  const size_t size = std::accumulate(paths.begin(), paths.end(), REKEY_V2_HEADER_SIZE,
+                                      [](const size_t total, const std::string* path) { return total + path->size(); });
   std::vector<uint8_t> encoded(size);
   std::copy(REKEY_MAGIC.begin(), REKEY_MAGIC.end(), encoded.begin());
-  size_t header = REKEY_MAGIC.size();
-  size_t payload = REKEY_MAGIC.size() + 8;
+  encoded[REKEY_MAGIC.size()] = REKEY_VERSION_V2;
+  size_t header = REKEY_MAGIC.size() + 1;
+  size_t payload = REKEY_V2_HEADER_SIZE;
   for (const std::string* path : paths) {
     const uint16_t length = static_cast<uint16_t>(path->size());
     encoded[header++] = static_cast<uint8_t>(length & 0xFFU);
@@ -45,40 +65,67 @@ std::vector<uint8_t> encodeRekeyIdentity(const RekeyIdentity& identity) {
     std::copy(path->begin(), path->end(), encoded.begin() + static_cast<std::ptrdiff_t>(payload));
     payload += path->size();
   }
+  uint32_t checksum = ClippingCodec::crc32(encoded.data(), REKEY_BASE_HEADER_SIZE);
+  checksum = ClippingCodec::crc32(encoded.data() + REKEY_V2_HEADER_SIZE, size - REKEY_V2_HEADER_SIZE, checksum);
+  for (size_t i = 0; i < sizeof(checksum); ++i) {
+    encoded[REKEY_BASE_HEADER_SIZE + i] = static_cast<uint8_t>(checksum >> (i * 8U));
+  }
   return encoded;
 }
 
-bool readRekeyIdentity(const std::string& markerPath, RekeyIdentity& identity) {
+bool readRekeyIdentity(const std::string& markerPath, const std::string_view bookType, RekeyIdentity& identity) {
   HalFile marker;
   if (!Storage.openFileForRead("CLIP", markerPath, marker)) return false;
   const uint64_t size = marker.fileSize64();
-  constexpr size_t headerSize = REKEY_MAGIC.size() + 8;
-  if (size < headerSize || size > headerSize + REKEY_PATH_LIMIT * 4) return false;
-  std::array<uint8_t, headerSize> header{};
+  if (size < REKEY_BASE_HEADER_SIZE || size > REKEY_V2_HEADER_SIZE + REKEY_PATH_LIMIT * 4) return false;
+  std::array<uint8_t, REKEY_BASE_HEADER_SIZE> header{};
   if (marker.read(header.data(), header.size()) != static_cast<int>(header.size()) ||
       !std::equal(REKEY_MAGIC.begin(), REKEY_MAGIC.end(), header.begin())) {
     return false;
   }
+  const uint8_t version = header[REKEY_MAGIC.size()];
+  if (version != REKEY_VERSION_V1 && version != REKEY_VERSION_V2) return false;
+  const size_t headerSize = version == REKEY_VERSION_V1 ? REKEY_BASE_HEADER_SIZE : REKEY_V2_HEADER_SIZE;
   std::array<uint16_t, 4> lengths{};
   size_t expected = headerSize;
   for (size_t i = 0; i < lengths.size(); ++i) {
-    const size_t offset = REKEY_MAGIC.size() + i * 2;
+    const size_t offset = REKEY_MAGIC.size() + 1 + i * 2;
     lengths[i] = static_cast<uint16_t>(header[offset]) | (static_cast<uint16_t>(header[offset + 1]) << 8U);
     if (lengths[i] == 0 || lengths[i] > REKEY_PATH_LIMIT) return false;
     expected += lengths[i];
   }
   if (size != expected) return false;
-  std::array<std::string*, 4> paths = {&identity.sourceBook, &identity.destinationBook, &identity.sourceStore,
-                                       &identity.destinationStore};
+  uint32_t storedChecksum = 0;
+  if (version == REKEY_VERSION_V2) {
+    std::array<uint8_t, sizeof(uint32_t)> checksum{};
+    if (marker.read(checksum.data(), checksum.size()) != static_cast<int>(checksum.size())) return false;
+    for (size_t i = 0; i < checksum.size(); ++i) {
+      storedChecksum |= static_cast<uint32_t>(checksum[i]) << (i * 8U);
+    }
+  }
+  RekeyIdentity parsed;
+  std::array<std::string*, 4> paths = {&parsed.sourceBook, &parsed.destinationBook, &parsed.sourceStore,
+                                       &parsed.destinationStore};
   for (size_t i = 0; i < paths.size(); ++i) {
     paths[i]->resize(lengths[i]);
     if (marker.read(paths[i]->data(), lengths[i]) != static_cast<int>(lengths[i])) return false;
   }
+  if (!marker.close()) return false;
+  if (version == REKEY_VERSION_V2) {
+    const uint32_t checksum = std::accumulate(
+        paths.begin(), paths.end(), ClippingCodec::crc32(header.data(), header.size()),
+        [](const uint32_t value, const std::string* path) {
+          return ClippingCodec::crc32(reinterpret_cast<const uint8_t*>(path->data()), path->size(), value);
+        });
+    if (checksum != storedChecksum) return false;
+  }
+  if (!validRekeyIdentity(parsed, bookType)) return false;
+  identity = std::move(parsed);
   return true;
 }
 
-bool writeRekeyIdentity(const std::string& markerPath, const RekeyIdentity& identity) {
-  const std::vector<uint8_t> encoded = encodeRekeyIdentity(identity);
+bool writeRekeyIdentity(const std::string& markerPath, const std::string_view bookType, const RekeyIdentity& identity) {
+  const std::vector<uint8_t> encoded = encodeRekeyIdentity(identity, bookType);
   if (encoded.empty()) return false;
   HalFile marker;
   if (!Storage.openFileForWrite("CLIP", markerPath, marker)) return false;
@@ -86,7 +133,7 @@ bool writeRekeyIdentity(const std::string& markerPath, const RekeyIdentity& iden
   marker.flush();
   if (!written || !marker.sync() || !marker.close()) return false;
   RekeyIdentity verified;
-  return readRekeyIdentity(markerPath, verified) && verified == identity;
+  return readRekeyIdentity(markerPath, bookType, verified) && verified == identity;
 }
 
 struct HalSourceContext {
@@ -166,6 +213,94 @@ bool sameClippings(const std::vector<ClippingCodec::ClippingMetadata>& lhs,
                     [](const auto& left, const auto& right) { return sameClipping(left, right); });
 }
 
+const char* legacyBackupSuffix(const ClippingCodec::Format format) {
+  switch (format) {
+    case ClippingCodec::Format::CrossInkV1:
+      return ".crossink-v1.orig";
+    case ClippingCodec::Format::CrossInkV2:
+      return ".crossink-v2.orig";
+    case ClippingCodec::Format::Current:
+      return nullptr;
+  }
+  return nullptr;
+}
+
+bool filesEqual(const std::string& leftPath, const std::string& rightPath) {
+  HalFile left;
+  HalFile right;
+  if (!Storage.openFileForRead("CLIP", leftPath, left) || !Storage.openFileForRead("CLIP", rightPath, right) ||
+      left.fileSize64() != right.fileSize64()) {
+    return false;
+  }
+
+  std::array<uint8_t, 128> leftBuffer{};
+  std::array<uint8_t, 128> rightBuffer{};
+  uint64_t remaining = left.fileSize64();
+  while (remaining > 0) {
+    const size_t chunk = static_cast<size_t>(std::min<uint64_t>(leftBuffer.size(), remaining));
+    if (left.read(leftBuffer.data(), chunk) != static_cast<int>(chunk) ||
+        right.read(rightBuffer.data(), chunk) != static_cast<int>(chunk) ||
+        !std::equal(leftBuffer.begin(), leftBuffer.begin() + static_cast<std::ptrdiff_t>(chunk), rightBuffer.begin())) {
+      return false;
+    }
+    remaining -= chunk;
+  }
+  return true;
+}
+
+bool isExactLegacyBackup(const std::string& canonicalPath, const std::string& backupPath,
+                         const ClippingCodec::Format expectedFormat) {
+  ClippingCodec::Index backup;
+  return inspectPath(backupPath, backup) == ClippingCodec::Status::Ok && backup.format == expectedFormat &&
+         filesEqual(canonicalPath, backupPath);
+}
+
+bool createExactLegacyBackup(const std::string& canonicalPath, const ClippingCodec::Format format) {
+  const char* suffix = legacyBackupSuffix(format);
+  if (!suffix) return false;
+  const std::string backupPath = canonicalPath + suffix;
+  const std::string tempPath = backupPath + ".tmp";
+
+  // The versioned original is immutable. A pre-existing file must match the
+  // canonical legacy bytes exactly; conflicts are preserved and fail closed.
+  if (Storage.exists(backupPath.c_str())) return isExactLegacyBackup(canonicalPath, backupPath, format);
+
+  if (Storage.exists(tempPath.c_str())) {
+    if (!isExactLegacyBackup(canonicalPath, tempPath, format)) return false;
+  } else {
+    HalFile source;
+    HalFile temp;
+    if (!Storage.openFileForRead("CLIP", canonicalPath, source)) return false;
+    if (!Storage.openFileForWrite("CLIP", tempPath, temp)) {
+      source.close();
+      return false;
+    }
+
+    std::array<uint8_t, 128> buffer{};
+    uint64_t remaining = source.fileSize64();
+    bool copied = true;
+    while (remaining > 0) {
+      const size_t chunk = static_cast<size_t>(std::min<uint64_t>(buffer.size(), remaining));
+      if (source.read(buffer.data(), chunk) != static_cast<int>(chunk) || temp.write(buffer.data(), chunk) != chunk) {
+        copied = false;
+        break;
+      }
+      remaining -= chunk;
+    }
+    temp.flush();
+    if (copied) copied = temp.sync();
+    if (!temp.close()) copied = false;
+    source.close();
+    if (!copied || !isExactLegacyBackup(canonicalPath, tempPath, format)) {
+      Storage.remove(tempPath.c_str());
+      return false;
+    }
+  }
+
+  if (!Storage.rename(tempPath.c_str(), backupPath.c_str())) return false;
+  return isExactLegacyBackup(canonicalPath, backupPath, format);
+}
+
 bool sameRekeyedIndex(const ClippingCodec::Index& actual, const ClippingCodec::BookMetadata& expectedBook,
                       const std::vector<ClippingCodec::ClippingMetadata>& expectedClippings,
                       const uint32_t expectedFileLength) {
@@ -219,7 +354,7 @@ ClippingStore::LoadResult ClippingStore::loadForBook(const std::string& filePath
   const auto finishRecoveredRekey = [&]() {
     const std::string markerPath = storePath_ + ".move";
     RekeyIdentity identity;
-    if (!Storage.exists(markerPath.c_str()) || !readRekeyIdentity(markerPath, identity) ||
+    if (!Storage.exists(markerPath.c_str()) || !readRekeyIdentity(markerPath, bookType, identity) ||
         identity.destinationBook != filePath || identity.destinationStore != storePath_ ||
         Storage.exists(identity.sourceBook.c_str()) || !Storage.exists(identity.destinationBook.c_str())) {
       return;
@@ -302,7 +437,11 @@ ClippingStore::LoadResult ClippingStore::loadForBook(const std::string& filePath
   if (index_.format != ClippingCodec::Format::Current) {
     if (rewrite(index_.clippings, SIZE_MAX, nullptr)) return LoadResult::Migrated;
     // The fully validated legacy file remains canonical if migration could not
-    // complete, so callers may still read its text without losing data.
+    // complete, so callers may still read its text without losing data. A
+    // failed publish can call unload() when rollback cannot re-establish a
+    // canonical file; cppcheck cannot see that mutation through rewrite().
+    // cppcheck-suppress knownConditionTrueFalse
+    if (!loaded_) return LoadResult::IoError;
     return LoadResult::LoadedLegacy;
   }
   return recovered ? LoadResult::Recovered : LoadResult::Loaded;
@@ -312,37 +451,96 @@ bool ClippingStore::removeFilesForBook(const std::string& filePath, const std::s
   const std::string canonical = ClippingCodec::filePathForBook(filePath, bookType);
   if (canonical.empty()) return false;
   const std::array<std::string, 3> paths = {canonical, canonical + ".bak", canonical + ".tmp"};
-  for (const std::string& path : paths) {
-    if (!Storage.exists(path.c_str())) continue;
-    const LoadCandidate candidate = inspectCandidate(path);
-    if (candidate.status != ClippingCodec::Status::Ok || candidate.index.book.path != filePath ||
-        candidate.index.book.bookType != bookType) {
-      return false;
-    }
+  const bool pathsOwned = std::all_of(paths.begin(), paths.end(), [&](const std::string& candidatePath) {
+    if (!Storage.exists(candidatePath.c_str())) return true;
+    const LoadCandidate candidate = inspectCandidate(candidatePath);
+    return candidate.status == ClippingCodec::Status::Ok && candidate.index.book.path == filePath &&
+           candidate.index.book.bookType == bookType;
+  });
+  if (!pathsOwned) {
+    return false;
   }
 
   const std::string markerPath = canonical + ".move";
   const bool markerExists = Storage.exists(markerPath.c_str());
-  bool markerOwned = false;
   if (markerExists) {
     RekeyIdentity identity;
-    markerOwned = readRekeyIdentity(markerPath, identity) && identity.destinationBook == filePath &&
-                  identity.destinationStore == canonical;
+    if (!readRekeyIdentity(markerPath, bookType, identity) || identity.destinationBook != filePath ||
+        identity.destinationStore != canonical) {
+      return false;
+    }
   }
 
   bool removed = true;
-  for (const std::string& path : paths) {
-    if (Storage.exists(path.c_str())) removed = Storage.remove(path.c_str()) && removed;
+  for (const std::string& candidatePath : paths) {
+    if (Storage.exists(candidatePath.c_str())) removed = Storage.remove(candidatePath.c_str()) && removed;
   }
   // A marker is deleted only when its durable identity proves that this exact
-  // destination owns it. Malformed or mismatched markers are preserved for
-  // diagnosis rather than guessed at, while validated clipping data above can
-  // still be removed after a confirmed book replacement/delete.
+  // destination owns it. Malformed or mismatched markers make the whole
+  // operation fail closed before any validated sibling is removed.
   if (markerExists) {
-    if (!markerOwned) return false;
     removed = Storage.remove(markerPath.c_str()) && removed;
   }
   return removed;
+}
+
+bool ClippingStore::hasFilesForBook(const std::string& filePath, const std::string& bookType) {
+  const std::string canonical = ClippingCodec::filePathForBook(filePath, bookType);
+  return !canonical.empty() &&
+         (Storage.exists(canonical.c_str()) || Storage.exists((canonical + ".bak").c_str()) ||
+          Storage.exists((canonical + ".tmp").c_str()) || Storage.exists((canonical + ".move").c_str()));
+}
+
+bool ClippingStore::quarantineFilesForBook(const std::string& filePath, const std::string& quarantineDirectory,
+                                           const std::string& bookType) {
+  const std::string canonical = ClippingCodec::filePathForBook(filePath, bookType);
+  if (canonical.empty() || quarantineDirectory.empty() || quarantineDirectory == "/" ||
+      !Storage.exists(quarantineDirectory.c_str())) {
+    return false;
+  }
+
+  struct CandidatePath {
+    std::string source;
+    std::string orphanBase;
+    bool marker = false;
+  };
+  const std::array<CandidatePath, 4> candidates = {
+      CandidatePath{canonical, quarantineDirectory + "/.crossvi_replaced_clippings.bin", false},
+      CandidatePath{canonical + ".bak", quarantineDirectory + "/.crossvi_replaced_clippings.bin.bak", false},
+      CandidatePath{canonical + ".tmp", quarantineDirectory + "/.crossvi_replaced_clippings.bin.tmp", false},
+      CandidatePath{canonical + ".move", quarantineDirectory + "/.crossvi_replaced_clippings.move", true},
+  };
+
+  const auto owned = [&](const CandidatePath& candidate, const std::string& path) {
+    if (candidate.marker) {
+      RekeyIdentity identity;
+      return readRekeyIdentity(path, bookType, identity) && identity.destinationBook == filePath &&
+             identity.destinationStore == canonical;
+    }
+    const LoadCandidate inspected = inspectCandidate(path);
+    return inspected.status == ClippingCodec::Status::Ok && inspected.index.book.path == filePath &&
+           inspected.index.book.bookType == bookType;
+  };
+
+  // Validate every active and previously quarantined candidate before moving
+  // anything. A bad sibling must not turn a partial transaction into data loss.
+  for (const CandidatePath& candidate : candidates) {
+    const bool sourceExists = Storage.exists(candidate.source.c_str());
+    const bool destinationExists = Storage.exists(candidate.orphanBase.c_str());
+    if ((sourceExists && !owned(candidate, candidate.source)) ||
+        (destinationExists && !owned(candidate, candidate.orphanBase)) || (sourceExists && destinationExists)) {
+      return false;
+    }
+  }
+
+  for (const CandidatePath& candidate : candidates) {
+    if (!Storage.exists(candidate.source.c_str())) continue;
+    if (!Storage.rename(candidate.source.c_str(), candidate.orphanBase.c_str()) ||
+        !owned(candidate, candidate.orphanBase)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 void ClippingStore::unload() {
@@ -412,6 +610,10 @@ bool ClippingStore::readText(const size_t index, std::string& out) const {
 ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string& filePath, const std::string& title,
                                                               const std::string& author, const std::string& bookType) {
   if (!loaded_) return RekeyResult::NotLoaded;
+  if (index_.format != ClippingCodec::Format::Current && !createExactLegacyBackup(storePath_, index_.format)) {
+    lastCodecStatus_ = ClippingCodec::Status::IoError;
+    return RekeyResult::IoError;
+  }
 
   ClippingCodec::BookMetadata destinationBook{title, author, filePath, bookType};
   std::vector<uint8_t> encodedMetadata;
@@ -420,7 +622,8 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
   if (lastCodecStatus_ != ClippingCodec::Status::Ok || destinationPath.empty()) {
     return RekeyResult::InvalidDestination;
   }
-  if (filePath == book_.path && bookType == book_.bookType) return RekeyResult::Unchanged;
+  if (bookType != book_.bookType) return RekeyResult::InvalidDestination;
+  if (filePath == book_.path) return RekeyResult::Unchanged;
   // A CRC collision must not turn a move into an in-place metadata rewrite.
   if (destinationPath == storePath_) return RekeyResult::DestinationExists;
   if (!preparedDestinationPath_.empty()) {
@@ -434,17 +637,15 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
   const std::string destinationBackup = destinationPath + ".bak";
   const std::string rekeyMarker = destinationPath + ".move";
   const RekeyIdentity rekeyIdentity{book_.path, filePath, storePath_, destinationPath};
+  if (!validRekeyIdentity(rekeyIdentity, bookType)) return RekeyResult::InvalidDestination;
   bool markerReady = false;
   if (Storage.exists(rekeyMarker.c_str())) {
     RekeyIdentity storedIdentity;
-    if (!readRekeyIdentity(rekeyMarker, storedIdentity)) {
-      const bool noPreparedBytes = !Storage.exists(destinationPath.c_str()) &&
-                                   !Storage.exists(destinationTemp.c_str()) &&
-                                   !Storage.exists(destinationBackup.c_str());
-      if (!Storage.exists(book_.path.c_str()) || Storage.exists(filePath.c_str()) || !noPreparedBytes ||
-          !Storage.remove(rekeyMarker.c_str())) {
-        return RekeyResult::DestinationExists;
-      }
+    if (!readRekeyIdentity(rekeyMarker, bookType, storedIdentity)) {
+      // A name-shaped sibling is not proof that CrossVi created it. Preserve
+      // malformed or unreadable bytes rather than silently replacing a file
+      // whose ownership cannot be established from its durable identity.
+      return RekeyResult::DestinationExists;
     } else if (!(storedIdentity == rekeyIdentity)) {
       return RekeyResult::DestinationExists;
     } else {
@@ -456,9 +657,11 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
     // partial writes can never block the move permanently.
     if (markerReady && Storage.exists(book_.path.c_str()) && !Storage.exists(filePath.c_str())) {
       const std::array<const std::string*, 3> preparedPaths = {&destinationPath, &destinationTemp, &destinationBackup};
-      for (const std::string* path : preparedPaths) {
-        if (Storage.exists(path->c_str()) && !Storage.remove(path->c_str())) return RekeyResult::IoError;
-      }
+      const bool cleanupFailed =
+          std::any_of(preparedPaths.begin(), preparedPaths.end(), [](const std::string* preparedPath) {
+            return Storage.exists(preparedPath->c_str()) && !Storage.remove(preparedPath->c_str());
+          });
+      if (cleanupFailed) return RekeyResult::IoError;
       if (!Storage.remove(rekeyMarker.c_str())) return RekeyResult::IoError;
       markerReady = false;
     }
@@ -492,7 +695,7 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
     if (existingDestination.exists || existingTemp.exists) return RekeyResult::DestinationExists;
     if ((!Storage.exists("/.crosspoint") && !Storage.mkdir("/.crosspoint")) ||
         (!Storage.exists(ClippingCodec::DIRECTORY) && !Storage.mkdir(ClippingCodec::DIRECTORY)) ||
-        (!markerReady && !writeRekeyIdentity(rekeyMarker, rekeyIdentity))) {
+        (!markerReady && !writeRekeyIdentity(rekeyMarker, bookType, rekeyIdentity))) {
       return RekeyResult::IoError;
     }
     preparedIndex_ = index_;
@@ -571,7 +774,7 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
     }
     if ((!Storage.exists("/.crosspoint") && !Storage.mkdir("/.crosspoint")) ||
         (!Storage.exists(ClippingCodec::DIRECTORY) && !Storage.mkdir(ClippingCodec::DIRECTORY)) ||
-        (!markerReady && !writeRekeyIdentity(rekeyMarker, rekeyIdentity))) {
+        (!markerReady && !writeRekeyIdentity(rekeyMarker, bookType, rekeyIdentity))) {
       return RekeyResult::IoError;
     }
     preparedDestinationPath_ = std::move(destinationPath);
@@ -582,7 +785,7 @@ ClippingStore::RekeyResult ClippingStore::prepareRekeyForBook(const std::string&
 
   if ((!Storage.exists("/.crosspoint") && !Storage.mkdir("/.crosspoint")) ||
       (!Storage.exists(ClippingCodec::DIRECTORY) && !Storage.mkdir(ClippingCodec::DIRECTORY)) ||
-      (!markerReady && !writeRekeyIdentity(rekeyMarker, rekeyIdentity))) {
+      (!markerReady && !writeRekeyIdentity(rekeyMarker, bookType, rekeyIdentity))) {
     lastCodecStatus_ = ClippingCodec::Status::IoError;
     return RekeyResult::IoError;
   }
@@ -703,6 +906,13 @@ ClippingStore::RekeyResult ClippingStore::finalizePreparedRekey() {
 
   const std::string sourcePath = storePath_;
   const std::string markerPath = preparedDestinationPath_ + ".move";
+  const RekeyIdentity expectedIdentity{book_.path, preparedIndex_.book.path, sourcePath, preparedDestinationPath_};
+  RekeyIdentity storedIdentity;
+  if (!validRekeyIdentity(expectedIdentity, book_.bookType) ||
+      !readRekeyIdentity(markerPath, book_.bookType, storedIdentity) || !(storedIdentity == expectedIdentity)) {
+    lastCodecStatus_ = ClippingCodec::Status::IoError;
+    return RekeyResult::IoError;
+  }
   storePath_ = std::move(preparedDestinationPath_);
   book_ = preparedIndex_.book;
   index_ = std::move(preparedIndex_);
@@ -711,8 +921,14 @@ ClippingStore::RekeyResult ClippingStore::finalizePreparedRekey() {
 
   // The destination is authoritative once the EPUB rename has succeeded.
   // Failure to remove the duplicate source is non-fatal and preserves data.
-  if (Storage.exists(sourcePath.c_str()) && !Storage.remove(sourcePath.c_str())) {
-    LOG_ERR("CLIP", "Could not remove old clipping source after finalized re-key: %s", sourcePath.c_str());
+  if (Storage.exists(sourcePath.c_str())) {
+    const LoadCandidate source = inspectCandidate(sourcePath);
+    if (source.status != ClippingCodec::Status::Ok || source.index.book.path != expectedIdentity.sourceBook ||
+        source.index.book.bookType != book_.bookType) {
+      LOG_ERR("CLIP", "Preserving invalid old clipping source after finalized re-key: %s", sourcePath.c_str());
+    } else if (!Storage.remove(sourcePath.c_str())) {
+      LOG_ERR("CLIP", "Could not remove old clipping source after finalized re-key: %s", sourcePath.c_str());
+    }
   }
   if (Storage.exists(markerPath.c_str()) && !Storage.remove(markerPath.c_str())) {
     LOG_ERR("CLIP", "Finalized clipping re-key but could not remove marker: %s", markerPath.c_str());
@@ -723,13 +939,14 @@ ClippingStore::RekeyResult ClippingStore::finalizePreparedRekey() {
 
 bool ClippingStore::cancelPreparedRekey() {
   if (preparedDestinationPath_.empty()) return true;
-  const std::array<std::string, 4> paths = {preparedDestinationPath_, preparedDestinationPath_ + ".tmp",
-                                            preparedDestinationPath_ + ".bak", preparedDestinationPath_ + ".move"};
-  for (const std::string& path : paths) {
-    if (Storage.exists(path.c_str()) && !Storage.remove(path.c_str())) {
-      lastCodecStatus_ = ClippingCodec::Status::IoError;
-      return false;
-    }
+  const RekeyIdentity expectedIdentity{book_.path, preparedIndex_.book.path, storePath_, preparedDestinationPath_};
+  RekeyIdentity storedIdentity;
+  const std::string markerPath = preparedDestinationPath_ + ".move";
+  if (!validRekeyIdentity(expectedIdentity, book_.bookType) ||
+      !readRekeyIdentity(markerPath, book_.bookType, storedIdentity) || !(storedIdentity == expectedIdentity) ||
+      !removeFilesForBook(expectedIdentity.destinationBook, book_.bookType)) {
+    lastCodecStatus_ = ClippingCodec::Status::IoError;
+    return false;
   }
   preparedDestinationPath_.clear();
   preparedIndex_ = {};
@@ -748,6 +965,10 @@ bool ClippingStore::rewrite(std::vector<ClippingCodec::ClippingMetadata> target,
   if (!loaded_ || !preparedDestinationPath_.empty() || target.size() > ClippingCodec::MAX_CLIPPINGS_PER_BOOK ||
       ((replacementText == nullptr) != (replacementIndex == SIZE_MAX)) ||
       (replacementText && replacementIndex >= target.size())) {
+    return false;
+  }
+  if (index_.format != ClippingCodec::Format::Current && !createExactLegacyBackup(storePath_, index_.format)) {
+    lastCodecStatus_ = ClippingCodec::Status::IoError;
     return false;
   }
 

@@ -158,10 +158,12 @@ bool clear(const std::string& cachePath) {
   // Reset is allowed to discard corrupt/current data, but it must never erase
   // a format written by a newer firmware (including an interrupted .tmp or a
   // fallback .bak), nor proceed when a file cannot be inspected safely.
-  for (const auto& path : paths) {
-    PerBookReaderSettings ignored;
-    const ReadStatus status = readStored(path, ignored);
-    if (status == ReadStatus::NEWER_VERSION || status == ReadStatus::IO_ERROR) return false;
+  if (!std::all_of(paths.begin(), paths.end(), [](const auto& path) {
+        PerBookReaderSettings ignored;
+        const ReadStatus status = readStored(path, ignored);
+        return status != ReadStatus::NEWER_VERSION && status != ReadStatus::IO_ERROR;
+      })) {
+    return false;
   }
   bool success = true;
   for (const auto& path : paths) success = removeIfPresent(path) && success;

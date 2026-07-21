@@ -39,7 +39,8 @@ void FileBrowserActivity::loadFiles() {
 
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
-    if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
+    if (isBookFileTransactionArtifact(fileNameBuffer.get()) ||
+        (!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
         strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {
       continue;
     }

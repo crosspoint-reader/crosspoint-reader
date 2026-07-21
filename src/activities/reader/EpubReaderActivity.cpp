@@ -191,26 +191,26 @@ void EpubReaderActivity::onEnter() {
     toggleAutoPageTurn(pageTurnOptionForRate(bookReaderSettings.autoPageTurnRate), false);
   }
 
-  HalFile f;
-  if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    int dataSize = f.read(data, 6);
+  uint8_t data[6]{};
+  const int spineCount = epub->getSpineItemsCount();
+  const ProgressFile::EpubBounds progressBounds{spineCount > 0 ? static_cast<uint32_t>(spineCount) : 0};
+  const ProgressFile::CandidateValidator progressValidator{ProgressFile::validateEpubBounds, &progressBounds};
+  const ProgressFile::LoadResult progress =
+      ProgressFile::loadEpub(epub->getCachePath(), data, sizeof(data), progressValidator);
+  if (progress) {
+    const size_t dataSize = progress.size;
     if (dataSize == 4 || dataSize == 6) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
-      if (nextPageNumber == UINT16_MAX) {
-        // UINT16_MAX is an in-memory navigation sentinel for "open previous
-        // chapter on its last page". It should never be treated as persisted
-        // resume state after sleep or reopen.
-        LOG_DBG("ERS", "Ignoring stale last-page sentinel from progress cache");
-        nextPageNumber = 0;
-      }
       cachedSpineIndex = currentSpineIndex;
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
     }
     if (dataSize == 6) {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
     }
+  } else if (progress.source == ProgressFile::LoadSource::Invalid ||
+             progress.source == ProgressFile::LoadSource::IoError) {
+    LOG_ERR("ERS", "No valid progress copy could be read");
   }
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
@@ -575,10 +575,21 @@ void EpubReaderActivity::loop() {
         stopReadingPage(false, static_cast<uint32_t>(millis()));
         section.reset();
         requestUpdate();
-      } else if (section->isBuildComplete() && applyDeferredReposition()) {
-        // The chapter re-paginated since the saved progress (settings changed): we now know the
-        // real page count, so re-render at the remapped page. No-op for an unchanged resume.
-        requestUpdate();
+      } else if (section->isBuildComplete()) {
+        // Finalization can happen entirely in the background while the visible
+        // page stays unchanged. Persist the now-exact total here; otherwise an
+        // immediate Home action can leave progress.bin carrying the earlier
+        // estimate and Dashboard correctly refuses to display it.
+        const bool repositioned = applyDeferredReposition();
+        const int exactPageCount = section->pageCount;
+        if (saveProgress(currentSpineIndex, section->currentPage, exactPageCount)) {
+          lastSavedSpineIndex = currentSpineIndex;
+          lastSavedPage = section->currentPage;
+          lastSavedPageCount = exactPageCount;
+        } else {
+          pendingSyncSaveError = true;
+        }
+        if (repositioned || pendingSyncSaveError) requestUpdate();
       }
     }
   }
@@ -1034,30 +1045,41 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       {
         RenderLock lock(*this);
         if (epub && section) {
-          uint16_t backupSpine = currentSpineIndex;
-          uint16_t backupPage = section->currentPage;
-          uint16_t backupPageCount = section->pageCount;
-          // Keep the in-memory resume point before dropping the section. If
-          // clearing succeeds but progress persistence fails, the reader can
-          // still rebuild at the same relative position instead of falling
-          // back to page zero or a stale pending page.
-          currentSpineIndex = backupSpine;
-          nextPageNumber = backupPage;
-          cachedChapterTotalPageCount = backupPageCount;
-          section.reset();
-          if (!clearBookCacheDirectoryPreservingUserState(epub->getCachePath())) {
-            LOG_ERR("ERS", "Failed to clear derived book cache without risking user data");
-            pendingCacheClearError = true;
-            requestUpdate();
-            break;
-          }
-          epub->setupCacheDir();
+          const int backupSpine = currentSpineIndex;
+          const int backupPage = section->currentPage;
+          // A partial section's pageCount is only its built watermark. Persist
+          // the best total estimate before deleting the section cache so a
+          // rebuild can restore the same relative position.
+          const int backupPageCount = section->estimatedTotalPages();
           if (!saveProgress(backupSpine, backupPage, backupPageCount)) {
             LOG_ERR("ERS", "Failed to save progress before cache clear");
             pendingSyncSaveError = true;
             requestUpdate();
             break;
           }
+          nextPageNumber = backupPage;
+          cachedChapterTotalPageCount = backupPageCount;
+          section.reset();
+          if (!clearBookCacheDirectoryPreservingUserState(epub->getCachePath())) {
+            LOG_ERR("ERS", "Failed to clear derived book cache without risking user data");
+            // A failed rollback may leave the only authoritative copy of some
+            // per-book files in the sibling staging directory. Recover it now;
+            // if that is still impossible, release the book and leave before
+            // render()/onExit() can create conflicting state in the cache.
+            if (!recoverBookCacheUserState(epub->getCachePath(), epub->getPath())) {
+              LOG_ERR("ERS", "Cache state recovery remains incomplete; leaving reader fail-closed");
+              bookSettingsWritable = false;
+              bookReadingStatsWritable = false;
+              epub.reset();
+              lock.unlock();
+              onGoHome();
+              return;
+            }
+            pendingCacheClearError = true;
+            requestUpdate();
+            break;
+          }
+          epub->setupCacheDir();
         }
       }
       onGoHome();

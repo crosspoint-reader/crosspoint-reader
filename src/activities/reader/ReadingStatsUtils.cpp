@@ -206,7 +206,12 @@ void markReadingHistoryDay(uint32_t& anchorDay, std::array<uint8_t, READING_HIST
     return;
   }
   if (dayIndex > anchorDay) {
-    shiftHistoryOlder(bits, dayIndex - anchorDay);
+    const uint32_t shiftDays = dayIndex - anchorDay;
+    // A jump beyond the complete rolling window cannot be distinguished from
+    // a bad clock. Preserve the known history instead of irreversibly clearing
+    // it and re-anchoring to an untrusted date.
+    if (shiftDays >= READING_HISTORY_DAYS) return;
+    shiftHistoryOlder(bits, shiftDays);
     anchorDay = dayIndex;
   }
   if (anchorDay >= dayIndex) {
@@ -245,7 +250,11 @@ void mergeReadingHistory(uint32_t& targetAnchorDay, std::array<uint8_t, READING_
     return;
   }
   if (sourceAnchorDay > targetAnchorDay) {
-    shiftHistoryOlder(targetBits, sourceAnchorDay - targetAnchorDay);
+    const uint32_t shiftDays = sourceAnchorDay - targetAnchorDay;
+    // Do not let one implausibly distant peer clock erase the target's entire
+    // rolling history. Numeric cumulative counters are merged independently.
+    if (shiftDays >= READING_HISTORY_DAYS) return;
+    shiftHistoryOlder(targetBits, shiftDays);
     targetAnchorDay = sourceAnchorDay;
   }
   for (size_t bitIndex = 0; bitIndex < READING_HISTORY_DAYS && bitIndex <= sourceAnchorDay; ++bitIndex) {
@@ -275,12 +284,21 @@ uint16_t computeReadingHistoryLongestStreak(const uint32_t anchorDay,
 uint16_t computeReadingHistoryCurrentStreak(const uint32_t anchorDay,
                                             const std::array<uint8_t, READING_HISTORY_BYTES>& bits,
                                             const ReadingStatsDate* today) {
-  if ((anchorDay == 0 && !isBitSet(bits, 0)) || !isBitSet(bits, 0)) return 0;
+  if (anchorDay == 0 && !isBitSet(bits, 0)) return 0;
+  size_t firstDay = 0;
   if (today && today->isValid()) {
     const uint32_t todayDay = readingStatsDayIndex(*today);
-    if (todayDay < anchorDay || todayDay > anchorDay + 1u) return 0;
+    if (todayDay > anchorDay) {
+      if (todayDay - anchorDay > 1u) return 0;
+    } else {
+      const uint32_t delta = anchorDay - todayDay;
+      if (delta >= READING_HISTORY_DAYS) return 0;
+      firstDay = static_cast<size_t>(delta);
+      if (!isBitSet(bits, firstDay)) ++firstDay;  // Yesterday still keeps the streak current.
+    }
   }
+  if (!isBitSet(bits, firstDay)) return 0;
   uint16_t streak = 0;
-  while (streak < READING_HISTORY_DAYS && isBitSet(bits, streak)) ++streak;
+  while (firstDay + streak < READING_HISTORY_DAYS && isBitSet(bits, firstDay + streak)) ++streak;
   return streak;
 }

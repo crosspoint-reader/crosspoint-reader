@@ -30,6 +30,21 @@ void appendString(std::vector<uint8_t>& bytes, const std::string& text) {
   bytes.insert(bytes.end(), text.begin(), text.end());
 }
 
+std::vector<uint8_t> makeRekeyMarker(const uint8_t version, const std::string& sourceBook,
+                                     const std::string& destinationBook, const std::string& sourceStore,
+                                     const std::string& destinationStore) {
+  const std::array<const std::string*, 4> paths = {&sourceBook, &destinationBook, &sourceStore, &destinationStore};
+  std::vector<uint8_t> bytes{'C', 'V', 'C', 'R', version};
+  for (const std::string* path : paths) appendU16(bytes, static_cast<uint16_t>(path->size()));
+  uint32_t checksum = ClippingCodec::crc32(bytes.data(), bytes.size());
+  for (const std::string* path : paths) {
+    checksum = ClippingCodec::crc32(reinterpret_cast<const uint8_t*>(path->data()), path->size(), checksum);
+  }
+  if (version != '1') appendU32(bytes, checksum);
+  for (const std::string* path : paths) bytes.insert(bytes.end(), path->begin(), path->end());
+  return bytes;
+}
+
 ClippingCodec::ClippingMetadata sampleClipping(const uint32_t timestamp = 42) {
   ClippingCodec::ClippingMetadata clipping;
   clipping.spineIndex = 1;
@@ -86,6 +101,8 @@ ClippingCodec::Status inspectBytes(const std::vector<uint8_t>& bytes, ClippingCo
 
 constexpr char BOOK_PATH[] = "/Books/demo.epub";
 constexpr char MOVED_BOOK_PATH[] = "/read/demo.epub";
+constexpr char VICTIM_BOOK_PATH[] = "/Books/victim.epub";
+constexpr char REPLACEMENT_CACHE_PATH[] = "/.crosspoint/epub_replaced";
 
 class ClippingStorePersistenceTest : public testing::Test {
  protected:
@@ -93,6 +110,10 @@ class ClippingStorePersistenceTest : public testing::Test {
 
   std::string storePath() const { return ClippingCodec::filePathForBook(BOOK_PATH); }
   std::string movedStorePath() const { return ClippingCodec::filePathForBook(MOVED_BOOK_PATH); }
+  std::string victimStorePath() const { return ClippingCodec::filePathForBook(VICTIM_BOOK_PATH); }
+  std::string legacyBackupPath(const uint8_t version) const {
+    return storePath() + ".crossink-v" + std::to_string(version) + ".orig";
+  }
 
   std::vector<uint8_t> createCanonicalFor(const std::string& bookPath, const std::string& text = "nội dung đầu") {
     ClippingStore store;
@@ -274,9 +295,18 @@ TEST_F(ClippingStorePersistenceTest, MigratesOnlyFullyValidatedCrossInkV1AndV2) 
     ClippingCodec::Index index;
     ASSERT_EQ(inspectBytes(Storage.file(storePath()), index), ClippingCodec::Status::Ok);
     EXPECT_EQ(index.format, ClippingCodec::Format::Current);
+    EXPECT_EQ(Storage.file(legacyBackupPath(version)), legacy);
+    EXPECT_FALSE(Storage.exists((legacyBackupPath(version) + ".tmp").c_str()));
     std::string text;
     EXPECT_TRUE(migrated.readText(0, text));
     EXPECT_EQ(text, "văn bản cũ");
+
+    const auto immutableBackup = Storage.file(legacyBackupPath(version));
+    ASSERT_EQ(migrated.add(sampleClipping(43), "đoạn mới"), ClippingStore::AddResult::Added);
+    EXPECT_EQ(Storage.file(legacyBackupPath(version)), immutableBackup);
+    ClippingStore reopened;
+    EXPECT_EQ(reopened.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Loaded);
+    EXPECT_EQ(Storage.file(legacyBackupPath(version)), immutableBackup);
 
     Storage.reset();
     auto ambiguous = legacy;
@@ -286,6 +316,134 @@ TEST_F(ClippingStorePersistenceTest, MigratesOnlyFullyValidatedCrossInkV1AndV2) 
     EXPECT_EQ(rejected.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::InvalidFile);
     EXPECT_EQ(Storage.file(storePath()), ambiguous);
   }
+}
+
+TEST_F(ClippingStorePersistenceTest, LegacyMigrationReusesOnlyAnExactPreExistingVersionedBackup) {
+  const auto legacy = makeLegacy(2, BOOK_PATH, "bản gốc");
+  Storage.setFile(storePath(), legacy);
+  Storage.setFile(legacyBackupPath(2), legacy);
+
+  ClippingStore migrated;
+  ASSERT_EQ(migrated.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Migrated);
+  EXPECT_EQ(Storage.file(legacyBackupPath(2)), legacy);
+
+  Storage.reset();
+  const auto conflictingBackup = makeLegacy(2, BOOK_PATH, "bản khác");
+  Storage.setFile(storePath(), legacy);
+  Storage.setFile(legacyBackupPath(2), conflictingBackup);
+  ClippingStore refused;
+  EXPECT_EQ(refused.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  EXPECT_EQ(Storage.file(legacyBackupPath(2)), conflictingBackup);
+  EXPECT_FALSE(Storage.exists((storePath() + ".tmp").c_str()));
+  EXPECT_FALSE(Storage.exists((storePath() + ".bak").c_str()));
+  EXPECT_EQ(refused.add(sampleClipping(44), "không được ghi đè"), ClippingStore::AddResult::SaveFailed);
+  EXPECT_EQ(refused.prepareRekeyForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::RekeyResult::IoError);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  EXPECT_EQ(Storage.file(legacyBackupPath(2)), conflictingBackup);
+  EXPECT_FALSE(Storage.exists(movedStorePath().c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, LegacyBackupPromotionCanBeRetriedAfterAnInterruptedRename) {
+  const auto legacy = makeLegacy(1, BOOK_PATH, "có thể thử lại");
+  Storage.setFile(storePath(), legacy);
+  Storage.failRenameOnce();
+
+  ClippingStore interrupted;
+  EXPECT_EQ(interrupted.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  EXPECT_FALSE(Storage.exists(legacyBackupPath(1).c_str()));
+  EXPECT_EQ(Storage.file(legacyBackupPath(1) + ".tmp"), legacy);
+
+  ClippingStore retried;
+  ASSERT_EQ(retried.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Migrated);
+  EXPECT_EQ(Storage.file(legacyBackupPath(1)), legacy);
+  EXPECT_FALSE(Storage.exists((legacyBackupPath(1) + ".tmp").c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, DurableLegacyBackupSurvivesInterruptedMigrationAndEnablesRetry) {
+  const auto legacy = makeLegacy(2, BOOK_PATH, "nguồn phục hồi");
+  for (const size_t failedRename : {size_t{2}, size_t{3}}) {
+    Storage.reset();
+    Storage.setFile(storePath(), legacy);
+    // Call 1 promotes the immutable original. Calls 2 and 3 are the two
+    // canonical rewrite rename boundaries; either must be safely retryable.
+    Storage.failRenameOnCalls({failedRename});
+
+    ClippingStore interrupted;
+    EXPECT_EQ(interrupted.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+    EXPECT_EQ(Storage.file(storePath()), legacy);
+    EXPECT_EQ(Storage.file(legacyBackupPath(2)), legacy);
+
+    ClippingStore retried;
+    ASSERT_EQ(retried.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Migrated);
+    EXPECT_EQ(Storage.file(legacyBackupPath(2)), legacy);
+  }
+}
+
+TEST_F(ClippingStorePersistenceTest, FailedMigrationRollbackLeavesValidatedFilesForRecoveryAndFailsClosed) {
+  const auto legacy = makeLegacy(2, BOOK_PATH, "phục hồi sau reset");
+  Storage.setFile(storePath(), legacy);
+  // Current temp promotion and legacy rollback both fail. The validated
+  // legacy .bak and current .tmp remain, so the next load can recover.
+  Storage.failRenameOnCalls({3, 4});
+
+  ClippingStore interrupted;
+  EXPECT_EQ(interrupted.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::IoError);
+  EXPECT_FALSE(interrupted.isLoaded());
+  EXPECT_FALSE(Storage.exists(storePath().c_str()));
+  EXPECT_EQ(Storage.file(storePath() + ".bak"), legacy);
+  EXPECT_EQ(Storage.file(legacyBackupPath(2)), legacy);
+
+  ClippingStore recovered;
+  ASSERT_EQ(recovered.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Migrated);
+  EXPECT_EQ(Storage.file(legacyBackupPath(2)), legacy);
+}
+
+TEST_F(ClippingStorePersistenceTest, LegacyBackupFaultsNeverModifyTheCanonicalOrConflictingOriginal) {
+  const auto legacy = makeLegacy(1, BOOK_PATH, "không được mất");
+  Storage.setFile(storePath(), legacy);
+  Storage.shortWriteOnce();
+
+  ClippingStore shortWrite;
+  EXPECT_EQ(shortWrite.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  EXPECT_FALSE(Storage.exists(legacyBackupPath(1).c_str()));
+
+  Storage.reset();
+  Storage.setFile(storePath(), legacy);
+  Storage.failSyncOnce();
+  ClippingStore syncFailure;
+  EXPECT_EQ(syncFailure.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  EXPECT_FALSE(Storage.exists(legacyBackupPath(1).c_str()));
+
+  Storage.reset();
+  Storage.setFile(storePath(), legacy);
+  Storage.corruptRenameOnce();
+  ClippingStore corruptedPromotion;
+  EXPECT_EQ(corruptedPromotion.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  const auto corruptOriginal = Storage.file(legacyBackupPath(1));
+  EXPECT_NE(corruptOriginal, legacy);
+
+  ClippingStore refusedRetry;
+  EXPECT_EQ(refusedRetry.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::LoadedLegacy);
+  EXPECT_EQ(Storage.file(storePath()), legacy);
+  EXPECT_EQ(Storage.file(legacyBackupPath(1)), corruptOriginal);
+}
+
+TEST_F(ClippingStorePersistenceTest, NewerCrossViFormatIsNeverBackedUpOrMigratedAsCrossInk) {
+  auto newer = createCanonical();
+  newer[4] = static_cast<uint8_t>(ClippingCodec::VERSION + 1);
+  newer[5] = 0;
+  Storage.setFile(storePath(), newer);
+
+  ClippingStore refused;
+  EXPECT_EQ(refused.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::UnsupportedVersion);
+  EXPECT_EQ(Storage.file(storePath()), newer);
+  EXPECT_FALSE(Storage.exists(legacyBackupPath(1).c_str()));
+  EXPECT_FALSE(Storage.exists(legacyBackupPath(2).c_str()));
 }
 
 TEST_F(ClippingStorePersistenceTest, RekeysByStreamingToTheMovedBookAndSwitchesOnlyAfterVerification) {
@@ -352,6 +510,78 @@ TEST_F(ClippingStorePersistenceTest, TwoPhaseRekeyKeepsSourceUntilTheBookMoveIsD
   EXPECT_EQ(text, "nội dung đầu");
 }
 
+TEST_F(ClippingStorePersistenceTest, LegacyV1MoveMarkerRecoversOnlyWithExactPathBindings) {
+  createCanonicalFor(VICTIM_BOOK_PATH);
+  Storage.setFile(MOVED_BOOK_PATH, {0x01});
+  const std::string markerPath = movedStorePath() + ".move";
+  Storage.setFile(markerPath,
+                  makeRekeyMarker('1', VICTIM_BOOK_PATH, MOVED_BOOK_PATH, victimStorePath(), movedStorePath()));
+
+  ClippingStore destination;
+  EXPECT_EQ(destination.loadForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Ready);
+
+  EXPECT_FALSE(Storage.exists(victimStorePath().c_str()));
+  EXPECT_FALSE(Storage.exists(markerPath.c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, ForgedV1MoveMarkerCannotDeleteAnotherBooksClippings) {
+  const auto victim = createCanonicalFor(VICTIM_BOOK_PATH);
+  Storage.setFile(MOVED_BOOK_PATH, {0x01});
+  const std::string markerPath = movedStorePath() + ".move";
+  const auto forged = makeRekeyMarker('1', VICTIM_BOOK_PATH, MOVED_BOOK_PATH, storePath(), movedStorePath());
+  Storage.setFile(markerPath, forged);
+
+  ClippingStore destination;
+  EXPECT_EQ(destination.loadForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Ready);
+
+  EXPECT_EQ(Storage.file(victimStorePath()), victim);
+  EXPECT_EQ(Storage.file(markerPath), forged);
+}
+
+TEST_F(ClippingStorePersistenceTest, SwappedMoveMarkerBindingsFailClosed) {
+  const auto victim = createCanonicalFor(VICTIM_BOOK_PATH);
+  Storage.setFile(MOVED_BOOK_PATH, {0x01});
+  const std::string markerPath = movedStorePath() + ".move";
+  const auto swapped = makeRekeyMarker('1', VICTIM_BOOK_PATH, MOVED_BOOK_PATH, movedStorePath(), victimStorePath());
+  Storage.setFile(markerPath, swapped);
+
+  ClippingStore destination;
+  EXPECT_EQ(destination.loadForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Ready);
+
+  EXPECT_EQ(Storage.file(victimStorePath()), victim);
+  EXPECT_EQ(Storage.file(markerPath), swapped);
+}
+
+TEST_F(ClippingStorePersistenceTest, CorruptV2MoveMarkerFailsClosed) {
+  const auto victim = createCanonicalFor(VICTIM_BOOK_PATH);
+  Storage.setFile(MOVED_BOOK_PATH, {0x01});
+  const std::string markerPath = movedStorePath() + ".move";
+  auto corrupt = makeRekeyMarker('2', VICTIM_BOOK_PATH, MOVED_BOOK_PATH, victimStorePath(), movedStorePath());
+  ASSERT_GT(corrupt.size(), 13U);
+  corrupt[13] ^= 0x01;
+  Storage.setFile(markerPath, corrupt);
+
+  ClippingStore destination;
+  EXPECT_EQ(destination.loadForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Ready);
+
+  EXPECT_EQ(Storage.file(victimStorePath()), victim);
+  EXPECT_EQ(Storage.file(markerPath), corrupt);
+}
+
+TEST_F(ClippingStorePersistenceTest, NewerMoveMarkerFailsClosed) {
+  const auto victim = createCanonicalFor(VICTIM_BOOK_PATH);
+  Storage.setFile(MOVED_BOOK_PATH, {0x01});
+  const std::string markerPath = movedStorePath() + ".move";
+  const auto newer = makeRekeyMarker('3', VICTIM_BOOK_PATH, MOVED_BOOK_PATH, victimStorePath(), movedStorePath());
+  Storage.setFile(markerPath, newer);
+
+  ClippingStore destination;
+  EXPECT_EQ(destination.loadForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Ready);
+
+  EXPECT_EQ(Storage.file(victimStorePath()), victim);
+  EXPECT_EQ(Storage.file(markerPath), newer);
+}
+
 TEST_F(ClippingStorePersistenceTest, ReplacementRemovesOnlyItsExactlyOwnedMoveMarker) {
   createCanonical();
   ClippingStore store;
@@ -375,12 +605,14 @@ TEST_F(ClippingStorePersistenceTest, ReplacementPreservesMalformedMoveMarker) {
   ASSERT_EQ(store.prepareRekeyForBook(MOVED_BOOK_PATH, "Sách đã chuyển", "Tác giả"),
             ClippingStore::RekeyResult::Prepared);
   const std::string marker = movedStorePath() + ".move";
+  const auto prepared = Storage.file(movedStorePath());
   const std::vector<uint8_t> malformed{0x01, 0x02, 0x03};
   Storage.setFile(marker, malformed);
 
   EXPECT_FALSE(ClippingStore::removeFilesForBook(MOVED_BOOK_PATH));
 
   EXPECT_EQ(Storage.file(marker), malformed);
+  EXPECT_EQ(Storage.file(movedStorePath()), prepared);
   EXPECT_TRUE(Storage.exists(storePath().c_str()));
 }
 
@@ -391,6 +623,7 @@ TEST_F(ClippingStorePersistenceTest, ReplacementPreservesMismatchedMoveMarker) {
   ASSERT_EQ(store.prepareRekeyForBook(MOVED_BOOK_PATH, "Sách đã chuyển", "Tác giả"),
             ClippingStore::RekeyResult::Prepared);
   const std::string marker = movedStorePath() + ".move";
+  const auto prepared = Storage.file(movedStorePath());
   auto mismatched = Storage.file(marker);
   const auto destination =
       std::search(mismatched.begin(), mismatched.end(), MOVED_BOOK_PATH, MOVED_BOOK_PATH + sizeof(MOVED_BOOK_PATH) - 1);
@@ -401,7 +634,92 @@ TEST_F(ClippingStorePersistenceTest, ReplacementPreservesMismatchedMoveMarker) {
   EXPECT_FALSE(ClippingStore::removeFilesForBook(MOVED_BOOK_PATH));
 
   EXPECT_EQ(Storage.file(marker), mismatched);
+  EXPECT_EQ(Storage.file(movedStorePath()), prepared);
   EXPECT_TRUE(Storage.exists(storePath().c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, ReplacementQuarantinesCanonicalBackupAndTempWithoutChangingBytes) {
+  const auto canonical = createCanonical();
+  Storage.setFile(storePath() + ".bak", canonical);
+  Storage.setFile(storePath() + ".tmp", canonical);
+  ASSERT_TRUE(Storage.mkdir(REPLACEMENT_CACHE_PATH));
+
+  ASSERT_TRUE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+
+  EXPECT_FALSE(Storage.exists(storePath().c_str()));
+  EXPECT_FALSE(Storage.exists((storePath() + ".bak").c_str()));
+  EXPECT_FALSE(Storage.exists((storePath() + ".tmp").c_str()));
+  EXPECT_EQ(Storage.file(std::string(REPLACEMENT_CACHE_PATH) + "/.crossvi_replaced_clippings.bin"), canonical);
+  EXPECT_EQ(Storage.file(std::string(REPLACEMENT_CACHE_PATH) + "/.crossvi_replaced_clippings.bin.bak"), canonical);
+  EXPECT_EQ(Storage.file(std::string(REPLACEMENT_CACHE_PATH) + "/.crossvi_replaced_clippings.bin.tmp"), canonical);
+}
+
+TEST_F(ClippingStorePersistenceTest, ReplacementClippingQuarantineRetriesEachRenameBoundary) {
+  const auto canonical = createCanonical();
+  Storage.setFile(storePath() + ".bak", canonical);
+  Storage.setFile(storePath() + ".tmp", canonical);
+  ASSERT_TRUE(Storage.mkdir(REPLACEMENT_CACHE_PATH));
+  Storage.failRenameOnCalls({2});
+
+  EXPECT_FALSE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+  EXPECT_FALSE(Storage.exists(storePath().c_str()));
+  EXPECT_TRUE(Storage.exists((storePath() + ".bak").c_str()));
+
+  ASSERT_TRUE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+  EXPECT_FALSE(Storage.exists((storePath() + ".bak").c_str()));
+  EXPECT_FALSE(Storage.exists((storePath() + ".tmp").c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, ReplacementClippingQuarantineFailsClosedOnCorruptNewerAndMismatchedFiles) {
+  const auto canonical = createCanonical();
+  ASSERT_TRUE(Storage.mkdir(REPLACEMENT_CACHE_PATH));
+
+  auto corrupt = canonical;
+  corrupt.back() ^= 1;
+  Storage.setFile(storePath(), corrupt);
+  EXPECT_FALSE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+  EXPECT_EQ(Storage.file(storePath()), corrupt);
+
+  auto newer = canonical;
+  newer[4] = static_cast<uint8_t>(ClippingCodec::VERSION + 1);
+  newer[5] = 0;
+  Storage.setFile(storePath(), newer);
+  EXPECT_FALSE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+  EXPECT_EQ(Storage.file(storePath()), newer);
+
+  const auto mismatched = createCanonicalFor(MOVED_BOOK_PATH);
+  Storage.setFile(storePath(), mismatched);
+  EXPECT_FALSE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+  EXPECT_EQ(Storage.file(storePath()), mismatched);
+}
+
+TEST_F(ClippingStorePersistenceTest, ReplacementQuarantinesOnlyAnExactlyOwnedMoveMarker) {
+  createCanonical();
+  ClippingStore store;
+  ASSERT_EQ(store.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Loaded);
+  ASSERT_EQ(store.prepareRekeyForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::RekeyResult::Prepared);
+  const std::string marker = movedStorePath() + ".move";
+  const auto markerBytes = Storage.file(marker);
+  ASSERT_TRUE(Storage.mkdir(REPLACEMENT_CACHE_PATH));
+
+  ASSERT_TRUE(ClippingStore::quarantineFilesForBook(MOVED_BOOK_PATH, REPLACEMENT_CACHE_PATH));
+
+  EXPECT_FALSE(Storage.exists(movedStorePath().c_str()));
+  EXPECT_FALSE(Storage.exists(marker.c_str()));
+  EXPECT_EQ(Storage.file(std::string(REPLACEMENT_CACHE_PATH) + "/.crossvi_replaced_clippings.move"), markerBytes);
+  EXPECT_TRUE(Storage.exists(storePath().c_str()));
+  EXPECT_TRUE(ClippingStore::quarantineFilesForBook(MOVED_BOOK_PATH, REPLACEMENT_CACHE_PATH));
+}
+
+TEST_F(ClippingStorePersistenceTest, ReplacementPreservesAClippingArchiveCorruptedAfterRename) {
+  createCanonical();
+  ASSERT_TRUE(Storage.mkdir(REPLACEMENT_CACHE_PATH));
+  Storage.corruptRenameOnce();
+
+  EXPECT_FALSE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
+  EXPECT_FALSE(Storage.exists(storePath().c_str()));
+  EXPECT_TRUE(Storage.exists((std::string(REPLACEMENT_CACHE_PATH) + "/.crossvi_replaced_clippings.bin").c_str()));
+  EXPECT_FALSE(ClippingStore::quarantineFilesForBook(BOOK_PATH, REPLACEMENT_CACHE_PATH));
 }
 
 TEST_F(ClippingStorePersistenceTest, PreparedRekeyCanBeCancelledOrReusedAfterAReset) {
@@ -456,6 +774,23 @@ TEST_F(ClippingStorePersistenceTest, MarkerOwnedPartialDestinationIsCleanedAndRe
   EXPECT_EQ(retry.prepareRekeyForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"), ClippingStore::RekeyResult::Prepared);
   EXPECT_TRUE(Storage.exists(movedStorePath().c_str()));
   EXPECT_FALSE(Storage.exists((movedStorePath() + ".tmp").c_str()));
+}
+
+TEST_F(ClippingStorePersistenceTest, RekeyPreservesMalformedPreExistingMarkerEvenWhenSourceBookExists) {
+  const auto source = createCanonical();
+  Storage.setFile(BOOK_PATH, {0x01});
+  const std::string marker = movedStorePath() + ".move";
+  const std::vector<uint8_t> malformed{0x01, 0x02, 0x03};
+  Storage.setFile(marker, malformed);
+
+  ClippingStore store;
+  ASSERT_EQ(store.loadForBook(BOOK_PATH, "Sách", "Tác giả"), ClippingStore::LoadResult::Loaded);
+  EXPECT_EQ(store.prepareRekeyForBook(MOVED_BOOK_PATH, "Sách", "Tác giả"),
+            ClippingStore::RekeyResult::DestinationExists);
+
+  EXPECT_EQ(Storage.file(marker), malformed);
+  EXPECT_EQ(Storage.file(storePath()), source);
+  EXPECT_FALSE(Storage.exists(movedStorePath().c_str()));
 }
 
 TEST_F(ClippingStorePersistenceTest, RetryPromotesOnlyAnExactValidatedPreparedTemp) {

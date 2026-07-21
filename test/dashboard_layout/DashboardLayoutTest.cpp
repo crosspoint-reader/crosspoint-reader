@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <limits>
+#include <optional>
 
+#include "activities/home/DashboardProgress.h"
 #include "components/themes/dashboard/DashboardLayout.h"
 
 namespace {
@@ -62,4 +65,57 @@ TEST(DashboardLayout, DegradesWithoutNegativeOrOutOfBoundsRects) {
   EXPECT_TRUE(contains(tinyTile, layout.title));
   EXPECT_TRUE(contains(tinyTile, layout.progress));
   EXPECT_TRUE(contains(tinyTile, layout.footer));
+}
+
+TEST(DashboardProgress, StrictlyDecodesFinalizedEpubProgress) {
+  const std::array<uint8_t, 6> valid{2, 0, 4, 0, 10, 0};
+  DashboardProgress::Position position;
+  ASSERT_TRUE(DashboardProgress::decode(valid.data(), valid.size(), position));
+  EXPECT_EQ(position.spineIndex, 2);
+  EXPECT_EQ(position.pageNumber, 4);
+  EXPECT_EQ(position.pageCount, 10);
+
+  EXPECT_FALSE(DashboardProgress::decode(valid.data(), 4, position));
+  auto invalid = valid;
+  invalid[2] = 10;
+  EXPECT_FALSE(DashboardProgress::decode(invalid.data(), invalid.size(), position));
+  invalid = valid;
+  invalid[4] = 0;
+  invalid[5] = 0;
+  EXPECT_FALSE(DashboardProgress::decode(invalid.data(), invalid.size(), position));
+  invalid = valid;
+  invalid[2] = 0xFF;
+  invalid[3] = 0xFF;
+  EXPECT_FALSE(DashboardProgress::decode(invalid.data(), invalid.size(), position));
+}
+
+TEST(DashboardProgress, RequiresMatchingFinalizedSectionCache) {
+  const DashboardProgress::Position position{2, 4, 10};
+  EXPECT_TRUE(DashboardProgress::validate(position, 3, std::optional<uint16_t>{10}));
+  EXPECT_FALSE(DashboardProgress::validate(position, 2, std::optional<uint16_t>{10}));
+  EXPECT_FALSE(DashboardProgress::validate(position, 3, std::optional<uint16_t>{9}));
+  EXPECT_FALSE(DashboardProgress::validate(position, 3, std::nullopt));
+}
+
+TEST(DashboardProgress, ConvertsOnlyFiniteProgress) {
+  uint8_t percent = 99;
+  EXPECT_TRUE(DashboardProgress::toPercent(0.425F, percent));
+  EXPECT_EQ(percent, 43);
+  EXPECT_TRUE(DashboardProgress::toPercent(-1.0F, percent));
+  EXPECT_EQ(percent, 0);
+  EXPECT_TRUE(DashboardProgress::toPercent(2.0F, percent));
+  EXPECT_EQ(percent, 100);
+  EXPECT_FALSE(DashboardProgress::toPercent(std::numeric_limits<float>::quiet_NaN(), percent));
+}
+
+TEST(DashboardProgress, TrustedCompletionDoesNotDependOnProgressOrSectionCache) {
+  uint8_t percent = 7;
+  EXPECT_TRUE(DashboardProgress::fromCompletedStats(true, true, percent));
+  EXPECT_EQ(percent, 100);
+
+  percent = 7;
+  EXPECT_FALSE(DashboardProgress::fromCompletedStats(false, true, percent));
+  EXPECT_EQ(percent, 7);
+  EXPECT_FALSE(DashboardProgress::fromCompletedStats(true, false, percent));
+  EXPECT_EQ(percent, 7);
 }

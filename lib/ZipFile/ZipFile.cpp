@@ -5,6 +5,8 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <array>
+#include <cstring>
 #include <limits>
 
 struct ZipInflateCtx {
@@ -17,6 +19,17 @@ struct ZipInflateCtx {
 namespace {
 constexpr uint16_t ZIP_METHOD_STORED = 0;
 constexpr uint16_t ZIP_METHOD_DEFLATED = 8;
+constexpr uint64_t FNV64_OFFSET_BASIS = 14695981039346656037ull;
+constexpr uint64_t FNV64_PRIME = 1099511628211ull;
+
+uint16_t readLe16(const uint8_t* data) {
+  return static_cast<uint16_t>(data[0]) | (static_cast<uint16_t>(data[1]) << 8U);
+}
+
+uint32_t readLe32(const uint8_t* data) {
+  return static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8U) |
+         (static_cast<uint32_t>(data[2]) << 16U) | (static_cast<uint32_t>(data[3]) << 24U);
+}
 
 // RAII zip: opens the zip if not already open, closes on destruction only if
 // it performed the open.  Removes the wasOpen/close boilerplate from every method.
@@ -236,13 +249,16 @@ bool ZipFile::loadZipDetails() {
   }
 
   file.seek(fileSize - scanRange);
-  file.read(buffer, scanRange);
+  if (file.read(buffer, scanRange) != scanRange) {
+    free(buffer);
+    return false;
+  }
 
   // Scan backwards for the signature
   int foundOffset = -1;
   for (int i = scanRange - 22; i >= 0; i--) {
     constexpr uint32_t signature = 0x06054b50;
-    if (*reinterpret_cast<uint32_t*>(&buffer[i]) == signature) {
+    if (readLe32(&buffer[i]) == signature) {
       foundOffset = i;
       break;
     }
@@ -258,11 +274,53 @@ bool ZipFile::loadZipDetails() {
   // Relative positions within EOCD:
   // Offset 10: Total number of entries (2 bytes)
   // Offset 16: Offset of start of central directory with respect to the starting disk number (4 bytes)
-  zipDetails.totalEntries = *reinterpret_cast<uint16_t*>(&buffer[foundOffset + 10]);
-  zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
+  zipDetails.totalEntries = readLe16(&buffer[foundOffset + 10]);
+  zipDetails.centralDirSize = readLe32(&buffer[foundOffset + 12]);
+  zipDetails.centralDirOffset = readLe32(&buffer[foundOffset + 16]);
+  const uint64_t centralDirEnd = static_cast<uint64_t>(zipDetails.centralDirOffset) + zipDetails.centralDirSize;
+  const uint64_t eocdOffset = static_cast<uint64_t>(fileSize - scanRange + foundOffset);
+  if (zipDetails.totalEntries == 0 || zipDetails.centralDirSize == 0 || centralDirEnd > eocdOffset) {
+    LOG_ERR("ZIP", "Invalid central directory bounds");
+    free(buffer);
+    zipDetails = {0, 0, 0, false};
+    return false;
+  }
   zipDetails.isSet = true;
 
   free(buffer);
+  return true;
+}
+
+bool ZipFile::getSourceIdentity(SourceIdentity& identity) {
+  identity = {};
+  const ScopedOpenClose zip{*this};
+  if (!zip || !loadZipDetails()) return false;
+
+  const uint64_t expectedFileSize = file.fileSize64();
+  const uint64_t centralDirEnd = static_cast<uint64_t>(zipDetails.centralDirOffset) + zipDetails.centralDirSize;
+  if (expectedFileSize == 0 || centralDirEnd > expectedFileSize || !file.seek(zipDetails.centralDirOffset)) {
+    return false;
+  }
+
+  std::array<uint8_t, 512> buffer{};
+  uint64_t hash = FNV64_OFFSET_BASIS;
+  uint32_t remaining = zipDetails.centralDirSize;
+  while (remaining > 0) {
+    const size_t chunk = std::min<size_t>(buffer.size(), remaining);
+    if (file.read(buffer.data(), chunk) != static_cast<int>(chunk)) return false;
+    for (size_t i = 0; i < chunk; ++i) {
+      hash ^= buffer[i];
+      hash *= FNV64_PRIME;
+    }
+    remaining -= static_cast<uint32_t>(chunk);
+  }
+
+  if (file.fileSize64() != expectedFileSize) return false;
+  identity.fileSize = expectedFileSize;
+  identity.centralDirOffset = zipDetails.centralDirOffset;
+  identity.centralDirSize = zipDetails.centralDirSize;
+  identity.totalEntries = zipDetails.totalEntries;
+  identity.centralDirHash = hash;
   return true;
 }
 

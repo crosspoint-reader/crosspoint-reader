@@ -34,7 +34,9 @@ class CrossPointWebServer {
     HalFile file;
     String fileName;
     String path = "/";
+    String stagingPath;
     size_t size = 0;
+    bool ownsStagingFile = false;
     bool success = false;
     String error = "";
 

@@ -18,6 +18,7 @@
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
+#include "UploadPathGuard.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
 #include "html/FilesPageHtml.generated.h"
@@ -42,10 +43,12 @@ CrossPointWebServer* wsInstance = nullptr;
 HalFile wsUploadFile;
 String wsUploadFileName;
 String wsUploadPath;
+String wsUploadStagingPath;
 size_t wsUploadSize = 0;
 size_t wsUploadReceived = 0;
 unsigned long wsUploadStartTime = 0;
 bool wsUploadInProgress = false;
+bool wsUploadOwnsStagingFile = false;
 uint8_t wsUploadClientNum = 255;  // 255 = no active upload client
 size_t wsLastProgressSent = 0;
 String wsLastCompleteName;
@@ -81,6 +84,7 @@ bool isProtectedItemName(const String& name) {
   }
   return false;
 }
+
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -219,14 +223,15 @@ void CrossPointWebServer::begin() {
 void CrossPointWebServer::abortWsUpload(const char* tag) {
   // Explicit close() required: file-scope global persists beyond function scope
   wsUploadFile.close();
-  String filePath = wsUploadPath;
-  if (!filePath.endsWith("/")) filePath += "/";
-  filePath += wsUploadFileName;
-  if (Storage.remove(filePath.c_str())) {
-    LOG_DBG(tag, "Deleted incomplete upload: %s", filePath.c_str());
-  } else {
-    LOG_DBG(tag, "Failed to delete incomplete upload: %s", filePath.c_str());
+  if (wsUploadOwnsStagingFile && !wsUploadStagingPath.isEmpty()) {
+    if (Storage.remove(wsUploadStagingPath.c_str())) {
+      LOG_DBG(tag, "Deleted incomplete upload: %s", wsUploadStagingPath.c_str());
+    } else {
+      LOG_DBG(tag, "Failed to delete incomplete upload: %s", wsUploadStagingPath.c_str());
+    }
   }
+  wsUploadOwnsStagingFile = false;
+  wsUploadStagingPath = "";
   wsUploadInProgress = false;
   wsUploadClientNum = 255;
   wsLastProgressSent = 0;
@@ -247,6 +252,10 @@ void CrossPointWebServer::stop() {
   if (wsUploadInProgress && wsUploadFile) {
     abortWsUpload("WEB");
   }
+  if (upload.file) upload.file.close();
+  if (upload.ownsStagingFile && !upload.stagingPath.isEmpty()) Storage.remove(upload.stagingPath.c_str());
+  upload.ownsStagingFile = false;
+  upload.stagingPath = "";
 
   // Stop WebSocket server
   if (wsServer) {
@@ -438,7 +447,8 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     auto fileName = String(name);
 
     // Skip hidden items (starting with ".")
-    bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
+    bool shouldHide =
+        isBookFileTransactionArtifact(fileName.c_str()) || (!SETTINGS.showHiddenFiles && fileName.startsWith("."));
 
     // Check against explicitly hidden items list
     if (!shouldHide) {
@@ -654,15 +664,26 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     // Reset watchdog - this is the critical 1% crash point
     esp_task_wdt_reset();
 
+    if (state.ownsStagingFile) {
+      state.error = "Upload already in progress";
+      return;
+    }
+    if (state.file) state.file.close();
     state.fileName = upload.filename;
     state.size = 0;
     state.success = false;
     state.error = "";
+    state.stagingPath = "";
     uploadStartTime = millis();
     lastLoggedSize = 0;
     state.bufferPos = 0;
     totalWriteTime = 0;
     writeCount = 0;
+
+    if (!UploadPathGuard::isSafeLeafName(state.fileName.c_str())) {
+      state.error = "Invalid file name";
+      return;
+    }
 
     // Get upload path from query parameter (defaults to root if not specified)
     // Note: We use query parameter instead of form data because multipart form
@@ -681,6 +702,18 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       state.path = "/";
     }
 
+    if (!UploadPathGuard::isSafeAbsolutePath(state.path.c_str())) {
+      state.error = "Invalid upload path";
+      return;
+    }
+    HalFile uploadDirectory = Storage.open(state.path.c_str());
+    if (!uploadDirectory || !uploadDirectory.isDirectory()) {
+      if (uploadDirectory) uploadDirectory.close();
+      state.error = "Upload folder does not exist";
+      return;
+    }
+    uploadDirectory.close();
+
     LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
     LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
 
@@ -695,16 +728,23 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       return;
     }
 
+    state.stagingPath = hiddenBookFileSibling(filePath.c_str(), ".crossvi-upload.tmp").c_str();
+    if (Storage.exists(state.stagingPath.c_str())) {
+      state.error = "An interrupted upload is already present";
+      return;
+    }
+
     // Open file for writing - this can be slow due to FAT cluster allocation
     esp_task_wdt_reset();
-    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
+    if (!Storage.openFileForWrite("WEB", state.stagingPath, state.file)) {
       state.error = "Failed to create file on SD card";
       LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
       return;
     }
+    state.ownsStagingFile = true;
     esp_task_wdt_reset();
 
-    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
+    LOG_DBG("WEB", "[UPLOAD] Staging file created successfully: %s", state.stagingPath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
@@ -748,10 +788,12 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       if (!flushUploadBuffer(state)) {
         state.error = "Failed to write final data to SD card";
       }
-      state.file.close();
+      state.file.flush();
+      const bool synced = state.file.sync();
+      const bool closed = state.file.close();
+      const bool durable = synced && closed;
 
-      if (state.error.isEmpty()) {
-        state.success = true;
+      if (state.error.isEmpty() && durable) {
         const unsigned long elapsed = millis() - uploadStartTime;
         const float avgKbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
         const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0 / elapsed) : 0;
@@ -760,23 +802,27 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
                 writePercent);
 
-        // Clear epub cache after uploading the file
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
-        resetBookUserStateAfterReplacement(filePath.c_str());
+        const BookFilePublishResult published = publishStagedBookFile(state.stagingPath.c_str(), filePath.c_str());
+        if (published == BookFilePublishResult::Published || published == BookFilePublishResult::Unchanged) {
+          state.ownsStagingFile = false;
+          state.success = true;
+        } else {
+          state.error = published == BookFilePublishResult::InvalidStagedFile
+                            ? "Uploaded book file is invalid"
+                            : "Could not safely publish uploaded file";
+        }
+      } else if (state.error.isEmpty()) {
+        state.error = "Could not safely store uploaded file";
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     state.bufferPos = 0;  // Discard buffered data
-    if (state.file) {
-      state.file.close();
-      // Try to delete the incomplete file
-      String filePath = state.path;
-      if (!filePath.endsWith("/")) filePath += "/";
-      filePath += state.fileName;
-      Storage.remove(filePath.c_str());
-    }
+    if (state.file) state.file.close();
+    if (state.ownsStagingFile && !state.stagingPath.isEmpty()) Storage.remove(state.stagingPath.c_str());
+    state.ownsStagingFile = false;
     state.error = "Upload aborted";
     LOG_DBG("WEB", "Upload aborted");
   }
@@ -786,6 +832,8 @@ void CrossPointWebServer::handleUploadPost(UploadState& state) const {
   if (state.success) {
     server->send(200, "text/plain", "File uploaded successfully: " + state.fileName);
   } else {
+    if (state.ownsStagingFile && !state.stagingPath.isEmpty()) Storage.remove(state.stagingPath.c_str());
+    state.ownsStagingFile = false;
     const String error = state.error.isEmpty() ? "Unknown error during upload" : state.error;
     server->send(400, "text/plain", error);
   }
@@ -1596,7 +1644,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
     case WStype_TEXT: {
       // Parse control messages
-      String msg = String((char*)payload);
+      String msg = String(reinterpret_cast<char*>(payload), length);
       LOG_DBG("WS", "Text from client %u: %s", num, msg.c_str());
 
       if (msg.startsWith("START:")) {
@@ -1606,6 +1654,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           wsServer->sendTXT(num, "ERROR:Upload already in progress");
           break;
         }
+        if (wsUploadOwnsStagingFile) abortWsUpload("WS");
 
         // Parse: START:<filename>:<size>:<path>
         int firstColon = msg.indexOf(':', 6);
@@ -1614,18 +1663,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (firstColon > 0 && secondColon > 0) {
           wsUploadFileName = msg.substring(6, firstColon);
           String sizeToken = msg.substring(firstColon + 1, secondColon);
-          bool sizeValid = sizeToken.length() > 0;
-          int digitStart = (sizeValid && sizeToken[0] == '+') ? 1 : 0;
-          if (digitStart > 0 && sizeToken.length() < 2) sizeValid = false;
-          for (int i = digitStart; i < (int)sizeToken.length() && sizeValid; i++) {
-            if (!isdigit((unsigned char)sizeToken[i])) sizeValid = false;
-          }
-          if (!sizeValid) {
+          if (!UploadPathGuard::isSafeLeafName(wsUploadFileName.c_str()) ||
+              !UploadPathGuard::parseSize(sizeToken.c_str(), wsUploadSize)) {
             LOG_DBG("WS", "START rejected: invalid size token '%s'", sizeToken.c_str());
             wsServer->sendTXT(num, "ERROR:Invalid START format");
             return;
           }
-          wsUploadSize = sizeToken.toInt();
           wsUploadPath = msg.substring(secondColon + 1);
           wsUploadReceived = 0;
           wsLastProgressSent = 0;
@@ -1636,6 +1679,17 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           if (wsUploadPath.length() > 1 && wsUploadPath.endsWith("/")) {
             wsUploadPath = wsUploadPath.substring(0, wsUploadPath.length() - 1);
           }
+          if (!UploadPathGuard::isSafeAbsolutePath(wsUploadPath.c_str())) {
+            wsServer->sendTXT(num, "ERROR:Invalid upload path");
+            return;
+          }
+          HalFile uploadDirectory = Storage.open(wsUploadPath.c_str());
+          if (!uploadDirectory || !uploadDirectory.isDirectory()) {
+            if (uploadDirectory) uploadDirectory.close();
+            wsServer->sendTXT(num, "ERROR:Upload folder does not exist");
+            return;
+          }
+          uploadDirectory.close();
 
           String filePath = wsUploadPath;
           if (!filePath.endsWith("/")) filePath += "/";
@@ -1651,26 +1705,47 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
                   filePath.c_str());
 
+          wsUploadStagingPath = hiddenBookFileSibling(filePath.c_str(), ".crossvi-upload.tmp").c_str();
+          if (Storage.exists(wsUploadStagingPath.c_str())) {
+            wsServer->sendTXT(num, "ERROR:An interrupted upload is already present");
+            return;
+          }
+
           // Open file for writing
           esp_task_wdt_reset();
-          if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
+          if (!Storage.openFileForWrite("WS", wsUploadStagingPath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
             wsUploadInProgress = false;
             wsUploadClientNum = 255;
             return;
           }
+          wsUploadOwnsStagingFile = true;
           esp_task_wdt_reset();
 
           // Zero-byte upload: complete immediately without waiting for BIN frames
           if (wsUploadSize == 0) {
             // Explicit close() required: file-scope global persists beyond function scope
-            wsUploadFile.close();
-            wsLastCompleteName = wsUploadFileName;
-            wsLastCompleteSize = 0;
-            wsLastCompleteAt = millis();
-            LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
-            resetBookUserStateAfterReplacement(filePath.c_str());
-            wsServer->sendTXT(num, "DONE");
+            wsUploadFile.flush();
+            const bool synced = wsUploadFile.sync();
+            const bool closed = wsUploadFile.close();
+            const bool durable = synced && closed;
+            const BookFilePublishResult published =
+                durable ? publishStagedBookFile(wsUploadStagingPath.c_str(), filePath.c_str())
+                        : BookFilePublishResult::StorageError;
+            if (published == BookFilePublishResult::Published || published == BookFilePublishResult::Unchanged) {
+              wsUploadOwnsStagingFile = false;
+              wsUploadStagingPath = "";
+              wsLastCompleteName = wsUploadFileName;
+              wsLastCompleteSize = 0;
+              wsLastCompleteAt = millis();
+              LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
+              wsServer->sendTXT(num, "DONE");
+            } else {
+              if (wsUploadOwnsStagingFile) Storage.remove(wsUploadStagingPath.c_str());
+              wsUploadOwnsStagingFile = false;
+              wsUploadStagingPath = "";
+              wsServer->sendTXT(num, "ERROR:Could not safely publish upload");
+            }
             wsLastProgressSent = 0;
             break;
           }
@@ -1720,13 +1795,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       // Check if upload complete
       if (wsUploadReceived >= wsUploadSize) {
         // Explicit close() required: file-scope global persists beyond function scope
-        wsUploadFile.close();
+        wsUploadFile.flush();
+        const bool synced = wsUploadFile.sync();
+        const bool closed = wsUploadFile.close();
+        const bool durable = synced && closed;
         wsUploadInProgress = false;
         wsUploadClientNum = 255;
-
-        wsLastCompleteName = wsUploadFileName;
-        wsLastCompleteSize = wsUploadSize;
-        wsLastCompleteAt = millis();
 
         unsigned long elapsed = millis() - wsUploadStartTime;
         float kbps = (elapsed > 0) ? (wsUploadSize / 1024.0) / (elapsed / 1000.0) : 0;
@@ -1734,13 +1808,25 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         LOG_DBG("WS", "Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)", wsUploadFileName.c_str(), wsUploadSize,
                 elapsed, kbps);
 
-        // Clear epub cache after uploading the file
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        resetBookUserStateAfterReplacement(filePath.c_str());
-
-        wsServer->sendTXT(num, "DONE");
+        const BookFilePublishResult published =
+            durable ? publishStagedBookFile(wsUploadStagingPath.c_str(), filePath.c_str())
+                    : BookFilePublishResult::StorageError;
+        if (published == BookFilePublishResult::Published || published == BookFilePublishResult::Unchanged) {
+          wsUploadOwnsStagingFile = false;
+          wsUploadStagingPath = "";
+          wsLastCompleteName = wsUploadFileName;
+          wsLastCompleteSize = wsUploadSize;
+          wsLastCompleteAt = millis();
+          wsServer->sendTXT(num, "DONE");
+        } else {
+          if (wsUploadOwnsStagingFile) Storage.remove(wsUploadStagingPath.c_str());
+          wsUploadOwnsStagingFile = false;
+          wsUploadStagingPath = "";
+          wsServer->sendTXT(num, "ERROR:Could not safely publish upload");
+        }
         wsLastProgressSent = 0;
       }
       break;

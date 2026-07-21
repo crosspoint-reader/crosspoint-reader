@@ -15,7 +15,17 @@
 
 class NearbySyncExchange {
  public:
-  enum class State : uint8_t { Idle, Discovering, Pairing, WaitingForOffer, OfferReady, Accepted, Error };
+  enum class State : uint8_t {
+    Idle,
+    Discovering,
+    Pairing,
+    WaitingForAck,
+    WaitingForOffer,
+    OfferReady,
+    WaitingForComplete,
+    Accepted,
+    Error
+  };
   enum class Error : uint8_t { None, RadioStart, NoPeer, PairingTimeout, TransferTimeout, QueueOverflow, Protocol };
 
   NearbySyncExchange();
@@ -23,10 +33,10 @@ class NearbySyncExchange {
   NearbySyncExchange(const NearbySyncExchange&) = delete;
   NearbySyncExchange& operator=(const NearbySyncExchange&) = delete;
 
-  bool start(NearbySync::Kind kind, const NearbySync::MacAddress& localMac, const std::string& localDeviceName,
-             const uint8_t* localOffer, size_t localOfferSize, uint32_t nowMs);
+  bool start(NearbySync::Kind kind, NearbySync::Role role, const NearbySync::MacAddress& localMac,
+             const std::string& localDeviceName, const uint8_t* localOffer, size_t localOfferSize, uint32_t nowMs);
   void update(uint32_t nowMs);
-  bool confirmShare(uint32_t nowMs);
+  bool confirmPairing(uint32_t nowMs);
   bool acknowledgePeerOffer(uint32_t nowMs);
   void stop();
 
@@ -34,6 +44,8 @@ class NearbySyncExchange {
   Error error() const { return error_; }
   bool wasRadioActivated() const { return radio_.wasActivated(); }
   bool peerAcceptedLocalOffer() const { return peerAcceptedLocalOffer_; }
+  NearbySync::Role role() const { return role_; }
+  NearbySync::Role peerRole() const { return peer_.role(); }
   const std::string& peerName() const { return peerName_; }
   const NearbySync::MacAddress& peerDeviceMac() const { return peer_.deviceMac(); }
   uint16_t pairingCode() const;
@@ -54,9 +66,13 @@ class NearbySyncExchange {
   static constexpr uint32_t BIND_INTERVAL_MS = 700;
   static constexpr uint32_t OFFER_INTERVAL_MS = 700;
   static constexpr uint32_t ACK_INTERVAL_MS = 150;
+  static constexpr uint32_t COMPLETE_INTERVAL_MS = 150;
   static constexpr uint32_t DISCOVERY_TIMEOUT_MS = 8000;
+  // Pairing and local offer preview remain human-paced. Once either side has
+  // explicitly confirmed and entered a transport wait, bound retries to two
+  // minutes so a vanished peer cannot keep the reader awake forever.
+  static constexpr uint32_t TRANSFER_TIMEOUT_MS = 120000;
   static constexpr uint32_t ACCEPT_SETTLE_MS = 900;
-  static constexpr uint32_t ACCEPT_MAX_SETTLE_MS = 12000;
   static constexpr NearbySync::MacAddress BROADCAST_MAC{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
   struct RawEvent {
@@ -69,6 +85,7 @@ class NearbySyncExchange {
   State state_ = State::Idle;
   Error error_ = Error::None;
   NearbySync::Kind kind_ = NearbySync::Kind::Position;
+  NearbySync::Role role_ = NearbySync::Role::Sender;
   NearbySync::MacAddress localMac_{};
   std::string localDeviceName_;
   uint32_t localSessionId_ = 0;
@@ -79,13 +96,15 @@ class NearbySyncExchange {
   size_t localOfferSize_ = 0;
   std::array<uint8_t, NearbySync::MAX_PAYLOAD_BYTES> peerOffer_{};
   size_t peerOfferSize_ = 0;
-  bool localShareConfirmed_ = false;
+  bool pairingConfirmed_ = false;
+  bool localBindSent_ = false;
   bool peerAcceptedLocalOffer_ = false;
   uint32_t stateStartedMs_ = 0;
   uint32_t lastHelloMs_ = 0;
   uint32_t lastBindMs_ = 0;
   uint32_t lastOfferMs_ = 0;
   uint32_t lastAckMs_ = 0;
+  uint32_t lastCompleteMs_ = 0;
   uint32_t acceptedMs_ = 0;
 
 #ifndef SIMULATOR
@@ -106,6 +125,7 @@ class NearbySyncExchange {
   bool sendBind(uint32_t nowMs);
   bool sendOffer(uint32_t nowMs);
   bool sendAck(uint32_t nowMs);
+  bool sendComplete(uint32_t nowMs);
   void enter(State state, uint32_t nowMs);
   void fail(Error error);
 };

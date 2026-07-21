@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <array>
 #include <string>
 
@@ -14,6 +15,8 @@ constexpr char LOG_TAG[] = "BSTATS";
 constexpr char CURRENT_FILE_NAME[] = "stats_v5.bin";
 constexpr char PREVIOUS_FILE_NAME[] = "stats_v4.bin";
 constexpr char LEGACY_FILE_NAME[] = "stats.bin";
+constexpr std::array<const char*, 5> REMOVABLE_FILE_NAMES = {CURRENT_FILE_NAME, "stats_v5.bin.tmp", "stats_v5.bin.bak",
+                                                             PREVIOUS_FILE_NAME, LEGACY_FILE_NAME};
 
 struct LoadOutcome {
   ReadingStatsDecodeResult result = ReadingStatsDecodeResult::Invalid;
@@ -142,19 +145,25 @@ bool BookReadingStats::save(const std::string& cachePath) const {
 }
 
 bool BookReadingStats::remove(const std::string& cachePath) {
-  const std::string currentPath = cachePath + "/" + CURRENT_FILE_NAME;
-  for (const char* suffix : {"", ".bak", ".tmp"}) {
-    const std::string path = currentPath + suffix;
-    BookReadingStats existing;
-    if (isProtected(loadPath(path, existing))) {
-      LOG_ERR(LOG_TAG, "Refusing to delete unreadable or newer per-book stats file: %s", path.c_str());
-      return false;
-    }
+  // Inspect every file before deleting any of them. A reset must not partly
+  // delete known-good state before discovering an unreadable, corrupt, or
+  // newer legacy file that CrossVi cannot safely classify.
+  if (!std::all_of(REMOVABLE_FILE_NAMES.begin(), REMOVABLE_FILE_NAMES.end(), [&](const char* name) {
+        const std::string path = cachePath + "/" + name;
+        BookReadingStats existing;
+        const LoadOutcome outcome = loadPath(path, existing);
+        if (outcome.readResult != ReadingStatsStorage::ReadResult::Missing &&
+            outcome.result != ReadingStatsDecodeResult::Ok) {
+          LOG_ERR(LOG_TAG, "Refusing to delete unrecognized per-book stats file: %s", path.c_str());
+          return false;
+        }
+        return true;
+      })) {
+    return false;
   }
 
   bool ok = true;
-  for (const char* name :
-       {CURRENT_FILE_NAME, "stats_v5.bin.tmp", "stats_v5.bin.bak", PREVIOUS_FILE_NAME, LEGACY_FILE_NAME}) {
+  for (const char* name : REMOVABLE_FILE_NAMES) {
     if (!removeIfPresent(cachePath + "/" + name)) {
       LOG_ERR(LOG_TAG, "Could not remove per-book stats file: %s", name);
       ok = false;

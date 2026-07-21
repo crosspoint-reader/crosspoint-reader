@@ -6,7 +6,10 @@
 #include <Serialization.h>
 
 #include <cstdlib>
+#include <new>
 
+#include "Epub/BoundedFileReader.h"
+#include "Epub/SectionCacheValidator.h"
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 
@@ -279,17 +282,25 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 }
 
 bool ImageBlock::serialize(HalFile& file) {
+  if (imagePath.empty() || imagePath.size() > SectionCacheValidation::MAX_IMAGE_PATH_BYTES || width <= 0 ||
+      height <= 0) {
+    LOG_ERR("IMG", "Serialization failed: invalid image block");
+    return false;
+  }
   serialization::writeString(file, imagePath);
   serialization::writePod(file, width);
   serialization::writePod(file, height);
   return true;
 }
 
-std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
+std::unique_ptr<ImageBlock> ImageBlock::deserialize(BoundedFileReader& reader) {
   std::string path;
-  serialization::readString(file, path);
-  int16_t w, h;
-  serialization::readPod(file, w);
-  serialization::readPod(file, h);
-  return std::unique_ptr<ImageBlock>(new ImageBlock(path, w, h));
+  int16_t w = 0;
+  int16_t h = 0;
+  if (!reader.readString(path, SectionCacheValidation::MAX_IMAGE_PATH_BYTES, false) || !reader.readPod(w) ||
+      !reader.readPod(h) || w <= 0 || h <= 0) {
+    LOG_ERR("IMG", "Deserialization failed: invalid image block");
+    return nullptr;
+  }
+  return std::unique_ptr<ImageBlock>(new (std::nothrow) ImageBlock(path, w, h));
 }

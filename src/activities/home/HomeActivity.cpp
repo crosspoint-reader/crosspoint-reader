@@ -2,6 +2,7 @@
 
 #include <Bitmap.h>
 #include <Epub.h>
+#include <Epub/Section.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -9,6 +10,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <array>
 #include <cstring>
 #include <vector>
 
@@ -17,8 +19,10 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/home/DashboardProgress.h"
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
+#include "activities/reader/ProgressFile.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -28,6 +32,23 @@ bool hasUsableBitmapThumbnail(const std::string& path) {
   if (!Storage.openFileForRead("HOME", path, file)) return false;
   Bitmap bitmap(file);
   return bitmap.parseHeaders() == BmpReaderError::Ok;
+}
+
+struct DashboardProgressValidationContext {
+  const std::string* cachePath = nullptr;
+  int spineCount = 0;
+};
+
+bool validateDashboardProgressCandidate(const uint8_t* data, const size_t size, const void* rawContext) {
+  if (!rawContext) return false;
+  const auto& context = *static_cast<const DashboardProgressValidationContext*>(rawContext);
+  if (!context.cachePath) return false;
+
+  DashboardProgress::Position position;
+  return DashboardProgress::decode(data, size, position) &&
+         DashboardProgress::validate(
+             position, context.spineCount,
+             Section::getCachedPageCount(*context.cachePath, static_cast<int>(position.spineIndex)));
 }
 }  // namespace
 
@@ -79,16 +100,52 @@ void HomeActivity::loadBookSummary() {
 
   // Epub's constructor only derives the cache key; it does not open or parse
   // the book, so Dashboard never indexes book contents during Home startup.
-  const Epub recentEpub(recentBooks[0].path, "/.crosspoint");
-  const BookReadingStats stats = BookReadingStats::load(recentEpub.getCachePath());
+  Epub recentEpub(recentBooks[0].path, "/.crosspoint");
+
+  // Validate the metadata against the backing EPUB before reading any
+  // path-keyed statistics or progress. A replaced, legacy, unreadable, or
+  // otherwise invalid cache stays unknown on Home; Reader performs any safe
+  // rebuild/reset when the user opens the book.
+  if (!recentEpub.load(false, true)) return;
+
+  BookReadingStats::LoadStatus statsStatus = BookReadingStats::LoadStatus::Missing;
+  const BookReadingStats stats = BookReadingStats::load(recentEpub.getCachePath(), &statsStatus);
   bookSummary.bookReadingSeconds = stats.totalReadingSeconds;
   bookSummary.bookPagesTurned = stats.totalPagesTurned;
   bookSummary.bookSessions = stats.sessionCount;
   bookSummary.estimatedTimeLeftSeconds = stats.estimatedTimeLeftSeconds;
 
-  // A reliable percentage needs loaded EPUB metadata plus validated progress.
-  // Do not add that I/O to Home merely to guess a number.
-  bookSummary.hasProgress = false;
+  // Completion is authoritative user state after Epub::load() has verified
+  // that this cache still belongs to the EPUB at the recent path. It must not
+  // disappear merely because a rebuild cleared the derived section cache or a
+  // progress file is unavailable.
+  if (DashboardProgress::fromCompletedStats(BookReadingStats::isTrustedLoadStatus(statsStatus), stats.isCompleted,
+                                            bookSummary.progressPercent)) {
+    bookSummary.hasProgress = true;
+    return;
+  }
+
+  std::array<uint8_t, 6> progressBytes{};
+  const DashboardProgressValidationContext progressContext{&recentEpub.getCachePath(), recentEpub.getSpineItemsCount()};
+  const ProgressFile::CandidateValidator progressValidator{validateDashboardProgressCandidate, &progressContext};
+  const ProgressFile::LoadResult progressLoad =
+      ProgressFile::loadEpub(recentEpub.getCachePath(), progressBytes.data(), progressBytes.size(), progressValidator);
+  // Legacy four-byte progress has no persisted chapter total, so it cannot
+  // support an honest Dashboard percentage. A verified six-byte backup/temp is
+  // still usable when the canonical file was interrupted or malformed.
+  if (!progressLoad || progressLoad.size != progressBytes.size()) return;
+
+  DashboardProgress::Position progress;
+  if (!DashboardProgress::decode(progressBytes.data(), progressBytes.size(), progress)) return;
+
+  const float chapterProgress = static_cast<float>(progress.pageNumber + 1U) / static_cast<float>(progress.pageCount);
+  if (!DashboardProgress::toPercent(recentEpub.calculateProgress(progress.spineIndex, chapterProgress),
+                                    bookSummary.progressPercent)) {
+    return;
+  }
+  bookSummary.hasProgress = true;
+  const int tocIndex = recentEpub.getTocIndexForSpineIndex(progress.spineIndex);
+  if (tocIndex >= 0) bookSummary.chapterTitle = recentEpub.getTocItem(tocIndex).title;
 }
 
 void HomeActivity::loadRecentCovers(int coverHeight) {

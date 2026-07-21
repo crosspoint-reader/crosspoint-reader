@@ -9,6 +9,8 @@
 #include "Block.h"
 #include "BlockStyle.h"
 
+class BoundedFileReader;
+
 // Represents a line of text on a page.
 //
 // All per-word data lives in ONE flat heap allocation (the arena) instead of
@@ -89,5 +91,5 @@ class TextBlock final : public Block {
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   BlockType getType() override { return TEXT_BLOCK; }
   bool serialize(HalFile& file) const;
-  static std::unique_ptr<TextBlock> deserialize(HalFile& file);
+  static std::unique_ptr<TextBlock> deserialize(BoundedFileReader& reader);
 };

@@ -458,7 +458,9 @@ void TxtReaderActivity::renderStatusBar() const {
 bool TxtReaderActivity::saveProgress() const {
   uint8_t data[4];
   ProgressFileCodec::encodePage(static_cast<uint32_t>(currentPage), data);
-  if (!ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data))) {
+  const ProgressFile::PageBounds bounds{totalPages > 0 ? static_cast<uint32_t>(totalPages) : 0};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validatePageBounds, &bounds};
+  if (!ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data), validator)) {
     LOG_ERR("TRS", "Failed to save progress: page %d", currentPage);
     return false;
   }
@@ -466,19 +468,29 @@ bool TxtReaderActivity::saveProgress() const {
 }
 
 void TxtReaderActivity::loadProgress() {
-  HalFile f;
-  if (Storage.openFileForRead("TRS", txt->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    if (f.read(data, 4) == 4) {
-      const uint32_t savedPage = ProgressFileCodec::decodePage(data);
-      if (totalPages > 0 && savedPage < static_cast<uint32_t>(totalPages)) {
-        currentPage = static_cast<int>(savedPage);
-        lastSavedPage = currentPage;
-      } else {
-        currentPage = std::max(totalPages - 1, 0);
-      }
-      LOG_DBG("TRS", "Loaded progress: page %d/%d", currentPage, totalPages);
+  uint8_t data[4]{};
+  const ProgressFile::PageBounds bounds{totalPages > 0 ? static_cast<uint32_t>(totalPages) : 0};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validatePageBounds, &bounds};
+  const ProgressFile::LoadResult progress = ProgressFile::loadPage(txt->getCachePath(), data, sizeof(data), validator);
+  if (progress) {
+    const uint32_t savedPage = ProgressFileCodec::decodePage(data);
+    currentPage = static_cast<int>(savedPage);
+    lastSavedPage = currentPage;
+    LOG_DBG("TRS", "Loaded progress: page %d/%d", currentPage, totalPages);
+  } else if (progress.source == ProgressFile::LoadSource::Invalid) {
+    // TXT pagination legitimately changes with font, margin and wrapping
+    // settings. Prefer any semantically valid backup above, but if every
+    // complete candidate is merely beyond the rebuilt last page, preserve the
+    // legacy behavior and resume at that last page instead of page one.
+    const ProgressFile::LoadResult sizeValid = ProgressFile::loadPage(txt->getCachePath(), data, sizeof(data));
+    if (sizeValid) {
+      currentPage = std::max(totalPages - 1, 0);
+      LOG_DBG("TRS", "Clamped stale progress after repagination: page %d/%d", currentPage, totalPages);
+    } else {
+      LOG_ERR("TRS", "No valid progress copy could be read");
     }
+  } else if (progress.source == ProgressFile::LoadSource::IoError) {
+    LOG_ERR("TRS", "No valid progress copy could be read");
   }
 }
 

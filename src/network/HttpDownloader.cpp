@@ -257,11 +257,19 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
-                                                             const std::string& username, const std::string& password) {
+                                                             const std::string& username, const std::string& password,
+                                                             const bool overwriteExisting) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   if (Storage.exists(destPath.c_str())) {
-    Storage.remove(destPath.c_str());
+    if (!overwriteExisting) {
+      LOG_ERR("HTTP", "Refusing to replace existing download destination");
+      return FILE_ERROR;
+    }
+    if (!Storage.remove(destPath.c_str())) {
+      LOG_ERR("HTTP", "Failed to remove stale destination before download");
+      return FILE_ERROR;
+    }
   }
   HalFile file;
   if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
@@ -277,11 +285,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   const DownloadError result = runGetSecure(url, username, password, sink);
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
-  file.close();
+  file.flush();
+  const bool synced = file.sync();
+  const bool closed = file.close();
 
-  if (result != OK) {
+  if (result != OK || !synced || !closed) {
     Storage.remove(destPath.c_str());
-    return result;
+    return result == OK ? FILE_ERROR : result;
   }
   if (sink.downloaded == 0) {
     LOG_ERR("HTTP", "no data received");
