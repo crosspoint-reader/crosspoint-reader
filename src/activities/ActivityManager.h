@@ -113,6 +113,8 @@ class ActivityManager {
   // Trigger a render and block until it completes.
   // Must NOT be called from the render task or while holding a RenderLock.
   void requestUpdateAndWait();
+
+  int getStackSize();
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp

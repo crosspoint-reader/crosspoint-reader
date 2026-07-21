@@ -14,6 +14,7 @@
 #include "DictionaryWordSelectActivity.h"
 #include "EpdFontFamily.h"
 #include "ReaderUtils.h"
+#include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/Dictionary.h"
@@ -28,12 +29,15 @@ constexpr size_t MAX_LINE_BYTES = 191;
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
 
+constexpr int MAX_DEFINITION_DEPTH = 3;
+
 }  // namespace
 
 void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
+  if (activityManager.getStackSize() / 2 >= MAX_DEFINITION_DEPTH) reachedMaxDepth = true;
   std::replace(definition.begin(), definition.end(), '\0', '\n');
   definition = htmlToPlainText(definition);
   wrapText();
@@ -169,7 +173,7 @@ void DictionaryDefinitionActivity::openDictionaryWordSelect() {
   // Word geometry must match render(): viewable-area margins plus screen margin.
   if (words.empty()) return;
 
-  if (SETTINGS.dictionaryName[0] == '\0') {
+  if (SETTINGS.dictionaryName[0] == '\0' || reachedMaxDepth) {
     showDictionaryMessage = true;
     dictionaryMessageTime = millis();
     requestUpdate();
@@ -382,6 +386,10 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 
   if (showDictionaryMessage) {
-    GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+    if (reachedMaxDepth) {
+      GUI.drawPopup(renderer, tr(STR_DICT_MAX_DEPTH));
+    } else {
+      GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+    }
   }
 }

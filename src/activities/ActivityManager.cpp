@@ -321,6 +321,8 @@ void ActivityManager::requestUpdateAndWait() {
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
 
+int ActivityManager::getStackSize() { return stackActivities.size(); }
+
 // RenderLock
 
 RenderLock::RenderLock() {

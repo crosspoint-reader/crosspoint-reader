@@ -55,5 +55,6 @@ class DictionaryDefinitionActivity final : public Activity {
   int nonBlankLineCount = 0;
   ButtonNavigator buttonNavigator;
   bool showDictionaryMessage = false;
+  bool reachedMaxDepth = false;
   unsigned long dictionaryMessageTime = 0UL;
 };
