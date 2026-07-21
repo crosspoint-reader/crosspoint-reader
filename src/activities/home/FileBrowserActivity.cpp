@@ -262,14 +262,18 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
         LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
         if (removeDirFile(fullPath)) {
           LOG_DBG("FileBrowser", "Deleted successfully");
-          loadFiles();
-          if (files.empty()) {
-            nav.selected = 0;
-          } else if (nav.selected >= listCount()) {
-            // Move selection to the new "last" item
-            nav.selected = listCount() - 1;
+          {
+            // buildScreen() reads the row caches on the render task; see loop().
+            RenderLock lock(*this);
+            loadFiles();
+            if (files.empty()) {
+              nav.selected = 0;
+            } else if (nav.selected >= listCount()) {
+              // Move selection to the new "last" item
+              nav.selected = listCount() - 1;
+            }
+            nav.follow(listCount());
           }
-          nav.follow(listCount());
 
           requestUpdate(true);
         } else {
@@ -286,6 +290,10 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
     return;
   } else {
     // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
+    // buildScreen() runs on the render task and reads basepath plus the
+    // ListItem label/value pointers into rowNames/rowExtensions that
+    // rebuildRowItems() frees; mutate only under the render lock.
+    RenderLock lock(*this);
     if (basepath.back() != '/') basepath += "/";
 
     if (isDirectory) {
@@ -293,9 +301,12 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
       loadFiles();
       nav.selected = 0;
       nav.top = 0;
+      lock.unlock();
       requestUpdate();
     } else {
-      onSelectBook(basepath + entry);
+      const std::string fullPath = basepath + entry;
+      lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
+      onSelectBook(fullPath);
     }
   }
   return;
@@ -306,10 +317,15 @@ bool FileBrowserActivity::handleCustomInput() {
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
   if (mode == Mode::Books && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/") {
-    basepath = "/";
-    loadFiles();
-    nav.selected = 0;
-    nav.top = 0;
+    {
+      // buildScreen() runs on the render task and reads basepath plus the
+      // row caches rebuildRowItems() frees; mutate only under the render lock.
+      RenderLock lock(*this);
+      basepath = "/";
+      loadFiles();
+      nav.selected = 0;
+      nav.top = 0;
+    }
     requestUpdate();
     return true;
   }
@@ -329,15 +345,20 @@ bool FileBrowserActivity::handleButtons() {
       if (basepath != "/") {
         const std::string oldPath = basepath;
 
-        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-        if (basepath.empty()) basepath = "/";
-        loadFiles();
+        {
+          // buildScreen() runs on the render task and reads basepath plus the
+          // row caches rebuildRowItems() frees; mutate only under the render lock.
+          RenderLock lock(*this);
+          basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+          if (basepath.empty()) basepath = "/";
+          loadFiles();
 
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
-        nav.selected = static_cast<int>(findEntry(dirName));
-        nav.top = 0;
-        nav.follow(listCount());
+          const auto pos = oldPath.find_last_of('/');
+          const std::string dirName = oldPath.substr(pos + 1) + "/";
+          nav.selected = static_cast<int>(findEntry(dirName));
+          nav.top = 0;
+          nav.follow(listCount());
+        }
 
         requestUpdate();
       } else if (mode == Mode::PickFirmware) {
