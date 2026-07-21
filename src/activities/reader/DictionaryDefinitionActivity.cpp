@@ -185,7 +185,11 @@ void DictionaryDefinitionActivity::openDictionaryWordSelect() {
   startActivityForResult(
       std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(words), &metadata,
                                                      nonBlankLineCount, orientedMarginLeft, orientedMarginTop),
-      [this](const ActivityResult&) { requestUpdate(); });
+      [this](const ActivityResult&) {
+        words.clear();
+        saveWordsFromPage();
+        requestUpdate();
+      });
 }
 
 void DictionaryDefinitionActivity::loop() {
@@ -242,12 +246,6 @@ void DictionaryDefinitionActivity::loop() {
   }
 }
 
-// Draws the current page's line spans (copied into a stack buffer for NUL
-// termination). Called twice per render: once in font-cache scan mode, once
-// for the real paint.
-//
-bool nonAlphanum(char c) { return c == '\n' || c == ' ' || c == '\r' || c == '\t'; }
-
 void DictionaryDefinitionActivity::saveWordsFromLine(const int fontId, const int startX, const int y, char* line,
                                                      int& lineCount) {
   int x = startX;
@@ -258,21 +256,23 @@ void DictionaryDefinitionActivity::saveWordsFromLine(const int fontId, const int
   while (true) {
     if (std::isspace(*c) || *c == '\0') {
       int wordLen = c - wordStart;
-      int wordWidth = measureSpan(fontId, wordStart, wordLen);
-      char buf[MAX_LINE_BYTES + 1];
-      memcpy(buf, wordStart, wordLen);
-      buf[wordLen] = '\0';
+      if (wordLen > 0) {
+        int wordWidth = measureSpan(fontId, wordStart, wordLen);
+        char buf[MAX_LINE_BYTES + 1];
+        memcpy(buf, wordStart, wordLen);
+        buf[wordLen] = '\0';
+        WordBox box;
+        box.fontId = fontId;
+        box.x = x;
+        x += wordWidth + spaceWidth;
+        box.y = y;
+        box.width = wordWidth;
+        box.row = lineCount;
+        box.text = buf;
+        box.style = EpdFontFamily::REGULAR;
+        words.push_back(box);
+      }
       wordStart += wordLen + 1;
-      WordBox box;
-      box.fontId = fontId;
-      box.x = x;
-      x += wordWidth + spaceWidth;
-      box.y = y;
-      box.width = wordWidth;
-      box.row = lineCount;
-      box.text = buf;
-      box.style = EpdFontFamily::REGULAR;
-      words.push_back(box);
     } else {
       lineHasWords = true;
     }
@@ -321,10 +321,12 @@ void DictionaryDefinitionActivity::saveWordsFromPage() {
     memcpy(lineBuf, definition.c_str() + lines[i].start, len);
     lineBuf[len] = '\0';
     saveWordsFromLine(fontId, x, bodyStartY + (i - firstLine) * lineHeight, lineBuf, nonBlankLineCount);
-    // renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, lineBuf);
   }
 }
 
+// Draws the current page's line spans (copied into a stack buffer for NUL
+// termination). Called twice per render: once in font-cache scan mode, once
+// for the real paint.
 void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) {
   const int lineHeight = renderer.getLineHeight(fontId);
   char lineBuf[MAX_LINE_BYTES + 1];
@@ -335,7 +337,6 @@ void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(lineBuf, definition.c_str() + lines[i].start, len);
     lineBuf[len] = '\0';
-    // saveWordsFromLine(fontId, x, startY + (i - firstLine) * lineHeight, lineBuf, (i - firstLine));
     renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, lineBuf);
   }
 }

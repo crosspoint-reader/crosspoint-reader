@@ -20,8 +20,8 @@ class DictionaryDefinitionActivity final : public Activity {
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
-        metadata(DictionaryPageMetdata(MetadataString{"", UI_12_FONT_ID, 0, 0, EpdFontFamily::REGULAR},
-                                       MetadataString{"", UI_10_FONT_ID, 0, 0, EpdFontFamily::REGULAR})) {}
+        metadata(DictionaryPageMetadata(MetadataString{"", UI_12_FONT_ID, 0, 0, EpdFontFamily::REGULAR},
+                                        MetadataString{"", UI_10_FONT_ID, 0, 0, EpdFontFamily::REGULAR})) {}
 
   void onEnter() override;
   void loop() override;
@@ -45,7 +45,7 @@ class DictionaryDefinitionActivity final : public Activity {
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
   // separators) to newlines so C-string APIs see the whole text.
-  DictionaryPageMetdata metadata;
+  DictionaryPageMetadata metadata;
   std::vector<WordBox> words;
   std::string definition;
   std::vector<Line> lines;

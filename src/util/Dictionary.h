@@ -25,7 +25,7 @@ struct MetadataString {
   EpdFontFamily::Style style;
 };
 
-struct DictionaryPageMetdata {
+struct DictionaryPageMetadata {
   MetadataString headword;
   MetadataString pageNums;
 };
@@ -98,11 +98,6 @@ class Dictionary {
   static std::string cleanWord(const char* word);
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
-  // Longest measurable/drawable span. Wrapped lines stay under the screen width
-  // (far below this); only pathological unbreakable tokens are split at this cap.
-  static constexpr size_t MAX_LINE_BYTES = 191;
-  // Body text left/right inset, matching the reader's default feel.
-  static constexpr int SIDE_PADDING = 20;
 
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;

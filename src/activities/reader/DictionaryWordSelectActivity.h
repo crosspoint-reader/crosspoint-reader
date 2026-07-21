@@ -23,7 +23,7 @@ class DictionaryWordSelectActivity final : public Activity {
         marginTop(marginTop) {}
 
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::vector<WordBox> words, DictionaryPageMetdata* metadata, int rowCount,
+                                        std::vector<WordBox> words, DictionaryPageMetadata* metadata, int rowCount,
                                         int marginLeft, int marginTop)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         words(std::move(words)),
@@ -51,7 +51,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void drawHints() const;
 
   std::unique_ptr<Page> page;
-  DictionaryPageMetdata* metadata = nullptr;
+  DictionaryPageMetadata* metadata = nullptr;
   const int marginLeft;
   const int marginTop;
   int fontId = 0;
