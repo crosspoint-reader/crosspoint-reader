@@ -663,13 +663,17 @@ The profile includes typography, margins, paragraph layout, orientation, image/t
 
 Statistics are currently recorded for EPUB reading. Timing starts only after a page has rendered successfully and stops when you open a menu, leave the reader, or the visible interval becomes idle. Very short opens are filtered out: at least 10 active seconds are needed to save duration, and at least 60 active seconds are needed to count a session.
 
+Open **Reading statistics** from an EPUB's Reader Menu. With the Dashboard theme, Home also shows the same shortcut when it can safely read the latest EPUB's saved records; a damaged or unsupported record is not displayed as plausible zero data.
+
 Time-of-day, day-of-week, and reading-streak views require a valid device date and time. Total active time and page-turn counts still work when the clock is unavailable. Nearby statistics are additive display snapshots; they do not modify local counters.
 
 ### 5.5 Clippings
 
 Choose **Create clipping**, move the cursor to the first word, press **Confirm**, move to the last word, and press **Confirm** again. At the end of a page, you may continue through adjacent rendered pages in the same chapter. A draft is limited to 256 words and 512 bytes of UTF-8 text; nothing is saved until final confirmation. Up to 64 passages are stored for each book.
 
-Open **Clippings** to read saved text. Press **Confirm** from a clipping's detail screen to return to its location. Hold **Confirm** and complete the two-step prompt to delete it. **Saved items** on Home groups passages from every book and can export them to a new `My Clippings.txt`-style text file without modifying the library.
+Before a draft continues onto another page, press **Back** once to remove its first selection point and start again; press **Back** again to leave without saving. After a draft has continued onto another page, **Back** leaves and discards the whole unfinished draft.
+
+Open **Clippings** to read saved text. Press **Confirm** from a clipping's detail screen to return to its location. Hold **Confirm** and complete the two-step prompt to delete it. **Clippings** on Home groups passages from every book and can export them to a new `My Clippings.txt`-style text file without modifying the library.
 
 Single-page clippings are underlined only when saved pagination still matches exactly. Multi-page clippings remain readable and return to their exact starting location, but are not yet drawn as inline underlines. After font, margin, orientation, or layout changes, saved text remains available and CrossVi does not guess where to draw a highlight.
 

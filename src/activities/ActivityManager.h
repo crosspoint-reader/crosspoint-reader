@@ -12,13 +12,12 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "home/HomeMenuMapping.h"
 #include "util/ScreenshotInfo.h"
 
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 struct ClippingJumpResult;
-
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, SAVED_ITEMS, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
 
 /**
  * ActivityManager

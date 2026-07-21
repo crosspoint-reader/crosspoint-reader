@@ -8,7 +8,7 @@ CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspo
 
 The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, technical identifiers, protocols, and on-card `.crosspoint` data layout. New protected formats are written beside retained legacy data so migration remains non-destructive.
 
-> **Current validation status:** core codecs, storage recovery, layout mapping, and protocol state machines have host tests, static analysis, and ESP32-C3 build validation. End-to-end UI, ESP-NOW radio, e-paper refresh, power-loss behavior, and memory use still require testing on physical X3/X4 hardware.
+> **Current validation status:** core codecs, storage recovery, layout mapping, and protocol state machines have host tests, static analysis, and ESP32-C3 build validation. End-to-end UI, ESP-NOW radio, e-paper refresh, power-loss behavior, and memory use still require the [X3/X4 hardware checklist](./docs/contributing/hardware-validation.md) before a stable release.
 
 **Target devices:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
 
@@ -22,7 +22,7 @@ The original CrossPoint project and community remain the foundation of this firm
 
 - **EPUB reading tools**: create and revisit clippings, view per-book and all-time reading statistics, and keep a separate reader profile for each EPUB without changing the device-wide defaults.
 
-- **Dashboard home theme**: a compact overview of the latest book and reading totals. Enable it under **Settings → Display → UI Theme → Dashboard**.
+- **Dashboard home theme**: a compact overview of the latest book and reading totals, with a direct shortcut to the full statistics view when its verified data is available. Enable it under **Settings → Display → UI Theme → Dashboard**.
 
 - **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
 

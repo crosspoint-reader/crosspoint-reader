@@ -454,6 +454,14 @@ void ClipSelectionActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen_ = true;
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    // Back wins over a simultaneous/in-flight Confirm press. Otherwise that
+    // Confirm release could immediately recreate the anchor we just cleared.
+    confirmPressSeen_ = false;
+    if (ClippingPageTools::shouldClearSelectionAnchorOnBack(anchorOrder_, committedWords_.size())) {
+      anchorOrder_ = -1;
+      requestUpdate();
+      return;
+    }
     cancel();
     return;
   }

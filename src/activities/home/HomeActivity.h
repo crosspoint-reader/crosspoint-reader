@@ -1,10 +1,13 @@
 #pragma once
 #include <functional>
+#include <optional>
 #include <vector>
 
 #include "./FileBrowserActivity.h"
 #include "HomeBookSummary.h"
+#include "HomeMenuMapping.h"
 #include "activities/Activity.h"
+#include "activities/reader/ReadingStatsPresentation.h"
 #include "util/ButtonNavigator.h"
 
 struct RecentBook;
@@ -33,35 +36,14 @@ class HomeActivity final : public Activity {
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
   HomeBookSummary bookSummary;
+  // Built from the same verified files as bookSummary. Opening the screen must
+  // not trigger a second EPUB/statistics scan from Home.
+  std::optional<ReadingStatsPresentation> readingStatsPresentation;
   const HomeMenuItem initialMenuItem;
 
-  // Convert HomeMenuItem to menu index (used in onEnter)
-  static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
-    int i = 0;
-    if (item == HomeMenuItem::FILE_BROWSER) return i;
-    ++i;
-    if (item == HomeMenuItem::RECENTS) return i;
-    ++i;
-    if (item == HomeMenuItem::SAVED_ITEMS) return i;
-    ++i;
-    if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
-    if (hasOpdsUrl) ++i;
-    if (item == HomeMenuItem::FILE_TRANSFER) return i;
-    ++i;
-    if (item == HomeMenuItem::SETTINGS_MENU) return i;
-    return 0;
-  }
-
   // Convert menu index to HomeMenuItem (used in loop)
-  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
-    int i = 0;
-    if (idx == i++) return HomeMenuItem::FILE_BROWSER;
-    if (idx == i++) return HomeMenuItem::RECENTS;
-    if (idx == i++) return HomeMenuItem::SAVED_ITEMS;
-    if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
-    if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
-    if (idx == i) return HomeMenuItem::SETTINGS_MENU;
-    return HomeMenuItem::NONE;
+  static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl, bool hasReadingStats) {
+    return HomeMenuMapping::actionAt(idx, hasOpdsUrl, hasReadingStats);
   }
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
@@ -70,6 +52,7 @@ class HomeActivity final : public Activity {
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
+  void onReadingStatsOpen();
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image

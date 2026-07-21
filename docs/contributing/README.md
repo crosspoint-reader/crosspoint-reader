@@ -8,5 +8,6 @@ It is written for software developers who may be new to embedded development.
 - [Development Workflow](./development-workflow.md)
 - [Testing and Debugging](./testing-debugging.md)
 - [EPUB Index Benchmark on X3/X4](./epub-index-benchmark.md)
+- [CrossVi Hardware Validation Checklist](./hardware-validation.md)
 
 If you are new, start with [Getting Started](./getting-started.md).

@@ -32,6 +32,10 @@ inline bool canAdvanceSelectionPage(const SelectionPageAdvanceState& state) {
          state.currentPage < static_cast<uint16_t>(state.pageCount - 1) && state.selectionFits;
 }
 
+inline bool shouldClearSelectionAnchorOnBack(const int anchorOrder, const size_t committedWordCount) {
+  return anchorOrder >= 0 && committedWordCount == 0;
+}
+
 // The caller supplies unique token indices captured from one rendered page.
 // A selection reaches the real end only when it contains every token from its
 // first selected token through the page's final textual token.

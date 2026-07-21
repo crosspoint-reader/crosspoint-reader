@@ -1,5 +1,6 @@
 add_executable(DashboardLayoutTest
   DashboardLayoutTest.cpp
+  HomeMenuMappingTest.cpp
   SectionCacheLayoutTest.cpp
   SectionCacheValidatorTest.cpp
   ${REPO_ROOT}/lib/Epub/Epub/SectionCacheValidator.cpp

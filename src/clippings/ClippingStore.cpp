@@ -819,7 +819,7 @@ ClippingStore::ExportResult ClippingStore::exportCatalog(const Catalog& catalog,
   }
   if (catalog.entries.empty()) return ExportResult::Empty;
 
-  // The Saved Items screen may have been open while WebDAV or another task
+  // The Clippings screen may have been open while WebDAV or another task
   // changed the clipping directory. Re-scan here so "Export all" never treats
   // a stale UI snapshot as the complete set of stores.
   Catalog currentCatalog;

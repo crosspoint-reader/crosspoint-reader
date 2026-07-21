@@ -247,7 +247,7 @@ void SavedClippingsActivity::render(RenderLock&&) {
   const int helpHeight = metrics.listRowHeight;
   const int contentBottom = screen.y + screen.height - helpHeight - metrics.verticalSpacing;
 
-  GUI.drawHeader(renderer, Rect{screen.x, headerTop, screen.width, metrics.headerHeight}, tr(STR_SAVED_ITEMS));
+  GUI.drawHeader(renderer, Rect{screen.x, headerTop, screen.width, metrics.headerHeight}, tr(STR_CLIPPINGS));
   GUI.drawList(
       renderer, Rect{screen.x, contentTop, screen.width, std::max(0, contentBottom - contentTop)}, rowCount(),
       selectedIndex_, [this](const int index) { return rowTitle(index); },

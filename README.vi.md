@@ -26,7 +26,7 @@ CrossVi bổ sung một số tiện ích dễ dùng, nhưng không tự ý thay 
 
 Thiết lập riêng theo sách, thống kê trong trình đọc, clipping và đồng bộ vị trí hiện áp dụng cho EPUB. XTC và TXT vẫn đọc như trước, nhưng chưa có các công cụ này.
 
-- **Dashboard:** màn hình chính gọn hơn, hiển thị sách vừa đọc và các con số tổng quan. Bật tại **Cài đặt → Hiển thị → Giao diện → Bảng đọc sách**.
+- **Dashboard:** màn hình chính gọn hơn, hiển thị sách vừa đọc và các con số tổng quan. Khi dữ liệu của EPUB gần nhất đọc được an toàn, bạn có thể mở thẳng phần thống kê đầy đủ từ đây. Bật tại **Cài đặt → Hiển thị → Giao diện → Bảng đọc sách**.
 - **Thiết lập riêng cho từng sách:** mỗi EPUB có thể dùng phông chữ, cỡ chữ, lề, khoảng cách dòng, hướng màn hình và tốc độ tự lật trang riêng. Các sách khác vẫn dùng thiết lập chung.
 - **Thống kê đọc:** xem thời gian đọc, số trang đã lật, số phiên đọc, chuỗi ngày đọc và ước tính thời gian còn lại. Thời gian chỉ được tính khi một trang EPUB đã hiển thị thành công; thời gian ở menu hoặc lúc máy đang lập chỉ mục không được tính.
 - **Clipping (lưu đoạn trích):** chọn một đoạn trên trang đang đọc hoặc tiếp tục sang các trang liền kề trong cùng chương, rồi xem lại hoặc xóa sau đó. Bản nháp có giới hạn rõ ràng để không làm đầy bộ nhớ và chỉ được lưu sau khi bạn xác nhận. CrossVi không tìm kiếm và đoán vị trí cũ sau khi bố cục sách thay đổi; nếu không khớp an toàn, đoạn chữ vẫn được giữ nhưng phần đánh dấu sẽ tạm không hiện.

@@ -24,6 +24,7 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ProgressFile.h"
+#include "activities/reader/ReadingStatsActivity.h"
 #include "activities/reader/ReadingStatsCompletionTransaction.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -55,14 +56,8 @@ bool validateDashboardProgressCandidate(const uint8_t* data, const size_t size, 
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 5;  // File Browser, Recents, Saved Items, File transfer, Settings
-  if (!recentBooks.empty()) {
-    count += recentBooks.size();
-  }
-  if (hasOpdsServers) {
-    count++;
-  }
-  return count;
+  return HomeMenuMapping::selectionCount(static_cast<int>(recentBooks.size()), hasOpdsServers,
+                                         readingStatsPresentation.has_value());
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -87,6 +82,7 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 
 void HomeActivity::loadBookSummary() {
   bookSummary = {};
+  readingStatsPresentation.reset();
 
   // Dashboard has no summary surface without a recent book. Avoid scanning
   // statistics and peer snapshots when the theme will render its empty state.
@@ -169,6 +165,16 @@ void HomeActivity::loadBookSummary() {
     bookSummary.bookSessions = stats.sessionCount;
   }
 
+  const auto cacheReadingStatsPresentation = [&](const ReadingStatsMetric progress) {
+    // Never turn unreadable/newer files into plausible zeroes. Missing files
+    // are trusted, explicit zero-data states.
+    if (!policyInput.bookStatsTrusted || !localStatsTrusted) return;
+    ReadingStatsDateTime now;
+    const ReadingStatsDateTime* currentDateTime = getCurrentLocalReadingStatsDateTime(now) ? &now : nullptr;
+    readingStatsPresentation =
+        buildReadingStatsPresentation(stats, true, localStats, true, syncedReport, currentDateTime, progress, false);
+  };
+
   // Completion is authoritative user state after Epub::load() has verified
   // that this cache still belongs to the EPUB at the recent path. It must not
   // disappear merely because a rebuild cleared the derived section cache or a
@@ -177,6 +183,7 @@ void HomeActivity::loadBookSummary() {
                                             bookSummary.progressPercent)) {
     bookSummary.hasProgress = true;
     bookSummary.progressState = DashboardMetricState::Available;
+    cacheReadingStatsPresentation(ReadingStatsMetric::known(100));
     return;
   }
 
@@ -192,12 +199,14 @@ void HomeActivity::loadBookSummary() {
     bookSummary.progressState = progressLoad.source == ProgressFile::LoadSource::Missing
                                     ? DashboardMetricState::NoData
                                     : DashboardMetricState::Unavailable;
+    cacheReadingStatsPresentation(ReadingStatsMetric::unavailable());
     return;
   }
 
   DashboardProgress::Position progress;
   if (!DashboardProgress::decode(progressBytes.data(), progressBytes.size(), progress)) {
     bookSummary.progressState = DashboardMetricState::Unavailable;
+    cacheReadingStatsPresentation(ReadingStatsMetric::unavailable());
     return;
   }
 
@@ -206,6 +215,7 @@ void HomeActivity::loadBookSummary() {
   if (!recentEpub.calculateProgressChecked(progress.spineIndex, chapterProgress, bookProgress) ||
       !DashboardProgress::toPercent(bookProgress, bookSummary.progressPercent)) {
     bookSummary.progressState = DashboardMetricState::Unavailable;
+    cacheReadingStatsPresentation(ReadingStatsMetric::unavailable());
     return;
   }
   bookSummary.hasProgress = true;
@@ -215,6 +225,7 @@ void HomeActivity::loadBookSummary() {
   bookSummary.chapterPageTotal = progress.pageCount;
   const int tocIndex = recentEpub.getTocIndexForSpineIndex(progress.spineIndex);
   if (tocIndex >= 0) bookSummary.chapterTitle = recentEpub.getTocItem(tocIndex).title;
+  cacheReadingStatsPresentation(ReadingStatsMetric::known(bookSummary.progressPercent));
 }
 
 void HomeActivity::loadRecentCovers(int coverHeight) {
@@ -302,10 +313,19 @@ void HomeActivity::onEnter() {
     loadBookSummary();
   } else {
     bookSummary = {};
+    readingStatsPresentation.reset();
   }
 
-  const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                      ? 0
+                      : HomeMenuMapping::selectorIndexOf(initialMenuItem, static_cast<int>(recentBooks.size()),
+                                                         hasOpdsServers, readingStatsPresentation.has_value());
+  if (selectorIndex < 0) {
+    // Preserve the previous fallback for an optional destination that vanished
+    // while returning Home (for example, the last OPDS server was removed).
+    selectorIndex = HomeMenuMapping::selectorIndexOf(HomeMenuItem::FILE_BROWSER, static_cast<int>(recentBooks.size()),
+                                                     hasOpdsServers, readingStatsPresentation.has_value());
+  }
 
   // Trigger first update
   requestUpdate();
@@ -383,7 +403,7 @@ void HomeActivity::loop() {
       onSelectBook(recentBooks[selectorIndex].path);
     } else {
       const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+      switch (indexToMenuItem(menuIndex, hasOpdsServers, readingStatsPresentation.has_value())) {
         case HomeMenuItem::FILE_BROWSER:
           onFileBrowserOpen();
           break;
@@ -401,6 +421,9 @@ void HomeActivity::loop() {
           break;
         case HomeMenuItem::SETTINGS_MENU:
           onSettingsOpen();
+          break;
+        case HomeMenuItem::READING_STATS:
+          onReadingStatsOpen();
           break;
         default:
           break;
@@ -434,13 +457,20 @@ void HomeActivity::render(RenderLock&&) {
                       std::bind(&HomeActivity::storeCoverBuffer, this), bookSummary);
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_SAVED_ITEMS),
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_CLIPPINGS),
                                         tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Bookmark, Transfer, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 3, Library);
+  }
+
+  // Appending keeps every existing menu index stable whether this optional
+  // shortcut is available or not.
+  if (readingStatsPresentation) {
+    menuItems.push_back(tr(STR_READING_STATS));
+    menuIcons.push_back(Book);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -487,3 +517,10 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onReadingStatsOpen() {
+  if (!readingStatsPresentation || recentBooks.empty()) return;
+  startActivityForResult(std::make_unique<ReadingStatsActivity>(renderer, mappedInput, recentBooks.front().title,
+                                                                *readingStatsPresentation),
+                         [this](const ActivityResult&) { requestUpdate(); });
+}

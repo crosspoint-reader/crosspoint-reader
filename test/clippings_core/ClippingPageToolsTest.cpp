@@ -52,6 +52,13 @@ ClippingCodec::ClippingMetadata clippingForWord(const uint16_t word, const uint3
 
 }  // namespace
 
+TEST(ClippingPageTools, BackClearsOnlyAnUncommittedSinglePageSelection) {
+  EXPECT_FALSE(ClippingPageTools::shouldClearSelectionAnchorOnBack(-1, 0));
+  EXPECT_TRUE(ClippingPageTools::shouldClearSelectionAnchorOnBack(0, 0));
+  EXPECT_TRUE(ClippingPageTools::shouldClearSelectionAnchorOnBack(12, 0));
+  EXPECT_FALSE(ClippingPageTools::shouldClearSelectionAnchorOnBack(0, 1));
+}
+
 TEST(ClippingPageTools, FingerprintCoversRenderContextAndAvailableLayoutData) {
   const Page page = makePage();
   const GfxRenderer renderer(480, 800, 24);
