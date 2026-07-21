@@ -71,6 +71,8 @@ class EpubReaderActivity final : public Activity {
   bool bookSettingsWritable = true;
   uint8_t autoPageTurnSeconds = 0;
   bool pendingBookSettingsSaveError = false;
+  bool pendingBookStylesApplyError = false;
+  bool pendingExternalCssWarning = false;
   bool pendingCacheClearError = false;
 
   ClippingStore clippingStore;
@@ -100,6 +102,11 @@ class EpubReaderActivity final : public Activity {
 
   BookReadingStats bookReadingStats;
   GlobalReadingStats globalReadingStats;
+  // Read trust and write permission are deliberately separate. A pending
+  // transaction can make valid statistics read-only; corrupt/newer files are
+  // neither writable nor safe to present as real zeroes.
+  bool bookReadingStatsTrusted = true;
+  bool globalReadingStatsTrusted = true;
   bool bookReadingStatsWritable = true;
   bool globalReadingStatsWritable = true;
   // Prevent a broken/newer stats file or transient SD failure from causing an
@@ -143,6 +150,27 @@ class EpubReaderActivity final : public Activity {
   // Set when the lazy extension start failed, so loop() doesn't retry (and log) every
   // tick; the blocking extension in render() remains the fallback past the watermark.
   bool partialRebuildStartFailed = false;
+
+#if defined(ENABLE_SERIAL_LOG) && defined(LOG_LEVEL) && LOG_LEVEL >= 2
+  enum class DebugSectionCacheStatus : uint8_t { Unknown, Miss, Partial, Hit };
+  struct DebugIndexMetrics {
+    int spineIndex = -1;
+    uint32_t openStartedMs = 0;
+    uint32_t openStartFreeHeap = 0;
+    uint32_t synchronousPages = 0;
+    uint32_t backgroundPages = 0;
+    uint32_t lastReportedBackgroundPages = 0;
+    DebugSectionCacheStatus cacheStatus = DebugSectionCacheStatus::Unknown;
+    bool waitingForVisiblePage = false;
+    bool includesSwitchWait = false;
+  } debugIndexMetrics;
+
+  void debugBeginSectionOpen(bool includesSwitchWait);
+  void debugSetSectionCacheStatus(DebugSectionCacheStatus status);
+  void debugRecordSectionBuild(uint16_t before, bool background);
+  void debugReportVisibleSection();
+  void debugReportCompletedBuild() const;
+#endif
 
   // Last position persisted by render()'s saveProgress, used to skip redundant
   // writeAtomic calls on no-op re-renders (menu/bookmark/screenshot).
@@ -224,7 +252,7 @@ class EpubReaderActivity final : public Activity {
   void recordReadingSample(const ReadingSessionSample& sample);
   void commitReadingSession();
   void saveReadingStats();
-  void refreshEstimatedTimeLeft();
+  bool refreshEstimatedTimeLeft();
   void markBookCompleted();
 
   // Footnote navigation

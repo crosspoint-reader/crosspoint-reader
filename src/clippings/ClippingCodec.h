@@ -66,9 +66,9 @@ struct ClippingMetadata {
   uint32_t textOffset = 0;
   uint16_t textLength = 0;
   std::string chapterTitle;
-  // CRC of the complete rendered page text/geometry. Zero denotes imported
-  // legacy data without an exact page identity; such clippings remain readable
-  // but are never highlighted by guessing.
+  // CRC of the complete rendered start-page text/geometry. Zero denotes
+  // imported legacy data without an exact start-page identity; such clippings
+  // remain readable but are never highlighted or opened by guessing.
   uint32_t pageFingerprint = 0;
 };
 

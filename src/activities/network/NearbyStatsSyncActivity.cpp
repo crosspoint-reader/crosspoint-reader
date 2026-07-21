@@ -16,9 +16,8 @@
 
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
-#include "activities/network/NearbyStatsPolicy.h"
+#include "activities/network/NearbyStatsStorage.h"
 #include "activities/reader/ReadingStatsCodec.h"
-#include "activities/reader/ReadingStatsStorage.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -47,6 +46,13 @@ std::string exchangeErrorMessage(const NearbySyncExchange::Error error) {
 }
 
 std::string statsPath(const NearbySync::MacAddress& mac) {
+  char path[64];
+  snprintf(path, sizeof(path), "%s/device_%02x%02x%02x%02x%02x%02x_v4.bin", SYNCED_STATS_DIR, mac[0], mac[1], mac[2],
+           mac[3], mac[4], mac[5]);
+  return path;
+}
+
+std::string legacyStatsPath(const NearbySync::MacAddress& mac) {
   char path[64];
   snprintf(path, sizeof(path), "%s/device_%02x%02x%02x%02x%02x%02x.bin", SYNCED_STATS_DIR, mac[0], mac[1], mac[2],
            mac[3], mac[4], mac[5]);
@@ -83,27 +89,6 @@ std::string deviceName(const NearbySync::MacAddress& mac) {
 }
 
 std::string labeled(const char* label, const std::string& value) { return std::string(label) + ": " + value; }
-
-enum class StatsFileDecision : uint8_t { Replaceable, Regression, Protected };
-
-StatsFileDecision inspectStatsFile(const std::string& path, const GlobalReadingStats& incoming,
-                                   bool* supportedFormat = nullptr) {
-  if (supportedFormat) *supportedFormat = false;
-  ReadingStatsCodec::GlobalBytes bytes{};
-  const ReadingStatsStorage::ReadOutcome read = ReadingStatsStorage::read(path.c_str(), bytes.data(), bytes.size());
-  if (ReadingStatsStorage::isProtectedExistingFile(read.result, false)) return StatsFileDecision::Protected;
-  if (read.result != ReadingStatsStorage::ReadResult::Ok) return StatsFileDecision::Replaceable;
-
-  GlobalReadingStats decoded;
-  const ReadingStatsDecodeResult result = ReadingStatsCodec::decode(bytes.data(), read.size, decoded);
-  if (ReadingStatsStorage::isProtectedExistingFile(read.result, result == ReadingStatsDecodeResult::NewerFormat)) {
-    return StatsFileDecision::Protected;
-  }
-  if (result != ReadingStatsDecodeResult::Ok) return StatsFileDecision::Replaceable;
-  if (supportedFormat) *supportedFormat = true;
-  return NearbyStatsPolicy::doesNotRegress(incoming, decoded) ? StatsFileDecision::Replaceable
-                                                              : StatsFileDecision::Regression;
-}
 }  // namespace
 
 NearbyStatsSyncActivity::NearbyStatsSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -312,16 +297,12 @@ bool NearbyStatsSyncActivity::preparePeerStats() {
 void NearbyStatsSyncActivity::inspectPeerStatsStorage() {
   peerStatsRegresses_ = false;
   peerStatsStorageProtected_ = false;
-  rotateExistingPeerStats_ = false;
 
   const std::string path = statsPath(exchange_.peerDeviceMac());
-  const StatsFileDecision primary = inspectStatsFile(path, peerStats_, &rotateExistingPeerStats_);
-  const StatsFileDecision temporary = inspectStatsFile(path + ".tmp", peerStats_);
-  const StatsFileDecision backup = inspectStatsFile(path + ".bak", peerStats_);
-  peerStatsStorageProtected_ = primary == StatsFileDecision::Protected || temporary == StatsFileDecision::Protected ||
-                               backup == StatsFileDecision::Protected;
-  peerStatsRegresses_ = primary == StatsFileDecision::Regression || temporary == StatsFileDecision::Regression ||
-                        backup == StatsFileDecision::Regression;
+  const std::string legacyPath = legacyStatsPath(exchange_.peerDeviceMac());
+  const NearbyStatsStorage::Inspection inspection = NearbyStatsStorage::inspect(path, legacyPath, peerStats_);
+  peerStatsStorageProtected_ = inspection.protectedStorage;
+  peerStatsRegresses_ = inspection.regresses;
 }
 
 bool NearbyStatsSyncActivity::savePeerStats() {
@@ -331,14 +312,17 @@ bool NearbyStatsSyncActivity::savePeerStats() {
   }
 
   const std::string path = statsPath(exchange_.peerDeviceMac());
-  const std::string backupPath = path + ".bak";
-  inspectPeerStatsStorage();
-  if (peerStatsStorageProtected_ || peerStatsRegresses_) {
+  const std::string legacyPath = legacyStatsPath(exchange_.peerDeviceMac());
+  NearbyStatsStorage::Inspection inspection;
+  const bool saved = NearbyStatsStorage::saveRawSnapshot(path, legacyPath, exchange_.peerOffer(),
+                                                         exchange_.peerOfferSize(), &inspection);
+  peerStatsStorageProtected_ = inspection.protectedStorage;
+  peerStatsRegresses_ = inspection.regresses;
+  if (!saved) {
     LOG_ERR(LOG_TAG, "Refusing unsafe peer stats replacement: %s", path.c_str());
     return false;
   }
-  return ReadingStatsStorage::writeAtomic(path.c_str(), backupPath.c_str(), rotateExistingPeerStats_,
-                                          exchange_.peerOffer(), exchange_.peerOfferSize());
+  return true;
 }
 
 void NearbyStatsSyncActivity::acceptPeerStats() {

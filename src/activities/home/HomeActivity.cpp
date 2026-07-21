@@ -20,6 +20,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "activities/home/DashboardProgress.h"
+#include "activities/home/DashboardStatsPolicy.h"
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ProgressFile.h"
@@ -87,34 +88,86 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 void HomeActivity::loadBookSummary() {
   bookSummary = {};
 
-  const GlobalReadingStats localStats = GlobalReadingStats::load();
-  const GlobalReadingStats globalStats =
-      GlobalReadingStats::hasSyncedStats() ? GlobalReadingStats::loadAggregated(localStats) : localStats;
-  bookSummary.globalReadingSeconds = globalStats.totalReadingSeconds;
-  bookSummary.globalPagesTurned = globalStats.totalPagesTurned;
-  ReadingStatsDateTime now;
-  if (getCurrentLocalReadingStatsDateTime(now)) {
-    bookSummary.currentStreak = globalStats.currentReadingStreak(&now.date);
+  // Dashboard has no summary surface without a recent book. Avoid scanning
+  // statistics and peer snapshots when the theme will render its empty state.
+  if (recentBooks.empty()) return;
+
+  GlobalReadingStats::LoadStatus localStatus = GlobalReadingStats::LoadStatus::Missing;
+  const GlobalReadingStats localStats = GlobalReadingStats::load(&localStatus);
+  const bool localStatsTrusted = GlobalReadingStats::isTrustedLoadStatus(localStatus);
+  const bool hasSyncedDirectory = GlobalReadingStats::hasSyncedStats();
+  GlobalReadingStatsAggregation syncedReport;
+  if (hasSyncedDirectory && localStatsTrusted) {
+    syncedReport = GlobalReadingStats::loadAggregatedWithReport(localStats);
   }
 
-  if (recentBooks.empty() || !FsHelpers::hasEpubExtension(recentBooks[0].path)) return;
+  DashboardStatsPolicyInput policyInput;
+  policyInput.localStatsTrusted = localStatsTrusted;
+  policyInput.localStatsMissing = localStatus == GlobalReadingStats::LoadStatus::Missing;
+  policyInput.hasSyncedDirectory = hasSyncedDirectory;
+  policyInput.syncedScanComplete = syncedReport.scanComplete;
+  policyInput.validPeerCount = syncedReport.validPeerCount;
+  policyInput.skippedPeerCount = syncedReport.skippedPeerCount;
+  policyInput.isEpub = FsHelpers::hasEpubExtension(recentBooks[0].path);
 
-  // Epub's constructor only derives the cache key; it does not open or parse
-  // the book, so Dashboard never indexes book contents during Home startup.
+  const auto applyPolicy = [&]() {
+    const DashboardStatsPolicyResult policy = DashboardStatsPolicy::evaluate(policyInput);
+    bookSummary.bookStatsState = policy.bookStats;
+    bookSummary.globalStatsState = policy.globalStats;
+    bookSummary.syncedStatsState = policy.syncedStats;
+    bookSummary.usingSyncedStats = policy.useAllSynced;
+    bookSummary.syncedDeviceCount = policy.useAllSynced && syncedReport.validPeerCount != UINT16_MAX
+                                        ? static_cast<uint16_t>(syncedReport.validPeerCount + 1U)
+                                        : syncedReport.validPeerCount;
+
+    const GlobalReadingStats& displayedStats = policy.useAllSynced ? syncedReport.stats : localStats;
+    if (policy.globalStats != DashboardMetricState::Available) return;
+    bookSummary.globalReadingSeconds = displayedStats.totalReadingSeconds;
+    bookSummary.globalPagesTurned = displayedStats.totalPagesTurned;
+    ReadingStatsDateTime now;
+    if (getCurrentLocalReadingStatsDateTime(now)) {
+      bookSummary.currentStreak = displayedStats.currentReadingStreak(&now.date);
+      bookSummary.hasCurrentStreak = true;
+    }
+  };
+
+  // XTC, TXT and other formats still use the recent book's title, author and
+  // cover. Their readers do not currently feed the per-book stats engine, so
+  // Dashboard labels those metrics as not tracked instead of inventing EPUB
+  // progress for them.
+  if (!policyInput.isEpub) {
+    applyPolicy();
+    return;
+  }
+
+  // Epub's constructor only derives the cache key. Dashboard verifies the
+  // durable source binding once and then opens only the existing book.bin;
+  // it never indexes book contents or performs the Reader's second
+  // central-directory check during Home startup.
   Epub recentEpub(recentBooks[0].path, "/.crosspoint");
 
   // Validate the metadata against the backing EPUB before reading any
   // path-keyed statistics or progress. A replaced, legacy, unreadable, or
   // otherwise invalid cache stays unknown on Home; Reader performs any safe
   // rebuild/reset when the user opens the book.
-  if (!recentEpub.load(false, true)) return;
+  if (recentEpub.inspectSourceBinding() != Epub::SourceBindingStatus::Match ||
+      recentEpub.inspectCache() != BookMetadataCache::LoadStatus::Loaded) {
+    applyPolicy();
+    bookSummary.progressState = DashboardMetricState::Unavailable;
+    return;
+  }
+  policyInput.epubVerified = true;
 
   BookReadingStats::LoadStatus statsStatus = BookReadingStats::LoadStatus::Missing;
   const BookReadingStats stats = BookReadingStats::load(recentEpub.getCachePath(), &statsStatus);
-  bookSummary.bookReadingSeconds = stats.totalReadingSeconds;
-  bookSummary.bookPagesTurned = stats.totalPagesTurned;
-  bookSummary.bookSessions = stats.sessionCount;
-  bookSummary.estimatedTimeLeftSeconds = stats.estimatedTimeLeftSeconds;
+  policyInput.bookStatsTrusted = BookReadingStats::isTrustedLoadStatus(statsStatus);
+  policyInput.bookStatsMissing = statsStatus == BookReadingStats::LoadStatus::Missing;
+  applyPolicy();
+  if (bookSummary.bookStatsState == DashboardMetricState::Available) {
+    bookSummary.bookReadingSeconds = stats.totalReadingSeconds;
+    bookSummary.bookPagesTurned = stats.totalPagesTurned;
+    bookSummary.bookSessions = stats.sessionCount;
+  }
 
   // Completion is authoritative user state after Epub::load() has verified
   // that this cache still belongs to the EPUB at the recent path. It must not
@@ -123,6 +176,7 @@ void HomeActivity::loadBookSummary() {
   if (DashboardProgress::fromCompletedStats(BookReadingStats::isTrustedLoadStatus(statsStatus), stats.isCompleted,
                                             bookSummary.progressPercent)) {
     bookSummary.hasProgress = true;
+    bookSummary.progressState = DashboardMetricState::Available;
     return;
   }
 
@@ -134,17 +188,31 @@ void HomeActivity::loadBookSummary() {
   // Legacy four-byte progress has no persisted chapter total, so it cannot
   // support an honest Dashboard percentage. A verified six-byte backup/temp is
   // still usable when the canonical file was interrupted or malformed.
-  if (!progressLoad || progressLoad.size != progressBytes.size()) return;
+  if (!progressLoad || progressLoad.size != progressBytes.size()) {
+    bookSummary.progressState = progressLoad.source == ProgressFile::LoadSource::Missing
+                                    ? DashboardMetricState::NoData
+                                    : DashboardMetricState::Unavailable;
+    return;
+  }
 
   DashboardProgress::Position progress;
-  if (!DashboardProgress::decode(progressBytes.data(), progressBytes.size(), progress)) return;
+  if (!DashboardProgress::decode(progressBytes.data(), progressBytes.size(), progress)) {
+    bookSummary.progressState = DashboardMetricState::Unavailable;
+    return;
+  }
 
   const float chapterProgress = static_cast<float>(progress.pageNumber + 1U) / static_cast<float>(progress.pageCount);
-  if (!DashboardProgress::toPercent(recentEpub.calculateProgress(progress.spineIndex, chapterProgress),
-                                    bookSummary.progressPercent)) {
+  float bookProgress = 0.0F;
+  if (!recentEpub.calculateProgressChecked(progress.spineIndex, chapterProgress, bookProgress) ||
+      !DashboardProgress::toPercent(bookProgress, bookSummary.progressPercent)) {
+    bookSummary.progressState = DashboardMetricState::Unavailable;
     return;
   }
   bookSummary.hasProgress = true;
+  bookSummary.progressState = DashboardMetricState::Available;
+  bookSummary.hasChapterPage = true;
+  bookSummary.chapterPageCurrent = static_cast<uint16_t>(progress.pageNumber + 1U);
+  bookSummary.chapterPageTotal = progress.pageCount;
   const int tocIndex = recentEpub.getTocIndexForSpineIndex(progress.spineIndex);
   if (tocIndex >= 0) bookSummary.chapterTitle = recentEpub.getTocItem(tocIndex).title;
 }

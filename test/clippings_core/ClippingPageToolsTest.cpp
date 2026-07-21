@@ -1,6 +1,7 @@
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
+#include <iterator>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -95,10 +96,9 @@ TEST(ClippingPageTools, BuildsHighlightsOnlyForTheExactFingerprint) {
 }
 
 TEST(ClippingPageTools, UsesFocusSplitGeometryForBoldPrefixAndRegularSuffix) {
-  auto block =
-      std::make_shared<TextBlock>(std::vector<std::string>{"abcdef"}, std::vector<int16_t>{0},
-                                  std::vector<EpdFontFamily::Style>{EpdFontFamily::REGULAR},
-                                  std::vector<uint8_t>{2}, std::vector<uint16_t>{18});
+  auto block = std::make_shared<TextBlock>(std::vector<std::string>{"abcdef"}, std::vector<int16_t>{0},
+                                           std::vector<EpdFontFamily::Style>{EpdFontFamily::REGULAR},
+                                           std::vector<uint8_t>{2}, std::vector<uint16_t>{18});
   Page page;
   page.elements.push_back(std::make_shared<PageLine>(std::move(block), 5, 20));
   GfxRenderer renderer(480, 800, 24);
@@ -163,4 +163,42 @@ TEST(ClippingPageTools, TruncationNoticeIsOncePerRecentPageWithinFixedMemory) {
   // The oldest identity can be reported again after the fixed-size ring has
   // evicted it; memory use never grows with page count.
   EXPECT_TRUE(tracker.markIfNew(2, 3, 100));
+}
+
+TEST(ClippingPageTools, PageAdvanceRequiresCompleteExtraction) {
+  ClippingPageTools::SelectionPageAdvanceState state;
+  state.loaderAvailable = true;
+  state.extractionComplete = true;
+  state.selectionStarted = true;
+  state.wordCount = 192;
+  state.cursorOrder = 191;
+  state.currentPage = 3;
+  state.pageCount = 5;
+  state.selectionFits = true;
+  EXPECT_TRUE(ClippingPageTools::canAdvanceSelectionPage(state));
+
+  // A dense page may contain uncaptured words after the 192-word bounded
+  // selection window. Advancing from that window would create a non-contiguous
+  // clipping, so both the transition and its UI affordance must remain off.
+  state.extractionComplete = false;
+  EXPECT_FALSE(ClippingPageTools::canAdvanceSelectionPage(state));
+
+  state.extractionComplete = true;
+  state.cursorOrder = 190;
+  EXPECT_FALSE(ClippingPageTools::canAdvanceSelectionPage(state));
+  state.cursorOrder = 191;
+  state.currentPage = 4;
+  EXPECT_FALSE(ClippingPageTools::canAdvanceSelectionPage(state));
+}
+
+TEST(ClippingPageTools, CrossPageSelectionMustCoverAContiguousPhysicalPageTail) {
+  const uint16_t completeTail[] = {18, 19, 20, 21};
+  EXPECT_TRUE(ClippingPageTools::isContiguousTail(completeTail, std::size(completeTail), 22));
+
+  const uint16_t hiddenMiddle[] = {18, 20, 21};
+  EXPECT_FALSE(ClippingPageTools::isContiguousTail(hiddenMiddle, std::size(hiddenMiddle), 22));
+
+  const uint16_t hiddenEnd[] = {18, 19, 20};
+  EXPECT_FALSE(ClippingPageTools::isContiguousTail(hiddenEnd, std::size(hiddenEnd), 22));
+  EXPECT_FALSE(ClippingPageTools::isContiguousTail(nullptr, 0, 22));
 }

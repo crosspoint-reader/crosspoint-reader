@@ -316,6 +316,28 @@ TEST(ClipTextBuilder, DistinguishesInsertedAndAuthoredHyphens) {
   EXPECT_EQ(result.text, "hiện-đại");
 }
 
+TEST(ClipTextBuilder, BuildsABoundedSelectionAcrossConsecutivePages) {
+  std::vector<ClipTextBuilder::Word> words = {word("cuối", 0), word("trang", 30), word("đầu", 0), word("sau", 25)};
+  words[0].pageIndex = 0;
+  words[0].pageWordIndex = 18;
+  words[1].pageIndex = 0;
+  words[1].pageWordIndex = 19;
+  words[2].pageIndex = 1;
+  words[2].pageWordIndex = 0;
+  words[3].pageIndex = 1;
+  words[3].pageWordIndex = 1;
+
+  ClipTextBuilder::Result result;
+  ASSERT_EQ(ClipTextBuilder::build(words, orderFor(words.size()), 0, words.size() - 1, 7, 20, result),
+            ClipTextBuilder::Status::Ok);
+  EXPECT_EQ(result.text, "cuối trang đầu sau");
+  EXPECT_EQ(result.startPage, 7);
+  EXPECT_EQ(result.endPage, 8);
+  EXPECT_EQ(result.startPageWordIndex, 18);
+  EXPECT_EQ(result.endPageWordIndex, 1);
+  EXPECT_EQ(result.wordCount, 4);
+}
+
 TEST(ClipTextBuilder, RejectsMalformedSelectionsAndTextBeyondStorageLimit) {
   ClipTextBuilder::Result result;
   std::vector<ClipTextBuilder::Word> words = {word(std::string(ClippingCodec::MAX_TEXT_BYTES, 'a'), 0)};

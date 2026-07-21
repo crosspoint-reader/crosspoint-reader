@@ -7,8 +7,8 @@
 
 #include "ReadingStatsUtils.h"
 
-// Per-book reading statistics, persisted in the book cache as stats_v5.bin.
-// The binary layout remains compatible with CrossInk v1.4.
+// Per-book reading statistics, persisted in a CRC-protected CrossVi envelope
+// at stats_v6.bin. Its payload remains compatible with CrossInk v1.4.
 struct BookReadingStats {
   static constexpr uint8_t CURRENT_FILE_VERSION = 5;
   static constexpr size_t CURRENT_FILE_SIZE = 73;
@@ -45,7 +45,13 @@ struct BookReadingStats {
   }
 
   static BookReadingStats load(const std::string& cachePath, LoadStatus* status = nullptr);
+  // Non-mutating storage preflight used before publishing a cross-file
+  // completion marker.
+  static bool canPublish(const std::string& cachePath);
   bool save(const std::string& cachePath) const;
+  // Ensures both the canonical primary and backup contain this payload. Used
+  // before completing multi-file transactions and explicit reset tombstones.
+  bool saveRedundant(const std::string& cachePath) const;
   static bool remove(const std::string& cachePath);
 
   void recordForwardPageRead(uint32_t seconds);

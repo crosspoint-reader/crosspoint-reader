@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 
 #include "CrossPointSettings.h"
@@ -65,14 +66,21 @@ void BookReaderSettingsActivity::loop() {
   const int rowCount = static_cast<int>(settings.size()) + 2;
   buttonNavigator.onNextRelease([this, rowCount] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, rowCount);
+    resetConfirmationPending = false;
     requestUpdate();
   });
   buttonNavigator.onPreviousRelease([this, rowCount] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, rowCount);
+    resetConfirmationPending = false;
     requestUpdate();
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (resetConfirmationPending) {
+      resetConfirmationPending = false;
+      requestUpdate();
+      return;
+    }
     finishWithResult();
     return;
   }
@@ -86,6 +94,12 @@ void BookReaderSettingsActivity::toggleSelected() {
     return;
   }
   if (selectedIndex == static_cast<int>(settings.size()) + 1) {
+    if (!resetConfirmationPending) {
+      resetConfirmationPending = true;
+      requestUpdate();
+      return;
+    }
+    resetConfirmationPending = false;
     applyReaderSettings(globalDefaults);
     // Reset means remove the complete book profile, including its independent
     // auto-page-turn interval. Merely disabling custom typography preserves the
@@ -97,12 +111,25 @@ void BookReaderSettingsActivity::toggleSelected() {
     return;
   }
 
-  if (!customEnabled) setCustomEnabled(true);
   const SettingInfo& setting = settings[selectedIndex - 1];
   if (setting.nameId == StrId::STR_FONT_FAMILY) {
+    const uint8_t previousFontFamily = SETTINGS.fontFamily;
+    const std::string previousSdFontFamily = SETTINGS.sdFontFamilyName;
     startActivityForResult(
         std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry(), false),
-        [this](const ActivityResult&) {
+        [this, previousFontFamily, previousSdFontFamily](const ActivityResult&) {
+          if (SETTINGS.fontFamily == previousFontFamily && SETTINGS.sdFontFamilyName == previousSdFontFamily) {
+            requestUpdate();
+            return;
+          }
+
+          const uint8_t selectedFontFamily = SETTINGS.fontFamily;
+          const std::string selectedSdFontFamily = SETTINGS.sdFontFamilyName;
+          if (!customEnabled) setCustomEnabled(true);
+          SETTINGS.fontFamily = selectedFontFamily;
+          std::strncpy(SETTINGS.sdFontFamilyName, selectedSdFontFamily.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
+          SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
+          sdFontSystem.ensureLoaded(renderer, false);
           customEnabled = true;
           savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval,
                                               savedCustom.autoPageTurnSeconds, savedCustom.autoPageTurnStartsOnOpen);
@@ -111,24 +138,29 @@ void BookReaderSettingsActivity::toggleSelected() {
     return;
   }
 
+  if (setting.type == SettingType::ENUM && setting.valuePtr && setting.enumValues.size() > 2) {
+    const auto valuePtr = setting.valuePtr;
+    const uint8_t current = SETTINGS.*valuePtr;
+    optionPopup.show(setting.nameId, setting.enumValues.data(), static_cast<int>(setting.enumValues.size()), current,
+                     [this, valuePtr](const int value) {
+                       if (!customEnabled) setCustomEnabled(true);
+                       SETTINGS.*valuePtr = static_cast<uint8_t>(value);
+                       savedCustom =
+                           captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval,
+                                                 savedCustom.autoPageTurnSeconds, savedCustom.autoPageTurnStartsOnOpen);
+                       requestUpdate();
+                     });
+    requestUpdate();
+    return;
+  }
+
+  if (!customEnabled) setCustomEnabled(true);
+
   if (setting.type == SettingType::TOGGLE && setting.valuePtr) {
     SETTINGS.*(setting.valuePtr) = !(SETTINGS.*(setting.valuePtr));
   } else if (setting.type == SettingType::ENUM && setting.valuePtr) {
-    const auto valuePtr = setting.valuePtr;
-    const uint8_t current = SETTINGS.*valuePtr;
-    if (setting.enumValues.size() > 2) {
-      optionPopup.show(setting.nameId, setting.enumValues.data(), static_cast<int>(setting.enumValues.size()), current,
-                       [this, valuePtr](const int value) {
-                         SETTINGS.*valuePtr = static_cast<uint8_t>(value);
-                         savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval,
-                                                             savedCustom.autoPageTurnSeconds,
-                                                             savedCustom.autoPageTurnStartsOnOpen);
-                         requestUpdate();
-                       });
-      requestUpdate();
-      return;
-    }
-    SETTINGS.*valuePtr = static_cast<uint8_t>((current + 1) % setting.enumValues.size());
+    const uint8_t current = SETTINGS.*(setting.valuePtr);
+    SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>((current + 1) % setting.enumValues.size());
   } else if (setting.type == SettingType::VALUE && setting.valuePtr) {
     const uint8_t current = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = current + setting.valueRange.step > setting.valueRange.max
@@ -142,7 +174,9 @@ void BookReaderSettingsActivity::toggleSelected() {
 
 std::string BookReaderSettingsActivity::valueForRow(const int index) const {
   if (index == 0) return customEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-  if (index == static_cast<int>(settings.size()) + 1) return {};
+  if (index == static_cast<int>(settings.size()) + 1) {
+    return resetConfirmationPending ? tr(STR_CONFIRM) : std::string{};
+  }
 
   const SettingInfo& setting = settings[index - 1];
   if (setting.type == SettingType::TOGGLE && setting.valuePtr) {

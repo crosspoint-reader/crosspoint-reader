@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "activities/home/DashboardProgress.h"
+#include "activities/home/DashboardStatsPolicy.h"
 #include "components/themes/dashboard/DashboardLayout.h"
 
 namespace {
@@ -30,12 +31,16 @@ TEST(DashboardLayout, FitsBothSupportedPortraitPanels) {
     EXPECT_TRUE(contains(tile, layout.stats));
     EXPECT_TRUE(contains(tile, layout.title));
     EXPECT_TRUE(contains(tile, layout.progress));
+    EXPECT_TRUE(contains(tile, layout.progressBar));
+    EXPECT_TRUE(contains(tile, layout.progressLabel));
     EXPECT_TRUE(contains(tile, layout.footer));
 
     EXPECT_FALSE(overlaps(layout.cover, layout.stats));
     EXPECT_FALSE(overlaps(layout.cover, layout.title));
     EXPECT_FALSE(overlaps(layout.stats, layout.title));
     EXPECT_FALSE(overlaps(layout.title, layout.progress));
+    EXPECT_FALSE(overlaps(layout.progressBar, layout.progressLabel));
+    EXPECT_FALSE(overlaps(layout.progressLabel, layout.footer));
     EXPECT_FALSE(overlaps(layout.progress, layout.footer));
   }
 }
@@ -64,6 +69,8 @@ TEST(DashboardLayout, DegradesWithoutNegativeOrOutOfBoundsRects) {
   EXPECT_TRUE(contains(tinyTile, layout.stats));
   EXPECT_TRUE(contains(tinyTile, layout.title));
   EXPECT_TRUE(contains(tinyTile, layout.progress));
+  EXPECT_TRUE(contains(tinyTile, layout.progressBar));
+  EXPECT_TRUE(contains(tinyTile, layout.progressLabel));
   EXPECT_TRUE(contains(tinyTile, layout.footer));
 }
 
@@ -118,4 +125,86 @@ TEST(DashboardProgress, TrustedCompletionDoesNotDependOnProgressOrSectionCache) 
   EXPECT_EQ(percent, 7);
   EXPECT_FALSE(DashboardProgress::fromCompletedStats(true, false, percent));
   EXPECT_EQ(percent, 7);
+}
+
+TEST(DashboardProgress, CompactBarFillIsExactAndBounded) {
+  EXPECT_EQ(DashboardProgress::fillWidth(200, 0), 0);
+  EXPECT_EQ(DashboardProgress::fillWidth(200, 100), 196);
+  EXPECT_EQ(DashboardProgress::fillWidth(200, 255), 196);
+  EXPECT_EQ(DashboardProgress::fillWidth(4, 100), 0);
+}
+
+TEST(DashboardStatsPolicy, DistinguishesMissingZeroAndUnreadableBookStats) {
+  DashboardStatsPolicyInput input;
+  input.isEpub = true;
+  input.epubVerified = true;
+  input.localStatsTrusted = true;
+  input.localStatsMissing = true;
+
+  input.bookStatsTrusted = true;
+  input.bookStatsMissing = true;
+  EXPECT_EQ(DashboardStatsPolicy::evaluate(input).bookStats, DashboardMetricState::NoData);
+
+  input.bookStatsMissing = false;
+  EXPECT_EQ(DashboardStatsPolicy::evaluate(input).bookStats, DashboardMetricState::Available);
+
+  input.bookStatsTrusted = false;
+  EXPECT_EQ(DashboardStatsPolicy::evaluate(input).bookStats, DashboardMetricState::Unavailable);
+}
+
+TEST(DashboardStatsPolicy, NonEpubFormatsAreExplicitlyNotTracked) {
+  DashboardStatsPolicyInput input;
+  input.localStatsTrusted = true;
+  EXPECT_EQ(DashboardStatsPolicy::evaluate(input).bookStats, DashboardMetricState::NotTracked);
+
+  input.isEpub = true;
+  EXPECT_EQ(DashboardStatsPolicy::evaluate(input).bookStats, DashboardMetricState::Unavailable);
+}
+
+TEST(DashboardStatsPolicy, UsesOnlyACompleteVerifiedSyncedAggregate) {
+  DashboardStatsPolicyInput input;
+  input.localStatsTrusted = true;
+  input.hasSyncedDirectory = true;
+  input.syncedScanComplete = true;
+  input.validPeerCount = 2;
+
+  DashboardStatsPolicyResult result = DashboardStatsPolicy::evaluate(input);
+  EXPECT_TRUE(result.useAllSynced);
+  EXPECT_EQ(result.globalStats, DashboardMetricState::Available);
+  EXPECT_EQ(result.syncedStats, DashboardMetricState::Available);
+
+  input.skippedPeerCount = 1;
+  result = DashboardStatsPolicy::evaluate(input);
+  EXPECT_FALSE(result.useAllSynced);
+  EXPECT_EQ(result.globalStats, DashboardMetricState::Available);
+  EXPECT_EQ(result.syncedStats, DashboardMetricState::Unavailable);
+
+  input.skippedPeerCount = 0;
+  input.syncedScanComplete = false;
+  result = DashboardStatsPolicy::evaluate(input);
+  EXPECT_FALSE(result.useAllSynced);
+  EXPECT_EQ(result.globalStats, DashboardMetricState::Available);
+  EXPECT_EQ(result.syncedStats, DashboardMetricState::Unavailable);
+}
+
+TEST(DashboardStatsPolicy, UntrustedLocalStatsCannotBecomePlausibleSyncedZeros) {
+  DashboardStatsPolicyInput input;
+  input.hasSyncedDirectory = true;
+  input.syncedScanComplete = true;
+  input.validPeerCount = 2;
+
+  const DashboardStatsPolicyResult result = DashboardStatsPolicy::evaluate(input);
+  EXPECT_FALSE(result.useAllSynced);
+  EXPECT_EQ(result.globalStats, DashboardMetricState::Unavailable);
+  EXPECT_EQ(result.syncedStats, DashboardMetricState::Unavailable);
+}
+
+TEST(DashboardStatsPolicy, MissingLocalStatsAreKnownNoDataWithoutPeers) {
+  DashboardStatsPolicyInput input;
+  input.localStatsTrusted = true;
+  input.localStatsMissing = true;
+
+  const DashboardStatsPolicyResult result = DashboardStatsPolicy::evaluate(input);
+  EXPECT_EQ(result.globalStats, DashboardMetricState::NoData);
+  EXPECT_EQ(result.syncedStats, DashboardMetricState::NoData);
 }

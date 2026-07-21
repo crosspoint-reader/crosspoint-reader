@@ -18,7 +18,7 @@ CrossVi có giao diện tiếng Việt và được khởi xướng bởi một 
 - Chuyển sách qua Wi-Fi bằng trình duyệt hoặc Calibre.
 - Tải sách từ thư viện trực tuyến OPDS.
 - Đổi chức năng các nút bấm, màn hình ngủ và thanh trạng thái.
-- Hỗ trợ 30 ngôn ngữ, gồm tiếng Việt và các ngôn ngữ viết từ phải sang trái.
+- Hỗ trợ 30 ngôn ngữ, gồm tiếng Việt và các ngôn ngữ viết từ phải sang trái. Các tính năng đọc mới đã có đầy đủ tiếng Anh và tiếng Việt; một số nhãn mới ở ngôn ngữ khác tạm dùng bản tiếng Anh.
 
 ## Các tính năng đọc mới
 
@@ -29,7 +29,7 @@ Thiết lập riêng theo sách, thống kê trong trình đọc, clipping và �
 - **Dashboard:** màn hình chính gọn hơn, hiển thị sách vừa đọc và các con số tổng quan. Bật tại **Cài đặt → Hiển thị → Giao diện → Bảng đọc sách**.
 - **Thiết lập riêng cho từng sách:** mỗi EPUB có thể dùng phông chữ, cỡ chữ, lề, khoảng cách dòng, hướng màn hình và tốc độ tự lật trang riêng. Các sách khác vẫn dùng thiết lập chung.
 - **Thống kê đọc:** xem thời gian đọc, số trang đã lật, số phiên đọc, chuỗi ngày đọc và ước tính thời gian còn lại. Thời gian chỉ được tính khi một trang EPUB đã hiển thị thành công; thời gian ở menu hoặc lúc máy đang lập chỉ mục không được tính.
-- **Clipping (lưu đoạn trích):** chọn một đoạn ngay trên trang đang đọc, xem lại hoặc xóa sau đó. CrossVi không tìm kiếm và đoán vị trí cũ sau khi bố cục sách thay đổi; nếu không khớp chính xác, đoạn chữ vẫn được giữ nhưng phần đánh dấu sẽ tạm không hiện.
+- **Clipping (lưu đoạn trích):** chọn một đoạn trên trang đang đọc hoặc tiếp tục sang các trang liền kề trong cùng chương, rồi xem lại hoặc xóa sau đó. Bản nháp có giới hạn rõ ràng để không làm đầy bộ nhớ và chỉ được lưu sau khi bạn xác nhận. CrossVi không tìm kiếm và đoán vị trí cũ sau khi bố cục sách thay đổi; nếu không khớp an toàn, đoạn chữ vẫn được giữ nhưng phần đánh dấu sẽ tạm không hiện.
 - **Nearby Sync:** hai máy CrossVi ở gần nhau có thể trao đổi vị trí đọc của đúng cùng một tệp EPUB, hoặc lưu một bản thống kê của máy kia. Cả hai bên đều phải mở tính năng và xác nhận; dữ liệu nhận được không tự ghi đè dữ liệu trên máy. Nếu chương đích chưa có dữ liệu bố cục phù hợp hoặc không xác định được đúng đoạn văn, CrossVi sẽ từ chối thay vì đoán một trang gần đúng.
 
 Nearby Sync không cần Internet nhưng dữ liệu truyền gần **không được mã hóa**. Chỉ dùng với một máy đáng tin cậy và kiểm tra mã ghép cặp trên cả hai màn hình.
@@ -83,7 +83,7 @@ Các định dạng được hỗ trợ trực tiếp là `.epub`, `.txt`, `.xtc
 
 ## Dữ liệu cũ có dùng lại được không?
 
-Có. CrossVi giữ nguyên thư mục `.crosspoint`, cấu trúc dữ liệu, định dạng file và các giao thức tương thích của CrossPoint. Bạn vẫn nên sao lưu thẻ nhớ trước khi đổi firmware.
+Có. CrossVi giữ nguyên thư mục `.crosspoint`, các mã định danh kỹ thuật và giao thức tương thích của CrossPoint. Những định dạng an toàn mới được ghi cạnh dữ liệu cũ thay vì xóa hoặc ghi đè dữ liệu cũ. Bạn vẫn nên sao lưu thẻ nhớ trước khi đổi firmware.
 
 Không nên xóa cả thư mục `.crosspoint` chỉ để sửa lỗi hiển thị sách. Thư mục này không chỉ là bộ nhớ đệm: nó còn chứa cài đặt, vị trí đọc, dấu trang, đoạn trích và thống kê. Hãy dùng chức năng xóa bộ nhớ đệm trong máy trước; nếu phải thao tác thẻ nhớ thủ công, hãy sao lưu rồi chỉ di chuyển thư mục `sections` của đúng cuốn sách cần tạo lại bố cục.
 

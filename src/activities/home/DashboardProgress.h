@@ -42,4 +42,9 @@ inline bool fromCompletedStats(const bool trusted, const bool completed, uint8_t
   return true;
 }
 
+inline int fillWidth(const int barWidth, const uint8_t percent) {
+  if (barWidth <= 4) return 0;
+  return (barWidth - 4) * std::min<unsigned>(percent, 100U) / 100;
+}
+
 }  // namespace DashboardProgress

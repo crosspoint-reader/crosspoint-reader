@@ -31,7 +31,6 @@ class NearbyStatsSyncActivity final : public Activity {
   bool peerStatsReady_ = false;
   bool peerStatsRegresses_ = false;
   bool peerStatsStorageProtected_ = false;
-  bool rotateExistingPeerStats_ = false;
 
   void startExchange(NearbySync::Role role);
   bool preparePeerStats();

@@ -48,10 +48,11 @@ inline bool isExact(const ClippingJumpResult& request, const StoreSnapshot& curr
     return false;
   }
 
-  // A page fingerprint identifies one rendered page only. Multi-page and
-  // legacy entries remain readable but cannot issue an exact navigation jump.
-  return request.pageFingerprint != 0 && request.startPage == request.endPage && request.pageCount > 0 &&
-         request.startPage < request.pageCount && request.wordCount > 0 && request.textLength > 0;
+  // The fingerprint identifies the rendered start page only. That is enough
+  // for an exact jump to the beginning of a multi-page clipping; later pages
+  // remain readable text and are never highlighted or navigated by guessing.
+  return request.pageFingerprint != 0 && request.pageCount > 0 && request.startPage <= request.endPage &&
+         request.endPage < request.pageCount && request.wordCount > 0 && request.textLength > 0;
 }
 
 }  // namespace ClippingJumpValidation

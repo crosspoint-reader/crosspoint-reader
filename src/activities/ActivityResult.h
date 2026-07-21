@@ -58,6 +58,8 @@ struct ClippingSelectionResult {
   uint16_t endPageWordIndex = 0;
   uint16_t paragraphIndex = UINT16_MAX;
   uint16_t wordCount = 0;
+  // Exact identity of startPage. A multi-page selection may safely reopen at
+  // its start without pretending that one CRC identifies every later page.
   uint32_t pageFingerprint = 0;
 };
 
@@ -87,6 +89,7 @@ struct ClippingJumpResult {
   uint32_t textOffset = 0;
   uint16_t textLength = 0;
   uint32_t textCrc32 = 0;
+  // Exact identity of startPage; later pages are never matched by guessing.
   uint32_t pageFingerprint = 0;
 };
 

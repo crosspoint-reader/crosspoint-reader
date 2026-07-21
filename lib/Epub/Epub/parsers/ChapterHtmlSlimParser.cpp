@@ -1368,7 +1368,9 @@ bool ChapterHtmlSlimParser::beginParse() {
   XML_SetElementHandler(xmlParser_, startElement, endElement);
   XML_SetCharacterDataHandler(xmlParser_, characterData);
 
-  parseStartTime_ = millis();
+#if defined(ENABLE_SERIAL_LOG) && defined(LOG_LEVEL) && LOG_LEVEL >= 2
+  parseStartTime_ = static_cast<uint32_t>(millis());
+#endif
   return true;
 }
 
@@ -1410,7 +1412,10 @@ void ChapterHtmlSlimParser::abortParse() {
 
 bool ChapterHtmlSlimParser::finishParse() {
   if (xmlParser_) {
-    LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - parseStartTime_);
+#if defined(ENABLE_SERIAL_LOG) && defined(LOG_LEVEL) && LOG_LEVEL >= 2
+    LOG_DBG("EHP", "Time to parse and build pages: %u ms",
+            static_cast<unsigned>(static_cast<uint32_t>(millis()) - parseStartTime_));
+#endif
     destroyXmlParser(xmlParser_);
     xmlParser_ = nullptr;
   }

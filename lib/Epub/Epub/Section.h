@@ -110,6 +110,12 @@ class Section {
   bool buildSomeMore(int maxPages);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }
+#if defined(ENABLE_SERIAL_LOG) && defined(LOG_LEVEL) && LOG_LEVEL >= 2
+  // Debug-only probe used by reader instrumentation to classify pages laid out
+  // on the render path versus the background pump. It is compiled out of
+  // release builds together with the counters that consume it.
+  uint16_t debugBuiltPageCount() const { return builtPageCount_; }
+#endif
   // Best-known total page count: the exact pageCount once finalized, or a smoothed byte-based
   // estimate (pages so far scaled by totalBytes/bytesConsumed, damped by an EMA) while a giant spine
   // is still building, so "page X of Y" / progress don't read off the small build watermark.

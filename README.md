@@ -6,7 +6,7 @@
 
 CrossVi is an independent fork of [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader) for readers and contributors worldwide. It keeps the open, hackable reading experience for Xteink e-paper devices while focusing on faster text layout, safer SD-card I/O, resilient caches, and carefully developed new features.
 
-The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, file formats, technical identifiers, and on-card `.crosspoint` data layout so improvements remain compatible and easy to contribute upstream.
+The original CrossPoint project and community remain the foundation of this firmware. CrossVi preserves its MIT license, device support, technical identifiers, protocols, and on-card `.crosspoint` data layout. New protected formats are written beside retained legacy data so migration remains non-destructive.
 
 > **Current validation status:** core codecs, storage recovery, layout mapping, and protocol state machines have host tests, static analysis, and ESP32-C3 build validation. End-to-end UI, ESP-NOW radio, e-paper refresh, power-loss behavior, and memory use still require testing on physical X3/X4 hardware.
 
@@ -49,9 +49,9 @@ The original CrossPoint project and community remain the foundation of this firm
 
 - **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-- **Localization**: 30 UI languages and counting, including Vietnamese. RTL support.
+- **Localization**: 30 UI languages and counting, including Vietnamese. RTL support. New reader tools are fully translated in English and Vietnamese; other languages currently use English fallback for some new labels.
 
-> **Safety boundaries for the new reading tools:** clipping selection is limited to the current rendered page, and a saved highlight is shown only when the page layout can be matched exactly. Nearby position sync requires the same complete EPUB file, a usable paragraph anchor in the target chapter's current local layout, and explicit confirmation on both devices; it refuses to guess a page when those checks are unavailable. Nearby traffic is not encrypted, so use it only with a trusted reader nearby.
+> **Safety boundaries for the new reading tools:** clipping selection can continue across adjacent rendered pages in the same chapter, within fixed memory and text limits; nothing is saved until the reader confirms the complete selection. A saved highlight or jump is applied only when its source and layout can be matched safely. Nearby position sync requires the same complete EPUB file, a usable paragraph anchor in the target chapter's current local layout, and explicit confirmation on both devices; it refuses to guess a page when those checks are unavailable. Nearby traffic is not encrypted, so use it only with a trusted reader nearby.
 
 ### Coming soon:
 
@@ -241,7 +241,7 @@ cache. The same `.crosspoint` directory also contains settings and reader data t
 ├── epub_<path-hash>/    # one directory per book path
 │   ├── progress.bin     # saved reading position
 │   ├── crossvi_reader_settings.bin  # per-book reader profile
-│   ├── stats_v5.bin     # per-book reading statistics
+│   ├── stats_v6.bin     # CRC-protected per-book reading statistics
 │   ├── cover.bmp        # generated cover image
 │   ├── book.bin         # generated title, author, spine, and TOC metadata
 │   ├── css_rules.cache  # generated parsed-CSS cache
@@ -252,14 +252,19 @@ cache. The same `.crosspoint` directory also contains settings and reader data t
 │       └── ...
 ├── bookmarks/           # bookmark JSON files
 ├── clippings/           # saved EPUB passages
-├── synced_stats/        # separate Nearby statistics snapshots
-├── global_stats.bin     # local all-time reading statistics
+├── synced_stats/        # CRC-protected per-device Nearby snapshots
+├── global_stats_v4.bin  # CRC-protected local all-time reading statistics
 ├── settings.bin/json    # device settings and compatibility fallback
 ├── state.bin/json       # resume/runtime state and compatibility fallback
 └── recent.json          # recent books list
 ```
 
-Do **not** delete all of `/.crosspoint` as routine cache troubleshooting: that is effectively a reader-data reset and removes settings, positions, bookmarks, clippings, and statistics. Use the firmware's cache command first. It preserves per-book profiles and reading statistics, but rebuilding a book cache may reset its saved position. For the narrowest manual layout reset, back up the SD card and move only that book's `sections/` directory aside. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching state; manual SD-card edits may leave stale path-keyed directories behind.
+CrossVi keeps supported `stats_v5.bin`/`stats_v4.bin`/`stats.bin` and
+`global_stats.bin` files unchanged when it migrates them. The new envelope is
+written beside the legacy source so an interrupted migration cannot destroy the
+only copy and older firmware data remains available for manual rollback.
+
+Do **not** delete all of `/.crosspoint` as routine cache troubleshooting: that is effectively a reader-data reset and removes settings, positions, bookmarks, clippings, and statistics. Use the firmware's cache command first. It preserves the saved position, per-book profile, clippings, and reading statistics while rebuilding only generated indexes and render data. For the narrowest manual layout reset, back up the SD card and move only that book's `sections/` directory aside. Book deletes, overwrites, and moves done through the firmware or web UI clear or re-key matching state; manual SD-card edits may leave stale path-keyed directories behind.
 
 For more details on the internal file structures, see the [file formats document](./docs/file-formats.md).
 

@@ -99,7 +99,7 @@ TEST(ClippingJumpValidationTest, RejectsEveryBookStoreAndEntryIdentityMismatch) 
   }
 }
 
-TEST(ClippingJumpValidationTest, RejectsStaleIndexLegacyMultiPageAndMissingFingerprint) {
+TEST(ClippingJumpValidationTest, RejectsStaleIndexLegacyAndMissingFingerprint) {
   FixtureData data;
 
   data.request.clippingIndex = 1;
@@ -110,13 +110,27 @@ TEST(ClippingJumpValidationTest, RejectsStaleIndexLegacyMultiPageAndMissingFinge
   EXPECT_FALSE(ClippingJumpValidation::isExact(data.request, data.snapshot()));
 
   data = FixtureData{};
-  data.entries[0].endPage = 8;
-  data.request.endPage = 8;
-  EXPECT_FALSE(ClippingJumpValidation::isExact(data.request, data.snapshot()));
-
-  data = FixtureData{};
   data.entries[0].pageFingerprint = 0;
   data.request.pageFingerprint = 0;
+  EXPECT_FALSE(ClippingJumpValidation::isExact(data.request, data.snapshot()));
+}
+
+TEST(ClippingJumpValidationTest, AcceptsExactStartOfMultiPageButRejectsInvalidPageRanges) {
+  FixtureData data;
+  data.entries[0].endPage = 9;
+  data.entries[0].endWordIndex = 3;
+  data.entries[0].wordCount = 24;
+  data.request.endPage = 9;
+  data.request.endWordIndex = 3;
+  data.request.wordCount = 24;
+  EXPECT_TRUE(ClippingJumpValidation::isExact(data.request, data.snapshot()));
+
+  data.entries[0].endPage = 6;
+  data.request.endPage = 6;
+  EXPECT_FALSE(ClippingJumpValidation::isExact(data.request, data.snapshot()));
+
+  data.entries[0].endPage = data.entries[0].pageCount;
+  data.request.endPage = data.request.pageCount;
   EXPECT_FALSE(ClippingJumpValidation::isExact(data.request, data.snapshot()));
 }
 

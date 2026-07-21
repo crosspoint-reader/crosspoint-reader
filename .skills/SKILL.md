@@ -849,7 +849,7 @@ build_flags =
 
 **Location**: `.crosspoint/` directory on SD card root
 
-**Structure**: `.crosspoint/epub_<path-hash>/{book.bin, progress.bin, crossvi_reader_settings.bin, stats_v5.bin, cover.bmp, sections/*.bin}` plus global bookmarks, clippings, settings, and statistics
+**Structure**: `.crosspoint/epub_<path-hash>/{book.bin, progress.bin, crossvi_reader_settings.bin, stats_v6.bin, cover.bmp, sections/*.bin}` plus global bookmarks, clippings, settings, and statistics
 
 **Hash**: `std::hash<std::string>{}(filepath)`. CrossVi migrates path-keyed reader state for moves performed through its own UI/WebDAV handlers; out-of-band SD-card renames do not get that transaction.
 
@@ -878,7 +878,7 @@ mv /path/to/sd/.crosspoint/epub_<path-hash>/sections \
    /path/to/sd/.crosspoint/epub_<path-hash>/sections.bad
 ```
 
-Never remove all of `.crosspoint/` for routine cache testing. That deletes user data. The firmware cache command preserves per-book settings and statistics, but may reset the saved position.
+Never remove all of `.crosspoint/` for routine cache testing. That deletes user data. The firmware cache command preserves the saved position, per-book settings, statistics, and clippings while rebuilding generated layout/index data.
 
 **When to Clear Cache**:
 - EPUB parsing errors after code changes to `lib/Epub/`
@@ -895,7 +895,7 @@ Never remove all of `.crosspoint/` for routine cache testing. That deletes user 
 
 **Current Versions** (as of docs/file-formats.md):
 - `book.bin`: **Version 7** (metadata structure)
-- `section.bin`: **Version 25** (layout structure)
+- `section.bin`: **Version 30** (layout structure)
 
 **Version Increment Rules**:
 1. **ALWAYS increment version** BEFORE changing binary structure
@@ -905,7 +905,7 @@ Never remove all of `.crosspoint/` for routine cache testing. That deletes user 
 **Example** (incrementing section format version):
 ```cpp
 // lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 26;  // Was 25, now 26
+static constexpr uint8_t SECTION_FILE_VERSION = 31;  // Was 30, now 31
 
 // Add new field to structure
 struct PageLine {

@@ -31,5 +31,8 @@ bool permitsBookWrite(const std::string& cachePath, const BookReadingStats& stat
 // malformed markers block all EPUB cache relocation/deletion/quarantine.
 bool canRelocateOrDeleteEpubCache(const std::string& cachePath);
 bool permitsGlobalWrite(const GlobalReadingStats& stats);
+// Global reset is never part of a completion transaction, even when its zero
+// payload happens to match a transaction endpoint.
+bool canResetGlobalStats();
 
 }  // namespace ReadingStatsCompletionTransaction

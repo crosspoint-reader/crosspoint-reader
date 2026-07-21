@@ -6,10 +6,61 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 The directory name is derived from the book path, not its content. CrossVi also
 stores non-disposable reader data in this tree: `progress.bin`,
-`crossvi_reader_settings.bin`, `stats_v5.bin`, `/.crosspoint/bookmarks/`,
-`/.crosspoint/clippings/`, `/.crosspoint/global_stats.bin`, and
+`crossvi_reader_settings.bin`, `stats_v6.bin`, `/.crosspoint/bookmarks/`,
+`/.crosspoint/clippings/`, `/.crosspoint/global_stats_v4.bin`, and
 `/.crosspoint/synced_stats/`. Do not treat the entire `/.crosspoint` directory
 as disposable cache.
+
+## Reading statistics envelope
+
+CrossVi stores canonical reading statistics in a small integrity envelope:
+
+- per book: `stats_v6.bin`
+- local device: `/.crosspoint/global_stats_v4.bin`
+- Nearby peer: `/.crosspoint/synced_stats/device_<mac>_v4.bin`
+
+The envelope is little-endian and has this exact layout:
+
+| Offset | Size | Field |
+| ---: | ---: | --- |
+| 0 | 4 | magic `CVSE` |
+| 4 | 1 | envelope version (`1`) |
+| 5 | 1 | kind (`1` book, `2` global, `3` peer global) |
+| 6 | 2 | payload length |
+| 8 | N | CrossInk-compatible statistics payload |
+| 8 + N | 4 | CRC32 of the complete header and payload |
+
+The book payload remains raw version 5 (73 bytes), while local and Nearby
+global payloads remain raw version 3 (159 bytes). Nearby transmits the raw
+version-3 payload for interoperability and adds the envelope only when saving
+the received peer snapshot.
+
+CrossInk peer snapshots named `device_<mac>.bin{,.bak,.tmp}` are read as
+legacy input and left byte-for-byte unchanged. CrossVi writes received peers to
+the `_v4.bin` envelope beside them. A committed `_v4.bin` primary or backup is
+authoritative; a lone damaged `_v4.bin.tmp` may fall back to the intact legacy
+snapshot because that temp was never published.
+
+Publication uses `.tmp`, sync, byte verification, rename, and decode/CRC
+readback; a verified previous primary is retained as `.bak`. A corrupt primary
+may recover from a valid backup or temporary file. A primary or backup v6/v4
+artifact—valid or not—prevents fallback to older raw data. A lone empty,
+truncated, or CRC-invalid `.tmp` is treated as an abandoned pre-publication
+write and may be replaced by migration; a valid or protected temp still takes
+precedence. Unknown newer envelopes, larger CRC-valid payloads, newer sibling
+filenames (`stats_v7`, `global_stats_v5`, or peer `_v5` and above), wrong kinds,
+and I/O errors fail closed.
+
+On first load with no envelope artifact, CrossVi can import supported raw
+`stats_v5.bin{,.bak,.tmp}`, `stats_v4.bin`, `stats.bin`, and
+`global_stats.bin{,.bak,.tmp}` files. Migration never modifies or deletes those
+sources. An explicit reset writes a valid zero-valued envelope (a tombstone) to
+the backup first and then the primary, so a failure after the backup commit
+cannot make a later primary loss resurrect retained legacy statistics.
+Completion transactions likewise keep their marker until both per-book and
+global primary/backup pairs contain the same committed payload. A lone invalid
+transaction temp is removable pre-publication debris; a committed marker or a
+newer/unreadable marker remains fail-closed.
 
 ## `book.bin`
 

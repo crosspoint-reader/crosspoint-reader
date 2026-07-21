@@ -619,17 +619,17 @@ Available options include:
 - **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
 - **Book settings** – Keep reader settings for this EPUB separate from the device-wide defaults.
 - **Reading statistics** – Show statistics for the current EPUB and the combined device totals.
-- **Create clipping** – Select and save a passage from the currently rendered page.
+- **Create clipping** – Select and save a passage from the current page or continue through adjacent pages in the same chapter.
 - **Clippings** – Browse, open, jump to, or delete passages saved for this EPUB.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
-- **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
+- **Auto Turn (5–120 seconds)** – Choose the delay between automatic page turns for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.
 - **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
 - **Nearby position (Experimental)** – Exchange the current position with another nearby CrossVi reader that has the exact same complete EPUB file.
-- **Delete Book Cache** – Rebuild generated data for the current book. Per-book settings and reading statistics are preserved, but the locally saved reading position may be reset.
+- **Delete Book Cache** – Rebuild generated layout/index data for the current book. Reading position, per-book settings, statistics, and clippings are preserved.
 
 Press **Back** at any time to close the menu and return to your current page.
 
@@ -667,13 +667,15 @@ Time-of-day, day-of-week, and reading-streak views require a valid device date a
 
 ### 5.5 Clippings
 
-Choose **Create clipping**, move the cursor to the first word, press **Confirm**, move to the last word, and press **Confirm** again. Selection is deliberately limited to the current rendered page and to 512 bytes of UTF-8 text. Up to 64 passages are stored for each book.
+Choose **Create clipping**, move the cursor to the first word, press **Confirm**, move to the last word, and press **Confirm** again. At the end of a page, you may continue through adjacent rendered pages in the same chapter. A draft is limited to 256 words and 512 bytes of UTF-8 text; nothing is saved until final confirmation. Up to 64 passages are stored for each book.
 
-Open **Clippings** to read saved text. Press **Confirm** from a clipping's detail screen to return to its location. Hold **Confirm** and complete the two-step prompt to delete it. CrossVi shows an underline only when it can match the saved pagination exactly; after font, margin, orientation, or layout changes, the saved text remains available but CrossVi does not guess where to draw a highlight.
+Open **Clippings** to read saved text. Press **Confirm** from a clipping's detail screen to return to its location. Hold **Confirm** and complete the two-step prompt to delete it. **Saved items** on Home groups passages from every book and can export them to a new `My Clippings.txt`-style text file without modifying the library.
+
+Single-page clippings are underlined only when saved pagination still matches exactly. Multi-page clippings remain readable and return to their exact starting location, but are not yet drawn as inline underlines. After font, margin, orientation, or layout changes, saved text remains available and CrossVi does not guess where to draw a highlight.
 
 ### 5.6 Nearby position sync
 
-On both readers, open the same complete EPUB and select **Nearby position (Experimental)**. Start the radio manually, compare the four-digit code shown on both devices, and continue only if it matches. Each side must explicitly share, and the receiving reader must explicitly apply the incoming position.
+On both readers, open the same complete EPUB and select **Nearby position (Experimental)**. Choose **Send** on the reader whose position should win and **Receive** on the other reader; roles stay fixed for the session. Start the radio manually, compare the four-digit code shown on both devices, and continue only if it matches. The receiving reader previews and explicitly applies the incoming position; it never sends its old position back automatically.
 
 The EPUB is hashed from the complete file, not matched by filename. A different edition or modified copy is rejected. The pairing code and peer/session binding prevent accidental cross-talk, but Nearby Sync traffic is not encrypted and is not designed to resist a malicious nearby device. Use it only with someone you trust.
 
@@ -739,6 +741,6 @@ Press **Ctrl-C** or close the graph window to exit.
 
 If the device is stuck in a bootloop, press and release the Reset button. Then, press and hold on to the configured Back button and the Power Button to boot to the Home Screen.
 
-For a broken book layout, first use **Delete Book Cache** for that book. This preserves its per-book profile and reading statistics, although its locally saved position may reset. If the UI is unavailable, back up the SD card and move only the matching `/.crosspoint/epub_<path-hash>/sections/` directory aside before retrying.
+For a broken book layout, first use **Delete Book Cache** for that book. This preserves its reading position, per-book profile, statistics, and clippings. If the UI is unavailable, back up the SD card and move only the matching `/.crosspoint/epub_<path-hash>/sections/` directory aside before retrying.
 
 Do **not** delete the whole `.crosspoint` directory as a normal troubleshooting step. It also contains device settings, resume state, bookmarks, clippings, and reading statistics. Removing it is a full reader-data reset; make a complete backup first if that is explicitly what you intend.

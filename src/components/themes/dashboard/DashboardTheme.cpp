@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "RecentBooksStore.h"
+#include "activities/home/DashboardProgress.h"
 #include "activities/home/HomeBookSummary.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
@@ -39,6 +40,15 @@ void drawValueRow(GfxRenderer& renderer, const int x, const int y, const int wid
   const std::string safeLabel = renderer.truncatedText(SMALL_FONT_ID, label, labelWidth);
   renderer.drawText(SMALL_FONT_ID, x, y, safeLabel.c_str());
   renderer.drawText(UI_10_FONT_ID, x + std::max(0, width - valueWidth), y - 2, value, true, EpdFontFamily::BOLD);
+}
+
+void drawStatus(GfxRenderer& renderer, const Rect rect, const char* text) {
+  const auto lines = renderer.wrappedText(SMALL_FONT_ID, text, rect.width, 3);
+  int y = rect.y;
+  for (const std::string& line : lines) {
+    renderer.drawText(SMALL_FONT_ID, rect.x, y, line.c_str());
+    y += renderer.getLineHeight(SMALL_FONT_ID);
+  }
 }
 
 }  // namespace
@@ -87,44 +97,118 @@ void DashboardTheme::drawHomeContent(GfxRenderer& renderer, const Rect rect, con
                              layout.content.height + 12, 2, CORNER_RADIUS, true, true, true, true, true);
   }
 
-  char duration[24];
-  char value[24];
-  formatDuration(summary.bookReadingSeconds, duration, sizeof(duration));
+  char duration[24]{};
+  char value[32]{};
   const int statsLineHeight = 42;
   int statsY = layout.stats.y + 4;
-  renderer.drawText(UI_12_FONT_ID, layout.stats.x, statsY, tr(STR_DASH_READING_LEDGER), true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, layout.stats.x, statsY, tr(STR_STATS_THIS_BOOK), true, EpdFontFamily::BOLD);
   statsY += 45;
-  drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_READING_TIME), duration);
-  statsY += statsLineHeight;
-  snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(summary.bookPagesTurned));
-  drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_PAGES), value);
-  statsY += statsLineHeight;
-  snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(summary.bookSessions));
-  drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_SESSIONS), value);
-  statsY += statsLineHeight;
-  if (summary.estimatedTimeLeftSeconds > 0) {
-    formatDuration(summary.estimatedTimeLeftSeconds, duration, sizeof(duration));
-    drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_TIME_LEFT), duration);
+  if (summary.bookStatsState == DashboardMetricState::Available) {
+    formatDuration(summary.bookReadingSeconds, duration, sizeof(duration));
+    drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_READING_TIME), duration);
+    statsY += statsLineHeight;
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(summary.bookPagesTurned));
+    drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_PAGES), value);
+    statsY += statsLineHeight;
+    snprintf(value, sizeof(value), "%lu", static_cast<unsigned long>(summary.bookSessions));
+    drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_SESSIONS), value);
+    statsY += statsLineHeight;
+    if (summary.hasChapterPage) {
+      snprintf(value, sizeof(value), "%u / %u", static_cast<unsigned>(summary.chapterPageCurrent),
+               static_cast<unsigned>(summary.chapterPageTotal));
+      drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_CHAPTER_PAGE), value);
+    }
+  } else {
+    const char* status = tr(STR_STATS_UNAVAILABLE);
+    if (summary.bookStatsState == DashboardMetricState::NoData) {
+      status = tr(STR_DASH_NO_READING_DATA);
+    } else if (summary.bookStatsState == DashboardMetricState::NotTracked) {
+      status = tr(STR_DASH_NOT_TRACKED);
+    }
+    drawStatus(renderer, Rect{layout.stats.x, statsY, layout.stats.width, layout.stats.height - 45}, status);
+    if (summary.hasChapterPage) {
+      statsY += statsLineHeight * 2;
+      snprintf(value, sizeof(value), "%u / %u", static_cast<unsigned>(summary.chapterPageCurrent),
+               static_cast<unsigned>(summary.chapterPageTotal));
+      drawValueRow(renderer, layout.stats.x, statsY, layout.stats.width, tr(STR_DASH_CHAPTER_PAGE), value);
+    }
   }
 
-  const auto titleLines =
-      renderer.wrappedText(UI_12_FONT_ID, book.title.c_str(), layout.title.width, 2, EpdFontFamily::BOLD);
   int titleY = layout.title.y;
-  for (const auto& line : titleLines) {
-    renderer.drawText(UI_12_FONT_ID, layout.title.x, titleY, line.c_str(), true, EpdFontFamily::BOLD);
-    titleY += renderer.getLineHeight(UI_12_FONT_ID);
+  const std::string title =
+      renderer.truncatedText(UI_12_FONT_ID, book.title.c_str(), layout.title.width, EpdFontFamily::BOLD);
+  renderer.drawText(UI_12_FONT_ID, layout.title.x, titleY, title.c_str(), true, EpdFontFamily::BOLD);
+  titleY += renderer.getLineHeight(UI_12_FONT_ID);
+  if (!book.author.empty()) {
+    const std::string author = renderer.truncatedText(SMALL_FONT_ID, book.author.c_str(), layout.title.width);
+    renderer.drawText(SMALL_FONT_ID, layout.title.x, titleY, author.c_str());
+    titleY += renderer.getLineHeight(SMALL_FONT_ID);
+  }
+  if (!summary.chapterTitle.empty() &&
+      titleY + renderer.getLineHeight(SMALL_FONT_ID) <= layout.title.y + layout.title.height) {
+    const std::string chapter = renderer.truncatedText(SMALL_FONT_ID, summary.chapterTitle.c_str(), layout.title.width);
+    renderer.drawText(SMALL_FONT_ID, layout.title.x, titleY, chapter.c_str());
   }
 
   if (summary.hasProgress && layout.progress.height > 0) {
-    drawProgressBar(renderer, layout.progress, summary.progressPercent, 100);
+    if (layout.progressBar.width > 0 && layout.progressBar.height > 0) {
+      renderer.drawRect(layout.progressBar.x, layout.progressBar.y, layout.progressBar.width,
+                        layout.progressBar.height);
+      const int fillWidth = DashboardProgress::fillWidth(layout.progressBar.width, summary.progressPercent);
+      if (fillWidth > 0 && layout.progressBar.height > 4) {
+        renderer.fillRect(layout.progressBar.x + 2, layout.progressBar.y + 2, fillWidth, layout.progressBar.height - 4);
+      }
+    }
+    snprintf(value, sizeof(value), "%u%%", static_cast<unsigned>(summary.progressPercent));
+    const int labelWidth = renderer.getTextWidth(SMALL_FONT_ID, value);
+    renderer.drawText(SMALL_FONT_ID, layout.progressLabel.x + std::max(0, layout.progressLabel.width - labelWidth),
+                      layout.progressLabel.y, value);
+  } else if (layout.progress.height > 0) {
+    const char* state = tr(STR_STATS_UNAVAILABLE);
+    if (summary.progressState == DashboardMetricState::NoData) {
+      state = tr(STR_DASH_NO_READING_DATA);
+    } else if (summary.progressState == DashboardMetricState::NotTracked) {
+      state = tr(STR_DASH_NOT_TRACKED);
+    }
+    const std::string progressText = std::string(tr(STR_STATS_PROGRESS)) + ": " + state;
+    const std::string progress = renderer.truncatedText(SMALL_FONT_ID, progressText.c_str(), layout.progress.width);
+    renderer.drawText(SMALL_FONT_ID, layout.progress.x, layout.progress.y, progress.c_str());
   }
 
   if (layout.footer.height > 0) {
-    formatDuration(summary.globalReadingSeconds, duration, sizeof(duration));
-    const std::string footerText = std::string(tr(STR_DASH_ALL_TIME)) + ": " + duration + "   " + tr(STR_DASH_PAGES) +
-                                   ": " + std::to_string(summary.globalPagesTurned);
+    char scope[64]{};
+    if (summary.usingSyncedStats) {
+      snprintf(scope, sizeof(scope), tr(STR_STATS_ALL_SYNCED_FORMAT), static_cast<unsigned>(summary.syncedDeviceCount));
+    } else {
+      snprintf(scope, sizeof(scope), "%s", tr(STR_STATS_THIS_DEVICE));
+    }
+
+    std::string footerText = std::string(scope) + ": ";
+    if (summary.globalStatsState == DashboardMetricState::Available) {
+      formatDuration(summary.globalReadingSeconds, duration, sizeof(duration));
+      footerText +=
+          std::string(duration) + " | " + tr(STR_DASH_PAGES) + ": " + std::to_string(summary.globalPagesTurned);
+    } else if (summary.globalStatsState == DashboardMetricState::NoData) {
+      footerText += tr(STR_DASH_NO_READING_DATA);
+    } else {
+      footerText += tr(STR_STATS_UNAVAILABLE);
+    }
     const std::string footer = renderer.truncatedText(SMALL_FONT_ID, footerText.c_str(), layout.footer.width);
     renderer.drawText(SMALL_FONT_ID, layout.footer.x, layout.footer.y, footer.c_str());
+
+    const int secondLineY = layout.footer.y + renderer.getLineHeight(SMALL_FONT_ID);
+    if (secondLineY + renderer.getLineHeight(SMALL_FONT_ID) <= layout.footer.y + layout.footer.height) {
+      if (summary.syncedStatsState == DashboardMetricState::Unavailable &&
+          summary.globalStatsState != DashboardMetricState::Unavailable) {
+        const std::string warning =
+            renderer.truncatedText(SMALL_FONT_ID, tr(STR_DASH_SYNC_UNAVAILABLE), layout.footer.width);
+        renderer.drawText(SMALL_FONT_ID, layout.footer.x, secondLineY, warning.c_str());
+      } else if (summary.hasCurrentStreak) {
+        snprintf(value, sizeof(value), "%s: %u", tr(STR_STATS_STREAK), static_cast<unsigned>(summary.currentStreak));
+        const std::string streak = renderer.truncatedText(SMALL_FONT_ID, value, layout.footer.width);
+        renderer.drawText(SMALL_FONT_ID, layout.footer.x, secondLineY, streak.c_str());
+      }
+    }
   }
 }
 

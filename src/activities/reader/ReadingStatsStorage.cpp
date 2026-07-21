@@ -49,7 +49,14 @@ ReadOutcome read(const char* path, uint8_t* data, const size_t capacity) {
     outcome.result = ReadResult::TooLarge;
     return outcome;
   }
-  if (outcome.size == 0 || !data || file.read(data, outcome.size) != static_cast<int>(outcome.size)) {
+  // A zero-byte file is a recognizable torn write, not an I/O failure. Let
+  // the format decoder classify it as invalid so a valid backup/temp may be
+  // recovered. Actual read and close failures remain protected I/O errors.
+  if (outcome.size == 0) {
+    outcome.result = file.close() ? ReadResult::Ok : ReadResult::IoError;
+    return outcome;
+  }
+  if (!data || file.read(data, outcome.size) != static_cast<int>(outcome.size)) {
     file.close();
     outcome.result = ReadResult::IoError;
     return outcome;

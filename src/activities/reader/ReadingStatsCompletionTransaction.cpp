@@ -33,7 +33,7 @@ constexpr size_t MAX_MARKER_SIZE = HEADER_SIZE + MAX_CACHE_PATH_SIZE + PAYLOAD_S
 using BookBytes = ReadingStatsCodec::BookBytes;
 using GlobalBytes = ReadingStatsCodec::GlobalBytes;
 
-enum class MarkerReadResult : uint8_t { Missing, Ok, Blocked };
+enum class MarkerReadResult : uint8_t { Missing, Ok, Invalid, Protected };
 
 struct Marker {
   std::string cachePath;
@@ -192,9 +192,12 @@ MarkerReadResult readOneMarker(const char* path, Marker& marker) {
   std::array<uint8_t, MAX_MARKER_SIZE> bytes{};
   const ReadingStatsStorage::ReadOutcome read = ReadingStatsStorage::read(path, bytes.data(), bytes.size());
   if (read.result == ReadingStatsStorage::ReadResult::Missing) return MarkerReadResult::Missing;
-  if (read.result != ReadingStatsStorage::ReadResult::Ok || !decodeMarker(bytes.data(), read.size, marker)) {
-    return MarkerReadResult::Blocked;
+  if (read.result != ReadingStatsStorage::ReadResult::Ok) return MarkerReadResult::Protected;
+  if (read.size >= 5 && std::equal(MARKER_MAGIC.begin(), MARKER_MAGIC.end(), bytes.begin()) &&
+      bytes[4] > MARKER_VERSION) {
+    return MarkerReadResult::Protected;
   }
+  if (!decodeMarker(bytes.data(), read.size, marker)) return MarkerReadResult::Invalid;
   return MarkerReadResult::Ok;
 }
 
@@ -203,17 +206,24 @@ MarkerReadResult readMarker(Marker& marker) {
   Marker temporary;
   const MarkerReadResult primaryResult = readOneMarker(MARKER_PATH, primary);
   const MarkerReadResult temporaryResult = readOneMarker(MARKER_TEMP_PATH, temporary);
-  if (primaryResult == MarkerReadResult::Blocked || temporaryResult == MarkerReadResult::Blocked) {
-    return MarkerReadResult::Blocked;
+  if (primaryResult == MarkerReadResult::Protected || primaryResult == MarkerReadResult::Invalid ||
+      temporaryResult == MarkerReadResult::Protected) {
+    return MarkerReadResult::Protected;
   }
-  if (primaryResult == MarkerReadResult::Missing && temporaryResult == MarkerReadResult::Missing) {
-    return MarkerReadResult::Missing;
+  if (primaryResult == MarkerReadResult::Missing) {
+    if (temporaryResult == MarkerReadResult::Invalid) {
+      return Storage.remove(MARKER_TEMP_PATH) ? MarkerReadResult::Missing : MarkerReadResult::Protected;
+    }
+    if (temporaryResult == MarkerReadResult::Missing) return MarkerReadResult::Missing;
+    marker = std::move(temporary);
+    return MarkerReadResult::Ok;
   }
-  if (primaryResult == MarkerReadResult::Ok && temporaryResult == MarkerReadResult::Ok &&
-      primary.encoded != temporary.encoded) {
-    return MarkerReadResult::Blocked;
+  // A committed primary is authoritative over an abandoned invalid temp. Two
+  // valid but different markers remain ambiguous and fail closed.
+  if (temporaryResult == MarkerReadResult::Ok && primary.encoded != temporary.encoded) {
+    return MarkerReadResult::Protected;
   }
-  marker = primaryResult == MarkerReadResult::Ok ? std::move(primary) : std::move(temporary);
+  marker = std::move(primary);
   return MarkerReadResult::Ok;
 }
 
@@ -249,7 +259,7 @@ RecoveryResult recover(const std::string& cachePath) {
   Marker marker;
   const MarkerReadResult markerResult = readMarker(marker);
   if (markerResult == MarkerReadResult::Missing) return RecoveryResult::NoMarker;
-  if (markerResult == MarkerReadResult::Blocked || marker.cachePath != cachePath) {
+  if (markerResult != MarkerReadResult::Ok || marker.cachePath != cachePath) {
     LOG_ERR(LOG_TAG, "Completion transaction marker is invalid or belongs to another book");
     return RecoveryResult::Blocked;
   }
@@ -290,6 +300,18 @@ RecoveryResult recover(const std::string& cachePath) {
     return RecoveryResult::Blocked;
   }
 
+  // A completed marker must leave no pre-transition fallback behind. If only
+  // a primary were new, a later CRC failure could recover the old backup and
+  // split the per-book/global completion count after the marker was gone.
+  if (!marker.newBookStats.saveRedundant(cachePath)) {
+    LOG_ERR(LOG_TAG, "Could not consolidate per-book completion backup");
+    return RecoveryResult::Blocked;
+  }
+  if (!marker.newGlobalStats.saveRedundant()) {
+    LOG_ERR(LOG_TAG, "Could not consolidate global completion backup");
+    return RecoveryResult::Blocked;
+  }
+
   currentBook = BookReadingStats::load(cachePath, &bookStatus);
   currentGlobal = GlobalReadingStats::load(&globalStatus);
   if (bookStatus != BookReadingStats::LoadStatus::Ok || globalStatus != GlobalReadingStats::LoadStatus::Ok ||
@@ -309,7 +331,7 @@ RecoveryResult recoverPending() {
   Marker marker;
   const MarkerReadResult result = readMarker(marker);
   if (result == MarkerReadResult::Missing) return RecoveryResult::NoMarker;
-  if (result == MarkerReadResult::Blocked) return RecoveryResult::Blocked;
+  if (result != MarkerReadResult::Ok) return RecoveryResult::Blocked;
   // decodeMarker() already constrained this to /.crosspoint/epub_<digits>.
   return recover(marker.cachePath);
 }
@@ -329,6 +351,10 @@ bool commit(const std::string& cachePath, const BookReadingStats& oldBookStats, 
   if (!BookReadingStats::isTrustedLoadStatus(bookStatus) || !GlobalReadingStats::isTrustedLoadStatus(globalStatus) ||
       ReadingStatsCodec::encode(currentBook) != ReadingStatsCodec::encode(oldBookStats) ||
       ReadingStatsCodec::encode(currentGlobal) != ReadingStatsCodec::encode(oldGlobalStats)) {
+    return false;
+  }
+  if (!BookReadingStats::canPublish(cachePath) || !GlobalReadingStats::canPublish()) {
+    LOG_ERR(LOG_TAG, "Completion destination has a protected sibling; marker was not published");
     return false;
   }
 
@@ -357,6 +383,11 @@ bool permitsGlobalWrite(const GlobalReadingStats& stats) {
   const MarkerReadResult result = readMarker(marker);
   return result == MarkerReadResult::Missing ||
          (result == MarkerReadResult::Ok && markerAllowsGlobalWrite(marker, stats));
+}
+
+bool canResetGlobalStats() {
+  Marker marker;
+  return readMarker(marker) == MarkerReadResult::Missing;
 }
 
 }  // namespace ReadingStatsCompletionTransaction

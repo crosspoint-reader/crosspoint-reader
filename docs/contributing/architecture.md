@@ -148,14 +148,14 @@ Typical persisted areas on SD:
     css_rules.cache
     progress.bin
     crossvi_reader_settings.bin
-    stats_v5.bin
+    stats_v6.bin
     cover.bmp
     sections/*.bin
     img_* cache files
   bookmarks/
   clippings/
   synced_stats/
-  global_stats.bin
+  global_stats_v4.bin
   settings.json
   state.json
 ```

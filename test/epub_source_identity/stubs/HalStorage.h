@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Arduino.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -11,12 +13,13 @@
 class Print {
  public:
   virtual ~Print() = default;
+  virtual size_t write(const uint8_t value) { return write(&value, 1); }
   virtual size_t write(const uint8_t*, size_t length) { return length; }
 };
 
 class HalStorage;
 
-class HalFile {
+class HalFile : public Print {
  public:
   HalFile() = default;
   HalFile(HalFile&&) = default;
@@ -30,8 +33,10 @@ class HalFile {
   bool seek(size_t position);
   bool seekCur(int64_t offset);
   int available() const;
-  size_t position() const { return position_; }
+  size_t position() const;
   int read(void* destination, size_t length);
+  using Print::write;
+  size_t write(const uint8_t* source, size_t length) override;
   size_t write(const void* source, size_t length);
   void flush() {}
   bool sync();
@@ -61,6 +66,32 @@ class HalStorage {
     return true;
   }
   bool remove(const char* path) { return files_.erase(path) != 0; }
+  bool removeDir(const char* path) {
+    if (failRemoveDir_) {
+      failRemoveDir_ = false;
+      return false;
+    }
+    const std::string root = path;
+    const std::string prefix = root + "/";
+    bool removed = directories_.erase(root) != 0;
+    for (auto it = files_.begin(); it != files_.end();) {
+      if (it->first.compare(0, prefix.size(), prefix) == 0) {
+        it = files_.erase(it);
+        removed = true;
+      } else {
+        ++it;
+      }
+    }
+    for (auto it = directories_.begin(); it != directories_.end();) {
+      if (it->compare(0, prefix.size(), prefix) == 0) {
+        it = directories_.erase(it);
+        removed = true;
+      } else {
+        ++it;
+      }
+    }
+    return removed;
+  }
   bool rename(const char* from, const char* to) {
     if (failRename_) {
       failRename_ = false;
@@ -77,6 +108,7 @@ class HalStorage {
     return true;
   }
   bool openFileForRead(const char*, const char* path, HalFile& file) {
+    ++openReadAttempts_[path];
     if (unreadable_.count(path) || files_.count(path) == 0) return false;
     file = makeFile(path, false);
     return true;
@@ -85,6 +117,8 @@ class HalStorage {
     return openFileForRead(tag, path.c_str(), file);
   }
   bool openFileForWrite(const char*, const char* path, HalFile& file) {
+    ++openWriteAttempts_[path];
+    if (unwritable_.count(path)) return false;
     files_[path].clear();
     file = makeFile(path, true);
     return true;
@@ -97,37 +131,69 @@ class HalStorage {
     files_.clear();
     directories_.clear();
     unreadable_.clear();
+    unwritable_.clear();
     shortWrite_ = false;
+    shortWritePath_.clear();
+    shortReadPath_.clear();
     failSync_ = false;
+    failClosePath_.clear();
     failRename_ = false;
+    failRemoveDir_ = false;
     corruptRename_ = false;
     growOnReadCall_ = 0;
     readCalls_ = 0;
     maxRead_ = 0;
+    invalidOperations_ = 0;
+    openReadAttempts_.clear();
+    openWriteAttempts_.clear();
   }
   void setFile(const std::string& path, std::vector<uint8_t> data) { files_[path] = std::move(data); }
   std::vector<uint8_t>& mutableFile(const std::string& path) { return files_.at(path); }
   const std::vector<uint8_t>& file(const std::string& path) const { return files_.at(path); }
   void makeUnreadable(const std::string& path) { unreadable_.insert(path); }
+  void makeReadable(const std::string& path) { unreadable_.erase(path); }
+  void makeUnwritable(const std::string& path) { unwritable_.insert(path); }
+  void makeWritable(const std::string& path) { unwritable_.erase(path); }
   void shortWriteOnce() { shortWrite_ = true; }
+  void shortWriteFor(const std::string& path) { shortWritePath_ = path; }
+  void shortReadFor(const std::string& path) { shortReadPath_ = path; }
   void failSyncOnce() { failSync_ = true; }
+  void failCloseFor(const std::string& path) { failClosePath_ = path; }
   void failRenameOnce() { failRename_ = true; }
+  void failRemoveDirOnce() { failRemoveDir_ = true; }
   void corruptRenameOnce() { corruptRename_ = true; }
   void growOnReadCall(size_t call) { growOnReadCall_ = call; }
   size_t maxRead() const { return maxRead_; }
+  size_t invalidOperationCount() const { return invalidOperations_; }
+  size_t openReadAttemptsFor(const std::string& path) const {
+    const auto found = openReadAttempts_.find(path);
+    return found == openReadAttempts_.end() ? 0 : found->second;
+  }
+  size_t openWriteAttemptsFor(const std::string& path) const {
+    const auto found = openWriteAttempts_.find(path);
+    return found == openWriteAttempts_.end() ? 0 : found->second;
+  }
 
  private:
   friend class HalFile;
   std::map<std::string, std::vector<uint8_t>> files_;
   std::set<std::string> directories_;
   std::set<std::string> unreadable_;
+  std::set<std::string> unwritable_;
   bool shortWrite_ = false;
+  std::string shortWritePath_;
+  std::string shortReadPath_;
   bool failSync_ = false;
+  std::string failClosePath_;
   bool failRename_ = false;
+  bool failRemoveDir_ = false;
   bool corruptRename_ = false;
   size_t growOnReadCall_ = 0;
   size_t readCalls_ = 0;
   size_t maxRead_ = 0;
+  size_t invalidOperations_ = 0;
+  std::map<std::string, size_t> openReadAttempts_;
+  std::map<std::string, size_t> openWriteAttempts_;
 
   HalFile makeFile(const std::string& path, bool writable) {
     HalFile file;
@@ -139,10 +205,28 @@ class HalStorage {
   }
 };
 
-inline size_t HalFile::size() const { return open_ && storage_ ? storage_->files_.at(path_).size() : 0; }
+inline size_t HalFile::size() const {
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return 0;
+  }
+  return storage_->files_.at(path_).size();
+}
+
+inline size_t HalFile::position() const {
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return 0;
+  }
+  return position_;
+}
 
 inline bool HalFile::seek(const size_t position) {
-  if (!open_ || position > size()) return false;
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return false;
+  }
+  if (position > size()) return false;
   position_ = position;
   return true;
 }
@@ -153,24 +237,44 @@ inline bool HalFile::seekCur(const int64_t offset) {
   return next <= size() && seek(static_cast<size_t>(next));
 }
 
-inline int HalFile::available() const { return open_ && position_ < size() ? static_cast<int>(size() - position_) : 0; }
+inline int HalFile::available() const {
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return 0;
+  }
+  return position_ < size() ? static_cast<int>(size() - position_) : 0;
+}
 
 inline int HalFile::read(void* destination, const size_t length) {
-  if (!open_ || writable_ || position_ > size() || length > size() - position_) return 0;
-  storage_->maxRead_ = std::max(storage_->maxRead_, length);
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return 0;
+  }
+  if (writable_ || position_ >= size()) return 0;
+  size_t readLength = std::min(length, size() - position_);
+  if (storage_->shortReadPath_ == path_ && readLength > 0) {
+    storage_->shortReadPath_.clear();
+    --readLength;
+  }
+  storage_->maxRead_ = std::max(storage_->maxRead_, readLength);
   const auto& bytes = storage_->files_.at(path_);
-  std::copy_n(bytes.data() + position_, length, static_cast<uint8_t*>(destination));
-  position_ += length;
+  std::copy_n(bytes.data() + position_, readLength, static_cast<uint8_t*>(destination));
+  position_ += readLength;
   ++storage_->readCalls_;
   if (storage_->growOnReadCall_ == storage_->readCalls_) storage_->files_[path_].push_back(0xA5U);
-  return static_cast<int>(length);
+  return static_cast<int>(readLength);
 }
 
 inline size_t HalFile::write(const void* source, const size_t length) {
-  if (!open_ || !writable_) return 0;
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return 0;
+  }
+  if (!writable_) return 0;
   size_t written = length;
-  if (storage_->shortWrite_) {
+  if (storage_->shortWrite_ || storage_->shortWritePath_ == path_) {
     storage_->shortWrite_ = false;
+    storage_->shortWritePath_.clear();
     written = length == 0 ? 0 : length - 1;
   }
   auto& bytes = storage_->files_[path_];
@@ -180,8 +284,15 @@ inline size_t HalFile::write(const void* source, const size_t length) {
   return written;
 }
 
+inline size_t HalFile::write(const uint8_t* source, const size_t length) {
+  return write(static_cast<const void*>(source), length);
+}
+
 inline bool HalFile::sync() {
-  if (!open_) return false;
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return false;
+  }
   if (storage_->failSync_) {
     storage_->failSync_ = false;
     return false;
@@ -190,9 +301,15 @@ inline bool HalFile::sync() {
 }
 
 inline bool HalFile::close() {
+  if (!open_ || !storage_) {
+    ++HalStorage::getInstance().invalidOperations_;
+    return false;
+  }
+  const bool shouldFail = storage_->failClosePath_ == path_;
+  if (shouldFail) storage_->failClosePath_.clear();
   const bool wasOpen = open_;
   open_ = false;
-  return wasOpen;
+  return wasOpen && !shouldFail;
 }
 
 #define Storage HalStorage::getInstance()

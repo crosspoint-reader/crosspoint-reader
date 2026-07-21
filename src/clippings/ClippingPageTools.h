@@ -2,6 +2,7 @@
 
 #include <Epub/Page.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -13,6 +14,37 @@
 class GfxRenderer;
 
 namespace ClippingPageTools {
+
+struct SelectionPageAdvanceState {
+  bool loaderAvailable = false;
+  bool extractionComplete = false;
+  bool selectionStarted = false;
+  size_t wordCount = 0;
+  int cursorOrder = -1;
+  uint16_t currentPage = 0;
+  uint16_t pageCount = 0;
+  bool selectionFits = false;
+};
+
+inline bool canAdvanceSelectionPage(const SelectionPageAdvanceState& state) {
+  return state.loaderAvailable && state.extractionComplete && state.selectionStarted && state.wordCount > 0 &&
+         state.cursorOrder == static_cast<int>(state.wordCount - 1) && state.pageCount > 0 &&
+         state.currentPage < static_cast<uint16_t>(state.pageCount - 1) && state.selectionFits;
+}
+
+// The caller supplies unique token indices captured from one rendered page.
+// A selection reaches the real end only when it contains every token from its
+// first selected token through the page's final textual token.
+inline bool isContiguousTail(const uint16_t* indices, const size_t count, const uint32_t pageWordCount) {
+  if (!indices || count == 0 || pageWordCount == 0) return false;
+  uint16_t minimum = indices[0];
+  uint16_t maximum = indices[0];
+  for (size_t index = 1; index < count; ++index) {
+    minimum = std::min(minimum, indices[index]);
+    maximum = std::max(maximum, indices[index]);
+  }
+  return static_cast<uint32_t>(maximum) + 1 == pageWordCount && static_cast<uint32_t>(maximum - minimum) + 1 == count;
+}
 
 // Matches the selection activity's definition of a visible token, including
 // common Unicode spacing characters emitted by EPUB layout.

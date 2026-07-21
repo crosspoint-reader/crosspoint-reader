@@ -24,6 +24,7 @@ class BookReaderSettingsActivity final : public Activity {
   PerBookReaderSettings globalDefaults;
   PerBookReaderSettings savedCustom;
   bool customEnabled = false;
+  bool resetConfirmationPending = false;
   int selectedIndex = 0;
 
   void rebuildSettings();

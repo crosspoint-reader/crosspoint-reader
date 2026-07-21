@@ -1,10 +1,12 @@
 #include "ClipSelectionActivity.h"
 
+#include <Arduino.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <climits>
 #include <cstdlib>
@@ -50,7 +52,7 @@ bool startsParagraph(const std::string_view text) {
 
 void ClipSelectionActivity::onEnter() {
   Activity::onEnter();
-  if (!page_ || fontId_ == 0 || sectionPageCount_ == 0 || sectionPage_ >= sectionPageCount_) {
+  if (!page_ || fontId_ == 0 || sectionPageCount_ == 0 || startPage_ >= sectionPageCount_) {
     cancel();
     return;
   }
@@ -91,6 +93,8 @@ void ClipSelectionActivity::extractWords() {
   uint8_t styleMask = 0;
   uint32_t visibleWordIndex = 0;
   bool reachedCap = false;
+  extractionComplete_ = true;
+  pageTextualWordCount_ = 0;
 
   for (const auto& element : page_->elements) {
     if (element->getTag() != TAG_PageLine) continue;
@@ -134,7 +138,7 @@ void ClipSelectionActivity::extractWords() {
       word.x = line->xPos + block->wordXpos(i) + marginLeft_;
       word.y = y;
       word.height = lineHeight_;
-      word.pageIndex = 0;
+      word.pageIndex = static_cast<int>(currentPage_ - startPage_);
       word.pageWordIndex = pageWordIndex;
       word.text.assign(text);
       word.paragraphStart = startsParagraph(text);
@@ -167,6 +171,8 @@ void ClipSelectionActivity::extractWords() {
     if (reachedCap) break;
   }
 
+  pageTextualWordCount_ = visibleWordIndex;
+  extractionComplete_ = !reachedCap;
   if (words_.empty()) return;
   if (styleMask == 0) styleMask = 0x01U;
   renderer.ensureSdCardFontReady(fontId_, pageText.c_str(), styleMask);
@@ -220,12 +226,38 @@ int ClipSelectionActivity::closestOrderInRow(const uint16_t row, const int cente
   return bestOrder;
 }
 
-bool ClipSelectionActivity::buildSelection(ClipTextBuilder::Result& result) const {
+bool ClipSelectionActivity::buildSelectionAt(const int orderIndex, ClipTextBuilder::Result& result) {
   if (anchorOrder_ < 0 || readingOrder_.empty()) return false;
-  const size_t first = static_cast<size_t>(std::min(anchorOrder_, cursorOrder_));
-  const size_t last = static_cast<size_t>(std::max(anchorOrder_, cursorOrder_));
-  return ClipTextBuilder::build(words_, readingOrder_, first, last, sectionPage_, sectionPageCount_, result) ==
-         ClipTextBuilder::Status::Ok;
+  const size_t first = static_cast<size_t>(std::min(anchorOrder_, orderIndex));
+  const size_t last = static_cast<size_t>(std::max(anchorOrder_, orderIndex));
+  if (committedWords_.empty()) {
+    return ClipTextBuilder::build(words_, readingOrder_, first, last, startPage_, sectionPageCount_, result) ==
+           ClipTextBuilder::Status::Ok;
+  }
+
+  // Temporarily append the current selection to the already-reserved draft.
+  // This keeps ClipTextBuilder as the single source of truth without a third
+  // full Word array at confirmation time.
+  const size_t committedSize = committedWords_.size();
+  const size_t selectedHere = last - first + 1;
+  if (selectedHere > MAX_DRAFT_WORDS || committedSize > MAX_DRAFT_WORDS - selectedHere) return false;
+  for (size_t order = first; order <= last; ++order) {
+    committedWords_.push_back(words_[readingOrder_[order]]);
+  }
+
+  combinedOrder_.resize(committedWords_.size());
+  for (size_t index = 0; index < combinedOrder_.size(); ++index) {
+    combinedOrder_[index] = static_cast<uint16_t>(index);
+  }
+  const bool built = ClipTextBuilder::build(committedWords_, combinedOrder_, 0, combinedOrder_.size() - 1, startPage_,
+                                            sectionPageCount_, result) == ClipTextBuilder::Status::Ok;
+  committedWords_.resize(committedSize);
+  combinedOrder_.clear();
+  return built;
+}
+
+bool ClipSelectionActivity::buildSelection(ClipTextBuilder::Result& result) {
+  return buildSelectionAt(cursorOrder_, result);
 }
 
 bool ClipSelectionActivity::selectionBuildsAt(const int orderIndex) const {
@@ -233,12 +265,16 @@ bool ClipSelectionActivity::selectionBuildsAt(const int orderIndex) const {
   const int first = std::min(anchorOrder_, orderIndex);
   const int last = std::max(anchorOrder_, orderIndex);
 
+  const size_t selectedHere = static_cast<size_t>(last - first + 1);
+  if (selectedHere > MAX_DRAFT_WORDS || committedWords_.size() > MAX_DRAFT_WORDS - selectedHere) return false;
+
   // Raw token bytes plus one possible separator per boundary are an upper
   // bound on the normalized ClipTextBuilder output. This allocation-free
   // check keeps cursor movement responsive and guarantees the final build
   // cannot exceed the 512-byte storage limit. It is intentionally a little
   // conservative when punctuation or normalized whitespace removes bytes.
-  size_t upperBound = static_cast<size_t>(last - first);
+  const size_t totalWords = committedWords_.size() + selectedHere;
+  size_t upperBound = committedTextBytes_ + (totalWords == 0 ? 0 : totalWords - 1);
   for (int order = first; order <= last; ++order) {
     const size_t wordBytes = words_[readingOrder_[order]].text.size();
     if (upperBound > ClippingCodec::MAX_TEXT_BYTES || wordBytes > ClippingCodec::MAX_TEXT_BYTES - upperBound)
@@ -250,6 +286,10 @@ bool ClipSelectionActivity::selectionBuildsAt(const int orderIndex) const {
 
 void ClipSelectionActivity::moveHorizontal(const int direction) {
   const int target = cursorOrder_ + direction;
+  if (target >= static_cast<int>(readingOrder_.size()) && direction > 0 && anchorOrder_ >= 0) {
+    advanceSelectionPage();
+    return;
+  }
   if (target < 0 || target >= static_cast<int>(readingOrder_.size()) || !selectionBuildsAt(target)) return;
   cursorOrder_ = target;
   requestUpdate();
@@ -265,6 +305,108 @@ void ClipSelectionActivity::moveVertical(const int direction) {
   if (target < 0 || target == cursorOrder_ || !selectionBuildsAt(target)) return;
   cursorOrder_ = target;
   requestUpdate();
+}
+
+bool ClipSelectionActivity::restorePageAfterFailedAdvance(const uint16_t page, const int cursor, const int anchor) {
+  if (!pageLoader_) return false;
+  page_ = pageLoader_.load(pageLoader_.context, page);
+  if (!page_) return false;
+  currentPage_ = page;
+  extractWords();
+  if (readingOrder_.empty()) return false;
+  cursorOrder_ = std::clamp(cursor, 0, static_cast<int>(readingOrder_.size()) - 1);
+  anchorOrder_ = std::clamp(anchor, 0, static_cast<int>(readingOrder_.size()) - 1);
+  requestUpdate();
+  return true;
+}
+
+bool ClipSelectionActivity::advanceSelectionPage() {
+  if (!canAdvanceSelectionPage()) return false;
+
+  const int lastOrder = static_cast<int>(readingOrder_.size()) - 1;
+
+  ClipTextBuilder::Result verified;
+  if (!buildSelectionAt(lastOrder, verified)) return false;
+
+  const int firstOrder = committedWords_.empty() ? std::min(anchorOrder_, cursorOrder_) : 0;
+  size_t extensionTextBytes = 0;
+  for (int order = firstOrder; order <= lastOrder; ++order) {
+    const auto& word = words_[readingOrder_[order]];
+    if (extensionTextBytes > ClippingCodec::MAX_TEXT_BYTES ||
+        word.text.size() > ClippingCodec::MAX_TEXT_BYTES - extensionTextBytes) {
+      return false;
+    }
+    extensionTextBytes += word.text.size();
+  }
+  const size_t extensionSize = static_cast<size_t>(lastOrder - firstOrder + 1);
+  if (extensionSize > MAX_DRAFT_WORDS || committedWords_.size() > MAX_DRAFT_WORDS - extensionSize) return false;
+
+  if (committedWords_.capacity() < MAX_DRAFT_WORDS) {
+    constexpr size_t HEAP_SAFETY_MARGIN = 8U * 1024U;
+    const size_t requiredContiguousBytes = sizeof(ClipTextBuilder::Word) * MAX_DRAFT_WORDS;
+    if (ESP.getMaxAllocHeap() < requiredContiguousBytes + HEAP_SAFETY_MARGIN) return false;
+    committedWords_.reserve(MAX_DRAFT_WORDS);
+    combinedOrder_.reserve(MAX_DRAFT_WORDS);
+  }
+
+  const uint16_t previousPage = currentPage_;
+  const int previousCursor = cursorOrder_;
+  const int previousAnchor = anchorOrder_;
+  const uint16_t nextPage = static_cast<uint16_t>(currentPage_ + 1);
+  const size_t previousCommittedSize = committedWords_.size();
+  for (int order = firstOrder; order <= lastOrder; ++order) {
+    committedWords_.push_back(words_[readingOrder_[order]]);
+  }
+
+  // Release the current TextBlock arena before loading the next page. If the
+  // SD read fails, reload the previous page and leave the draft unchanged.
+  page_.reset();
+  words_.clear();
+  visuals_.clear();
+  readingOrder_.clear();
+  page_ = pageLoader_.load(pageLoader_.context, nextPage);
+  if (!page_) {
+    committedWords_.resize(previousCommittedSize);
+    if (!restorePageAfterFailedAdvance(previousPage, previousCursor, previousAnchor)) cancel();
+    return false;
+  }
+
+  currentPage_ = nextPage;
+  extractWords();
+  // A cross-page quote must start with the first textual token of the next
+  // rendered page. If navigation/safe-area filtering hid an earlier token,
+  // accepting this page would silently splice two non-contiguous passages.
+  if (readingOrder_.empty() || words_[readingOrder_.front()].pageWordIndex != 0) {
+    page_.reset();
+    committedWords_.resize(previousCommittedSize);
+    if (!restorePageAfterFailedAdvance(previousPage, previousCursor, previousAnchor)) cancel();
+    return false;
+  }
+
+  committedTextBytes_ += extensionTextBytes;
+  anchorOrder_ = 0;
+  cursorOrder_ = 0;
+  requestUpdate();
+  return true;
+}
+
+bool ClipSelectionActivity::canAdvanceSelectionPage() const {
+  int firstOrder = 0;
+  if (committedWords_.empty() && anchorOrder_ >= 0) firstOrder = std::min(anchorOrder_, cursorOrder_);
+  std::array<uint16_t, MAX_VISIBLE_WORDS> pageWordIndices{};
+  size_t pageWordIndexCount = 0;
+  if (!readingOrder_.empty() && firstOrder >= 0 && cursorOrder_ >= firstOrder) {
+    for (int order = firstOrder; order <= cursorOrder_; ++order) {
+      if (pageWordIndexCount >= pageWordIndices.size()) return false;
+      pageWordIndices[pageWordIndexCount++] = words_[readingOrder_[order]].pageWordIndex;
+    }
+  }
+  const bool selectionFits =
+      !readingOrder_.empty() && selectionBuildsAt(cursorOrder_) &&
+      ClippingPageTools::isContiguousTail(pageWordIndices.data(), pageWordIndexCount, pageTextualWordCount_);
+  return ClippingPageTools::canAdvanceSelectionPage({static_cast<bool>(pageLoader_), extractionComplete_,
+                                                     anchorOrder_ >= 0, readingOrder_.size(), cursorOrder_,
+                                                     currentPage_, sectionPageCount_, selectionFits});
 }
 
 void ClipSelectionActivity::confirmSelection() {
@@ -367,7 +509,14 @@ void ClipSelectionActivity::drawSelection() const {
 
 void ClipSelectionActivity::drawHints() const {
   const char* confirm = anchorOrder_ < 0 ? tr(STR_SELECT) : tr(STR_DONE);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirm, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const bool atCapturedEnd =
+      anchorOrder_ >= 0 && !readingOrder_.empty() && cursorOrder_ == static_cast<int>(readingOrder_.size()) - 1;
+  const bool hasNextPage =
+      pageLoader_ && sectionPageCount_ > 0 && currentPage_ < static_cast<uint16_t>(sectionPageCount_ - 1);
+  const char* rightHint = canAdvanceSelectionPage()      ? tr(STR_NEXT_PAGE)
+                          : atCapturedEnd && hasNextPage ? tr(STR_CLIPPING_CANNOT_EXTEND)
+                                                         : tr(STR_DIR_RIGHT);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirm, tr(STR_DIR_LEFT), rightHint);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

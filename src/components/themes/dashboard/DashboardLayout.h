@@ -12,6 +12,8 @@ struct DashboardLayout {
   Rect stats;
   Rect title;
   Rect progress;
+  Rect progressBar;
+  Rect progressLabel;
   Rect footer;
 
   static DashboardLayout calculate(const Rect tile) {
@@ -19,9 +21,9 @@ struct DashboardLayout {
     constexpr int INNER_GAP = 16;
     constexpr int COVER_HEIGHT = 252;
     constexpr int COVER_WIDTH = 168;
-    constexpr int TITLE_HEIGHT = 48;
+    constexpr int TITLE_HEIGHT = 60;
     constexpr int PROGRESS_HEIGHT = 14;
-    constexpr int ROW_GAP = 10;
+    constexpr int ROW_GAP = 8;
 
     DashboardLayout out;
     out.content = Rect{tile.x + OUTER_PADDING, tile.y + 8, std::max(0, tile.width - OUTER_PADDING * 2),
@@ -42,6 +44,14 @@ struct DashboardLayout {
     const int progressY = std::min(contentBottom, out.title.y + out.title.height + ROW_GAP);
     out.progress = Rect{out.content.x, progressY, out.content.width,
                         std::min(PROGRESS_HEIGHT, std::max(0, contentBottom - progressY))};
+    constexpr int PROGRESS_LABEL_WIDTH = 40;
+    constexpr int PROGRESS_LABEL_GAP = 8;
+    const int progressLabelWidth = std::min(PROGRESS_LABEL_WIDTH, out.progress.width);
+    const int progressGap = out.progress.width > progressLabelWidth ? PROGRESS_LABEL_GAP : 0;
+    out.progressBar = Rect{out.progress.x, out.progress.y,
+                           std::max(0, out.progress.width - progressLabelWidth - progressGap), out.progress.height};
+    out.progressLabel = Rect{out.progress.x + out.progress.width - progressLabelWidth, out.progress.y,
+                             progressLabelWidth, out.progress.height};
 
     const int footerY = std::min(contentBottom, out.progress.y + out.progress.height + ROW_GAP);
     out.footer = Rect{out.content.x, footerY, out.content.width, std::max(0, contentBottom - footerY)};

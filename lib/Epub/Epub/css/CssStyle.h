@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
+#include <limits>
 
 // Matches order of PARAGRAPH_ALIGNMENT in CrossPointSettings
 enum class CssTextAlign : uint8_t { Justify = 0, Left = 1, Center = 2, Right = 3, None = 4 };
@@ -42,7 +44,15 @@ struct CssLength {
 
   // Resolve to int16_t pixels (for BlockStyle fields)
   [[nodiscard]] int16_t toPixelsInt16(const float emSize, const float containerWidth = 0) const {
-    return static_cast<int16_t>(toPixels(emSize, containerWidth));
+    const float pixels = toPixels(emSize, containerWidth);
+    if (std::isnan(pixels)) return 0;
+    if (pixels >= static_cast<float>(std::numeric_limits<int16_t>::max())) {
+      return std::numeric_limits<int16_t>::max();
+    }
+    if (pixels <= static_cast<float>(std::numeric_limits<int16_t>::min())) {
+      return std::numeric_limits<int16_t>::min();
+    }
+    return static_cast<int16_t>(pixels);
   }
 };
 

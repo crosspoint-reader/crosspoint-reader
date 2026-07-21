@@ -29,11 +29,15 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // False when ZIP enumeration stopped before the complete stylesheet set
+  // could be established. A partial set must never be published as valid.
+  bool cssDiscoveryComplete = true;
   // One central-directory scan is shared by preflight, sidecar binding, and
   // book.bin validation. A separate forced scan at the end detects a source
   // that changed while the EPUB was being opened or indexed.
   mutable ZipFile::SourceIdentity sourceIdentitySnapshot{};
   mutable bool hasSourceIdentitySnapshot = false;
+  bool externalCssUnavailable = false;
 
   bool ensureSourceIdentitySnapshot() const;
   bool sourceStillMatchesSnapshot() const;
@@ -42,7 +46,8 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
-  void parseCssFiles() const;
+  bool parseCssFiles() const;
+  bool prepareCssCache(bool verifySourceAtEntry);
 
  public:
   enum class SourceBindingStatus : uint8_t { Match, Missing, Mismatch, NewerVersion, Invalid, IoError };
@@ -59,6 +64,10 @@ class Epub {
   SourceBindingStatus inspectSourceBinding() const;
   bool bindCurrentSource() const;
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // Ensure the external stylesheet cache exists and passes a complete read-back.
+  // Safe to call repeatedly; already-valid caches leave section caches untouched.
+  bool ensureCssCache();
+  bool isExternalCssUnavailable() const { return externalCssUnavailable; }
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
@@ -85,6 +94,10 @@ class Epub {
   int getSpineIndexForTextReference() const;
 
   size_t getBookSize() const;
+  // Returns false if book.bin becomes unavailable or internally inconsistent
+  // while progress is being calculated. Callers that display authoritative
+  // state should not turn that failure into a plausible 0% value.
+  bool calculateProgressChecked(int currentSpineIndex, float currentSpineRead, float& progress) const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
   CssParser* getCssParser() const { return cssParser.get(); }
   int resolveHrefToSpineIndex(const std::string& href) const;
