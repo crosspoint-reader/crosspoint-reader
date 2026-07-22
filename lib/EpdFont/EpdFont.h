@@ -12,6 +12,13 @@ class EpdFont {
 
   const EpdGlyph* getGlyph(uint32_t cp) const;
 
+  /// Returns true if this font's interval table covers `cp`. Unlike getGlyph(),
+  /// it does NOT consult the on-demand miss handler or fall back to the
+  /// replacement glyph — it reports only what this font can render directly.
+  /// Used by the CJK UI font fallback to decide whether a string needs to be
+  /// routed to another font.
+  bool hasCodepoint(uint32_t cp) const;
+
   /// Returns the kerning adjustment (4.4 fixed-point in pixels) between two codepoints.
   /// Returns 0 if no kerning data exists for the pair.
   int8_t getKerning(uint32_t leftCp, uint32_t rightCp) const;
