@@ -55,7 +55,10 @@ std::string writeCssFixture(const std::string& css) {
 
 using Line = std::vector<std::pair<std::string, EpdFontFamily::Style>>;
 
-std::vector<Line> parseHtmlIntoLines(const std::string& html, const std::string& css = "") {
+// Runs the real parser end-to-end and returns the resulting pages. Shared by
+// parseHtmlIntoLines() (word/style assertions) and any test that also needs
+// to inspect a line's resolved BlockStyle (e.g. hanging-indent geometry).
+std::vector<std::unique_ptr<Page>> parseHtmlIntoPages(const std::string& html, const std::string& css = "") {
   HalDisplay halDisplay;
   GfxRenderer renderer(halDisplay);
   renderer.insertFont(kFontId, testfont::makeTestFontFamily());
@@ -90,6 +93,11 @@ std::vector<Line> parseHtmlIntoLines(const std::string& html, const std::string&
   const bool ok = parser.parseAndBuildPages();
   std::filesystem::remove(filepath);
   if (!ok) return {};
+  return pages;
+}
+
+std::vector<Line> parseHtmlIntoLines(const std::string& html, const std::string& css = "") {
+  const auto pages = parseHtmlIntoPages(html, css);
 
   std::vector<Line> lines;
   for (const auto& page : pages) {
@@ -105,6 +113,21 @@ std::vector<Line> parseHtmlIntoLines(const std::string& html, const std::string&
     }
   }
   return lines;
+}
+
+// Returns the BlockStyle of every PageLine, in order, across all pages.
+std::vector<BlockStyle> parseHtmlIntoBlockStyles(const std::string& html, const std::string& css = "") {
+  const auto pages = parseHtmlIntoPages(html, css);
+
+  std::vector<BlockStyle> styles;
+  for (const auto& page : pages) {
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto* pageLine = static_cast<const PageLine*>(element.get());
+      styles.push_back(pageLine->getBlock()->getBlockStyle());
+    }
+  }
+  return styles;
 }
 
 constexpr const char* kBullet = "\xE2\x80\xA2";
@@ -208,6 +231,40 @@ TEST(ChapterHtmlSlimParserListTest, ClassBasedListStyleTypeNoneOnOrderedListSupp
   EXPECT_EQ(lines[0][0].first, "Apple");
   ASSERT_FALSE(lines[1].empty());
   EXPECT_EQ(lines[1][0].first, "Banana");
+}
+
+// Regression test for a real-world EPUB CSS pattern: a <ul> container with its
+// own margin-left/padding-left (dropped prior to a fix that made <ul>/<ol>
+// full block containers), whose <li><p> children rely on that container inset
+// to counterbalance a hanging text-indent. Without the container's
+// contribution, leftInset()+textIndent goes negative and the first line's
+// glyphs render off the left edge of the page, with continuation lines
+// sitting almost flush against the margin instead of hanging-indented.
+TEST(ChapterHtmlSlimParserListTest, ListContainerMarginCounterbalancesHangingIndent) {
+  const auto styles = parseHtmlIntoBlockStyles(
+      "<html><body>"
+      "<ul class=\"list-simple1\">"
+      "<li><p class=\"list-item1\">Sketching User Experiences by Bill Buxton.</p></li>"
+      "<li><p class=\"list-item1\">Have Paper, Will Prototype by Bill Lucas.</p></li>"
+      "</ul>"
+      "</body></html>",
+      ".list-simple1 { margin-top: 1em; padding-left: 1.4em; margin-left: 0.1em; margin-bottom: 1em; "
+      "margin-right: 0.1em; text-align: left; list-style-type: none; }"
+      ".list-item1 { margin-top: 0.1em; margin-bottom: 0.1em; margin-right: 0em; margin-left: 0.1em; "
+      "text-indent: -1.5em; }");
+
+  ASSERT_FALSE(styles.empty());
+  const auto& firstLine = styles.front();
+  // The <ul>'s own padding-left (1.4em) + margin-left (0.1em) must still be
+  // present on the <li>/<p> block instead of being silently dropped.
+  EXPECT_GT(firstLine.leftInset(), 0);
+  EXPECT_TRUE(firstLine.textIndentDefined);
+  EXPECT_LT(firstLine.textIndent, 0);
+  // The actual regression: the hanging-indent's negative text-indent must not
+  // push the first line's start position past the left edge of the page.
+  EXPECT_GE(firstLine.leftInset() + firstLine.textIndent, 0)
+      << "leftInset=" << firstLine.leftInset() << " textIndent=" << firstLine.textIndent
+      << " -- first line would render off the left edge";
 }
 
 // Regression tests for PR #2589 (GitHub issue #956): when <li> wraps a

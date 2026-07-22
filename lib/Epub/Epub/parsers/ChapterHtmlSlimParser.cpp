@@ -41,7 +41,7 @@ constexpr size_t TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS = 320;
 constexpr size_t MAX_ANCHORS_PER_CHAPTER = 1024;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
-constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
+constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "ul", "ol"};
 constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
@@ -918,13 +918,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
           self->listItemBulletOnly = true;
         }
+      } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
+        // <ul>/<ol> now goes through the same container accumulation as <div>/<blockquote>
+        // above (blockStyleStack push + startNewTextBlock), so its own margin-left/
+        // padding-left contribute to the horizontal inset that <li>/<p> children combine
+        // with. Without this, list-container CSS margins/padding were silently dropped,
+        // and a hanging text-indent on the <li>'s child (e.g. text-indent: -1.5em) had
+        // nothing to hang off, pushing the marker off the left edge.
+        ChapterHtmlSlimParser::ListContext ctx;
+        ctx.ordered = strcmp(name, "ol") == 0;
+        ctx.styleNone = cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None;
+        self->listStack.push_back(ctx);
       }
     }
-  } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
-    ChapterHtmlSlimParser::ListContext ctx;
-    ctx.ordered = strcmp(name, "ol") == 0;
-    ctx.styleNone = cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None;
-    self->listStack.push_back(ctx);
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
     // Flush buffer before style change so preceding text gets current style
     if (self->partWordBufferIndex > 0) {
