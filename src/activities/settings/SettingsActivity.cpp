@@ -46,13 +46,7 @@ void SettingsActivity::rebuildSettingsLists() {
     } else if (setting.category == StrId::STR_CAT_READER) {
       // Settings merged into "Text Settings"
       // (they stay in the shared list for the web settings API)
-      if (setting.nameId == StrId::STR_FONT_FAMILY || setting.nameId == StrId::STR_FONT_SIZE ||
-          setting.nameId == StrId::STR_LINE_SPACING || setting.nameId == StrId::STR_EXTRA_SPACING ||
-          setting.nameId == StrId::STR_PARA_ALIGNMENT || setting.nameId == StrId::STR_SCREEN_MARGIN ||
-          setting.nameId == StrId::STR_FOCUS_READING || setting.nameId == StrId::STR_HYPHENATION ||
-          setting.nameId == StrId::STR_EMBEDDED_STYLE || setting.nameId == StrId::STR_TEXT_AA) {
-        continue;
-      }
+      if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
