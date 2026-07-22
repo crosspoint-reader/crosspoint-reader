@@ -100,14 +100,13 @@ void drawLine(const GfxRenderer& renderer, int fontId, int x, int y, const char*
 
 namespace textsettings {
 
-void renderPreview(GfxRenderer& renderer, int previewPadding, int top, int height, const char* familyName,
+void renderPreview(GfxRenderer& renderer, int previewPadding, int labelGap, int top, int height, const char* familyName,
                    const char* sizeName) {
   const int left = previewPadding;
   const int width = renderer.getScreenWidth() - (previewPadding * 2);
   if (width <= 0 || height <= 0) return;
 
   const int labelH = renderer.getTextHeight(UI_10_FONT_ID);
-  const int labelGap = 4;
   const int labelReserved = labelH + labelGap + previewPadding;
 
   char labelBuf[128];

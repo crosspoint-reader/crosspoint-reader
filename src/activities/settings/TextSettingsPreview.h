@@ -9,7 +9,7 @@ namespace textsettings {
 // from SETTINGS; the caller supplies only the pane geometry and the label's
 // family/size names. Kept in its own translation unit so the activity stays a
 // thin tab/nav shell.
-void renderPreview(GfxRenderer& renderer, int previewPadding, int top, int height, const char* familyName,
+void renderPreview(GfxRenderer& renderer, int previewPadding, int labelGap, int top, int height, const char* familyName,
                    const char* sizeName);
 
 }  // namespace textsettings
