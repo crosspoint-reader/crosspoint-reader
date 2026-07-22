@@ -86,11 +86,12 @@ void renderPreview(GfxRenderer& renderer, PreviewLayout& layout, int previewPadd
   const int lineAdvance = std::max(1, renderer.getLineHeight(fontId, compression));
   const int paragraphGap = SETTINGS.extraParagraphSpacing ? lineAdvance / 2 : 0;
 
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    fcm->prewarmCache(fontId, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), SETTINGS.focusReadingEnabled ? 0x03 : 0x01);
-  }
-
-  // Re-lay-out only when a layout-affecting setting or the geometry changed; else reuse cache
+  // Re-lay-out (and re-prewarm glyphs) only when a layout-affecting setting or the
+  // geometry changed; else reuse the cache. The prewarm inputs are (fontId, constant
+  // sample text, styleMask<-focusReading), all of which are key fields, so a matching
+  // key means an identical prewarm call. This relies on nothing else evicting the SD
+  // glyph cache while this activity is up — true today: the only evictor is
+  // FontCacheManager::PrewarmScope, used solely by the reader/dictionary activities.
   const PreviewKey key{.fontId = fontId,
                        .fontSize = SETTINGS.fontSize,
                        .screenMargin = SETTINGS.screenMargin,
@@ -101,6 +102,9 @@ void renderPreview(GfxRenderer& renderer, PreviewLayout& layout, int previewPadd
                        .focusReading = SETTINGS.focusReadingEnabled != 0,
                        .hyphenation = SETTINGS.hyphenationEnabled != 0};
   if (key != layout.key) {
+    if (auto* fcm = renderer.getFontCacheManager()) {
+      fcm->prewarmCache(fontId, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), SETTINGS.focusReadingEnabled ? 0x03 : 0x01);
+    }
     relayout(layout, renderer, fontId, textWidth);
     layout.key = key;
   }
