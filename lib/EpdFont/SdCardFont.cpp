@@ -68,6 +68,10 @@ bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& c
 const char* asCStr(const std::string& s) { return s.c_str(); }
 const char* asCStr(const char* s) { return s; }
 
+// resetStyleMiniData retention bounds (see the PerStyle comment in the header).
+constexpr size_t MINI_RETAIN_MIN_FREE_HEAP = 40 * 1024;
+constexpr uint8_t MINI_UNDERUSE_RUNS_BEFORE_FREE = 3;
+
 // Keep-if-fits buffer reuse: only reallocate when the needed size exceeds the
 // current capacity. Freeing + reallocating slightly different sizes every page
 // turn punches non-coalescing holes in the heap (the freed block rarely fits the
@@ -102,7 +106,46 @@ void SdCardFont::freeStyleMiniData(PerStyle& s) {
   s.miniIntervalCapacity = 0;
   s.miniGlyphCapacity = 0;
   s.miniBitmapCapacity = 0;
+  s.miniBitmapUsed = 0;
+  s.miniUnderuseRuns = 0;
   freeStyleMiniKern(s);
+  memset(&s.miniData, 0, sizeof(s.miniData));
+  s.epdFont.data = &s.stubData;
+}
+
+void SdCardFont::resetStyleMiniData(PerStyle& s) {
+  // Retention is a bet that the next page needs similar buffers. Don't hold it
+  // when the heap is tight: the arenas are rebuildable for one page's worth of
+  // allocations, and this floor keeps retained fonts out of the way of section
+  // builds and the render path's own floors.
+  if (ESP.getFreeHeap() < MINI_RETAIN_MIN_FREE_HEAP) {
+    freeStyleMiniData(s);
+    return;
+  }
+  // Underuse hysteresis, on the bitmap arena (the dominant allocation): an
+  // outlier page (e.g. three styles cramped together) would otherwise pin its
+  // high-water arena for the rest of the book. Keep while the page used at
+  // least 3/4 of capacity; release only after several consecutive pages below
+  // that, so alternating dense/sparse pages never thrash. miniBitmapUsed == 0
+  // (metadata-only scope) carries no signal and leaves the counter untouched.
+  if (s.miniBitmapCapacity > 0 && s.miniBitmapUsed > 0) {
+    if (s.miniBitmapUsed < s.miniBitmapCapacity - s.miniBitmapCapacity / 4) {
+      if (++s.miniUnderuseRuns >= MINI_UNDERUSE_RUNS_BEFORE_FREE) {
+        LOG_DBG("SDCF", "mini release (underuse): used=%u cap=%u", s.miniBitmapUsed, s.miniBitmapCapacity);
+        freeStyleMiniData(s);
+        return;
+      }
+    } else {
+      s.miniUnderuseRuns = 0;
+    }
+  }
+  s.miniIntervalCount = 0;
+  s.miniGlyphCount = 0;
+  s.miniBitmapUsed = 0;
+  s.miniKernLeftEntryCount = 0;
+  s.miniKernRightEntryCount = 0;
+  s.miniKernLeftClassCount = 0;
+  s.miniKernRightClassCount = 0;
   memset(&s.miniData, 0, sizeof(s.miniData));
   s.epdFont.data = &s.stubData;
 }
@@ -926,6 +969,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       freeStyleMiniData(s);
       return static_cast<int>(cpCount);
     }
+    s.miniBitmapUsed = totalBitmapSize;  // underuse-hysteresis signal for resetStyleMiniData
 
     // Read bitmap data sorted by file offset
     std::sort(readOrder, readOrder + validCount,
@@ -1020,7 +1064,7 @@ void SdCardFont::clearCache() {
   // clearPersistentCache() to wipe it.
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;
-    freeStyleMiniData(styles_[i]);
+    resetStyleMiniData(styles_[i]);
     applyGlyphMissCallback(i);
   }
 }

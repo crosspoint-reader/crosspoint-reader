@@ -172,9 +172,15 @@ class SdCardFont {
     // (capacities below track allocated sizes): freeing and reallocating slightly
     // different sizes on every page turn was a primary heap fragmenter — each page's
     // freed hole rarely fit the next page's need, so maxAlloc eroded all session.
-    // After a few pages the capacities converge on the book's max and page turns
-    // stop allocating entirely. freeStyleMiniData() still releases everything (and
-    // zeroes capacities) for style eviction / font unload.
+    // The per-render PrewarmScope calls clearCache() -> resetStyleMiniData(), which
+    // drops the page's DATA (counts, miniData) but keeps the allocations so the
+    // next page's ensureArrayCapacity early-returns; after a few pages the
+    // capacities converge on the book's max and page turns stop touching the
+    // allocator. Retention is bounded two ways in resetStyleMiniData(): a heap
+    // floor frees outright under pressure, and sustained underuse (an outlier
+    // page's oversized bitmap arena) frees after a few consecutive low-use pages.
+    // freeStyleMiniData() remains the full teardown (zeroes capacities) for style
+    // eviction / font unload.
     EpdFontData miniData{};
     EpdUnicodeInterval* miniIntervals = nullptr;
     EpdGlyph* miniGlyphs = nullptr;
@@ -184,6 +190,11 @@ class SdCardFont {
     uint32_t miniIntervalCapacity = 0;
     uint32_t miniGlyphCapacity = 0;
     uint32_t miniBitmapCapacity = 0;
+    // Bitmap bytes the current page actually used (set by prewarmStyle), the
+    // underuse-hysteresis signal; 0 = no bitmap built this scope (metadata-only
+    // prewarm), which leaves the hysteresis counter untouched.
+    uint32_t miniBitmapUsed = 0;
+    uint8_t miniUnderuseRuns = 0;
 
     // Per-page mini kern matrix (built by buildMiniKernMatrix on each full
     // prewarm). miniKernLeftClasses/miniKernRightClasses map ONLY the codepoints
@@ -257,6 +268,10 @@ class SdCardFont {
 
   // Per-style helpers
   void freeStyleMiniData(PerStyle& s);
+  // Per-scope variant: drop the page's data, keep the allocations (see the
+  // PerStyle comment). May escalate to freeStyleMiniData under heap pressure
+  // or sustained underuse.
+  void resetStyleMiniData(PerStyle& s);
   void freeStyleAll(PerStyle& s);
   void freeStyleKernLigatureData(PerStyle& s);
   void freeStyleMiniKern(PerStyle& s);
