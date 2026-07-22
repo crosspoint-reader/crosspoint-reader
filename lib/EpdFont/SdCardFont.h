@@ -265,4 +265,8 @@ class SdCardFont {
 
   // Static callback for EpdFontData::glyphMissHandler (per-style via OverflowContext)
   static const EpdGlyph* onGlyphMiss(void* ctx, uint32_t codepoint);
+
+  // Static callback for EpdFontData::coverageHandler: answers hasCodepoint()
+  // from the RAM-resident full interval table, without SD I/O.
+  static bool onCoverageQuery(void* ctx, uint32_t codepoint);
 };
