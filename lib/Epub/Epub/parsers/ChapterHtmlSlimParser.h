@@ -90,6 +90,10 @@ class ChapterHtmlSlimParser {
     bool ordered = false;    // true for <ol>, false for <ul>
     bool styleNone = false;  // true when list-style-type: none is set on this list
     int counter = 0;         // incremented before each direct <li>; used as its number when ordered
+    int depth = 0;           // self->depth at push time (before startElement's trailing increment);
+                             // matches self->depth in endElement after its leading decrement for the
+                             // same element, letting the pop below tell "my closing tag" apart from
+                             // "a hidden nested list's closing tag" (see endElement).
   };
   std::vector<ListContext> listStack;
 

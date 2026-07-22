@@ -928,6 +928,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         ChapterHtmlSlimParser::ListContext ctx;
         ctx.ordered = strcmp(name, "ol") == 0;
         ctx.styleNone = cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None;
+        ctx.depth = self->depth;
         self->listStack.push_back(ctx);
       }
     }
@@ -1350,7 +1351,12 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
   // </ul> or </ol> closes: pop its list context so a following sibling list at the
   // same nesting level starts its own counter/style instead of inheriting this one's.
-  if ((strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) && !self->listStack.empty()) {
+  // Guarded by depth (not just tag name + non-empty stack): a display:none <ul>/<ol>
+  // returns early in startElement without ever pushing a context (see the
+  // hasDisplay()/CssDisplay::None branch above), so its closing tag must not pop
+  // the *parent* list's context out from under still-unprocessed siblings.
+  if ((strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) && !self->listStack.empty() &&
+      self->listStack.back().depth == self->depth) {
     self->listStack.pop_back();
   }
 }

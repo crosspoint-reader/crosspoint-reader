@@ -159,6 +159,38 @@ TEST(ChapterHtmlSlimParserListTest, OrderedListItemsGetNumberedPrefix) {
   EXPECT_EQ(lines[1][0].first, "2.");
 }
 
+TEST(ChapterHtmlSlimParserListTest, NestedOrderedListsRestartAndResumeCounters) {
+  const auto lines = parseHtmlIntoLines(
+      "<html><body><ol><li>Outer one"
+      "<ol><li>Inner one</li></ol>"
+      "</li><li>Outer two</li></ol></body></html>");
+
+  ASSERT_EQ(lines.size(), 3u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "1.");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "1.");
+  ASSERT_FALSE(lines[2].empty());
+  EXPECT_EQ(lines[2][0].first, "2.");
+}
+
+// Regression test: a display:none nested <ul>/<ol> returns from startElement
+// before pushing a ListContext (see the hasDisplay()/CssDisplay::None fast
+// path), so its closing tag must not unconditionally pop the *outer* list's
+// context -- otherwise later outer <li>s lose their number/bullet entirely.
+TEST(ChapterHtmlSlimParserListTest, HiddenNestedListDoesNotPopOuterListContext) {
+  const auto lines = parseHtmlIntoLines(
+      "<html><body><ol><li>Outer one</li>"
+      "<ol style=\"display: none\"><li>Hidden</li></ol>"
+      "<li>Outer two</li></ol></body></html>");
+
+  ASSERT_EQ(lines.size(), 2u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "1.");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "2.");
+}
+
 TEST(ChapterHtmlSlimParserListTest, ListStyleTypeNoneSuppressesMarker) {
   const auto lines =
       parseHtmlIntoLines("<html><body><ul style=\"list-style-type: none\"><li>Apple</li></ul></body></html>");
