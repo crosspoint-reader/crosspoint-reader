@@ -38,9 +38,9 @@ bool ImageDimsProbe::feed(const uint8_t b) {
           return false;
         }
       } else if (pos >= 16 && pos < 20) {
-        width = static_cast<uint16_t>((static_cast<uint32_t>(width) << 8) | b);
+        width = (width << 8) | b;
       } else if (pos >= 20 && pos < 24) {
-        height = static_cast<uint16_t>((static_cast<uint32_t>(height) << 8) | b);
+        height = (height << 8) | b;
         if (pos == 23) {
           state = State::Done;
           pos++;
@@ -111,8 +111,8 @@ bool ImageDimsProbe::feed(const uint8_t b) {
     case State::JpegSof:
       sofBuf[sofFill++] = b;
       if (sofFill == 5) {
-        height = static_cast<uint16_t>((sofBuf[1] << 8) | sofBuf[2]);
-        width = static_cast<uint16_t>((sofBuf[3] << 8) | sofBuf[4]);
+        height = static_cast<uint32_t>((sofBuf[1] << 8) | sofBuf[2]);
+        width = static_cast<uint32_t>((sofBuf[3] << 8) | sofBuf[4]);
         state = State::Done;
         return false;
       }

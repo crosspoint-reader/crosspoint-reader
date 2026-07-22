@@ -44,6 +44,9 @@ class ImageDimsProbe : public Print {
   bool sofPending = false;  // current segment is a SOF frame header
   uint8_t sofBuf[5] = {0};
   uint8_t sofFill = 0;
-  uint16_t width = 0;
-  uint16_t height = 0;
+  // 32-bit: PNG IHDR width/height are 4-byte fields. Accumulating them in a
+  // uint16_t silently truncates an oversized image to a plausible small value
+  // that passes the INT16_MAX sanity check in getDimensions().
+  uint32_t width = 0;
+  uint32_t height = 0;
 };

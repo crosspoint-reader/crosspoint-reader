@@ -217,8 +217,13 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   const int bytesPerRow = (cachedWidth + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
 
   // First pass of a page render: try to pull the payload into the RAM slot so
-  // the remaining ~12 passes skip SD entirely.
-  if (loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
+  // the remaining ~12 passes skip SD entirely. Only an EMPTY slot is claimed:
+  // the slot lives until the page render completes, so a populated slot with a
+  // different hash means another image on this same page owns it. Evicting it
+  // here would make 2+ image pages reload each other from SD on every pass
+  // (all the SD traffic of streaming plus the slot alloc churn); instead later
+  // images take the streaming path below, unchanged from pre-cache behavior.
+  if (pxcSlotHash == 0 && loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
     renderRowsFromPxcSlot(renderer, x, y);
     LOG_DBG("IMG", "Cache render complete (payload now in RAM)");
     return true;
