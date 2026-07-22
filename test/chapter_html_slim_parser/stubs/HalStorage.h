@@ -7,12 +7,12 @@
 // the SD card. Only the subset of the real API that ChapterHtmlSlimParser.cpp
 // and CssParser.cpp actually call is implemented.
 
-#include "Print.h"
-
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
+
+#include "Print.h"
 
 class HalFile : public Print {
   friend class HalStorage;

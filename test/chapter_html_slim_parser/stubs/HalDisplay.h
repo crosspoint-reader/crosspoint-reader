@@ -6,9 +6,9 @@
 // GfxRenderer.cpp double never calls into a HalDisplay instance, so no
 // framebuffer/SPI methods are needed here.
 
-#include "Arduino.h"
-
 #include <cstdint>
+
+#include "Arduino.h"
 
 class HalDisplay {
  public:

@@ -5,10 +5,10 @@
 // reference in passing (e.g. ChapterHtmlSlimParser's popup timing, the image
 // decode retry loop) without needing the real Arduino core.
 
+#include <cstdint>
+
 #include "Print.h"
 #include "WString.h"
-
-#include <cstdint>
 
 inline void delay(unsigned long) {}
 inline unsigned long millis() { return 0; }

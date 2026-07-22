@@ -8,12 +8,9 @@
 // ...) instead of always getting the unordered-list bullet, and
 // list-style-type: none should suppress the marker entirely.
 
-#include "Epub/parsers/ChapterHtmlSlimParser.h"
-
-#include <gtest/gtest.h>
-
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <gtest/gtest.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -27,6 +24,7 @@
 #include "Epub/Page.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
+#include "Epub/parsers/ChapterHtmlSlimParser.h"
 #include "TestFont.h"
 
 namespace {
@@ -37,8 +35,8 @@ constexpr uint16_t kViewportHeight = 4000;
 
 std::string writeFixture(const std::string& html) {
   static int counter = 0;
-  const auto path = std::filesystem::temp_directory_path() /
-                     ("chapter_html_slim_parser_test_" + std::to_string(counter++) + ".html");
+  const auto path =
+      std::filesystem::temp_directory_path() / ("chapter_html_slim_parser_test_" + std::to_string(counter++) + ".html");
   std::ofstream out(path, std::ios::binary);
   out << html;
   out.close();
@@ -105,8 +103,7 @@ TEST(ChapterHtmlSlimParserListTest, UnorderedListItemGetsBulletPrefix) {
 }
 
 TEST(ChapterHtmlSlimParserListTest, OrderedListItemsGetNumberedPrefix) {
-  const auto lines =
-      parseHtmlIntoLines("<html><body><ol><li>Apple</li><li>Banana</li></ol></body></html>");
+  const auto lines = parseHtmlIntoLines("<html><body><ol><li>Apple</li><li>Banana</li></ol></body></html>");
 
   ASSERT_EQ(lines.size(), 2u);
   ASSERT_FALSE(lines[0].empty());
@@ -116,8 +113,8 @@ TEST(ChapterHtmlSlimParserListTest, OrderedListItemsGetNumberedPrefix) {
 }
 
 TEST(ChapterHtmlSlimParserListTest, ListStyleTypeNoneSuppressesMarker) {
-  const auto lines = parseHtmlIntoLines(
-      "<html><body><ul style=\"list-style-type: none\"><li>Apple</li></ul></body></html>");
+  const auto lines =
+      parseHtmlIntoLines("<html><body><ul style=\"list-style-type: none\"><li>Apple</li></ul></body></html>");
 
   ASSERT_EQ(lines.size(), 1u);
   ASSERT_FALSE(lines[0].empty());
@@ -125,8 +122,8 @@ TEST(ChapterHtmlSlimParserListTest, ListStyleTypeNoneSuppressesMarker) {
 }
 
 TEST(ChapterHtmlSlimParserListTest, OrderedListStyleTypeNoneSuppressesNumber) {
-  const auto lines = parseHtmlIntoLines(
-      "<html><body><ol style=\"list-style-type: none\"><li>Apple</li></ol></body></html>");
+  const auto lines =
+      parseHtmlIntoLines("<html><body><ol style=\"list-style-type: none\"><li>Apple</li></ol></body></html>");
 
   ASSERT_EQ(lines.size(), 1u);
   ASSERT_FALSE(lines[0].empty());
@@ -147,8 +144,7 @@ TEST(ChapterHtmlSlimParserListItemBlockTest, BulletStaysInlineWithNestedParagrap
 }
 
 TEST(ChapterHtmlSlimParserListItemBlockTest, SecondParagraphInSameListItemStartsNewLineWithoutBullet) {
-  const auto lines =
-      parseHtmlIntoLines("<html><body><ul><li><p>First</p><p>Second</p></li></ul></body></html>");
+  const auto lines = parseHtmlIntoLines("<html><body><ul><li><p>First</p><p>Second</p></li></ul></body></html>");
 
   ASSERT_EQ(lines.size(), 2u);
   ASSERT_EQ(lines[0].size(), 2u);
@@ -183,4 +179,3 @@ TEST(ChapterHtmlSlimParserListItemBlockTest, EmptyListItemDoesNotAbsorbNextItems
   EXPECT_EQ(lines[1][0].first, kBullet);
   EXPECT_EQ(lines[1][1].first, "Text");
 }
-

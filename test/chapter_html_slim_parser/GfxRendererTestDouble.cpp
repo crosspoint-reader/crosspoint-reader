@@ -13,9 +13,9 @@
 // test-only replacement, the same pattern test/minibidi_arabic uses for
 // Logging.h.
 
-#include "GfxRenderer.h"
-
 #include <Utf8.h>
+
+#include "GfxRenderer.h"
 
 bool GfxRenderer::isFontCacheScanning() const { return false; }
 

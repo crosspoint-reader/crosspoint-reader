@@ -44,4 +44,3 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& /*
 bool Epub::readItemContentsToStream(const std::string& /*itemHref*/, Print& /*out*/, size_t /*chunkSize*/) const {
   return false;
 }
-
