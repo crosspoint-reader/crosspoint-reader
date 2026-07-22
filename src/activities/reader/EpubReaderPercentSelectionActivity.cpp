@@ -4,6 +4,7 @@
 #include <HalGPIO.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "MappedInputManager.h"
@@ -36,12 +37,61 @@ void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
 }
 
 void EpubReaderPercentSelectionActivity::loop() {
+  auto& theme = UITheme::getInstance();
+  auto metrics = theme.getMetrics();
+  Rect screen = theme.getScreenSafeArea(renderer, true, false);
+  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
+  constexpr int barWidth = 360;
+  constexpr int barHeight = 16;
+  const int barX = screen.x + (screen.width - barWidth) / 2;
+  const int barY = contentTop + metrics.verticalSpacing * 2;
+  int tx = 0;
+  int ty = 0;
+
+  // Live drag on the slider: once a touch lands on the bar, the percent follows the
+  // finger until release. Runs before the Back handler because the release of a drag
+  // can also register as a swipe (e.g. the left-edge rightward back gesture) — the
+  // drag must consume it so it can't cancel the dialog or step the percent.
+  if (mappedInput.isScreenTouchHeld(tx, ty)) {
+    if (draggingBar ||
+        (tx >= barX - 20 && tx < barX + barWidth + 20 && ty >= barY - 24 && ty < barY + barHeight + 24)) {
+      draggingBar = true;
+      const int dragged = std::clamp((tx - barX) * 100 / barWidth, 0, 100);
+      if (dragged != percent) {
+        percent = dragged;
+        requestUpdate();
+      }
+      return;
+    }
+  } else if (draggingBar) {
+    // Release frame of a drag: swallow the tap/swipe events it produced.
+    draggingBar = false;
+    return;
+  }
+
   // Back cancels, confirm selects, arrows adjust the percent.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
+    return;
+  }
+
+  if (mappedInput.wasScreenTapped(tx, ty) && tx >= barX - 20 && tx < barX + barWidth + 20 && ty >= barY - 24 &&
+      ty < barY + barHeight + 24) {
+    percent = std::clamp((tx - barX) * 100 / barWidth, 0, 100);
+    requestUpdate();
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Right) {
+    adjustPercent(kLargeStep);
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Left) {
+    adjustPercent(-kLargeStep);
     return;
   }
 

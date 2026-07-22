@@ -16,8 +16,10 @@ void QrDisplayActivity::onEnter() {
 void QrDisplayActivity::onExit() { Activity::onExit(); }
 
 void QrDisplayActivity::loop() {
+  int x = 0;
+  int y = 0;
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
     finish();
     return;
   }

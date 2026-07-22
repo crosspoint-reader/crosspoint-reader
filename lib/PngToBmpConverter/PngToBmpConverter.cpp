@@ -4,6 +4,8 @@
 #include <HalStorage.h>
 #include <InflateStream.h>
 #include <Logging.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <cstdio>
 #include <cstring>
@@ -71,6 +73,12 @@ enum PngFilter : uint8_t {
   PNG_FILTER_AVERAGE = 3,
   PNG_FILTER_PAETH = 4,
 };
+
+void yieldDuringDecode(uint8_t& rowsSinceYield) {
+  if (++rowsSinceYield < 8) return;
+  rowsSinceYield = 0;
+  vTaskDelay(1);
+}
 
 // Read a big-endian 32-bit value from file
 bool readBE32(HalFile& file, uint32_t& value) {
@@ -659,6 +667,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   }
 
   bool success = true;
+  uint8_t rowsSinceYield = 0;
 
   // Process each scanline
   for (uint32_t y = 0; y < height; y++) {
@@ -710,6 +719,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
           fsDitherer->nextRow();
       }
       bmpOut.write(rowBuffer, bytesPerRow);
+      yieldDuringDecode(rowsSinceYield);
     } else {
       // Area-averaging scaling (same as JpegToBmpConverter)
       for (int outX = 0; outX < outWidth; outX++) {
@@ -778,6 +788,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
         bmpOut.write(rowBuffer, bytesPerRow);
         currentOutY++;
+        yieldDuringDecode(rowsSinceYield);
 
         nextOutY_srcStart = static_cast<uint32_t>(currentOutY + 1) * scaleY_fp;
 

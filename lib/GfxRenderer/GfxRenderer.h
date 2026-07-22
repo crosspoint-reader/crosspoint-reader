@@ -134,7 +134,19 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
+  void tapToLogical(float nx, float ny, int& outX, int& outY) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
+  // grayscale strip rendering) can overlap the panel's refresh time. The
+  // framebuffer must stay untouched until waitRefreshComplete(). Falls back to
+  // a blocking refresh when fadingFix is enabled or the panel lacks deferral
+  // support. See HalDisplay::displayBufferAsync for the baseline contract.
+  void displayBufferAsync(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  void waitRefreshComplete() const;
+  // True when displayBufferAsync() genuinely overlaps: panel defers and
+  // fadingFix isn't forcing the blocking path. Callers can skip overlap
+  // scaffolding (e.g. whole-plane grayscale buffers) when false.
+  bool supportsAsyncRefresh() const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
@@ -188,6 +200,15 @@ class GfxRenderer {
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
+
+  // Snapshot / restore a screen-coordinate framebuffer region (byte-aligned in
+  // panel memory). readFramebufferRegion returns the bytes written to dst, or
+  // 0 when the region is empty, offscreen, or exceeds dstCapacity. Pass the
+  // same rectangle to writeFramebufferRegion to restore the saved pixels.
+  // Enables partial-repaint patterns (e.g. moving a selection highlight)
+  // without re-rendering the whole page.
+  size_t readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const;
+  void writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src);
 
   // Text
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR,

@@ -205,8 +205,12 @@ void FileBrowserActivity::loop() {
 
   const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  auto activateSelected = [this] {
     if (lockNextConfirmRelease) {
       lockNextConfirmRelease = false;
       return;
@@ -234,6 +238,11 @@ void FileBrowserActivity::loop() {
       const std::string fullPath = cleanBasePath + entry;
 
       auto handler = [this, fullPath](const ActivityResult& res) {
+        // The confirmation popup acts on button press; if that button is still
+        // held when we resume, swallow its release so it doesn't also act here
+        // (Back would go up a directory, Confirm would open the selection).
+        lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
+        lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
         if (!res.isCancelled) {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           if (removeDirFile(fullPath)) {
@@ -273,6 +282,19 @@ void FileBrowserActivity::loop() {
       }
     }
     return;
+  };
+
+  int touchSel = static_cast<int>(selectorIndex);
+  const auto listTouch = handleListTouch(touchSel, static_cast<int>(files.size()), contentTop, contentHeight, false);
+  if (listTouch != ListTouchResult::None) {
+    selectorIndex = static_cast<size_t>(touchSel);
+    if (listTouch == ListTouchResult::Activated) activateSelected();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    activateSelected();
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -303,6 +325,18 @@ void FileBrowserActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();

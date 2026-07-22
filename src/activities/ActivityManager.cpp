@@ -22,12 +22,17 @@
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
 void ActivityManager::begin() {
+#if defined(configNUM_CORES) && configNUM_CORES > 1
+  constexpr BaseType_t renderTaskCore = 1;
+#else
+  constexpr BaseType_t renderTaskCore = 0;
+#endif
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
                           8192,               // Stack size
                           this,               // Parameters
                           1,                  // Priority
                           &renderTaskHandle,  // Task handle
-                          0                   // Pin to core 0 (PRO_CPU)
+                          renderTaskCore  // Keep long renders/cover decodes off CPU 0's idle watchdog when available
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
 }
@@ -61,6 +66,14 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (currentActivity) {
+    if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
+      if (currentActivity->handleHomeGesture()) {
+        return;
+      }
+      goHome();
+      return;
+    }
+
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
   }

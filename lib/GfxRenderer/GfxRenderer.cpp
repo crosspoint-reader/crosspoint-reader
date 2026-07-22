@@ -213,6 +213,61 @@ static inline void rotateCoordinates(const GfxRenderer::Orientation orientation,
   }
 }
 
+// Output of screenRectToAlignedMemRect: a rectangle in panel-memory
+// coordinates whose x and width are guaranteed to be multiples of 8 (the
+// SDK's EInkDisplay::displayWindow alignment requirement). `valid == false`
+// means the input was empty or fully outside the panel.
+struct AlignedMemRect {
+  uint16_t x = 0;
+  uint16_t y = 0;
+  uint16_t w = 0;
+  uint16_t h = 0;
+  bool valid = false;
+};
+
+// Translate a screen-coordinate rectangle (the coordinate system used by
+// fillRect / drawText / the rest of the renderer's public API) into a
+// panel-memory rectangle suitable for direct framebuffer indexing. Rotates
+// the rectangle's two opposite corners with rotateCoordinates(), takes the
+// bounding box (which naturally swaps width/height in Portrait /
+// PortraitInverted), then snaps the x extent outward to multiples of 8 and
+// clamps to panel bounds. Precondition: panel dims are multiples of 8 (true
+// for the 800x480 panel), so clamping cannot re-break alignment.
+static AlignedMemRect screenRectToAlignedMemRect(GfxRenderer::Orientation orientation, int sx, int sy, int sw, int sh,
+                                                 uint16_t panelWidth, uint16_t panelHeight) {
+  AlignedMemRect out;
+  if (sw <= 0 || sh <= 0) return out;
+
+  int x0, y0, x1, y1;
+  rotateCoordinates(orientation, sx, sy, &x0, &y0, panelWidth, panelHeight);
+  rotateCoordinates(orientation, sx + sw - 1, sy + sh - 1, &x1, &y1, panelWidth, panelHeight);
+
+  const int memXLo = std::min(x0, x1);
+  const int memYLo = std::min(y0, y1);
+  const int memXHi = std::max(x0, x1) + 1;  // exclusive upper bound
+  const int memYHi = std::max(y0, y1) + 1;
+
+  // Snap x outward to multiples of 8.
+  int alignedXLo = memXLo & ~0x7;        // round down
+  int alignedXHi = (memXHi + 7) & ~0x7;  // round up
+
+  if (alignedXLo < 0) alignedXLo = 0;
+  if (alignedXHi > panelWidth) alignedXHi = panelWidth;
+  int clampedYLo = memYLo;
+  int clampedYHi = memYHi;
+  if (clampedYLo < 0) clampedYLo = 0;
+  if (clampedYHi > panelHeight) clampedYHi = panelHeight;
+
+  if (alignedXHi <= alignedXLo || clampedYHi <= clampedYLo) return out;
+
+  out.x = static_cast<uint16_t>(alignedXLo);
+  out.y = static_cast<uint16_t>(clampedYLo);
+  out.w = static_cast<uint16_t>(alignedXHi - alignedXLo);
+  out.h = static_cast<uint16_t>(clampedYHi - clampedYLo);
+  out.valid = true;
+  return out;
+}
+
 enum class TextRotation { None, Rotated90CW };
 
 // Shared glyph rendering logic for normal and rotated text.
@@ -1451,6 +1506,53 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   display.displayBuffer(refreshMode, fadingFix);
 }
 
+void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
+  // The async path has no turn-off-screen hook, which the sunlight fading fix
+  // relies on; keep those users on the blocking path.
+  if (fadingFix) {
+    display.displayBuffer(refreshMode, fadingFix);
+    return;
+  }
+  display.displayBufferAsync(refreshMode);
+}
+
+void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
+
+bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
+
+size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
+  if (dst == nullptr || w <= 0 || h <= 0) return 0;
+
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return 0;
+
+  const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+  const size_t needed = rowBytes * mem.h;
+  if (needed > dstCapacity) return 0;
+
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    const uint8_t* srcRow = frameBuffer + (static_cast<uint32_t>(mem.y + row) * panelWidthBytes) + (mem.x / 8);
+    uint8_t* dstRow = dst + (static_cast<size_t>(row) * rowBytes);
+    memcpy(dstRow, srcRow, rowBytes);
+  }
+  return needed;
+}
+
+void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src) {
+  if (src == nullptr || w <= 0 || h <= 0) return;
+
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return;
+
+  const size_t rowBytes = mem.w / 8;  // exact: mem.w is a multiple of 8
+
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    const uint8_t* srcRow = src + (static_cast<size_t>(row) * rowBytes);
+    uint8_t* dstRow = frameBuffer + (static_cast<uint32_t>(mem.y + row) * panelWidthBytes) + (mem.x / 8);
+    memcpy(dstRow, srcRow, rowBytes);
+  }
+}
+
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
   if (!text || maxWidth <= 0) return "";
@@ -1562,6 +1664,35 @@ int GfxRenderer::getScreenHeight() const {
       return panelHeight;
   }
   return panelWidth;
+}
+
+void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
+  int phyX = static_cast<int>(nx * panelWidth);
+  int phyY = static_cast<int>(ny * panelHeight);
+  if (phyX < 0) phyX = 0;
+  if (phyX > panelWidth - 1) phyX = panelWidth - 1;
+  if (phyY < 0) phyY = 0;
+  if (phyY > panelHeight - 1) phyY = panelHeight - 1;
+
+  switch (orientation) {
+    case Portrait:
+      outX = panelHeight - 1 - phyY;
+      outY = phyX;
+      break;
+    case PortraitInverted:
+      outX = phyY;
+      outY = panelWidth - 1 - phyX;
+      break;
+    case LandscapeClockwise:
+      outX = panelWidth - 1 - phyX;
+      outY = panelHeight - 1 - phyY;
+      break;
+    case LandscapeCounterClockwise:
+    default:
+      outX = phyX;
+      outY = phyY;
+      break;
+  }
 }
 
 // Translate a logical rect through rotateCoordinates and take the bounding

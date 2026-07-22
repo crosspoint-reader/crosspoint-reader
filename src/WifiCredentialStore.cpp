@@ -38,7 +38,7 @@ bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
 
   if (needsResave) {
     LOG_DBG("WCS", "Resaving JSON with obfuscated passwords");
-    saveToFile();
+    requestResave();
   }
 
   return true;

@@ -20,6 +20,9 @@ class EpubReaderPercentSelectionActivity final : public Activity {
   // Current percent value (0-100) shown on the slider.
   int percent = 0;
 
+  // True while a touch that landed on the slider bar is being dragged.
+  bool draggingBar = false;
+
   ButtonNavigator buttonNavigator;
 
   // Change the current percent by a delta and clamp within bounds.

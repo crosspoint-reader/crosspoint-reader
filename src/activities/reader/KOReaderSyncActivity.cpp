@@ -232,8 +232,19 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  // Prefer the exact spine/page from a crosspoint-sync rich position (lossless
+  // CrossPoint<->CrossPoint sync); fall back to the approximate XPath mapping
+  // for plain kosync servers or when the rich position cannot be applied.
+  std::optional<CrossPointPosition> richMapped;
+  if (remoteProgress.position.has_value()) {
+    richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
+  }
+  if (richMapped.has_value()) {
+    remotePosition = *richMapped;
+  } else {
+    SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
+    remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  }
 
   if (smartSyncEnabled()) {
     static constexpr float SAME_PROGRESS_EPSILON = 0.001f;  // 0.1 percentage points
@@ -286,6 +297,22 @@ void KOReaderSyncActivity::performUpload() {
   progress.document = documentHash;
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
+
+  // Rich CrossPoint position for crosspoint-sync servers (lossless
+  // CrossPoint<->CrossPoint sync); plain kosync servers ignore the extra field.
+  {
+    KOReaderRichPosition pos;
+    const float pct = localProgress.percentage < 0.0f   ? 0.0f
+                      : localProgress.percentage > 1.0f ? 1.0f
+                                                        : localProgress.percentage;
+    pos.pctQ = static_cast<uint32_t>(pct * 1000000.0f + 0.5f);
+    pos.spineIndex = static_cast<uint16_t>(currentSpineIndex);
+    pos.pageNumber = static_cast<uint16_t>(currentPage);
+    pos.totalPages = static_cast<uint16_t>(totalPagesInSpine > 0 ? totalPagesInSpine : 1);
+    pos.paragraphIndex = currentParagraphIndex;
+    pos.xpath = localProgress.xpath;
+    progress.position = std::move(pos);
+  }
 
   // Optionally include document metadata (KOReader PR #15306)
   if (KOREADER_STORE.getSendMetadata()) {
@@ -509,6 +536,35 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == SHOWING_RESULT) {
+    auto chooseSelected = [this] {
+      if (selectedOption == 0) {
+        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+      } else if (selectedOption == 1) {
+        performUpload();
+      }
+    };
+
+    {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+      constexpr int optionHeight = 30;
+      int touchedOption = -1;
+      const auto touch = mappedInput.rowTouch(touchedOption, top + 230 - 2, optionHeight, 2);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (selectedOption != touchedOption) {
+          selectedOption = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        selectedOption = touchedOption;
+        chooseSelected();
+        return;
+      }
+    }
+
     // Navigate options
     if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
         mappedInput.wasReleased(MappedInputManager::Button::Left)) {
@@ -521,12 +577,7 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (selectedOption == 0) {
-        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
-      } else if (selectedOption == 1) {
-        // Upload local progress
-        performUpload();
-      }
+      chooseSelected();
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -536,6 +587,21 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty) && ty > renderer.getScreenHeight() / 3 &&
+        ty < renderer.getScreenHeight() * 2 / 3) {
+      if (documentHash.empty()) {
+        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
+          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
+        } else {
+          documentHash = KOReaderDocumentId::calculate(epubPath);
+        }
+      }
+      performUpload();
+      return;
+    }
+
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {

@@ -724,6 +724,59 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   return result;
 }
 
+std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(const std::shared_ptr<Epub>& epub,
+                                                                   const KOReaderRichPosition& rich,
+                                                                   GfxRenderer& renderer) {
+  const int spineCount = epub->getSpineItemsCount();
+  if (static_cast<int>(rich.spineIndex) >= spineCount) {
+    LOG_DBG("PM", "Rich position spine %u out of range (%d spine items)", rich.spineIndex, spineCount);
+    return std::nullopt;
+  }
+
+  CrossPointPosition result{};
+  result.spineIndex = rich.spineIndex;
+
+  Section tempSection(epub, result.spineIndex, renderer);
+  const auto cachedCount = tempSection.getCachedPageCount();
+  if (!cachedCount || *cachedCount <= 0) {
+    // No local layout for the target spine yet; the percentage/xpath mapping
+    // handles density estimation better than a blind copy of remote pages.
+    LOG_DBG("PM", "Rich position spine %u has no cached page count", rich.spineIndex);
+    return std::nullopt;
+  }
+  result.totalPages = *cachedCount;
+
+  const int remotePages = rich.totalPages > 0 ? rich.totalPages : 1;
+  if (result.totalPages == remotePages) {
+    // Identical layout (same render settings) — the page transfers losslessly.
+    result.pageNumber = std::min<int>(rich.pageNumber, result.totalPages - 1);
+    LOG_DBG("PM", "Rich position exact: spine=%d page=%d/%d", result.spineIndex, result.pageNumber, result.totalPages);
+    return result;
+  }
+
+  // Layout differs; the paragraph LUT is the most accurate anchor we have.
+  if (rich.paragraphIndex.has_value()) {
+    const auto lutPage = tempSection.getPageForParagraphIndex(*rich.paragraphIndex);
+    if (lutPage.has_value()) {
+      result.paragraphIndex = *rich.paragraphIndex;
+      result.hasParagraphIndex = true;
+      result.pageNumber = std::min<int>(*lutPage, result.totalPages - 1);
+      LOG_DBG("PM", "Rich position para %u -> spine=%d page=%d/%d", *rich.paragraphIndex, result.spineIndex,
+              result.pageNumber, result.totalPages);
+      return result;
+    }
+  }
+
+  // Fall back to the intra-spine page fraction.
+  const float intra =
+      (remotePages > 1) ? static_cast<float>(rich.pageNumber) / static_cast<float>(remotePages - 1) : 0.0f;
+  result.pageNumber = std::max(
+      0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
+  LOG_DBG("PM", "Rich position scaled: spine=%d remote %u/%d -> page=%d/%d", result.spineIndex, rich.pageNumber,
+          remotePages, result.pageNumber, result.totalPages);
+  return result;
+}
+
 CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
                                                 GfxRenderer& renderer, int currentSpineIndex,
                                                 int totalPagesInCurrentSpine, int fallbackTotalPages) {

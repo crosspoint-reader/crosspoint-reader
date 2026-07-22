@@ -1,6 +1,7 @@
 #include "RoundedRaffTheme.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 
@@ -110,6 +111,18 @@ void RoundedRaffTheme::drawTabBar(const GfxRenderer& renderer, Rect rect, const 
 
   // Full-width divider between tabs and setting rows.
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
+}
+
+bool RoundedRaffTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
+                                         const int x, const int y, int& index) const {
+  (void)renderer;
+  if (tabs.empty() || y < rect.y || y >= rect.y + rect.height || x < rect.x || x >= rect.x + rect.width) {
+    return false;
+  }
+
+  const int slotWidth = std::max(1, rect.width / static_cast<int>(tabs.size()));
+  index = std::min(static_cast<int>(tabs.size()) - 1, (x - rect.x) / slotWidth);
+  return true;
 }
 
 void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
@@ -248,57 +261,14 @@ void RoundedRaffTheme::drawTextField(const GfxRenderer& renderer, Rect rect, con
   renderer.drawLine(lineStart, lineY, lineStart + lineW - 1, lineY, thickness, true);
 }
 
-void RoundedRaffTheme::drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
-                                       const char* secondaryLabel, const KeyboardKeyType keyType,
-                                       const bool inactiveSelection) const {
-  constexpr int keyRadius = 10;
-  const bool disabled = keyType == KeyboardKeyType::Disabled;
-  const bool invert = isSelected && !inactiveSelection;
+int RoundedRaffTheme::getListRowStep(bool hasSubtitle) const {
+  const int rowHeight =
+      hasSubtitle ? RoundedRaffMetrics::values.listWithSubtitleRowHeight : RoundedRaffMetrics::values.listRowHeight;
+  return rowHeight + kSelectableRowGap;
+}
 
-  if (isSelected) {
-    const Color fillColor = (inactiveSelection || disabled) ? Color::LightGray : Color::Black;
-    renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, keyRadius, fillColor);
-  } else {
-    if (disabled) {
-      renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, keyRadius, Color::LightGray);
-    } else {
-      renderer.fillRoundedRect(rect.x, rect.y, rect.width, rect.height, keyRadius, Color::White);
-    }
-    renderer.drawRoundedRect(rect.x, rect.y, rect.width, rect.height, 1, keyRadius, true);
-  }
-
-  if (keyType == KeyboardKeyType::Space) {
-    const int lineHalfWidth = rect.width * 3 / 10;
-    const int centerX = rect.x + rect.width / 2;
-    const int lineY = rect.y + rect.height / 2 + 3;
-    renderer.drawLine(centerX - lineHalfWidth, lineY, centerX + lineHalfWidth, lineY, 3, !invert);
-    return;
-  }
-
-  if (keyType == KeyboardKeyType::Del) {
-    const int centerX = rect.x + rect.width / 2;
-    const int centerY = rect.y + rect.height / 2;
-    const int arrowLen = rect.width / 4;
-    const int arrowHead = std::max(1, arrowLen / 2);
-    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX + arrowLen / 2, centerY, 3, !invert);
-    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY - arrowHead, 3,
-                      !invert);
-    renderer.drawLine(centerX - arrowLen / 2, centerY, centerX - arrowLen / 2 + arrowHead, centerY + arrowHead, 3,
-                      !invert);
-    return;
-  }
-
-  if (label != nullptr && label[0] != '\0') {
-    const int itemWidth = renderer.getTextWidth(UI_12_FONT_ID, label);
-    const int textX = rect.x + (rect.width - itemWidth) / 2;
-    const int textY = rect.y + (rect.height - renderer.getLineHeight(UI_12_FONT_ID)) / 2;
-    renderer.drawText(UI_12_FONT_ID, textX, textY, label, !invert);
-  }
-
-  if (secondaryLabel != nullptr && secondaryLabel[0] != '\0') {
-    const int secWidth = renderer.getTextWidth(SMALL_FONT_ID, secondaryLabel);
-    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - secWidth - 3, rect.y + 1, secondaryLabel, !invert);
-  }
+int RoundedRaffTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
+  return std::max(1, contentHeight / getListRowStep(hasSubtitle));
 }
 
 void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
@@ -383,6 +353,10 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
 
 void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                        const char* btn4) const {
+  if (gpio.hasTouch()) {
+    return;
+  }
+
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 

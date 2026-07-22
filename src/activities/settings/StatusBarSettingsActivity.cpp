@@ -127,6 +127,21 @@ void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
 void StatusBarSettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  switch (handleListTouch(selectedIndex, visibleItemCount, contentTop, contentHeight, false)) {
+    case ListTouchResult::Activated:
+      handleSelection();
+      requestUpdate();
+      return;
+    case ListTouchResult::Consumed:
+      return;
+    case ListTouchResult::None:
+      break;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;

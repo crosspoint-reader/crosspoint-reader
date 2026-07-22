@@ -39,6 +39,17 @@ class HalDisplay {
                             bool fromProgmem = false) const;
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  // Non-blocking refresh (shadow-free): starts the panel waveform and returns
+  // while the panel refreshes on its own. The framebuffer must stay untouched
+  // until waitRefreshComplete(), and the caller must rebuild the differential
+  // baseline before the next differential update (the tiled grayscale cleanup
+  // does). Panels without deferral fall back to a blocking refresh.
+  void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  // Block until a pending deferred refresh completes (no-op when none is).
+  void waitRefreshComplete();
+  // True when displayBufferAsync() genuinely overlaps (panel driver defers);
+  // false where it falls back to a blocking refresh.
+  bool supportsAsyncRefresh() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Power management
