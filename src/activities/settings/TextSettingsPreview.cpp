@@ -131,18 +131,16 @@ void renderPreview(GfxRenderer& renderer, int previewPadding, int labelGap, int 
   const int maxLines = std::max(1, innerHeight / lineAdvance);
 
   const char* previewText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
-  const char* extText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT_EXT);  // second paragraph, for the paragraph gap
   const bool focusReading = SETTINGS.focusReadingEnabled != 0;
   if (auto* fcm = renderer.getFontCacheManager()) {
     char prewarmBuf[256];
-    snprintf(prewarmBuf, sizeof(prewarmBuf), "%s %s %s", previewText, extText, ELLIPSIS_UTF8);
+    snprintf(prewarmBuf, sizeof(prewarmBuf), "%s %s", previewText, ELLIPSIS_UTF8);
     fcm->prewarmCache(fontId, prewarmBuf, focusReading ? 0x03 : 0x01);  // 0x03 also warms bold
   }
 
   // Focus-reading bold prefixes widen each word; wrap narrower so they fit
   const int wrapWidth = focusReading ? textWidth - textWidth / 12 : textWidth;
   const auto lines = renderer.wrappedText(fontId, previewText, wrapWidth, maxLines);
-  const auto extLines = renderer.wrappedText(fontId, extText, wrapWidth, maxLines);
 
   const uint8_t align = SETTINGS.paragraphAlignment;
   const bool justify = align == CrossPointSettings::JUSTIFIED || align == CrossPointSettings::BOOK_STYLE;
@@ -154,7 +152,7 @@ void renderPreview(GfxRenderer& renderer, int previewPadding, int labelGap, int 
 
   int y = top + previewPadding;
   const int textBottomLimit = top + height - labelReserved;
-  const std::vector<std::string>* paragraphs[2] = {&lines, extLines.empty() ? &lines : &extLines};
+  const std::vector<std::string>* paragraphs[2] = {&lines, &lines};
   for (const auto* paragraph : paragraphs) {
     const size_t lastLine = paragraph->empty() ? 0 : paragraph->size() - 1;
     for (size_t i = 0; i < paragraph->size(); i++) {
