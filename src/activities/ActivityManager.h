@@ -102,6 +102,7 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
+  bool currentActivityRestoresGrayscaleAfterForcedRefresh() const;
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 

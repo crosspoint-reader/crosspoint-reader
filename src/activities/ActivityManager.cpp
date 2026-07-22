@@ -269,6 +269,10 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
+bool ActivityManager::currentActivityRestoresGrayscaleAfterForcedRefresh() const {
+  return currentActivity && currentActivity->restoresGrayscaleAfterForcedRefresh();
+}
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 ScreenshotInfo ActivityManager::getScreenshotInfo() const {

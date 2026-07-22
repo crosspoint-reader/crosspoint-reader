@@ -44,6 +44,9 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+  // Whether a forced screen refresh should be followed by this activity's normal
+  // render path to restore its grayscale overlay.
+  virtual bool restoresGrayscaleAfterForcedRefresh() const { return false; }
   virtual bool isHomeActivity() const { return false; }
   virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }

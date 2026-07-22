@@ -533,8 +533,16 @@ void loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
-    RenderLock lock;
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    const bool restoreGrayscale = activityManager.currentActivityRestoresGrayscaleAfterForcedRefresh();
+    {
+      RenderLock lock;
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    }
+    if (restoreGrayscale) {
+      // The forced refresh only displays the 1-bit framebuffer. Re-render the
+      // visible reader page so its normal pipeline restores anti-aliasing.
+      activityManager.requestUpdate();
+    }
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.
