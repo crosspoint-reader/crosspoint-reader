@@ -239,11 +239,12 @@ void TextSettingsActivity::render(RenderLock&&) {
 }
 
 void TextSettingsActivity::applyFamily(int listIndex) {
-  currentFamilyIndex_ = listIndex;
   const auto& font = fonts_[listIndex];
   if (font.isBuiltin) {
     SETTINGS.fontFamily = font.settingIndex;
     SETTINGS.sdFontFamilyName[0] = '\0';
+    sdFontSystem.ensureLoaded(renderer);  // unloads the previously resident SD font
+    currentFamilyIndex_ = listIndex;
   } else if (registry_) {
     const int sdIdx = font.settingIndex - CrossPointSettings::BUILTIN_FONT_COUNT;
     const auto& families = registry_->getFamilies();
@@ -251,6 +252,7 @@ void TextSettingsActivity::applyFamily(int listIndex) {
       strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
       SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
       sdFontSystem.ensureLoaded(renderer);
+      currentFamilyIndex_ = listIndex;
     }
   }
 }
