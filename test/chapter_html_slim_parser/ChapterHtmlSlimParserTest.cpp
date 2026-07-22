@@ -43,9 +43,19 @@ std::string writeFixture(const std::string& html) {
   return path.string();
 }
 
+std::string writeCssFixture(const std::string& css) {
+  static int cssCounter = 0;
+  const auto path = std::filesystem::temp_directory_path() /
+                    ("chapter_html_slim_parser_test_" + std::to_string(cssCounter++) + ".css");
+  std::ofstream out(path, std::ios::binary);
+  out << css;
+  out.close();
+  return path.string();
+}
+
 using Line = std::vector<std::pair<std::string, EpdFontFamily::Style>>;
 
-std::vector<Line> parseHtmlIntoLines(const std::string& html) {
+std::vector<Line> parseHtmlIntoLines(const std::string& html, const std::string& css = "") {
   HalDisplay halDisplay;
   GfxRenderer renderer(halDisplay);
   renderer.insertFont(kFontId, testfont::makeTestFontFamily());
@@ -56,11 +66,19 @@ std::vector<Line> parseHtmlIntoLines(const std::string& html) {
   const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)> completePageFn =
       [&pages](std::unique_ptr<Page> page, uint16_t, uint16_t) { pages.push_back(std::move(page)); };
 
-  // A real (but empty/unloaded) CssParser is required for inline style="..." attributes
-  // to be parsed at all: ChapterHtmlSlimParser only calls CssParser::parseInlineStyle
-  // when self->cssParser is non-null (production always constructs one per Epub, even
-  // for books with no stylesheet files).
+  // A real CssParser is required for inline style="..." attributes and class-based
+  // CSS resolution to work at all: ChapterHtmlSlimParser only calls
+  // CssParser::parseInlineStyle / resolveStyle when self->cssParser is non-null.
+  // When css is provided, load it as a stylesheet so class selectors resolve.
   CssParser cssParser("");
+  if (!css.empty()) {
+    const std::string cssPath = writeCssFixture(css);
+    HalFile cssFile;
+    if (Storage.openFileForRead("TST", cssPath, cssFile)) {
+      cssParser.loadFromStream(cssFile);
+    }
+    std::filesystem::remove(cssPath);
+  }
 
   ChapterHtmlSlimParser parser(/*epub=*/nullptr, filepath, renderer, kFontId, /*lineCompression=*/1.0f,
                                /*extraParagraphSpacing=*/false, static_cast<uint8_t>(CssTextAlign::Left),
@@ -160,6 +178,36 @@ TEST(ChapterHtmlSlimParserListTest, ExplicitListStyleTypeDecimalStillShowsNumber
   EXPECT_EQ(lines[0][0].first, "1.");
   ASSERT_FALSE(lines[1].empty());
   EXPECT_EQ(lines[1][0].first, "2.");
+}
+
+TEST(ChapterHtmlSlimParserListTest, ClassBasedListStyleTypeNoneSuppressesBullet) {
+  const auto lines = parseHtmlIntoLines(
+      "<html><body><ul class=\"list-simple1\">"
+      "<li><p class=\"list-item1\">Apple</p></li>"
+      "<li><p class=\"list-item1\">Banana</p></li>"
+      "</ul></body></html>",
+      ".list-simple1 { list-style-type: none; margin-left: 1em; }"
+      ".list-item1 { text-indent: 0; }");
+
+  ASSERT_EQ(lines.size(), 2u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "Apple");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "Banana");
+}
+
+TEST(ChapterHtmlSlimParserListTest, ClassBasedListStyleTypeNoneOnOrderedListSuppressesNumbers) {
+  const auto lines = parseHtmlIntoLines(
+      "<html><body><ol class=\"no-num\">"
+      "<li>Apple</li><li>Banana</li>"
+      "</ol></body></html>",
+      ".no-num { list-style-type: none; }");
+
+  ASSERT_EQ(lines.size(), 2u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "Apple");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "Banana");
 }
 
 // Regression tests for PR #2589 (GitHub issue #956): when <li> wraps a
