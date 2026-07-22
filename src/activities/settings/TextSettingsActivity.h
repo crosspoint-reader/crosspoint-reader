@@ -39,6 +39,21 @@ class TextSettingsActivity final : public Activity {
   void applySize(int listIndex);
   void confirmLayoutRow(int row);
   void confirmStyleRow(int row);
+  // Applies the row at the given list index for the active tab (Confirm and tap share this).
+  void activateRow(int row);
+
+  // Handles tab/list/swipe touch input; returns true if an event was consumed (caller returns).
+  bool handleTouch();
+
+  // Vertical layout of the preview/tab-bar/list panes.
+  // Shared by render() (to draw) and loop() (to hit-test touch) to avoid drift
+  struct PaneGeometry {
+    int previewTop;
+    int tabTop;
+    int listTop;
+    int listHeight;
+  };
+  PaneGeometry paneGeometry() const;
   std::string layoutValueText(int row) const;
   std::string styleValueText(int row) const;
   // True when the focused list row is a setting the preview cannot reflect.

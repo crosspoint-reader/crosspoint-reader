@@ -17,6 +17,9 @@
 #include "fontIds.h"
 
 namespace {
+// Tab labels for Font | Size | Layout | Style (shared by render and loop touch hit-testing).
+constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
+
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
     const auto& families = registry->getFamilies();
@@ -84,6 +87,76 @@ void TextSettingsActivity::onEnter() {
 
 void TextSettingsActivity::onExit() { Activity::onExit(); }
 
+TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
+  const int previewTop = afterHeader;
+  const int tabTop = previewTop + previewHeight;
+  const int captionH = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
+  const int listTop = tabTop + metrics_.tabBarHeight + metrics_.verticalSpacing;
+  const int listHeight = usableHeight - previewHeight - metrics_.tabBarHeight - metrics_.verticalSpacing - captionH;
+  return {previewTop, tabTop, listTop, listHeight};
+}
+
+bool TextSettingsActivity::handleTouch() {
+  // Inert on non-touch boards: the events simply never fire.
+  int tx = 0;
+  int ty = 0;
+  const auto geo = paneGeometry();
+  const int listCount = currentListSize();
+
+  // TODO: this tab-bar touch pass duplicates SettingsActivity's
+  // this will have to be refactored when a handleTabBarTouch() helper exist
+  // (similar to handleListTouch)
+  auto buildTabs = [this]() {
+    std::vector<TabInfo> tabs;
+    tabs.reserve(static_cast<int>(Tab::Count));
+    for (int t = 0; t < static_cast<int>(Tab::Count); t++) {
+      tabs.push_back({I18N.get(TAB_NAME_IDS[t]), tab_ == static_cast<Tab>(t)});
+    }
+    return tabs;
+  };
+  int tabHit = -1;
+  if ((mappedInput.wasScreenTouchDown(tx, ty) || mappedInput.wasScreenTapped(tx, ty)) &&
+      GUI.tabIndexFromPoint(renderer, Rect{0, geo.tabTop, renderer.getScreenWidth(), metrics_.tabBarHeight},
+                            buildTabs(), tx, ty, tabHit)) {
+    if (tab_ != static_cast<Tab>(tabHit)) {
+      tab_ = static_cast<Tab>(tabHit);
+      selectedIndex() = 0;
+      requestUpdate();
+    }
+    return true;
+  }
+
+  int row = std::max(0, selectedIndex() - 1);
+  switch (handleListTouch(row, listCount, geo.listTop, geo.listHeight, /*hasSubtitle=*/false)) {
+    case ListTouchResult::Activated:
+      selectedIndex() = row + 1;
+      activateRow(row);
+      return true;
+    case ListTouchResult::Consumed:
+      selectedIndex() = row + 1;
+      return true;
+    case ListTouchResult::None:
+      break;
+  }
+
+  // Vertical swipe pages the list (Family/Size); short lists just clamp.
+  const int pageItems = GUI.getListPageItems(geo.listHeight, false);
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectedIndex() =
+        selectedIndex() == 0 ? 1 : ButtonNavigator::nextPageIndex(selectedIndex(), listCount + 1, pageItems);
+    requestUpdate();
+    return true;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectedIndex() = ButtonNavigator::previousPageIndex(selectedIndex(), listCount + 1, pageItems);
+    requestUpdate();
+    return true;
+  }
+
+  return false;
+}
+
 void TextSettingsActivity::loop() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
@@ -98,32 +171,11 @@ void TextSettingsActivity::loop() {
       return;
     }
 
-    const int itemIndex = selectedIndex() - 1;
-    switch (tab_) {
-      case Tab::Family:
-        if (itemIndex != currentFamilyIndex_) {
-          applyFamily(itemIndex);
-          requestUpdate();
-        }
-        break;
-      case Tab::Size:
-        if (itemIndex != currentSizeIndex_) {
-          applySize(itemIndex);
-          requestUpdate();
-        }
-        break;
-      case Tab::Layout:
-        confirmLayoutRow(itemIndex);
-        break;
-      case Tab::Style:
-        confirmStyleRow(itemIndex);
-        break;
-
-      default:
-        break;
-    }
+    activateRow(selectedIndex() - 1);
     return;
   }
+
+  if (handleTouch()) return;
 
   const int ringSize = currentListSize() + 1;  // +1 for the tab bar at position 0
 
@@ -150,32 +202,25 @@ void TextSettingsActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_TEXT_SETTINGS));
 
-  const int previewTop = afterHeader;
+  const auto geo = paneGeometry();
   const char* familyName = (currentFamilyIndex_ >= 0 && currentFamilyIndex_ < static_cast<int>(fonts_.size()))
                                ? fonts_[currentFamilyIndex_].name.c_str()
                                : "";
   const char* sizeName = (currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
                              ? sizes_[currentSizeIndex_].name.c_str()
                              : "";
-  textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing, previewTop,
-                              previewHeight, familyName, sizeName);
+  textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing,
+                              geo.previewTop, previewHeight, familyName, sizeName);
 
   const bool onTabBar = selectedIndex() == 0;
-  const int tabTop = previewTop + previewHeight;
-  static constexpr StrId TAB_NAME_IDS[static_cast<int>(Tab::Count)] = {StrId::STR_FONT, StrId::STR_SIZE,
-                                                                       StrId::STR_LAYOUT, StrId::STR_STYLE};
   std::vector<TabInfo> tabs;
   tabs.reserve(static_cast<int>(Tab::Count));
   for (int t = 0; t < static_cast<int>(Tab::Count); t++) {
     tabs.push_back({I18N.get(TAB_NAME_IDS[t]), tab_ == static_cast<Tab>(t)});
   }
-  GUI.drawTabBar(renderer, Rect{0, tabTop, pageWidth, metrics_.tabBarHeight}, tabs, onTabBar);
+  GUI.drawTabBar(renderer, Rect{0, geo.tabTop, pageWidth, metrics_.tabBarHeight}, tabs, onTabBar);
 
-  // Caption space for indicating non-previewable settings (e.g., embeddedStyle)
-  const int captionH = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
-  const int listTop = tabTop + metrics_.tabBarHeight + metrics_.verticalSpacing;
-  const int listHeight = usableHeight - previewHeight - metrics_.tabBarHeight - metrics_.verticalSpacing - captionH;
-  const Rect listRect{0, listTop, pageWidth, listHeight};
+  const Rect listRect{0, geo.listTop, pageWidth, geo.listHeight};
   const int selectedItem = selectedIndex() - 1;
   const char* confirmLabel = tr(STR_SELECT);
 
@@ -228,7 +273,7 @@ void TextSettingsActivity::render(RenderLock&&) {
   }
 
   if (focusedRowHasNoPreview()) {
-    const int capY = listTop + listHeight + metrics_.verticalSpacing;
+    const int capY = geo.listTop + geo.listHeight + metrics_.verticalSpacing;
     renderer.drawText(UI_10_FONT_ID, metrics_.previewPadding, capY, tr(STR_NOT_IN_PREVIEW));
   }
 
@@ -254,6 +299,31 @@ void TextSettingsActivity::applyFamily(int listIndex) {
       sdFontSystem.ensureLoaded(renderer);
       currentFamilyIndex_ = listIndex;
     }
+  }
+}
+
+void TextSettingsActivity::activateRow(int row) {
+  switch (tab_) {
+    case Tab::Family:
+      if (row != currentFamilyIndex_) {
+        applyFamily(row);
+        requestUpdate();
+      }
+      break;
+    case Tab::Size:
+      if (row != currentSizeIndex_) {
+        applySize(row);
+        requestUpdate();
+      }
+      break;
+    case Tab::Layout:
+      confirmLayoutRow(row);
+      break;
+    case Tab::Style:
+      confirmStyleRow(row);
+      break;
+    default:
+      break;
   }
 }
 
