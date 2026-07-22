@@ -37,7 +37,7 @@ void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
-  if (activityManager.getStackSize() / 2 >= MAX_DEFINITION_DEPTH) reachedMaxDepth = true;
+  if (activityManager.getStackSize() >= MAX_DEFINITION_DEPTH) reachedMaxDepth = true;
   std::replace(definition.begin(), definition.end(), '\0', '\n');
   definition = htmlToPlainText(definition);
   wrapText();

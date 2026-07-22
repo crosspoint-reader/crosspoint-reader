@@ -137,6 +137,8 @@ void ActivityManager::loop() {
           stackActivities.back()->onExit();
           stackActivities.pop_back();
         }
+      } else if (pendingAction == PendingAction::ReplaceCurrent) {
+        exitActivity(lock);
       } else if (pendingAction == PendingAction::Push) {
         // Move current activity to stack
         stackActivities.push_back(std::move(currentActivity));
@@ -250,6 +252,16 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
   }
   pendingActivity = std::move(activity);
   pendingAction = PendingAction::Push;
+}
+
+void ActivityManager::replaceCurrentActivity(std::unique_ptr<Activity>&& activity) {
+  if (pendingActivity) {
+    // Should never happen in practice
+    LOG_ERR("ACT", "pendingActivity while replaceCurrentActivity is not expected");
+    pendingActivity.reset();
+  }
+  pendingActivity = std::move(activity);
+  pendingAction = PendingAction::ReplaceCurrent;
 }
 
 void ActivityManager::popActivity() {
