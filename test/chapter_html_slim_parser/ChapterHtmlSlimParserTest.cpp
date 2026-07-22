@@ -130,6 +130,38 @@ TEST(ChapterHtmlSlimParserListTest, OrderedListStyleTypeNoneSuppressesNumber) {
   EXPECT_EQ(lines[0][0].first, "Apple");
 }
 
+TEST(ChapterHtmlSlimParserListTest, ExplicitListStyleTypeDiscStillShowsBullet) {
+  const auto lines =
+      parseHtmlIntoLines("<html><body><ul style=\"list-style-type: disc\"><li>Apple</li></ul></body></html>");
+
+  ASSERT_EQ(lines.size(), 1u);
+  ASSERT_GE(lines[0].size(), 2u);
+  EXPECT_EQ(lines[0][0].first, kBullet);
+  EXPECT_EQ(lines[0][1].first, "Apple");
+}
+
+TEST(ChapterHtmlSlimParserListTest, UnrecognizedListStyleTypeFallsBackToBullet) {
+  const auto lines =
+      parseHtmlIntoLines("<html><body><ul style=\"list-style-type: circle\"><li>Apple</li></ul></body></html>");
+
+  ASSERT_EQ(lines.size(), 1u);
+  ASSERT_GE(lines[0].size(), 2u);
+  EXPECT_EQ(lines[0][0].first, kBullet);
+  EXPECT_EQ(lines[0][1].first, "Apple");
+}
+
+TEST(ChapterHtmlSlimParserListTest, ExplicitListStyleTypeDecimalStillShowsNumbers) {
+  const auto lines = parseHtmlIntoLines(
+      "<html><body><ol style=\"list-style-type: decimal\"><li>Apple</li><li>Banana"
+      "</li></ol></body></html>");
+
+  ASSERT_EQ(lines.size(), 2u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "1.");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "2.");
+}
+
 // Regression tests for PR #2589 (GitHub issue #956): when <li> wraps a
 // block-level child like <p>, the bullet must stay inline with the child's
 // text instead of being flushed to its own line above it.
