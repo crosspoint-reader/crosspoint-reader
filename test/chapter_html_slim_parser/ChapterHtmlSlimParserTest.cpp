@@ -26,6 +26,7 @@
 
 #include "Epub/Page.h"
 #include "Epub/blocks/TextBlock.h"
+#include "Epub/css/CssParser.h"
 #include "TestFont.h"
 
 namespace {
@@ -57,11 +58,18 @@ std::vector<Line> parseHtmlIntoLines(const std::string& html) {
   const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)> completePageFn =
       [&pages](std::unique_ptr<Page> page, uint16_t, uint16_t) { pages.push_back(std::move(page)); };
 
+  // A real (but empty/unloaded) CssParser is required for inline style="..." attributes
+  // to be parsed at all: ChapterHtmlSlimParser only calls CssParser::parseInlineStyle
+  // when self->cssParser is non-null (production always constructs one per Epub, even
+  // for books with no stylesheet files).
+  CssParser cssParser("");
+
   ChapterHtmlSlimParser parser(/*epub=*/nullptr, filepath, renderer, kFontId, /*lineCompression=*/1.0f,
                                /*extraParagraphSpacing=*/false, static_cast<uint8_t>(CssTextAlign::Left),
                                kViewportWidth, kViewportHeight, /*hyphenationEnabled=*/false,
-                               /*focusReadingEnabled=*/false, completePageFn, /*embeddedStyle=*/false,
-                               /*contentBase=*/"", /*imageBasePath=*/"");
+                               /*focusReadingEnabled=*/false, completePageFn, /*embeddedStyle=*/true,
+                               /*contentBase=*/"", /*imageBasePath=*/"", /*imageRendering=*/0,
+                               /*tocAnchors=*/{}, /*popupFn=*/nullptr, &cssParser);
 
   const bool ok = parser.parseAndBuildPages();
   std::filesystem::remove(filepath);
