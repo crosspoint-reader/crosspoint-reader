@@ -76,6 +76,8 @@ bool ifoDeclares64BitOffsets(const std::string& ifoPath) {
 
 }  // namespace
 
+std::string WordBox::getWord(std::string& definition) const { return definition.substr(defView.offset, defView.len); }
+
 bool Dictionary::open(const char* folderName) {
   basePath.clear();
   std::string resolved;

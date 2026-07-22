@@ -15,18 +15,22 @@
 // touch-down moves the highlight and a tap on a word looks it up directly.
 class DictionaryWordSelectActivity final : public Activity {
  public:
+  // Called from EpubReaderActivity
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, int marginLeft, int marginTop)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
+        words(std::make_unique<std::vector<WordBox>>()),
         marginTop(marginTop) {}
 
+  // Called from DictionaryDefinitionActivity
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::vector<WordBox> words, DictionaryPageMetadata* metadata, int rowCount,
-                                        int marginLeft, int marginTop)
+                                        std::unique_ptr<std::vector<WordBox>> words, std::string* definition,
+                                        DictionaryPageMetadata* metadata, int rowCount, int marginLeft, int marginTop)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         words(std::move(words)),
+        definition(definition),
         metadata(metadata),
         rowCount(rowCount),
         marginLeft(marginLeft),
@@ -49,6 +53,8 @@ class DictionaryWordSelectActivity final : public Activity {
   void performLookup();
   bool drawHighlightWithSnapshot();
   void drawHints() const;
+  void handleUnexpectedError();
+  std::string getSelectedWord(const WordBox& word);
 
   std::unique_ptr<Page> page;
   DictionaryPageMetadata* metadata = nullptr;
@@ -57,7 +63,8 @@ class DictionaryWordSelectActivity final : public Activity {
   int fontId = 0;
   int lineHeight = 0;
 
-  std::vector<WordBox> words;
+  std::unique_ptr<std::vector<WordBox>> words;
+  std::string* definition = nullptr;
   int selected = 0;
   uint16_t rowCount = 0;
 

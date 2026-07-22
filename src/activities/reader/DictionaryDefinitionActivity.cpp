@@ -171,7 +171,7 @@ void DictionaryDefinitionActivity::wrapText() {
 
 void DictionaryDefinitionActivity::openDictionaryWordSelect() {
   // Word geometry must match render(): viewable-area margins plus screen margin.
-  if (words.empty()) return;
+  if (words->empty()) return;
 
   if (SETTINGS.dictionaryName[0] == '\0' || reachedMaxDepth) {
     showDictionaryMessage = true;
@@ -187,10 +187,10 @@ void DictionaryDefinitionActivity::openDictionaryWordSelect() {
   orientedMarginLeft += SETTINGS.screenMargin;
 
   startActivityForResult(
-      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(words), &metadata,
+      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(words), &definition, &metadata,
                                                      nonBlankLineCount, orientedMarginLeft, orientedMarginTop),
       [this](const ActivityResult&) {
-        words.clear();
+        words = std::make_unique<std::vector<WordBox>>();
         saveWordsFromPage();
         requestUpdate();
       });
@@ -222,7 +222,7 @@ void DictionaryDefinitionActivity::loop() {
   buttonNavigator.onNext([this] {
     if (currentPage + 1 < totalPages) {
       currentPage++;
-      words.clear();
+      words->clear();
       saveWordsFromPage();
       requestUpdate();
     }
@@ -231,7 +231,7 @@ void DictionaryDefinitionActivity::loop() {
   buttonNavigator.onPrevious([this] {
     if (currentPage > 0) {
       currentPage--;
-      words.clear();
+      words->clear();
       saveWordsFromPage();
       requestUpdate();
     }
@@ -251,7 +251,7 @@ void DictionaryDefinitionActivity::loop() {
 }
 
 void DictionaryDefinitionActivity::saveWordsFromLine(const int fontId, const int startX, const int y, char* line,
-                                                     int& lineCount) {
+                                                     int& lineCount, int lineIdx) {
   int x = startX;
   char* wordStart = line;
   bool lineHasWords = false;
@@ -262,9 +262,6 @@ void DictionaryDefinitionActivity::saveWordsFromLine(const int fontId, const int
       int wordLen = c - wordStart;
       if (wordLen > 0) {
         int wordWidth = measureSpan(fontId, wordStart, wordLen);
-        char buf[MAX_LINE_BYTES + 1];
-        memcpy(buf, wordStart, wordLen);
-        buf[wordLen] = '\0';
         WordBox box;
         box.fontId = fontId;
         box.x = x;
@@ -272,9 +269,10 @@ void DictionaryDefinitionActivity::saveWordsFromLine(const int fontId, const int
         box.y = y;
         box.width = wordWidth;
         box.row = lineCount;
-        box.text = buf;
+        box.text = nullptr;
+        box.defView = {lines[lineIdx].start + (wordStart - line), wordLen};
         box.style = EpdFontFamily::REGULAR;
-        words.push_back(box);
+        words->push_back(box);
       }
       wordStart += wordLen + 1;
     } else {
@@ -324,7 +322,7 @@ void DictionaryDefinitionActivity::saveWordsFromPage() {
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
     memcpy(lineBuf, definition.c_str() + lines[i].start, len);
     lineBuf[len] = '\0';
-    saveWordsFromLine(fontId, x, bodyStartY + (i - firstLine) * lineHeight, lineBuf, nonBlankLineCount);
+    saveWordsFromLine(fontId, x, bodyStartY + (i - firstLine) * lineHeight, lineBuf, nonBlankLineCount, i);
   }
 }
 

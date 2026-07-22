@@ -20,6 +20,7 @@ class DictionaryDefinitionActivity final : public Activity {
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
         definition(std::move(definition)),
+        words(std::make_unique<std::vector<WordBox>>()),
         metadata(DictionaryPageMetadata(MetadataString{"", UI_12_FONT_ID, 0, 0, EpdFontFamily::REGULAR},
                                         MetadataString{"", UI_10_FONT_ID, 0, 0, EpdFontFamily::REGULAR})) {}
 
@@ -39,14 +40,14 @@ class DictionaryDefinitionActivity final : public Activity {
   int measureSpan(int fontId, const char* text, size_t len) const;
   void drawBody(int fontId, int x, int startY);
   void openDictionaryWordSelect();
-  void saveWordsFromLine(const int fontId, const int startX, const int y, char* line, int& lineRow);
+  void saveWordsFromLine(const int fontId, const int startX, const int y, char* line, int& lineRow, int lineIdx);
   void saveWordsFromPage();
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
   // separators) to newlines so C-string APIs see the whole text.
   DictionaryPageMetadata metadata;
-  std::vector<WordBox> words;
+  std::unique_ptr<std::vector<WordBox>> words;
   std::string definition;
   std::vector<Line> lines;
   int currentPage = 0;

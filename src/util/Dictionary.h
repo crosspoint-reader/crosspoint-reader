@@ -30,15 +30,23 @@ struct DictionaryPageMetadata {
   MetadataString pageNums;
 };
 
+struct DefView {
+  u_int32_t offset = 0;
+  int len = 0;
+};
+
 struct WordBox {
   int fontId;
   int16_t x;
   int16_t y;
   int16_t width;
   uint16_t row;
-  std::string text;
+  const char* text;
+  DefView defView;
   EpdFontFamily::Style style;
   bool selectable = true;
+
+  std::string getWord(std::string& definition) const;
 };
 
 // Slim StarDict reader: exact-match lookup with a mini stemming fallback.
