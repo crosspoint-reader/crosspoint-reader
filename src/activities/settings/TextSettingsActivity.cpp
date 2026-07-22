@@ -157,8 +157,8 @@ void TextSettingsActivity::render(RenderLock&&) {
   const char* sizeName = (currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
                              ? sizes_[currentSizeIndex_].name.c_str()
                              : "";
-  textsettings::renderPreview(renderer, metrics_.previewPadding, metrics_.verticalSpacing, previewTop, previewHeight,
-                              familyName, sizeName);
+  textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing, previewTop,
+                              previewHeight, familyName, sizeName);
 
   const bool onTabBar = selectedIndex() == 0;
   const int tabTop = previewTop + previewHeight;

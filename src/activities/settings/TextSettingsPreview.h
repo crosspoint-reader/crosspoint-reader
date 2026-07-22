@@ -1,15 +1,36 @@
 #pragma once
 
+#include <cstdint>
+#include <memory>
+#include <vector>
+
 class GfxRenderer;
+class TextBlock;
 
 namespace textsettings {
 
-// Renders the shared live sample-text pane for TextSettingsActivity. Reads the
-// live reader settings (font, size, spacing, margin, alignment, focus reading)
-// from SETTINGS; the caller supplies only the pane geometry and the label's
-// family/size names. Kept in its own translation unit so the activity stays a
-// thin tab/nav shell.
-void renderPreview(GfxRenderer& renderer, int previewPadding, int labelGap, int top, int height, const char* familyName,
-                   const char* sizeName);
+// Settings + geometry that determine the laid-out lines; used to invalidate the cache.
+struct PreviewKey {
+  int fontId = -1;
+  int fontSize = -1;
+  int screenMargin = -1;
+  int textWidth = -1;
+  float lineCompression = -1.0f;
+  uint8_t alignment = 0xFF;
+  bool extraParagraphSpacing = false;
+  bool focusReading = false;
+  bool hyphenation = false;
+  bool operator==(const PreviewKey&) const = default;
+};
+
+// Cached engine preview lines + the key that produced them
+struct PreviewLayout {
+  std::vector<std::shared_ptr<TextBlock>> lines;
+  PreviewKey key;
+};
+
+// Draws the sample-text pane via the reader engine, reusing layout across redraws
+void renderPreview(GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, int top, int height,
+                   const char* familyName, const char* sizeName);
 
 }  // namespace textsettings
