@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Epub.h"
+#include "ReaderRenderSpec.h"
 
 class Page;
 class GfxRenderer;
@@ -19,9 +20,7 @@ class Section {
   std::string filePath;
   HalFile file;
 
-  void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                              uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
+  void writeSectionFileHeader(const ReaderRenderSpec& spec);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
   // Page-offset table entry, kept in RAM while an incremental build is running so
@@ -85,23 +84,16 @@ class Section {
   // forward-declared ChapterHtmlSlimParser, whose full definition is only visible in the .cpp.
   explicit Section(const std::shared_ptr<Epub>& epub, int spineIndex, GfxRenderer& renderer);
   ~Section();
-  bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                       uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled);
+  bool loadSectionFile(const ReaderRenderSpec& spec);
   bool clearCache() const;
-  bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                         uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled,
-                         const std::function<void()>& popupFn = nullptr);
+  bool createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn = nullptr);
 
   // Incremental build: lay out the section a few pages at a time so a large chapter
   // can show its first page immediately and keep the UI responsive while the rest
   // builds. createSectionFile() above is the one-shot wrapper over these.
   //   if (!startBuild(...)) fail;
   //   each tick: buildSomeMore(N); render up to pageCount; when isBuildComplete() stop.
-  bool startBuild(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                  uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                  uint8_t imageRendering, bool focusReadingEnabled, const std::function<void()>& popupFn = nullptr);
+  bool startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn = nullptr);
   // Lay out up to maxPages more pages (maxPages <= 0 = build to completion). Returns
   // false on error (the build is abandoned). Sets isBuildComplete() when finished.
   bool buildSomeMore(int maxPages);

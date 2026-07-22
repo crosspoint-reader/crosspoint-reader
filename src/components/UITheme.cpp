@@ -146,23 +146,18 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
+  const auto sb = SETTINGS.statusBarSpec();
 
-  // Add status bar margin
-  const bool showStatusBar =
-      SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-      SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE || SETTINGS.statusBarBattery ||
-      SETTINGS.statusBarClock != CrossPointSettings::STATUS_BAR_CLOCK_MODE::STATUS_BAR_CLOCK_HIDE;
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  return (showStatusBar ? (metrics.statusBarVerticalMargin) : 0) +
-         (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+  // Layout reservation is hardware-agnostic: pass clockAvailable=true so the
+  // reserved height does not depend on whether an RTC is present.
+  return (sb.textLaneVisible(true) ? (metrics.statusBarVerticalMargin) : 0) +
+         (sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0);
 }
 
 int UITheme::getProgressBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+  const auto sb = SETTINGS.statusBarSpec();
+  return sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0;
 }
 
 // Centered text implementation that takes the safe area into account

@@ -95,7 +95,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
 // Build the dictionary selection setting dynamically from the folders discovered
 // under /dictionaries. "None" plus one option per dictionary; the selected folder
 // name persists in SETTINGS.dictionaryName (saved/loaded manually in
-// JsonSettingsIO — the generic loop skips dynamic entries).
+// CrossPointSettings::toJson/fromJson — the generic loop skips dynamic entries).
 inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& dictionaries) {
   std::vector<std::string> folderNames;
   folderNames.reserve(dictionaries.size());
