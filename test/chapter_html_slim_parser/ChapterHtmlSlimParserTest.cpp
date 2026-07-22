@@ -17,6 +17,7 @@
 #include <fstream>
 #include <functional>
 #include <memory>
+#include <random>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,9 +35,14 @@ constexpr uint16_t kViewportWidth = 600;
 constexpr uint16_t kViewportHeight = 4000;
 
 std::string writeFixture(const std::string& html) {
-  static int counter = 0;
+  // Random (not just an incrementing counter) so concurrent CTest processes running
+  // this same binary under `ctest -j` (one process per TEST(), one gtest_filter each)
+  // never race on the same path in the shared OS temp directory. A per-process counter
+  // alone collides: every process starts back at 0, so parallel tests can read a
+  // sibling test's fixture mid-write and see garbage HTML.
+  static std::mt19937_64 rng(std::random_device{}());
   const auto path =
-      std::filesystem::temp_directory_path() / ("chapter_html_slim_parser_test_" + std::to_string(counter++) + ".html");
+      std::filesystem::temp_directory_path() / ("chapter_html_slim_parser_test_" + std::to_string(rng()) + ".html");
   std::ofstream out(path, std::ios::binary);
   out << html;
   out.close();
@@ -44,9 +50,9 @@ std::string writeFixture(const std::string& html) {
 }
 
 std::string writeCssFixture(const std::string& css) {
-  static int cssCounter = 0;
-  const auto path = std::filesystem::temp_directory_path() /
-                    ("chapter_html_slim_parser_test_" + std::to_string(cssCounter++) + ".css");
+  static std::mt19937_64 rng(std::random_device{}());
+  const auto path =
+      std::filesystem::temp_directory_path() / ("chapter_html_slim_parser_test_" + std::to_string(rng()) + ".css");
   std::ofstream out(path, std::ios::binary);
   out << css;
   out.close();
