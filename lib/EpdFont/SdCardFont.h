@@ -173,14 +173,17 @@ class SdCardFont {
     // different sizes on every page turn was a primary heap fragmenter — each page's
     // freed hole rarely fit the next page's need, so maxAlloc eroded all session.
     // The per-render PrewarmScope calls clearCache() -> resetStyleMiniData(), which
-    // drops the page's DATA (counts, miniData) but keeps the allocations so the
-    // next page's ensureArrayCapacity early-returns; after a few pages the
-    // capacities converge on the book's max and page turns stop touching the
-    // allocator. Retention is bounded two ways in resetStyleMiniData(): a heap
-    // floor frees outright under pressure, and sustained underuse (an outlier
-    // page's oversized bitmap arena) frees after a few consecutive low-use pages.
-    // freeStyleMiniData() remains the full teardown (zeroes capacities) for style
-    // eviction / font unload.
+    // keeps both the allocations AND the loaded data. Buffers: reuse means
+    // ensureArrayCapacity early-returns once capacities converge on the book's
+    // max, so page turns stop touching the allocator (the free/realloc-per-page
+    // pattern was a primary heap fragmenter). Data: the next prewarm
+    // subset-checks against the resident tables (see prewarmStyle), so the idle
+    // prewarm of page N+1 serves the actual turn with zero SD reads. Retention
+    // is bounded two ways in resetStyleMiniData(): a heap floor frees outright
+    // under pressure, and sustained underuse (an outlier page's oversized bitmap
+    // arena) frees after a few consecutive low-use rebuilds. freeStyleMiniData()
+    // remains the full teardown (zeroes capacities) for style eviction / font
+    // unload.
     EpdFontData miniData{};
     EpdUnicodeInterval* miniIntervals = nullptr;
     EpdGlyph* miniGlyphs = nullptr;
@@ -195,6 +198,13 @@ class SdCardFont {
     // prewarm), which leaves the hysteresis counter untouched.
     uint32_t miniBitmapUsed = 0;
     uint8_t miniUnderuseRuns = 0;
+    // True when the resident mini was built metadata-only (no bitmaps): it can
+    // serve metadata requests but a full render request must rebuild.
+    bool miniMetadataOnly = false;
+    // Set by a rebuild, consumed by resetStyleMiniData: gates the underuse
+    // hysteresis to one evaluation per rebuild (scopes reset twice, and subset
+    // hits load nothing new to judge).
+    bool miniHysteresisPending = false;
 
     // Per-page mini kern matrix (built by buildMiniKernMatrix on each full
     // prewarm). miniKernLeftClasses/miniKernRightClasses map ONLY the codepoints

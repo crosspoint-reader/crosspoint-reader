@@ -922,6 +922,10 @@ bool EpubReaderActivity::launchKOReaderSync() {
     if (section) {
       nextPageNumber = section->currentPage;
     }
+    // The image extractor holds a raw pointer into this epub (see onEnter);
+    // clear it before the early release, mirroring onExit(), or a later image
+    // render would call through a dangling context.
+    ImageBlock::setExtractor(nullptr, nullptr);
     section.reset();
     epub.reset();
   }
