@@ -888,14 +888,10 @@ void CrossPointWebServer::handleRename() const {
 
   HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
-    server->send(500, "text/plain", "Failed to open file");
+    server->send(500, "text/plain", "Failed to open item");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be renamed");
-    return;
-  }
+  const bool isDir = file.isDirectory();
 
   String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
   if (parentPath.isEmpty()) {
@@ -913,16 +909,18 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  clearBookCache(itemPath.c_str());
+  if (!isDir) {
+    clearBookCache(itemPath.c_str());
+  }
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
-    LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    LOG_DBG("WEB", "Renamed %s: %s -> %s", isDir ? "folder" : "file", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
-    LOG_ERR("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
-    server->send(500, "text/plain", "Failed to rename file");
+    LOG_ERR("WEB", "Failed to rename: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to rename");
   }
 }
 
@@ -964,12 +962,15 @@ void CrossPointWebServer::handleMove() const {
 
   HalFile file = Storage.open(itemPath.c_str());
   if (!file) {
-    server->send(500, "text/plain", "Failed to open file");
+    server->send(500, "text/plain", "Failed to open item");
     return;
   }
-  if (file.isDirectory()) {
+  const bool isDir = file.isDirectory();
+
+  // Moving a folder into itself or a descendant would orphan the subtree
+  if (isDir && (destPath == itemPath || destPath.startsWith(itemPath + "/"))) {
     file.close();
-    server->send(400, "text/plain", "Only files can be moved");
+    server->send(400, "text/plain", "Cannot move a folder into itself");
     return;
   }
 
@@ -1006,16 +1007,18 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  clearBookCache(itemPath.c_str());
+  if (!isDir) {
+    clearBookCache(itemPath.c_str());
+  }
   const bool success = file.rename(newPath.c_str());
   file.close();
 
   if (success) {
-    LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    LOG_DBG("WEB", "Moved %s: %s -> %s", isDir ? "folder" : "file", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
-    LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
-    server->send(500, "text/plain", "Failed to move file");
+    LOG_ERR("WEB", "Failed to move: %s -> %s", itemPath.c_str(), newPath.c_str());
+    server->send(500, "text/plain", "Failed to move");
   }
 }
 

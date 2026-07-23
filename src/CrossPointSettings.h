@@ -133,8 +133,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
+    LP_MENU_HIGHLIGHT = 4,
+    LP_MENU_DICT_HIGHLIGHT = 5,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
+
+  // Where HighlightStore appends saved passages: one markdown file per book
+  // under /Highlights, or a single /Highlights.md for everything.
+  enum HIGHLIGHT_FILE_MODE { HIGHLIGHT_FILE_PER_BOOK = 0, HIGHLIGHT_FILE_SINGLE = 1, HIGHLIGHT_FILE_MODE_COUNT };
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -237,6 +243,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Highlight markdown output layout (HIGHLIGHT_FILE_MODE values)
+  uint8_t highlightFileMode = HIGHLIGHT_FILE_PER_BOOK;
   // UI Theme
   uint8_t uiTheme = LYRA;
   // Sunlight fading compensation

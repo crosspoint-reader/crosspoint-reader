@@ -6,6 +6,7 @@
 #include <optional>
 
 #include "BookmarkEntry.h"
+#include "DictionaryWordSelectActivity.h"
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
@@ -122,7 +123,9 @@ class EpubReaderActivity final : public Activity {
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
-  void openDictionaryWordSelect();
+  // Opens word selection over the current page for dictionary lookup and/or
+  // passage highlighting (long-press Confirm functions and the reader menu).
+  void openWordSelect(DictionaryWordSelectActivity::Mode mode);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();

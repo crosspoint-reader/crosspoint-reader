@@ -35,6 +35,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookMover.h"
 #include "util/BookmarkUtil.h"
 #include "util/ScreenshotUtil.h"
 
@@ -97,54 +98,9 @@ bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex
 }
 
 // Pick a non-colliding destination path inside /Read/ for a finished book.
-// Mirrors the suffixing scheme used elsewhere: "name.epub" -> "name (2).epub", etc.
 std::string buildReadFolderDestination(const std::string& srcPath) {
-  const size_t lastSlash = srcPath.rfind('/');
-  const std::string filename = (lastSlash != std::string::npos) ? srcPath.substr(lastSlash + 1) : srcPath;
-
   Storage.mkdir(READ_FOLDER);
-  std::string dstPath = std::string(READ_FOLDER) + "/" + filename;
-  if (!Storage.exists(dstPath.c_str())) {
-    return dstPath;
-  }
-
-  const size_t dotPos = filename.rfind('.');
-  const std::string base = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
-  const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
-  int suffix = 2;
-  do {
-    dstPath = std::string(READ_FOLDER) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
-    suffix++;
-  } while (Storage.exists(dstPath.c_str()) && suffix < 100);
-  return dstPath;
-}
-
-// Relocate a finished book and its cache dir into /read/, keep it in recents by
-// repointing its entry to the new path, and repoint the resume pointer too.
-// On rename failure: LOG_ERR and leave everything in place (no UI alert subsystem here).
-void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
-                                  const std::string& oldCachePath) {
-  LOG_INF("ERS", "Moving finished epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
-  if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
-    LOG_ERR("ERS", "Failed to move finished book to '/Read' folder");
-    return;
-  }
-
-  // Cache dir is keyed by hash of the epub path (see Epub ctor), so it must be re-keyed.
-  const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));
-  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
-    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
-      LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
-    }
-  }
-
-  // Keep the book in recents (crossink behavior): repoint the entry to its new
-  // location instead of dropping it. updatePath persists on success.
-  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
-  if (APP_STATE.openEpubPath == srcPath) {
-    APP_STATE.openEpubPath = dstPath;
-    APP_STATE.saveToFile();
-  }
+  return BookMover::buildDestination(srcPath, READ_FOLDER);
 }
 
 }  // namespace
@@ -225,10 +181,10 @@ void EpubReaderActivity::onExit() {
   section.reset();
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
-    const std::string oldCachePath = epub->getCachePath();
     const std::string dstPath = buildReadFolderDestination(srcPath);
     epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
-    moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath);
+    // Moves the file and migrates cache dir, recents entry and resume pointer.
+    BookMover::moveFile(srcPath, dstPath);
   } else {
     epub.reset();
   }
@@ -258,8 +214,10 @@ void EpubReaderActivity::openReaderMenu() {
                          });
 }
 
-void EpubReaderActivity::openDictionaryWordSelect() {
-  if (SETTINGS.dictionaryName[0] == '\0') {
+void EpubReaderActivity::openWordSelect(const DictionaryWordSelectActivity::Mode mode) {
+  // Pure dictionary mode is useless without a dictionary; the mixed mode can
+  // still highlight, so it opens and only the lookup path reports an error.
+  if (mode == DictionaryWordSelectActivity::Mode::Dictionary && SETTINGS.dictionaryName[0] == '\0') {
     showDictionaryMessage = true;
     dictionaryMessageTime = millis();
     requestUpdate();
@@ -276,8 +234,14 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   orientedMarginTop += SETTINGS.screenMargin;
   orientedMarginLeft += SETTINGS.screenMargin;
 
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
-                                                                        orientedMarginLeft, orientedMarginTop),
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  std::string chapterTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "";
+
+  // section.get() outlives the sub-activity (the reader is paused beneath it)
+  // and enables highlight selections that continue onto the following pages.
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(
+                             renderer, mappedInput, std::move(page), orientedMarginLeft, orientedMarginTop, mode,
+                             epub->getTitle(), std::move(chapterTitle), section.get(), section->currentPage),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
@@ -473,10 +437,23 @@ void EpubReaderActivity::loop() {
         }
         break;
       case CrossPointSettings::LP_MENU_DICTIONARY:
-        // Hold ~0.4s starts dictionary word selection on the current page.
+      case CrossPointSettings::LP_MENU_HIGHLIGHT:
+      case CrossPointSettings::LP_MENU_DICT_HIGHLIGHT:
+        // Hold ~0.4s starts word selection on the current page (dictionary
+        // lookup, passage highlighting, or both).
         if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
           ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
-          openDictionaryWordSelect();
+          switch (SETTINGS.longPressMenuFunction) {
+            case CrossPointSettings::LP_MENU_HIGHLIGHT:
+              openWordSelect(DictionaryWordSelectActivity::Mode::Highlight);
+              break;
+            case CrossPointSettings::LP_MENU_DICT_HIGHLIGHT:
+              openWordSelect(DictionaryWordSelectActivity::Mode::DictionaryHighlight);
+              break;
+            default:
+              openWordSelect(DictionaryWordSelectActivity::Mode::Dictionary);
+              break;
+          }
           return;
         }
         break;
@@ -752,7 +729,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
-      openDictionaryWordSelect();
+      openWordSelect(DictionaryWordSelectActivity::Mode::Dictionary);
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {

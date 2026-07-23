@@ -4,23 +4,44 @@
 #include <I18n.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "activities/Activity.h"
 #include "util/Dictionary.h"
 
-// Word selection over the current reader page: Left/Right step through words
-// in reading order, Up/Down jump rows, Confirm looks the word up and opens
-// DictionaryDefinitionActivity, Back returns to the reader. On touch devices a
-// touch-down moves the highlight and a tap on a word looks it up directly.
+class Section;
+
+// Button-driven word selection over the current reader page: the buttons
+// that physically lie horizontal step through words in reading order, the
+// vertical pair jumps rows (see wasPressedVisual — in landscape the front
+// Left/Right pair and the side buttons trade axes), Back returns to the
+// reader. What Confirm does depends on the mode:
+//  - Dictionary: release looks the word up in DictionaryDefinitionActivity.
+//  - Highlight: release anchors a passage selection; the next release saves
+//    the anchored range as a markdown highlight (HighlightStore).
+//  - DictionaryHighlight: long-press release looks up, short release
+//    anchors/saves a highlight. Back cancels an active selection first.
+// When a Section is supplied, an anchored selection can keep extending past
+// the last word onto the following page(s) of the same chapter.
 class DictionaryWordSelectActivity final : public Activity {
  public:
+  enum class Mode : uint8_t { Dictionary, Highlight, DictionaryHighlight };
+
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                        std::unique_ptr<Page> page, int marginLeft, int marginTop)
+                                        std::unique_ptr<Page> page, int marginLeft, int marginTop,
+                                        Mode mode = Mode::Dictionary, std::string bookTitle = {},
+                                        std::string chapterTitle = {}, Section* section = nullptr, int pageIndex = 0)
       : Activity("DictionaryWordSelect", renderer, mappedInput),
         page(std::move(page)),
         marginLeft(marginLeft),
-        marginTop(marginTop) {}
+        marginTop(marginTop),
+        mode(mode),
+        bookTitle(std::move(bookTitle)),
+        chapterTitle(std::move(chapterTitle)),
+        section(section),
+        originalPageIndex(pageIndex),
+        sectionPageIndex(pageIndex) {}
 
   void onEnter() override;
   void loop() override;
@@ -38,25 +59,73 @@ class DictionaryWordSelectActivity final : public Activity {
     EpdFontFamily::Style style;
   };
 
-  enum class Popup : uint8_t { None, Busy, NotFound, Error };
+  enum class Popup : uint8_t { None, Busy, NotFound, Error, Saved };
+
+  // On-screen (visual) directions, resolved to physical buttons per orientation.
+  enum class VisualDir : uint8_t { Left, Right, Up, Down };
 
   void extractWords();
+  void buildReadingOrder();
   int closestInRow(uint16_t row, int centerX) const;
-  int wordAt(int x, int y) const;
   void moveVertical(int direction);
   void performLookup();
+  void handleConfirmRelease();
+  void toggleHighlight();
+  bool saveHighlight();
   bool drawHighlightWithSnapshot();
   void drawHints() const;
+  bool wasPressedVisual(VisualDir dir) const;
+  void paintWordBox(int idx, bool highlighted, int rangeLo, int rangeHi);
+  void resetCursorToMiddle();
+  bool rowIsRtl(uint16_t row) const;
+  bool handleCrossPageNavigation();
+  bool advancePage();
+  bool retreatPage();
+  void resetCarried();
+  bool showPage(int pageIndex);
 
   std::unique_ptr<Page> page;
   const int marginLeft;
   const int marginTop;
+  const Mode mode;
+  const std::string bookTitle;
+  const std::string chapterTitle;
   int fontId = 0;
   int lineHeight = 0;
 
   std::vector<WordBox> words;
   int selected = 0;
   uint16_t rowCount = 0;
+
+  // TextBlock stores each line's words in visual (left-to-right) order; the
+  // logical order is discarded at layout time. These map between the two so
+  // passage selection follows the text on RTL (e.g. Arabic) pages:
+  // readingOrder[pos] = word index, readingPos[idx] = reading position.
+  std::vector<uint16_t> readingOrder;
+  std::vector<uint16_t> readingPos;
+
+  // Passage selection (highlight modes): index of the word anchoring the
+  // active selection, -1 when none. drawnLo/drawnHi is the reading-position
+  // range whose highlight boxes are currently painted in the framebuffer
+  // (-1 = unknown, the next render must repaint the full page).
+  int anchor = -1;
+  int drawnLo = -1;
+  int drawnHi = -1;
+
+  // Cross-page selection (only when section != nullptr): the reader's section
+  // outlives this activity, so the raw pointer stays valid. carriedText holds
+  // the selected words of pages already scrolled past; carriedLens records
+  // its length before each page advance so retreating can truncate it.
+  // firstPageSelStart is the selection's start reading-position on the page
+  // where it was anchored, restored when retreating all the way back.
+  Section* section;
+  const int originalPageIndex;
+  int sectionPageIndex;
+  std::string carriedText;
+  std::vector<size_t> carriedLens;
+  int firstPageSelStart = -1;
+  // Bounds the carried text (~2 KB per page) on a 380 KB-RAM device.
+  static constexpr size_t MAX_CARRIED_PAGES = 8;
 
   Dictionary dict;
   bool dictOpenAttempted = false;
