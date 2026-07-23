@@ -22,6 +22,9 @@ constexpr size_t MAX_LINE_BYTES = 191;
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
 
+// Feeds the watchdog during a blocking index build (see Dictionary::buildIndex).
+void indexBuildYield(void*) { vTaskDelay(1); }
+
 }  // namespace
 
 void DictionaryDefinitionActivity::onEnter() {
@@ -31,6 +34,15 @@ void DictionaryDefinitionActivity::onEnter() {
   std::replace(definition.begin(), definition.end(), '\0', '\n');
   definition = htmlToPlainText(definition);
   wrapText();
+
+  DictionaryRegistry::discover(dictionaries);
+  for (size_t i = 0; i < dictionaries.size(); i++) {
+    if (dictionaries[i].name == SETTINGS.dictionaryName) {
+      dictIndex = static_cast<int>(i);
+      break;
+    }
+  }
+
   requestUpdate();
 }
 
@@ -164,19 +176,68 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNext([this] {
+  // Front Left/Right are dedicated to dictionary switching (below), so
+  // multi-page scrolling moves to the side buttons alone here — unlike most
+  // list activities, where Left/Right and side Up/Down both scroll the same
+  // axis via NavNext/NavPrevious.
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] {
     if (currentPage + 1 < totalPages) {
       currentPage++;
       requestUpdate();
     }
   });
-
-  buttonNavigator.onPrevious([this] {
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] {
     if (currentPage > 0) {
       currentPage--;
       requestUpdate();
     }
   });
+
+  if (dictionaries.size() > 1 && dictIndex >= 0) {
+    // Same previous/next-to-physical-button convention mapLabels() uses, so
+    // the hint text drawn in render() always matches what actually happens.
+    const bool swapped = mappedInput.isNavDirectionSwapped();
+    if (mappedInput.wasPressed(swapped ? MappedInputManager::Button::Left : MappedInputManager::Button::Right)) {
+      switchDictionary(1);
+    } else if (mappedInput.wasPressed(swapped ? MappedInputManager::Button::Right : MappedInputManager::Button::Left)) {
+      switchDictionary(-1);
+    }
+  }
+}
+
+void DictionaryDefinitionActivity::switchDictionary(const int direction) {
+  const int n = static_cast<int>(dictionaries.size());
+  dictIndex = (dictIndex + direction + n) % n;
+
+  // Paint a status line before the (possibly slow, first-open) SD work below;
+  // same pattern as DictionaryWordSelectActivity::performLookup().
+  headword = dictionaries[dictIndex].name;
+  definition = tr(STR_DICT_LOOKING_UP);
+  wrapText();
+  requestUpdateAndWait();
+
+  bool ok = dict.open(dictionaries[dictIndex].name.c_str());
+  if (ok && dict.needsIndex()) {
+    definition = tr(STR_DICT_INDEXING);
+    wrapText();
+    requestUpdateAndWait();
+    ok = dict.buildIndex(&indexBuildYield);
+  }
+
+  std::string newDefinition;
+  std::string newHeadword;
+  const bool found = ok && dict.lookup(rawWord.c_str(), newDefinition, newHeadword);
+  if (found) {
+    headword = std::move(newHeadword);
+    definition = std::move(newDefinition);
+    std::replace(definition.begin(), definition.end(), '\0', '\n');
+    definition = htmlToPlainText(definition);
+  } else {
+    headword = rawWord;
+    definition = ok ? tr(STR_DICT_NOT_FOUND) : tr(STR_DICT_ERROR);
+  }
+  wrapText();
+  requestUpdate();
 }
 
 // Draws the current page's line spans (copied into a stack buffer for NUL
@@ -230,8 +291,16 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   scope.endScanAndPrewarm();
   drawBody(fontId, contentX + SIDE_PADDING, bodyStartY);
 
-  const auto labels =
-      mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
+  // Left/Right hint the adjacent dictionary by name (what pressing it
+  // switches to), not a generic arrow — the button no longer pages text.
+  std::string prevLabel;
+  std::string nextLabel;
+  if (dictionaries.size() > 1 && dictIndex >= 0) {
+    const int n = static_cast<int>(dictionaries.size());
+    prevLabel = dictionaries[(dictIndex - 1 + n) % n].name;
+    nextLabel = dictionaries[(dictIndex + 1) % n].name;
+  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", prevLabel.c_str(), nextLabel.c_str());
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }

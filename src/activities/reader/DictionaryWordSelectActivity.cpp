@@ -209,8 +209,8 @@ void DictionaryWordSelectActivity::performLookup() {
 
   if (found) {
     popup = Popup::None;
-    startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                                          std::move(definition)),
+    startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, words[selected].text,
+                                                                          std::move(headword), std::move(definition)),
                            [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
@@ -319,25 +319,75 @@ bool DictionaryWordSelectActivity::retreatPage() {
   return true;
 }
 
+// Maps an on-screen direction to the button that physically lies that way.
+// In portrait the front Left/Right pair is horizontal below the page and the
+// side buttons are stacked vertically; in landscape the rotation puts the
+// front pair in a vertical column and the side buttons on a horizontal edge,
+// so the axes trade: side buttons step words, the front pair jumps rows.
+// Within each axis the direction follows isNavDirectionSwapped() — the same
+// convention mapLabels() uses to place hint labels — so the cursor always
+// moves the way the drawn hints say it will.
+bool DictionaryWordSelectActivity::wasPressedVisual(const VisualDir dir) const {
+  using Button = MappedInputManager::Button;
+  const auto orientation = renderer.getOrientation();
+  const bool landscape =
+      orientation == GfxRenderer::LandscapeClockwise || orientation == GfxRenderer::LandscapeCounterClockwise;
+  const bool swapped = mappedInput.isNavDirectionSwapped();
+  Button button = Button::Left;
+  if (landscape) {
+    // LandscapeCW: side buttons sit on the bottom edge (Down left of Up) and
+    // the front pair on the left edge (Left above Right); CCW mirrors both.
+    switch (dir) {
+      case VisualDir::Left:
+        button = swapped ? Button::Up : Button::Down;
+        break;
+      case VisualDir::Right:
+        button = swapped ? Button::Down : Button::Up;
+        break;
+      case VisualDir::Up:
+        button = swapped ? Button::Right : Button::Left;
+        break;
+      case VisualDir::Down:
+        button = swapped ? Button::Left : Button::Right;
+        break;
+    }
+  } else {
+    // Portrait keeps the natural mapping; PortraitInverted reverses both
+    // pairs (the device is upside down) when the follow-orientation swap is on.
+    switch (dir) {
+      case VisualDir::Left:
+        button = swapped ? Button::Right : Button::Left;
+        break;
+      case VisualDir::Right:
+        button = swapped ? Button::Left : Button::Right;
+        break;
+      case VisualDir::Up:
+        button = swapped ? Button::Down : Button::Up;
+        break;
+      case VisualDir::Down:
+        button = swapped ? Button::Up : Button::Down;
+        break;
+    }
+  }
+  return mappedInput.wasPressed(button);
+}
+
 // Cross-page selection: while anchored, a forward move past the last word
-// (or Down on the last row) continues the selection onto the next page; the
-// symmetric backward move on the first word/row returns. True when the key
-// press was consumed.
+// (or visual-Down on the last row) continues the selection onto the next
+// page; the symmetric backward move on the first word/row returns. True when
+// the key press was consumed.
 bool DictionaryWordSelectActivity::handleCrossPageNavigation() {
   if (anchor < 0 || !section || words.empty()) return false;
   const uint16_t row = words[selected].row;
   const bool rtl = rowIsRtl(row);
-  const bool fwdKey =
-      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Left : MappedInputManager::Button::Right);
-  const bool backKey =
-      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Right : MappedInputManager::Button::Left);
+  const bool fwdKey = wasPressedVisual(rtl ? VisualDir::Left : VisualDir::Right);
+  const bool backKey = wasPressedVisual(rtl ? VisualDir::Right : VisualDir::Left);
   const int pos = readingPos[selected];
   if ((fwdKey && pos == static_cast<int>(words.size()) - 1) ||
-      (mappedInput.wasPressed(MappedInputManager::Button::Down) && row == rowCount - 1)) {
+      (wasPressedVisual(VisualDir::Down) && row == rowCount - 1)) {
     return advancePage();
   }
-  if (!carriedLens.empty() &&
-      ((backKey && pos == 0) || (mappedInput.wasPressed(MappedInputManager::Button::Up) && row == 0))) {
+  if (!carriedLens.empty() && ((backKey && pos == 0) || (wasPressedVisual(VisualDir::Up) && row == 0))) {
     return retreatPage();
   }
   return false;
@@ -433,10 +483,8 @@ void DictionaryWordSelectActivity::loop() {
   // the storage index would jump from the last reading word of an RTL row to
   // the first reading word of the *previous* row instead of onto the next.
   const bool rtl = rowIsRtl(words[selected].row);
-  const bool fwdKey =
-      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Left : MappedInputManager::Button::Right);
-  const bool backKey =
-      mappedInput.wasPressed(rtl ? MappedInputManager::Button::Right : MappedInputManager::Button::Left);
+  const bool fwdKey = wasPressedVisual(rtl ? VisualDir::Left : VisualDir::Right);
+  const bool backKey = wasPressedVisual(rtl ? VisualDir::Right : VisualDir::Left);
   const int pos = readingPos[selected];
   if (backKey && pos > 0) {
     selected = readingOrder[pos - 1];
@@ -444,9 +492,9 @@ void DictionaryWordSelectActivity::loop() {
   } else if (fwdKey && pos + 1 < static_cast<int>(words.size())) {
     selected = readingOrder[pos + 1];
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+  } else if (wasPressedVisual(VisualDir::Up)) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+  } else if (wasPressedVisual(VisualDir::Down)) {
     moveVertical(1);
   }
 }
@@ -541,7 +589,15 @@ void DictionaryWordSelectActivity::drawHints() const {
   // Confirm's meaning depends on the mode: lookup, highlight, or both
   // (the mixed mode hints the long-press lookup; a short press highlights).
   const char* confirmLabel = (mode == Mode::Highlight) ? tr(STR_HIGHLIGHT) : tr(STR_LOOKUP);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  // In landscape the front pair jumps rows instead of stepping words (see
+  // wasPressedVisual), so hint the vertical directions; mapLabels' swap puts
+  // each label on the chip whose button actually moves that way.
+  const auto orientation = renderer.getOrientation();
+  const bool landscape =
+      orientation == GfxRenderer::LandscapeClockwise || orientation == GfxRenderer::LandscapeCounterClockwise;
+  const char* prevLabel = landscape ? tr(STR_DIR_UP) : tr(STR_DIR_LEFT);
+  const char* nextLabel = landscape ? tr(STR_DIR_DOWN) : tr(STR_DIR_RIGHT);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, prevLabel, nextLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

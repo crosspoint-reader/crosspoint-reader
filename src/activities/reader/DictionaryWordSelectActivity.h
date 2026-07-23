@@ -12,8 +12,10 @@
 
 class Section;
 
-// Button-driven word selection over the current reader page: Left/Right step
-// through words in reading order, Up/Down jump rows, Back returns to the
+// Button-driven word selection over the current reader page: the buttons
+// that physically lie horizontal step through words in reading order, the
+// vertical pair jumps rows (see wasPressedVisual — in landscape the front
+// Left/Right pair and the side buttons trade axes), Back returns to the
 // reader. What Confirm does depends on the mode:
 //  - Dictionary: release looks the word up in DictionaryDefinitionActivity.
 //  - Highlight: release anchors a passage selection; the next release saves
@@ -59,6 +61,9 @@ class DictionaryWordSelectActivity final : public Activity {
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error, Saved };
 
+  // On-screen (visual) directions, resolved to physical buttons per orientation.
+  enum class VisualDir : uint8_t { Left, Right, Up, Down };
+
   void extractWords();
   void buildReadingOrder();
   int closestInRow(uint16_t row, int centerX) const;
@@ -69,6 +74,7 @@ class DictionaryWordSelectActivity final : public Activity {
   bool saveHighlight();
   bool drawHighlightWithSnapshot();
   void drawHints() const;
+  bool wasPressedVisual(VisualDir dir) const;
   void paintWordBox(int idx, bool highlighted, int rangeLo, int rangeHi);
   void resetCursorToMiddle();
   bool rowIsRtl(uint16_t row) const;
