@@ -134,7 +134,19 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
+  void tapToLogical(float nx, float ny, int& outX, int& outY) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
+  // grayscale strip rendering) can overlap the panel's refresh time. The
+  // framebuffer must stay untouched until waitRefreshComplete(). Falls back to
+  // a blocking refresh when fadingFix is enabled or the panel lacks deferral
+  // support. See HalDisplay::displayBufferAsync for the baseline contract.
+  void displayBufferAsync(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  void waitRefreshComplete() const;
+  // True when displayBufferAsync() genuinely overlaps: panel defers and
+  // fadingFix isn't forcing the blocking path. Callers can skip overlap
+  // scaffolding (e.g. whole-plane grayscale buffers) when false.
+  bool supportsAsyncRefresh() const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
@@ -217,6 +229,7 @@ class GfxRenderer {
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
+  int getLineHeight(int fontId, float compression) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Word-wrap \p text into at most \p maxLines lines, each no wider than

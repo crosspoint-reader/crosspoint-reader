@@ -517,6 +517,34 @@ void WifiSelectionActivity::loop() {
 
   // Handle save prompt state
   if (state == WifiSelectionState::SAVE_PROMPT) {
+    {
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const int buttonY = screen.y + (screen.height - height * 3) / 2 + 80;
+      constexpr int buttonWidth = 60;
+      constexpr int buttonSpacing = 30;
+      const int startX = screen.x + (screen.width - (buttonWidth * 2 + buttonSpacing)) / 2;
+      int touchedOption = -1;
+      const auto touch = mappedInput.colTouch(touchedOption, startX - 8, buttonWidth + buttonSpacing, 2, buttonY - 8,
+                                              buttonY + height + 8, buttonWidth + 16);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (savePromptSelection != touchedOption) {
+          savePromptSelection = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        savePromptSelection = touchedOption;
+        if (savePromptSelection == 0) {
+          RenderLock lock(*this);
+          WIFI_STORE.addCredential(selectedSSID, enteredPassword);
+        }
+        onComplete(true);
+        return;
+      }
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (savePromptSelection > 0) {
@@ -546,6 +574,39 @@ void WifiSelectionActivity::loop() {
 
   // Handle forget prompt state (connection failed with saved credentials)
   if (state == WifiSelectionState::FORGET_PROMPT) {
+    {
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
+      const int buttonY = screen.y + (screen.height - height * 3) / 2 + 80;
+      constexpr int buttonWidth = 120;
+      constexpr int buttonSpacing = 30;
+      const int startX = screen.x + (screen.width - (buttonWidth * 2 + buttonSpacing)) / 2;
+      int touchedOption = -1;
+      const auto touch = mappedInput.colTouch(touchedOption, startX - 8, buttonWidth + buttonSpacing, 2, buttonY - 8,
+                                              buttonY + height + 8, buttonWidth + 16);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (forgetPromptSelection != touchedOption) {
+          forgetPromptSelection = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        forgetPromptSelection = touchedOption;
+        if (forgetPromptSelection == 1) {
+          RenderLock lock(*this);
+          WIFI_STORE.removeCredential(selectedSSID);
+          const auto network = find_if(networks.begin(), networks.end(),
+                                       [this](const WifiNetworkInfo& net) { return net.ssid == selectedSSID; });
+          if (network != networks.end()) {
+            network->hasSavedPassword = false;
+          }
+        }
+        startWifiScan();
+        return;
+      }
+    }
+
     if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
         mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (forgetPromptSelection > 0) {
@@ -636,6 +697,35 @@ void WifiSelectionActivity::loop() {
         selectedSSID = networks[selectedNetworkIndex].ssid;
         state = WifiSelectionState::FORGET_PROMPT;
         forgetPromptSelection = 0;  // Default to "Cancel"
+        requestUpdate();
+        return;
+      }
+    }
+
+    if (!networks.empty()) {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int contentTop =
+          screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+      const int contentHeight = screen.height - contentTop - metrics.verticalSpacing * 2;
+      int touchSel = static_cast<int>(selectedNetworkIndex);
+      const auto listTouch =
+          handleListTouch(touchSel, static_cast<int>(networks.size()), contentTop, contentHeight, false);
+      if (listTouch != ListTouchResult::None) {
+        selectedNetworkIndex = static_cast<size_t>(touchSel);
+        if (listTouch == ListTouchResult::Activated) selectNetwork(selectedNetworkIndex);
+        return;
+      }
+
+      const int pageItems = GUI.getListPageItems(contentHeight, false);
+      const auto swipe = mappedInput.wasSwipe();
+      if (swipe == MappedInputManager::SwipeDir::Up) {
+        selectedNetworkIndex = ButtonNavigator::nextPageIndex(selectedNetworkIndex, networks.size(), pageItems);
+        requestUpdate();
+        return;
+      }
+      if (swipe == MappedInputManager::SwipeDir::Down) {
+        selectedNetworkIndex = ButtonNavigator::previousPageIndex(selectedNetworkIndex, networks.size(), pageItems);
         requestUpdate();
         return;
       }

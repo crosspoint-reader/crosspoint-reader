@@ -348,8 +348,12 @@ void FileBrowserActivity::loop() {
 
   const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentHeight =
+      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  auto activateSelected = [this] {
     if (lockNextConfirmRelease) {
       lockNextConfirmRelease = false;
       return;
@@ -415,6 +419,19 @@ void FileBrowserActivity::loop() {
         onSelectBook(basepath + entry);
       }
     }
+    return;
+  };
+
+  int touchSel = static_cast<int>(selectorIndex);
+  const auto listTouch = handleListTouch(touchSel, static_cast<int>(files.size()), contentTop, contentHeight, false);
+  if (listTouch != ListTouchResult::None) {
+    selectorIndex = static_cast<size_t>(touchSel);
+    if (listTouch == ListTouchResult::Activated) activateSelected();
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    activateSelected();
     return;
   }
 

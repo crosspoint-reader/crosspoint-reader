@@ -256,7 +256,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
         // The empty block was created by a <br> section separator. Inject a full line of
         // blank space before the following paragraph so the scene/section break is visible.
         // This only fires when the <br> block stayed empty (i.e. no inline text was added).
-        const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
+        const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression));
         incoming.marginTop = static_cast<int16_t>(incoming.marginTop + lineHeight);
       }
 
@@ -306,7 +306,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     currentPageNextY = 0;
   }
 
-  const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression + 0.5f);
+  const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression));
   const int16_t defaultVerticalSpacing = static_cast<int16_t>(lineHeight / 2);
   const int16_t topSpacing =
       static_cast<int16_t>((blockStyle.marginTop > 0 ? blockStyle.marginTop : defaultVerticalSpacing) +
@@ -1452,7 +1452,7 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
 
   if (!currentPage) {
     currentPage.reset(new Page());
@@ -1492,7 +1492,7 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY = 0;
   }
 
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  const int lineHeight = renderer.getLineHeight(fontId, lineCompression);
 
   // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();

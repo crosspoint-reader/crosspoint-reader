@@ -91,9 +91,13 @@ jobs:
           restore-keys: pio-${{ runner.os }}-
 
       - name: Build CrossPoint
+        # Both envs in ONE pio invocation: a second `pio run` can wipe the whole
+        # .pio/build tree (project-checksum mismatch after the S3 toolchain
+        # installs into the restored cache), deleting the default firmware.bin
+        # before the artifact upload.
         run: |
           set -euo pipefail
-          pio run | tee pio.log
+          pio run -e default -e sticky | tee pio.log
 
       - name: Extract firmware stats
 

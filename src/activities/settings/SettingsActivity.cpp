@@ -1,5 +1,6 @@
 #include "SettingsActivity.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 
@@ -11,7 +12,6 @@
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
-#include "FontSelectionActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
@@ -21,6 +21,7 @@
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
+#include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -49,6 +50,9 @@ void SettingsActivity::rebuildSettingsLists() {
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
+      // Settings merged into "Text Settings"
+      // (they stay in the shared list for the web settings API)
+      if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
@@ -62,16 +66,22 @@ void SettingsActivity::rebuildSettingsLists() {
   }
 
   // Append device-only ACTION items
-  controlsSettings.insert(controlsSettings.begin(),
-                          SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  if (!BoardConfig::hasTouch()) {
+    controlsSettings.insert(controlsSettings.begin(),
+                            SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
+  if (!BoardConfig::hasTouch()) {
+    systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
+  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  // Insert "Manage Fonts" right after the font family setting so users discover it naturally
+  readerSettings.insert(readerSettings.begin(),
+                        SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
@@ -122,6 +132,24 @@ void SettingsActivity::loop() {
 
   bool hasChangedCategory = false;
 
+  auto applyCategorySelection = [this] {
+    switch (selectedCategoryIndex) {
+      case 0:
+        currentSettings = &displaySettings;
+        break;
+      case 1:
+        currentSettings = &readerSettings;
+        break;
+      case 2:
+        currentSettings = &controlsSettings;
+        break;
+      case 3:
+        currentSettings = &systemSettings;
+        break;
+    }
+    settingsCount = static_cast<int>(currentSettings->size());
+  };
+
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selectedSettingIndex == 0) {
@@ -146,7 +174,103 @@ void SettingsActivity::loop() {
     return;
   }
 
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int tx = 0;
+  int ty = 0;
+  const int tabTop = metrics.topPadding + metrics.headerHeight;
+  const int listTop = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  const int listHeight =
+      renderer.getScreenHeight() - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
+                                    metrics.buttonHintsHeight + metrics.verticalSpacing * 2);
+  auto buildTabs = [&]() {
+    std::vector<TabInfo> tabs;
+    tabs.reserve(categoryCount);
+    for (int i = 0; i < categoryCount; i++) {
+      tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
+    }
+    return tabs;
+  };
+  auto settingIndexFromPoint = [&](const int x, const int y, int& settingIndex) {
+    (void)x;
+    if (settingsCount <= 0 || y < listTop || y >= listTop + listHeight) return false;
+    const int rowStep = GUI.getListRowStep(false);
+    if (rowStep <= 0) return false;
+    const int pageItems = GUI.getListPageItems(listHeight, false);
+    const int selectedRow = std::max(0, selectedSettingIndex - 1);
+    const int pageStart = selectedRow / pageItems * pageItems;
+    const int row = (y - listTop) / rowStep;
+    const int touched = pageStart + row;
+    if (row < 0 || row >= pageItems || touched < 0 || touched >= settingsCount) return false;
+    settingIndex = touched + 1;
+    return true;
+  };
+
+  if (mappedInput.wasScreenTouchDown(tx, ty)) {
+    int touchedCategory = -1;
+    const auto tabs = buildTabs();
+    if (GUI.tabIndexFromPoint(renderer, Rect{0, tabTop, renderer.getScreenWidth(), metrics.tabBarHeight}, tabs, tx, ty,
+                              touchedCategory)) {
+      if (selectedCategoryIndex != touchedCategory || selectedSettingIndex != 0) {
+        selectedCategoryIndex = touchedCategory;
+        selectedSettingIndex = 0;
+        applyCategorySelection();
+        requestUpdate();
+      }
+      return;
+    }
+
+    int touchedSetting = -1;
+    if (settingIndexFromPoint(tx, ty, touchedSetting)) {
+      if (selectedSettingIndex != touchedSetting) {
+        selectedSettingIndex = touchedSetting;
+        requestUpdate();
+      }
+      return;
+    }
+  }
+
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    int tappedCategory = -1;
+    const auto tabs = buildTabs();
+    if (GUI.tabIndexFromPoint(renderer, Rect{0, tabTop, renderer.getScreenWidth(), metrics.tabBarHeight}, tabs, tx, ty,
+                              tappedCategory)) {
+      selectedCategoryIndex = tappedCategory;
+      selectedSettingIndex = 0;
+      applyCategorySelection();
+      requestUpdate();
+      return;
+    }
+
+    int tappedSetting = -1;
+    if (settingIndexFromPoint(tx, ty, tappedSetting)) {
+      selectedSettingIndex = tappedSetting;
+      toggleCurrentSetting();
+      requestUpdate();
+      return;
+    }
+  }
+
   // Handle navigation
+  const auto& navMetrics = UITheme::getInstance().getMetrics();
+  const int settingsListHeight =
+      renderer.getScreenHeight() - (navMetrics.topPadding + navMetrics.headerHeight + navMetrics.tabBarHeight +
+                                    navMetrics.buttonHintsHeight + navMetrics.verticalSpacing * 2);
+  const int settingsPageItems = GUI.getListPageItems(settingsListHeight, false);
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectedSettingIndex = selectedSettingIndex == 0 ? 1
+                                                     : ButtonNavigator::nextPageIndex(
+                                                           selectedSettingIndex, settingsCount + 1, settingsPageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectedSettingIndex =
+        ButtonNavigator::previousPageIndex(selectedSettingIndex, settingsCount + 1, settingsPageItems);
+    requestUpdate();
+    return;
+  }
+
   buttonNavigator.onNextRelease([this] {
     selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
@@ -171,21 +295,7 @@ void SettingsActivity::loop() {
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
-    switch (selectedCategoryIndex) {
-      case 0:
-        currentSettings = &displaySettings;
-        break;
-      case 1:
-        currentSettings = &readerSettings;
-        break;
-      case 2:
-        currentSettings = &controlsSettings;
-        break;
-      case 3:
-        currentSettings = &systemSettings;
-        break;
-    }
-    settingsCount = static_cast<int>(currentSettings->size());
+    applyCategorySelection();
   }
 }
 
@@ -224,15 +334,6 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
-    if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      // Launch font selection submenu instead of cycling
-      startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
-                             [this](const ActivityResult&) {
-                               SETTINGS.saveToFile();
-                               rebuildSettingsLists();
-                             });
-      return;
-    }
     const uint8_t totalValues = setting.enumStringValues.empty()
                                     ? static_cast<uint8_t>(setting.enumValues.size())
                                     : static_cast<uint8_t>(setting.enumStringValues.size());
@@ -292,6 +393,14 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::DownloadFonts:
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 rebuildSettingsLists();
+                               });
+        break;
+      case SettingAction::TextSettings:
+        startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                                                      TextSettingsActivity::Tab::Family),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsLists();

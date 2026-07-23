@@ -1,5 +1,6 @@
 #include <HalGPIO.h>
 #include <Logging.h>
+#include <PowerManager.h>
 #include <Preferences.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -191,15 +192,20 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 }  // namespace
 
 void HalGPIO::begin() {
-  inputMgr.begin();
+#if FREEINK_MCU_C3
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
   _deviceType = detectDeviceTypeWithFingerprint();
+  BoardConfig::selectDevice(deviceIsX3() ? BoardConfig::Board::XteinkX3 : BoardConfig::Board::XteinkX4);
 
   if (deviceIsX4()) {
     pinMode(BAT_GPIO0, INPUT);
     pinMode(UART0_RXD, INPUT);
   }
+#else
+  _deviceType = DeviceType::X4;
+#endif
+  inputMgr.begin();
 }
 
 void HalGPIO::update() {
@@ -225,7 +231,44 @@ unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
+bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
+
+bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
+
+bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
+
+bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
+  return inputMgr.isTouchTapCandidate(nx, ny, heldMs);
+}
+
+bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return inputMgr.isTouchHeldAt(nx, ny); }
+
+unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
+
+bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
+  return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
+}
+
+bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
+
+void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
+  InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);
+}
+
+bool HalGPIO::isXteinkDevice() const {
+  return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
+}
+
 bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
+  // Boards without a power button (or M5Paper's latch circuit) cannot verify a
+  // hold; treat the wake as valid.
+  if (BoardConfig::ACTIVE.input.power < 0) {
+    return true;
+  }
+#if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER
+  return true;
+#endif
   if (shortPressAllowed) {
     // Fast path - no duration check needed
     return true;
@@ -271,8 +314,10 @@ bool HalGPIO::isUsbConnected() const {
     }
     return false;
   }
-  // U0RXD/GPIO20 reads HIGH when USB is connected
-  return digitalRead(UART0_RXD) == HIGH;
+  if (BoardConfig::ACTIVE.usbDetect < 0) {
+    return false;
+  }
+  return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
@@ -281,8 +326,11 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
   const bool usbConnected = isUsbConnected();
 
-  if ((wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) ||
-      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO && resetReason == ESP_RST_DEEPSLEEP && usbConnected)) {
+  if (resetReason == ESP_RST_DEEPSLEEP &&
+      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
+    return WakeupReason::PowerButton;
+  }
+  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) {
     return WakeupReason::PowerButton;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {

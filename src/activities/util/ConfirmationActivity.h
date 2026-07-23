@@ -3,6 +3,7 @@
 #include <string>
 
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "fontIds.h"
 
 class ConfirmationActivity : public Activity {
@@ -17,6 +18,7 @@ class ConfirmationActivity : public Activity {
 
   std::string safeHeading;
   std::string safeBody;
+  OptionPopup confirmPopup;
   int startY = 0;
   int lineHeight = 0;
 

@@ -14,6 +14,14 @@ void ClearCacheActivity::onEnter() {
   Activity::onEnter();
 
   state = WARNING;
+  const char* options[] = {tr(STR_CANCEL), tr(STR_CLEAR_BUTTON)};
+  confirmPopup.show(tr(STR_CLEAR_READING_CACHE), options, 2, 0, [this](int idx) {
+    if (idx == 1) {
+      beginClear();
+    } else {
+      goBack();
+    }
+  });
   requestUpdate();
 }
 
@@ -34,6 +42,8 @@ void ClearCacheActivity::render(RenderLock&&) {
                               EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, tr(STR_CLEAR_CACHE_WARNING_3), true);
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, tr(STR_CLEAR_CACHE_WARNING_4), true);
+
+    if (confirmPopup.processRender(renderer, mappedInput)) return;
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CLEAR_BUTTON), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -71,6 +81,16 @@ void ClearCacheActivity::render(RenderLock&&) {
     renderer.displayBuffer();
     return;
   }
+}
+
+void ClearCacheActivity::beginClear() {
+  LOG_DBG("CLEAR_CACHE", "User confirmed, starting cache clear");
+  {
+    RenderLock lock(*this);
+    state = CLEARING;
+  }
+  requestUpdateAndWait();
+  clearCache();
 }
 
 void ClearCacheActivity::clearCache() {
@@ -122,15 +142,10 @@ void ClearCacheActivity::clearCache() {
 
 void ClearCacheActivity::loop() {
   if (state == WARNING) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      LOG_DBG("CLEAR_CACHE", "User confirmed, starting cache clear");
-      {
-        RenderLock lock(*this);
-        state = CLEARING;
-      }
-      requestUpdateAndWait();
+    if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-      clearCache();
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      beginClear();
     }
 
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -141,7 +156,9 @@ void ClearCacheActivity::loop() {
   }
 
   if (state == SUCCESS || state == FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    int x = 0;
+    int y = 0;
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
       goBack();
     }
     return;

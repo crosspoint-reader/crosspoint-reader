@@ -65,6 +65,18 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
+void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
+  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+    einkDisplay.requestResync(1);
+  }
+
+  einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
+}
+
+void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
+
+bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
+
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);

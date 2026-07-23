@@ -69,6 +69,8 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
@@ -97,7 +99,7 @@ void XtcReaderActivity::loop() {
   }
 
   // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
     openChapterSelection();
   }
 
@@ -106,7 +108,9 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -128,8 +132,9 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const bool skipPages = !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP &&
-                         mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
+  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+  const bool skipPages =
+      !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && heldMs > ReaderUtils::SKIP_HOLD_MS;
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
@@ -169,10 +174,10 @@ void XtcReaderActivity::render(RenderLock&&) {
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
+  const auto sb = SETTINGS.statusBarSpec();
   const int bookPageCount = static_cast<int>(xtc->getPageCount());
   const int bookPage = static_cast<int>(currentPage) + 1;
-  std::string title =
-      SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE ? xtc->getTitle() : "";
+  std::string title = sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE ? xtc->getTitle() : "";
 
   if (!xtc->hasChapters()) {
     return StatusBarInfo{bookPage, bookPageCount, std::move(title)};
@@ -187,7 +192,7 @@ XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
     return StatusBarInfo{bookPage, bookPageCount, std::move(title)};
   }
 
-  if (SETTINGS.statusBarTitle == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
+  if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
     title = chapterIt->name.empty() ? tr(STR_UNNAMED) : chapterIt->name;
   }
 
@@ -196,9 +201,10 @@ XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
 }
 
 void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition position) const {
-  const bool drawBottom = SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_BOTTOM &&
+  const auto sb = SETTINGS.statusBarSpec();
+  const bool drawBottom = sb.xtcMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_BOTTOM &&
                           position == StatusBarOverlayPosition::Bottom;
-  const bool drawTop = SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP &&
+  const bool drawTop = sb.xtcMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP &&
                        position == StatusBarOverlayPosition::Top;
   if (!drawBottom && !drawTop) {
     return;
@@ -410,7 +416,7 @@ void XtcReaderActivity::renderPage() {
 
   free(pageBuffer);
 
-  if (SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP) {
+  if (SETTINGS.statusBarSpec().xtcMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP) {
     renderStatusBarOverlay(StatusBarOverlayPosition::Top);
   } else {
     renderStatusBarOverlay(StatusBarOverlayPosition::Bottom);
