@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <BoardConfig.h>
-#include <driver/usb_serial_jtag.h>
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
@@ -17,6 +16,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <driver/usb_serial_jtag.h>
 
 #include <cstring>
 
