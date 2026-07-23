@@ -472,7 +472,30 @@ void loop() {
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
         uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, bufferSize);
+        // logSerial's TX timeout is 1ms (see the load-bearing setTxTimeoutMs()
+        // call above) so it never hangs the device when no host is attached —
+        // but that means a single write() call for a large buffer only sends
+        // whatever fits in the HWCDC ring buffer before giving up, silently
+        // dropping the rest. Retry the remainder instead of relying on one
+        // blocking call, bounded so a host that stops draining mid-dump (e.g.
+        // disconnects) can't hang the device either.
+        constexpr size_t kChunkSize = 256;  // small enough to fit the HWCDC TX ring buffer per attempt
+        size_t written = 0;
+        const uint32_t deadline = millis() + 30000;
+        while (written < bufferSize && millis() < deadline) {
+          const size_t remaining = bufferSize - written;
+          const size_t toSend = remaining < kChunkSize ? remaining : kChunkSize;
+          const size_t sent = logSerial.write(buf + written, toSend);
+          written += sent;
+          // Always yield after a write attempt (success or not) — a tight loop that
+          // only delays on sent==0 can starve the underlying USB task (TinyUSB) of
+          // scheduling time it needs to actually drain the ring buffer and refill it.
+          delay(5);
+        }
+        if (written < bufferSize) {
+          LOG_ERR("MAIN", "SCREENSHOT: only sent %u of %u bytes before timeout", static_cast<unsigned>(written),
+                  bufferSize);
+        }
         logSerial.printf("SCREENSHOT_END\n");
       }
     }
