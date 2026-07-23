@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <BoardConfig.h>
+#include <driver/usb_serial_jtag.h>
 #include <Epub.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
@@ -542,12 +543,21 @@ void loop() {
   // to sleep, and deep-sleeping drops the USB CDC connection entirely.
   //
   // gpio.isUsbConnected() only detects net-positive charge current (X3: BQ27220
-  // fuel-gauge Current() > 0) — a debug/data cable to a dev machine often reads as
-  // NOT connected by that check (no net charging current, e.g. near-full battery or
-  // a data-only port), even though it's very much plugged in. `Serial` (the native
-  // USB CDC connection, already used this way above) catches that case: it's true
-  // once a host has the port open, independent of charge current.
-  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs && !gpio.isUsbConnected() && !Serial) {
+  // fuel-gauge Current() > 0) — confirmed against the BQ25616 datasheet that the
+  // charge IC's STAT pin (what a GPIO-based alternative would read) is HIGH for
+  // BOTH "charging complete" and "no input at all," so it can't distinguish "USB
+  // plugged in, battery just full" from "nothing plugged in" either.
+  //
+  // usb_serial_jtag_is_connected() catches the case both of those miss: a debug/
+  // data cable to a dev machine, with no net charging current, and no serial
+  // terminal app actively holding the port open (unlike `Serial`'s bool operator,
+  // which needs a host application to assert DTR — merely being plugged into a
+  // computer already means the USB Serial/JTAG peripheral is receiving SOF
+  // packets, independent of any application-level connection). It reads false for
+  // a plain power source with no USB host controller (e.g. a power bank), which is
+  // fine — isUsbConnected() already covers genuine charging.
+  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs && !gpio.isUsbConnected() &&
+      !usb_serial_jtag_is_connected()) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
