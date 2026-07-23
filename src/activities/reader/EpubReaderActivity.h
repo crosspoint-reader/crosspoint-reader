@@ -196,7 +196,11 @@ class EpubReaderActivity final : public Activity {
   // speed would only burn battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
-  bool restoresGrayscaleAfterForcedRefresh() const override { return true; }
+  bool handleForcedRefresh() override {
+    pagesUntilFullRefresh = 1;
+    requestUpdate();
+    return true;
+  }
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;
 };

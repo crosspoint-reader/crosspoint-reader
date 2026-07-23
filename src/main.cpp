@@ -533,15 +533,9 @@ void loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
-    const bool restoreGrayscale = activityManager.currentActivityRestoresGrayscaleAfterForcedRefresh();
-    {
+    if (!activityManager.handleForcedRefresh()) {
       RenderLock lock;
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-    }
-    if (restoreGrayscale) {
-      // The forced refresh only displays the 1-bit framebuffer. Re-render the
-      // visible reader page so its normal pipeline restores anti-aliasing.
-      activityManager.requestUpdate();
     }
   }
 

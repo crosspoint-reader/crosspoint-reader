@@ -49,6 +49,10 @@ class TxtReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
-  bool restoresGrayscaleAfterForcedRefresh() const override { return true; }
+  bool handleForcedRefresh() override {
+    pagesUntilFullRefresh = 1;
+    requestUpdate();
+    return true;
+  }
   ScreenshotInfo getScreenshotInfo() const override;
 };
