@@ -54,7 +54,7 @@ class DictionaryWordSelectActivity final : public Activity {
   bool drawHighlightWithSnapshot();
   void drawHints() const;
   void handleUnexpectedError();
-  std::string getSelectedWord(const WordBox& word);
+  const char* getSelectedWord(const WordBox& word);
 
   std::unique_ptr<Page> page;
   DictionaryPageMetadata* metadata = nullptr;
@@ -76,6 +76,7 @@ class DictionaryWordSelectActivity final : public Activity {
   Popup popup = Popup::None;
   StrId popupMsg = StrId::STR_DICT_NOT_FOUND;
   unsigned long popupTime = 0;
+  char wordBuffer[MAX_LINE_BYTES + 1] = {0};
 
   // Differential highlight repaint: the pixels under the current highlight
   // box, so a cursor move restores them and repaints only the two affected

@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
+#include "util/Dictionary.h"
 
 namespace {
 
@@ -105,7 +106,7 @@ void DictionaryWordSelectActivity::extractWords() {
   if (styleMask == 0) styleMask = 0x01;  // REGULAR
   renderer.ensureSdCardFontReady(fontId, pageText.c_str(), styleMask);
   for (auto& word : *words) {
-    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, getSelectedWord(word).c_str(), word.style));
+    word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
   }
 }
 
@@ -188,7 +189,7 @@ void DictionaryWordSelectActivity::performLookup() {
     handleUnexpectedError();
     return;
   }
-  bool found = ok && dict.lookup(getSelectedWord((*words)[selected]).c_str(), nextDefinition, headword, &result);
+  bool found = ok && dict.lookup(getSelectedWord((*words)[selected]), nextDefinition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -255,12 +256,12 @@ void DictionaryWordSelectActivity::loop() {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && words) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && words && !words->empty()) {
     performLookup();
     return;
   }
 
-  if (!words) return;
+  if (!words || words->empty()) return;
 
   // Touch: a touch-down moves the highlight to the touched word (differential
   // repaint), a tap on a word selects and looks it up in one go.
@@ -328,7 +329,7 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   snapshotIdx = saved ? selected : -1;
 
   renderer.fillRect(hx, hy, hw, hh, true);
-  renderer.drawText(fontId, word.x, word.y, getSelectedWord(word).c_str(), false, word.style);
+  renderer.drawText(fontId, word.x, word.y, getSelectedWord(word), false, word.style);
   return saved;
 }
 
@@ -351,8 +352,11 @@ void DictionaryWordSelectActivity::drawHints() const {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-std::string DictionaryWordSelectActivity::getSelectedWord(const WordBox& word) {
-  return definition ? word.getWord(*definition).c_str() : word.text;
+const char* DictionaryWordSelectActivity::getSelectedWord(const WordBox& word) {
+  if (!definition) return word.text;
+  memcpy(wordBuffer, definition->c_str() + word.defView.offset, word.defView.len);
+  wordBuffer[word.defView.len] = '\0';
+  return wordBuffer;
 }
 
 void DictionaryWordSelectActivity::render(RenderLock&&) {
@@ -365,7 +369,7 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     // The full path's PrewarmScope cleared the glyph cache on exit; batch-load
     // just the highlighted word's glyphs before drawing them white-on-black.
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, getSelectedWord((*words)[selected]).c_str(),
+        fontId, getSelectedWord((*words)[selected]),
         static_cast<uint8_t>(1u << (static_cast<uint8_t>((*words)[selected].style) & 0x03)));
     if (drawHighlightWithSnapshot()) {
       drawHints();
@@ -386,14 +390,15 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
     scope.endScanAndPrewarm();
     page->render(renderer, fontId, marginLeft, marginTop);
   } else {
-    if (metadata != nullptr) {
+    if (metadata) {
       auto& headword = metadata->headword;
       auto& pageNums = metadata->pageNums;
       renderer.drawText(headword.fontId, headword.x, headword.y, headword.word.c_str(), true, headword.style);
       renderer.drawText(pageNums.fontId, pageNums.x, pageNums.y, pageNums.word.c_str(), true, pageNums.style);
     }
+    if (!words) handleUnexpectedError();
     for (const auto& word : *words) {
-      renderer.drawText(fontId, word.x, word.y, getSelectedWord(word).c_str(), true, word.style);
+      renderer.drawText(word.fontId, word.x, word.y, getSelectedWord(word), true, word.style);
     }
   }
 

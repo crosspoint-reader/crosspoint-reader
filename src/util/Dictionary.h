@@ -7,6 +7,12 @@
 #include <string>
 #include <vector>
 
+namespace {
+// Longest measurable/drawable span. Wrapped lines stay under the screen width
+// (far below this); only pathological unbreakable tokens are split at this cap.
+constexpr size_t MAX_LINE_BYTES = 191;
+}  // namespace
+
 // Result of an index search — file location of a definition without reading it.
 struct DictLocation {
   uint32_t offset = 0;  // byte offset in .dict data
@@ -45,8 +51,6 @@ struct WordBox {
   DefView defView;
   EpdFontFamily::Style style;
   bool selectable = true;
-
-  std::string getWord(std::string& definition) const;
 };
 
 // Slim StarDict reader: exact-match lookup with a mini stemming fallback.

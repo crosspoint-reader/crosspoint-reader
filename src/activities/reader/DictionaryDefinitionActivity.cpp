@@ -22,10 +22,6 @@
 
 namespace {
 
-// Longest measurable/drawable span. Wrapped lines stay under the screen width
-// (far below this); only pathological unbreakable tokens are split at this cap.
-constexpr size_t MAX_LINE_BYTES = 191;
-
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
 
