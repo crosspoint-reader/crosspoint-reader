@@ -43,9 +43,8 @@ static DRAM_ATTR const char PANIC_MCAUSE_12[] = "Instruction page fault";
 static DRAM_ATTR const char PANIC_MCAUSE_13[] = "Load page fault";
 static DRAM_ATTR const char PANIC_MCAUSE_15[] = "Store page fault";
 static DRAM_ATTR const char* const PANIC_MCAUSE_REASONS[] = {
-    PANIC_MCAUSE_0,  PANIC_MCAUSE_1,  PANIC_MCAUSE_2, PANIC_MCAUSE_3,
-    PANIC_MCAUSE_4,  PANIC_MCAUSE_5,  PANIC_MCAUSE_6, PANIC_MCAUSE_7,
-    PANIC_MCAUSE_8,  PANIC_MCAUSE_9,  nullptr,        PANIC_MCAUSE_11,
+    PANIC_MCAUSE_0,  PANIC_MCAUSE_1,  PANIC_MCAUSE_2, PANIC_MCAUSE_3,  PANIC_MCAUSE_4, PANIC_MCAUSE_5,
+    PANIC_MCAUSE_6,  PANIC_MCAUSE_7,  PANIC_MCAUSE_8, PANIC_MCAUSE_9,  nullptr,        PANIC_MCAUSE_11,
     PANIC_MCAUSE_12, PANIC_MCAUSE_13, nullptr,        PANIC_MCAUSE_15,
 };
 #endif
@@ -80,8 +79,8 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   if (panicMessage[0] == '\0') {
     uint32_t mcause = ((RvExcFrame*)frame)->mcause;
     const char* reason = mcause < (sizeof(PANIC_MCAUSE_REASONS) / sizeof(PANIC_MCAUSE_REASONS[0]))
-                              ? PANIC_MCAUSE_REASONS[mcause]
-                              : nullptr;
+                             ? PANIC_MCAUSE_REASONS[mcause]
+                             : nullptr;
     if (reason) {
       int i = 0;
       for (; i < (int)sizeof(panicMessage) - 1 && reason[i]; i++) {
