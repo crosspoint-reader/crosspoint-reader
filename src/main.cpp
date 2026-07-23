@@ -534,7 +534,17 @@ void loop() {
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
+  // Only auto-sleep on inactivity while running on battery — a device sitting on USB
+  // power (charging, or plugged in for serial debugging) has no battery-life reason
+  // to sleep, and deep-sleeping drops the USB CDC connection entirely.
+  //
+  // gpio.isUsbConnected() only detects net-positive charge current (X3: BQ27220
+  // fuel-gauge Current() > 0) — a debug/data cable to a dev machine often reads as
+  // NOT connected by that check (no net charging current, e.g. near-full battery or
+  // a data-only port), even though it's very much plugged in. `Serial` (the native
+  // USB CDC connection, already used this way above) catches that case: it's true
+  // once a host has the port open, independent of charge current.
+  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs && !gpio.isUsbConnected() && !Serial) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
