@@ -481,8 +481,11 @@ void loop() {
         // disconnects) can't hang the device either.
         constexpr size_t kChunkSize = 256;  // small enough to fit the HWCDC TX ring buffer per attempt
         size_t written = 0;
-        const uint32_t deadline = millis() + 30000;
-        while (written < bufferSize && millis() < deadline) {
+        // Elapsed-since-start (unsigned subtraction), not an absolute deadline —
+        // `millis() + 30000` can overflow near the uint32_t wraparound and make
+        // the comparison misbehave right at that boundary.
+        const uint32_t startMs = millis();
+        while (written < bufferSize && millis() - startMs < 30000) {
           const size_t remaining = bufferSize - written;
           const size_t toSend = remaining < kChunkSize ? remaining : kChunkSize;
           const size_t sent = logSerial.write(buf + written, toSend);
