@@ -58,7 +58,7 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
 
 }  // namespace
 
-void renderPreview(GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, int top, int height,
+void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, int top, int height,
                    const char* familyName, const char* sizeName) {
   const int left = previewPadding;
   const int width = renderer.getScreenWidth() - (previewPadding * 2);
