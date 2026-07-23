@@ -200,8 +200,11 @@ class EpubReaderActivity final : public Activity {
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
   bool handleForcedRefresh() override {
-    pagesUntilFullRefresh = 1;
-    forcedRefreshPending = true;
+    {
+      RenderLock lock(*this);
+      pagesUntilFullRefresh = 1;
+      forcedRefreshPending = true;
+    }
     requestUpdate();
     return true;
   }
