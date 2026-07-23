@@ -21,6 +21,35 @@ void __real_panic_abort(const char* message);
 void __real_panic_print_backtrace(const void* frame, int core);
 
 static DRAM_ATTR const char PANIC_REASON_UNKNOWN[] = "(unknown panic reason)";
+
+#if __riscv
+// Mirrors the exception-code table in esp-idf's panic_arch_fill_info()
+// (components/esp_system/port/arch/riscv/panic_arch.c), indexed by the RISC-V `mcause` CSR value found
+// in the panic frame. Only standard architectural exceptions are covered; SoC-level pseudo-causes
+// (watchdog timeout, cache error) use out-of-range mcause sentinel values from separate ETS_*_INUM
+// tables and are intentionally left undecoded (nullptr) rather than guessed at.
+static DRAM_ATTR const char PANIC_MCAUSE_0[] = "Instruction address misaligned";
+static DRAM_ATTR const char PANIC_MCAUSE_1[] = "Instruction access fault";
+static DRAM_ATTR const char PANIC_MCAUSE_2[] = "Illegal instruction";
+static DRAM_ATTR const char PANIC_MCAUSE_3[] = "Breakpoint";
+static DRAM_ATTR const char PANIC_MCAUSE_4[] = "Load address misaligned";
+static DRAM_ATTR const char PANIC_MCAUSE_5[] = "Load access fault";
+static DRAM_ATTR const char PANIC_MCAUSE_6[] = "Store address misaligned";
+static DRAM_ATTR const char PANIC_MCAUSE_7[] = "Store access fault";
+static DRAM_ATTR const char PANIC_MCAUSE_8[] = "Environment call from U-mode";
+static DRAM_ATTR const char PANIC_MCAUSE_9[] = "Environment call from S-mode";
+static DRAM_ATTR const char PANIC_MCAUSE_11[] = "Environment call from M-mode";
+static DRAM_ATTR const char PANIC_MCAUSE_12[] = "Instruction page fault";
+static DRAM_ATTR const char PANIC_MCAUSE_13[] = "Load page fault";
+static DRAM_ATTR const char PANIC_MCAUSE_15[] = "Store page fault";
+static DRAM_ATTR const char* const PANIC_MCAUSE_REASONS[] = {
+    PANIC_MCAUSE_0,  PANIC_MCAUSE_1,  PANIC_MCAUSE_2, PANIC_MCAUSE_3,
+    PANIC_MCAUSE_4,  PANIC_MCAUSE_5,  PANIC_MCAUSE_6, PANIC_MCAUSE_7,
+    PANIC_MCAUSE_8,  PANIC_MCAUSE_9,  nullptr,        PANIC_MCAUSE_11,
+    PANIC_MCAUSE_12, PANIC_MCAUSE_13, nullptr,        PANIC_MCAUSE_15,
+};
+#endif
+
 void IRAM_ATTR __wrap_panic_abort(const char* message) {
   if (!message) message = PANIC_REASON_UNKNOWN;
   // IRAM-safe bounded copy (strncpy is not IRAM-safe in panic context)
@@ -43,6 +72,25 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   __real_panic_print_backtrace(frame, core);
   return;
 #else
+  // Raw architectural faults (LoadProhibited, StoreProhibited, illegal instruction, ...) never call
+  // __wrap_panic_abort above -- only an explicit abort()/assert() does. Backfill panicMessage from the
+  // frame's mcause exception code here (this hook runs unconditionally for every panic type, per
+  // esp-idf's print_state() in port/panic_handler.c), so those crash types still get a human-readable
+  // reason in the crash report instead of staying blank.
+  if (panicMessage[0] == '\0') {
+    uint32_t mcause = ((RvExcFrame*)frame)->mcause;
+    const char* reason = mcause < (sizeof(PANIC_MCAUSE_REASONS) / sizeof(PANIC_MCAUSE_REASONS[0]))
+                              ? PANIC_MCAUSE_REASONS[mcause]
+                              : nullptr;
+    if (reason) {
+      int i = 0;
+      for (; i < (int)sizeof(panicMessage) - 1 && reason[i]; i++) {
+        panicMessage[i] = reason[i];
+      }
+      panicMessage[i] = '\0';
+    }
+  }
+
   for (size_t i = 0; i < MAX_PANIC_STACK_DEPTH; i++) {
     panicStack[i].sp = 0;
   }
