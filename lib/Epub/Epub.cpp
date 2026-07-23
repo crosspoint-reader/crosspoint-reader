@@ -357,6 +357,14 @@ void Epub::parseCssFiles() const {
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
+  // Don't try to open an ePub containing DRM
+  constexpr auto encryptionPath = "META-INF/encryption.xml";
+  size_t encryptionFileSize = 0;
+  if (getItemSize(encryptionPath, &encryptionFileSize) && encryptionFileSize > 0) {
+    LOG_ERR("EBP", "ePub contains DRM");
+    return false;
+  }
+
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   // Always create CssParser - needed for inline style parsing even without CSS files
