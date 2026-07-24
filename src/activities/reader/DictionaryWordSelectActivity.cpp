@@ -163,7 +163,8 @@ void DictionaryWordSelectActivity::performLookup() {
 
   std::string definition;
   std::string headword;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword);
+  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
+  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -172,8 +173,33 @@ void DictionaryWordSelectActivity::performLookup() {
                            [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-  popup = ok ? Popup::NotFound : Popup::Error;
-  popupMsg = ok ? StrId::STR_DICT_NOT_FOUND : StrId::STR_DICT_ERROR;
+  // Name the failure: a genuine miss is "Not found"; a word that WAS found but
+  // couldn't be read is a real error — and we distinguish decompression from a
+  // low-memory allocation from a generic read error.
+  if (!ok) {
+    popup = Popup::Error;
+    popupMsg = StrId::STR_DICT_ERROR;
+  } else {
+    switch (result) {
+      case Dictionary::LookupResult::Decompress:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_DECOMPRESS_ERROR;
+        break;
+      case Dictionary::LookupResult::LowMemory:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_LOW_MEMORY;
+        break;
+      case Dictionary::LookupResult::ReadError:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_READ_FAILED;
+        break;
+      case Dictionary::LookupResult::NotFound:
+      default:
+        popup = Popup::NotFound;
+        popupMsg = StrId::STR_DICT_NOT_FOUND;
+        break;
+    }
+  }
   popupTime = millis();
   requestUpdate();
 }

@@ -266,8 +266,12 @@ DictLocation Dictionary::locate(const char* target, std::string* matchedHeadword
   return result;
 }
 
-bool Dictionary::readDefinition(const DictLocation& location, std::string& out) {
-  if (!location.found) return false;
+bool Dictionary::readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult) {
+  const auto fail = [outResult](LookupResult r) {
+    if (outResult) *outResult = r;
+    return false;
+  };
+  if (!location.found) return fail(LookupResult::ReadError);
   const uint32_t size = std::min(location.size, MAX_DEFINITION_BYTES);
 
   std::string path;
@@ -279,30 +283,41 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out) 
     HalFile tmp = Storage.open(DICT_TMP_FILE, O_WRITE | O_CREAT | O_TRUNC);
     if (!tmp) {
       LOG_ERR("DICT", "Failed to open %s", DICT_TMP_FILE);
-      return false;
+      return fail(LookupResult::ReadError);
     }
-    if (!DictZip::extractEntry((basePath + ".dict.dz").c_str(), location.offset, size, tmp)) {
-      LOG_ERR("DICT", "dictzip extraction failed for %s", basePath.c_str());
-      return false;
+    DictZip::ExtractError xerr = DictZip::ExtractError::None;
+    if (!DictZip::extractEntry((basePath + ".dict.dz").c_str(), location.offset, size, tmp, &xerr)) {
+      // Map the specific extraction cause to the lookup result: allocation
+      // failure (heap fragmentation) vs corrupt/truncated .dz vs an IO error.
+      LOG_ERR("DICT", "dictzip extraction failed for %s (error %d)", basePath.c_str(), static_cast<int>(xerr));
+      switch (xerr) {
+        case DictZip::ExtractError::LowMemory:
+          return fail(LookupResult::LowMemory);
+        case DictZip::ExtractError::ReadError:
+          return fail(LookupResult::ReadError);
+        case DictZip::ExtractError::Decompress:
+        default:
+          return fail(LookupResult::Decompress);
+      }
     }
     tmp.close();  // close before reopening the same path for read
     path = DICT_TMP_FILE;
   }
 
   HalFile dict;
-  if (!Storage.openFileForRead("DICT", path, dict)) return false;
+  if (!Storage.openFileForRead("DICT", path, dict)) return fail(LookupResult::ReadError);
   const uint32_t dictSize = static_cast<uint32_t>(dict.fileSize());
   if (offset > dictSize || size > dictSize - offset) {
     LOG_ERR("DICT", "Definition out of bounds (%lu+%lu > %lu)", static_cast<unsigned long>(offset),
             static_cast<unsigned long>(size), static_cast<unsigned long>(dictSize));
-    return false;
+    return fail(LookupResult::ReadError);
   }
 
   // std::string growth aborts on OOM (-fno-exceptions); refuse up front unless
   // the allocation fits comfortably in the largest free block.
   if (ESP.getMaxAllocHeap() < size + 8 * 1024) {
     LOG_ERR("DICT", "Low heap for %lu byte definition", static_cast<unsigned long>(size));
-    return false;
+    return fail(LookupResult::LowMemory);
   }
 
   dict.seekSet(offset);
@@ -310,7 +325,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out) 
   const int bytesRead = dict.read(&out[0], size);
   if (bytesRead < 0) {
     out.clear();
-    return false;
+    return fail(LookupResult::ReadError);
   }
   if (static_cast<uint32_t>(bytesRead) < size) out.resize(bytesRead);
   return true;
@@ -360,7 +375,12 @@ void Dictionary::stemVariants(const std::string& word, std::vector<std::string>&
   }
 }
 
-bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut) {
+bool Dictionary::lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
+                        LookupResult* outResult) {
+  const auto setResult = [outResult](LookupResult r) {
+    if (outResult) *outResult = r;
+  };
+  setResult(LookupResult::NotFound);
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
@@ -373,6 +393,13 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       if (location.found) break;
     }
   }
-  if (!location.found) return false;
-  return readDefinition(location, definitionOut);
+  if (!location.found) return false;  // genuinely not in the dictionary
+
+  // Found in the index — propagate the precise failure reason from readDefinition
+  // (decompression / low memory / read error) so the caller can name it.
+  if (readDefinition(location, definitionOut, outResult)) {
+    setResult(LookupResult::Found);
+    return true;
+  }
+  return false;
 }

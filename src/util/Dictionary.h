@@ -22,6 +22,20 @@ struct DictLocation {
 // index is held in RAM.
 class Dictionary {
  public:
+  // Why a lookup did not return a definition — so the UI can tell a genuine
+  // miss apart from a real failure, and name the failure.
+  enum class LookupResult : uint8_t {
+    Found,       // hit — definition filled
+    NotFound,    // the word is genuinely not in the dictionary
+    LowMemory,   // found, but an allocation failed: the ~32KB .dict.dz inflate
+                 // window / chunk buffer, or the definition text buffer, couldn't
+                 // be obtained from the fragmented heap. THIS is the "stopped
+                 // finding words until restart" case — definitively memory.
+    Decompress,  // found, but decompression genuinely failed (corrupt/truncated
+                 // .dict.dz — a read/inflate error, not a memory shortage)
+    ReadError,   // found, but a file open/bounds/IO error prevented reading it
+  };
+
   // Resolve the dictionary folder and validate its files. Rejects
   // dictionaries with 64-bit index offsets (idxoffsetbits=64 in .ifo).
   bool open(const char* folderName);
@@ -37,8 +51,11 @@ class Dictionary {
 
   // Clean the word, look it up, and on a miss retry mini stem variants
   // (-'s/-s/-es/-ies/-ed/-ing). On a hit fills the definition text (capped at
-  // MAX_DEFINITION_BYTES) and the headword as stored in the index.
-  bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut);
+  // MAX_DEFINITION_BYTES) and the headword as stored in the index. Returns true
+  // on a hit. *outResult (if provided) reports the precise outcome so the UI can
+  // distinguish a genuine miss from a decompression / low-memory / read failure.
+  bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
+              LookupResult* outResult = nullptr);
 
   static std::string cleanWord(const char* word);
 
@@ -48,7 +65,9 @@ class Dictionary {
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
   DictLocation locate(const char* target, std::string* matchedHeadwordOut);
-  bool readDefinition(const DictLocation& location, std::string& out);
+  // Read the definition at location. On failure returns false and, if outResult
+  // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
+  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
