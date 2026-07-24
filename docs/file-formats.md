@@ -96,11 +96,11 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 33 is binary-identical to version 32. The version was bumped because
-simple HTML table rows are now laid out as positioned columns rather than
-flattened paragraphs with synthetic row/cell labels, so cached v32 pages must
-be rebuilt. Version 32 added the book-internal source href to serialized image
-blocks for lazy extraction. Version 31 preserved word continuation when
+Version 33 keeps the version 32 serialized layout unchanged. It was bumped
+because simple HTML table rows are now laid out as positioned columns rather
+than flattened paragraphs with synthetic row/cell labels, so cached v32 pages
+must be rebuilt. Version 32 added the book-internal source href to serialized
+image blocks for lazy extraction. Version 31 preserved word continuation when
 splitting long CJK text at `MAX_WORD_SIZE`; version 30 similarly invalidated
 v29 positions after Arabic contextual shaping changed text measurement.
 
