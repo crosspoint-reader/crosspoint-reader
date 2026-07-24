@@ -72,8 +72,8 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   }
 
   if (needsResave) {
-    LOG_DBG("KRS", "Resaved KOReader credentials to update format");
-    saveToFile();
+    LOG_DBG("KRS", "Resaving KOReader credentials to update format");
+    requestResave();
   }
 
   return true;

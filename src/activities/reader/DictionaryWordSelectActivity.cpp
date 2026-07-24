@@ -106,6 +106,20 @@ void DictionaryWordSelectActivity::extractWords() {
   }
 }
 
+// Index of the word whose box (with finger-sized slop) contains the touch
+// point; -1 when the touch lands on no word. Boxes never overlap after the
+// slop grows them, at worst they touch, so first hit wins.
+int DictionaryWordSelectActivity::wordAt(const int x, const int y) const {
+  constexpr int SLOP = 4;  // matches the highlight box (+2) plus finger error
+  for (int i = 0; i < static_cast<int>(words.size()); i++) {
+    const WordBox& word = words[i];
+    if (x >= word.x - SLOP && x < word.x + word.width + SLOP && y >= word.y - SLOP && y < word.y + lineHeight + SLOP) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 // Index of the word in `row` whose horizontal center is closest to centerX;
 // -1 when the row has no words.
 int DictionaryWordSelectActivity::closestInRow(const uint16_t row, const int centerX) const {
@@ -185,6 +199,28 @@ void DictionaryWordSelectActivity::loop() {
   }
 
   if (words.empty()) return;
+
+  // Touch: a touch-down moves the highlight to the touched word (differential
+  // repaint), a tap on a word selects and looks it up in one go.
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTouchDown(tx, ty)) {
+    const int hit = wordAt(tx, ty);
+    if (hit >= 0 && hit != selected) {
+      selected = hit;
+      requestUpdate();
+    }
+    return;
+  }
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    const int hit = wordAt(tx, ty);
+    if (hit >= 0) {
+      selected = hit;
+      performLookup();
+    }
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Left) && selected > 0) {
     selected--;
     requestUpdate();

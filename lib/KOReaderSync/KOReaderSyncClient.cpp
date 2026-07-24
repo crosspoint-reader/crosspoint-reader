@@ -22,7 +22,21 @@ constexpr char DEVICE_ID[] = "crosspoint-reader";
 // footprint is smaller than mbedTLS's old ~48KB peak, but keep a conservative
 // floor. Check both total free heap and largest contiguous block so fragmented
 // heap does not fall through into a failed TLS allocation path.
-constexpr uint32_t MIN_HEAP_FOR_TLS = 55000;
+// MEMFIX-PORT: TLS heap gate; portable
+// Field data (July 2026): launching sync from a reader session lands at
+// 51.9-58.2 KB free / 42-53 KB maxAlloc after WiFi comes up. wolfSSL handles
+// allocation failure by returning MEMORY_E (no abort under -fno-exceptions),
+// so an optimistic attempt degrades to the same clean "sync failed" as the
+// gate — the gate only needs to keep out states where a doomed handshake
+// would waste tens of seconds, not guarantee success.
+//
+// Free and largest-block have separate requirements: with SP ECC
+// (WOLFSSL_HAVE_SP_ECC) the handshake's crypto uses fixed 256-bit arrays, so
+// the largest single TLS allocation is the ~17 KB wolfSSL record buffer, not
+// a run of fast-math bignums. A handshake was measured succeeding inside a
+// 43 KB largest block; requiring 50 KB contiguous refused syncs that fit.
+constexpr uint32_t MIN_FREE_FOR_TLS = 50000;
+constexpr uint32_t MIN_BLOCK_FOR_TLS = 20000;
 
 // Apply the shared KOSync auth headers after begin(). x-auth-* is the native
 // KOSync scheme; Basic auth is added for Calibre-Web-Automated compatibility.
@@ -39,9 +53,9 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
 bool insufficientHeap() {
   const uint32_t freeHeap = ESP.getFreeHeap();
   const uint32_t maxAllocHeap = ESP.getMaxAllocHeap();
-  if (freeHeap < MIN_HEAP_FOR_TLS || maxAllocHeap < MIN_HEAP_FOR_TLS) {
-    LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free, %u max alloc (need %u)", freeHeap,
-            maxAllocHeap, MIN_HEAP_FOR_TLS);
+  if (freeHeap < MIN_FREE_FOR_TLS || maxAllocHeap < MIN_BLOCK_FOR_TLS) {
+    LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free (need %u), %u max alloc (need %u)", freeHeap,
+            MIN_FREE_FOR_TLS, maxAllocHeap, MIN_BLOCK_FOR_TLS);
     return true;
   }
   return false;

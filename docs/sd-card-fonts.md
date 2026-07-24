@@ -52,6 +52,52 @@ There are three ways to install fonts:
 
 3. Insert the SD card and power on your CrossPoint reader
 
+## CJK in the User Interface
+
+The built-in UI fonts are Latin-only, so by default the interface (book titles
+in the library, file names in the browser, list rows, headers) shows
+replacement boxes for Chinese/Japanese/Korean text even when book *content*
+renders correctly with a selected SD-card font.
+
+To avoid shipping a large CJK glyph set in flash, CrossPoint instead reuses the
+SD-card font you already selected: when a UI string contains a CJK character
+the built-in font cannot draw, that whole string is rendered with your selected
+SD-card font instead.
+
+The fallback is **size-matched**. The built-in UI fonts render at 8 pt
+(small/author lines), 10 pt (list rows) and 12 pt (book-cover titles, headers),
+so CrossPoint loads your SD family at those sizes too and maps each UI font to
+its same-size SD font. CJK book names therefore appear at the same size as the
+Latin text around them. For this to work the family must contain `.cpfont`
+files at sizes **8, 10 and 12** (in addition to the reader sizes 12–18); any UI
+size missing from the family simply keeps showing boxes for CJK at that size.
+
+When converting your own font, include the UI sizes:
+
+    python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
+      MyCJKFont-Regular.otf \
+      --intervals cjk \
+      --sizes 8,10,12,14,16,18 \
+      --style regular \
+      --name MyCJKFont \
+      --output-dir ./MyCJKFont/
+
+What this means in practice:
+
+- Select a CJK-capable SD font under **Settings > Reader > Font Family**
+  (see [Installing Fonts](#installing-fonts) and the `cjk` / `hangul` presets
+  under [Converting Custom Fonts](#converting-custom-fonts)). That single
+  selection drives both book content *and* size-matched CJK fallback in the UI.
+- Pure-Latin UI strings keep the crisp built-in font; only strings that
+  actually contain CJK are routed to the SD font.
+- The fallback is per *string*, not per glyph: a mixed title such as
+  `三体 Vol.1` renders entirely in the SD font (including the Latin part). If
+  that SD font is a `Mono` family, the Latin portion will appear half/full
+  width.
+- If no SD font is selected (a built-in reading font is active), there is no
+  CJK fallback and the UI again shows boxes for CJK — pick a CJK SD font to
+  restore it.
+
 ## Available Pre-Built Fonts
 
 The current list of pre-built fonts is maintained in the

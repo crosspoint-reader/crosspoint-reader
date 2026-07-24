@@ -5,6 +5,7 @@
 
 #include "../../BookmarkEntry.h"
 #include "../Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderBookmarksActivity final : public Activity {
@@ -13,7 +14,8 @@ class EpubReaderBookmarksActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   std::vector<BookmarkEntry> bookmarks;
-  int confirmingDelete = 0;  // 0 = hide dialog, 1 = show dialog, 2 = allow confirmation to delete
+  bool confirmingDelete = false;
+  OptionPopup confirmPopup;
 
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -30,4 +32,7 @@ class EpubReaderBookmarksActivity final : public Activity {
 
   // Calculate the height available for the bookmark list based on orientation
   int getListHeight(const GfxRenderer& renderer);
+
+  // Delete the currently selected bookmark and persist the list
+  void deleteSelectedBookmark();
 };
