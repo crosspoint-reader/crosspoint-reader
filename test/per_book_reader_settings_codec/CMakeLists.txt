@@ -4,6 +4,7 @@ add_executable(PerBookReaderSettingsCodecTest
 
 target_include_directories(PerBookReaderSettingsCodecTest PRIVATE
   ${REPO_ROOT}/src/activities/reader
+  ${REPO_ROOT}/lib/Epub
 )
 
 target_link_libraries(PerBookReaderSettingsCodecTest PRIVATE
@@ -21,6 +22,7 @@ add_executable(PerBookReaderSettingsStoreTest
 target_include_directories(PerBookReaderSettingsStoreTest PRIVATE
   ${REPO_ROOT}/test/clippings_core/stubs
   ${REPO_ROOT}/src/activities/reader
+  ${REPO_ROOT}/lib/Epub
 )
 
 target_link_libraries(PerBookReaderSettingsStoreTest PRIVATE

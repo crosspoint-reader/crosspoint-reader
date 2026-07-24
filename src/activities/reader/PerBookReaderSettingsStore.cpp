@@ -135,7 +135,12 @@ LegacyReadStatus readLegacy(const std::string& path, const PerBookReaderSettings
     legacy.mapped.textAntiAliasing = legacy.bytes[14];
     legacy.mapped.imageRendering = legacy.bytes[16];
     legacy.mapped.extraParagraphSpacing = legacy.bytes[17];
+    legacy.mapped.forceParagraphIndents = legacy.bytes[18];
     legacy.mapped.focusReadingEnabled = legacy.bytes[19];
+  }
+  if ((flags & CROSSINK_RENDER_MODE) != 0) {
+    legacy.mapped.hasRenderModeOverride = true;
+    legacy.mapped.renderMode = static_cast<EpubRenderMode>(legacy.bytes[4]);
   }
   return LegacyReadStatus::OK;
 }

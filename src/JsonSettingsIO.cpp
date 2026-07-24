@@ -1,11 +1,13 @@
 #include "JsonSettingsIO.h"
 
 #include <ArduinoJson.h>
+#include <AtomicJsonFile.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <string>
 
@@ -16,6 +18,49 @@
 #include "RecentBooksStore.h"
 #include "SettingsList.h"
 #include "WifiCredentialStore.h"
+
+namespace {
+
+constexpr size_t MAX_BOOKMARK_COUNT = 1024;
+
+bool parseBookmarks(const uint8_t* data, const size_t size, std::vector<BookmarkEntry>* destination) {
+  JsonDocument doc;
+  const auto error = deserializeJson(doc, data, size);
+  if (error || !doc["bookmarks"].is<JsonArray>()) return false;
+
+  JsonArray arr = doc["bookmarks"].as<JsonArray>();
+  if (arr.size() > MAX_BOOKMARK_COUNT) return false;
+  std::vector<BookmarkEntry> parsed;
+  if (destination) parsed.reserve(arr.size());
+  for (JsonVariant entry : arr) {
+    if (!entry.is<JsonObject>()) return false;
+    JsonObject obj = entry.as<JsonObject>();
+    if (!obj["xpath"].is<const char*>() || !obj["summary"].is<const char*>()) return false;
+    const char* positionKind = obj["positionKind"] | "epub";
+    const bool textPosition = std::strcmp(positionKind, "text") == 0;
+    if (!textPosition && std::strcmp(positionKind, "epub") != 0) return false;
+    if (textPosition && !obj["byteOffset"].is<uint32_t>()) return false;
+    const float percentage = obj["percentage"] | static_cast<float>(-1);
+    if (!std::isfinite(percentage) || percentage < 0.0f || percentage > 1.0f) return false;
+    if (!destination) continue;
+    parsed.emplace_back();
+    auto& bookmark = parsed.back();
+    bookmark.xpath = obj["xpath"] | std::string("");
+    bookmark.percentage = percentage;
+    bookmark.summary = obj["summary"] | std::string("");
+    bookmark.computedSpineIndex = obj["si"] | static_cast<uint16_t>(0);
+    bookmark.computedChapterPageCount = obj["pc"] | static_cast<uint16_t>(0);
+    bookmark.computedChapterProgress = obj["pp"] | static_cast<uint16_t>(0);
+    bookmark.positionKind = textPosition ? BookmarkEntry::PositionKind::Text : BookmarkEntry::PositionKind::Epub;
+    bookmark.byteOffset = textPosition ? obj["byteOffset"].as<uint32_t>() : 0;
+  }
+  if (destination) destination->swap(parsed);
+  return true;
+}
+
+bool validateBookmarkJson(const uint8_t* data, const size_t size, void*) { return parseBookmarks(data, size, nullptr); }
+
+}  // namespace
 
 // Convert legacy settings.
 void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
@@ -81,7 +126,8 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
 
   String json;
   serializeJson(doc, json);
-  return Storage.writeFile(path, json);
+  const auto saved = AtomicJsonFile::save(path, json);
+  return saved == AtomicFile::SaveStatus::Saved || saved == AtomicFile::SaveStatus::Unchanged;
 }
 
 bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
@@ -124,7 +170,7 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringOffset) continue;
+    if (!info.valuePtr && !info.value16Ptr && !info.stringOffset) continue;
 
     if (info.stringOffset) {
       const char* strPtr = (const char*)&s + info.stringOffset;
@@ -133,6 +179,8 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
       } else {
         doc[info.key] = strPtr;
       }
+    } else if (info.value16Ptr) {
+      doc[info.key] = s.*(info.value16Ptr);
     } else {
       doc[info.key] = s.*(info.valuePtr);
     }
@@ -160,7 +208,8 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
 
   String json;
   serializeJson(doc, json);
-  return Storage.writeFile(path, json);
+  const auto saved = AtomicJsonFile::save(path, json);
+  return saved == AtomicFile::SaveStatus::Saved || saved == AtomicFile::SaveStatus::Unchanged;
 }
 
 bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool* needsResave) {
@@ -183,9 +232,14 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
-    if (!info.valuePtr && !info.stringOffset) continue;
+    if (!info.valuePtr && !info.value16Ptr && !info.stringOffset) continue;
 
-    if (info.stringOffset) {
+    if (info.value16Ptr) {
+      const uint16_t fieldDefault = s.*(info.value16Ptr);
+      const int raw = doc[info.key] | static_cast<int>(fieldDefault);
+      s.*(info.value16Ptr) = static_cast<uint16_t>(
+          std::clamp(raw, static_cast<int>(info.valueRange.min), static_cast<int>(info.valueRange.max)));
+    } else if (info.stringOffset) {
       const char* strPtr = (const char*)&s + info.stringOffset;
       const std::string fieldDefault = strPtr;  // current buffer = struct-initializer default
       std::string val;
@@ -289,35 +343,46 @@ bool JsonSettingsIO::saveBookmarks(const std::vector<BookmarkEntry>& bookmarks, 
     obj["si"] = bookmark.computedSpineIndex;
     obj["pc"] = bookmark.computedChapterPageCount;
     obj["pp"] = bookmark.computedChapterProgress;
+    if (bookmark.positionKind == BookmarkEntry::PositionKind::Text) {
+      obj["positionKind"] = "text";
+      obj["byteOffset"] = bookmark.byteOffset;
+    }
   }
 
   String json;
   serializeJson(doc, json);
-  return Storage.writeFile(path, json);
+  const auto saved = AtomicFile::save(path, reinterpret_cast<const uint8_t*>(json.c_str()), json.length(),
+                                      BOOKMARK_FILE_MAX_BYTES, validateBookmarkJson);
+  return saved == AtomicFile::SaveStatus::Saved || saved == AtomicFile::SaveStatus::Unchanged;
 }
 
 bool JsonSettingsIO::loadBookmarks(std::vector<BookmarkEntry>& bookmarks, const char* json) {
-  JsonDocument doc;
-  auto error = deserializeJson(doc, json);
-  if (error) {
-    LOG_ERR("BKM", "JSON parse error: %s", error.c_str());
+  if (!json || !parseBookmarks(reinterpret_cast<const uint8_t*>(json), strlen(json), &bookmarks)) {
+    LOG_ERR("BKM", "Bookmark JSON validation failed");
     return false;
   }
-
-  JsonArray arr = doc["bookmarks"].as<JsonArray>();
-  bookmarks.clear();
-  bookmarks.reserve(arr.size());
-  for (JsonObject obj : arr) {
-    bookmarks.emplace_back();
-    auto& bookmark = bookmarks.back();
-    bookmark.xpath = obj["xpath"] | std::string("");
-    bookmark.percentage = obj["percentage"] | static_cast<float>(0);
-    bookmark.summary = obj["summary"] | std::string("");
-    bookmark.computedSpineIndex = obj["si"] | static_cast<uint16_t>(0);
-    bookmark.computedChapterPageCount = obj["pc"] | static_cast<uint16_t>(0);
-    bookmark.computedChapterProgress = obj["pp"] | static_cast<uint16_t>(0);
-  }
-
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
   return true;
+}
+
+JsonSettingsIO::BookmarkLoadStatus JsonSettingsIO::loadBookmarksFromFile(std::vector<BookmarkEntry>& bookmarks,
+                                                                         const char* path) {
+  std::string json;
+  const AtomicFile::LoadStatus loaded =
+      AtomicFile::load(path, json, BOOKMARK_FILE_MAX_BYTES, validateBookmarkJson);
+  switch (loaded) {
+    case AtomicFile::LoadStatus::Primary:
+    case AtomicFile::LoadStatus::Backup:
+    case AtomicFile::LoadStatus::Temp:
+      return loadBookmarks(bookmarks, json.c_str()) ? BookmarkLoadStatus::Loaded : BookmarkLoadStatus::Invalid;
+    case AtomicFile::LoadStatus::Missing:
+      return BookmarkLoadStatus::Missing;
+    case AtomicFile::LoadStatus::Oversize:
+      return BookmarkLoadStatus::Oversize;
+    case AtomicFile::LoadStatus::IoError:
+      return BookmarkLoadStatus::IoError;
+    case AtomicFile::LoadStatus::Invalid:
+    default:
+      return BookmarkLoadStatus::Invalid;
+  }
 }

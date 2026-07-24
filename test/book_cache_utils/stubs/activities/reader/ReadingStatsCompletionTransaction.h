@@ -6,7 +6,7 @@
 namespace ReadingStatsCompletionTransaction {
 inline std::string blockedCachePath;
 
-inline bool canRelocateOrDeleteEpubCache(const std::string& cachePath) {
+inline bool canRelocateOrDeleteBookCache(const std::string& cachePath) {
   return blockedCachePath.empty() || blockedCachePath != cachePath;
 }
 

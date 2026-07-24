@@ -9,6 +9,7 @@
 #include "ActivityManager.h"  // for using the ActivityManager singleton
 #include "ActivityResult.h"
 #include "GfxRenderer.h"
+#include "GlobalShortcut.h"
 #include "MappedInputManager.h"
 #include "RenderLock.h"
 #include "util/ScreenshotInfo.h"
@@ -23,6 +24,9 @@ class Activity {
 
   ActivityResultHandler resultHandler;
   ActivityResult result;
+
+  // Opt-in helper for screens where global navigation is safe.
+  bool handleSafeGlobalShortcut(GlobalShortcut shortcut);
 
  public:
   explicit Activity(std::string name, GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -48,6 +52,7 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+  virtual bool handleGlobalShortcut(GlobalShortcut) { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 
   // Start a new activity without destroying the current one

@@ -1,15 +1,17 @@
 #include "CrossPointState.h"
 
+#include <AtomicJsonFile.h>
 #include <HalStorage.h>
 #include <JsonSettingsIO.h>
 #include <Logging.h>
-#include <Serialization.h>
 
 #include <algorithm>
+#include <cstring>
 #include <mutex>
 
+#include "LegacyStateCodec.h"
+
 namespace {
-constexpr uint8_t STATE_FILE_VERSION = 4;
 constexpr char STATE_FILE_BIN[] = "/.crosspoint/state.bin";
 constexpr char STATE_FILE_JSON[] = "/.crosspoint/state.json";
 constexpr char STATE_FILE_BAK[] = "/.crosspoint/state.bin.bak";
@@ -33,19 +35,30 @@ void CrossPointState::pushRecentSleep(uint16_t idx) {
 }
 
 bool CrossPointState::saveToFile() const {
+  if (!persistenceWritable) return false;
   std::lock_guard<std::mutex> lock(_mutex);
   Storage.mkdir("/.crosspoint");
   return JsonSettingsIO::saveState(*this, STATE_FILE_JSON);
 }
 
 bool CrossPointState::loadFromFile() {
-  // Try JSON first
-  if (Storage.exists(STATE_FILE_JSON)) {
-    String json = Storage.readFile(STATE_FILE_JSON);
-    if (!json.isEmpty()) {
-      std::lock_guard<std::mutex> lock(_mutex);
-      return JsonSettingsIO::loadState(*this, json.c_str());
+  const std::string stateBackup = std::string(STATE_FILE_JSON) + ".bak";
+  const std::string stateTemp = std::string(STATE_FILE_JSON) + ".tmp";
+  const bool hasJsonState = Storage.exists(STATE_FILE_JSON) || Storage.exists(stateBackup.c_str()) ||
+                            Storage.exists(stateTemp.c_str());
+  if (hasJsonState) {
+    std::string json;
+    const AtomicFile::LoadStatus loaded = AtomicJsonFile::load(STATE_FILE_JSON, json);
+    if (loaded != AtomicFile::LoadStatus::Primary && loaded != AtomicFile::LoadStatus::Backup &&
+        loaded != AtomicFile::LoadStatus::Temp) {
+      persistenceWritable = false;
+      LOG_ERR("CPS", "Could not recover a valid state.json");
+      return false;
     }
+    std::lock_guard<std::mutex> lock(_mutex);
+    const bool parsed = JsonSettingsIO::loadState(*this, json.c_str());
+    persistenceWritable = parsed;
+    return parsed;
   }
 
   // Fall back to binary migration
@@ -60,8 +73,11 @@ bool CrossPointState::loadFromFile() {
         return false;
       }
     }
+    persistenceWritable = false;
+    return false;
   }
 
+  persistenceWritable = true;
   return false;
 }
 
@@ -70,33 +86,22 @@ bool CrossPointState::loadFromBinaryFile() {
   if (!Storage.openFileForRead("CPS", STATE_FILE_BIN, inputFile)) {
     return false;
   }
-  std::lock_guard<std::mutex> lock(_mutex);
-
-  uint8_t version;
-  serialization::readPod(inputFile, version);
-  if (version > STATE_FILE_VERSION) {
-    LOG_ERR("CPS", "Deserialization failed: Unknown version %u", version);
+  LegacyStateCodec::State legacy;
+  const LegacyStateCodec::DecodeStatus decoded = LegacyStateCodec::decode(inputFile, legacy);
+  const bool closed = inputFile.close();
+  if (decoded != LegacyStateCodec::DecodeStatus::Ok || !closed) {
+    LOG_ERR("CPS", "Legacy state validation failed (%u)", static_cast<unsigned>(decoded));
     return false;
   }
 
-  serialization::readString(inputFile, openEpubPath);
-  if (version >= 2) {
-    uint8_t legacyLastSleep = UINT8_MAX;
-    serialization::readPod(inputFile, legacyLastSleep);
-    if (legacyLastSleep != UINT8_MAX) {
-      pushRecentSleep(static_cast<uint16_t>(legacyLastSleep));
-    }
-  }
-
-  if (version >= 3) {
-    serialization::readPod(inputFile, readerActivityLoadCount);
-  }
-
-  if (version >= 4) {
-    serialization::readPod(inputFile, lastSleepFromReader);
-  } else {
-    lastSleepFromReader = false;
-  }
+  std::lock_guard<std::mutex> lock(_mutex);
+  openEpubPath = std::move(legacy.openBookPath);
+  memset(recentSleepImages, 0, sizeof(recentSleepImages));
+  recentSleepPos = 0;
+  recentSleepFill = 0;
+  if (legacy.lastSleepImage != UINT8_MAX) pushRecentSleep(static_cast<uint16_t>(legacy.lastSleepImage));
+  readerActivityLoadCount = legacy.readerActivityLoadCount;
+  lastSleepFromReader = legacy.lastSleepFromReader;
 
   return true;
 }

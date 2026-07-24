@@ -10,6 +10,10 @@ void Activity::requestUpdate(bool immediate) { activityManager.requestUpdate(imm
 
 void Activity::requestUpdateAndWait() { activityManager.requestUpdateAndWait(); }
 
+bool Activity::handleSafeGlobalShortcut(const GlobalShortcut shortcut) {
+  return activityManager.handleSafeGlobalShortcut(shortcut);
+}
+
 void Activity::onGoHome(HomeMenuItem item) { activityManager.goHome(item); }
 
 void Activity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }

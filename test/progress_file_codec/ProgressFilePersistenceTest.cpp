@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <iterator>
 #include <vector>
 
 #include "ProgressFile.h"
@@ -23,6 +24,14 @@ std::vector<uint8_t> bytes(const std::array<uint8_t, Size>& value) {
 std::array<uint8_t, 4> pageBytes(const uint32_t page) {
   return {static_cast<uint8_t>(page), static_cast<uint8_t>(page >> 8), static_cast<uint8_t>(page >> 16),
           static_cast<uint8_t>(page >> 24)};
+}
+
+std::array<uint8_t, ProgressFileCodec::TXT_V2_SIZE> txtOffsetBytes(const uint32_t offset) {
+  uint8_t raw[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(offset, raw);
+  std::array<uint8_t, ProgressFileCodec::TXT_V2_SIZE> result{};
+  std::copy(std::begin(raw), std::end(raw), result.begin());
+  return result;
 }
 }  // namespace
 
@@ -236,4 +245,132 @@ TEST(ProgressFilePersistence, PreservesUnknownLargerLayouts) {
   EXPECT_FALSE(ProgressFile::writeAtomic(CACHE_PATH, next.data(), next.size()));
   EXPECT_EQ(Storage.file(PRIMARY), unknown);
   EXPECT_FALSE(Storage.exists(TEMP));
+}
+
+TEST(ProgressFilePersistence, TxtLoadValidatesFormatAndFallsBackToLegacyBackup) {
+  Storage.reset();
+  auto invalidPrimary = txtOffsetBytes(200);
+  invalidPrimary[0] ^= 0x80U;
+  const auto legacyBackup = pageBytes(3);
+  Storage.setFile(PRIMARY, bytes(invalidPrimary));
+  Storage.setFile(BACKUP, bytes(legacyBackup));
+  const ProgressFile::TxtBounds bounds{1000, 10};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validateTxtBounds, &bounds};
+
+  uint8_t loaded[ProgressFileCodec::TXT_V2_SIZE]{};
+  const auto result = ProgressFile::loadTxt(CACHE_PATH, loaded, sizeof(loaded), validator);
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result.source, ProgressFile::LoadSource::Backup);
+  EXPECT_EQ(result.size, 4u);
+  uint32_t page = 0;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(loaded, result.size, page), ProgressFileCodec::TxtDecodeStatus::LegacyPage);
+  EXPECT_EQ(page, 3u);
+}
+
+TEST(ProgressFilePersistence, TxtLegacyPageCanBeMigratedToVerifiedByteOffset) {
+  Storage.reset();
+  const auto legacy = pageBytes(3);
+  Storage.setFile(PRIMARY, bytes(legacy));
+  const ProgressFile::TxtBounds bounds{5000, 10};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validateTxtBounds, &bounds};
+
+  uint8_t loaded[ProgressFileCodec::TXT_V2_SIZE]{};
+  const auto legacyResult = ProgressFile::loadTxt(CACHE_PATH, loaded, sizeof(loaded), validator);
+  ASSERT_TRUE(legacyResult);
+  uint32_t legacyPage = 0;
+  ASSERT_EQ(ProgressFileCodec::decodeTxt(loaded, legacyResult.size, legacyPage),
+            ProgressFileCodec::TxtDecodeStatus::LegacyPage);
+  ASSERT_EQ(legacyPage, 3u);
+
+  uint8_t migrated[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(1234, migrated);
+  ASSERT_TRUE(ProgressFile::writeTxtAtomic(CACHE_PATH, migrated, validator));
+  EXPECT_EQ(Storage.file(PRIMARY), std::vector<uint8_t>(std::begin(migrated), std::end(migrated)));
+  EXPECT_EQ(Storage.file(BACKUP), bytes(legacy));
+
+  const auto migratedResult = ProgressFile::loadTxt(CACHE_PATH, loaded, sizeof(loaded), validator);
+  ASSERT_TRUE(migratedResult);
+  uint32_t byteOffset = 0;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(loaded, migratedResult.size, byteOffset),
+            ProgressFileCodec::TxtDecodeStatus::Ok);
+  EXPECT_EQ(byteOffset, 1234u);
+}
+
+TEST(ProgressFilePersistence, TxtWritePreservesSameSizeNewerVersion) {
+  Storage.reset();
+  auto newer = txtOffsetBytes(100);
+  newer[1] = ProgressFileCodec::TXT_VERSION + 1;
+  Storage.setFile(PRIMARY, bytes(newer));
+  const ProgressFile::TxtBounds bounds{1000, 10};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validateTxtBounds, &bounds};
+  uint8_t next[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(200, next);
+
+  EXPECT_FALSE(ProgressFile::writeTxtAtomic(CACHE_PATH, next, validator));
+  EXPECT_EQ(Storage.file(PRIMARY), bytes(newer));
+  EXPECT_FALSE(Storage.exists(BACKUP));
+  EXPECT_FALSE(Storage.exists(TEMP));
+}
+
+TEST(ProgressFilePersistence, TxtLoadFailsClosedWhenAnySiblingUsesNewerVersion) {
+  const std::array<const char*, 3> candidatePaths = {PRIMARY, BACKUP, TEMP};
+  for (const size_t futureSize :
+       {size_t{2}, size_t{3}, size_t{5}, ProgressFileCodec::TXT_V2_SIZE, ProgressFileCodec::TXT_V2_SIZE + 4}) {
+    for (size_t index = 0; index < candidatePaths.size(); ++index) {
+      const char* newerPath = candidatePaths[index];
+      SCOPED_TRACE(newerPath);
+      SCOPED_TRACE(futureSize);
+      Storage.reset();
+      const auto legacy = pageBytes(3);
+      Storage.setFile(index == 0 ? BACKUP : PRIMARY, bytes(legacy));
+      auto newerRecord = txtOffsetBytes(100);
+      newerRecord[1] = ProgressFileCodec::TXT_VERSION + 1;
+      std::vector<uint8_t> newer = bytes(newerRecord);
+      newer.resize(futureSize, 0xA5);
+      Storage.setFile(newerPath, newer);
+
+      uint8_t loaded[ProgressFileCodec::TXT_V2_SIZE]{};
+      const auto result = ProgressFile::loadTxt(CACHE_PATH, loaded, sizeof(loaded));
+      EXPECT_FALSE(result);
+      EXPECT_EQ(result.source, ProgressFile::LoadSource::Invalid);
+
+      uint8_t next[ProgressFileCodec::TXT_V2_SIZE];
+      ProgressFileCodec::encodeTxtOffset(200, next);
+      EXPECT_FALSE(ProgressFile::writeTxtAtomic(CACHE_PATH, next));
+      EXPECT_EQ(Storage.file(newerPath), newer);
+    }
+  }
+}
+
+TEST(ProgressFilePersistence, TxtLegacyPageThatResemblesFutureHeaderRemainsUsable) {
+  Storage.reset();
+  // 852 == 0x00000354, whose first bytes are TXT magic 'T' and future v3.
+  const auto legacy = pageBytes(852);
+  Storage.setFile(PRIMARY, bytes(legacy));
+  const ProgressFile::TxtBounds bounds{5000, 1000};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validateTxtBounds, &bounds};
+
+  uint8_t loaded[ProgressFileCodec::TXT_V2_SIZE]{};
+  const auto result = ProgressFile::loadTxt(CACHE_PATH, loaded, sizeof(loaded), validator);
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result.source, ProgressFile::LoadSource::Primary);
+  uint32_t page = 0;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(loaded, result.size, page), ProgressFileCodec::TxtDecodeStatus::LegacyPage);
+  EXPECT_EQ(page, 852u);
+
+  uint8_t migrated[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(1234, migrated);
+  EXPECT_TRUE(ProgressFile::writeTxtAtomic(CACHE_PATH, migrated, validator));
+  EXPECT_EQ(Storage.file(BACKUP), bytes(legacy));
+}
+
+TEST(ProgressFilePersistence, TxtBoundsRejectOffsetAtOrPastEnd) {
+  Storage.reset();
+  const ProgressFile::TxtBounds bounds{1000, 10};
+  const ProgressFile::CandidateValidator validator{ProgressFile::validateTxtBounds, &bounds};
+  uint8_t invalid[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(1000, invalid);
+
+  EXPECT_FALSE(ProgressFile::writeTxtAtomic(CACHE_PATH, invalid, validator));
+  EXPECT_FALSE(Storage.exists(PRIMARY));
 }

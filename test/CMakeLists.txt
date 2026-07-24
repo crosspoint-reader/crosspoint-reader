@@ -28,6 +28,7 @@ add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
   ${REPO_ROOT}/lib
+  ${REPO_ROOT}/lib/Epub
 )
 target_compile_options(crosspoint_test_common INTERFACE
   -Wall
@@ -37,6 +38,12 @@ target_compile_options(crosspoint_test_common INTERFACE
 
 enable_testing()
 include(GoogleTest)
+
+find_program(PYTHON3_EXECUTABLE NAMES python3)
+if(NOT PYTHON3_EXECUTABLE)
+  message(FATAL_ERROR "python3 is required for code-generation tests")
+endif()
+add_test(NAME CodegenTest COMMAND ${PYTHON3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/codegen/CodegenTest.py)
 
 add_subdirectory(streaming_json_parser)
 add_subdirectory(release_json_parser)
@@ -55,3 +62,9 @@ add_subdirectory(clippings_core)
 add_subdirectory(nearby_sync_core)
 add_subdirectory(book_cache_utils)
 add_subdirectory(epub_source_identity)
+add_subdirectory(xtc)
+add_subdirectory(atomic_persistence)
+add_subdirectory(reader_feature_utils)
+add_subdirectory(reader_gestures)
+add_subdirectory(boot_recovery)
+add_subdirectory(dictionary)

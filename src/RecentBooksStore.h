@@ -4,6 +4,8 @@
 
 #include <string>
 #include <vector>
+#include <cstddef>
+#include <cstdint>
 
 struct RecentBook {
   std::string path;
@@ -17,8 +19,11 @@ struct RecentBook {
 class RecentBooksStore : public PersistableStore<RecentBooksStore> {
  private:
   std::vector<RecentBook> recentBooks;
+  std::vector<std::string> pinnedPaths;
 
   static constexpr int MAX_RECENT_BOOKS = 10;
+  static constexpr size_t MAX_PINNED_BOOKS = 12;
+  static constexpr size_t MAX_PIN_PATH_BYTES = 512;
 
   RecentBooksStore() = default;
   ~RecentBooksStore() = default;
@@ -26,6 +31,8 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   friend class PersistableStore<RecentBooksStore>;
 
  public:
+  enum class PinResult : uint8_t { Pinned, Unpinned, LimitReached, InvalidPath, SaveFailed };
+
   static const char* getFilePath() { return "/.crosspoint/recent.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
@@ -47,6 +54,11 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   // Persists on success. Keeps the entry's list position (does not reorder).
   void updatePath(const std::string& oldPath, const std::string& newPath, const std::string& oldCachePath,
                   const std::string& newCachePath);
+
+  PinResult togglePin(const std::string& path);
+  bool isPinned(const std::string& path) const;
+  const std::vector<std::string>& getPinnedPaths() const { return pinnedPaths; }
+  static constexpr size_t getMaxPinnedBooks() { return MAX_PINNED_BOOKS; }
 
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);

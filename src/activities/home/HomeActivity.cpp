@@ -3,10 +3,12 @@
 #include <Bitmap.h>
 #include <Epub.h>
 #include <Epub/Section.h>
+#include <Epub/SourceIdentityStore.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Txt.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -24,9 +26,12 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/reader/ProgressFile.h"
+#include "activities/reader/ProgressFileCodec.h"
 #include "activities/reader/ReadingStatsActivity.h"
 #include "activities/reader/ReadingStatsCompletionTransaction.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
+#include "components/themes/crossvi/CrossViTheme.h"
 #include "fontIds.h"
 
 namespace {
@@ -53,11 +58,37 @@ bool validateDashboardProgressCandidate(const uint8_t* data, const size_t size, 
              position, context.spineCount,
              Section::getCachedPageCount(*context.cachePath, static_cast<int>(position.spineIndex)));
 }
+
+StrId homeBookHintLabelId(const HomeBookSummary& summary) {
+  switch (homeBookAction(summary)) {
+    case HomeBookAction::Continue:
+      return StrId::STR_CONTINUE;
+    case HomeBookAction::ReadAgain:
+      return StrId::STR_READ_AGAIN;
+    case HomeBookAction::Start:
+      return StrId::STR_START;
+    case HomeBookAction::Open:
+    default:
+      return StrId::STR_OPEN;
+  }
+}
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
   return HomeMenuMapping::selectionCount(static_cast<int>(recentBooks.size()), hasOpdsServers,
-                                         readingStatsPresentation.has_value());
+                                         hasReadingStatsShortcut());
+}
+
+bool HomeActivity::hasReadingStatsShortcut() const {
+  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::CROSSVI) return true;
+  if (recentBooks.empty()) return false;
+  const std::string& path = recentBooks.front().path;
+  return FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) ||
+         FsHelpers::hasMarkdownExtension(path);
+}
+
+bool HomeActivity::hasHomeReadingSummary() const {
+  return SETTINGS.uiTheme == CrossPointSettings::UI_THEME::CROSSVI;
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -82,11 +113,36 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 
 void HomeActivity::loadBookSummary() {
   bookSummary = {};
+  bookSummary.dailyReadingGoalMinutes = SETTINGS.dailyReadingGoalMinutes;
   readingStatsPresentation.reset();
 
-  // Dashboard has no summary surface without a recent book. Avoid scanning
-  // statistics and peer snapshots when the theme will render its empty state.
-  if (recentBooks.empty()) return;
+  // The CrossVi Today/Goal card describes this device, not the latest book,
+  // so keep it useful for a new library as well. Other themes retain their
+  // existing empty-state behavior.
+  if (recentBooks.empty()) {
+    if (SETTINGS.uiTheme != CrossPointSettings::UI_THEME::CROSSVI) return;
+
+    GlobalReadingStats::LoadStatus deviceStatus = GlobalReadingStats::LoadStatus::Missing;
+    const GlobalReadingStats deviceStats = GlobalReadingStats::load(&deviceStatus);
+    const bool deviceStatsTrusted = GlobalReadingStats::isTrustedLoadStatus(deviceStatus);
+    const bool hasSyncedDirectory = GlobalReadingStats::hasSyncedStats();
+    const GlobalReadingStatsAggregation allSyncedStats = hasSyncedDirectory && deviceStatsTrusted
+                                                             ? GlobalReadingStats::loadAggregatedWithReport(deviceStats)
+                                                             : GlobalReadingStatsAggregation{};
+
+    ReadingStatsDateTime now;
+    const ReadingStatsDateTime* currentDateTime = getCurrentLocalReadingStatsDateTime(now) ? &now : nullptr;
+    if (currentDateTime && deviceStatsTrusted) {
+      bookSummary.hasTodayReadingSeconds = deviceStats.readingSummaryForDate(
+          now.date, bookSummary.todayReadingSeconds, bookSummary.todayReadingSessions);
+    }
+
+    const BookReadingStats noBookStats;
+    readingStatsPresentation = buildReadingStatsPresentation(
+        noBookStats, false, deviceStats, deviceStatsTrusted, allSyncedStats, currentDateTime,
+        ReadingStatsMetric::notApplicable(), false);
+    return;
+  }
 
   GlobalReadingStats::LoadStatus localStatus = GlobalReadingStats::LoadStatus::Missing;
   const GlobalReadingStats localStats = GlobalReadingStats::load(&localStatus);
@@ -117,11 +173,16 @@ void HomeActivity::loadBookSummary() {
                                         : syncedReport.validPeerCount;
 
     const GlobalReadingStats& displayedStats = policy.useAllSynced ? syncedReport.stats : localStats;
+    ReadingStatsDateTime now;
+    const bool hasCurrentDateTime = getCurrentLocalReadingStatsDateTime(now);
+    if (hasCurrentDateTime && localStatsTrusted) {
+      bookSummary.hasTodayReadingSeconds = localStats.readingSummaryForDate(
+          now.date, bookSummary.todayReadingSeconds, bookSummary.todayReadingSessions);
+    }
     if (policy.globalStats != DashboardMetricState::Available) return;
     bookSummary.globalReadingSeconds = displayedStats.totalReadingSeconds;
     bookSummary.globalPagesTurned = displayedStats.totalPagesTurned;
-    ReadingStatsDateTime now;
-    if (getCurrentLocalReadingStatsDateTime(now)) {
+    if (hasCurrentDateTime) {
       bookSummary.currentStreak = displayedStats.currentReadingStreak(&now.date);
       bookSummary.hasCurrentStreak = true;
     }
@@ -163,6 +224,8 @@ void HomeActivity::loadBookSummary() {
     bookSummary.bookReadingSeconds = stats.totalReadingSeconds;
     bookSummary.bookPagesTurned = stats.totalPagesTurned;
     bookSummary.bookSessions = stats.sessionCount;
+    bookSummary.hasStartedReading = stats.totalReadingSeconds > 0 || stats.totalPagesTurned > 0 ||
+                                    stats.sessionCount > 0 || stats.isCompleted;
   }
 
   const auto cacheReadingStatsPresentation = [&](const ReadingStatsMetric progress) {
@@ -182,6 +245,7 @@ void HomeActivity::loadBookSummary() {
   if (DashboardProgress::fromCompletedStats(BookReadingStats::isTrustedLoadStatus(statsStatus), stats.isCompleted,
                                             bookSummary.progressPercent)) {
     bookSummary.hasProgress = true;
+    bookSummary.hasStartedReading = true;
     bookSummary.progressState = DashboardMetricState::Available;
     cacheReadingStatsPresentation(ReadingStatsMetric::known(100));
     return;
@@ -219,6 +283,8 @@ void HomeActivity::loadBookSummary() {
     return;
   }
   bookSummary.hasProgress = true;
+  bookSummary.progressBelowOnePercent = bookProgress > 0.0F && bookSummary.progressPercent == 0;
+  bookSummary.hasStartedReading = bookSummary.hasStartedReading || progress.spineIndex > 0 || progress.pageNumber > 0;
   bookSummary.progressState = DashboardMetricState::Available;
   bookSummary.hasChapterPage = true;
   bookSummary.chapterPageCurrent = static_cast<uint16_t>(progress.pageNumber + 1U);
@@ -238,7 +304,8 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       const bool thumbnailExists = Storage.exists(coverPath.c_str());
-      const bool validateThumbnail = SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DASHBOARD;
+      const bool validateThumbnail = SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DASHBOARD ||
+                                     SETTINGS.uiTheme == CrossPointSettings::UI_THEME::CROSSVI;
       const bool thumbnailUsable = thumbnailExists && (!validateThumbnail || hasUsableBitmapThumbnail(coverPath));
       if (thumbnailExists && !thumbnailUsable && !Storage.remove(coverPath.c_str())) {
         LOG_ERR("HOME", "Could not remove invalid cover thumbnail: %s", coverPath.c_str());
@@ -308,9 +375,19 @@ void HomeActivity::onEnter() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
   // Keep the feature isolated: existing home themes must not pay any stats or
-  // synced-snapshot SD I/O when Dashboard is not selected.
-  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DASHBOARD) {
-    loadBookSummary();
+  // synced-snapshot SD I/O. CrossVi additionally shows verified TXT/Markdown
+  // and XTC/XTCH summaries without changing their persistence formats.
+  if (SETTINGS.uiTheme == CrossPointSettings::UI_THEME::DASHBOARD ||
+      SETTINGS.uiTheme == CrossPointSettings::UI_THEME::CROSSVI) {
+    const bool isCrossViNonEpub =
+        SETTINGS.uiTheme == CrossPointSettings::UI_THEME::CROSSVI && !recentBooks.empty() &&
+        (FsHelpers::hasXtcExtension(recentBooks.front().path) ||
+         FsHelpers::hasTxtExtension(recentBooks.front().path) ||
+         FsHelpers::hasMarkdownExtension(recentBooks.front().path));
+    bookSummary = {};
+    bookSummary.dailyReadingGoalMinutes = SETTINGS.dailyReadingGoalMinutes;
+    readingStatsPresentation.reset();
+    if (!isCrossViNonEpub || !loadRecentNonEpubReadingStats()) loadBookSummary();
   } else {
     bookSummary = {};
     readingStatsPresentation.reset();
@@ -319,12 +396,12 @@ void HomeActivity::onEnter() {
   selectorIndex = initialMenuItem == HomeMenuItem::NONE
                       ? 0
                       : HomeMenuMapping::selectorIndexOf(initialMenuItem, static_cast<int>(recentBooks.size()),
-                                                         hasOpdsServers, readingStatsPresentation.has_value());
+                                                         hasOpdsServers, hasReadingStatsShortcut());
   if (selectorIndex < 0) {
     // Preserve the previous fallback for an optional destination that vanished
     // while returning Home (for example, the last OPDS server was removed).
     selectorIndex = HomeMenuMapping::selectorIndexOf(HomeMenuItem::FILE_BROWSER, static_cast<int>(recentBooks.size()),
-                                                     hasOpdsServers, readingStatsPresentation.has_value());
+                                                     hasOpdsServers, hasReadingStatsShortcut());
   }
 
   // Trigger first update
@@ -375,6 +452,17 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  if (readingStatsNotice != ReadingStatsNotice::None) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        mappedInput.wasReleased(MappedInputManager::Button::NavPrevious) ||
+        mappedInput.wasReleased(MappedInputManager::Button::NavNext)) {
+      readingStatsNotice = ReadingStatsNotice::None;
+      requestUpdate();
+    }
+    return;
+  }
+
   const int menuCount = getMenuItemCount();
 
   buttonNavigator.onNext([this, menuCount] {
@@ -403,7 +491,7 @@ void HomeActivity::loop() {
       onSelectBook(recentBooks[selectorIndex].path);
     } else {
       const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers, readingStatsPresentation.has_value())) {
+      switch (indexToMenuItem(menuIndex, hasOpdsServers, hasReadingStatsShortcut())) {
         case HomeMenuItem::FILE_BROWSER:
           onFileBrowserOpen();
           break;
@@ -440,8 +528,9 @@ void HomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
-                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+  GUI.drawHomeHeader(
+      renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
+      metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
@@ -461,16 +550,15 @@ void HomeActivity::render(RenderLock&&) {
                                         tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Recent, Bookmark, Transfer, Settings};
 
-  if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 3, Library);
+  if (hasReadingStatsShortcut()) {
+    menuItems.insert(menuItems.begin() + 2, tr(STR_READING_STATS));
+    menuIcons.insert(menuIcons.begin() + 2, Book);
   }
 
-  // Appending keeps every existing menu index stable whether this optional
-  // shortcut is available or not.
-  if (readingStatsPresentation) {
-    menuItems.push_back(tr(STR_READING_STATS));
-    menuIcons.push_back(Book);
+  if (hasOpdsServers) {
+    const size_t opdsIndex = 3 + (hasReadingStatsShortcut() ? 1u : 0u);
+    menuItems.insert(menuItems.begin() + static_cast<std::ptrdiff_t>(opdsIndex), tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + static_cast<std::ptrdiff_t>(opdsIndex), Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -479,19 +567,53 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin(), Book);
   }
 
+  const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+  const int contentBottom = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const bool showReadingSummary = hasHomeReadingSummary();
+  const int summaryY = contentBottom - CrossViMetrics::HOME_READING_SUMMARY_HEIGHT -
+                       CrossViMetrics::HOME_READING_SUMMARY_BOTTOM_GAP;
+  const int menuBottom = showReadingSummary ? summaryY - CrossViMetrics::HOME_READING_SUMMARY_GAP : contentBottom;
   GUI.drawButtonMenu(
-      renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
+      renderer, Rect{0, menuTop, pageWidth, std::max(0, menuBottom - menuTop)}, static_cast<int>(menuItems.size()),
       metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
-                                            tr(STR_DIR_DOWN));
+  if (showReadingSummary) {
+    GUI.drawHomeReadingSummary(renderer,
+                               Rect{CrossViMetrics::values.contentSidePadding, summaryY,
+                                    pageWidth - CrossViMetrics::values.contentSidePadding * 2,
+                                    CrossViMetrics::HOME_READING_SUMMARY_HEIGHT},
+                               bookSummary, false);
+  }
+
+  const char* resumeLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
+  if (!recentBooks.empty() && SETTINGS.uiTheme == CrossPointSettings::UI_THEME::CROSSVI) {
+    resumeLabel = I18N.get(homeBookHintLabelId(bookSummary));
+  }
+  const auto labels =
+      mappedInput.mapLabels(resumeLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  switch (readingStatsNotice) {
+    case ReadingStatsNotice::BackupDone:
+      GUI.drawPopup(renderer, tr(STR_STATS_BACKUP_DONE));
+      break;
+    case ReadingStatsNotice::BackupFailed:
+      GUI.drawPopup(renderer, tr(STR_STATS_BACKUP_FAILED));
+      break;
+    case ReadingStatsNotice::RestoreDone:
+      GUI.drawPopup(renderer, tr(STR_STATS_RESTORE_DONE));
+      break;
+    case ReadingStatsNotice::RestoreFailed:
+      GUI.drawPopup(renderer, tr(STR_STATS_RESTORE_FAILED));
+      break;
+    case ReadingStatsNotice::NoBackup:
+      GUI.drawPopup(renderer, tr(STR_STATS_NO_BACKUP));
+      break;
+    case ReadingStatsNotice::None:
+      break;
+  }
 
   renderer.displayBuffer();
 
@@ -518,9 +640,202 @@ void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
 
+bool HomeActivity::loadRecentNonEpubReadingStats() {
+  if (recentBooks.empty()) return false;
+  const std::string& path = recentBooks.front().path;
+  std::string cachePath;
+  ZipFile::SourceIdentity currentIdentity;
+  ZipFile::SourceIdentity storedIdentity;
+  ReadingStatsMetric progress = ReadingStatsMetric::unavailable();
+  const bool isXtc = FsHelpers::hasXtcExtension(path);
+  uint32_t xtcPageCount = 0;
+  size_t txtFileSize = 0;
+
+  if (isXtc) {
+    Xtc xtc(path, "/.crosspoint");
+    if (!xtc.load() || !xtc.getSourceIdentity(currentIdentity)) return false;
+    cachePath = xtc.getCachePath();
+    xtcPageCount = xtc.getPageCount();
+    if (xtcPageCount == 0) return false;
+  } else {
+    Txt txt(path, "/.crosspoint");
+    if (!txt.load() || !txt.getSourceIdentity(currentIdentity)) return false;
+    cachePath = txt.getCachePath();
+    txtFileSize = txt.getFileSize();
+  }
+
+  const SourceIdentityStore::LoadStatus identityStatus = SourceIdentityStore::load(cachePath, storedIdentity);
+  const bool identityTrusted = identityStatus == SourceIdentityStore::LoadStatus::Primary ||
+                               identityStatus == SourceIdentityStore::LoadStatus::Backup ||
+                               identityStatus == SourceIdentityStore::LoadStatus::Temp;
+  if (!identityTrusted || storedIdentity != currentIdentity) return false;
+
+  if (isXtc) {
+    uint8_t progressBytes[4]{};
+    const ProgressFile::PageBounds bounds{xtcPageCount};
+    const ProgressFile::CandidateValidator validator{ProgressFile::validatePageBounds, &bounds};
+    const ProgressFile::LoadResult loaded =
+        ProgressFile::loadPage(cachePath, progressBytes, sizeof(progressBytes), validator);
+    if (loaded) {
+      const uint32_t page = ProgressFileCodec::decodePage(progressBytes);
+      const uint32_t percent = static_cast<uint32_t>(
+          std::min<uint64_t>(100, (static_cast<uint64_t>(page) + 1u) * 100u / xtcPageCount));
+      progress = ReadingStatsMetric::known(percent);
+      bookSummary.hasProgress = true;
+      bookSummary.progressBelowOnePercent = percent == 0;
+      bookSummary.hasStartedReading = page > 0;
+      bookSummary.progressPercent = static_cast<uint8_t>(percent);
+      bookSummary.progressState = DashboardMetricState::Available;
+    } else {
+      bookSummary.progressState = loaded.source == ProgressFile::LoadSource::Missing
+                                      ? DashboardMetricState::NoData
+                                      : DashboardMetricState::Unavailable;
+    }
+  } else if (txtFileSize > 0) {
+    uint8_t progressBytes[ProgressFileCodec::TXT_V2_SIZE]{};
+    const ProgressFile::TxtBounds bounds{static_cast<uint32_t>(txtFileSize), 0};
+    const ProgressFile::CandidateValidator validator{ProgressFile::validateTxtBounds, &bounds};
+    const ProgressFile::LoadResult loaded =
+        ProgressFile::loadTxt(cachePath, progressBytes, sizeof(progressBytes), validator);
+    uint32_t byteOffset = 0;
+    if (loaded && ProgressFileCodec::decodeTxt(progressBytes, loaded.size, byteOffset) ==
+                      ProgressFileCodec::TxtDecodeStatus::Ok) {
+      const uint32_t percent = static_cast<uint32_t>(static_cast<uint64_t>(byteOffset) * 100u / txtFileSize);
+      progress = ReadingStatsMetric::estimated(percent);
+      bookSummary.hasProgress = true;
+      bookSummary.hasStartedReading = byteOffset > 0;
+      bookSummary.progressEstimated = true;
+      bookSummary.progressPercent = static_cast<uint8_t>(std::min<uint32_t>(percent, 100u));
+      bookSummary.progressState = DashboardMetricState::Available;
+    } else {
+      bookSummary.progressState = loaded.source == ProgressFile::LoadSource::Missing
+                                      ? DashboardMetricState::NoData
+                                      : DashboardMetricState::Unavailable;
+    }
+  } else {
+    bookSummary.progressState = DashboardMetricState::NoData;
+  }
+
+  BookReadingStats::LoadStatus bookStatus = BookReadingStats::LoadStatus::Missing;
+  const BookReadingStats bookStats = BookReadingStats::load(cachePath, &bookStatus);
+  GlobalReadingStats::LoadStatus deviceStatus = GlobalReadingStats::LoadStatus::Missing;
+  const GlobalReadingStats deviceStats = GlobalReadingStats::load(&deviceStatus);
+  if (!BookReadingStats::isTrustedLoadStatus(bookStatus) || !GlobalReadingStats::isTrustedLoadStatus(deviceStatus)) {
+    return false;
+  }
+
+  bookSummary.bookStatsState = bookStatus == BookReadingStats::LoadStatus::Missing ? DashboardMetricState::NoData
+                                                                                   : DashboardMetricState::Available;
+  bookSummary.bookReadingSeconds = bookStats.totalReadingSeconds;
+  bookSummary.bookPagesTurned = bookStats.totalPagesTurned;
+  bookSummary.bookSessions = bookStats.sessionCount;
+  bookSummary.hasStartedReading = bookSummary.hasStartedReading || bookStats.totalReadingSeconds > 0 ||
+                                  bookStats.totalPagesTurned > 0 || bookStats.sessionCount > 0 ||
+                                  bookStats.isCompleted;
+
+  if (bookStats.isCompleted) {
+    progress = ReadingStatsMetric::known(100);
+    bookSummary.hasProgress = true;
+    bookSummary.hasStartedReading = true;
+    bookSummary.progressEstimated = false;
+    bookSummary.progressPercent = 100;
+    bookSummary.progressState = DashboardMetricState::Available;
+  }
+
+  const bool hasSyncedDirectory = GlobalReadingStats::hasSyncedStats();
+  const GlobalReadingStatsAggregation allSyncedStats =
+      hasSyncedDirectory ? GlobalReadingStats::loadAggregatedWithReport(deviceStats) : GlobalReadingStatsAggregation{};
+  DashboardStatsPolicyInput policyInput;
+  policyInput.localStatsTrusted = true;
+  policyInput.localStatsMissing = deviceStatus == GlobalReadingStats::LoadStatus::Missing;
+  policyInput.hasSyncedDirectory = hasSyncedDirectory;
+  policyInput.syncedScanComplete = allSyncedStats.scanComplete;
+  policyInput.validPeerCount = allSyncedStats.validPeerCount;
+  policyInput.skippedPeerCount = allSyncedStats.skippedPeerCount;
+  const DashboardStatsPolicyResult policy = DashboardStatsPolicy::evaluate(policyInput);
+  bookSummary.globalStatsState = policy.globalStats;
+  bookSummary.syncedStatsState = policy.syncedStats;
+  bookSummary.usingSyncedStats = policy.useAllSynced;
+  bookSummary.syncedDeviceCount = policy.useAllSynced && allSyncedStats.validPeerCount != UINT16_MAX
+                                      ? static_cast<uint16_t>(allSyncedStats.validPeerCount + 1U)
+                                      : allSyncedStats.validPeerCount;
+  const GlobalReadingStats& displayedStats = policy.useAllSynced ? allSyncedStats.stats : deviceStats;
+  if (policy.globalStats == DashboardMetricState::Available) {
+    bookSummary.globalReadingSeconds = displayedStats.totalReadingSeconds;
+    bookSummary.globalPagesTurned = displayedStats.totalPagesTurned;
+  }
+  ReadingStatsDateTime now;
+  const ReadingStatsDateTime* currentDateTime = getCurrentLocalReadingStatsDateTime(now) ? &now : nullptr;
+  if (currentDateTime && policy.globalStats == DashboardMetricState::Available) {
+    bookSummary.currentStreak = displayedStats.currentReadingStreak(&now.date);
+    bookSummary.hasCurrentStreak = true;
+  }
+  if (currentDateTime) {
+    bookSummary.hasTodayReadingSeconds = deviceStats.readingSummaryForDate(
+        now.date, bookSummary.todayReadingSeconds, bookSummary.todayReadingSessions);
+  }
+  readingStatsPresentation = buildReadingStatsPresentation(bookStats, true, deviceStats, true, allSyncedStats,
+                                                           currentDateTime, progress, false);
+  markReadingStatsPageMetricsNotApplicable(*readingStatsPresentation);
+  return true;
+}
+
 void HomeActivity::onReadingStatsOpen() {
-  if (!readingStatsPresentation || recentBooks.empty()) return;
-  startActivityForResult(std::make_unique<ReadingStatsActivity>(renderer, mappedInput, recentBooks.front().title,
-                                                                *readingStatsPresentation),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  if (!hasReadingStatsShortcut() && !hasHomeReadingSummary()) return;
+  if (!readingStatsPresentation) {
+    GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+    renderer.displayBuffer();
+    if (recentBooks.empty() || FsHelpers::hasEpubExtension(recentBooks.front().path)) {
+      loadBookSummary();
+    } else if (!loadRecentNonEpubReadingStats()) {
+      requestUpdate();
+      return;
+    }
+  }
+  if (!readingStatsPresentation) {
+    requestUpdate();
+    return;
+  }
+  const std::string statsTitle = recentBooks.empty() ? std::string(tr(STR_READING_STATS)) : recentBooks.front().title;
+  startActivityForResult(std::make_unique<ReadingStatsActivity>(
+                             renderer, mappedInput, statsTitle, *readingStatsPresentation,
+                             ReadingStatsActivity::Page::Device, false, true),
+                         [this](const ActivityResult& result) {
+                           const auto* action = std::get_if<ReadingStatsActionResult>(&result.data);
+                           if (!action) {
+                             requestUpdate();
+                             return;
+                           }
+                           if (action->action == ReadingStatsActionResult::Action::BackupDeviceStats) {
+                             const GlobalReadingStats::BackupResult backup = GlobalReadingStats::createBackup();
+                             readingStatsNotice = backup == GlobalReadingStats::BackupResult::Ok
+                                                      ? ReadingStatsNotice::BackupDone
+                                                      : ReadingStatsNotice::BackupFailed;
+                             requestUpdate();
+                             return;
+                           }
+                           if (action->action != ReadingStatsActionResult::Action::RestoreDeviceStats) return;
+                           startActivityForResult(
+                               std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_STATS_RESTORE),
+                                                                      tr(STR_STATS_RESTORE_PROMPT)),
+                               [this](const ActivityResult& confirmation) {
+                                 if (confirmation.isCancelled) return;
+                                 const GlobalReadingStats::BackupResult restored =
+                                     GlobalReadingStats::restoreBackup();
+                                 if (restored == GlobalReadingStats::BackupResult::Ok) {
+                                   readingStatsPresentation.reset();
+                                   if (recentBooks.empty() || FsHelpers::hasEpubExtension(recentBooks.front().path)) {
+                                     loadBookSummary();
+                                   } else {
+                                     loadRecentNonEpubReadingStats();
+                                   }
+                                   readingStatsNotice = ReadingStatsNotice::RestoreDone;
+                                 } else if (restored == GlobalReadingStats::BackupResult::Missing) {
+                                   readingStatsNotice = ReadingStatsNotice::NoBackup;
+                                 } else {
+                                   readingStatsNotice = ReadingStatsNotice::RestoreFailed;
+                                 }
+                                 requestUpdate();
+                               });
+                         });
 }

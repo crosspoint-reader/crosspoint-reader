@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <AtomicFile.h>
 
 #include <string>
 
@@ -22,9 +23,12 @@ class PersistableStoreBase {
   // Serializes doc and writes it to path (ensures /.crosspoint exists). Logs on failure.
   static bool writeDocToFile(const char* path, const JsonDocument& doc);
 
-  // Reads path and parses it into doc. Returns false silently when the file
-  // does not exist (expected on first boot); logs on read/parse failure.
-  static bool readDocFromFile(const char* path, JsonDocument& doc);
+  // Recovers and parses path into doc. Missing is expected on first boot;
+  // malformed, oversize and I/O failures remain distinguishable so callers
+  // can block a later write from replacing unreadable user data.
+  static AtomicFile::LoadStatus readDocFromFile(const char* path, JsonDocument& doc);
+
+  mutable bool persistenceWritable = true;
 
   /**
    * Helper function for extracting an obfuscated password from a JSON value.
@@ -66,7 +70,11 @@ class PersistableStore : public PersistableStoreBase {
     return instance;
   }
 
+  void markReadOnlyForRecovery() { persistenceWritable = false; }
+  bool isPersistenceWritable() const { return persistenceWritable; }
+
   bool saveToFile() const {
+    if (!persistenceWritable) return false;
     JsonDocument doc;
     static_cast<const T*>(this)->toJson(doc);
     return writeDocToFile(T::getFilePath(), doc);
@@ -74,9 +82,19 @@ class PersistableStore : public PersistableStoreBase {
 
   bool loadFromFile() {
     JsonDocument doc;
-    if (!readDocFromFile(T::getFilePath(), doc)) {
+    const AtomicFile::LoadStatus loaded = readDocFromFile(T::getFilePath(), doc);
+    if (loaded == AtomicFile::LoadStatus::Missing) {
+      persistenceWritable = true;
       return false;
     }
-    return static_cast<T*>(this)->fromJson(doc.as<JsonVariantConst>());
+    if (loaded != AtomicFile::LoadStatus::Primary && loaded != AtomicFile::LoadStatus::Backup &&
+        loaded != AtomicFile::LoadStatus::Temp) {
+      persistenceWritable = false;
+      return false;
+    }
+    persistenceWritable = true;
+    const bool parsed = static_cast<T*>(this)->fromJson(doc.as<JsonVariantConst>());
+    if (!parsed) persistenceWritable = false;
+    return parsed;
   }
 };

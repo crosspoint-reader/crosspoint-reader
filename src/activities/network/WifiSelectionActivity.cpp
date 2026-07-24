@@ -14,6 +14,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ClockSyncPolicy.h"
 
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
@@ -258,7 +259,7 @@ void WifiSelectionActivity::promptHiddenSsid() {
   startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_SSID),
                                                                  "",  // No initial text
                                                                  32,  // Max SSID length (IEEE 802.11: 32 bytes)
-                                                                 InputType::Text),
+                                                                 InputType::Identifier),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
                              state = WifiSelectionState::NETWORK_LIST;
@@ -382,10 +383,9 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    // A persisted "synced once" flag cannot prove that this boot's system
+    // clock is valid (X4 has no external RTC; X3 may have lost RTC validity).
+    if (ClockSyncPolicy::shouldSyncFromNetwork(SETTINGS.clockHasBeenSynced, halClock.isSystemTimeValid())) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();

@@ -27,6 +27,7 @@
 #include "components/icons/text24.h"
 #include "components/icons/transfer.h"
 #include "components/icons/wifi.h"
+#include "components/themes/HomeMenuLayout.h"
 #include "fontIds.h"
 
 // Internal constants
@@ -512,11 +513,15 @@ void LyraTheme::drawEmptyRecents(const GfxRenderer& renderer, const Rect rect) c
 void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const HomeMenuLayout::Fit layout =
+      HomeMenuLayout::fit(rect.height, buttonCount, 1, metrics.menuRowHeight, metrics.menuSpacing,
+                          std::max(mainMenuIconSize, lineHeight) + 8);
   for (int i = 0; i < buttonCount; ++i) {
-    int tileWidth = rect.width - LyraMetrics::values.contentSidePadding * 2;
-    Rect tileRect = Rect{rect.x + LyraMetrics::values.contentSidePadding,
-                         rect.y + i * (LyraMetrics::values.menuRowHeight + LyraMetrics::values.menuSpacing), tileWidth,
-                         LyraMetrics::values.menuRowHeight};
+    const int tileWidth = rect.width - metrics.contentSidePadding * 2;
+    const Rect tileRect{rect.x + metrics.contentSidePadding, rect.y + layout.yOffset(i, 1), tileWidth,
+                        layout.rowHeight};
 
     const bool selected = selectedIndex == i;
 
@@ -524,11 +529,9 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
       renderer.fillRoundedRect(tileRect.x, tileRect.y, tileRect.width, tileRect.height, cornerRadius, Color::LightGray);
     }
 
-    std::string labelStr = buttonLabel(i);
-    const char* label = labelStr.c_str();
+    const std::string labelStr = buttonLabel(i);
     int textX = tileRect.x + 16;
-    const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-    const int textY = tileRect.y + (LyraMetrics::values.menuRowHeight - lineHeight) / 2;
+    const int textY = tileRect.y + (tileRect.height - lineHeight) / 2;
 
     if (rowIcon != nullptr) {
       UIIcon icon = rowIcon(i);
@@ -539,6 +542,8 @@ void LyraTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
       }
     }
 
-    renderer.drawText(UI_12_FONT_ID, textX, textY, label, true);
+    const std::string label = renderer.truncatedText(UI_12_FONT_ID, labelStr.c_str(),
+                                                     std::max(0, tileRect.x + tileRect.width - textX - 8));
+    renderer.drawText(UI_12_FONT_ID, textX, textY, label.c_str(), true);
   }
 }

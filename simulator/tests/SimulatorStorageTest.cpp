@@ -43,6 +43,16 @@ int main() {
   assert(Storage.writeFile("/.hidden", String("visible to firmware")));
   assert(containsName(Storage.listFiles("/"), ".hidden"));
 
+  HalFile readWrite;
+  assert(Storage.openFileForWrite("TEST", "/read-write.bin", readWrite));
+  const char pageBytes[] = "page-cache";
+  assert(readWrite.write(pageBytes, sizeof(pageBytes)) == sizeof(pageBytes));
+  assert(readWrite.seek(0));
+  char restored[sizeof(pageBytes)] = {};
+  assert(readWrite.read(restored, sizeof(restored)) == static_cast<int>(sizeof(restored)));
+  assert(std::string(restored) == pageBytes);
+  readWrite.close();
+
   bool hiddenSeen = false;
   {
     HalFile rootDirectory = Storage.open("/", O_RDONLY);

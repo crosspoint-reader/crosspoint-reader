@@ -24,6 +24,12 @@ class MappedInputManager {
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
+  // Main owns Power single/double disambiguation. While override is enabled,
+  // readers see only the resolved synthetic release, never the raw first click.
+  void setPowerReleaseOverride(bool enabled, bool released) {
+    powerReleaseOverrideEnabled = enabled;
+    powerReleaseOverride = released;
+  }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
@@ -42,6 +48,8 @@ class MappedInputManager {
   // read it here instead of CrossPointSettings.orientation, which is just the persisted reader
   // preference and stays "rotated" even while portrait UI like home/settings is on screen.
   const GfxRenderer& renderer;
+  bool powerReleaseOverrideEnabled = false;
+  bool powerReleaseOverride = false;
 
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
 };

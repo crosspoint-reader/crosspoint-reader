@@ -1,5 +1,7 @@
 #include "SettingsActivity.h"
 
+#include <Version.h>
+
 #include <GfxRenderer.h>
 #include <Logging.h>
 
@@ -23,6 +25,7 @@
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -117,13 +120,19 @@ void SettingsActivity::onExit() {
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
 
+bool SettingsActivity::handleGlobalShortcut(const GlobalShortcut shortcut) {
+  if (optionPopup.isActive()) return false;
+  if (!SETTINGS.saveToFile()) return false;
+  return handleSafeGlobalShortcut(shortcut);
+}
+
 void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   bool hasChangedCategory = false;
 
   // Handle actions with early return
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selectedSettingIndex == 0) {
       selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
       hasChangedCategory = true;
@@ -157,15 +166,13 @@ void SettingsActivity::loop() {
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+  buttonNavigator.onNextContinuous([this] {
+    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+  buttonNavigator.onPreviousContinuous([this] {
+    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
     requestUpdate();
   });
 
@@ -201,6 +208,10 @@ void SettingsActivity::toggleCurrentSetting() {
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
+    return;
+  }
+  if (setting.nameId == StrId::STR_DAILY_READING_GOAL) {
+    openDailyReadingGoalPicker();
     return;
   }
 
@@ -258,10 +269,41 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
-      SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
+      SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>(setting.valueRange.min);
     } else {
-      SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
+      SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>(currentValue + setting.valueRange.step);
     }
+  } else if (setting.type == SettingType::VALUE && setting.value16Ptr != nullptr) {
+    const uint16_t currentValue = SETTINGS.*(setting.value16Ptr);
+    if (currentValue + setting.valueRange.step > setting.valueRange.max) {
+      SETTINGS.*(setting.value16Ptr) = setting.valueRange.min;
+    } else {
+      SETTINGS.*(setting.value16Ptr) = static_cast<uint16_t>(currentValue + setting.valueRange.step);
+    }
+  } else if (setting.type == SettingType::STRING) {
+    const std::string initialValue = setting.stringGetter
+                                         ? setting.stringGetter()
+                                         : std::string(reinterpret_cast<const char*>(&SETTINGS) + setting.stringOffset);
+    const size_t stringOffset = setting.stringOffset;
+    const size_t stringMaxLen = setting.stringMaxLen;
+    const auto stringSetter = setting.stringSetter;
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(setting.nameId), initialValue,
+                                                stringMaxLen > 0 ? stringMaxLen - 1 : 0, InputType::Text),
+        [this, stringOffset, stringMaxLen, stringSetter](const ActivityResult& result) {
+          if (result.isCancelled) return;
+          const std::string& value = std::get<KeyboardResult>(result.data).text;
+          if (stringSetter) {
+            stringSetter(value);
+          } else if (stringMaxLen > 0) {
+            char* destination = reinterpret_cast<char*>(&SETTINGS) + stringOffset;
+            std::strncpy(destination, value.c_str(), stringMaxLen - 1);
+            destination[stringMaxLen - 1] = '\0';
+          }
+          SETTINGS.saveToFile();
+          rebuildSettingsLists();
+        });
+    return;
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
@@ -353,6 +395,22 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openDailyReadingGoalPicker() {
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "DailyReadingGoalInterval", StrId::STR_DAILY_READING_GOAL,
+          SETTINGS.dailyReadingGoalMinutes, 0, CrossPointSettings::MAX_DAILY_READING_GOAL_MINUTES, 5, 15,
+          StrId::STR_SLEEP_TIMER_VALUE_FORMAT, false, true, StrId::STR_NONE_OPT, StrId::STR_STATE_OFF),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.dailyReadingGoalMinutes = static_cast<uint16_t>(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+          rebuildSettingsLists();
+        }
+        requestUpdate();
+      });
+}
+
 void SettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
@@ -398,7 +456,8 @@ void SettingsActivity::render(RenderLock&&) {
           } else if (value < setting.enumValues.size()) {
             valueText = I18N.get(setting.enumValues[value]);
           }
-        } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+        } else if (setting.type == SettingType::VALUE &&
+                   (setting.valuePtr != nullptr || setting.value16Ptr != nullptr)) {
           if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
             char valueBuffer[32];
             if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
@@ -408,21 +467,38 @@ void SettingsActivity::render(RenderLock&&) {
                        static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
               valueText = valueBuffer;
             }
+          } else if (setting.nameId == StrId::STR_DAILY_READING_GOAL) {
+            if (SETTINGS.dailyReadingGoalMinutes == 0) {
+              valueText = tr(STR_STATE_OFF);
+            } else {
+              char valueBuffer[32];
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
+                       static_cast<unsigned int>(SETTINGS.dailyReadingGoalMinutes));
+              valueText = valueBuffer;
+            }
           } else {
-            valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+            valueText = setting.value16Ptr ? std::to_string(SETTINGS.*(setting.value16Ptr))
+                                           : std::to_string(SETTINGS.*(setting.valuePtr));
           }
+        } else if (setting.type == SettingType::STRING) {
+          valueText = setting.stringGetter
+                          ? setting.stringGetter()
+                          : std::string(reinterpret_cast<const char*>(&SETTINGS) + setting.stringOffset);
+          if (valueText.empty()) valueText = tr(STR_NONE_OPT);
         }
         return valueText;
       },
       true);
 
   // Draw help text
-  const auto confirmLabel =
-      (selectedSettingIndex == 0)
-          ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-          : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
-                 ? tr(STR_SELECT)
-                 : tr(STR_TOGGLE));
+  const bool selectedSettingUsesPicker =
+      selectedSettingIndex > 0 && ((*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
+                                   (*currentSettings)[selectedSettingIndex - 1].nameId ==
+                                       StrId::STR_DAILY_READING_GOAL ||
+                                   (*currentSettings)[selectedSettingIndex - 1].type == SettingType::STRING);
+  const auto confirmLabel = selectedSettingIndex == 0
+                                ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
+                                : (selectedSettingUsesPicker ? tr(STR_SELECT) : tr(STR_TOGGLE));
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

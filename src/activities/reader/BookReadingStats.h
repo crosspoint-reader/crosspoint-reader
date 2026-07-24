@@ -8,11 +8,12 @@
 #include "ReadingStatsUtils.h"
 
 // Per-book reading statistics, persisted in a CRC-protected CrossVi envelope
-// at stats_v6.bin. Its payload remains compatible with CrossInk v1.4.
+// at stats_v6.bin. Versions 1-5 remain readable for CrossInk migration.
 struct BookReadingStats {
-  static constexpr uint8_t CURRENT_FILE_VERSION = 5;
-  static constexpr size_t CURRENT_FILE_SIZE = 73;
+  static constexpr uint8_t CURRENT_FILE_VERSION = 6;
+  static constexpr size_t CURRENT_FILE_SIZE = 77;
   static constexpr uint16_t MAX_PACE_SAMPLE_COUNT = 1000;
+  static constexpr uint16_t INVALID_MINUTE_OF_DAY = UINT16_MAX;
 
   uint16_t sessionCount = 0;
   uint32_t totalReadingSeconds = 0;
@@ -25,6 +26,8 @@ struct BookReadingStats {
   bool finishedDateManual = false;
   ReadingStatsDate startDate;
   ReadingStatsDate finishedDate;
+  uint16_t startMinuteOfDay = INVALID_MINUTE_OF_DAY;
+  uint16_t finishedMinuteOfDay = INVALID_MINUTE_OF_DAY;
   std::array<uint32_t, READING_TIME_BUCKET_COUNT> timeOfDaySeconds{};
   std::array<uint32_t, READING_DAY_OF_WEEK_COUNT> dayOfWeekSeconds{};
 

@@ -1,11 +1,13 @@
 #include "ActivityManager.h"
 
 #include <FontCacheManager.h>
+#include <HalStorage.h>
 #include <HalPowerManager.h>
 
 #include <algorithm>
 
 #include "OpdsServerStore.h"
+#include "RecentBooksStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -268,10 +270,41 @@ void ActivityManager::popActivity() {
 
 bool ActivityManager::preventAutoSleep() const { return currentActivity && currentActivity->preventAutoSleep(); }
 
+bool ActivityManager::handleGlobalShortcut(const GlobalShortcut shortcut) {
+  if (shortcut == GlobalShortcut::RefreshScreen) {
+    RenderLock lock;
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    return true;
+  }
+  return currentActivity && currentActivity->handleGlobalShortcut(shortcut);
+}
+
+bool ActivityManager::handleSafeGlobalShortcut(const GlobalShortcut shortcut) {
+  if (shortcut == GlobalShortcut::GoHome) {
+    if (currentActivity && currentActivity->name == "Home") return true;
+    goHome();
+    return true;
+  }
+  if (shortcut != GlobalShortcut::ResumeReading) return false;
+
+  if (currentActivity && currentActivity->isReaderActivity()) return true;
+  if (!stackActivities.empty() && stackActivities.back()->isReaderActivity()) {
+    popActivity();
+    return true;
+  }
+
+  for (const auto& book : RECENT_BOOKS.getBooks()) {
+    if (!book.path.empty() && Storage.exists(book.path.c_str())) {
+      goToReader(book.path);
+      return true;
+    }
+  }
+  goHome();
+  return true;
+}
+
 bool ActivityManager::isReaderActivity() const {
-  return std::any_of(stackActivities.begin(), stackActivities.end(),
-                     [](const auto& activity) { return activity->isReaderActivity(); }) ||
-         (currentActivity && currentActivity->isReaderActivity());
+  return currentActivity && currentActivity->isReaderActivity();
 }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }

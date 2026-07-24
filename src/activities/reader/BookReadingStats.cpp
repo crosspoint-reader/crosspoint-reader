@@ -251,7 +251,7 @@ bool BookReadingStats::saveRedundant(const std::string& cachePath) const {
 }
 
 bool BookReadingStats::remove(const std::string& cachePath) {
-  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(cachePath)) {
+  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(cachePath)) {
     LOG_ERR(LOG_TAG, "Refusing to reset stats with a pending completion transaction: %s", cachePath.c_str());
     return false;
   }

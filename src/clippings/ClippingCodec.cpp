@@ -9,6 +9,7 @@ namespace {
 
 constexpr std::array<uint8_t, 4> MAGIC = {'C', 'V', 'C', 'L'};
 constexpr size_t LEGACY_CHAPTER_TITLE_BYTES = 48;
+constexpr std::array<uint8_t, 4> TEXT_ANCHOR_MAGIC = {'T', 'X', 'T', '1'};
 constexpr std::array<uint32_t, 16> CRC32_NIBBLE = {
     0x00000000U, 0x1DB71064U, 0x3B6E20C8U, 0x26D930ACU, 0x76DC4190U, 0x6B6B51F4U, 0x4DB26158U, 0x5005713CU,
     0xEDB88320U, 0xF00F9344U, 0xD6D6A3E8U, 0xCB61B38CU, 0x9B64C2B0U, 0x86D3D2D4U, 0xA00AE278U, 0xBDBDF21CU,
@@ -62,6 +63,10 @@ Status validateClipping(const ClippingMetadata& clipping) {
     return Status::Corrupt;
   }
   if (clipping.startPage == clipping.endPage && clipping.startWordIndex > clipping.endWordIndex) {
+    return Status::Corrupt;
+  }
+  if (clipping.hasTextAnchor &&
+      (!clipping.chapterTitle.empty() || clipping.textSourceStart >= clipping.textSourceEnd)) {
     return Status::Corrupt;
   }
   return isValidUtf8(clipping.chapterTitle) ? Status::Ok : Status::InvalidUtf8;
@@ -195,6 +200,12 @@ Status inspectCurrent(const Source& source, Index& out) {
     if (chapterLength > MAX_CHAPTER_TITLE_BYTES) return Status::Corrupt;
     clipping.chapterTitle.assign(reinterpret_cast<const char*>(record.data() + 28), chapterLength);
     clipping.pageFingerprint = readU32(record.data() + 92);
+    if (chapterLength == 0 &&
+        std::equal(TEXT_ANCHOR_MAGIC.begin(), TEXT_ANCHOR_MAGIC.end(), record.begin() + 28)) {
+      clipping.hasTextAnchor = true;
+      clipping.textSourceStart = readU32(record.data() + 32);
+      clipping.textSourceEnd = readU32(record.data() + 36);
+    }
 
     if (clipping.textOffset != expectedTextOffset || addWouldOverflow(clipping.textOffset, clipping.textLength) ||
         clipping.textOffset + clipping.textLength > fileLength) {
@@ -377,6 +388,11 @@ Status encodeRecord(const ClippingMetadata& clipping, std::array<uint8_t, RECORD
   writeU16(out.data() + 24, clipping.textLength);
   writeU16(out.data() + 26, static_cast<uint16_t>(clipping.chapterTitle.size()));
   std::copy(clipping.chapterTitle.begin(), clipping.chapterTitle.end(), out.begin() + 28);
+  if (clipping.hasTextAnchor) {
+    std::copy(TEXT_ANCHOR_MAGIC.begin(), TEXT_ANCHOR_MAGIC.end(), out.begin() + 28);
+    writeU32(out.data() + 32, clipping.textSourceStart);
+    writeU32(out.data() + 36, clipping.textSourceEnd);
+  }
   writeU32(out.data() + 92, clipping.pageFingerprint);
   return Status::Ok;
 }

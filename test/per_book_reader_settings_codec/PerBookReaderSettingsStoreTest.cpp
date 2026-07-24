@@ -269,7 +269,10 @@ TEST_F(PerBookReaderSettingsStoreTest, MapsOnlySemanticallyEquivalentCrossInkV2F
   EXPECT_EQ(loaded.textAntiAliasing, 0);
   EXPECT_EQ(loaded.imageRendering, 2);
   EXPECT_EQ(loaded.extraParagraphSpacing, 0);
+  EXPECT_EQ(loaded.forceParagraphIndents, 1);
   EXPECT_EQ(loaded.focusReadingEnabled, 1);
+  EXPECT_TRUE(loaded.hasRenderModeOverride);
+  EXPECT_EQ(loaded.renderMode, EpubRenderMode::Light);
   EXPECT_EQ(Storage.file(legacyPath()), legacy);
   EXPECT_EQ(Storage.file(legacyBackupPath(2)), legacy);
 }

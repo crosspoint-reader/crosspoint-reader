@@ -5,6 +5,7 @@
 
 #include "lib/EpdFont/EpdFont.h"
 #include "lib/EpdFont/EpdFontData.h"
+#include "lib/GfxRenderer/TextDarkness.h"
 
 // ============================================================================
 // Synthetic test font
@@ -159,6 +160,26 @@ TEST(Fp4Math, ExhaustiveKernRange) {
       EXPECT_LT(std::abs(step - idealPx), 1.0f) << "advance=" << advance << " kern=" << kern;
     }
   }
+}
+
+TEST(GlyphDarkness, MapsAllTwoBitLevels) {
+  constexpr uint8_t expected[3][4] = {
+      {0, 1, 2, 3},
+      {0, 1, 1, 3},
+      {0, 0, 1, 3},
+  };
+
+  for (uint8_t darkness = 0; darkness < 3; darkness++) {
+    for (uint8_t level = 0; level < 4; level++) {
+      EXPECT_EQ(GlyphDarkness::mapLevel(level, darkness), expected[darkness][level]);
+    }
+  }
+}
+
+TEST(GlyphDarkness, LeavesOutOfRangeInputsUnchanged) {
+  EXPECT_EQ(GlyphDarkness::mapLevel(4, GlyphDarkness::EXTRA_DARK), 4);
+  EXPECT_EQ(GlyphDarkness::mapLevel(2, 3), 2);
+  EXPECT_EQ(GlyphDarkness::mapLevel(2, 255), 2);
 }
 
 // ============================================================================

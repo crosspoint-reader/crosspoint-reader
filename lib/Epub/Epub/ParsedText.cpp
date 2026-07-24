@@ -455,7 +455,7 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
     return 0;
   }
   if (blockStyle.textIndentDefined) {
-    if (blockStyle.textIndent < 0 || !extraParagraphSpacing) {
+    if (blockStyle.textIndent < 0 || !extraParagraphSpacing || forceParagraphIndents) {
       return blockStyle.textIndent;
     }
     return 0;

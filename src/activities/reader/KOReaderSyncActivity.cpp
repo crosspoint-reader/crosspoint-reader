@@ -363,6 +363,7 @@ void KOReaderSyncActivity::performUpload() {
 void KOReaderSyncActivity::onEnter() {
   Activity::onEnter();
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+  suppressInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
@@ -523,6 +524,12 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
+  if (ReaderUtils::consumeInitialRelease(suppressInitialConfirmRelease,
+                                         mappedInput.wasReleased(MappedInputManager::Button::Confirm),
+                                         mappedInput.isPressed(MappedInputManager::Button::Confirm))) {
+    return;
+  }
+
   if (state == NO_CREDENTIALS || state == SYNC_FAILED || state == UPLOAD_COMPLETE || state == SYNC_COMPLETE) {
     if (autoReturnAt != 0 && millis() >= autoReturnAt) {
       returnToReader();

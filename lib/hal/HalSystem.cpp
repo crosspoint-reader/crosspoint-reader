@@ -9,6 +9,7 @@
 #include "esp_private/esp_cpu_internal.h"
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
+#include <Version.h>
 
 #define MAX_PANIC_STACK_DEPTH 32
 
@@ -115,7 +116,8 @@ std::string getPanicInfo(bool full) {
   } else {
     std::string info;
 
-    info += "CrossVi version: " CROSSPOINT_VERSION;
+    info += "CrossVi version: ";
+    info += CROSSPOINT_VERSION;
     info += "\n\nPanic reason: " + std::string(panicMessage);
     info += "\n\nLast logs:\n" + getLastLogs();
     info += "\n\nStack memory:\n";

@@ -13,6 +13,7 @@
 #include "BookCacheUtils.h"
 #include "BookReplacementTransaction.h"
 #include "BookmarkUtil.h"
+#include "activities/reader/ReadingStatsCompletionTransaction.h"
 
 namespace {
 
@@ -59,6 +60,7 @@ class BookCacheUtilsTest : public testing::Test {
  protected:
   void SetUp() override {
     Storage.reset();
+    ReadingStatsCompletionTransaction::clearBlockedCacheForTest();
     Storage.addDirectory(CACHE_PATH);
     Storage.addDirectory("/read");
     Storage.addDirectory(BookmarkUtil::getBookmarksDir());
@@ -77,6 +79,22 @@ class BookCacheUtilsTest : public testing::Test {
     }
   }
 };
+
+TEST_F(BookCacheUtilsTest, PendingCompletionLeavesTrackedCacheByteForByteUntouched) {
+  put("stats_v6.bin", 10);
+  put("progress.bin", 20);
+  put("index.bin", 30);
+  const auto stats = Storage.file(CACHE_PATH + "/stats_v6.bin");
+  const auto progress = Storage.file(CACHE_PATH + "/progress.bin");
+  const auto index = Storage.file(CACHE_PATH + "/index.bin");
+
+  ReadingStatsCompletionTransaction::blockCacheForTest(CACHE_PATH);
+  EXPECT_FALSE(clearBookCacheDirectoryPreservingUserState(CACHE_PATH));
+  EXPECT_EQ(Storage.file(CACHE_PATH + "/stats_v6.bin"), stats);
+  EXPECT_EQ(Storage.file(CACHE_PATH + "/progress.bin"), progress);
+  EXPECT_EQ(Storage.file(CACHE_PATH + "/index.bin"), index);
+  EXPECT_FALSE(Storage.exists(STAGING_PATH.c_str()));
+}
 
 TEST_F(BookCacheUtilsTest, ClearsDerivedCacheAndPreservesAllSupportedUserState) {
   const std::vector<std::string> names = {"stats.bin",

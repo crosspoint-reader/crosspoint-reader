@@ -14,6 +14,6 @@ Its MIT license and copyright notice are retained in [LICENSE](LICENSE).
 CrossVi-specific changes include separate X3/X4 targets, current HAL API
 compatibility, a pixel-exact nearest-neighbour display path, clickable raw
 hardware buttons, tear-free presentation, CrossVi virtual-SD variables,
-framebuffer screenshots, and deterministic smoke tests.
+framebuffer screenshots, scripted button input, and deterministic smoke tests.
 
 See [the simulator guide](../docs/contributing/simulator.md) for setup and use.

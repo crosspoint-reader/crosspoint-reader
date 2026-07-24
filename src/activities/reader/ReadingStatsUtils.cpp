@@ -113,6 +113,21 @@ bool readingStatsDateFromDayIndex(uint32_t dayIndex, ReadingStatsDate& outDate) 
   return true;
 }
 
+uint32_t readingStatsMinuteIndex(const ReadingStatsDate& date, const uint16_t minuteOfDay) {
+  if (!date.isValid() || minuteOfDay >= 24u * 60u) return 0;
+  return readingStatsDayIndex(date) * (24u * 60u) + minuteOfDay;
+}
+
+bool readingStatsDateTimeFromMinuteIndex(const uint32_t minuteIndex, ReadingStatsDateTime& outDateTime) {
+  constexpr uint32_t MINUTES_PER_DAY = 24u * 60u;
+  outDateTime = {};
+  if (!readingStatsDateFromDayIndex(minuteIndex / MINUTES_PER_DAY, outDateTime.date)) return false;
+  const uint16_t minuteOfDay = static_cast<uint16_t>(minuteIndex % MINUTES_PER_DAY);
+  outDateTime.hour = static_cast<uint8_t>(minuteOfDay / 60u);
+  outDateTime.minute = static_cast<uint8_t>(minuteOfDay % 60u);
+  return outDateTime.isValid();
+}
+
 void addDaysToReadingStatsDate(ReadingStatsDate& date, const int delta) {
   if (!date.isValid() || delta == 0) return;
   const int64_t lastDay = readingStatsDayIndex({2099, 12, 31});

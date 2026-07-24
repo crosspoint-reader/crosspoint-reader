@@ -481,6 +481,39 @@ TEST_F(EpubSourceIdentityTest, CssCacheBuildIsVerifiedAndIdempotent) {
   EXPECT_EQ(epub.getCssParser()->resolveStyle("p", "note").textAlign, CssTextAlign::Right);
 }
 
+TEST_F(EpubSourceIdentityTest, FullModeDescendantRulesAreBoundedAndSurviveTheCssCache) {
+  const std::string css =
+      "p.lead { margin-left: 1em; } section.note p.lead { text-align: right; text-indent: 2em; }";
+  Storage.setFile("/full-mode.css", std::vector<uint8_t>(css.begin(), css.end()));
+  HalFile source;
+  ASSERT_TRUE(Storage.openFileForRead("TEST", "/full-mode.css", source));
+
+  CssParser parser(CACHE_PATH);
+  ASSERT_TRUE(parser.loadFromStream(source));
+  ASSERT_TRUE(source.close());
+
+  const CssStyle balanced = parser.resolveStyle("p", "lead");
+  EXPECT_TRUE(balanced.defined.marginLeft);
+  EXPECT_FALSE(balanced.defined.textAlign);
+
+  const std::vector<CssParser::AncestorEntry> matching = {{"section", "note"}};
+  const CssStyle full = parser.resolveStyle("p", "lead", matching);
+  EXPECT_TRUE(full.defined.textAlign);
+  EXPECT_EQ(full.textAlign, CssTextAlign::Right);
+  EXPECT_TRUE(full.defined.textIndent);
+
+  const std::vector<CssParser::AncestorEntry> notMatching = {{"section", "warning"}};
+  EXPECT_FALSE(parser.resolveStyle("p", "lead", notMatching).defined.textAlign);
+
+  ASSERT_TRUE(parser.saveToCache());
+  CssParser restored(CACHE_PATH);
+  ASSERT_TRUE(restored.loadFromCache());
+  const CssStyle cached = restored.resolveStyle("p", "lead", matching);
+  EXPECT_TRUE(cached.defined.textAlign);
+  EXPECT_EQ(cached.textAlign, CssTextAlign::Right);
+  EXPECT_TRUE(cached.defined.textIndent);
+}
+
 TEST_F(EpubSourceIdentityTest, WarmCssDiscoveryDoesNotTouchManifestScratchFile) {
   const auto identity = identify(makeCssTestEpub());
   Epub epub(EPUB_PATH, "/.crosspoint");

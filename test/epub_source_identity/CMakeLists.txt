@@ -2,7 +2,9 @@ find_package(EXPAT REQUIRED)
 
 add_executable(EpubSourceIdentityTest
   EpubSourceIdentityTest.cpp
+  TxtSourceIdentityTest.cpp
   ${REPO_ROOT}/lib/ZipFile/ZipFile.cpp
+  ${REPO_ROOT}/lib/Txt/Txt.cpp
   ${REPO_ROOT}/lib/Epub/Epub.cpp
   ${REPO_ROOT}/lib/Epub/Epub/BookMetadataCache.cpp
   ${REPO_ROOT}/lib/Epub/Epub/SourceIdentityStore.cpp
@@ -17,6 +19,7 @@ add_executable(EpubSourceIdentityTest
 target_include_directories(EpubSourceIdentityTest PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/stubs
   ${REPO_ROOT}/lib/ZipFile
+  ${REPO_ROOT}/lib/Txt
   ${REPO_ROOT}/lib/Epub
   ${REPO_ROOT}/lib/Memory
   ${REPO_ROOT}/lib/Serialization

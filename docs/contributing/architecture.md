@@ -67,6 +67,16 @@ Top-level activity groups:
 Reader orchestration starts in `src/activities/reader/ReaderActivity.h` and dispatches to format-specific readers.
 EPUB processing is implemented in `lib/Epub/`.
 
+XTC/XTCH is intentionally not routed through the EPUB reflow pipeline. The
+existing `lib/Xtc` parser validates a bounded, fixed 480×800 v1.0 container,
+streams a complete source identity, and loads only the requested page. X4 uses
+a native 1:1 viewport; X3 maps the same complete source page into an
+aspect-preserving centered viewport. Path-keyed state uses the same
+`SourceIdentityStore` and replacement/move transactions as EPUB/TXT, rather
+than a second cache-identity system. XTC/XTCH reading time and completion use
+the same per-book/global statistics stores and completion transaction as the
+other readers. See [`lib/Xtc/README`](../../lib/Xtc/README).
+
 ```mermaid
 flowchart LR
     A[Select book] --> B[ReaderActivity]
@@ -128,7 +138,7 @@ Notes:
   preloading the full ZIP central directory for large books.
 - "section cache exists" depends on cache-busting parameters such as font,
   viewport size, paragraph alignment, hyphenation, embedded CSS, image rendering,
-  and Focus Reading settings
+  Focus Reading, EPUB render mode, and forced paragraph indentation
 - rendering favors reusing precomputed layout data to keep page turns responsive on constrained hardware
 - progress/session state is persisted so the reader can reopen at the last position after reboot/sleep
 
@@ -155,6 +165,7 @@ Typical persisted areas on SD:
   bookmarks/
   clippings/
   synced_stats/
+  stats_backups/device_stats_v1.bin
   global_stats_v4.bin
   settings.json
   state.json
@@ -194,9 +205,10 @@ Some sources are generated and should not be edited manually.
 
 - `scripts/build_html.py` generates `src/network/html/*.generated.h` from HTML files
 - `scripts/gen_i18n.py` generates `lib/I18n/I18nKeys.h`, `I18nStrings.h`, and `I18nStrings.cpp`
+- `scripts/git_branch.py` generates an environment-local `generated/version.generated.h` under `.pio/build/<environment>/`
 - `scripts/generate_hyphenation_trie.py` generates hyphenation headers under `lib/Epub/Epub/hyphenation/generated/`
 
-When editing related source assets, regenerate via normal build steps/scripts.
+HTML traversal and gzip metadata are deterministic, and the HTML/i18n generators replace an output only when its bytes change. This keeps warm builds from recompiling generated translation or web objects unnecessarily. The version header remains environment-local so parallel PlatformIO environments cannot overwrite one shared build identity. When editing related source assets, regenerate via normal build steps/scripts.
 
 ## Key directories
 

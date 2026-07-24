@@ -26,38 +26,53 @@ BookReadingStatsPresentation buildBookPresentation(const BookReadingStats& stats
                                                    const bool hasFreshTimeEstimate) {
   BookReadingStatsPresentation model;
   model.progress = progress;
+  if (model.progress.state == ReadingStatsMetricState::Estimated) {
+    model.progress.value = std::min<uint32_t>(model.progress.value, 99);
+  }
   if (!trusted) return model;
+
+  if (stats.isCompleted) model.progress = ReadingStatsMetric::known(100);
 
   model.readingTime = ReadingStatsMetric::known(stats.totalReadingSeconds);
   model.sessions = ReadingStatsMetric::known(stats.sessionCount);
   model.pagesTurned = ReadingStatsMetric::known(stats.totalPagesTurned);
   model.completed = ReadingStatsMetric::known(stats.isCompleted ? 1u : 0u);
-  // totalReadingSeconds includes visits from ten seconds onward, while
-  // sessionCount includes only visits lasting at least sixty seconds. The
-  // persisted schema cannot reconstruct an honest average session duration.
-  if (stats.paceSampleCount > 0 && stats.avgSecondsPerForwardPage > 0) {
+  // CrossInk v1.4.0 counts reading time from ten seconds but sessions from one
+  // minute. The persisted schema therefore cannot reconstruct an honest
+  // average session duration from mixed short visits.
+  if (stats.paceSampleCount == 0) {
+    model.averagePage = ReadingStatsMetric::noData();
+  } else if (stats.avgSecondsPerForwardPage > 0) {
     model.averagePage = ReadingStatsMetric::known(stats.avgSecondsPerForwardPage);
   }
   if (stats.isCompleted) {
     model.timeLeft = ReadingStatsMetric::known(0);
   } else if (hasFreshTimeEstimate && stats.estimatedTimeLeftSeconds > 0) {
     model.timeLeft = ReadingStatsMetric::estimated(stats.estimatedTimeLeftSeconds);
+  } else {
+    model.timeLeft = ReadingStatsMetric::noData();
   }
 
   const bool hasValidNow = now && now->isValid();
   const auto dateIsNotFuture = [hasValidNow, now](const ReadingStatsDate& date) {
     return date.isValid() && (!hasValidNow || compareReadingStatsDate(date, now->date) <= 0);
   };
-  if (dateIsNotFuture(stats.startDate)) {
-    model.startDate = ReadingStatsMetric::known(readingStatsDayIndex(stats.startDate));
+  if (dateIsNotFuture(stats.startDate) && stats.startMinuteOfDay < 24u * 60u) {
+    model.startDate = ReadingStatsMetric::known(readingStatsMinuteIndex(stats.startDate, stats.startMinuteOfDay));
+  } else if (!stats.startDate.isValid()) {
+    model.startDate = ReadingStatsMetric::noData();
   }
   if (stats.isCompleted) {
-    if (dateIsNotFuture(stats.finishedDate)) {
-      model.finishDate = ReadingStatsMetric::known(readingStatsDayIndex(stats.finishedDate));
+    if (dateIsNotFuture(stats.finishedDate) && stats.finishedMinuteOfDay < 24u * 60u) {
+      model.finishDate =
+          ReadingStatsMetric::known(readingStatsMinuteIndex(stats.finishedDate, stats.finishedMinuteOfDay));
+    } else if (!stats.finishedDate.isValid()) {
+      model.finishDate = ReadingStatsMetric::noData();
     }
-  } else if (hasValidNow && hasFreshTimeEstimate && stats.startDate.isValid() &&
-             compareReadingStatsDate(stats.startDate, now->date) <= 0 && stats.totalReadingSeconds > 0 &&
-             stats.estimatedTimeLeftSeconds > 0) {
+  } else if (!hasFreshTimeEstimate || !stats.startDate.isValid() || stats.totalReadingSeconds == 0 ||
+             stats.estimatedTimeLeftSeconds == 0) {
+    model.finishDate = ReadingStatsMetric::noData();
+  } else if (hasValidNow && compareReadingStatsDate(stats.startDate, now->date) <= 0) {
     const uint64_t elapsedDays = std::max<uint16_t>(1, readingSpanDaysElapsed(stats.startDate, now->date));
     constexpr uint64_t SECONDS_PER_DAY = 24u * 60u * 60u;
     const auto saturatedMultiply = [](const uint64_t lhs, const uint64_t rhs) {
@@ -80,7 +95,8 @@ BookReadingStatsPresentation buildBookPresentation(const BookReadingStats& stats
     if (calendarSeconds > 0 && calendarSeconds <= lastSeconds - currentSeconds) {
       ReadingStatsDateTime estimate = *now;
       addSecondsToReadingStatsDateTime(estimate, static_cast<uint32_t>(calendarSeconds));
-      model.finishDate = ReadingStatsMetric::estimated(readingStatsDayIndex(estimate.date));
+      const uint16_t minuteOfDay = static_cast<uint16_t>(estimate.hour) * 60u + estimate.minute;
+      model.finishDate = ReadingStatsMetric::estimated(readingStatsMinuteIndex(estimate.date, minuteOfDay));
     }
   }
   model.timeOfDay = buildChart(stats.timeOfDaySeconds, stats.totalReadingSeconds, true);
@@ -115,6 +131,31 @@ GlobalReadingStatsPresentation buildGlobalPresentation(const GlobalReadingStats&
   model.dayOfWeek = buildChart(stats.dayOfWeekSeconds, stats.totalReadingSeconds, true);
   return model;
 }
+
+ReadingCalendarSnapshot buildCalendarSnapshot(const GlobalReadingStats& stats, const bool trusted,
+                                              const ReadingStatsDate* today) {
+  ReadingCalendarSnapshot snapshot;
+  if (!trusted) return snapshot;
+
+  snapshot.anchorDay = stats.readingHistoryAnchorDay;
+  snapshot.historyBits = stats.readingHistoryBits;
+  for (size_t index = 0; index < READING_HISTORY_DAYS; ++index) {
+    if ((stats.readingHistoryBits[index / 8] & static_cast<uint8_t>(1u << (index % 8))) != 0) {
+      ++snapshot.readingDays;
+    }
+  }
+  snapshot.historyAvailable = stats.totalReadingSeconds == 0 || snapshot.readingDays > 0 ||
+                              stats.longestReadingStreak > 0;
+  if (today && today->isValid()) {
+    snapshot.today = *today;
+    snapshot.clockValid = true;
+    snapshot.currentStreak = stats.currentReadingStreak(today);
+    if (snapshot.readingDays > 0 && snapshot.anchorDay > readingStatsDayIndex(*today)) {
+      snapshot.historyAvailable = false;
+    }
+  }
+  return snapshot;
+}
 }  // namespace
 
 ReadingStatsPresentation buildReadingStatsPresentation(
@@ -125,6 +166,7 @@ ReadingStatsPresentation buildReadingStatsPresentation(
   model.book = buildBookPresentation(bookStats, bookStatsTrusted, now, progress, hasFreshTimeEstimate);
   const ReadingStatsDate* today = now && now->isValid() ? &now->date : nullptr;
   model.device = buildGlobalPresentation(deviceStats, deviceStatsTrusted, today);
+  model.deviceCalendar = buildCalendarSnapshot(deviceStats, deviceStatsTrusted, today);
   model.validPeerCount = allSyncedStats.validPeerCount;
   model.skippedPeerCount = allSyncedStats.skippedPeerCount;
   model.showAllSynced = allSyncedStats.validPeerCount > 0;
@@ -137,6 +179,16 @@ ReadingStatsPresentation buildReadingStatsPresentation(
   return model;
 }
 
+void markReadingStatsPageMetricsNotApplicable(ReadingStatsPresentation& presentation) {
+  presentation.book.averagePage = ReadingStatsMetric::notApplicable();
+  const bool knownIncomplete =
+      presentation.book.completed.state == ReadingStatsMetricState::Known && presentation.book.completed.value == 0;
+  if (knownIncomplete) {
+    presentation.book.timeLeft = ReadingStatsMetric::notApplicable();
+    presentation.book.finishDate = ReadingStatsMetric::notApplicable();
+  }
+}
+
 int scaleReadingStatsBar(const uint32_t value, const uint32_t maximum, const int availableWidth) {
   if (value == 0 || maximum == 0 || availableWidth <= 0) return 0;
   const int scaled = static_cast<int>((static_cast<uint64_t>(value) * availableWidth) / maximum);
@@ -145,7 +197,8 @@ int scaleReadingStatsBar(const uint32_t value, const uint32_t maximum, const int
 
 void previewReadingStatsSession(BookReadingStats* bookStats, GlobalReadingStats* deviceStats, const uint32_t seconds,
                                 const BookReadingStats& pendingBookSpans,
-                                const GlobalReadingStats& pendingGlobalSpans) {
+                                const GlobalReadingStats& pendingGlobalSpans,
+                                const ReadingStatsDateTime* sessionStart) {
   if (seconds >= 10) {
     if (bookStats) {
       bookStats->totalReadingSeconds = addReadingStatsSaturated(bookStats->totalReadingSeconds, seconds);
@@ -167,4 +220,10 @@ void previewReadingStatsSession(BookReadingStats* bookStats, GlobalReadingStats*
   if (seconds < 60) return;
   if (bookStats && bookStats->sessionCount < UINT16_MAX) ++bookStats->sessionCount;
   if (deviceStats) deviceStats->totalSessions = addReadingStatsSaturated(deviceStats->totalSessions, 1);
+
+  if (seconds >= 120 && bookStats && sessionStart && sessionStart->isValid() && !bookStats->startDateManual &&
+      !bookStats->startDate.isValid()) {
+    bookStats->startDate = sessionStart->date;
+    bookStats->startMinuteOfDay = static_cast<uint16_t>(sessionStart->hour) * 60u + sessionStart->minute;
+  }
 }

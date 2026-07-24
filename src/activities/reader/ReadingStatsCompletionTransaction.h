@@ -14,7 +14,7 @@ enum class RecoveryResult : uint8_t { NoMarker, Recovered, Blocked };
 // is bound to one exact cache path; a marker for another book is left alone.
 RecoveryResult recover(const std::string& cachePath);
 
-// Recovers the exact EPUB cache path embedded in a strictly validated marker,
+// Recovers the exact tracked-book cache path embedded in a strictly validated marker,
 // so opening a different book cannot leave global statistics locked forever.
 RecoveryResult recoverPending();
 
@@ -27,9 +27,10 @@ bool commit(const std::string& cachePath, const BookReadingStats& oldBookStats, 
 // Public stats writers use these guards so an unresolved transaction cannot
 // be overwritten by an unrelated periodic save or reset.
 bool permitsBookWrite(const std::string& cachePath, const BookReadingStats& stats);
-// False while this exact EPUB cache is named by a valid pending transaction;
-// malformed markers block all EPUB cache relocation/deletion/quarantine.
-bool canRelocateOrDeleteEpubCache(const std::string& cachePath);
+// False while this exact tracked-book cache is named by a valid pending
+// transaction; malformed markers block all tracked-book cache
+// relocation/deletion/quarantine.
+bool canRelocateOrDeleteBookCache(const std::string& cachePath);
 bool permitsGlobalWrite(const GlobalReadingStats& stats);
 // Global reset is never part of a completion transaction, even when its zero
 // payload happens to match a transaction endpoint.

@@ -1,4 +1,6 @@
 #pragma once
+
+#include <Epub/EpubRenderMode.h>
 #include <HalStorage.h>
 
 #include <cstdint>
@@ -8,6 +10,7 @@
 class CrossPointSettings {
  private:
   mutable std::mutex _mutex;
+  mutable bool persistenceWritable = true;
 
   // Private constructor for singleton
   CrossPointSettings() = default;
@@ -154,7 +157,24 @@ class CrossPointSettings {
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
+    LP_MENU_READING_STATS = 4,
+    LP_MENU_AUTO_PAGE_TURN = 5,
     LONG_PRESS_MENU_FUNCTION_COUNT
+  };
+
+  enum DOUBLE_POWER_ACTION {
+    DOUBLE_POWER_DISABLED = 0,
+    DOUBLE_POWER_HOME = 1,
+    DOUBLE_POWER_RESUME = 2,
+    DOUBLE_POWER_REFRESH = 3,
+    DOUBLE_POWER_ACTION_COUNT
+  };
+
+  enum TEXT_DARKNESS {
+    TEXT_DARKNESS_NORMAL = 0,
+    TEXT_DARKNESS_DARK = 1,
+    TEXT_DARKNESS_EXTRA_DARK = 2,
+    TEXT_DARKNESS_COUNT
   };
 
   // Hide battery percentage
@@ -169,7 +189,7 @@ class CrossPointSettings {
   };
 
   // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, DASHBOARD = 4 };
+  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3, DASHBOARD = 4, CROSSVI = 5 };
 
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
@@ -210,9 +230,14 @@ class CrossPointSettings {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  uint8_t forceParagraphIndents = 0;
   uint8_t textAntiAliasing = 1;
+  // Global glyph weight adjustment for 2-bit anti-aliased reader text only.
+  uint8_t textDarkness = TEXT_DARKNESS_NORMAL;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Optional global double-click action for the power button.
+  uint8_t doublePowerAction = DOUBLE_POWER_DISABLED;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -231,8 +256,15 @@ class CrossPointSettings {
   uint8_t fontSize = MEDIUM;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
+  // EPUB render mode and Safe Mode are transient per-book overlays. They are
+  // persisted only by PerBookReaderSettings, never in global settings.json.
+  uint8_t epubRenderMode = static_cast<uint8_t>(EpubRenderMode::Balanced);
+  uint8_t epubRenderModeOverride = 0;
+  uint8_t epubSafeMode = 0;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
+  // Optional daily reading goal in minutes. Zero disables the goal.
+  uint16_t dailyReadingGoalMinutes = 0;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
@@ -251,11 +283,14 @@ class CrossPointSettings {
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
   uint8_t longPressButtonBehavior = OFF;
-  // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
+  // Long-press Confirm function while reading (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // UI Theme
-  uint8_t uiTheme = LYRA;
+  uint8_t uiTheme = CROSSVI;
+  // Local display name shown by the CrossVi Home theme. It does not change
+  // protocol identities or Nearby Sync device binding.
+  char deviceDisplayName[64] = "";
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
@@ -293,6 +328,7 @@ class CrossPointSettings {
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
+  static constexpr uint16_t MAX_DAILY_READING_GOAL_MINUTES = 8 * 60;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.
@@ -310,6 +346,8 @@ class CrossPointSettings {
 
   bool saveToFile() const;
   bool loadFromFile();
+  void markReadOnlyForRecovery() { persistenceWritable = false; }
+  bool isPersistenceWritable() const { return persistenceWritable; }
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);

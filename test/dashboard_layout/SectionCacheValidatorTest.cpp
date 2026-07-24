@@ -9,14 +9,14 @@
 #include "Epub/Epub/SectionCacheValidator.h"
 
 namespace {
-constexpr uint8_t FINAL_VERSION = 30;
-constexpr uint8_t PARTIAL_VERSION = 0xFC;
-constexpr uint64_t HEADER_SIZE = 37;
-constexpr size_t PAGE_COUNT_OFFSET = 19;
-constexpr size_t PAGE_LUT_OFFSET = 21;
-constexpr size_t ANCHOR_MAP_OFFSET = 25;
-constexpr size_t PARAGRAPH_LUT_OFFSET = 29;
-constexpr size_t LIST_ITEM_LUT_OFFSET = 33;
+constexpr uint8_t FINAL_VERSION = 31;
+constexpr uint8_t PARTIAL_VERSION = 0xFB;
+constexpr uint64_t HEADER_SIZE = 39;
+constexpr size_t PAGE_COUNT_OFFSET = 21;
+constexpr size_t PAGE_LUT_OFFSET = 23;
+constexpr size_t ANCHOR_MAP_OFFSET = 27;
+constexpr size_t PARAGRAPH_LUT_OFFSET = 31;
+constexpr size_t LIST_ITEM_LUT_OFFSET = 35;
 
 template <typename T>
 void append(std::vector<uint8_t>& bytes, const T& value) {
@@ -138,6 +138,8 @@ CacheBytes cacheWithPage(const std::vector<uint8_t>& page, const bool partial = 
   append<uint8_t>(bytes, 0);
   append<uint8_t>(bytes, 0);
   append<uint8_t>(bytes, 0);
+  append<uint8_t>(bytes, 0);
+  append<uint8_t>(bytes, 0);
   append<uint16_t>(bytes, 1);
   for (uint8_t field = 0; field < 4; ++field) append<uint32_t>(bytes, 0);
   EXPECT_EQ(bytes.size(), HEADER_SIZE);
@@ -203,6 +205,14 @@ TEST(SectionCacheValidator, RejectsEveryTruncationOfAValidFile) {
 TEST(SectionCacheValidator, RejectsInvalidHeaderAndTableOffsets) {
   auto cache = cacheWithPage(emptyPage());
   cache.bytes[9] = 2;  // invalid serialized bool
+  EXPECT_FALSE(validates(cache.bytes));
+
+  cache = cacheWithPage(emptyPage());
+  cache.bytes[19] = 3;  // invalid EPUB render mode
+  EXPECT_FALSE(validates(cache.bytes));
+
+  cache = cacheWithPage(emptyPage());
+  cache.bytes[20] = 2;  // invalid serialized force-indent bool
   EXPECT_FALSE(validates(cache.bytes));
 
   cache = cacheWithPage(emptyPage());

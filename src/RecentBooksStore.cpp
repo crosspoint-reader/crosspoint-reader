@@ -18,6 +18,8 @@ void RecentBooksStore::toJson(JsonDocument& doc) const {
     obj["author"] = book.author;
     obj["coverBmpPath"] = book.coverBmpPath;
   }
+  JsonArray pinned = doc["pinned"].to<JsonArray>();
+  for (const auto& path : pinnedPaths) pinned.add(path);
 }
 
 bool RecentBooksStore::fromJson(JsonVariantConst doc) {
@@ -34,6 +36,21 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     book.author = obj["author"] | "";
     book.coverBmpPath = obj["coverBmpPath"] | "";
     recentBooks.push_back(book);
+  }
+
+  pinnedPaths.clear();
+  JsonArrayConst pinned = doc["pinned"].as<JsonArrayConst>();
+  pinnedPaths.reserve(std::min(pinned.size(), MAX_PINNED_BOOKS));
+  for (const JsonVariantConst value : pinned) {
+    if (pinnedPaths.size() >= MAX_PINNED_BOOKS) break;
+    const std::string path = value.as<const char*>() ? value.as<const char*>() : "";
+    if (path.empty() || path.size() > MAX_PIN_PATH_BYTES ||
+        !(FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) ||
+          FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) ||
+        std::find(pinnedPaths.begin(), pinnedPaths.end(), path) != pinnedPaths.end()) {
+      continue;
+    }
+    pinnedPaths.push_back(path);
   }
 
   LOG_DBG("RBS", "Recent books loaded from file (%d entries)", getCount());
@@ -93,14 +110,57 @@ void RecentBooksStore::updatePath(const std::string& oldPath, const std::string&
                                   const std::string& oldCachePath, const std::string& newCachePath) {
   auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
                          [&](const RecentBook& book) { return book.path == oldPath; });
-  if (it == recentBooks.end()) {
-    return;
+  bool changed = false;
+  if (it != recentBooks.end()) {
+    it->path = newPath;
+    if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
+      it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
+    }
+    changed = true;
   }
-  it->path = newPath;
-  if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
-    it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
+
+  auto pin = std::find(pinnedPaths.begin(), pinnedPaths.end(), oldPath);
+  if (pin != pinnedPaths.end() && newPath.size() <= MAX_PIN_PATH_BYTES) {
+    const auto duplicate = std::find(pinnedPaths.begin(), pinnedPaths.end(), newPath);
+    if (duplicate != pinnedPaths.end() && duplicate != pin) {
+      pinnedPaths.erase(pin);
+    } else {
+      *pin = newPath;
+    }
+    changed = true;
   }
-  saveToFile();
+  if (changed) saveToFile();
+}
+
+RecentBooksStore::PinResult RecentBooksStore::togglePin(const std::string& path) {
+  auto existing = std::find(pinnedPaths.begin(), pinnedPaths.end(), path);
+  if (existing != pinnedPaths.end()) {
+    const size_t index = static_cast<size_t>(std::distance(pinnedPaths.begin(), existing));
+    pinnedPaths.erase(existing);
+    if (!saveToFile()) {
+      pinnedPaths.insert(pinnedPaths.begin() + index, path);
+      return PinResult::SaveFailed;
+    }
+    return PinResult::Unpinned;
+  }
+
+  if (path.empty() || path.size() > MAX_PIN_PATH_BYTES ||
+      !(FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) || FsHelpers::hasTxtExtension(path) ||
+        FsHelpers::hasMarkdownExtension(path))) {
+    return PinResult::InvalidPath;
+  }
+  if (pinnedPaths.size() >= MAX_PINNED_BOOKS) return PinResult::LimitReached;
+
+  pinnedPaths.insert(pinnedPaths.begin(), path);
+  if (!saveToFile()) {
+    pinnedPaths.erase(pinnedPaths.begin());
+    return PinResult::SaveFailed;
+  }
+  return PinResult::Pinned;
+}
+
+bool RecentBooksStore::isPinned(const std::string& path) const {
+  return std::find(pinnedPaths.begin(), pinnedPaths.end(), path) != pinnedPaths.end();
 }
 
 bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
@@ -108,7 +168,11 @@ bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exist
 bool RecentBooksStore::pruneMissing() {
   const size_t before = recentBooks.size();
   recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
-  return recentBooks.size() != before;
+  const size_t pinnedBefore = pinnedPaths.size();
+  pinnedPaths.erase(std::remove_if(pinnedPaths.begin(), pinnedPaths.end(),
+                                   [](const std::string& path) { return !Storage.exists(path.c_str()); }),
+                    pinnedPaths.end());
+  return recentBooks.size() != before || pinnedPaths.size() != pinnedBefore;
 }
 
 RecentBook RecentBooksStore::getDataFromBook(std::string path) const {

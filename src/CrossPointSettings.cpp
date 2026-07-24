@@ -1,5 +1,6 @@
 #include "CrossPointSettings.h"
 
+#include <AtomicJsonFile.h>
 #include <HalStorage.h>
 #include <JsonSettingsIO.h>
 #include <Logging.h>
@@ -97,32 +98,42 @@ uint8_t CrossPointSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue)
 }
 
 bool CrossPointSettings::saveToFile() const {
+  if (!persistenceWritable) return false;
   std::lock_guard<std::mutex> lock(_mutex);
   Storage.mkdir("/.crosspoint");
   return JsonSettingsIO::saveSettings(*this, SETTINGS_FILE_JSON);
 }
 
 bool CrossPointSettings::loadFromFile() {
-  // Try JSON first
-  if (Storage.exists(SETTINGS_FILE_JSON)) {
-    String json = Storage.readFile(SETTINGS_FILE_JSON);
-    if (!json.isEmpty()) {
-      bool resave = false;
-      bool result;
-      {
-        std::lock_guard<std::mutex> lock(_mutex);
-        result = JsonSettingsIO::loadSettings(*this, json.c_str(), &resave);
-      }
-      if (result && resave) {
-        if (saveToFile()) {
-          LOG_DBG("CPS", "Resaved settings to update format");
-        } else {
-          LOG_ERR("CPS", "Failed to resave settings after format update");
-        }
-      }
-      migrateLanguageBinaryFile();
-      return result;
+  const std::string settingsBackup = std::string(SETTINGS_FILE_JSON) + ".bak";
+  const std::string settingsTemp = std::string(SETTINGS_FILE_JSON) + ".tmp";
+  const bool hasJsonSettings = Storage.exists(SETTINGS_FILE_JSON) || Storage.exists(settingsBackup.c_str()) ||
+                               Storage.exists(settingsTemp.c_str());
+  if (hasJsonSettings) {
+    std::string json;
+    const AtomicFile::LoadStatus loaded = AtomicJsonFile::load(SETTINGS_FILE_JSON, json);
+    if (loaded != AtomicFile::LoadStatus::Primary && loaded != AtomicFile::LoadStatus::Backup &&
+        loaded != AtomicFile::LoadStatus::Temp) {
+      persistenceWritable = false;
+      LOG_ERR("CPS", "Could not recover a valid settings.json");
+      return false;
     }
+    bool resave = false;
+    bool result;
+    {
+      std::lock_guard<std::mutex> lock(_mutex);
+      result = JsonSettingsIO::loadSettings(*this, json.c_str(), &resave);
+    }
+    persistenceWritable = result;
+    if (result && resave) {
+      if (saveToFile()) {
+        LOG_DBG("CPS", "Resaved settings to update format");
+      } else {
+        LOG_ERR("CPS", "Failed to resave settings after format update");
+      }
+    }
+    migrateLanguageBinaryFile();
+    return result;
   }
 
   // Fall back to binary migration
@@ -138,9 +149,12 @@ bool CrossPointSettings::loadFromFile() {
         return false;
       }
     }
+    persistenceWritable = false;
+    return false;
   }
 
   // No settings files at all -- check for standalone language.bin
+  persistenceWritable = true;
   return migrateLanguageBinaryFile();
 }
 

@@ -1,40 +1,76 @@
-# XTC/XTCH Library
+# CrossVi XTC/XTCH support contract
 
-XTC ebook format support for CrossVi.
+CrossVi reads a deliberately small, fixed-layout subset of the Xteink
+XTC/XTCH formats. The contract is locked to real output from
+[`bigbag/epub-to-xtc-converter`](https://github.com/bigbag/epub-to-xtc-converter),
+commit `6792329e5ae77fac423db6b6cdc96af6afff82ae`.
 
-## Supported Formats
+## Supported subset
 
-| Format | Extension | Description                                  |
-|--------|-----------|----------------------------------------------|
-| XTC    | `.xtc`    | Container with XTG pages (1-bit monochrome)  |
-| XTCH   | `.xtch`   | Container with XTH pages (2-bit grayscale)   |
+| Extension | Container | Page payload | Bit depth |
+| --- | --- | --- | ---: |
+| `.xtc` | `XTC` | `XTG` | 1-bit monochrome |
+| `.xtch` | `XTCH` | `XTH` | 2-bit, four grayscale levels |
 
-## Format Overview
+CrossVi accepts only:
 
-XTC/XTCH are container formats designed for ESP32 e-paper displays. They store pre-rendered bitmap pages optimized for the XTeink X4 e-reader (480x800 resolution).
+- container version 1.0 (version bytes `1, 0`);
+- uncompressed pages;
+- portrait pages that are exactly 480 x 800 pixels;
+- XTG pages in XTC and XTH pages in XTCH;
+- bounded, terminated metadata and chapters whose page range is valid.
 
-### Container Structure (XTC/XTCH)
+The byte-swapped version 0.1 is not accepted. No fixture produced by the
+recommended converter was found that needs that compatibility exception.
+Unsupported dimensions, compression, versions, mixed page types, truncated
+payloads and inconsistent offsets/sizes fail closed.
 
-- 56-byte header with metadata offsets
-- Optional metadata (title, author, etc.)
-- Page index table (16 bytes per page)
-- Page data (XTG or XTH format)
+## Page storage
 
-### Page Formats
+XTG is row-major, MSB first. Each row occupies `(width + 7) / 8` bytes; bit 0
+means black and bit 1 means white.
 
-#### XTG (1-bit monochrome)
+XTH stores two vertical bit planes. Each plane occupies
+`width * ceil(height / 8)` bytes. Converter bit plane 0 is followed by bit
+plane 1; together they select white, dark gray, light gray or black. All size
+and offset arithmetic is checked before allocation or I/O.
 
-- Row-major storage, 8 pixels per byte
-- MSB first (bit 7 = leftmost pixel)
-- 0 = Black, 1 = White
+The converter's page-table `size` includes the 22-byte XTG/XTH page header,
+whereas the page-header `dataSize` describes payload bytes only. Chapter
+offsets are 64-bit and converter chapter page numbers are 1-based.
 
-#### XTH (2-bit grayscale)
+## X3 and X4 display policy
 
-- Two bit planes stored sequentially
-- Column-major order (right to left)
-- 8 vertical pixels per byte
-- Grayscale: 0=White, 1=Dark Grey, 2=Light Grey, 3=Black
+- X4 portrait (480 x 800): native 1:1 pixels, without scaling.
+- X3 portrait (528 x 792): aspect-preserving fit-to-screen, centered with
+  letterboxing. The complete 480 x 800 source is visible; it is never cropped
+  or stretched independently by axis.
 
-## Reference
+Both XTC and XTCH use the same integer mapping and no second framebuffer.
 
-Original format info: <https://gist.github.com/CrazyCoder/b125f26d6987c0620058249f59f1327d>
+## Reader features and limits
+
+Metadata, chapter navigation, progress, reading statistics, cover/thumbnail
+generation, recent books and sleep cover are supported. Reading time is
+counted only after a page is displayed successfully; per-book start/finish
+timestamps can be corrected from the statistics screen. Source identity is
+streamed with bounded memory. Replacing a file at the same path quarantines the old path-keyed state
+before the new book is opened; moving the same file uses the existing state
+move transaction.
+
+XTC/XTCH pages are pre-rendered images, not reflowable EPUB content. Font,
+font-size and CSS changes, dictionary selection, clipping, KOReader position
+sync and per-book typography settings therefore do not apply.
+
+## Fixtures and validation status
+
+The host fixtures and their provenance are in `test/xtc/resources/README.md`.
+Synthetic malformed fixtures exercise parser bounds, and the converter XTC and
+XTCH fixtures lock the real v1.0 byte contract. Host tests, sanitizers,
+firmware builds and model-specific simulator checks do not constitute physical
+device validation. X3/X4 hardware validation remains a release gate; see
+`docs/contributing/hardware-validation.md`.
+
+The historical gist linked by earlier versions remains useful background but
+is not the source of truth when it differs from converter output:
+<https://gist.github.com/CrazyCoder/b125f26d6987c0620058249f59f1327d>.

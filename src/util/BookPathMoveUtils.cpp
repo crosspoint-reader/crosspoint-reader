@@ -34,6 +34,10 @@ constexpr size_t MAX_REPLACEMENT_PATH_BYTES = 512;
 
 enum class CacheBackedBookKind : uint8_t { None, Epub, Xtc, Text };
 
+bool hasCompletionTrackedStats(const CacheBackedBookKind kind) {
+  return kind == CacheBackedBookKind::Epub || kind == CacheBackedBookKind::Text;
+}
+
 CacheBackedBookKind cacheBackedBookKind(const std::string& path) {
   if (FsHelpers::hasEpubExtension(path)) return CacheBackedBookKind::Epub;
   if (FsHelpers::hasXtcExtension(path)) return CacheBackedBookKind::Xtc;
@@ -56,10 +60,12 @@ std::string bookCachePath(const std::string& bookPath) {
   return {};
 }
 
-bool hasBookUserState(const std::string& bookPath, const std::string& cachePath, const bool isEpub) {
+bool hasBookUserState(const std::string& bookPath, const std::string& cachePath) {
+  const CacheBackedBookKind kind = cacheBackedBookKind(bookPath);
   return Storage.exists(cachePath.c_str()) || Storage.exists(BookmarkUtil::getBookmarkPath(bookPath).c_str()) ||
          Storage.exists(BookmarkUtil::getLegacyBookmarkPath(bookPath).c_str()) ||
-         (isEpub && ClippingStore::hasFilesForBook(bookPath));
+         (kind == CacheBackedBookKind::Epub && ClippingStore::hasFilesForBook(bookPath)) ||
+         (kind == CacheBackedBookKind::Text && ClippingStore::hasFilesForBook(bookPath, "txt"));
 }
 
 uint16_t readUint16(const uint8_t* bytes) {
@@ -182,7 +188,9 @@ bool resetNonEpubUserState(const std::string& bookPath, const std::string& cache
       (!Storage.exists(cachePath.c_str()) && !Storage.mkdir(cachePath.c_str()))) {
     return false;
   }
-  return BookmarkUtil::quarantineCanonicalForReplacement(bookPath, cachePath) &&
+  const bool clippingsHandled = cacheBackedBookKind(bookPath) != CacheBackedBookKind::Text ||
+                                ClippingStore::quarantineFilesForBook(bookPath, cachePath, "txt");
+  return clippingsHandled && BookmarkUtil::quarantineCanonicalForReplacement(bookPath, cachePath) &&
          resetBookCacheUserStateAfterReplacement(cachePath, bookPath);
 }
 
@@ -303,8 +311,9 @@ bool isBookFileTransactionArtifact(const char* fileName) {
 }
 
 bool canDeleteOrRelocateBookFile(const std::string& bookPath) {
-  return !FsHelpers::hasEpubExtension(bookPath) ||
-         ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(Epub(bookPath, CACHE_ROOT).getCachePath());
+  const CacheBackedBookKind kind = cacheBackedBookKind(bookPath);
+  return !hasCompletionTrackedStats(kind) ||
+         ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(bookCachePath(bookPath));
 }
 
 bool recoverInterruptedBookFileReplacement(const std::string& bookPath) {
@@ -417,6 +426,13 @@ BookFilePublishResult publishStagedBookFile(const std::string& stagingPath, cons
     Xtc stagedBook(stagingPath, CACHE_ROOT);
     if (!stagedBook.load()) return BookFilePublishResult::InvalidStagedFile;
   }
+  if (cacheBackedBookKind(bookPath) == CacheBackedBookKind::Text) {
+    // Validate with the same complete-file scan used by Reader. In particular,
+    // never replace a working book with a staged file that is unreadable or
+    // too large for TXT's uint32 index/progress format.
+    Txt stagedBook(stagingPath, CACHE_ROOT);
+    if (!stagedBook.load()) return BookFilePublishResult::InvalidStagedFile;
+  }
 
   const bool hadBook = Storage.exists(bookPath.c_str());
   if (hadBook) {
@@ -432,7 +448,7 @@ BookFilePublishResult publishStagedBookFile(const std::string& stagingPath, cons
   }
 
   const std::string cachePath = bookCachePath(bookPath);
-  const bool hasState = !cachePath.empty() && hasBookUserState(bookPath, cachePath, isEpub);
+  const bool hasState = !cachePath.empty() && hasBookUserState(bookPath, cachePath);
   bool barrierPrepared = false;
   bool replacementPending = false;
   if (hasState) {
@@ -520,13 +536,77 @@ BookPathMoveResult moveBookFilePreservingUserState(const std::string& sourcePath
 
   const std::string sourceCachePath = bookCachePath(sourcePath);
   const std::string destinationCachePath = bookCachePath(destinationPath);
-  if (sourceKind == CacheBackedBookKind::Epub &&
-      (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(sourceCachePath) ||
-       !ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(destinationCachePath))) {
+  if (hasCompletionTrackedStats(sourceKind) &&
+      (!ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(sourceCachePath) ||
+       !ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(destinationCachePath))) {
     return BookPathMoveResult::StateUnavailable;
   }
   if (!prepareBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath)) {
     return BookPathMoveResult::StateUnavailable;
+  }
+
+  if (sourceKind == CacheBackedBookKind::Text) {
+    ClippingStore clippings;
+    const bool hasClippings = ClippingStore::hasFilesForBook(sourcePath, "txt");
+    ClippingStore::RekeyResult preparedClippings = ClippingStore::RekeyResult::Unchanged;
+    if (hasClippings) {
+      const ClippingStore::LoadResult load = clippings.loadForBook(sourcePath, "", "", "txt");
+      if (!clippings.isLoaded()) {
+        LOG_ERR("BookMove", "Could not inspect TXT clipping state before move (%u)", static_cast<unsigned>(load));
+        cancelBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath);
+        return BookPathMoveResult::StateUnavailable;
+      }
+      const auto sourceBook = clippings.book();
+      preparedClippings =
+          clippings.prepareRekeyForBook(destinationPath, sourceBook.title, sourceBook.author, "txt");
+      if (preparedClippings != ClippingStore::RekeyResult::Prepared &&
+          preparedClippings != ClippingStore::RekeyResult::Unchanged) {
+        cancelBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath);
+        return BookPathMoveResult::StateUnavailable;
+      }
+    }
+
+    if (!Storage.rename(sourcePath.c_str(), destinationPath.c_str())) {
+      if (hasClippings) clippings.cancelPreparedRekey();
+      cancelBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath);
+      return BookPathMoveResult::StorageError;
+    }
+    const bool cachePublished =
+        finalizeBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath);
+    if (!cachePublished && Storage.rename(destinationPath.c_str(), sourcePath.c_str())) {
+      if (hasClippings) clippings.cancelPreparedRekey();
+      cancelBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath);
+      return BookPathMoveResult::StateUnavailable;
+    }
+
+    if (hasClippings) {
+      const ClippingStore::RekeyResult finalized =
+          preparedClippings == ClippingStore::RekeyResult::Unchanged ? ClippingStore::RekeyResult::Unchanged
+                                                                     : clippings.finalizePreparedRekey();
+      if (finalized != ClippingStore::RekeyResult::Rekeyed && finalized != ClippingStore::RekeyResult::Unchanged) {
+        LOG_ERR("BookMove", "Could not finalize moved TXT clipping state (%u)", static_cast<unsigned>(finalized));
+        if (Storage.rename(destinationPath.c_str(), sourcePath.c_str())) {
+          if (cachePublished) {
+            discardPublishedBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath,
+                                                   destinationPath);
+          } else {
+            cancelBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath);
+          }
+          clippings.cancelPreparedRekey();
+          return BookPathMoveResult::StateUnavailable;
+        }
+      }
+    }
+    if (cachePublished &&
+        !completeBookCacheUserStateMove(sourceCachePath, destinationCachePath, sourcePath, destinationPath)) {
+      LOG_ERR("BookMove", "Could not finish old TXT state cleanup");
+    }
+    RECENT_BOOKS.updatePath(sourcePath, destinationPath, sourceCachePath, destinationCachePath);
+    if (APP_STATE.openEpubPath == sourcePath) {
+      APP_STATE.openEpubPath = destinationPath;
+      APP_STATE.saveToFile();
+    }
+    return BookPathMoveResult::Moved;
   }
 
   if (sourceKind != CacheBackedBookKind::Epub) {
@@ -626,8 +706,13 @@ BookPathMoveResult moveBookFilePreservingUserState(const std::string& sourcePath
 }
 
 bool removeBookUserStateAfterDelete(const std::string& bookPath) {
-  if (!FsHelpers::hasEpubExtension(bookPath)) {
+  const CacheBackedBookKind kind = cacheBackedBookKind(bookPath);
+  if (kind != CacheBackedBookKind::Epub) {
     const std::string cachePath = bookCachePath(bookPath);
+    if (kind == CacheBackedBookKind::Text &&
+        !ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(cachePath)) {
+      return false;
+    }
     if (!cachePath.empty()) return resetNonEpubUserState(bookPath, cachePath);
     const std::string bookmarkPath = BookmarkUtil::getBookmarkPath(bookPath);
     const bool bookmarkRemoved = removeIfPresent(bookmarkPath);
@@ -636,7 +721,7 @@ bool removeBookUserStateAfterDelete(const std::string& bookPath) {
   }
 
   const std::string cachePath = Epub(bookPath, CACHE_ROOT).getCachePath();
-  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(cachePath)) return false;
+  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(cachePath)) return false;
   // Validate/remove external clipping state first and quarantine the cache
   // last. If an earlier step fails, the old source-identity sidecar remains in
   // the canonical cache so every future open continues to fail closed.
@@ -658,14 +743,19 @@ bool removeBookUserStateAfterDelete(const std::string& bookPath) {
 }
 
 bool resetBookUserStateAfterReplacement(const std::string& bookPath) {
-  if (!FsHelpers::hasEpubExtension(bookPath)) {
+  const CacheBackedBookKind kind = cacheBackedBookKind(bookPath);
+  if (kind != CacheBackedBookKind::Epub) {
     const std::string cachePath = bookCachePath(bookPath);
+    if (kind == CacheBackedBookKind::Text &&
+        !ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(cachePath)) {
+      return false;
+    }
     return cachePath.empty() ? removeBookUserStateAfterDelete(bookPath) : resetNonEpubUserState(bookPath, cachePath);
   }
 
   const std::string cachePath = bookCachePath(bookPath);
-  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteEpubCache(cachePath)) return false;
-  const bool hasState = hasBookUserState(bookPath, cachePath, true);
+  if (!ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(cachePath)) return false;
+  const bool hasState = hasBookUserState(bookPath, cachePath);
   // Establish a durable fail-closed barrier first, including for legacy paths
   // that had external state but no cache yet. A reset at any later boundary
   // retries this same transaction instead of adopting the replacement.

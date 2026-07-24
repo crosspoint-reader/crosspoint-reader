@@ -40,6 +40,9 @@ class Dictionary {
   // MAX_DEFINITION_BYTES) and the headword as stored in the index.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut);
 
+  // Exact lookup without the English stemming fallback.
+  bool lookupExact(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut);
+
   static std::string cleanWord(const char* word);
 
   static constexpr uint32_t MAX_DEFINITION_BYTES = 64 * 1024;
@@ -48,6 +51,8 @@ class Dictionary {
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
   DictLocation locate(const char* target, std::string* matchedHeadwordOut);
+  DictLocation locateOrdinal(uint32_t ordinal, std::string* matchedHeadwordOut);
+  DictLocation locateWithSynonyms(const char* target, std::string* matchedHeadwordOut);
   bool readDefinition(const DictLocation& location, std::string& out);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 

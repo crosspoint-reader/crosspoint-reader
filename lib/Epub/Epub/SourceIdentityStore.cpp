@@ -88,14 +88,25 @@ LoadStatus load(const std::string& cachePath, ZipFile::SourceIdentity& identity)
   const std::array<std::string, 3> paths = {pathFor(cachePath, ""), pathFor(cachePath, ".bak"),
                                             pathFor(cachePath, ".tmp")};
   constexpr std::array<LoadStatus, 3> sources = {LoadStatus::Primary, LoadStatus::Backup, LoadStatus::Temp};
+  std::array<Candidate, 3> candidates;
+  for (size_t i = 0; i < paths.size(); ++i) candidates[i] = inspect(paths[i]);
+
+  // Never resume an older sibling while a future firmware's state is still
+  // present. In particular, callers may delete path-keyed state after an
+  // identity mismatch, so a newer backup/temp must be visible even when the
+  // current primary is otherwise valid.
+  if (std::any_of(candidates.begin(), candidates.end(),
+                  [](const Candidate& candidate) { return candidate.status == CandidateStatus::NewerVersion; })) {
+    return LoadStatus::NewerVersion;
+  }
+
   bool invalid = false;
   for (size_t i = 0; i < paths.size(); ++i) {
-    const Candidate candidate = inspect(paths[i]);
+    const Candidate& candidate = candidates[i];
     if (candidate.status == CandidateStatus::Valid) {
       identity = candidate.identity;
       return sources[i];
     }
-    if (candidate.status == CandidateStatus::NewerVersion) return LoadStatus::NewerVersion;
     if (candidate.status == CandidateStatus::IoError) return LoadStatus::IoError;
     invalid = invalid || candidate.status == CandidateStatus::Invalid;
   }

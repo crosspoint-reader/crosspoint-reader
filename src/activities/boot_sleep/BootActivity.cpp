@@ -1,5 +1,7 @@
 #include "BootActivity.h"
 
+#include <Version.h>
+
 #include <GfxRenderer.h>
 #include <I18n.h>
 

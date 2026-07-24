@@ -11,7 +11,7 @@ namespace ReadingStatsEnvelope {
 // CrossVi keeps the CrossInk payload layouts for compatibility, but wraps
 // every canonical on-disk snapshot so torn writes and silent bit flips are
 // distinguishable from valid zero-valued statistics.
-enum class Kind : uint8_t { Book = 1, Global = 2, PeerGlobal = 3 };
+enum class Kind : uint8_t { Book = 1, Global = 2, PeerGlobal = 3, DailyGlobal = 4 };
 enum class DecodeResult : uint8_t { Ok, Invalid, NewerFormat, WrongKind, PayloadTooLarge };
 
 constexpr uint8_t CURRENT_VERSION = 1;

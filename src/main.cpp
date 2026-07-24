@@ -15,6 +15,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <BootRecovery.h>
 
 #include <cstring>
 
@@ -27,12 +28,15 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/boot_sleep/SafeBootActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/PowerButtonGesture.h"
 #include "util/ScreenshotUtil.h"
+#include <Version.h>
 
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);
@@ -41,6 +45,7 @@ FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
+static PowerButtonGesture powerButtonGesture;
 
 // Fonts
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
@@ -226,7 +231,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   powerManager.startDeepSleep(gpio);
 }
 
-void setupDisplayAndFonts(bool seamless = false) {
+void setupDisplayAndFonts(bool seamless = false, bool allowSdFonts = true) {
   display.begin(seamless);
   renderer.begin();
   activityManager.begin();
@@ -253,8 +258,12 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
-  // Discover and load SD card fonts
-  sdFontSystem.begin(renderer);
+  // Discover and load SD card fonts. Safe startup can skip this optional stage
+  // without changing the saved font selection.
+  if (allowSdFonts) {
+    BootRecovery::StageGuard stage(BootStage::SdFonts);
+    sdFontSystem.begin(renderer);
+  }
 
   LOG_DBG("MAIN", "Fonts setup");
 }
@@ -290,6 +299,26 @@ void setup() {
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
+  const auto wakeupReason = gpio.getWakeupReason();
+  bool recoveryFirmwareMode = false;
+  bool manualSafeBoot = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    const unsigned long settleStart = millis();
+    while (millis() - settleStart < 500) {
+      gpio.update();
+      delay(10);
+    }
+    // UP keeps priority because it is the established firmware-recovery chord.
+    recoveryFirmwareMode = gpio.isPressed(HalGPIO::BTN_UP);
+    manualSafeBoot = !recoveryFirmwareMode && gpio.isPressed(HalGPIO::BTN_DOWN);
+    if (recoveryFirmwareMode) {
+      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+    } else if (manualSafeBoot) {
+      LOG_INF("MAIN", "Manual safe startup (DOWN + POWER held at boot)");
+    }
+  }
+  BootRecovery::begin(manualSafeBoot);
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
@@ -301,16 +330,40 @@ void setup() {
 
   HalSystem::checkPanic();
 
-  SETTINGS.loadFromFile();
-  APP_STATE.loadFromFile();
-  RECENT_BOOKS.loadFromFile();
+  if (BootRecovery::shouldSkip(BootStage::Settings)) {
+    SETTINGS.markReadOnlyForRecovery();
+  } else {
+    BootRecovery::StageGuard stage(BootStage::Settings);
+    SETTINGS.loadFromFile();
+  }
+  if (BootRecovery::shouldSkip(BootStage::AppState)) {
+    APP_STATE.markReadOnlyForRecovery();
+  } else {
+    BootRecovery::StageGuard stage(BootStage::AppState);
+    APP_STATE.loadFromFile();
+  }
+  if (BootRecovery::shouldSkip(BootStage::RecentBooks)) {
+    RECENT_BOOKS.markReadOnlyForRecovery();
+  } else {
+    BootRecovery::StageGuard stage(BootStage::RecentBooks);
+    RECENT_BOOKS.loadFromFile();
+  }
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
-  KOREADER_STORE.loadFromFile();
-  OPDS_STORE.loadFromFile();
+  if (BootRecovery::shouldSkip(BootStage::KOReader)) {
+    KOREADER_STORE.markReadOnlyForRecovery();
+  } else {
+    BootRecovery::StageGuard stage(BootStage::KOReader);
+    KOREADER_STORE.loadFromFile();
+  }
+  if (BootRecovery::shouldSkip(BootStage::Opds)) {
+    OPDS_STORE.markReadOnlyForRecovery();
+  } else {
+    BootRecovery::StageGuard stage(BootStage::Opds);
+    OPDS_STORE.loadFromFile();
+  }
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
-  const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
@@ -331,37 +384,19 @@ void setup() {
       break;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
-  bool recoveryFirmwareMode = false;
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
-    // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
-    // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
-    // settle window even if the loop body takes longer than expected on slow boots.
-    const unsigned long settleStart = millis();
-    while (millis() - settleStart < 500) {
-      gpio.update();
-      delay(10);
-    }
-    if (gpio.isPressed(HalGPIO::BTN_UP)) {
-      recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
-    }
-  }
-
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
-  LOG_DBG("MAIN", "Starting CrossVi version " CROSSPOINT_VERSION);
+  LOG_DBG("MAIN", "Starting CrossVi version %s", CROSSPOINT_VERSION);
 
   // Resolve the single boot-presentation decision. Skipping the splash also
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
-  const BootResume resume = isSilentReboot              ? BootResume::Silent
+  const BootResume resume = BootRecovery::active()      ? BootResume::Splash
+                            : isSilentReboot             ? BootResume::Silent
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
 
-  setupDisplayAndFonts(resume != BootResume::Splash);
+  setupDisplayAndFonts(resume != BootResume::Splash, !BootRecovery::shouldSkip(BootStage::SdFonts));
 
   switch (resume) {
     case BootResume::Silent:
@@ -388,10 +423,17 @@ void setup() {
       break;
   }
 
+  const bool safeStartup = BootRecovery::active();
+  const bool manualSafeStartup = BootRecovery::manual();
+  BootRecovery::completeStartup();
+
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
+  } else if (safeStartup) {
+    activityManager.replaceActivity(
+        std::make_unique<SafeBootActivity>(renderer, mappedInputManager, manualSafeStartup));
   } else if (HalSystem::isRebootFromPanic()) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
@@ -448,6 +490,16 @@ void loop() {
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
+  static int appliedTextDarkness = -1;
+  if (appliedTextDarkness != SETTINGS.textDarkness) {
+    RenderLock lock;
+    renderer.setTextDarkness(SETTINGS.textDarkness);
+    appliedTextDarkness = SETTINGS.textDarkness;
+  }
+
+  const bool doublePowerEnabled =
+      SETTINGS.doublePowerAction != CrossPointSettings::DOUBLE_POWER_ACTION::DOUBLE_POWER_DISABLED;
+  mappedInputManager.setPowerReleaseOverride(doublePowerEnabled, false);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
@@ -483,6 +535,7 @@ void loop() {
   static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
+    powerButtonGesture.cancel();
     screenshotComboActive = true;
     if (screenshotButtonsReleased) {
       screenshotButtonsReleased = false;
@@ -494,31 +547,57 @@ void loop() {
     return;
   }
   if (screenshotComboActive) {
-    if (gpio.isPressed(HalGPIO::BTN_POWER)) return;
-    if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
-      screenshotButtonsReleased = true;
-      screenshotComboActive = false;
-      return;
-    }
+    powerButtonGesture.cancel();
+    // Keep owning input until both buttons are up. This also consumes a Down
+    // release that arrives after Power, so the screenshot chord cannot turn a
+    // reader page as a side effect.
+    if (gpio.isPressed(HalGPIO::BTN_POWER) || gpio.isPressed(HalGPIO::BTN_DOWN)) return;
     screenshotButtonsReleased = true;
     screenshotComboActive = false;
+    return;
+  }
+
+  const PowerButtonGesture::Event powerEvent = powerButtonGesture.update(
+      static_cast<uint32_t>(millis()), gpio.wasPressed(HalGPIO::BTN_POWER), gpio.wasReleased(HalGPIO::BTN_POWER),
+      gpio.isPressed(HalGPIO::BTN_POWER), static_cast<uint32_t>(gpio.getPowerButtonHeldTime()), doublePowerEnabled,
+      millis() >= allowSleepAt);
+  mappedInputManager.setPowerReleaseOverride(doublePowerEnabled, powerEvent == PowerButtonGesture::Event::Single);
+
+  if (powerEvent == PowerButtonGesture::Event::Hold) {
+    if (activityManager.preventAutoSleep()) return;
+    enterDeepSleep();
+    return;
+  }
+
+  if (powerEvent == PowerButtonGesture::Event::Double) {
+    switch (static_cast<CrossPointSettings::DOUBLE_POWER_ACTION>(SETTINGS.doublePowerAction)) {
+      case CrossPointSettings::DOUBLE_POWER_HOME:
+        activityManager.handleGlobalShortcut(GlobalShortcut::GoHome);
+        break;
+      case CrossPointSettings::DOUBLE_POWER_RESUME:
+        activityManager.handleGlobalShortcut(GlobalShortcut::ResumeReading);
+        break;
+      case CrossPointSettings::DOUBLE_POWER_REFRESH:
+        activityManager.handleGlobalShortcut(GlobalShortcut::RefreshScreen);
+        break;
+      case CrossPointSettings::DOUBLE_POWER_DISABLED:
+      default:
+        break;
+    }
+    return;
+  }
+
+  if (powerEvent == PowerButtonGesture::Event::Single &&
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+    if (activityManager.preventAutoSleep()) return;
+    enterDeepSleep();
+    return;
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
-    return;
-  }
-
-  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    // If the screenshot combination is potentially being pressed, don't sleep
-    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
-      return;
-    }
-    enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
   }

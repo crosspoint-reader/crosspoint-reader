@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Epub.h>
+#include <Epub/EpubRenderMode.h>
 
 #include <array>
 #include <memory>
@@ -21,6 +22,8 @@ struct NearbyReaderLayout {
   bool embeddedStyle = false;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
+  EpubRenderMode renderMode = EpubRenderMode::Balanced;
+  bool forceParagraphIndents = false;
 };
 
 class NearbyPositionSyncActivity final : public Activity {
@@ -35,7 +38,7 @@ class NearbyPositionSyncActivity final : public Activity {
   void render(RenderLock&&) override;
   bool preventAutoSleep() override;
   bool skipLoopDelay() override;
-  bool isReaderActivity() const override { return true; }
+  bool isReaderActivity() const override { return false; }
 
  private:
   std::shared_ptr<Epub> epub_;

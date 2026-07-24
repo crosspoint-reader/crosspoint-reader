@@ -549,7 +549,7 @@ bool HalStorage::openFileForRead(const char *moduleName, const String &path,
 }
 bool HalStorage::openFileForWrite(const char *moduleName, const char *path,
                                   HalFile &file) {
-  file = open(path, O_WRONLY | O_CREAT | O_TRUNC);
+  file = open(path, O_RDWR | O_CREAT | O_TRUNC);
   return file.isOpen();
 }
 bool HalStorage::openFileForWrite(const char *moduleName,

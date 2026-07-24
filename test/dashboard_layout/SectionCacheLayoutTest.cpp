@@ -3,41 +3,41 @@
 #include "Epub/Epub/SectionCacheLayout.h"
 
 namespace {
-constexpr uint64_t HEADER_SIZE = 37;
+constexpr uint64_t HEADER_SIZE = 39;
 
 SectionCacheLayout::FinalizedHeader validHeader() {
-  // Two serialized pages occupy bytes [37, 137), followed by the four
+  // Two serialized pages occupy bytes [39, 139), followed by the four
   // finalized lookup tables written by Section::commitBuildFile().
-  return {2, 137, 145, 151, 157};
+  return {2, 139, 147, 153, 159};
 }
 }  // namespace
 
 TEST(SectionCacheLayout, AcceptsExactFinalizedTableBoundaries) {
   EXPECT_FALSE(SectionCacheLayout::hasCompleteHeader(HEADER_SIZE - 1, HEADER_SIZE));
   EXPECT_TRUE(SectionCacheLayout::hasCompleteHeader(HEADER_SIZE, HEADER_SIZE));
-  EXPECT_TRUE(SectionCacheLayout::isValidFinalized(161, HEADER_SIZE, validHeader(), 2));
+  EXPECT_TRUE(SectionCacheLayout::isValidFinalized(163, HEADER_SIZE, validHeader(), 2));
 }
 
 TEST(SectionCacheLayout, RejectsHeaderOnlyAndMalformedFinalizedFiles) {
   auto header = validHeader();
   header.pageLutOffset = 0;
-  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(161, HEADER_SIZE, header, 2));
+  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(163, HEADER_SIZE, header, 2));
 
   header = validHeader();
   header.anchorMapOffset++;
-  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(161, HEADER_SIZE, header, 2));
+  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(163, HEADER_SIZE, header, 2));
 
   header = validHeader();
   header.paragraphLutOffset--;
-  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(161, HEADER_SIZE, header, 2));
+  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(163, HEADER_SIZE, header, 2));
 
   header = validHeader();
-  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(161, HEADER_SIZE, header, 1));
-  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(160, HEADER_SIZE, header, 2));
+  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(163, HEADER_SIZE, header, 1));
+  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(162, HEADER_SIZE, header, 2));
 
   header = validHeader();
   header.pageCount = 0;
-  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(161, HEADER_SIZE, header, 0));
+  EXPECT_FALSE(SectionCacheLayout::isValidFinalized(163, HEADER_SIZE, header, 0));
 }
 
 TEST(SectionCacheLayout, ChecksPartialTrailerWithWideArithmetic) {

@@ -6,15 +6,46 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "Utf8.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/VietnameseTelex.h"
+
+namespace {
+bool isUtf8ContinuationByte(const char value) { return (static_cast<unsigned char>(value) & 0xC0U) == 0x80U; }
+
+size_t previousUtf8Boundary(const std::string& value, size_t position) {
+  position = std::min(position, value.size());
+  if (position == 0) return 0;
+  --position;
+  while (position > 0 && isUtf8ContinuationByte(value[position])) --position;
+  return position;
+}
+
+size_t nextUtf8Boundary(const std::string& value, size_t position) {
+  position = std::min(position, value.size());
+  if (position >= value.size()) return value.size();
+  ++position;
+  while (position < value.size() && isUtf8ContinuationByte(value[position])) ++position;
+  return position;
+}
+
+std::string utf8CodepointAt(const std::string& value, const size_t position) {
+  if (position >= value.size()) return {};
+  return value.substr(position, nextUtf8Boundary(value, position) - position);
+}
+}  // namespace
 
 const char* const KeyboardEntryActivity::shiftString[2] = {"shift", "SHIFT"};
 
 void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
-  cursorPos = text.length();
   symMode = false;
+  telexAvailable = (inputType == InputType::Text || inputType == InputType::Identifier) &&
+                   I18N.getLanguage() == Language::VI;
+  telexEnabled = telexAvailable && inputType == InputType::Text;
+  if (telexAvailable) text = utf8ComposeNfc(text);
+  cursorPos = text.length();
   urlMode = false;
   cursorMode = false;
   togglePos = false;
@@ -76,6 +107,7 @@ char KeyboardEntryActivity::getAlternativeChar() const {
 
 bool KeyboardEntryActivity::insertChar(char c) {
   if (c == '\0') return true;
+  if (telexEnabled) return VietnameseTelex::applyKey(text, cursorPos, c, maxLength);
   if (maxLength != 0 && text.length() >= maxLength) return true;
   if (cursorPos > text.length()) cursorPos = text.length();
 
@@ -148,8 +180,10 @@ bool KeyboardEntryActivity::handleKeyPress() {
           hintShowTime = millis();
         }
         if (cursorPos > 0 && !text.empty()) {
-          text.erase(cursorPos - 1, 1);
-          cursorPos--;
+          const size_t previous = previousUtf8Boundary(text, cursorPos);
+          text.erase(previous, cursorPos - previous);
+          cursorPos = previous;
+          if (telexEnabled) VietnameseTelex::normalizeAtCursor(text, cursorPos, maxLength);
         }
         return true;
       case SpecialKeyType::Ok:
@@ -269,7 +303,7 @@ void KeyboardEntryActivity::loop() {
         togglePos = false;
         requestUpdate();
       } else if (cursorPos > 0) {
-        cursorPos--;
+        cursorPos = previousUtf8Boundary(text, cursorPos);
         requestUpdate();
       }
     }
@@ -306,7 +340,7 @@ void KeyboardEntryActivity::loop() {
       rightLongHandled = false;
     }
     if (cursorMode && !togglePos && cursorPos < text.length()) {
-      cursorPos++;
+      cursorPos = nextUtf8Boundary(text, cursorPos);
       requestUpdate();
     }
     if (cursorMode) return;
@@ -324,6 +358,14 @@ void KeyboardEntryActivity::loop() {
       selectedCol == static_cast<int>(SpecialKeyType::Del)) {
     text.clear();
     cursorPos = 0;
+    confirmLongHandled = true;
+    requestUpdate();
+  }
+
+  if (confirmHeld && !confirmLongHandled && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() > LONG_PRESS_MS && telexAvailable && !symMode && !urlMode &&
+      isBottomRow(selectedRow) && selectedCol == static_cast<int>(SpecialKeyType::Mode)) {
+    telexEnabled = !telexEnabled;
     confirmLongHandled = true;
     requestUpdate();
   }
@@ -381,7 +423,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     if (cursorMode) {
       revealPos = text.length();  // no reveal in displayText; block draws actual char directly
     } else {
-      revealPos = (text.length() > 0 && cursorPos > 0) ? cursorPos - 1 : std::string::npos;
+      revealPos = (text.length() > 0 && cursorPos > 0) ? previousUtf8Boundary(text, cursorPos) : std::string::npos;
     }
     displayText = text;
     for (size_t i = 0; i < displayText.length(); i++) {
@@ -410,7 +452,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   int cursorCharWidth = 6;
   if (cursorPos < text.length()) {
-    int w = renderer.getTextWidth(UI_12_FONT_ID, text.substr(cursorPos, 1).c_str());
+    int w = renderer.getTextWidth(UI_12_FONT_ID, utf8CodepointAt(text, cursorPos).c_str());
     if (w > cursorCharWidth) cursorCharWidth = w;
   }
 
@@ -424,7 +466,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   while (true) {
     std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
     textWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
-    if (textWidth <= maxLineWidth) {
+    const int firstCodepointEnd = static_cast<int>(nextUtf8Boundary(displayText, lineStartIdx));
+    if (textWidth <= maxLineWidth || lineEndIdx <= firstCodepointEnd) {
       const bool isLastLine = (lineEndIdx == static_cast<int>(displayText.length()));
       bool isCursorLine = false;
       if (!cursorDrawn && cursorPos >= lineStartIdx &&
@@ -438,11 +481,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         int beforeWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, beforeCursor.c_str(), EpdFontFamily::REGULAR);
         int kernOffset = 0;
         if (cursorPos < displayText.length()) {
-          std::string beforeAndCursor = beforeCursor + displayText.substr(cursorPos, 1);
+          const std::string cursorCodepoint = utf8CodepointAt(displayText, cursorPos);
+          std::string beforeAndCursor = beforeCursor + cursorCodepoint;
           int beforeAndCursorWidth =
               renderer.getTextAdvanceX(UI_12_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
-          int charAdvance =
-              renderer.getTextAdvanceX(UI_12_FONT_ID, displayText.substr(cursorPos, 1).c_str(), EpdFontFamily::REGULAR);
+          int charAdvance = renderer.getTextAdvanceX(UI_12_FONT_ID, cursorCodepoint.c_str(), EpdFontFamily::REGULAR);
           kernOffset = beforeAndCursorWidth - beforeWidth - charAdvance;
         }
         if (centerText) {
@@ -464,7 +507,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         renderer.drawText(UI_12_FONT_ID, lineStartX, inputStartY + inputHeight, part1.c_str());
         // Part 2: skip cursor slot (block + actual char drawn later)
         // Part 3: chars after cursor position (skip char under cursor), starting at cursorPixelX + cursorCharWidth
-        const int afterStart = static_cast<int>(cursorPos) + (cursorPos < text.length() ? 1 : 0);
+        const int afterStart = cursorPos < text.length() ? static_cast<int>(nextUtf8Boundary(text, cursorPos))
+                                                         : static_cast<int>(cursorPos);
         const int afterEnd = lineEndIdx;
         if (afterStart < afterEnd) {
           const std::string part3 = displayText.substr(afterStart, afterEnd - afterStart);
@@ -481,7 +525,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       lineStartIdx = lineEndIdx;
       lineEndIdx = displayText.length();
     } else {
-      lineEndIdx -= 1;
+      lineEndIdx = static_cast<int>(previousUtf8Boundary(displayText, lineEndIdx));
     }
   }
 
@@ -494,8 +538,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     static constexpr int blockPadding = 1;
     renderer.fillRect(cursorPixelX - blockPadding, cursorLineY, cursorCharWidth + blockPadding * 2, lineHeight, true);
     if (cursorPos < text.length()) {
-      const char buf[2] = {text[cursorPos], '\0'};
-      renderer.drawText(UI_12_FONT_ID, cursorPixelX, cursorLineY, buf, false);
+      const std::string cursorCodepoint = utf8CodepointAt(text, cursorPos);
+      renderer.drawText(UI_12_FONT_ID, cursorPixelX, cursorLineY, cursorCodepoint.c_str(), false);
     }
   } else if (cursorPos <= displayText.length()) {
     static constexpr int serifW = 3;
@@ -597,7 +641,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       }
     } else {
       const char* altCharTip;
-      if (inputType == InputType::Url) {
+      if (telexAvailable) {
+        altCharTip = telexEnabled ? tr(STR_KB_HINT_TELEX_ON) : tr(STR_KB_HINT_TELEX_OFF);
+      } else if (inputType == InputType::Url) {
         altCharTip = tr(STR_KB_HINT_SECONDARY_CHAR);
       } else if (shiftState > 0) {
         altCharTip = tr(STR_KB_HINT_LOWER_SECONDARY);
@@ -675,15 +721,17 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   struct BottomKeyInfo {
     KeyboardKeyType themeType;
     const char* label;
+    const char* secondaryLabel;
   };
   const BottomKeyInfo bottomKeys[BOTTOM_KEY_COUNT] = {
       {(symMode || urlMode) ? KeyboardKeyType::Disabled : KeyboardKeyType::Shift,
-       (symMode || urlMode) ? shiftString[0] : shiftString[shiftState]},
-      {KeyboardKeyType::Mode, urlMode ? "abc" : (symMode ? "abc" : "#@!")},
+       (symMode || urlMode) ? shiftString[0] : shiftString[shiftState], nullptr},
+      {KeyboardKeyType::Mode, urlMode ? "abc" : (symMode ? "abc" : "#@!"),
+       telexEnabled ? "VI" : nullptr},
       {inputType == InputType::Url ? KeyboardKeyType::Mode : KeyboardKeyType::Space,
-       inputType == InputType::Url ? "URL" : nullptr},
-      {KeyboardKeyType::Del, nullptr},
-      {KeyboardKeyType::Ok, tr(STR_OK_BUTTON)},
+       inputType == InputType::Url ? "URL" : nullptr, nullptr},
+      {KeyboardKeyType::Del, nullptr, nullptr},
+      {KeyboardKeyType::Ok, tr(STR_OK_BUTTON), nullptr},
   };
 
   for (int i = 0; i < BOTTOM_KEY_COUNT; i++) {
@@ -692,7 +740,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
     const bool activeKeySelected = isSelected && !cursorMode;
     GUI.drawKeyboardKey(renderer, Rect{keyX, bottomRowY, bottomKeyWidth, bottomKeyHeight}, bottomKeys[i].label,
-                        activeKeySelected, nullptr, bottomKeys[i].themeType);
+                        activeKeySelected, bottomKeys[i].secondaryLabel, bottomKeys[i].themeType);
   }
 
   if (cursorMode) {
@@ -711,7 +759,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
     if (isBottomRow(selectedRow)) {
       GUI.drawKeyboardKey(renderer, Rect{selKeyX, selKeyY, selKeyW, selKeyH}, bottomKeys[selectedCol].label, true,
-                          nullptr, bottomKeys[selectedCol].themeType, true);
+                          bottomKeys[selectedCol].secondaryLabel, bottomKeys[selectedCol].themeType, true);
     } else if (urlMode) {
       const int idx = selectedCol + selectedRow * 3;
       if (idx < URL_SNIPPET_COUNT) {

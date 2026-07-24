@@ -7,6 +7,8 @@
 
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
+#include "util/BookSearchUtils.h"
 #include "util/ButtonNavigator.h"
 
 class RecentBooksActivity final : public Activity {
@@ -14,16 +16,31 @@ class RecentBooksActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   size_t selectorIndex = 0;
-
-  // Set when a long-press has fired; input is swallowed until Confirm is released
-  // again so the release doesn't also open the book.
-  bool longPressFired = false;
+  bool confirmPressSeen = false;
+  bool confirmLongHandled = false;
+  bool suppressPopupConfirmRelease = false;
 
   // Recent tab state
   std::vector<RecentBook> recentBooks;
+  std::vector<bool> pinnedFlags;
+  OptionPopup optionPopup;
+
+  bool searchActive = false;
+  bool searchResultsTruncated = false;
+  std::string searchQuery;
+  std::vector<size_t> searchResults;
+  StrId popupMessage = StrId::STR_NONE_OPT;
+  unsigned long popupTime = 0;
 
   // Data loading
   void loadRecentBooks();
+  size_t visibleItemCount() const;
+  bool isSearchRow(size_t index) const;
+  size_t sourceIndex(size_t visibleIndex) const;
+  void launchSearch();
+  void applySearch(const std::string& query);
+  void clearSearch(bool preserveQuery = false);
+  void showBookActions(size_t sourceIndex);
 
   // Show an OK/Cancel prompt to remove the given book from the Recent Books list.
   void promptRemoveBook(const std::string& path, const std::string& title);
@@ -35,4 +52,7 @@ class RecentBooksActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool handleGlobalShortcut(GlobalShortcut shortcut) override {
+    return !optionPopup.isActive() && handleSafeGlobalShortcut(shortcut);
+  }
 };

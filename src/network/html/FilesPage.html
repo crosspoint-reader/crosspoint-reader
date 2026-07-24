@@ -1516,6 +1516,7 @@
   </div>
 
   <div class="action-buttons">
+    <button class="action-btn upload-action-btn" onclick="openInboxUpload()">📥 Send to Inbox</button>
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
@@ -1755,6 +1756,10 @@
         <div id="progress-bar"><div id="progress-fill"></div></div>
         <div id="progress-text"></div>
       </div>
+      <div id="inboxCompleteActions" style="display:none; gap:10px; margin-top:12px;">
+        <button class="upload-btn" onclick="openLatestInboxUpload()">Open latest on reader</button>
+        <button class="delete-btn-cancel" onclick="viewInbox()">View Inbox</button>
+      </div>
       <div class="log-section" id="log-section">
         <div class="log-header">
           <div class="log-title">📋 Conversion Log</div>
@@ -1843,6 +1848,7 @@
 <script>
   // get current path from query parameter
   const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  let uploadPath = currentPath;
 
   if (currentPath !== '/') {
     const leaf = currentPath.split('/').filter(Boolean).pop();
@@ -2109,7 +2115,10 @@
   }
 
   // Modal functions
-  function openUploadModal() {
+  function openUploadModal(targetPath = currentPath) {
+    uploadPath = targetPath;
+    uploadToInbox = uploadPath === '/Inbox';
+    completedUploadNames = [];
     imageStates = {};
     restoreUploadSettingsFromStorage();
 
@@ -2125,8 +2134,20 @@
     const logContainer = document.getElementById('log-container');
     if (logContainer) logContainer.innerHTML = '';
 
-    document.getElementById('uploadPathDisplay').textContent = currentPath === '/' ? '/ 🏠' : currentPath;
+    const completeActions = document.getElementById('inboxCompleteActions');
+    if (completeActions) completeActions.style.display = 'none';
+    const fileInput = document.getElementById('fileInput');
+    if (uploadToInbox) {
+      fileInput.setAttribute('accept', '.epub,.xtc,.xtch,.txt,.md,.markdown');
+    } else {
+      fileInput.removeAttribute('accept');
+    }
+    document.getElementById('uploadPathDisplay').textContent = uploadPath === '/' ? '/ 🏠' : uploadPath;
     document.getElementById('uploadModal').classList.add('open');
+  }
+
+  function openInboxUpload() {
+    openUploadModal('/Inbox');
   }
 
   function handleCancelUploadModal() {
@@ -3274,6 +3295,8 @@ let operationCancelled = false; // Set by Cancel to stop conversion loops and up
 let uploadGeneration = 0;       // Incremented each uploadFile() call; guards stale restoreAfterCancel()
 let currentUploadWs = null;     // Active WebSocket reference for external abort
 let currentUploadXhr = null;    // Active XHR reference for external abort
+let uploadToInbox = false;
+let completedUploadNames = [];
 const WS_PORT = 81;
 const WS_CHUNK_SIZE = 4096; // 4KB chunks - smaller for ESP32 stability
 
@@ -3952,6 +3975,7 @@ function reserveAvailableUploadFilename(fileName, usedFileNames) {
 
   let candidateName;
   do {
+    if (nextSuffix > 999) return null;
     candidateName = `${baseName} (${nextSuffix})${extension}`;
     nextSuffix++;
   } while (usedFileNames.has(normalize(candidateName)));
@@ -3961,8 +3985,9 @@ function reserveAvailableUploadFilename(fileName, usedFileNames) {
 }
 
 async function fetchExistingUploadNames() {
-  const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+  const response = await fetch('/api/files?path=' + encodeURIComponent(uploadPath) + '&_=' + Date.now());
   if (!response.ok) {
+    if (uploadPath === '/Inbox' && response.status === 404) return new Set();
     throw new Error(response.status + ' ' + response.statusText);
   }
   const entries = await response.json();
@@ -5261,7 +5286,7 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
     ws.onopen = function() {
       console.log('[WS] Connected, starting upload:', file.name);
       // Send start message: START:<filename>:<size>:<path>
-      ws.send(`START:${file.name}:${file.size}:${currentPath}`);
+      ws.send(`START:${file.name}:${file.size}:${uploadPath}`);
     };
 
     ws.onmessage = async function(event) {
@@ -5364,7 +5389,7 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
 
     const xhr = new XMLHttpRequest();
     currentUploadXhr = xhr;
-    xhr.open('POST', '/upload?path=' + encodeURIComponent(currentPath), true);
+    xhr.open('POST', '/upload?path=' + encodeURIComponent(uploadPath), true);
 
     xhr.upload.onprogress = function(e) {
       if (e.lengthComputable && onProgress) {
@@ -5409,6 +5434,10 @@ async function uploadFile() {
 
   if (files.length === 0) {
     alert('Please select at least one file!');
+    return;
+  }
+  if (uploadToInbox && files.length > 32) {
+    alert('Inbox accepts at most 32 files per batch.');
     return;
   }
 
@@ -5460,6 +5489,14 @@ async function uploadFile() {
         // Finalize batch log if in batch mode
         if (useBatchLog) {
           finalizeBatchLog();
+        }
+        if (uploadToInbox) {
+          isUploadInProgress = false;
+          document.getElementById('uploadModalClose').classList.remove('disabled');
+          fileInput.disabled = false;
+          document.getElementById('inboxCompleteActions').style.display = 'flex';
+          uploadBtn.style.display = 'none';
+        } else if (useBatchLog) {
           setTimeout(() => {
             window.location.reload();
           }, 2000);
@@ -5524,6 +5561,12 @@ async function uploadFile() {
     }
 
     const availableName = reserveAvailableUploadFilename(file.name, usedFileNames);
+    if (!availableName) {
+      failedFiles.push({ name: file.name, error: 'Too many files with the same name', file: originalFile });
+      currentIndex++;
+      uploadNextFile();
+      return;
+    }
     if (availableName !== file.name) {
       console.log(`[Upload] Renamed to avoid collision: ${file.name} -> ${availableName}`);
       file = new File([file], availableName, {
@@ -5554,6 +5597,7 @@ async function uploadFile() {
         saveToFileBatchLog(file.name, ok, ok ? convOriginalSize : 0, ok ? convNewSize : 0);
       }
 
+      completedUploadNames.push(file.name);
       currentIndex++;
       uploadNextFile();
     };
@@ -5683,6 +5727,25 @@ async function uploadFile() {
   }
 
   uploadNextFile();
+}
+
+async function openLatestInboxUpload() {
+  const name = completedUploadNames[completedUploadNames.length - 1];
+  if (!name) return;
+  const response = await fetch('/api/inbox/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name })
+  });
+  if (!response.ok) {
+    alert('Could not open the book: ' + await response.text());
+    return;
+  }
+  document.getElementById('progress-text').textContent = 'Opening on the reader…';
+}
+
+function viewInbox() {
+  window.location.href = '/files?path=' + encodeURIComponent('/Inbox');
 }
 
 function showFailedUploadsBanner() {

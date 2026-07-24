@@ -3,6 +3,8 @@
 #include <SDL.h>
 
 #include <atomic>
+#include <cstdlib>
+#include <cstring>
 
 #include "SimulatorControls.h"
 #include "SimulatorLifecycle.h"
@@ -268,6 +270,12 @@ bool HalGPIO::isUsbConnected() const { return true; }
 bool HalGPIO::wasUsbStateChanged() const { return false; }
 void HalGPIO::startDeepSleep() {
   clearButtonState();
+
+  const char *exitOnSleep = std::getenv("CROSSVI_SIM_EXIT_ON_SLEEP");
+  if (exitOnSleep && std::strcmp(exitOnSleep, "1") == 0) {
+    quitRequested.store(true);
+    return;
+  }
 
   while (true) {
     SDL_Event e;

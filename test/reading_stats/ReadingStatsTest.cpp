@@ -38,6 +38,8 @@ void expectBookStatsEqual(const BookReadingStats& lhs, const BookReadingStats& r
   EXPECT_EQ(lhs.finishedDate.year, rhs.finishedDate.year);
   EXPECT_EQ(lhs.finishedDate.month, rhs.finishedDate.month);
   EXPECT_EQ(lhs.finishedDate.day, rhs.finishedDate.day);
+  EXPECT_EQ(lhs.startMinuteOfDay, rhs.startMinuteOfDay);
+  EXPECT_EQ(lhs.finishedMinuteOfDay, rhs.finishedMinuteOfDay);
   EXPECT_EQ(lhs.timeOfDaySeconds, rhs.timeOfDaySeconds);
   EXPECT_EQ(lhs.dayOfWeekSeconds, rhs.dayOfWeekSeconds);
 }
@@ -52,6 +54,10 @@ void expectGlobalStatsEqual(const GlobalReadingStats& lhs, const GlobalReadingSt
   EXPECT_EQ(lhs.readingHistoryAnchorDay, rhs.readingHistoryAnchorDay);
   EXPECT_EQ(lhs.readingHistoryBits, rhs.readingHistoryBits);
   EXPECT_EQ(lhs.longestReadingStreak, rhs.longestReadingStreak);
+  EXPECT_EQ(lhs.latestReadingDay, rhs.latestReadingDay);
+  EXPECT_EQ(lhs.latestDayReadingSeconds, rhs.latestDayReadingSeconds);
+  EXPECT_EQ(lhs.latestDaySessions, rhs.latestDaySessions);
+  EXPECT_EQ(lhs.hasLatestDayReadingSeconds, rhs.hasLatestDayReadingSeconds);
 }
 
 template <typename Bytes>
@@ -89,7 +95,11 @@ BookReadingStats bookStatsWithSeconds(const uint32_t seconds) {
 
 constexpr char COMPLETION_CACHE_PATH[] = "/.crosspoint/epub_12345";
 constexpr char BOOK_STATS_PATH[] = "/.crosspoint/epub_12345/stats_v6.bin";
+constexpr char TXT_COMPLETION_CACHE_PATH[] = "/.crosspoint/txt_67890";
+constexpr char XTC_COMPLETION_CACHE_PATH[] = "/.crosspoint/xtc_24680";
 constexpr char GLOBAL_STATS_PATH[] = "/.crosspoint/global_stats_v4.bin";
+constexpr char DAILY_STATS_PATH[] = "/.crosspoint/daily_stats_v1.bin";
+constexpr char USER_STATS_BACKUP_PATH[] = "/.crosspoint/stats_backups/device_stats_v1.bin";
 constexpr char COMPLETION_MARKER_PATH[] = "/.crosspoint/stats_completion.txn";
 constexpr char COMPLETION_MARKER_TEMP_PATH[] = "/.crosspoint/stats_completion.txn.tmp";
 
@@ -109,6 +119,7 @@ CompletionTransition completionTransition(const uint32_t completedBooks = 7) {
   transition.newBook.isCompleted = true;
   transition.newBook.estimatedTimeLeftSeconds = 0;
   transition.newBook.finishedDate = {2026, 7, 21};
+  transition.newBook.finishedMinuteOfDay = 14u * 60u + 35u;
   transition.oldGlobal.totalReadingSeconds = 999;
   transition.oldGlobal.totalPagesTurned = 42;
   transition.oldGlobal.completedBooks = completedBooks;
@@ -118,16 +129,18 @@ CompletionTransition completionTransition(const uint32_t completedBooks = 7) {
   return transition;
 }
 
-void seedCompletionTransition(const CompletionTransition& transition) {
+void seedCompletionTransition(const CompletionTransition& transition,
+                              const std::string& cachePath = COMPLETION_CACHE_PATH) {
   Storage.reset();
-  Storage.setFile(BOOK_STATS_PATH, bookEnvelope(transition.oldBook));
+  Storage.setFile(cachePath + "/stats_v6.bin", bookEnvelope(transition.oldBook));
   Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(transition.oldGlobal));
 }
 
-void expectStoredTransition(const CompletionTransition& transition, const bool completed) {
+void expectStoredTransition(const CompletionTransition& transition, const bool completed,
+                            const std::string& cachePath = COMPLETION_CACHE_PATH) {
   BookReadingStats::LoadStatus bookStatus = BookReadingStats::LoadStatus::Invalid;
   GlobalReadingStats::LoadStatus globalStatus = GlobalReadingStats::LoadStatus::Invalid;
-  const BookReadingStats book = BookReadingStats::load(COMPLETION_CACHE_PATH, &bookStatus);
+  const BookReadingStats book = BookReadingStats::load(cachePath, &bookStatus);
   const GlobalReadingStats global = GlobalReadingStats::load(&globalStatus);
   ASSERT_TRUE(BookReadingStats::isTrustedLoadStatus(bookStatus));
   ASSERT_TRUE(GlobalReadingStats::isTrustedLoadStatus(globalStatus));
@@ -148,7 +161,107 @@ void writeMarkerCrc(std::vector<uint8_t>& marker) {
   const uint32_t crc = markerCrc32(marker.data(), marker.size() - 4);
   for (size_t i = 0; i < 4; ++i) marker[marker.size() - 4 + i] = static_cast<uint8_t>(crc >> (i * 8));
 }
+
+std::vector<uint8_t> legacyV1Marker(const std::vector<uint8_t>& current) {
+  constexpr size_t HEADER_SIZE = 8;
+  constexpr size_t LEGACY_BOOK_SIZE = 73;
+  const size_t pathSize = static_cast<size_t>(current[6]) | static_cast<size_t>(current[7]) << 8;
+  const size_t currentBookSize = BookReadingStats::CURRENT_FILE_SIZE;
+  const size_t globalSize = GlobalReadingStats::CURRENT_FILE_SIZE;
+  const size_t sourcePayload = HEADER_SIZE + pathSize;
+  std::vector<uint8_t> legacy(current.size() - 2 * (currentBookSize - LEGACY_BOOK_SIZE), 0);
+  std::copy(current.begin(), current.begin() + static_cast<std::ptrdiff_t>(sourcePayload), legacy.begin());
+  legacy[4] = 1;
+
+  size_t sourceOffset = sourcePayload;
+  size_t targetOffset = sourcePayload;
+  for (size_t book = 0; book < 2; ++book) {
+    std::copy_n(current.begin() + static_cast<std::ptrdiff_t>(sourceOffset), LEGACY_BOOK_SIZE,
+                legacy.begin() + static_cast<std::ptrdiff_t>(targetOffset));
+    legacy[targetOffset] = 5;
+    sourceOffset += currentBookSize;
+    targetOffset += LEGACY_BOOK_SIZE;
+  }
+  std::copy_n(current.begin() + static_cast<std::ptrdiff_t>(sourceOffset), 2 * globalSize,
+              legacy.begin() + static_cast<std::ptrdiff_t>(targetOffset));
+  writeMarkerCrc(legacy);
+  return legacy;
+}
 }  // namespace
+
+TEST(GlobalReadingStatsBackup, RoundTripsOnlyTheVerifiedLocalDeviceSnapshot) {
+  Storage.reset();
+  GlobalReadingStats original = globalStatsWithSeconds(1234);
+  original.totalSessions = 7;
+  original.completedBooks = 3;
+  Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(original));
+
+  EXPECT_EQ(GlobalReadingStats::createBackup(), GlobalReadingStats::BackupResult::Ok);
+  EXPECT_TRUE(GlobalReadingStats::hasValidBackup());
+
+  GlobalReadingStats changed = globalStatsWithSeconds(9999);
+  changed.totalSessions = 40;
+  Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(changed));
+  EXPECT_EQ(GlobalReadingStats::restoreBackup(), GlobalReadingStats::BackupResult::Ok);
+
+  GlobalReadingStats::LoadStatus status = GlobalReadingStats::LoadStatus::Invalid;
+  const GlobalReadingStats restored = GlobalReadingStats::load(&status);
+  ASSERT_TRUE(GlobalReadingStats::isTrustedLoadStatus(status));
+  expectGlobalStatsEqual(restored, original);
+}
+
+TEST(GlobalReadingStatsBackup, FailedReplacementKeepsThePreviousBackupRestorable) {
+  Storage.reset();
+  const GlobalReadingStats first = globalStatsWithSeconds(111);
+  Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(first));
+  ASSERT_EQ(GlobalReadingStats::createBackup(), GlobalReadingStats::BackupResult::Ok);
+  const std::vector<uint8_t> retained = Storage.file(USER_STATS_BACKUP_PATH);
+
+  const GlobalReadingStats second = globalStatsWithSeconds(222);
+  Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(second));
+  Storage.shortWriteOnce();
+  EXPECT_EQ(GlobalReadingStats::createBackup(), GlobalReadingStats::BackupResult::IoError);
+  EXPECT_EQ(Storage.file(USER_STATS_BACKUP_PATH), retained);
+
+  ASSERT_EQ(GlobalReadingStats::restoreBackup(), GlobalReadingStats::BackupResult::Ok);
+  GlobalReadingStats::LoadStatus status = GlobalReadingStats::LoadStatus::Invalid;
+  const GlobalReadingStats restored = GlobalReadingStats::load(&status);
+  ASSERT_TRUE(GlobalReadingStats::isTrustedLoadStatus(status));
+  expectGlobalStatsEqual(restored, first);
+}
+
+TEST(GlobalReadingStatsBackup, InvalidOrNewerBackupNeverChangesCurrentStats) {
+  for (const bool newer : {false, true}) {
+    SCOPED_TRACE(newer);
+    Storage.reset();
+    const GlobalReadingStats current = globalStatsWithSeconds(777);
+    Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(current));
+    if (newer) {
+      auto bytes = globalEnvelope(globalStatsWithSeconds(1));
+      bytes[4] = ReadingStatsEnvelope::CURRENT_VERSION + 1;
+      Storage.setFile(USER_STATS_BACKUP_PATH, std::move(bytes));
+      EXPECT_EQ(GlobalReadingStats::restoreBackup(), GlobalReadingStats::BackupResult::NewerFormat);
+    } else {
+      Storage.setFile(USER_STATS_BACKUP_PATH, {0x01, 0x02, 0x03});
+      EXPECT_EQ(GlobalReadingStats::restoreBackup(), GlobalReadingStats::BackupResult::Invalid);
+    }
+
+    GlobalReadingStats::LoadStatus status = GlobalReadingStats::LoadStatus::Invalid;
+    const GlobalReadingStats loaded = GlobalReadingStats::load(&status);
+    ASSERT_TRUE(GlobalReadingStats::isTrustedLoadStatus(status));
+    expectGlobalStatsEqual(loaded, current);
+  }
+}
+
+TEST(GlobalReadingStatsBackup, MissingOrUnreadableSourceCannotCreateAFalseBackup) {
+  Storage.reset();
+  EXPECT_EQ(GlobalReadingStats::createBackup(), GlobalReadingStats::BackupResult::Missing);
+  EXPECT_FALSE(Storage.exists(USER_STATS_BACKUP_PATH));
+
+  Storage.setFile(GLOBAL_STATS_PATH, {0x01, 0x02});
+  EXPECT_EQ(GlobalReadingStats::createBackup(), GlobalReadingStats::BackupResult::Invalid);
+  EXPECT_FALSE(Storage.exists(USER_STATS_BACKUP_PATH));
+}
 
 TEST(ReadingStatsCompletionTransaction, CommitsBothFilesAndSaturatesCompletedBooks) {
   for (const uint32_t initial : {7u, std::numeric_limits<uint32_t>::max()}) {
@@ -157,6 +270,67 @@ TEST(ReadingStatsCompletionTransaction, CommitsBothFilesAndSaturatesCompletedBoo
     EXPECT_TRUE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
                                                           transition.oldGlobal, transition.newGlobal));
     expectStoredTransition(transition, true);
+    EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
+    EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_TEMP_PATH));
+  }
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversCompletionForAnExactTxtCacheKey) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition, TXT_COMPLETION_CACHE_PATH);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(
+      TXT_COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook, transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+
+  ASSERT_TRUE(Storage.exists(COMPLETION_MARKER_PATH));
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recoverPending(),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  expectStoredTransition(transition, true, TXT_COMPLETION_CACHE_PATH);
+  EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
+  EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_TEMP_PATH));
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversCompletionForAnExactXtcCacheKey) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition, XTC_COMPLETION_CACHE_PATH);
+  Storage.failRenameOnCall(2);
+  EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(
+      XTC_COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook, transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+
+  ASSERT_TRUE(Storage.exists(COMPLETION_MARKER_PATH));
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recoverPending(),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  expectStoredTransition(transition, true, XTC_COMPLETION_CACHE_PATH);
+  EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
+  EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_TEMP_PATH));
+}
+
+TEST(ReadingStatsCompletionTransaction, RecoversVersionOneMarkerAfterTimestampUpgrade) {
+  CompletionTransition transition = completionTransition();
+  transition.newBook.finishedMinuteOfDay = BookReadingStats::INVALID_MINUTE_OF_DAY;
+  seedCompletionTransition(transition);
+  Storage.failRenameOnCall(2);
+  ASSERT_FALSE(ReadingStatsCompletionTransaction::commit(COMPLETION_CACHE_PATH, transition.oldBook, transition.newBook,
+                                                         transition.oldGlobal, transition.newGlobal));
+  Storage.resetFaultInjection();
+  ASSERT_TRUE(Storage.exists(COMPLETION_MARKER_PATH));
+  Storage.setFile(COMPLETION_MARKER_PATH, legacyV1Marker(Storage.file(COMPLETION_MARKER_PATH)));
+
+  EXPECT_EQ(ReadingStatsCompletionTransaction::recoverPending(),
+            ReadingStatsCompletionTransaction::RecoveryResult::Recovered);
+  expectStoredTransition(transition, true);
+}
+
+TEST(ReadingStatsCompletionTransaction, RejectsLookalikeAndUnsupportedCacheKeys) {
+  const CompletionTransition transition = completionTransition();
+  seedCompletionTransition(transition);
+  for (const char* cachePath : {"/.crosspoint/txt_", "/.crosspoint/txt_12/3", "/.crosspoint/txt_-1",
+                                "/.crosspoint/xtc_", "/.crosspoint/xtc_12x", "/.crosspoint/epub_12x"}) {
+    EXPECT_FALSE(ReadingStatsCompletionTransaction::commit(cachePath, transition.oldBook, transition.newBook,
+                                                           transition.oldGlobal, transition.newGlobal))
+        << cachePath;
     EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_PATH));
     EXPECT_FALSE(Storage.exists(COMPLETION_MARKER_TEMP_PATH));
   }
@@ -194,6 +368,7 @@ TEST(ReadingStatsCompletionTransaction, SupportsExplicitIncompleteWithoutUnderfl
   transition.newBook = transition.oldBook;
   transition.newBook.isCompleted = false;
   transition.newBook.finishedDate.clear();
+  transition.newBook.finishedMinuteOfDay = BookReadingStats::INVALID_MINUTE_OF_DAY;
   transition.newGlobal = transition.oldGlobal;
   transition.newGlobal.completedBooks = 0;
   seedCompletionTransition(transition);
@@ -344,7 +519,7 @@ TEST(ReadingStatsCompletionTransaction, RejectsCorruptNewerAndMismatchedMarkers)
 
   preparePending();
   marker = Storage.file(COMPLETION_MARKER_PATH);
-  marker[4] = 2;
+  marker[4] = 3;
   Storage.setFile(COMPLETION_MARKER_PATH, marker);
   EXPECT_EQ(ReadingStatsCompletionTransaction::recover(COMPLETION_CACHE_PATH),
             ReadingStatsCompletionTransaction::RecoveryResult::Blocked);
@@ -381,7 +556,7 @@ TEST(ReadingStatsCompletionTransaction, RecoversPendingBookIndependentOfTheCurre
   expectStoredTransition(transition, true);
 }
 
-TEST(ReadingStatsCompletionTransaction, RejectsValidCrcMarkerOutsideEpubCacheNamespace) {
+TEST(ReadingStatsCompletionTransaction, RejectsValidCrcMarkerOutsideTrackedBookCacheNamespace) {
   const CompletionTransition transition = completionTransition();
   seedCompletionTransition(transition);
   Storage.failRenameOnCall(2);
@@ -565,7 +740,7 @@ TEST(ReadingStatsCompletionTransaction, PendingMarkerBlocksGlobalResetWithoutMut
   expectStoredTransition(transition, true);
 }
 
-TEST(ReadingStatsCodec, BookV5RoundTripPreservesCrossInkLayout) {
+TEST(ReadingStatsCodec, BookV6RoundTripPreservesExactTimestamps) {
   BookReadingStats input;
   input.sessionCount = 42;
   input.totalReadingSeconds = 123456;
@@ -578,15 +753,25 @@ TEST(ReadingStatsCodec, BookV5RoundTripPreservesCrossInkLayout) {
   input.finishedDateManual = true;
   input.startDate = {2024, 2, 29};
   input.finishedDate = {2025, 12, 31};
+  input.startMinuteOfDay = 14u * 60u + 35u;
+  input.finishedMinuteOfDay = 23u * 60u + 59u;
   input.timeOfDaySeconds = {1, 2, 3, 4};
   input.dayOfWeekSeconds = {5, 6, 7, 8, 9, 10, 11};
 
   const auto encoded = ReadingStatsCodec::encode(input);
-  EXPECT_EQ(encoded.size(), 73u);
-  EXPECT_EQ(encoded[0], 5);
+  EXPECT_EQ(encoded.size(), 77u);
+  EXPECT_EQ(encoded[0], 6);
   BookReadingStats output;
   EXPECT_EQ(ReadingStatsCodec::decode(encoded.data(), encoded.size(), output), ReadingStatsDecodeResult::Ok);
   expectBookStatsEqual(input, output);
+
+  auto legacyV5 = encoded;
+  legacyV5[0] = 5;
+  EXPECT_EQ(ReadingStatsCodec::decode(legacyV5.data(), 73, output), ReadingStatsDecodeResult::Ok);
+  EXPECT_EQ(output.startDate.year, input.startDate.year);
+  EXPECT_EQ(output.finishedDate.year, input.finishedDate.year);
+  EXPECT_EQ(output.startMinuteOfDay, BookReadingStats::INVALID_MINUTE_OF_DAY);
+  EXPECT_EQ(output.finishedMinuteOfDay, BookReadingStats::INVALID_MINUTE_OF_DAY);
 }
 
 TEST(ReadingStatsCodec, BookReadsLegacyV1AndRejectsUnsafeFiles) {
@@ -1847,6 +2032,14 @@ TEST(ReadingStatsDates, ValidateLeapDaysAndSplitAcrossBoundaries) {
   addDaysToReadingStatsDate(date, 1);
   EXPECT_EQ(date.day, 29);
   EXPECT_EQ(readingStatsDayOfWeekIndex({2024, 1, 1}), 0);
+  const uint32_t minuteIndex = readingStatsMinuteIndex({2026, 7, 21}, 14u * 60u + 35u);
+  ReadingStatsDateTime restored;
+  ASSERT_TRUE(readingStatsDateTimeFromMinuteIndex(minuteIndex, restored));
+  EXPECT_EQ(restored.date.year, 2026);
+  EXPECT_EQ(restored.date.month, 7);
+  EXPECT_EQ(restored.date.day, 21);
+  EXPECT_EQ(restored.hour, 14);
+  EXPECT_EQ(restored.minute, 35);
 
   std::array<uint32_t, READING_TIME_BUCKET_COUNT> buckets{};
   std::array<uint32_t, READING_DAY_OF_WEEK_COUNT> days{};
@@ -1863,9 +2056,123 @@ TEST(ReadingStatsHistory, TracksCrossMidnightAndStreakExpiry) {
   EXPECT_EQ(stats.readingHistoryAnchorDay, readingStatsDayIndex(januarySecond));
   EXPECT_EQ(stats.currentReadingStreak(&januarySecond), 2);
   EXPECT_EQ(stats.displayLongestReadingStreak(), 2);
+  uint32_t januarySecondSeconds = 0;
+  ASSERT_TRUE(stats.readingSecondsForDate(januarySecond, januarySecondSeconds));
+  EXPECT_EQ(januarySecondSeconds, 10u);
 
   const ReadingStatsDate januaryFourth{2024, 1, 4};
   EXPECT_EQ(stats.currentReadingStreak(&januaryFourth), 0);
+}
+
+TEST(ReadingStatsDailySummary, PersistsExactCurrentDayWithoutChangingTheCompatibleGlobalPayload) {
+  Storage.reset();
+  const ReadingStatsDate today{2026, 7, 23};
+  GlobalReadingStats stats;
+  stats.totalSessions = 1;
+  stats.totalReadingSeconds = 12u * 60u;
+  stats.recordReadingSession(today);
+  stats.recordReadingSpan({today, 12, 0, 0}, 12u * 60u);
+
+  ASSERT_TRUE(stats.save());
+  ASSERT_TRUE(Storage.exists(DAILY_STATS_PATH));
+  GlobalReadingStats::LoadStatus status = GlobalReadingStats::LoadStatus::Invalid;
+  const GlobalReadingStats loaded = GlobalReadingStats::load(&status);
+  ASSERT_EQ(status, GlobalReadingStats::LoadStatus::Ok);
+  uint32_t seconds = 0;
+  uint32_t sessions = 0;
+  ASSERT_TRUE(loaded.readingSummaryForDate(today, seconds, sessions));
+  EXPECT_EQ(seconds, 12u * 60u);
+  EXPECT_EQ(sessions, 1u);
+  EXPECT_EQ(ReadingStatsCodec::encode(loaded), ReadingStatsCodec::encode(stats));
+}
+
+TEST(ReadingStatsDailySummary, CountsOnlySessionsExplicitlyRecordedForThatDay) {
+  const ReadingStatsDate today{2026, 7, 23};
+  GlobalReadingStats stats;
+  stats.totalSessions = 2;
+  stats.recordReadingSession(today);
+  stats.recordReadingSpan({today, 9, 0, 0}, 90);
+  stats.recordReadingSession(today);
+  stats.recordReadingSpan({today, 12, 0, 0}, 30);
+
+  uint32_t seconds = 0;
+  uint32_t sessions = 0;
+  ASSERT_TRUE(stats.readingSummaryForDate(today, seconds, sessions));
+  EXPECT_EQ(seconds, 120u);
+  EXPECT_EQ(sessions, 2u);
+}
+
+TEST(ReadingStatsDailySummary, NeverPresentsAStaleSidecarAsToday) {
+  Storage.reset();
+  const ReadingStatsDate today{2026, 7, 23};
+  GlobalReadingStats oldStats;
+  oldStats.totalReadingSeconds = 120;
+  oldStats.recordReadingSpan({today, 10, 0, 0}, 120);
+  ASSERT_TRUE(oldStats.save());
+
+  GlobalReadingStats replacement;
+  replacement.totalReadingSeconds = 600;
+  replacement.recordReadingSpan({today, 11, 0, 0}, 600);
+  Storage.setFile(GLOBAL_STATS_PATH, globalEnvelope(replacement));
+
+  GlobalReadingStats::LoadStatus status = GlobalReadingStats::LoadStatus::Invalid;
+  const GlobalReadingStats loaded = GlobalReadingStats::load(&status);
+  ASSERT_EQ(status, GlobalReadingStats::LoadStatus::Ok);
+  uint32_t seconds = 0;
+  EXPECT_FALSE(loaded.readingSecondsForDate(today, seconds));
+}
+
+TEST(ReadingStatsDailySummary, SidecarFailureKeepsCumulativeStatsAndHidesUnknownToday) {
+  Storage.reset();
+  const ReadingStatsDate today{2026, 7, 23};
+  GlobalReadingStats stats;
+  stats.totalReadingSeconds = 90;
+  stats.recordReadingSpan({today, 12, 0, 0}, 90);
+  Storage.shortWriteOnCall(2);  // Main envelope succeeds; optional daily sidecar fails.
+
+  ASSERT_TRUE(stats.save());
+  EXPECT_FALSE(Storage.exists(DAILY_STATS_PATH));
+  GlobalReadingStats::LoadStatus status = GlobalReadingStats::LoadStatus::Invalid;
+  const GlobalReadingStats loaded = GlobalReadingStats::load(&status);
+  ASSERT_EQ(status, GlobalReadingStats::LoadStatus::Ok);
+  EXPECT_EQ(loaded.totalReadingSeconds, 90u);
+  uint32_t seconds = 0;
+  EXPECT_FALSE(loaded.readingSecondsForDate(today, seconds));
+}
+
+TEST(ReadingStatsDailySummary, ProvesZeroForAnUnrecordedDay) {
+  GlobalReadingStats stats;
+  stats.recordReadingSpan({{2026, 7, 22}, 12, 0, 0}, 60);
+  uint32_t seconds = 99;
+  uint32_t sessions = 99;
+  ASSERT_TRUE(stats.readingSummaryForDate({2026, 7, 23}, seconds, sessions));
+  EXPECT_EQ(seconds, 0u);
+  EXPECT_EQ(sessions, 0u);
+}
+
+TEST(ReadingStatsDailySummary, DoesNotCallUnattributedLegacyReadingAnExactZero) {
+  GlobalReadingStats legacy;
+  legacy.totalReadingSeconds = 600;
+  uint32_t seconds = 0;
+  uint32_t sessions = 0;
+  EXPECT_FALSE(legacy.readingSummaryForDate({2026, 7, 23}, seconds, sessions));
+
+  GlobalReadingStats fresh;
+  ASSERT_TRUE(fresh.readingSummaryForDate({2026, 7, 23}, seconds, sessions));
+  EXPECT_EQ(seconds, 0u);
+  EXPECT_EQ(sessions, 0u);
+}
+
+TEST(ReadingStatsDailySummary, DoesNotInventLegacySameDaySessionCounts) {
+  const ReadingStatsDate today{2026, 7, 23};
+  GlobalReadingStats legacy;
+  recordReadingSpanIntoHistory(legacy.readingHistoryAnchorDay, legacy.readingHistoryBits, {today, 12, 0, 0}, 60);
+  legacy.totalSessions = 7;
+  legacy.recordReadingSession(today);
+
+  uint32_t seconds = 0;
+  uint32_t sessions = 0;
+  EXPECT_FALSE(legacy.readingSummaryForDate(today, seconds, sessions));
 }
 
 TEST(ReadingStatsHistory, RejectsFutureDatedHistoryAsCurrent) {

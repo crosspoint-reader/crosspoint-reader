@@ -13,6 +13,8 @@
 
 #include <string>
 
+#include <Version.h>
+
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/tvhdc/crossvi/releases/latest";
 }  // namespace

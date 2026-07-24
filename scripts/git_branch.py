@@ -1,106 +1,85 @@
-"""
-PlatformIO pre-build script: inject git branch and short SHA into
-CROSSPOINT_VERSION for the default (dev) environment.
+"""Generate one environment-local CrossVi version header for version.cpp."""
 
-Results in a version string like:  1.1.0-dev-feat-kosync-xpath-05c6cf8
-Release environments are unaffected; they set CROSSPOINT_VERSION in the ini.
-"""
+from __future__ import annotations
 
 import configparser
 import os
 import subprocess
 import sys
+from pathlib import Path
+
+SCRIPT_DIR = Path(globals().get("__file__", Path.cwd() / "scripts" / "git_branch.py")).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from write_if_changed import write_if_changed
 
 
-def warn(msg):
-    print(f'WARNING [git_branch.py]: {msg}', file=sys.stderr)
+def warn(message: str) -> None:
+    print(f"WARNING [git_branch.py]: {message}", file=sys.stderr)
 
 
-def run_git_value(project_dir, args, label):
+def _safe(value: str) -> str:
+    return "".join(character for character in value if character not in '"\\')
+
+
+def _git(project_dir: str, arguments: list[str], label: str) -> str:
     try:
-        value = subprocess.check_output(
-            ['git', *args],
-            text=True, stderr=subprocess.PIPE, cwd=project_dir
-        ).strip()
-        # Strip characters that would break a C string literal
-        return ''.join(c for c in value if c not in '"\\')
-    except FileNotFoundError:
-        warn(f'git not found on PATH; {label} suffix will be "unknown"')
-        return 'unknown'
-    except subprocess.CalledProcessError as e:
-        warn(
-            f'git command failed (exit {e.returncode}): '
-            f'{e.stderr.strip()}; {label} suffix will be "unknown"'
+        return _safe(
+            subprocess.check_output(
+                ["git", *arguments], text=True, stderr=subprocess.PIPE, cwd=project_dir
+            ).strip()
         )
-        return 'unknown'
-    except OSError as e:
-        warn(
-            f'OS error reading git {label}: {e}; '
-            f'{label} suffix will be "unknown"'
-        )
-        return 'unknown'
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        warn(
-            f'Unexpected error reading git {label}: {e}; '
-            f'{label} suffix will be "unknown"'
-        )
-        return 'unknown'
+    except (FileNotFoundError, subprocess.CalledProcessError, OSError) as error:
+        warn(f"could not read git {label}: {error}; using unknown")
+        return "unknown"
 
 
-def get_git_branch(project_dir):
-    branch = run_git_value(
-        project_dir, ['rev-parse', '--abbrev-ref', 'HEAD'], 'branch'
-    )
-    # Detached HEAD has no branch name.
-    if branch == 'HEAD':
-        return 'detached'
-    return branch
-
-
-def get_git_short_sha(project_dir):
-    return run_git_value(
-        project_dir, ['rev-parse', '--short', 'HEAD'], 'short SHA'
-    )
-
-
-def get_base_version(project_dir):
-    ini_path = os.path.join(project_dir, 'platformio.ini')
-    if not os.path.isfile(ini_path):
-        warn(f'platformio.ini not found at {ini_path}; base version will be "0.0.0"')
-        return '0.0.0'
+def base_version(project_dir: str) -> str:
     config = configparser.ConfigParser()
-    config.read(ini_path)
-    if not config.has_option('crosspoint', 'version'):
-        warn('No [crosspoint] version in platformio.ini; base version will be "0.0.0"')
-        return '0.0.0'
-    return config.get('crosspoint', 'version')
+    config.read(os.path.join(project_dir, "platformio.ini"))
+    return config.get("crosspoint", "version", fallback="0.0.0")
 
 
-def inject_version(env):
-    # Only applies to the dev (default) environment; release envs set the
-    # version via build_flags in platformio.ini and are unaffected.
-    if env['PIOENV'] != 'default':
-        return
+def compute_version(environment: str, project_dir: str) -> str:
+    base = base_version(project_dir)
+    if environment == "default":
+        branch = _git(project_dir, ["rev-parse", "--abbrev-ref", "HEAD"], "branch")
+        if branch == "HEAD":
+            branch = "detached"
+        sha = _git(project_dir, ["rev-parse", "--short", "HEAD"], "short SHA")
+        return f"{base}-dev-{branch}-{sha}"
+    if environment == "gh_release":
+        return base
+    if environment == "gh_release_rc":
+        return f"{base}-rc+{_safe(os.environ.get('CROSSPOINT_RC_HASH', 'unknown'))}"
+    if environment == "slim":
+        return f"{base}-slim"
+    if environment in ("simulator_x3", "simulator_x4"):
+        return f"{base}-simulator"
+    return f"{base}-{_safe(environment)}"
 
-    project_dir = env['PROJECT_DIR']
-    base_version = get_base_version(project_dir)
-    branch = get_git_branch(project_dir)
-    short_sha = get_git_short_sha(project_dir)
-    version_string = f'{base_version}-dev-{branch}-{short_sha}'
 
-    env.Append(CPPDEFINES=[('CROSSPOINT_VERSION', f'\\"{version_string}\\"')])
-    print(f'CrossVi build version: {version_string}')
+def generate(env) -> None:
+    project_dir = env["PROJECT_DIR"]
+    environment = env["PIOENV"]
+    generated_dir = Path(env.subst("$BUILD_DIR")) / "generated"
+    version = compute_version(environment, project_dir)
+    header = generated_dir / "version.generated.h"
+    write_if_changed(
+        header,
+        "#pragma once\n"
+        "// Generated by scripts/git_branch.py.\n"
+        f'#define CROSSVI_BUILD_VERSION "{version}"\n',
+    )
+    env.Append(CPPPATH=[str(generated_dir)])
+    print(f"CrossVi build version: {version}")
 
 
-# PlatformIO/SCons entry point — Import and env are SCons builtins injected at runtime.
-# When run directly with Python (e.g. for validation), a lightweight fake env is used
-# so the git/version logic can be exercised without a full build.
 try:
-    Import('env')           # noqa: F821  # type: ignore[name-defined]
-    inject_version(env)     # noqa: F821  # type: ignore[name-defined]
+    Import("env")  # noqa: F821  # type: ignore[name-defined]
+    generate(env)  # noqa: F821  # type: ignore[name-defined]
 except NameError:
-    class _Env(dict):
-        def Append(self, **_): pass
-
-    _project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    inject_version(_Env({'PIOENV': 'default', 'PROJECT_DIR': _project_dir}))
+    if __name__ == "__main__":
+        project = str(SCRIPT_DIR.parent)
+        print(compute_version("default", project))

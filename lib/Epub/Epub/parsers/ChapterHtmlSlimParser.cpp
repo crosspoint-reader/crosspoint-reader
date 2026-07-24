@@ -22,6 +22,17 @@
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 constexpr size_t PARSE_BUFFER_SIZE = 1024;
 
+void stripLightPublisherLayout(CssStyle& style) {
+  style.textIndent = {};
+  style.marginTop = style.marginBottom = style.marginLeft = style.marginRight = {};
+  style.paddingTop = style.paddingBottom = style.paddingLeft = style.paddingRight = {};
+  style.imageHeight = style.imageWidth = {};
+  style.defined.textIndent = 0;
+  style.defined.marginTop = style.defined.marginBottom = style.defined.marginLeft = style.defined.marginRight = 0;
+  style.defined.paddingTop = style.defined.paddingBottom = style.defined.paddingLeft = style.defined.paddingRight = 0;
+  style.defined.imageHeight = style.defined.imageWidth = 0;
+}
+
 // This number comes from PR #73
 // If we have > 750 words buffered up, perform the layout and consume out all but the last line
 // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
@@ -282,7 +293,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  currentTextBlock.reset(
+      new ParsedText(extraParagraphSpacing, forceParagraphIndents, hyphenationEnabled, focusReadingEnabled, blockStyle));
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }
@@ -352,8 +364,25 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
+  constexpr size_t MAX_CSS_ANCESTOR_DEPTH = 32;
+  constexpr size_t MAX_ANCESTOR_TAG_LENGTH = 32;
+  constexpr size_t MAX_ANCESTOR_CLASS_LENGTH = 96;
+  const auto pushCssAncestor = [self](const char* tag, const char* classes) {
+    if (self->cssAncestors.size() >= MAX_CSS_ANCESTOR_DEPTH) {
+      ++self->cssAncestorOverflowDepth;
+      return;
+    }
+    CssParser::AncestorEntry entry;
+    if (tag != nullptr && strnlen(tag, MAX_ANCESTOR_TAG_LENGTH + 1) <= MAX_ANCESTOR_TAG_LENGTH) entry.tag = tag;
+    if (classes != nullptr && strnlen(classes, MAX_ANCESTOR_CLASS_LENGTH + 1) <= MAX_ANCESTOR_CLASS_LENGTH) {
+      entry.classAttr = classes;
+    }
+    self->cssAncestors.push_back(std::move(entry));
+  };
+
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
+    pushCssAncestor(nullptr, nullptr);
     self->depth += 1;
     return;
   }
@@ -411,12 +440,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // before tag-specific branches emit any content or metadata.
   CssStyle cssStyle;
   if (self->cssParser) {
-    cssStyle = self->cssParser->resolveStyle(name, classAttr);
+    cssStyle = self->renderMode == EpubRenderMode::Full
+                   ? self->cssParser->resolveStyle(name, classAttr, self->cssAncestors)
+                   : self->cssParser->resolveStyle(name, classAttr);
     if (*styleAttr != '\0') {
       CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
       cssStyle.applyOver(inlineStyle);
     }
   }
+  if (self->renderMode == EpubRenderMode::Light) stripLightPublisherLayout(cssStyle);
 
   // HTML dir attribute overrides CSS direction (case-insensitive per HTML spec)
   if (*dirAttr != '\0') {
@@ -435,6 +467,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     cssStyle.direction = self->effectiveDirection;
     cssStyle.defined.direction = 1;
   }
+
+  pushCssAncestor(name, classAttr);
 
   // Skip elements with display:none before all fast paths (tables, links, etc.).
   if (cssStyle.hasDisplay() && cssStyle.display == CssDisplay::None) {
@@ -848,7 +882,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   const auto userAlignmentBlockStyle = BlockStyle::fromCssStyle(
       cssStyle, emSize, static_cast<CssTextAlign>(self->paragraphAlignment), self->viewportWidth);
 
+  auto effectiveBlockStyle = userAlignmentBlockStyle;
+  if (self->forceParagraphIndents && strcmp(name, "p") == 0) {
+    const bool naturalAlignment = effectiveBlockStyle.alignment == CssTextAlign::Justify ||
+                                  (effectiveBlockStyle.isRtl ? effectiveBlockStyle.alignment == CssTextAlign::Right
+                                                             : effectiveBlockStyle.alignment == CssTextAlign::Left);
+    if (naturalAlignment && (!effectiveBlockStyle.textIndentDefined || effectiveBlockStyle.textIndent == 0)) {
+      effectiveBlockStyle.textIndentDefined = true;
+      effectiveBlockStyle.textIndent = static_cast<int16_t>(emSize);
+    }
+  }
+
   if (strcmp(name, "hr") == 0) {
+    if (self->renderMode == EpubRenderMode::Light) {
+      self->depth += 1;
+      return;
+    }
     auto hrBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
     if (!self->embeddedStyle) {
       hrBlockStyle.marginLeft = 0;
@@ -896,7 +945,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(brStyle);
     } else {
       self->currentCssStyle = cssStyle;
-      const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle,
+      const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(effectiveBlockStyle,
                                                                                   BlockStyle::CombineAxis::Horizontal);
       self->blockStyleStack.push_back(accumulated);
       self->startNewTextBlock(accumulated.withoutBottom());
@@ -1203,6 +1252,12 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
 
+  if (self->cssAncestorOverflowDepth > 0) {
+    --self->cssAncestorOverflowDepth;
+  } else if (!self->cssAncestors.empty()) {
+    self->cssAncestors.pop_back();
+  }
+
   // Check if any style state will change after we decrement depth
   // If so, we MUST flush the partWordBuffer with the CURRENT style first
   // Note: depth hasn't been decremented yet, so we check against (depth - 1)
@@ -1326,6 +1381,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
 
 bool ChapterHtmlSlimParser::beginParse() {
+  lastFailure_ = ChapterParseFailure::None;
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -1346,6 +1402,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   xmlParser_ = XML_ParserCreate(nullptr);
   if (!xmlParser_) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
+    lastFailure_ = ChapterParseFailure::OutOfMemory;
     return false;
   }
 
@@ -1354,6 +1411,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   XML_SetDefaultHandlerExpand(xmlParser_, defaultHandlerExpand);
 
   if (!Storage.openFileForRead("EHP", filepath, parseFile_)) {
+    lastFailure_ = ChapterParseFailure::IoError;
     destroyXmlParser(xmlParser_);
     xmlParser_ = nullptr;
     return false;
@@ -1378,6 +1436,7 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
   void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
   if (!buf) {
     LOG_ERR("EHP", "Couldn't allocate memory for buffer");
+    lastFailure_ = ChapterParseFailure::OutOfMemory;
     return ParseStatus::Error;
   }
 
@@ -1385,12 +1444,15 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
 
   if (len == 0 && parseFile_.available() > 0) {
     LOG_ERR("EHP", "File read error");
+    lastFailure_ = ChapterParseFailure::IoError;
     return ParseStatus::Error;
   }
 
   const int done = parseFile_.available() == 0;
 
   if (XML_ParseBuffer(xmlParser_, static_cast<int>(len), done) == XML_STATUS_ERROR) {
+    lastFailure_ = XML_GetErrorCode(xmlParser_) == XML_ERROR_NO_MEMORY ? ChapterParseFailure::OutOfMemory
+                                                                      : ChapterParseFailure::InvalidContent;
     LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(xmlParser_),
             XML_ErrorString(XML_GetErrorCode(xmlParser_)));
     return ParseStatus::Error;

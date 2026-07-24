@@ -8,6 +8,7 @@
 #pragma once
 
 #include <HalStorage.h>
+#include <ZipFile.h>
 
 #include <functional>
 #include <memory>
@@ -43,6 +44,7 @@ class XtcParser {
   uint16_t getWidth() const { return m_defaultWidth; }
   uint16_t getHeight() const { return m_defaultHeight; }
   uint8_t getBitDepth() const { return m_bitDepth; }  // 1 = XTC/XTG, 2 = XTCH/XTH
+  bool getSourceIdentity(ZipFile::SourceIdentity& identity) const;
 
   // Page information
   bool getPageInfo(uint32_t pageIndex, PageInfo& info);
@@ -88,6 +90,10 @@ class XtcParser {
   std::string m_filepath;
   bool m_isOpen;
   XtcHeader m_header;
+  uint64_t m_fileSize;
+  uint16_t m_chapterCount;
+  ZipFile::SourceIdentity m_sourceIdentity;
+  bool m_hasSourceIdentity;
   std::vector<ChapterInfo> m_chapters;
   std::string m_title;
   std::string m_author;
@@ -100,11 +106,13 @@ class XtcParser {
 
   // Internal helper functions
   XtcError readHeader();
-  XtcError readFirstPageInfo();
-  XtcError readTitle();
-  XtcError readAuthor();
+  XtcError readMetadata();
   XtcError readChapters();
+  XtcError validatePageTable();
+  XtcError validatePageEntry(uint32_t pageIndex, PageInfo* info = nullptr);
+  XtcError fingerprintSource();
   bool readPageTableEntry(uint32_t pageIndex, PageInfo& info);
+  XtcError failOpen(XtcError error);
 
   // File handle management — reopen on demand, close after use
   bool ensureFileOpen();

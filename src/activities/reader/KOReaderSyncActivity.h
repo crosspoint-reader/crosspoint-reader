@@ -82,6 +82,7 @@ class KOReaderSyncActivity final : public Activity {
   // Timed return for successful smart-sync terminal states.
   unsigned long autoReturnAt = 0;
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1200;
+  bool suppressInitialConfirmRelease = false;
 
   // Tracks whether this session activated WiFi. Set in onEnter past the credentials
   // check; checked in onExit to decide whether to silent-reboot. Can't rely on

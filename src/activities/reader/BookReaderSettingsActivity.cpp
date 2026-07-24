@@ -17,18 +17,55 @@
 
 BookReaderSettingsActivity::BookReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                        PerBookReaderSettings globalDefaults,
-                                                       PerBookReaderSettings bookSettings)
+                                                       PerBookReaderSettings bookSettings, const ReaderKind readerKind)
     : Activity("BookReaderSettings", renderer, mappedInput),
       globalDefaults(std::move(globalDefaults)),
       savedCustom(std::move(bookSettings)),
-      customEnabled(savedCustom.hasReaderOverrides) {}
+      customEnabled(savedCustom.hasReaderOverrides),
+      readerKind(readerKind) {}
 
 void BookReaderSettingsActivity::rebuildSettings() {
   settings.clear();
   sdFontSystem.refreshIfDirty();
-  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
-    if (setting.category == StrId::STR_CAT_READER) settings.push_back(std::move(setting));
+  if (readerKind == ReaderKind::Epub) {
+    settings.push_back(SettingInfo::Enum(
+        StrId::STR_EPUB_RENDER_MODE, &CrossPointSettings::epubRenderMode,
+        {StrId::STR_EPUB_RENDER_FULL, StrId::STR_EPUB_RENDER_BALANCED, StrId::STR_EPUB_RENDER_LIGHT}));
+    settings.push_back(SettingInfo::Toggle(StrId::STR_EPUB_SAFE_MODE, &CrossPointSettings::epubSafeMode));
   }
+  for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
+    if (setting.category != StrId::STR_CAT_READER || setting.nameId == StrId::STR_DAILY_READING_GOAL ||
+        setting.nameId == StrId::STR_TEXT_DARKNESS) {
+      continue;
+    }
+    if (readerKind == ReaderKind::PlainText) {
+      const bool supported =
+          setting.nameId == StrId::STR_FONT_FAMILY || setting.nameId == StrId::STR_FONT_SIZE ||
+          setting.nameId == StrId::STR_LINE_SPACING || setting.nameId == StrId::STR_SCREEN_MARGIN ||
+          setting.nameId == StrId::STR_PARA_ALIGNMENT || setting.nameId == StrId::STR_ORIENTATION ||
+          setting.nameId == StrId::STR_TEXT_AA;
+      if (!supported) continue;
+      if (setting.nameId == StrId::STR_PARA_ALIGNMENT) {
+        setting.enumValues = {StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT};
+        setting.valueGetter = [] {
+          const uint8_t value = SETTINGS.paragraphAlignment;
+          return value >= CrossPointSettings::LEFT_ALIGN && value <= CrossPointSettings::RIGHT_ALIGN
+                     ? static_cast<uint8_t>(value - CrossPointSettings::LEFT_ALIGN)
+                     : static_cast<uint8_t>(0);
+        };
+        setting.valueSetter = [](const uint8_t value) {
+          SETTINGS.paragraphAlignment = static_cast<uint8_t>(CrossPointSettings::LEFT_ALIGN +
+                                                              std::min<uint8_t>(value, 2));
+        };
+      }
+    }
+    settings.push_back(std::move(setting));
+  }
+}
+
+bool BookReaderSettingsActivity::isIndependentBookOption(const SettingInfo& setting) const {
+  return readerKind == ReaderKind::Epub &&
+         (setting.nameId == StrId::STR_EPUB_RENDER_MODE || setting.nameId == StrId::STR_EPUB_SAFE_MODE);
 }
 
 void BookReaderSettingsActivity::onEnter() {
@@ -43,6 +80,9 @@ void BookReaderSettingsActivity::setCustomEnabled(const bool enabled) {
     savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval, savedCustom.autoPageTurnSeconds,
                                         savedCustom.autoPageTurnStartsOnOpen);
     applyReaderSettings(globalDefaults);
+    SETTINGS.epubRenderMode = static_cast<uint8_t>(savedCustom.renderMode);
+    SETTINGS.epubRenderModeOverride = savedCustom.hasRenderModeOverride ? 1 : 0;
+    SETTINGS.epubSafeMode = savedCustom.safeModeEnabled ? 1 : 0;
   } else {
     applyReaderSettings(savedCustom);
   }
@@ -112,6 +152,7 @@ void BookReaderSettingsActivity::toggleSelected() {
   }
 
   const SettingInfo& setting = settings[selectedIndex - 1];
+  const bool independentBookOption = isIndependentBookOption(setting);
   if (setting.nameId == StrId::STR_FONT_FAMILY) {
     const uint8_t previousFontFamily = SETTINGS.fontFamily;
     const std::string previousSdFontFamily = SETTINGS.sdFontFamilyName;
@@ -140,11 +181,19 @@ void BookReaderSettingsActivity::toggleSelected() {
 
   if (setting.type == SettingType::ENUM && setting.valuePtr && setting.enumValues.size() > 2) {
     const auto valuePtr = setting.valuePtr;
-    const uint8_t current = SETTINGS.*valuePtr;
+    const auto valueGetter = setting.valueGetter;
+    const auto valueSetter = setting.valueSetter;
+    const uint8_t current = valueGetter ? valueGetter() : SETTINGS.*valuePtr;
     optionPopup.show(setting.nameId, setting.enumValues.data(), static_cast<int>(setting.enumValues.size()), current,
-                     [this, valuePtr](const int value) {
-                       if (!customEnabled) setCustomEnabled(true);
-                       SETTINGS.*valuePtr = static_cast<uint8_t>(value);
+                     [this, valuePtr, valueSetter](const int value) {
+                       const bool renderMode = valuePtr == &CrossPointSettings::epubRenderMode;
+                       if (!customEnabled && !renderMode) setCustomEnabled(true);
+                       if (valueSetter) {
+                         valueSetter(static_cast<uint8_t>(value));
+                       } else {
+                         SETTINGS.*valuePtr = static_cast<uint8_t>(value);
+                       }
+                       if (renderMode) SETTINGS.epubRenderModeOverride = 1;
                        savedCustom =
                            captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval,
                                                  savedCustom.autoPageTurnSeconds, savedCustom.autoPageTurnStartsOnOpen);
@@ -154,7 +203,7 @@ void BookReaderSettingsActivity::toggleSelected() {
     return;
   }
 
-  if (!customEnabled) setCustomEnabled(true);
+  if (!customEnabled && !independentBookOption) setCustomEnabled(true);
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr) {
     SETTINGS.*(setting.valuePtr) = !(SETTINGS.*(setting.valuePtr));
@@ -164,11 +213,12 @@ void BookReaderSettingsActivity::toggleSelected() {
   } else if (setting.type == SettingType::VALUE && setting.valuePtr) {
     const uint8_t current = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = current + setting.valueRange.step > setting.valueRange.max
-                                       ? setting.valueRange.min
-                                       : current + setting.valueRange.step;
+                                       ? static_cast<uint8_t>(setting.valueRange.min)
+                                       : static_cast<uint8_t>(current + setting.valueRange.step);
   }
   savedCustom = captureReaderSettings(true, savedCustom.hasAutoPageTurnInterval, savedCustom.autoPageTurnSeconds,
                                       savedCustom.autoPageTurnStartsOnOpen);
+  savedCustom.hasReaderOverrides = customEnabled;
   requestUpdate();
 }
 
@@ -196,6 +246,8 @@ std::string BookReaderSettingsActivity::valueForRow(const int index) const {
 }
 
 void BookReaderSettingsActivity::render(RenderLock&&) {
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
@@ -214,7 +266,10 @@ void BookReaderSettingsActivity::render(RenderLock&&) {
         return I18N.get(settings[index - 1].nameId);
       },
       nullptr, nullptr, [this](const int index) { return valueForRow(index); }, true,
-      [this](const int index) { return !customEnabled && index > 0 && index <= static_cast<int>(settings.size()); });
+      [this](const int index) {
+        return !customEnabled && index > 0 && index <= static_cast<int>(settings.size()) &&
+               !isIndependentBookOption(settings[index - 1]);
+      });
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

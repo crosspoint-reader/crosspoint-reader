@@ -29,6 +29,11 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
+  const uint8_t cfgVersion = doc["cfgVersion"] | (uint8_t)1;
+  if (cfgVersion > CONFIG_VERSION) {
+    LOG_ERR("KRS", "Credential config version %u is newer than supported version %u", cfgVersion, CONFIG_VERSION);
+    return false;
+  }
   std::string user = doc["username"] | "";
 
   bool needsResave = false;
@@ -41,7 +46,6 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   // A pre-v2 config with credentials and no explicit URL was actively syncing
   // against the old default — pin that URL so the upgrade doesn't switch servers
   // out from under the user. Fresh setups get the new default.
-  const uint8_t cfgVersion = doc["cfgVersion"] | (uint8_t)1;
   if (cfgVersion < CONFIG_VERSION) {
     if (getServerUrl().empty() && hasCredentials()) {
       LOG_DBG("KRS", "Pre-v2 config used the old default server; pinning %s", LEGACY_DEFAULT_SERVER_URL);

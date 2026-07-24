@@ -1,8 +1,31 @@
 #include "Txt.h"
 
+#include <Arduino.h>
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+
+#include <algorithm>
+#include <array>
+#include <limits>
+
+namespace {
+constexpr size_t IDENTITY_CHUNK_SIZE = 2048;
+constexpr size_t IDENTITY_YIELD_BYTES = 64U * 1024U;
+constexpr uint64_t FNV64_OFFSET_BASIS = 14695981039346656037ULL;
+constexpr uint64_t FNV64_PRIME = 1099511628211ULL;
+
+void updateRawIdentity(const uint8_t* data, const size_t length, uint32_t& crc, uint64_t& fnv) {
+  for (size_t index = 0; index < length; ++index) {
+    crc ^= data[index];
+    for (uint8_t bit = 0; bit < 8; ++bit) {
+      crc = (crc >> 1U) ^ (0xEDB88320U & (0U - (crc & 1U)));
+    }
+    fnv ^= data[index];
+    fnv *= FNV64_PRIME;
+  }
+}
+}  // namespace
 
 Txt::Txt(std::string path, std::string cacheBasePath)
     : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
@@ -27,8 +50,46 @@ bool Txt::load() {
     return false;
   }
 
-  fileSize = file.size();
-  file.close();
+  const uint64_t expectedSize = file.fileSize64();
+  if (expectedSize > std::numeric_limits<size_t>::max() || expectedSize > std::numeric_limits<uint32_t>::max()) {
+    LOG_ERR("TXT", "TXT file is too large for this build: %s", filepath.c_str());
+    file.close();
+    return false;
+  }
+
+  std::array<uint8_t, IDENTITY_CHUNK_SIZE> buffer{};
+  uint64_t totalRead = 0;
+  size_t bytesSinceYield = 0;
+  uint32_t crc = UINT32_MAX;
+  uint64_t fnv = FNV64_OFFSET_BASIS;
+  while (totalRead < expectedSize) {
+    const size_t wanted = static_cast<size_t>(std::min<uint64_t>(buffer.size(), expectedSize - totalRead));
+    const int bytesRead = file.read(buffer.data(), wanted);
+    if (bytesRead <= 0 || static_cast<size_t>(bytesRead) > wanted) {
+      LOG_ERR("TXT", "Failed to fingerprint complete file: %s", filepath.c_str());
+      file.close();
+      return false;
+    }
+    updateRawIdentity(buffer.data(), static_cast<size_t>(bytesRead), crc, fnv);
+    totalRead += static_cast<size_t>(bytesRead);
+    bytesSinceYield += static_cast<size_t>(bytesRead);
+    if (bytesSinceYield >= IDENTITY_YIELD_BYTES) {
+      yield();
+      bytesSinceYield = 0;
+    }
+  }
+
+  // Reject an append/truncation observed during the scan. A writer must not
+  // bind path-keyed progress or statistics to a prefix of a changing file.
+  const bool sizeStayedStable = file.fileSize64() == expectedSize;
+  const bool closed = file.close();
+  if (totalRead != expectedSize || !sizeStayedStable || !closed) {
+    LOG_ERR("TXT", "TXT changed or became unreadable while fingerprinting: %s", filepath.c_str());
+    return false;
+  }
+
+  fileSize = static_cast<size_t>(expectedSize);
+  sourceIdentity = ZipFile::SourceIdentity::forRawFile(expectedSize, ~crc, fnv);
 
   loaded = true;
   LOG_DBG("TXT", "Loaded TXT file: %s (%zu bytes)", filepath.c_str(), fileSize);
@@ -40,9 +101,11 @@ std::string Txt::getTitle() const {
   size_t lastSlash = filepath.find_last_of('/');
   std::string filename = (lastSlash != std::string::npos) ? filepath.substr(lastSlash + 1) : filepath;
 
-  // Remove .txt extension
+  // Remove the plain-text extension used to dispatch this reader.
   if (FsHelpers::hasTxtExtension(filename)) {
     filename.resize(filename.length() - 4);
+  } else if (FsHelpers::hasMarkdownExtension(filename)) {
+    filename.resize(filename.length() - 3);
   }
 
   return filename;

@@ -17,7 +17,7 @@ ReadingStatsPresentation build(const BookReadingStats& book, const bool bookTrus
 }
 }  // namespace
 
-TEST(ReadingStatsPresentation, TrustedMissingDataKeepsRealZeroDistinctFromUnavailable) {
+TEST(ReadingStatsPresentation, TrustedMissingDataKeepsRealZeroDistinctFromMissingAndUnavailable) {
   const BookReadingStats book;
   const GlobalReadingStats device;
   const GlobalReadingStatsAggregation aggregate{device, 0, 0};
@@ -28,8 +28,10 @@ TEST(ReadingStatsPresentation, TrustedMissingDataKeepsRealZeroDistinctFromUnavai
   EXPECT_EQ(model.book.readingTime.value, 0u);
   EXPECT_EQ(model.book.sessions.state, ReadingStatsMetricState::Known);
   EXPECT_EQ(model.book.averageSession.state, ReadingStatsMetricState::Unavailable);
-  EXPECT_EQ(model.book.averagePage.state, ReadingStatsMetricState::Unavailable);
-  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::Unavailable);
+  EXPECT_EQ(model.book.averagePage.state, ReadingStatsMetricState::NoData);
+  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::NoData);
+  EXPECT_EQ(model.book.startDate.state, ReadingStatsMetricState::NoData);
+  EXPECT_EQ(model.book.finishDate.state, ReadingStatsMetricState::NoData);
   EXPECT_EQ(model.book.progress.state, ReadingStatsMetricState::Estimated);
   EXPECT_EQ(model.book.progress.value, 0u);
   EXPECT_TRUE(model.book.timeOfDay.available);
@@ -120,7 +122,7 @@ TEST(ReadingStatsPresentation, EstimateRequiresFreshStablePagination) {
   ReadingStatsPresentation model = build(book, true, device, true, aggregate);
   EXPECT_EQ(model.book.averageSession.state, ReadingStatsMetricState::Unavailable);
   EXPECT_EQ(model.book.averagePage.state, ReadingStatsMetricState::Known);
-  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::Unavailable);
+  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::NoData);
 
   model = build(book, true, device, true, aggregate, nullptr, ReadingStatsMetric::unavailable(), true);
   EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::Estimated);
@@ -132,6 +134,77 @@ TEST(ReadingStatsPresentation, EstimateRequiresFreshStablePagination) {
   EXPECT_EQ(model.book.completed.value, 1u);
   EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::Known);
   EXPECT_EQ(model.book.timeLeft.value, 0u);
+}
+
+TEST(ReadingStatsPresentation, TextReaderCanReportProgressWithoutInventingLayoutDependentPace) {
+  BookReadingStats book;
+  book.totalReadingSeconds = 120;
+  book.totalPagesTurned = 4;
+  const GlobalReadingStats device;
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+
+  ReadingStatsPresentation model =
+      build(book, true, device, true, aggregate, nullptr, ReadingStatsMetric::estimated(37), false);
+  markReadingStatsPageMetricsNotApplicable(model);
+  EXPECT_EQ(model.book.readingTime.state, ReadingStatsMetricState::Known);
+  EXPECT_EQ(model.book.readingTime.value, 120u);
+  EXPECT_EQ(model.book.pagesTurned.state, ReadingStatsMetricState::Known);
+  EXPECT_EQ(model.book.pagesTurned.value, 4u);
+  EXPECT_EQ(model.book.progress.state, ReadingStatsMetricState::Estimated);
+  EXPECT_EQ(model.book.progress.value, 37u);
+  EXPECT_EQ(model.book.averagePage.state, ReadingStatsMetricState::NotApplicable);
+  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::NotApplicable);
+  EXPECT_EQ(model.book.finishDate.state, ReadingStatsMetricState::NotApplicable);
+}
+
+TEST(ReadingStatsPresentation, TextReaderKeepsRecordedCompletionFacts) {
+  BookReadingStats book;
+  book.isCompleted = true;
+  book.finishedDate = {2024, 4, 5};
+  book.finishedMinuteOfDay = 9u * 60u + 15u;
+  const GlobalReadingStats device;
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+  const ReadingStatsDateTime now{{2024, 4, 6}, 12, 0, 0};
+
+  ReadingStatsPresentation model =
+      build(book, true, device, true, aggregate, &now, ReadingStatsMetric::estimated(100), false);
+  markReadingStatsPageMetricsNotApplicable(model);
+
+  EXPECT_EQ(model.book.averagePage.state, ReadingStatsMetricState::NotApplicable);
+  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::Known);
+  EXPECT_EQ(model.book.timeLeft.value, 0u);
+  EXPECT_EQ(model.book.finishDate.state, ReadingStatsMetricState::Known);
+  EXPECT_EQ(model.book.finishDate.value, readingStatsMinuteIndex(book.finishedDate, book.finishedMinuteOfDay));
+}
+
+TEST(ReadingStatsPresentation, EstimatedProgressCannotClaimCompletion) {
+  BookReadingStats book;
+  const GlobalReadingStats device;
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+
+  ReadingStatsPresentation model =
+      build(book, true, device, true, aggregate, nullptr, ReadingStatsMetric::estimated(100));
+  EXPECT_EQ(model.book.progress.state, ReadingStatsMetricState::Estimated);
+  EXPECT_EQ(model.book.progress.value, 99u);
+
+  book.isCompleted = true;
+  model = build(book, true, device, true, aggregate, nullptr, ReadingStatsMetric::estimated(99));
+  EXPECT_EQ(model.book.progress.state, ReadingStatsMetricState::Known);
+  EXPECT_EQ(model.book.progress.value, 100u);
+}
+
+TEST(ReadingStatsPresentation, TextReaderDoesNotHideUntrustedCompletionDataAsNotApplicable) {
+  const BookReadingStats book;
+  const GlobalReadingStats device;
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+
+  ReadingStatsPresentation model = build(book, false, device, true, aggregate);
+  markReadingStatsPageMetricsNotApplicable(model);
+
+  EXPECT_EQ(model.book.averagePage.state, ReadingStatsMetricState::NotApplicable);
+  EXPECT_EQ(model.book.completed.state, ReadingStatsMetricState::Unavailable);
+  EXPECT_EQ(model.book.timeLeft.state, ReadingStatsMetricState::Unavailable);
+  EXPECT_EQ(model.book.finishDate.state, ReadingStatsMetricState::Unavailable);
 }
 
 TEST(ReadingStatsPresentation, DatedChartsExposeLegacyAndPartialCoverage) {
@@ -163,6 +236,7 @@ TEST(ReadingStatsPresentation, BookDatesDistinguishStoredAndEstimatedValues) {
   BookReadingStats book;
   book.totalReadingSeconds = 3600;
   book.startDate = {2024, 1, 1};
+  book.startMinuteOfDay = 8u * 60u + 30u;
   book.estimatedTimeLeftSeconds = 7200;
   const GlobalReadingStats device;
   const GlobalReadingStatsAggregation aggregate{device, 0, 0};
@@ -171,21 +245,23 @@ TEST(ReadingStatsPresentation, BookDatesDistinguishStoredAndEstimatedValues) {
   ReadingStatsPresentation model =
       build(book, true, device, true, aggregate, &now, ReadingStatsMetric::estimated(50), true);
   EXPECT_EQ(model.book.startDate.state, ReadingStatsMetricState::Known);
-  EXPECT_EQ(model.book.startDate.value, readingStatsDayIndex(book.startDate));
+  EXPECT_EQ(model.book.startDate.value, readingStatsMinuteIndex(book.startDate, book.startMinuteOfDay));
   EXPECT_EQ(model.book.finishDate.state, ReadingStatsMetricState::Estimated);
-  EXPECT_EQ(model.book.finishDate.value, readingStatsDayIndex({2024, 1, 31}));
+  EXPECT_EQ(model.book.finishDate.value, readingStatsMinuteIndex({2024, 1, 31}, 12u * 60u));
 
   book.isCompleted = true;
   book.finishedDate = {2024, 1, 10};
+  book.finishedMinuteOfDay = 21u * 60u + 5u;
   model = build(book, true, device, true, aggregate, &now, ReadingStatsMetric::known(100), true);
   EXPECT_EQ(model.book.finishDate.state, ReadingStatsMetricState::Known);
-  EXPECT_EQ(model.book.finishDate.value, readingStatsDayIndex(book.finishedDate));
+  EXPECT_EQ(model.book.finishDate.value, readingStatsMinuteIndex(book.finishedDate, book.finishedMinuteOfDay));
 }
 
 TEST(ReadingStatsPresentation, FinishEstimateRequiresAValidNonFutureClockAndFitsCalendar) {
   BookReadingStats book;
   book.totalReadingSeconds = 1;
   book.startDate = {2024, 1, 12};
+  book.startMinuteOfDay = 7u * 60u;
   book.estimatedTimeLeftSeconds = std::numeric_limits<uint32_t>::max();
   const GlobalReadingStats device;
   const GlobalReadingStatsAggregation aggregate{device, 0, 0};
@@ -211,7 +287,9 @@ TEST(ReadingStatsPresentation, FutureCompletionDateIsNotPresentedAsFact) {
   BookReadingStats book;
   book.isCompleted = true;
   book.startDate = {2024, 1, 1};
+  book.startMinuteOfDay = 7u * 60u;
   book.finishedDate = {2024, 1, 12};
+  book.finishedMinuteOfDay = 8u * 60u;
   const GlobalReadingStats device;
   const GlobalReadingStatsAggregation aggregate{device, 0, 0};
   const ReadingStatsDateTime now{{2024, 1, 11}, 12, 0, 0};
@@ -264,6 +342,49 @@ TEST(ReadingStatsPresentation, StreakNeedsAValidCurrentDateButKnownZeroStaysZero
   EXPECT_EQ(model.device.currentStreak.value, 0u);
 }
 
+TEST(ReadingStatsPresentation, CalendarSnapshotUsesOnlyTrustedLocalDatedHistory) {
+  GlobalReadingStats device;
+  device.recordReadingSpan({{2026, 7, 23}, 12, 0, 0}, 60);
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+  const BookReadingStats book;
+  const ReadingStatsDateTime now{{2026, 7, 24}, 8, 0, 0};
+
+  ReadingStatsPresentation model = build(book, true, device, true, aggregate, &now);
+  EXPECT_TRUE(model.deviceCalendar.clockValid);
+  EXPECT_TRUE(model.deviceCalendar.historyAvailable);
+  EXPECT_EQ(model.deviceCalendar.today.day, 24u);
+  EXPECT_EQ(model.deviceCalendar.readingDays, 1u);
+  EXPECT_EQ(model.deviceCalendar.currentStreak, 1u);
+
+  model = build(book, true, device, false, aggregate, &now);
+  EXPECT_FALSE(model.deviceCalendar.historyAvailable);
+  EXPECT_FALSE(model.deviceCalendar.clockValid);
+}
+
+TEST(ReadingStatsPresentation, CalendarDoesNotPresentLegacyUndatedTotalsAsEmptyDays) {
+  GlobalReadingStats device;
+  device.totalReadingSeconds = 3600;
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+  const BookReadingStats book;
+  const ReadingStatsDateTime now{{2026, 7, 24}, 8, 0, 0};
+
+  const ReadingStatsPresentation model = build(book, true, device, true, aggregate, &now);
+  EXPECT_TRUE(model.deviceCalendar.clockValid);
+  EXPECT_FALSE(model.deviceCalendar.historyAvailable);
+}
+
+TEST(ReadingStatsPresentation, CalendarRejectsHistoryAnchoredInTheFuture) {
+  GlobalReadingStats device;
+  device.recordReadingSpan({{2026, 7, 25}, 12, 0, 0}, 60);
+  const GlobalReadingStatsAggregation aggregate{device, 0, 0};
+  const BookReadingStats book;
+  const ReadingStatsDateTime now{{2026, 7, 24}, 8, 0, 0};
+
+  const ReadingStatsPresentation model = build(book, true, device, true, aggregate, &now);
+  EXPECT_TRUE(model.deviceCalendar.clockValid);
+  EXPECT_FALSE(model.deviceCalendar.historyAvailable);
+}
+
 TEST(ReadingStatsPresentation, BarScalingIsBoundedVisibleAndOverflowSafe) {
   EXPECT_EQ(scaleReadingStatsBar(0, 100, 50), 0);
   EXPECT_EQ(scaleReadingStatsBar(1, 1000, 50), 2);
@@ -305,6 +426,25 @@ TEST(ReadingStatsPresentation, SessionPreviewMatchesCommitNoiseThresholdsWithout
 
   EXPECT_EQ(sourceBook.totalReadingSeconds, 100u);
   EXPECT_EQ(sourceDevice.totalReadingSeconds, 200u);
+}
+
+TEST(ReadingStatsPresentation, SessionPreviewIncludesAnEarnedStartDate) {
+  BookReadingStats book;
+  GlobalReadingStats device;
+  const BookReadingStats pendingBook;
+  const GlobalReadingStats pendingDevice;
+  const ReadingStatsDateTime sessionStart{{2026, 7, 21}, 14, 0, 0};
+
+  previewReadingStatsSession(&book, &device, 119, pendingBook, pendingDevice, &sessionStart);
+  EXPECT_FALSE(book.startDate.isValid());
+
+  book = {};
+  device = {};
+  previewReadingStatsSession(&book, &device, 120, pendingBook, pendingDevice, &sessionStart);
+  EXPECT_EQ(book.startDate.year, sessionStart.date.year);
+  EXPECT_EQ(book.startDate.month, sessionStart.date.month);
+  EXPECT_EQ(book.startDate.day, sessionStart.date.day);
+  EXPECT_EQ(book.startMinuteOfDay, 14u * 60u);
 }
 
 TEST(ReadingStatsPresentation, SessionPreviewCanLeaveReadOnlyScopesUntouched) {

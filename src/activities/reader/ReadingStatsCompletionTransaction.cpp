@@ -19,13 +19,17 @@ constexpr char LOG_TAG[] = "STATSTXN";
 constexpr char MARKER_PATH[] = "/.crosspoint/stats_completion.txn";
 constexpr char MARKER_TEMP_PATH[] = "/.crosspoint/stats_completion.txn.tmp";
 constexpr std::array<uint8_t, 4> MARKER_MAGIC = {'C', 'V', 'S', 'T'};
-constexpr uint8_t MARKER_VERSION = 1;
+constexpr uint8_t LEGACY_MARKER_VERSION = 1;
+constexpr uint8_t MARKER_VERSION = 2;
 constexpr uint8_t FLAG_BOOK_WAS_MISSING = 1u << 0;
 constexpr uint8_t FLAG_GLOBAL_WAS_MISSING = 1u << 1;
 constexpr uint8_t KNOWN_FLAGS = FLAG_BOOK_WAS_MISSING | FLAG_GLOBAL_WAS_MISSING;
-constexpr char EPUB_CACHE_PREFIX[] = "/.crosspoint/epub_";
+constexpr std::array<const char*, 3> TRACKED_BOOK_CACHE_PREFIXES = {"/.crosspoint/epub_", "/.crosspoint/txt_",
+                                                                    "/.crosspoint/xtc_"};
 constexpr size_t MAX_CACHE_PATH_SIZE = 64;
 constexpr size_t HEADER_SIZE = 8;
+constexpr size_t LEGACY_BOOK_PAYLOAD_SIZE = 73;
+constexpr size_t LEGACY_PAYLOAD_SIZE = LEGACY_BOOK_PAYLOAD_SIZE * 2 + GlobalReadingStats::CURRENT_FILE_SIZE * 2;
 constexpr size_t PAYLOAD_SIZE = BookReadingStats::CURRENT_FILE_SIZE * 2 + GlobalReadingStats::CURRENT_FILE_SIZE * 2;
 constexpr size_t CRC_SIZE = 4;
 constexpr size_t MAX_MARKER_SIZE = HEADER_SIZE + MAX_CACHE_PATH_SIZE + PAYLOAD_SIZE + CRC_SIZE;
@@ -79,16 +83,21 @@ uint32_t crc32(const uint8_t* data, const size_t size) {
 }
 
 bool validCachePath(const std::string& path) {
-  constexpr size_t prefixSize = sizeof(EPUB_CACHE_PREFIX) - 1;
-  return path.size() > prefixSize && path.size() <= MAX_CACHE_PATH_SIZE &&
-         path.compare(0, prefixSize, EPUB_CACHE_PREFIX) == 0 &&
-         std::all_of(path.begin() + static_cast<std::string::difference_type>(prefixSize), path.end(),
-                     [](const char character) { return character >= '0' && character <= '9'; });
+  if (path.size() > MAX_CACHE_PATH_SIZE) return false;
+  for (const char* prefix : TRACKED_BOOK_CACHE_PREFIXES) {
+    const size_t prefixSize = strlen(prefix);
+    if (path.size() > prefixSize && path.compare(0, prefixSize, prefix) == 0 &&
+        std::all_of(path.begin() + static_cast<std::string::difference_type>(prefixSize), path.end(),
+                    [](const char character) { return character >= '0' && character <= '9'; })) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool equalExceptBookCompletionFields(const BookBytes& lhs, const BookBytes& rhs) {
   for (size_t i = 0; i < lhs.size(); ++i) {
-    const bool completionField = i == 11 || (i >= 21 && i <= 24) || i >= 69;
+    const bool completionField = i == 11 || (i >= 21 && i <= 24) || (i >= 69 && i <= 72) || (i >= 75 && i <= 76);
     if (!completionField && lhs[i] != rhs[i]) return false;
   }
   return true;
@@ -152,13 +161,17 @@ std::vector<uint8_t> encodeMarker(const std::string& cachePath, const BookReadin
 
 bool decodeMarker(const uint8_t* data, const size_t size, Marker& marker) {
   marker = {};
-  if (!data || size < HEADER_SIZE + PAYLOAD_SIZE + CRC_SIZE ||
-      !std::equal(MARKER_MAGIC.begin(), MARKER_MAGIC.end(), data) || data[4] != MARKER_VERSION ||
+  if (!data || size < HEADER_SIZE + LEGACY_PAYLOAD_SIZE + CRC_SIZE ||
+      !std::equal(MARKER_MAGIC.begin(), MARKER_MAGIC.end(), data) ||
+      (data[4] != LEGACY_MARKER_VERSION && data[4] != MARKER_VERSION) ||
       (data[5] & ~KNOWN_FLAGS) != 0) {
     return false;
   }
+  const size_t bookPayloadSize = data[4] == LEGACY_MARKER_VERSION ? LEGACY_BOOK_PAYLOAD_SIZE
+                                                                  : BookReadingStats::CURRENT_FILE_SIZE;
+  const size_t payloadSize = data[4] == LEGACY_MARKER_VERSION ? LEGACY_PAYLOAD_SIZE : PAYLOAD_SIZE;
   const size_t pathSize = readLe16(data, 6);
-  if (pathSize == 0 || pathSize > MAX_CACHE_PATH_SIZE || size != HEADER_SIZE + pathSize + PAYLOAD_SIZE + CRC_SIZE ||
+  if (pathSize == 0 || pathSize > MAX_CACHE_PATH_SIZE || size != HEADER_SIZE + pathSize + payloadSize + CRC_SIZE ||
       readLe32(data, size - CRC_SIZE) != crc32(data, size - CRC_SIZE)) {
     return false;
   }
@@ -166,14 +179,14 @@ bool decodeMarker(const uint8_t* data, const size_t size, Marker& marker) {
   marker.cachePath.assign(reinterpret_cast<const char*>(data + HEADER_SIZE), pathSize);
   if (!validCachePath(marker.cachePath)) return false;
   size_t offset = HEADER_SIZE + pathSize;
-  if (ReadingStatsCodec::decode(data + offset, BookReadingStats::CURRENT_FILE_SIZE, marker.oldBookStats) !=
+  if (ReadingStatsCodec::decode(data + offset, bookPayloadSize, marker.oldBookStats) !=
       ReadingStatsDecodeResult::Ok)
     return false;
-  offset += BookReadingStats::CURRENT_FILE_SIZE;
-  if (ReadingStatsCodec::decode(data + offset, BookReadingStats::CURRENT_FILE_SIZE, marker.newBookStats) !=
+  offset += bookPayloadSize;
+  if (ReadingStatsCodec::decode(data + offset, bookPayloadSize, marker.newBookStats) !=
       ReadingStatsDecodeResult::Ok)
     return false;
-  offset += BookReadingStats::CURRENT_FILE_SIZE;
+  offset += bookPayloadSize;
   if (ReadingStatsCodec::decode(data + offset, GlobalReadingStats::CURRENT_FILE_SIZE, marker.oldGlobalStats) !=
       ReadingStatsDecodeResult::Ok)
     return false;
@@ -332,7 +345,7 @@ RecoveryResult recoverPending() {
   const MarkerReadResult result = readMarker(marker);
   if (result == MarkerReadResult::Missing) return RecoveryResult::NoMarker;
   if (result != MarkerReadResult::Ok) return RecoveryResult::Blocked;
-  // decodeMarker() already constrained this to /.crosspoint/epub_<digits>.
+  // decodeMarker() already constrained this to an EPUB or TXT cache key.
   return recover(marker.cachePath);
 }
 
@@ -372,7 +385,7 @@ bool permitsBookWrite(const std::string& cachePath, const BookReadingStats& stat
          (result == MarkerReadResult::Ok && markerAllowsBookWrite(marker, cachePath, stats));
 }
 
-bool canRelocateOrDeleteEpubCache(const std::string& cachePath) {
+bool canRelocateOrDeleteBookCache(const std::string& cachePath) {
   Marker marker;
   const MarkerReadResult result = readMarker(marker);
   return result == MarkerReadResult::Missing || (result == MarkerReadResult::Ok && marker.cachePath != cachePath);

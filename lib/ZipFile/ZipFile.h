@@ -26,11 +26,26 @@ class ZipFile {
   // includes every entry's path, sizes, local-header offset, and CRC32, so this
   // detects normal EPUB replacements without reading the compressed payload.
   struct SourceIdentity {
+    // Raw (non-ZIP) sources reuse the durable source-identity envelope. The
+    // impossible ZIP tuple {offset=UINT32_MAX, entries=0} distinguishes them
+    // without changing the v1 on-disk payload used by EPUBs and replacement
+    // barriers. For raw files centralDirSize carries CRC32 and centralDirHash
+    // carries the streaming FNV-1a hash.
+    static constexpr uint32_t RAW_FILE_OFFSET_SENTINEL = UINT32_MAX;
+
     uint64_t fileSize = 0;
     uint32_t centralDirOffset = 0;
     uint32_t centralDirSize = 0;
     uint16_t totalEntries = 0;
     uint64_t centralDirHash = 0;
+
+    static SourceIdentity forRawFile(const uint64_t size, const uint32_t crc32, const uint64_t fnv64) {
+      return {size, RAW_FILE_OFFSET_SENTINEL, crc32, 0, fnv64};
+    }
+
+    bool isRawFile() const { return centralDirOffset == RAW_FILE_OFFSET_SENTINEL && totalEntries == 0; }
+    uint32_t rawFileCrc32() const { return centralDirSize; }
+    uint64_t rawFileFnv64() const { return centralDirHash; }
 
     bool operator==(const SourceIdentity& other) const {
       return fileSize == other.fileSize && centralDirOffset == other.centralDirOffset &&

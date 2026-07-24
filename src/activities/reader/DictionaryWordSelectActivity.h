@@ -33,6 +33,7 @@ class DictionaryWordSelectActivity final : public Activity {
     int16_t y;
     int16_t width;
     uint16_t row;
+    const void* blockIdentity;
     const char* text;
     EpdFontFamily::Style style;
   };
@@ -42,8 +43,13 @@ class DictionaryWordSelectActivity final : public Activity {
   void extractWords();
   int closestInRow(uint16_t row, int centerX) const;
   void moveVertical(int direction);
+  void moveHorizontal(int direction);
+  bool resizeSelection(int delta);
+  bool canExtendSelection() const;
+  bool buildSelectedPhrase(size_t count, std::string& out) const;
   void performLookup();
   bool drawHighlightWithSnapshot();
+  void drawSelection();
   void drawHints() const;
 
   std::unique_ptr<Page> page;
@@ -54,7 +60,13 @@ class DictionaryWordSelectActivity final : public Activity {
 
   std::vector<WordBox> words;
   int selected = 0;
+  size_t selectionCount = 1;
   uint16_t rowCount = 0;
+
+  bool leftHeld = false;
+  bool rightHeld = false;
+  bool leftLongHandled = false;
+  bool rightLongHandled = false;
 
   Dictionary dict;
   bool dictOpenAttempted = false;
@@ -77,6 +89,9 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
+
+  static constexpr size_t MAX_VISIBLE_WORDS = 192;
+  static constexpr unsigned long LONG_PRESS_MS = 500;
 
   // The activity is entered while Confirm is still held (long-press trigger):
   // ignore the stale release until a fresh press is seen.

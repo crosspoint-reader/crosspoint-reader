@@ -6,12 +6,15 @@
 #include <vector>
 
 #include "Epub.h"
+#include "Epub/EpubRenderMode.h"
 #include "Epub/SectionCacheValidator.h"
 
 class Page;
 class GfxRenderer;
 class ChapterHtmlSlimParser;
 class CssParser;
+
+enum class EpubBuildStatus : uint8_t { Ok, OutOfMemory, InvalidContent, IoError, CacheError };
 
 class Section {
   std::shared_ptr<Epub> epub;
@@ -22,7 +25,8 @@ class Section {
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled);
+                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled,
+                              EpubRenderMode renderMode, bool forceParagraphIndents);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
   // Page-offset table entry, kept in RAM while an incremental build is running so
@@ -56,6 +60,7 @@ class Section {
   };
   std::unique_ptr<BuildContext> build_;
   bool buildComplete_ = false;
+  EpubBuildStatus lastBuildStatus_ = EpubBuildStatus::Ok;
   // Pages laid out by the active build (== build_->lut.size()). Distinct from pageCount,
   // which is the pages *available to read* and also counts a loaded partial file's pages.
   uint16_t builtPageCount_ = 0;
@@ -90,11 +95,13 @@ class Section {
   ~Section();
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled);
+                       uint8_t imageRendering, bool focusReadingEnabled, EpubRenderMode renderMode,
+                       bool forceParagraphIndents);
   bool clearCache();
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled,
+                         uint8_t imageRendering, bool focusReadingEnabled, EpubRenderMode renderMode,
+                         bool forceParagraphIndents,
                          const std::function<void()>& popupFn = nullptr);
 
   // Incremental build: lay out the section a few pages at a time so a large chapter
@@ -104,12 +111,14 @@ class Section {
   //   each tick: buildSomeMore(N); render up to pageCount; when isBuildComplete() stop.
   bool startBuild(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                   uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                  uint8_t imageRendering, bool focusReadingEnabled, const std::function<void()>& popupFn = nullptr);
+                  uint8_t imageRendering, bool focusReadingEnabled, EpubRenderMode renderMode,
+                  bool forceParagraphIndents, const std::function<void()>& popupFn = nullptr);
   // Lay out up to maxPages more pages (maxPages <= 0 = build to completion). Returns
   // false on error (the build is abandoned). Sets isBuildComplete() when finished.
   bool buildSomeMore(int maxPages);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }
+  EpubBuildStatus lastBuildStatus() const { return lastBuildStatus_; }
 #if defined(ENABLE_SERIAL_LOG) && defined(LOG_LEVEL) && LOG_LEVEL >= 2
   // Debug-only probe used by reader instrumentation to classify pages laid out
   // on the render path versus the background pump. It is compiled out of

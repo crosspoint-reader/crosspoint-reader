@@ -58,6 +58,14 @@ device, so button remapping and orientation logic still apply.
 The control strip is outside the firmware framebuffer and never appears in a
 captured UI image.
 
+For deterministic automation, `CROSSVI_SIM_INPUT_SCRIPT` accepts comma-separated
+`time-ms:key` events. Add a third field to hold a key before releasing it, for
+example `1200:CONFIRM,2600:RIGHT,4000:POWER:800`. Supported names are `BACK`,
+`CONFIRM`, `LEFT`, `RIGHT`, `UP`, `DOWN`, `POWER`, `SLEEP`, and `SCREENSHOT`.
+`CROSSVI_SIM_EXIT_ON_SLEEP=1` makes a scripted deep-sleep transition terminate
+the host process after firmware state has been saved. These variables are for
+tests; interactive use should normally go through the launcher above.
+
 ## Virtual SD card and books
 
 Each model has isolated data by default:
@@ -119,6 +127,20 @@ logical-BMP golden hashes with:
 ```sh
 python3 scripts/test_simulator.py
 ```
+
+The same command opens the frozen converter XTC and XTCH fixtures through File
+Browser on both models. It checks the X4 page pixel-for-pixel, checks the X3
+fit/centering/letterbox mapping pixel-for-pixel, verifies all four XTCH gray
+levels, hidden/top/bottom status overlays, progress reload, cover, Home
+thumbnail, sleep cover, and exercises a generated three-page/two-chapter book
+through Forward, Back, and chapter jump.
+The generated book is derived from the real converter fixture and is written
+only under the ignored `build/simulator-tests/` directory. An additional X3
+stress run injects 1,000 alternating page-turn requests and verifies that the
+final bitmap and persisted progress still identify the same page. A replacement
+regression also swaps in a different XTC with the same path, byte size, and page
+count, then verifies that progress, source identity, cover, and thumbnail state
+from the old book are not reused.
 
 If an intentional UI change alters the empty Home frame, review both generated
 captures under `build/simulator-tests/` and then update the accepted hashes:

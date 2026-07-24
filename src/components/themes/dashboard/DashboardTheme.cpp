@@ -13,6 +13,7 @@
 #include "activities/home/HomeBookSummary.h"
 #include "components/UITheme.h"
 #include "components/icons/cover.h"
+#include "components/themes/HomeMenuLayout.h"
 #include "components/themes/dashboard/DashboardLayout.h"
 #include "fontIds.h"
 
@@ -220,13 +221,15 @@ void DashboardTheme::drawButtonMenu(GfxRenderer& renderer, const Rect rect, cons
   constexpr int GAP = 8;
   constexpr int SIDE_PADDING = 20;
   const int tileWidth = (rect.width - SIDE_PADDING * 2 - GAP) / COLUMNS;
-  const int rowHeight = DashboardMetrics::values.menuRowHeight;
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const HomeMenuLayout::Fit layout = HomeMenuLayout::fit(
+      rect.height, buttonCount, COLUMNS, DashboardMetrics::values.menuRowHeight,
+      DashboardMetrics::values.menuSpacing, lineHeight + 8);
 
   for (int i = 0; i < buttonCount; ++i) {
     const int column = i % COLUMNS;
-    const int row = i / COLUMNS;
     const Rect tile{rect.x + SIDE_PADDING + column * (tileWidth + GAP),
-                    rect.y + row * (rowHeight + DashboardMetrics::values.menuSpacing), tileWidth, rowHeight};
+                    rect.y + layout.yOffset(i, COLUMNS), tileWidth, layout.rowHeight};
     const bool selected = i == selectedIndex;
     if (selected) {
       renderer.fillRoundedRect(tile.x, tile.y, tile.width, tile.height, CORNER_RADIUS, Color::LightGray);

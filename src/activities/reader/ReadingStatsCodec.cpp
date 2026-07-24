@@ -8,6 +8,7 @@ constexpr size_t BOOK_SIZE_V1 = 11;
 constexpr size_t BOOK_SIZE_V2 = 12;
 constexpr size_t BOOK_SIZE_V3 = 16;
 constexpr size_t BOOK_SIZE_V4 = 69;
+constexpr size_t BOOK_SIZE_V5 = 73;
 constexpr size_t GLOBAL_SIZE_V1 = 13;
 constexpr size_t GLOBAL_SIZE_V2 = 17;
 constexpr uint8_t FLAG_START_DATE_MANUAL = 1u << 0;
@@ -86,6 +87,14 @@ BookBytes encode(const BookReadingStats& stats) {
   for (size_t i = 0; i < stats.dayOfWeekSeconds.size(); ++i)
     writeLe32(data.data(), 41 + i * 4, stats.dayOfWeekSeconds[i]);
   writeLe32(data.data(), 69, stats.estimatedTimeLeftSeconds);
+  writeLe16(data.data(), 73,
+            stats.startDate.isValid() && stats.startMinuteOfDay < 24u * 60u
+                ? stats.startMinuteOfDay
+                : BookReadingStats::INVALID_MINUTE_OF_DAY);
+  writeLe16(data.data(), 75,
+            stats.finishedDate.isValid() && stats.finishedMinuteOfDay < 24u * 60u
+                ? stats.finishedMinuteOfDay
+                : BookReadingStats::INVALID_MINUTE_OF_DAY);
   return data;
 }
 
@@ -125,7 +134,7 @@ ReadingStatsDecodeResult decode(const uint8_t* data, const size_t size, BookRead
     decoded.isCompleted = data[11] != 0;
     decoded.avgSecondsPerForwardPage = readLe16(data, 12);
     decoded.paceSampleCount = readLe16(data, 14);
-  } else if ((size == BOOK_SIZE_V4 && data[0] == 4) ||
+  } else if ((size == BOOK_SIZE_V4 && data[0] == 4) || (size == BOOK_SIZE_V5 && data[0] == 5) ||
              (size == BookReadingStats::CURRENT_FILE_SIZE && data[0] == BookReadingStats::CURRENT_FILE_VERSION)) {
     readBookCommon(data, decoded);
     decoded.isCompleted = data[11] != 0;
@@ -140,7 +149,15 @@ ReadingStatsDecodeResult decode(const uint8_t* data, const size_t size, BookRead
       decoded.timeOfDaySeconds[i] = readLe32(data, 25 + i * 4);
     for (size_t i = 0; i < decoded.dayOfWeekSeconds.size(); ++i)
       decoded.dayOfWeekSeconds[i] = readLe32(data, 41 + i * 4);
-    if (size == BookReadingStats::CURRENT_FILE_SIZE) decoded.estimatedTimeLeftSeconds = readLe32(data, 69);
+    if (size >= BOOK_SIZE_V5) decoded.estimatedTimeLeftSeconds = readLe32(data, 69);
+    if (size == BookReadingStats::CURRENT_FILE_SIZE) {
+      const uint16_t startMinute = readLe16(data, 73);
+      const uint16_t finishedMinute = readLe16(data, 75);
+      if (decoded.startDate.isValid() && startMinute < 24u * 60u) decoded.startMinuteOfDay = startMinute;
+      if (decoded.finishedDate.isValid() && finishedMinute < 24u * 60u) {
+        decoded.finishedMinuteOfDay = finishedMinute;
+      }
+    }
   } else {
     return ReadingStatsDecodeResult::Invalid;
   }

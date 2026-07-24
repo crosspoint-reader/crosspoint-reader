@@ -18,7 +18,8 @@ class ReaderActivity final : public Activity {
   std::unique_ptr<Epub> loadEpub(const std::string& path, PerBookReaderSettings& globalSettings,
                                  PerBookReaderSettings& bookSettings, bool& settingsWritable);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
-  static std::unique_ptr<Txt> loadTxt(const std::string& path);
+  std::unique_ptr<Txt> loadTxt(const std::string& path, PerBookReaderSettings& globalSettings,
+                               PerBookReaderSettings& bookSettings, bool& settingsWritable);
   static bool isXtcFile(const std::string& path);
   static bool isTxtFile(const std::string& path);
   static bool isBmpFile(const std::string& path);
@@ -27,7 +28,8 @@ class ReaderActivity final : public Activity {
   void onGoToEpubReader(std::unique_ptr<Epub> epub, PerBookReaderSettings globalSettings,
                         PerBookReaderSettings bookSettings, bool settingsWritable);
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
-  void onGoToTxtReader(std::unique_ptr<Txt> txt);
+  void onGoToTxtReader(std::unique_ptr<Txt> txt, PerBookReaderSettings globalSettings,
+                       PerBookReaderSettings bookSettings, bool settingsWritable);
   void onGoToBmpViewer(const std::string& path);
 
   void onGoBack();

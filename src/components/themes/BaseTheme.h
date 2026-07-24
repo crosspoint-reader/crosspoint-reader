@@ -222,6 +222,11 @@ class BaseTheme {
                         const std::function<bool(int index)>& rowDimmed = nullptr) const;
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
+  // Home may use a lighter, personalized header without changing the visual
+  // contract of headers used by Settings, lists and reader dialogs.
+  virtual void drawHomeHeader(const GfxRenderer& renderer, Rect rect, const char* title) const {
+    drawHeader(renderer, rect, title);
+  }
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -236,6 +241,7 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  virtual void drawHomeReadingSummary(const GfxRenderer&, Rect, const HomeBookSummary&, bool) const {}
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex) const;

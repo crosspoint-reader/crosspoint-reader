@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "Epub/FootnoteEntry.h"
+#include "Epub/EpubRenderMode.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
@@ -19,6 +20,8 @@
 class Page;
 class GfxRenderer;
 class Epub;
+
+enum class ChapterParseFailure : uint8_t { None, OutOfMemory, InvalidContent, IoError };
 
 #define MAX_WORD_SIZE 200
 
@@ -48,7 +51,11 @@ class ChapterHtmlSlimParser {
   uint16_t viewportHeight;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
+  EpubRenderMode renderMode;
+  bool forceParagraphIndents;
   const CssParser* cssParser;
+  std::vector<CssParser::AncestorEntry> cssAncestors;
+  uint16_t cssAncestorOverflowDepth = 0;
   bool embeddedStyle;
   uint8_t imageRendering;
   std::string contentBase;
@@ -106,6 +113,7 @@ class ChapterHtmlSlimParser {
   // boundaries.
   XML_Parser xmlParser_ = nullptr;
   HalFile parseFile_;
+  ChapterParseFailure lastFailure_ = ChapterParseFailure::None;
 #if defined(ENABLE_SERIAL_LOG) && defined(LOG_LEVEL) && LOG_LEVEL >= 2
   uint32_t parseStartTime_ = 0;
 #endif
@@ -136,7 +144,9 @@ class ChapterHtmlSlimParser {
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
                                  std::vector<std::string> tocAnchors = {},
-                                 const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
+                                 const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr,
+                                 const EpubRenderMode renderMode = EpubRenderMode::Balanced,
+                                 const bool forceParagraphIndents = false)
 
       : epub(epub),
         filepath(filepath),
@@ -149,6 +159,8 @@ class ChapterHtmlSlimParser {
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
+        renderMode(renderMode),
+        forceParagraphIndents(forceParagraphIndents),
         completePageFn(completePageFn),
         popupFn(popupFn),
         cssParser(cssParser),
@@ -173,6 +185,7 @@ class ChapterHtmlSlimParser {
   ParseStatus parseStep();
   bool finishParse();  // flush the trailing page and tear down; returns true
   void abortParse();   // tear down without flushing (error / abandon)
+  ChapterParseFailure lastFailure() const { return lastFailure_; }
 
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }

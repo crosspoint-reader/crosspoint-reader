@@ -35,6 +35,12 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
+SCRIPT_DIR = Path(globals().get("__file__", Path.cwd() / "scripts" / "gen_i18n.py")).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from write_if_changed import write_if_changed
+
 
 # ---------------------------------------------------------------------------
 # YAML file reading (simple key: "value" format, no PyYAML dependency)
@@ -806,11 +812,9 @@ def _append_string_entry(lines: List[str], text: str, comment: str = "") -> None
 
 
 def _write_file(path: str, lines: List[str], verbose: bool = False) -> None:
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(lines))
-        f.write("\n")
+    changed = write_if_changed(path, "\n".join(lines) + "\n")
     if verbose:
-        print(f"Generated: {path}")
+        print(f"{'Generated' if changed else 'Unchanged'}: {path}")
 
 
 # ---------------------------------------------------------------------------

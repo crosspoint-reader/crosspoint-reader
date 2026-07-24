@@ -51,6 +51,10 @@ class CrossPointWebServerActivity final : public Activity {
 
   // Cached signal-strength bracket (0..4) for the WiFi indicator.
   int lastWifiBars = 0;
+  std::string lastReceivedName;
+  std::string lastReceivedPath;
+  unsigned long lastReceivedAt = 0;
+  bool restartToReader = false;
 
   void renderServerRunning() const;
   void renderWifiIndicator(int subHeaderTop) const;
@@ -59,6 +63,7 @@ class CrossPointWebServerActivity final : public Activity {
   void onWifiSelectionComplete(bool connected);
   void startAccessPoint();
   void startWebServer();
+  void openReceivedBook(const std::string& path);
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

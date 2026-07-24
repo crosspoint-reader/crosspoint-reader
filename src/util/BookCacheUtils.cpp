@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "BookmarkUtil.h"
+#include "activities/reader/ReadingStatsCompletionTransaction.h"
 
 namespace {
 
@@ -238,6 +239,13 @@ bool destinationNeedsEmptyBookmarkPayload(const MoveIdentity& identity) {
 std::string normalizedCachePath(std::string path) {
   while (path.size() > 1 && path.back() == '/') path.pop_back();
   return path;
+}
+
+bool isCompletionTrackedCachePath(const std::string& cachePath) {
+  const size_t separator = cachePath.rfind('/');
+  const size_t nameOffset = separator == std::string::npos ? 0 : separator + 1;
+  return cachePath.compare(nameOffset, sizeof("epub_") - 1, "epub_") == 0 ||
+         cachePath.compare(nameOffset, sizeof("txt_") - 1, "txt_") == 0;
 }
 
 std::string stagingPathFor(const std::string& cachePath) {
@@ -869,6 +877,13 @@ bool clearBookCacheDirectoryPreservingUserState(const std::string& rawCachePath)
   // A previous attempt may have stopped at any point. Staging only ever holds
   // whitelisted user state, so restore it before retrying the clear.
   if (Storage.exists(stagingPath.c_str()) && !restoreStagedUserState(cachePath, stagingPath)) return false;
+  // Completion coordinates per-book and global statistics. Never move the
+  // exact tracked stats file out from under its durable recovery marker.
+  if (isCompletionTrackedCachePath(cachePath) &&
+      !ReadingStatsCompletionTransaction::canRelocateOrDeleteBookCache(cachePath)) {
+    LOG_ERR("BookCache", "Pending reading-statistics transaction blocks cache clear: %s", cachePath.c_str());
+    return false;
+  }
   if (!Storage.exists(cachePath.c_str())) return true;
   if (!isDirectory(cachePath)) return false;
 

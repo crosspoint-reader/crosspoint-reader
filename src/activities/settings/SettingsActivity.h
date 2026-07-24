@@ -30,14 +30,15 @@ struct SettingInfo {
   StrId nameId;
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr = nullptr;
+  uint16_t CrossPointSettings::* value16Ptr = nullptr;
   std::vector<StrId> enumValues;
   std::vector<std::string> enumStringValues;  // runtime alternative to StrId enumValues (for SD card fonts etc.)
   SettingAction action = SettingAction::None;
 
   struct ValueRange {
-    uint8_t min;
-    uint8_t max;
-    uint8_t step;
+    uint16_t min;
+    uint16_t max;
+    uint16_t step;
   };
   ValueRange valueRange = {};
 
@@ -97,6 +98,18 @@ struct SettingInfo {
     s.nameId = nameId;
     s.type = SettingType::VALUE;
     s.valuePtr = ptr;
+    s.valueRange = valueRange;
+    s.key = key;
+    s.category = category;
+    return s;
+  }
+
+  static SettingInfo Value(StrId nameId, uint16_t CrossPointSettings::* ptr, const ValueRange valueRange,
+                           const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
+    SettingInfo s;
+    s.nameId = nameId;
+    s.type = SettingType::VALUE;
+    s.value16Ptr = ptr;
     s.valueRange = valueRange;
     s.key = key;
     s.category = category;
@@ -168,6 +181,7 @@ class SettingsActivity final : public Activity {
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
+  void openDailyReadingGoalPicker();
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
@@ -178,4 +192,5 @@ class SettingsActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool handleGlobalShortcut(GlobalShortcut shortcut) override;
 };

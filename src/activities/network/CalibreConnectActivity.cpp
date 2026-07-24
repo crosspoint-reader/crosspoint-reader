@@ -52,6 +52,7 @@ void CalibreConnectActivity::onEnter() {
 void CalibreConnectActivity::onExit() {
   Activity::onExit();
 
+  stopWebServer();
   MDNS.end();
 
   if (WiFi.getMode() != WIFI_MODE_NULL) {

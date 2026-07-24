@@ -9,16 +9,22 @@
 
 class EpubReaderBookmarksActivity final : public Activity {
   std::shared_ptr<Epub> epub;
-  std::string epubPath;
+  std::string bookPath;
+  bool textMode = false;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   std::vector<BookmarkEntry> bookmarks;
+  bool bookmarksWritable = false;
+  bool storageError = false;
   int confirmingDelete = 0;  // 0 = hide dialog, 1 = show dialog, 2 = allow confirmation to delete
 
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        const std::shared_ptr<Epub>& epub, const std::string& epubPath)
-      : Activity("EpubReaderBookmarks", renderer, mappedInput), epub(epub), epubPath(epubPath) {}
+      : Activity("EpubReaderBookmarks", renderer, mappedInput), epub(epub), bookPath(epubPath) {}
+  explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                       const std::string& textPath)
+      : Activity("TextReaderBookmarks", renderer, mappedInput), bookPath(textPath), textMode(true) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

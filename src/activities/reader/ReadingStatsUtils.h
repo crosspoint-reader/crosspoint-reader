@@ -38,11 +38,12 @@ void addDaysToReadingStatsDate(ReadingStatsDate& date, int delta);
 void addSecondsToReadingStatsDateTime(ReadingStatsDateTime& dateTime, uint32_t seconds);
 uint32_t readingStatsDayIndex(const ReadingStatsDate& date);
 bool readingStatsDateFromDayIndex(uint32_t dayIndex, ReadingStatsDate& outDate);
+uint32_t readingStatsMinuteIndex(const ReadingStatsDate& date, uint16_t minuteOfDay);
+bool readingStatsDateTimeFromMinuteIndex(uint32_t minuteIndex, ReadingStatsDateTime& outDateTime);
 uint8_t readingStatsDayOfWeekIndex(const ReadingStatsDate& date);  // Monday = 0
 ReadingTimeBucket readingTimeBucketForHour(uint8_t hour);
-// Returns false until the system clock has a valid date. CrossVi's current RTC
-// HAL exposes time-of-day only, so this deliberately uses the SNTP-backed
-// system clock instead of inventing a calendar date.
+// Returns false until the system clock has a valid date. X3 seeds that clock
+// from its calendar RTC; X4 and post-NTP updates use the same UTC system clock.
 bool getCurrentLocalReadingStatsDateTime(ReadingStatsDateTime& outDateTime);
 uint16_t readingSpanDaysInclusive(const ReadingStatsDate& start, const ReadingStatsDate& end);
 uint16_t readingSpanDaysElapsed(const ReadingStatsDate& start, const ReadingStatsDate& end);

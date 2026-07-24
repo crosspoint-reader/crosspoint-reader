@@ -206,7 +206,8 @@ bool sameClipping(const ClippingCodec::ClippingMetadata& lhs, const ClippingCode
          lhs.endWordIndex == rhs.endWordIndex && lhs.wordCount == rhs.wordCount &&
          lhs.paragraphIndex == rhs.paragraphIndex && lhs.timestamp == rhs.timestamp &&
          lhs.textOffset == rhs.textOffset && lhs.textLength == rhs.textLength && lhs.chapterTitle == rhs.chapterTitle &&
-         lhs.pageFingerprint == rhs.pageFingerprint;
+         lhs.pageFingerprint == rhs.pageFingerprint && lhs.hasTextAnchor == rhs.hasTextAnchor &&
+         lhs.textSourceStart == rhs.textSourceStart && lhs.textSourceEnd == rhs.textSourceEnd;
 }
 
 bool sameClippings(const std::vector<ClippingCodec::ClippingMetadata>& lhs,

@@ -22,3 +22,32 @@ TEST(ProgressFileCodec, UsesLittleEndianLayout) {
   EXPECT_EQ(data[2], 0xAB);
   EXPECT_EQ(data[3], 0x89);
 }
+
+TEST(ProgressFileCodec, TxtV2RoundTripsByteOffsetWithMagicAndVersion) {
+  uint8_t data[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(0x89ABCDEF, data);
+
+  EXPECT_EQ(data[0], ProgressFileCodec::TXT_MAGIC);
+  EXPECT_EQ(data[1], ProgressFileCodec::TXT_VERSION);
+  uint32_t offset = 0;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(data, sizeof(data), offset), ProgressFileCodec::TxtDecodeStatus::Ok);
+  EXPECT_EQ(offset, 0x89ABCDEFu);
+}
+
+TEST(ProgressFileCodec, TxtDecoderDistinguishesLegacyAndNewerRecords) {
+  uint8_t legacy[4];
+  ProgressFileCodec::encodePage(17, legacy);
+  uint32_t value = 0;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(legacy, sizeof(legacy), value),
+            ProgressFileCodec::TxtDecodeStatus::LegacyPage);
+  EXPECT_EQ(value, 17u);
+
+  uint8_t newer[ProgressFileCodec::TXT_V2_SIZE];
+  ProgressFileCodec::encodeTxtOffset(42, newer);
+  newer[1] = ProgressFileCodec::TXT_VERSION + 1;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(newer, sizeof(newer), value),
+            ProgressFileCodec::TxtDecodeStatus::NewerVersion);
+
+  newer[0] ^= 0x80U;
+  EXPECT_EQ(ProgressFileCodec::decodeTxt(newer, sizeof(newer), value), ProgressFileCodec::TxtDecodeStatus::BadMagic);
+}

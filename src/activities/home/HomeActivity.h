@@ -39,6 +39,8 @@ class HomeActivity final : public Activity {
   // Built from the same verified files as bookSummary. Opening the screen must
   // not trigger a second EPUB/statistics scan from Home.
   std::optional<ReadingStatsPresentation> readingStatsPresentation;
+  enum class ReadingStatsNotice : uint8_t { None, BackupDone, BackupFailed, RestoreDone, RestoreFailed, NoBackup };
+  ReadingStatsNotice readingStatsNotice = ReadingStatsNotice::None;
   const HomeMenuItem initialMenuItem;
 
   // Convert menu index to HomeMenuItem (used in loop)
@@ -53,6 +55,9 @@ class HomeActivity final : public Activity {
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
   void onReadingStatsOpen();
+  bool hasReadingStatsShortcut() const;
+  bool hasHomeReadingSummary() const;
+  bool loadRecentNonEpubReadingStats();
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image
@@ -70,4 +75,5 @@ class HomeActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool handleGlobalShortcut(GlobalShortcut shortcut) override { return handleSafeGlobalShortcut(shortcut); }
 };

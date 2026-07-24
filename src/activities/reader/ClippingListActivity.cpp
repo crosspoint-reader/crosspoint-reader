@@ -144,6 +144,9 @@ void ClippingListActivity::finishWithJump() {
   jump.textLength = clipping->textLength;
   jump.textCrc32 = ClippingCodec::crc32(reinterpret_cast<const uint8_t*>(text.data()), text.size());
   jump.pageFingerprint = clipping->pageFingerprint;
+  jump.hasTextAnchor = clipping->hasTextAnchor;
+  jump.textSourceStart = clipping->textSourceStart;
+  jump.textSourceEnd = clipping->textSourceEnd;
   setResult(std::move(jump));
   finish();
 }

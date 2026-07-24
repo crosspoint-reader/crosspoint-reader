@@ -118,4 +118,9 @@ bool HalClock::formatDate(char* buf, size_t bufSize,
   return true;
 }
 
-bool HalClock::syncFromNTP() { return _available; }
+bool HalClock::syncFromNTP() { return isSystemTimeValid(); }
+
+bool HalClock::isSystemTimeValid() const {
+  const auto now = std::time(nullptr);
+  return now >= 946684800 && now <= 4102444799;
+}

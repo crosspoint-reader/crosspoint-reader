@@ -141,7 +141,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
-                                                                   editServer.username, 63, InputType::Text),
+                                                                   editServer.username, 63, InputType::Identifier),
                            handler);
   } else if (selectedIndex == 3) {
     // Password

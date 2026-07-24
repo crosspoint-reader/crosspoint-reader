@@ -1,5 +1,6 @@
 #include "PersistableStore.h"
 
+#include <AtomicJsonFile.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
@@ -8,28 +9,29 @@ bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& 
   Storage.mkdir("/.crosspoint");
   String json;
   serializeJson(doc, json);
-  if (!Storage.writeFile(path, json)) {
+  const AtomicFile::SaveStatus saved = AtomicJsonFile::save(path, json);
+  if (saved != AtomicFile::SaveStatus::Saved && saved != AtomicFile::SaveStatus::Unchanged) {
     LOG_ERR("PERSIST", "Failed to write %s", path);
     return false;
   }
   return true;
 }
 
-bool PersistableStoreBase::readDocFromFile(const char* path, JsonDocument& doc) {
-  if (!Storage.exists(path)) {
-    return false;  // Expected on first boot — not an error.
+AtomicFile::LoadStatus PersistableStoreBase::readDocFromFile(const char* path, JsonDocument& doc) {
+  std::string json;
+  const AtomicFile::LoadStatus loaded = AtomicJsonFile::load(path, json);
+  if (loaded == AtomicFile::LoadStatus::Missing) return loaded;
+  if (loaded != AtomicFile::LoadStatus::Primary && loaded != AtomicFile::LoadStatus::Backup &&
+      loaded != AtomicFile::LoadStatus::Temp) {
+    LOG_ERR("PERSIST", "Failed to recover valid JSON from %s", path);
+    return loaded;
   }
-  String json = Storage.readFile(path);
-  if (json.isEmpty()) {
-    LOG_ERR("PERSIST", "Failed to read %s (empty)", path);
-    return false;
-  }
-  auto error = deserializeJson(doc, json);
+  auto error = deserializeJson(doc, json.data(), json.size());
   if (error) {
     LOG_ERR("PERSIST", "JSON parse error in %s: %s", path, error.c_str());
-    return false;
+    return AtomicFile::LoadStatus::Invalid;
   }
-  return true;
+  return loaded;
 }
 
 std::string PersistableStoreBase::extractPassword(JsonVariantConst doc, bool& needsResave) {

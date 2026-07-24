@@ -32,7 +32,7 @@ class IntervalSelectionActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool isReaderActivity() const override { return readerActivity; }
+  bool isReaderActivity() const override { return false; }
 
  private:
   StrId titleId;

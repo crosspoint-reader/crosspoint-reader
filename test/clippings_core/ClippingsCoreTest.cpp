@@ -192,6 +192,39 @@ TEST(ClippingCodec, KeepsMetadataResidentAndReadsVietnameseTextOnDemand) {
   EXPECT_EQ(loadedText, text);
 }
 
+TEST(ClippingCodec, RoundTripsPlainTextByteAnchorsWithoutChangingTheV3RecordSize) {
+  BookMetadata book{"Ghi chú", "", "/Books/ghi_chu.txt", "txt"};
+  ClippingMetadata clipping = sampleClipping();
+  clipping.chapterTitle.clear();
+  clipping.hasTextAnchor = true;
+  clipping.textSourceStart = 1234;
+  clipping.textSourceEnd = 1288;
+
+  const auto file = makeCurrentFile(book, {{clipping, "một đoạn văn bản"}});
+  Index index;
+  ASSERT_EQ(ClippingCodec::inspect(sourceFor(file), index), Status::Ok);
+  ASSERT_EQ(index.clippings.size(), 1U);
+  EXPECT_TRUE(index.clippings[0].hasTextAnchor);
+  EXPECT_EQ(index.clippings[0].textSourceStart, 1234U);
+  EXPECT_EQ(index.clippings[0].textSourceEnd, 1288U);
+  EXPECT_TRUE(index.clippings[0].chapterTitle.empty());
+}
+
+TEST(ClippingCodec, RejectsInvalidOrChapterConflictingPlainTextAnchors) {
+  ClippingMetadata clipping = sampleClipping();
+  clipping.hasTextAnchor = true;
+  clipping.textSourceStart = 20;
+  clipping.textSourceEnd = 20;
+  clipping.textLength = 5;
+  std::array<uint8_t, ClippingCodec::RECORD_SIZE> record{};
+  EXPECT_EQ(ClippingCodec::encodeRecord(clipping, record), Status::Corrupt);
+
+  clipping.textSourceEnd = 30;
+  EXPECT_EQ(ClippingCodec::encodeRecord(clipping, record), Status::Corrupt);
+  clipping.chapterTitle.clear();
+  EXPECT_EQ(ClippingCodec::encodeRecord(clipping, record), Status::Ok);
+}
+
 TEST(ClippingCodec, RejectsTruncationChecksumDamageAndInvalidOffsets) {
   const auto valid = makeCurrentFile(sampleBook(), {{sampleClipping(), "nội dung"}});
   for (size_t cut : {size_t{1}, ClippingCodec::HEADER_SIZE - 1, valid.size() - 1}) {

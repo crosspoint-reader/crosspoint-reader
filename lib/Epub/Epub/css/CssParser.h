@@ -23,9 +23,10 @@
  *   - Class selectors: .classname
  *   - Combined: element.classname
  *   - Grouped: selector1, selector2 { }
+ *   - Two-part descendants in Full mode: section p, .note span
  *
  * Not supported (silently ignored):
- *   - Descendant/child selectors
+ *   - Child selectors and descendants with more than two parts
  *   - Pseudo-classes and pseudo-elements
  *   - Media queries (content is skipped)
  *   - @import, @font-face, etc.
@@ -33,7 +34,12 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 9;
+  static constexpr uint8_t CSS_CACHE_VERSION = 10;
+
+  struct AncestorEntry {
+    std::string tag;
+    std::string classAttr;
+  };
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -59,6 +65,10 @@ class CssParser {
    * @return Combined style with all applicable rules merged
    */
   [[nodiscard]] CssStyle resolveStyle(std::string_view tagName, std::string_view classAttr) const;
+
+  /** Full-mode lookup with bounded ancestor context for two-part descendant selectors. */
+  [[nodiscard]] CssStyle resolveStyle(std::string_view tagName, std::string_view classAttr,
+                                      const std::vector<AncestorEntry>& ancestors) const;
 
   /**
    * Parse an inline style attribute string.

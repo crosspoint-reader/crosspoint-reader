@@ -51,7 +51,11 @@ public:
 
   bool isAvailable() const { return _available; }
   // Support both firmware HAL shapes while the repos are out of sync.
-  void update(const uint8_t /*mode*/, const uint8_t /*orientation*/, const bool /*inReader*/) {}
+  void update(const uint8_t mode, const uint8_t /*orientation*/, const bool inReader) {
+    const bool shouldBeAwake = mode != CrossPointTiltPageTurn::TILT_OFF && inReader;
+    if (shouldBeAwake && !_isAwake) wake();
+    if (!shouldBeAwake && _isAwake) deepSleep();
+  }
   void update(const uint8_t mode, const uint8_t /*direction*/, const uint8_t orientation, const bool inReader) {
     update(mode, orientation, inReader);
   }

@@ -3,14 +3,14 @@
     "logical_width": 528,
     "logical_height": 792,
     "framebuffer_bytes": 52272,
-    "sha256": "df999ffd5e782151bd913fdf9b50dd263d62fc9e74d616e5042dbee4fb61f3dd",
-    "bmp_sha256": "6d540a261c58b46cf530706c699d3947bdf194dbb7abfcb27d1ecd671de56eb9"
+    "sha256": "2965d3b309e7eed4fc6c6f1353ef7b02a7d5f8112471f5a75545533d2ab89c8f",
+    "bmp_sha256": "3ddc1ce24797edccc7e14fb779d123b9b7dc246ffa0fac41b02bba4ea00ba679"
   },
   "x4": {
     "logical_width": 480,
     "logical_height": 800,
     "framebuffer_bytes": 48000,
-    "sha256": "51e5bf9aef02e383f0a4c172297089882d13e0d9611eb4d0dce941249ecb8d9b",
-    "bmp_sha256": "f463c34597ef24708facad4e89f8968fb116e9804f489422f282a463d4652b19"
+    "sha256": "208617d7a921fbd4de9c211333438745fe533d47ab41f7854a8ed30384d1deed",
+    "bmp_sha256": "29ad01a1060c1a255d9ac90d16dff70066bcb9d9bba48cdddfa9a93dedfd022e"
   }
 }

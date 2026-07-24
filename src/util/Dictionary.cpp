@@ -9,8 +9,10 @@
 #include <cstring>
 
 #include "DictZip.h"
+#include "DictionaryQuery.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
+#include "StarDictSynonyms.h"
 
 namespace {
 
@@ -49,10 +51,6 @@ uint32_t readBe32(const uint8_t* p) {
   return (static_cast<uint32_t>(p[0]) << 24) | (static_cast<uint32_t>(p[1]) << 16) |
          (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
 }
-
-// Word characters for cleaning: ASCII alphanumerics plus any UTF-8
-// continuation/lead byte, so accented words keep their edges.
-bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 
 // True when the .ifo declares 64-bit index offsets, which this reader does not
 // support (only scans the first 2KB — idxoffsetbits always appears early).
@@ -107,7 +105,7 @@ bool Dictionary::needsIndex() {
   HalFile qidx;
   if (!Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) return true;
   const QidxHeader header = readQidxHeader(qidx, SAMPLE_INTERVAL);
-  return !header.valid || header.idxFileSize != idxSize;
+  return !header.valid || header.idxFileSize != idxSize || StarDictSynonyms::needsIndex(basePath);
 }
 
 bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx) {
@@ -187,6 +185,9 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx) {
 
   LOG_INF("DICT", "Indexed %lu entries (%lu samples) in %lu ms", static_cast<unsigned long>(entryCount),
           static_cast<unsigned long>(sampleCount), millis() - startMs);
+  // Synonyms are optional. A malformed .syn receives a disabled sidecar and
+  // never prevents normal .idx lookups from working.
+  StarDictSynonyms::buildIndex(basePath, yieldFn, ctx);
   return true;
 }
 
@@ -266,6 +267,49 @@ DictLocation Dictionary::locate(const char* target, std::string* matchedHeadword
   return result;
 }
 
+DictLocation Dictionary::locateOrdinal(uint32_t ordinal, std::string* matchedHeadwordOut) {
+  DictLocation result;
+  HalFile idx;
+  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) return result;
+  const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
+
+  uint32_t startByte = 0;
+  uint32_t entry = 0;
+  HalFile qidx;
+  if (Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) {
+    const QidxHeader header = readQidxHeader(qidx, SAMPLE_INTERVAL);
+    const uint32_t sample = ordinal / SAMPLE_INTERVAL;
+    if (header.valid && header.idxFileSize == idxSize && sample < header.sampleCount &&
+        readSampleOffset(qidx, sample, &startByte)) {
+      entry = sample * SAMPLE_INTERVAL;
+    }
+  }
+  if (startByte >= idxSize || !idx.seekSet(startByte)) return result;
+
+  while (entry <= ordinal && static_cast<uint32_t>(idx.position()) < idxSize) {
+    if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0) return result;
+    uint8_t suffix[8];
+    if (idx.read(suffix, sizeof(suffix)) != static_cast<int>(sizeof(suffix))) return result;
+    if (entry == ordinal) {
+      result.offset = readBe32(suffix);
+      result.size = readBe32(suffix + 4);
+      result.found = true;
+      if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
+      return result;
+    }
+    ++entry;
+  }
+  return result;
+}
+
+DictLocation Dictionary::locateWithSynonyms(const char* target, std::string* matchedHeadwordOut) {
+  DictLocation result = locate(target, matchedHeadwordOut);
+  if (result.found) return result;
+  uint32_t ordinal = 0;
+  if (!StarDictSynonyms::lookupOrdinal(basePath, target, ordinal)) return result;
+  return locateOrdinal(ordinal, matchedHeadwordOut);
+}
+
 bool Dictionary::readDefinition(const DictLocation& location, std::string& out) {
   if (!location.found) return false;
   const uint32_t size = std::min(location.size, MAX_DEFINITION_BYTES);
@@ -321,17 +365,7 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out) 
 }
 
 std::string Dictionary::cleanWord(const char* word) {
-  if (!word) return "";
-  size_t start = 0;
-  size_t end = strlen(word);
-  while (start < end && !isWordByte(static_cast<unsigned char>(word[start]))) start++;
-  while (end > start && !isWordByte(static_cast<unsigned char>(word[end - 1]))) end--;
-  if (start >= end) return "";
-
-  std::string result(word + start, end - start);
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
-  return result;
+  return word ? DictionaryQuery::clean(word) : std::string{};
 }
 
 void Dictionary::stemVariants(const std::string& word, std::vector<std::string>& out) {
@@ -368,15 +402,24 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
-  DictLocation location = locate(cleaned.c_str(), &matchedHeadwordOut);
+  DictLocation location = locateWithSynonyms(cleaned.c_str(), &matchedHeadwordOut);
   if (!location.found) {
     std::vector<std::string> variants;
     stemVariants(cleaned, variants);
     for (const auto& variant : variants) {
-      location = locate(variant.c_str(), &matchedHeadwordOut);
+      location = locateWithSynonyms(variant.c_str(), &matchedHeadwordOut);
       if (location.found) break;
     }
   }
   if (!location.found) return false;
   return readDefinition(location, definitionOut);
+}
+
+bool Dictionary::lookupExact(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut) {
+  definitionOut.clear();
+  matchedHeadwordOut.clear();
+  const std::string cleaned = cleanWord(word);
+  if (cleaned.empty() || !isOpen()) return false;
+  const DictLocation location = locateWithSynonyms(cleaned.c_str(), &matchedHeadwordOut);
+  return location.found && readDefinition(location, definitionOut);
 }

@@ -25,6 +25,7 @@ class CrossPointWebServer {
     size_t total = 0;
     std::string filename;
     std::string lastCompleteName;
+    std::string lastCompletePath;
     size_t lastCompleteSize = 0;
     unsigned long lastCompleteAt = 0;
   };
@@ -66,6 +67,7 @@ class CrossPointWebServer {
   bool isRunning() const { return running; }
 
   WsUploadStatus getWsUploadStatus() const;
+  bool takeOpenRequest(std::string& path);
 
   // Get the port number
   uint16_t getPort() const { return port; }
@@ -79,6 +81,8 @@ class CrossPointWebServer {
   uint16_t wsPort = 81;  // WebSocket port
   NetworkUDP udp;
   bool udpActive = false;
+  std::string lastCompletePath;
+  std::string pendingOpenPath;
 
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -98,8 +102,9 @@ class CrossPointWebServer {
   void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
-  void handleUpload(UploadState& state) const;
+  void handleUpload(UploadState& state);
   void handleUploadPost(UploadState& state) const;
+  void handleInboxOpen();
   void handleCreateFolder() const;
   void handleRename() const;
   void handleMove() const;
@@ -116,14 +121,19 @@ class CrossPointWebServer {
   void handleFontUpload();
   void handleFontUploadData();
   void handleFontDelete();
+  void abortFontUpload(const char* tag);
+  bool publishFontUpload();
 
   // Font upload state
   struct FontUploadState {
     HalFile file;
     std::string familyName;
-    std::string filePath;
+    std::string finalPath;
+    std::string stagingPath;
+    std::string backupPath;
     bool valid = false;
-    bool magicChecked = false;
+    bool published = false;
+    bool writeOk = false;
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;
     std::vector<uint8_t> buffer;

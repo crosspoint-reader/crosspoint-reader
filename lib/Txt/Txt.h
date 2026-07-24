@@ -1,6 +1,7 @@
 #pragma once
 
 #include <HalStorage.h>
+#include <ZipFile.h>
 
 #include <memory>
 #include <string>
@@ -11,6 +12,7 @@ class Txt {
   std::string cachePath;
   bool loaded = false;
   size_t fileSize = 0;
+  ZipFile::SourceIdentity sourceIdentity{};
 
  public:
   explicit Txt(std::string path, std::string cacheBasePath);
@@ -20,6 +22,11 @@ class Txt {
   [[nodiscard]] const std::string& getCachePath() const { return cachePath; }
   [[nodiscard]] std::string getTitle() const;
   [[nodiscard]] size_t getFileSize() const { return fileSize; }
+  [[nodiscard]] bool getSourceIdentity(ZipFile::SourceIdentity& identity) const {
+    if (!loaded || !sourceIdentity.isRawFile()) return false;
+    identity = sourceIdentity;
+    return true;
+  }
 
   void setupCacheDir() const;
   bool clearCache() const;

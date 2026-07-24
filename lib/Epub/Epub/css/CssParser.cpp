@@ -41,6 +41,11 @@ constexpr size_t READ_BUFFER_SIZE = 512;
 // Prevents unbounded memory growth from pathological CSS files
 constexpr size_t MAX_RULES = 1500;
 
+// Full mode intentionally supports only a bounded, useful subset of descendant
+// selectors. This keeps malformed publisher CSS from multiplying lookup work.
+constexpr size_t MAX_DESCENDANT_RULES = 100;
+constexpr size_t MAX_CLASSES_PER_ELEMENT = 4;
+
 // Minimum free heap required to apply CSS during rendering
 // If below this threshold, we skip CSS to avoid display artifacts.
 constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
@@ -457,9 +462,8 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
           return;
         }
 
-        // TODO: Support richer CSS selector syntax in the future. For now we only
-        // handle `tag`, `.class`, or `tag.class`. Reject anything containing a
-        // character that introduces unsupported syntax:
+        // Support `tag`, `.class`, `tag.class`, plus one descendant combinator.
+        // Reject anything containing syntax outside that deliberately small set:
         //   '+'  adjacent sibling combinator
         //   '>'  child combinator
         //   '['  attribute selector
@@ -467,10 +471,37 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
         //   '#'  ID selector
         //   '~'  general sibling combinator
         //   '*'  wildcard
-        //   ' '  descendant combinator
-        // Single-pass scan via find_first_of instead of eight sequential find() calls.
-        constexpr std::string_view kUnsupportedSelectorChars = "+>[:#~* ";
+        // Single-pass scan via find_first_of instead of sequential find() calls.
+        constexpr std::string_view kUnsupportedSelectorChars = "+>[:#~*";
         if (sel.find_first_of(kUnsupportedSelectorChars) != std::string_view::npos) return;
+
+        std::string_view selectorParts[2];
+        size_t selectorPartCount = 0;
+        bool tooManyParts = false;
+        forEachDelimitedToken(sel, isCssWhitespace, [&](const std::string_view part) {
+          if (selectorPartCount < std::size(selectorParts)) {
+            selectorParts[selectorPartCount++] = part;
+          } else {
+            tooManyParts = true;
+          }
+        });
+        if (tooManyParts || selectorPartCount == 0) return;
+
+        const auto isSimpleSelector = [](const std::string_view part) {
+          return !part.empty() && part.find_first_of("+>[:#~* \t\r\n\f") == std::string_view::npos;
+        };
+        if (!isSimpleSelector(selectorParts[0]) ||
+            (selectorPartCount == 2 && !isSimpleSelector(selectorParts[1]))) {
+          return;
+        }
+
+        if (selectorPartCount == 2) {
+          size_t descendantCount = 0;
+          for (const auto& pair : rulesBySelector_) {
+            if (pair.first.find(' ') != std::string::npos) ++descendantCount;
+          }
+          if (descendantCount >= MAX_DESCENDANT_RULES) return;
+        }
 
         // Skip if this would exceed the rule limit
         if (rulesBySelector_.size() >= MAX_RULES) {
@@ -481,11 +512,16 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
 
         // Store or merge with existing. Hash/equal are case-insensitive, so two
         // selectors that differ only in ASCII case collide on insert and merge.
-        auto it = rulesBySelector_.find(sel);
+        std::string normalizedSelector(selectorParts[0]);
+        if (selectorPartCount == 2) {
+          normalizedSelector.push_back(' ');
+          normalizedSelector.append(selectorParts[1]);
+        }
+        auto it = rulesBySelector_.find(normalizedSelector);
         if (it != rulesBySelector_.end()) {
           it->second.applyOver(style);
         } else {
-          rulesBySelector_.emplace(std::string(sel), style);
+          rulesBySelector_.emplace(std::move(normalizedSelector), style);
         }
       });
 }
@@ -684,6 +720,45 @@ CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view clas
     }
   });
 
+  return result;
+}
+
+CssStyle CssParser::resolveStyle(std::string_view tagName, std::string_view classAttr,
+                                 const std::vector<AncestorEntry>& ancestors) const {
+  CssStyle result = resolveStyle(tagName, classAttr);
+  if (ancestors.empty()) return result;
+
+  const auto forEachClass = [](const std::string_view classes, const auto& fn) {
+    size_t count = 0;
+    forEachDelimitedToken(classes, isCssWhitespace, [&](const std::string_view cls) {
+      if (count++ < MAX_CLASSES_PER_ELEMENT) fn(cls);
+    });
+  };
+  const auto applyRule = [this, &result](const CompositeKey key) {
+    if (const auto it = rulesBySelector_.find(key); it != rulesBySelector_.end()) result.applyOver(it->second);
+  };
+  const auto applyChildVariants = [&](const std::string_view parent0, const std::string_view parent1,
+                                      const std::string_view parent2) {
+    applyRule(CompositeKey{parent0, parent1, parent2, " ", tagName});
+    forEachClass(classAttr, [&](const std::string_view childClass) {
+      applyRule(CompositeKey{parent0, parent1, parent2, " ", ".", childClass});
+      applyRule(CompositeKey{parent0, parent1, parent2, " ", tagName, ".", childClass});
+    });
+  };
+
+  // Descendant rules sit between the basic element rule and the current
+  // element's class-specific rules. Re-applying the basic rules afterwards
+  // preserves the existing CrossVi priority model for the target element.
+  for (const AncestorEntry& ancestor : ancestors) {
+    if (ancestor.tag.empty()) continue;
+    applyChildVariants(ancestor.tag, {}, {});
+    forEachClass(ancestor.classAttr, [&](const std::string_view ancestorClass) {
+      applyChildVariants(".", ancestorClass, {});
+      applyChildVariants(ancestor.tag, ".", ancestorClass);
+    });
+  }
+  const CssStyle targetRules = resolveStyle(tagName, classAttr);
+  result.applyOver(targetRules);
   return result;
 }
 

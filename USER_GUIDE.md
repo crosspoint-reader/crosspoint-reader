@@ -44,6 +44,7 @@ Welcome to the **CrossVi** firmware. This guide outlines the hardware controls, 
     - [Footnote Navigation](#footnote-navigation)
     - [System Navigation](#system-navigation)
     - [Supported Languages](#supported-languages)
+    - [XTC/XTCH fixed-layout books](#xtcxtch-fixed-layout-books)
   - [5. Reader Menu](#5-reader-menu)
     - [5.1 Chapter Selection](#51-chapter-selection)
     - [5.2 Bookmarks](#52-bookmarks)
@@ -90,6 +91,12 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 > [!NOTE]
 > On subsequent restarts, the firmware will automatically reopen the last book you were reading.
+
+### Safe startup
+
+If CrossVi crashes while loading a startup store, the next crash recovery skips that exact stage and opens a read-only safe-start notice instead of repeatedly overwriting or reloading the suspect data. Press **Back** or **Confirm** to continue to Home. CrossVi does not delete the skipped file.
+
+To request the same protected startup manually, hold **Volume Down + Power** while powering on. This skips settings, resume state, recent books, network stores, and SD-card font discovery for that boot only. **Volume Up + Power** keeps its existing firmware-recovery priority.
 
 ---
 
@@ -230,6 +237,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
   - "RoundedRaff" - A rounded theme with additional visual styling
   - "Dashboard" - Shows the latest book together with per-book and all-time reading totals on the Home screen. It does not replace or alter the sleep screen.
+  - "CrossVi" - A compact X3/X4 Home with a current-book card, two-column shortcuts, a prominent Continue Reading action, and an optional personal device name.
+
+- **Device Name**: Set the short name shown at the top-left of the CrossVi Home theme. Long names are truncated to leave room for the battery; leave it empty to show the detected `Xteink X3` or `Xteink X4` model name. The device keyboard uses its existing basic Latin layout; use Web Settings when you want to enter Vietnamese diacritics or other Unicode characters.
 
 - **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
   
@@ -254,6 +264,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
 
+- **Daily Reading Goal**: Set an optional daily target from 5 to 120 minutes, in five-minute steps. Choose "Off" to disable the target. The CrossVi Home theme compares today's verified reading time with this goal and opens full device statistics when its summary card is selected.
+
 - **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
 
 - **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
@@ -269,6 +281,8 @@ The Settings screen allows you to configure the device's behavior. There are a f
   
   - "ON" - Vertical space will be added between paragraphs in Reading Mode
   - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
+
+- **Force Paragraph Indent**: Give ordinary EPUB paragraphs a first-line indent even when extra paragraph spacing is enabled. An explicit publisher indent is preserved, and headings or centered/right-aligned blocks are not forced into paragraph indentation.
 
 - **Dictionary**: Select the StarDict dictionary used for word lookups while reading, or "None" to disable lookups. *(Only shown when at least one dictionary folder exists under `/dictionaries/` on the SD card — see [docs/dictionary.md](docs/dictionary.md) for setup and usage.)*
 
@@ -593,8 +607,8 @@ If the device goes to sleep or you close the book while viewing a footnote, the 
 
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
-* **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
+* **Reader Menu:** While reading an EPUB or TXT/Markdown book, press **Confirm** to open the **[Reader Menu](#5-reader-menu)**. The plain-text menu shows only functions that have a reliable text equivalent; chapter navigation, footnotes and EPUB sync are intentionally omitted.
+* **Long-press Confirm (EPUB, configurable):** While reading an EPUB, holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. In TXT/Markdown, use the corresponding explicit Reader Menu item so a long press cannot conflict with opening that menu.
 
 ### Supported Languages
 
@@ -606,11 +620,39 @@ CrossVi renders text using the following Unicode character blocks, enabling supp
 
 What is not supported with built-in reader fonts: Chinese, Japanese, Korean, Arabic, Greek, Hebrew, and Farsi. However, **CJK, Hebrew, Greek, and other extended scripts can be enabled by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
 
+### XTC/XTCH fixed-layout books
+
+XTC and XTCH store pages that have already been rendered as images. CrossVi
+supports uncompressed version 1.0 files whose portrait pages are exactly
+480×800 pixels: `.xtc` uses one-bit XTG pages and `.xtch` uses four-level XTH
+grayscale pages. Metadata, chapters, progress, reading statistics, recent
+books, cover thumbnails and sleep covers are supported. Press **Confirm** while
+reading to open the chapter list when the file provides one; hold **Confirm**
+to open the current book statistics. When a file has no chapters, a short
+**Confirm** opens statistics directly.
+
+X4 shows these pages at native 1:1 resolution. X3 fits the entire page into its
+528×792 portrait screen, preserves the aspect ratio, centers it and leaves a
+small letterbox instead of cropping the last rows. A top or bottom reader
+status bar is an overlay; it does not change the source-page mapping.
+
+Because the content is fixed, EPUB-only actions do not apply: changing font,
+font size or CSS, selecting words for a dictionary, clipping, per-book
+typography, and KOReader position sync are unavailable. An unsupported version,
+compressed page, wrong page size, mixed XTG/XTH payload or damaged/truncated
+file is rejected rather than opened approximately.
+
+To create a compatible file, use the
+[EPUB to XTC Converter](https://github.com/bigbag/epub-to-xtc-converter) and
+export uncompressed version 1.0 at the **Xteink X4 / 480×800 portrait** preset.
+Use that same output for X3; CrossVi performs the safe fit at display time.
+The repository does not bundle the converter.
+
 ---
 
 ## 5. Reader Menu
 
-Press **Confirm** while reading to open the Reader Menu. From here you can access reading utilities and navigation options without leaving the book.
+Press **Confirm** while reading an EPUB or TXT/Markdown file to open the Reader Menu. TXT/Markdown supports bookmarks, dictionary lookup, clipping creation and browsing, per-book font/size/line-spacing/margin/alignment/orientation/anti-aliasing settings, reading statistics, auto turn, go-to-percent, screenshots and safe cache clearing. Items that require EPUB structure—chapter selection, footnotes, QR chapter text, KOReader sync and Nearby position sync—are hidden instead of appearing as non-working controls.
 
 Available options include:
 
@@ -647,7 +689,7 @@ Accessible by selecting **Chapters** from the Reader Menu.
 
 Bookmarks can be created to quickly save and restore your place in a book.
 
-To create a bookmark, hold **Confirm** for about half a second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
+To create an EPUB bookmark, hold **Confirm** for about half a second, or use the explicit bookmark item in the Reader Menu. For TXT/Markdown, open the Reader Menu and choose **Bookmark this page**. The label changes to **Remove bookmark from this page** when the displayed text page is already bookmarked.
 
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
@@ -657,15 +699,27 @@ Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
 
 Open **Book settings** from an EPUB's Reader Menu and enable **Use settings for this book**. Changes made on this screen apply only to that EPUB. Turning the option off restores the device-wide Reader defaults while keeping the custom profile available in case you enable it again. **Reset** removes the book-specific profile.
 
-The profile includes typography, margins, paragraph layout, orientation, image/text rendering options, and the book's auto-page-turn rate. CrossVi restores the global settings whenever you leave the EPUB, including sleep and sync paths, so a profile cannot leak into another book.
+The profile includes typography, margins, paragraph layout, orientation, image/text rendering options, and the book's auto-page-turn rate. **EPUB rendering** is independent of the typography toggle and offers three bounded choices:
+
+- **Balanced** (default) applies the supported publisher styles without additional descendant-selector work.
+- **Full** also applies a bounded set of two-part descendant CSS selectors for books that depend on them.
+- **Light** keeps the text/content structure but drops publisher margins, padding, image dimensions, text indents and horizontal rules that commonly produce fragile layouts.
+
+All three modes flatten complex tables into a readable sequence because the small fixed screen cannot reproduce arbitrary desktop table layout safely. **Safe Mode** is also per-book: it uses the Light policy with embedded CSS disabled. CrossVi offers it only after an explicit out-of-memory failure, asks before changing anything, and saves it only after a page renders successfully. You can disable it again in **Book settings**. CrossVi restores the global settings whenever you leave the EPUB, including sleep and sync paths, so a profile cannot leak into another book.
 
 ### 5.4 Reading statistics
 
-Statistics are currently recorded for EPUB reading. Timing starts only after a page has rendered successfully and stops when you open a menu, leave the reader, or the visible interval becomes idle. Very short opens are filtered out: at least 10 active seconds are needed to save duration, and at least 60 active seconds are needed to count a session.
+Statistics are recorded for EPUB, TXT/Markdown, XTC and XTCH reading. Timing starts only after a page has rendered successfully and stops when you open a menu, leave the reader, or the visible interval becomes idle. Very short opens are filtered out: at least 10 active seconds are needed to save duration, and at least 60 active seconds are needed to count a session.
 
-Open **Reading statistics** from an EPUB's Reader Menu. With the Dashboard theme, Home also shows the same shortcut when it can safely read the latest EPUB's saved records; a damaged or unsupported record is not displayed as plausible zero data.
+Open **Reading statistics** from the EPUB or TXT/Markdown Reader Menu. Press **Confirm** directly while reading an XTC/XTCH file without chapters; for XTC/XTCH files with chapters, hold **Confirm** so a short press can continue to open the chapter list. Home opens on **This device**; an in-reader shortcut opens on **This book**. A damaged or unsupported record is not displayed as plausible zero data.
+
+For TXT/Markdown, page turns and progress are tracked, but the progress label is estimated from the current byte position. CrossVi marks average-page pace and estimated finish time as **Not applicable** because changing the font, margins, or orientation changes the number of rendered pages.
 
 Time-of-day, day-of-week, and reading-streak views require a valid device date and time. Total active time and page-turn counts still work when the clock is unavailable. Nearby statistics are additive display snapshots; they do not modify local counters.
+
+On **This book**, press **Confirm** to edit the stored start timestamp and, for a completed book, the finish timestamp. The editor validates calendar dates and refuses a finish earlier than the start. On **This device**, press **Confirm** and choose **Reading calendar** to browse the retained 730-day local history by month. A filled marker means reading was recorded, an outlined cell is today, and a dash means that older date falls outside retained history; synced peer snapshots are not mixed into this calendar. An invalid clock or legacy totals without dated history are shown as unavailable rather than as empty days.
+
+When **This device** was opened from Home, the same Confirm menu also offers backup and restore for the local device aggregate. Restore requires confirmation and does not include per-book records, dictionary history, or Nearby snapshots. The verified backup is stored at `/.crosspoint/stats_backups/device_stats_v1.bin`; publication and restore use the same CRC/version checks and recoverable write rules as the live statistics store.
 
 ### 5.5 Clippings
 

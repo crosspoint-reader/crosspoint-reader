@@ -6,6 +6,10 @@
 
 #include "activities/home/DashboardProgress.h"
 #include "activities/home/DashboardStatsPolicy.h"
+#include "activities/home/HomeBookSummary.h"
+#include "components/themes/HomeMenuLayout.h"
+#include "components/themes/crossvi/CrossViLayout.h"
+#include "components/themes/crossvi/CrossViTheme.h"
 #include "components/themes/dashboard/DashboardLayout.h"
 
 namespace {
@@ -21,6 +25,34 @@ bool overlaps(const Rect& a, const Rect& b) {
 }
 
 }  // namespace
+
+TEST(HomeMenuLayout, PreservesPreferredRhythmWhenItFits) {
+  const HomeMenuLayout::Fit layout = HomeMenuLayout::fit(430, 6, 1, 64, 8, 40);
+  EXPECT_EQ(layout.rows, 6);
+  EXPECT_EQ(layout.rowHeight, 64);
+  EXPECT_EQ(layout.rowGap, 8);
+  EXPECT_EQ(layout.totalHeight(), 424);
+}
+
+TEST(HomeMenuLayout, CompressesEveryRowInsideTheAvailableHeight) {
+  for (const int height : {292, 317, 364, 422}) {
+    for (const int itemCount : {6, 7, 8}) {
+      const HomeMenuLayout::Fit layout = HomeMenuLayout::fit(height, itemCount, 1, 64, 8, 32);
+      EXPECT_GT(layout.rowHeight, 0);
+      EXPECT_LE(layout.totalHeight(), height);
+      EXPECT_EQ(layout.yOffset(itemCount - 1, 1) + layout.rowHeight, layout.totalHeight());
+    }
+  }
+}
+
+TEST(HomeMenuLayout, FitsTwoColumnDashboardMenus) {
+  const HomeMenuLayout::Fit layout = HomeMenuLayout::fit(262, 7, 2, 48, 8, 30);
+  EXPECT_EQ(layout.rows, 4);
+  EXPECT_EQ(layout.rowHeight, 48);
+  EXPECT_EQ(layout.rowGap, 8);
+  EXPECT_LE(layout.totalHeight(), 262);
+  EXPECT_EQ(layout.yOffset(6, 2), 3 * (layout.rowHeight + layout.rowGap));
+}
 
 TEST(DashboardLayout, FitsBothSupportedPortraitPanels) {
   for (const Rect tile : std::array<Rect, 2>{Rect{0, 56, 480, 410}, Rect{0, 56, 528, 410}}) {
@@ -72,6 +104,107 @@ TEST(DashboardLayout, DegradesWithoutNegativeOrOutOfBoundsRects) {
   EXPECT_TRUE(contains(tinyTile, layout.progressBar));
   EXPECT_TRUE(contains(tinyTile, layout.progressLabel));
   EXPECT_TRUE(contains(tinyTile, layout.footer));
+}
+
+TEST(CrossViLayout, FitsBothSupportedPortraitPanels) {
+  for (const Rect tile : std::array<Rect, 2>{Rect{0, 56, 480, 252}, Rect{0, 56, 528, 252}}) {
+    const CrossViLayout layout = CrossViLayout::calculate(tile);
+
+    EXPECT_TRUE(contains(tile, layout.card));
+    EXPECT_TRUE(contains(layout.card, layout.cover));
+    EXPECT_TRUE(contains(layout.card, layout.details));
+    EXPECT_TRUE(contains(layout.details, layout.title));
+    EXPECT_TRUE(contains(layout.details, layout.stats));
+    EXPECT_TRUE(contains(layout.details, layout.progress));
+    EXPECT_TRUE(contains(layout.progress, layout.progressBar));
+    EXPECT_TRUE(contains(layout.progress, layout.progressLabel));
+    EXPECT_TRUE(contains(layout.details, layout.continueButton));
+    EXPECT_TRUE(contains(layout.details, layout.continueButtonWithoutProgress));
+
+    EXPECT_FALSE(overlaps(layout.cover, layout.details));
+    EXPECT_FALSE(overlaps(layout.title, layout.stats));
+    EXPECT_FALSE(overlaps(layout.stats, layout.progress));
+    EXPECT_FALSE(overlaps(layout.progress, layout.continueButton));
+    EXPECT_FALSE(overlaps(layout.stats, layout.continueButtonWithoutProgress));
+  }
+}
+
+TEST(CrossViLayout, CachesOnlyTheCompactCoverRegion) {
+  const CrossViLayout x4 = CrossViLayout::calculate(Rect{0, 56, 480, 252});
+  const CrossViLayout x3 = CrossViLayout::calculate(Rect{0, 56, 528, 252});
+
+  EXPECT_EQ(x4.cover.x - x4.card.x, 20);
+  EXPECT_EQ(x3.cover.x - x3.card.x, 20);
+  EXPECT_EQ(x4.cover.width, 92);
+  EXPECT_EQ(x4.cover.height, 138);
+  EXPECT_EQ(x3.cover.width, 100);
+  EXPECT_EQ(x3.cover.height, 150);
+  EXPECT_LT(((x4.cover.width + 7) / 8) * x4.cover.height, 3000);
+  EXPECT_LT(((x3.cover.width + 7) / 8) * x3.cover.height, 4000);
+}
+
+TEST(CrossViLayout, AdaptiveTwoColumnMenuKeepsSettingsInsideTheSafeArea) {
+  // The two-row reading summary reserves 76 px below the menu.
+  for (const int availableHeight : {316, 324}) {
+    for (const int itemCount : {6, 7}) {
+      const HomeMenuLayout::Fit layout = HomeMenuLayout::fit(availableHeight, itemCount, 2, 80, 10, 48);
+      EXPECT_GT(layout.rowHeight, 0);
+      EXPECT_LE(layout.totalHeight(), availableHeight);
+      EXPECT_LE(layout.yOffset(itemCount - 1, 2) + layout.rowHeight, availableHeight);
+    }
+  }
+}
+
+TEST(CrossViLayout, ReadingSummaryFitsBetweenMenuAndButtonHints) {
+  for (const Rect screen : std::array<Rect, 2>{Rect{0, 0, 528, 792}, Rect{0, 0, 480, 800}}) {
+    const int screenHeight = screen.height;
+    const int contentBottom = screenHeight - CrossViMetrics::values.buttonHintsHeight -
+                              CrossViMetrics::values.verticalSpacing;
+    const Rect summary{CrossViMetrics::values.contentSidePadding,
+                       contentBottom - CrossViMetrics::HOME_READING_SUMMARY_HEIGHT -
+                           CrossViMetrics::HOME_READING_SUMMARY_BOTTOM_GAP,
+                       screen.width - CrossViMetrics::values.contentSidePadding * 2,
+                       CrossViMetrics::HOME_READING_SUMMARY_HEIGHT};
+    EXPECT_GT(summary.width, 0);
+    EXPECT_EQ(summary.y + summary.height + CrossViMetrics::HOME_READING_SUMMARY_BOTTOM_GAP, contentBottom);
+    EXPECT_LE(summary.y + summary.height,
+              screenHeight - CrossViMetrics::values.buttonHintsHeight - CrossViMetrics::values.verticalSpacing);
+  }
+}
+
+TEST(CrossViHomeAction, UsesOnlyTrustedExactProgressForItsLabel) {
+  HomeBookSummary summary;
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::Open);
+
+  summary.bookStatsState = DashboardMetricState::NoData;
+  summary.progressState = DashboardMetricState::NoData;
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::Start);
+
+  summary.hasProgress = true;
+  summary.progressState = DashboardMetricState::Available;
+  summary.progressPercent = 42;
+  summary.hasStartedReading = true;
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::Continue);
+
+  summary.progressEstimated = true;
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::Continue);
+
+  summary.progressEstimated = false;
+  summary.progressPercent = 100;
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::ReadAgain);
+}
+
+TEST(CrossViHomeAction, DoesNotTreatOpeningTheFirstSubPercentPageAsReading) {
+  HomeBookSummary summary;
+  summary.bookStatsState = DashboardMetricState::NoData;
+  summary.progressState = DashboardMetricState::Available;
+  summary.hasProgress = true;
+  summary.progressBelowOnePercent = true;
+
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::Start);
+
+  summary.hasStartedReading = true;
+  EXPECT_EQ(homeBookAction(summary), HomeBookAction::Continue);
 }
 
 TEST(DashboardProgress, StrictlyDecodesFinalizedEpubProgress) {

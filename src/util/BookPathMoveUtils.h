@@ -20,7 +20,7 @@ enum class BookFilePublishResult : uint8_t {
 };
 
 // Renames a book while migrating path-keyed progress, reader settings,
-// statistics, bookmarks, and EPUB clippings. A failure before the file rename
+// statistics, bookmarks, and EPUB/TXT clippings. A failure before the file rename
 // leaves the source authoritative; failures after it are rolled back when
 // possible or leave verified recovery state for the destination reader.
 BookPathMoveResult moveBookFilePreservingUserState(const std::string& sourcePath, const std::string& destinationPath);
@@ -43,9 +43,10 @@ bool recoverInterruptedBookFileReplacement(const std::string& bookPath);
 // files; browsers and book scanners must never expose them for mutation.
 bool isBookFileTransactionArtifact(const char* fileName);
 
-// Must be checked before physically deleting an EPUB. Move/replace helpers
-// also enforce this internally. A pending completion transaction keeps its
-// exact cache path authoritative until recovery succeeds.
+// Must be checked before physically deleting a book whose reader tracks
+// completion. Move/replace helpers also enforce this internally. A pending
+// completion transaction keeps its exact cache path authoritative until
+// recovery succeeds.
 bool canDeleteOrRelocateBookFile(const std::string& bookPath);
 
 // Call only after the backing file has been successfully deleted or replaced.

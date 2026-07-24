@@ -10,9 +10,9 @@ CrossVi có giao diện tiếng Việt và được khởi xướng bởi một 
 
 ## CrossVi làm được gì?
 
-- Đọc sách EPUB, TXT, XTC/XTCH và ảnh BMP.
+- Đọc sách EPUB, TXT, XTC/XTCH và ảnh BMP. CrossVi hỗ trợ chính thức tập con XTC/XTCH v1.0 không nén, trang dựng sẵn 480×800: X4 hiển thị đúng 1:1, còn X3 thu vừa toàn trang, giữ tỷ lệ và căn giữa nên không cắt nội dung.
 - Ghi nhớ sách đang đọc, vị trí đọc, dấu trang và lịch sử sách gần đây.
-- Tra từ điển StarDict và đồng bộ tiến độ đọc với máy chủ tương thích KOReader.
+- Tra từ điển StarDict, gồm tệp đồng nghĩa `.syn` tùy chọn và lịch sử tối đa 15 lần tra thành công; đồng bộ tiến độ đọc với máy chủ tương thích KOReader.
 - Đổi phông chữ, cỡ chữ, khoảng cách dòng, căn lề và giao diện.
 - Cài thêm phông chữ từ thẻ nhớ.
 - Chuyển sách qua Wi-Fi bằng trình duyệt hoặc Calibre.
@@ -24,11 +24,12 @@ CrossVi có giao diện tiếng Việt và được khởi xướng bởi một 
 
 CrossVi bổ sung một số tiện ích dễ dùng, nhưng không tự ý thay đổi sách hoặc vị trí đọc của bạn:
 
-Thiết lập riêng theo sách, thống kê trong trình đọc, clipping và đồng bộ vị trí hiện áp dụng cho EPUB. XTC và TXT vẫn đọc như trước, nhưng chưa có các công cụ này.
+Thống kê trong trình đọc dùng được cho EPUB, TXT/Markdown và XTC/XTCH. EPUB và TXT/Markdown đều có menu công cụ, dấu trang, tra cứu từ điển, đoạn trích và cài đặt hiển thị riêng cho từng sách. Với TXT/Markdown, dấu trang và đoạn trích bám theo vị trí byte trong tệp, nên đổi phông, lề hoặc hướng màn hình không làm chúng âm thầm trỏ sang đoạn khác. Các chức năng phụ thuộc cấu trúc EPUB như chọn chương, chú thích chân trang và đồng bộ vị trí KOReader không xuất hiện trong menu văn bản thuần. XTC/XTCH là ảnh trang cố định nên không đổi phông/cỡ chữ, không tra từ theo vùng chọn, không clipping và không đồng bộ vị trí KOReader; xem [contract định dạng](lib/Xtc/README).
 
 - **Dashboard:** màn hình chính gọn hơn, hiển thị sách vừa đọc và các con số tổng quan. Khi dữ liệu của EPUB gần nhất đọc được an toàn, bạn có thể mở thẳng phần thống kê đầy đủ từ đây. Bật tại **Cài đặt → Hiển thị → Giao diện → Bảng đọc sách**.
-- **Thiết lập riêng cho từng sách:** mỗi EPUB có thể dùng phông chữ, cỡ chữ, lề, khoảng cách dòng, hướng màn hình và tốc độ tự lật trang riêng. Các sách khác vẫn dùng thiết lập chung.
-- **Thống kê đọc:** xem thời gian đọc, số trang đã lật, số phiên đọc, chuỗi ngày đọc và ước tính thời gian còn lại. Thời gian chỉ được tính khi một trang EPUB đã hiển thị thành công; thời gian ở menu hoặc lúc máy đang lập chỉ mục không được tính.
+- **Theme CrossVi:** màn hình chính hai cột riêng cho X3/X4, nổi bật sách đang đọc, tiến độ, nút **Đọc tiếp**, sáu lối tắt chính và thẻ tóm tắt **Hôm nay/Mục tiêu** có thể mở phần thống kê đầy đủ. Bạn có thể đặt tên máy tại **Cài đặt → Hiển thị → Tên hiển thị**, bật theme tại **Giao diện → CrossVi** và đặt chỉ tiêu tại **Cài đặt → Trình đọc → Mục tiêu đọc mỗi ngày**.
+- **Thiết lập riêng cho từng sách:** mỗi EPUB có thể dùng phông chữ, cỡ chữ, lề, khoảng cách dòng, buộc thụt đầu dòng, hướng màn hình và tốc độ tự lật trang riêng. Ba chế độ hiển thị EPUB là **Đầy đủ**, **Cân bằng** (mặc định) và **Nhẹ**. Nếu một EPUB thật sự hết bộ nhớ khi dựng trang, CrossVi hỏi trước khi thử lại bằng **Chế độ an toàn**; chế độ này chỉ được lưu cho cuốn sách đó sau khi một trang đã hiển thị thành công.
+- **Thống kê đọc:** xem thời gian đọc, số trang đã lật, số phiên đọc, chuỗi ngày đọc và tiến độ cho EPUB, TXT/Markdown và XTC/XTCH. Thời gian chỉ được tính khi trang đã hiển thị thành công; thời gian ở menu hoặc lúc máy đang lập chỉ mục không được tính. Với TXT/Markdown, nhấn **Xác nhận** để mở menu rồi chọn **Thống kê đọc**; XTC/XTCH không có chương vẫn mở thống kê trực tiếp, còn XTC/XTCH có chương dùng thao tác giữ **Xác nhận**. Tại trang **Sách này**, nhấn **Xác nhận** để chỉnh ngày giờ bắt đầu/hoàn thành. Tại trang **Thiết bị này**, nhấn **Xác nhận** để mở lịch đọc 730 ngày; nếu vào từ Home, cùng menu này còn có sao lưu và khôi phục tổng thống kê của máy. Ngày nằm ngoài phần lịch sử còn được lưu sẽ được ghi rõ là chưa có dữ liệu, không giả thành ngày không đọc. Vì số trang TXT/Markdown thay đổi theo phông chữ và lề, CrossVi không đưa ra tốc độ hoặc ngày hoàn thành dự kiến thiếu tin cậy.
 - **Clipping (lưu đoạn trích):** chọn một đoạn trên trang đang đọc hoặc tiếp tục sang các trang liền kề trong cùng chương, rồi xem lại hoặc xóa sau đó. Bản nháp có giới hạn rõ ràng để không làm đầy bộ nhớ và chỉ được lưu sau khi bạn xác nhận. CrossVi không tìm kiếm và đoán vị trí cũ sau khi bố cục sách thay đổi; nếu không khớp an toàn, đoạn chữ vẫn được giữ nhưng phần đánh dấu sẽ tạm không hiện.
 - **Nearby Sync:** hai máy CrossVi ở gần nhau có thể trao đổi vị trí đọc của đúng cùng một tệp EPUB, hoặc lưu một bản thống kê của máy kia. Cả hai bên đều phải mở tính năng và xác nhận; dữ liệu nhận được không tự ghi đè dữ liệu trên máy. Nếu chương đích chưa có dữ liệu bố cục phù hợp hoặc không xác định được đúng đoạn văn, CrossVi sẽ từ chối thay vì đoán một trang gần đúng.
 
@@ -79,7 +80,7 @@ Bạn cũng có thể:
 - Dùng tiện ích CrossPoint Reader của Calibre để gửi sách qua Wi-Fi.
 - Thêm thư viện OPDS để tải sách trực tiếp.
 
-Các định dạng được hỗ trợ trực tiếp là `.epub`, `.txt`, `.xtc`, `.xtch` và `.bmp`.
+Các định dạng được hỗ trợ trực tiếp là `.epub`, `.txt`, `.md`, `.xtc`, `.xtch` và `.bmp`. Với XTC/XTCH, hãy xuất trang dọc 480×800, version 1.0 và không nén. Có thể dùng [EPUB to XTC Converter](https://github.com/bigbag/epub-to-xtc-converter); kể cả đọc trên X3, hãy chọn đầu ra X4 480×800 vì đây là kích thước mà firmware kiểm tra và thu vừa an toàn.
 
 ## Dữ liệu cũ có dùng lại được không?
 

@@ -4,18 +4,11 @@
 #include <WiFi.h>
 #include <esp_sntp.h>
 #include <time.h>
+#include <sys/time.h>
 
-#include <cassert>
+#include "ClockCalendar.h"
 
 HalClock halClock;  // Singleton instance
-
-// DS3231 register layout (BCD encoded):
-//   0x00: Seconds  (bits 6-4 = tens, bits 3-0 = ones)
-//   0x01: Minutes  (bits 6-4 = tens, bits 3-0 = ones)
-//   0x02: Hours    (bit 6 = 12/24 mode, bits 5-4 = tens, bits 3-0 = ones)
-
-static uint8_t bcdToDec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0x0F); }
-static uint8_t decToBcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
 
 void HalClock::begin() {
   if (!gpio.deviceIsX3()) {
@@ -23,28 +16,34 @@ void HalClock::begin() {
     return;
   }
 
-  // I2C is already initialised by HalPowerManager::begin() for X3.
-  // Probe the DS3231 by reading the seconds register.
-  Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);
-  if (Wire.endTransmission(false) != 0) {
+  if (!_rtc.begin()) {
     LOG_INF("CLK", "DS3231 RTC not found");
     _available = false;
     return;
   }
-  Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)1);
-  if (Wire.available() < 1) {
-    _available = false;
-    return;
-  }
-  Wire.read();  // discard — just testing connectivity
-
   _available = true;
   LOG_INF("CLK", "DS3231 RTC found");
 
-  // Prime the cache with an initial read
-  uint8_t h, m;
-  getTime(h, m);
+  Rtc::DateTime rtcNow;
+  if (!_rtc.now(rtcNow)) {
+    LOG_INF("CLK", "DS3231 calendar is not valid yet");
+    return;
+  }
+  ClockCalendar::DateTime calendar{rtcNow.year, rtcNow.month, rtcNow.day, rtcNow.hour,
+                                   rtcNow.minute, rtcNow.second, rtcNow.weekday};
+  time_t epoch = 0;
+  if (!ClockCalendar::toEpoch(calendar, epoch)) {
+    LOG_ERR("CLK", "DS3231 returned an invalid calendar");
+    return;
+  }
+  const timeval systemTime{epoch, 0};
+  if (settimeofday(&systemTime, nullptr) == 0) {
+    _cachedHour = rtcNow.hour;
+    _cachedMinute = rtcNow.minute;
+    _hasCachedTime = true;
+    _lastPollMs = millis();
+    LOG_INF("CLK", "System clock restored from DS3231 calendar");
+  }
 }
 
 bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
@@ -57,18 +56,8 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
     return true;
   }
 
-  // Read 3 bytes starting at register 0x00: seconds, minutes, hours
-  Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);
-  if (Wire.endTransmission(false) != 0) {
-    if (!_hasCachedTime) return false;
-    _lastPollMs = now;
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
-  }
-  Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)3);
-  if (Wire.available() < 3) {
+  Rtc::DateTime rtcNow;
+  if (!_rtc.now(rtcNow)) {
     if (!_hasCachedTime) return false;
     _lastPollMs = now;
     hour = _cachedHour;
@@ -76,22 +65,12 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
     return true;
   }
 
-  Wire.read();  // seconds — not needed
-  const uint8_t rawMin = Wire.read();
-  const uint8_t rawHour = Wire.read();
+  const ClockCalendar::DateTime calendar{rtcNow.year, rtcNow.month, rtcNow.day, rtcNow.hour,
+                                         rtcNow.minute, rtcNow.second, rtcNow.weekday};
+  if (!ClockCalendar::isValid(calendar)) return false;
 
-  _cachedMinute = bcdToDec(rawMin & 0x7F);
-  // Handle 12/24h mode: bit 6 high = 12h mode
-  if (rawHour & 0x40) {
-    // 12h mode: bit 5 = PM, bits 4-0 = hours (1-12)
-    uint8_t h12 = bcdToDec(rawHour & 0x1F);
-    bool pm = rawHour & 0x20;
-    if (h12 == 12) h12 = 0;
-    _cachedHour = pm ? (h12 + 12) : h12;
-  } else {
-    // 24h mode: bits 5-0 = hours (0-23)
-    _cachedHour = bcdToDec(rawHour & 0x3F);
-  }
+  _cachedMinute = rtcNow.minute;
+  _cachedHour = rtcNow.hour;
   _lastPollMs = now;
   _hasCachedTime = true;
 
@@ -99,6 +78,23 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   minute = _cachedMinute;
   return true;
 }
+
+bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const {
+  if (!_available) return false;
+  Rtc::DateTime rtcNow;
+  if (!_rtc.now(rtcNow)) return false;
+  const ClockCalendar::DateTime calendar{rtcNow.year, rtcNow.month, rtcNow.day, rtcNow.hour,
+                                         rtcNow.minute, rtcNow.second, rtcNow.weekday};
+  if (!ClockCalendar::isValid(calendar)) return false;
+  year = rtcNow.year;
+  month = rtcNow.month;
+  day = rtcNow.day;
+  hour = rtcNow.hour;
+  minute = rtcNow.minute;
+  return true;
+}
+
+bool HalClock::isSystemTimeValid() const { return ClockCalendar::isValidSystemEpoch(time(nullptr)); }
 
 bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
@@ -127,31 +123,23 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   return true;
 }
 
-bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
-  assert(hour < 24);
-  assert(minute < 60);
-  assert(second < 60);
-  Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);    // Start at register 0x00
-  Wire.write(decToBcd(second));  // 0x00: Seconds
-  Wire.write(decToBcd(minute));  // 0x01: Minutes
-  Wire.write(decToBcd(hour));    // 0x02: Hours (24h mode, bit 6 = 0)
-  if (Wire.endTransmission() != 0) {
-    LOG_ERR("CLK", "Failed to write time to DS3231");
-    return false;
-  }
+bool HalClock::writeDateTimeToRTC(const time_t epoch) {
+  if (!_available) return true;
+  ClockCalendar::DateTime calendar;
+  if (!ClockCalendar::fromEpoch(epoch, calendar)) return false;
+  const Rtc::DateTime rtcNow{calendar.year, calendar.month, calendar.day, calendar.hour,
+                             calendar.minute, calendar.second, calendar.weekday};
+  if (!_rtc.set(rtcNow)) return false;
 
   // Invalidate cache so next read fetches fresh data
   _lastPollMs = 0;
-  _cachedHour = hour;
-  _cachedMinute = minute;
+  _cachedHour = calendar.hour;
+  _cachedMinute = calendar.minute;
   _hasCachedTime = true;
   return true;
 }
 
 bool HalClock::syncFromNTP() {
-  if (!_available) return false;
-
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;
@@ -165,11 +153,9 @@ bool HalClock::syncFromNTP() {
   for (int i = 0; i < maxAttempts; i++) {
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
       time_t now = time(nullptr);
-      struct tm timeinfo;
-      gmtime_r(&now, &timeinfo);
-
-      if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
-        LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+      if (!ClockCalendar::isValidSystemEpoch(now)) continue;
+      if (writeDateTimeToRTC(now)) {
+        LOG_INF("CLK", "System clock synchronized; external RTC updated when present");
         return true;
       }
       return false;

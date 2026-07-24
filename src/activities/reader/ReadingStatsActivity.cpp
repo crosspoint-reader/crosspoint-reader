@@ -11,16 +11,29 @@
 #include <utility>
 
 #include "MappedInputManager.h"
+#include "ReadingCalendarActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace {
-enum class MetricFormat : uint8_t { Duration, Count, Pace, Percent, Completion, Remaining, Date };
+enum class MetricFormat : uint8_t { Duration, Count, Percent, Remaining, DateTime };
 
 struct SummaryCell {
-  StrId label;
-  const ReadingStatsMetric* metric;
-  MetricFormat format;
+  StrId label = StrId::STR_STATS_READING_TIME;
+  const ReadingStatsMetric* metric = nullptr;
+  MetricFormat format = MetricFormat::Count;
+};
+
+template <size_t Capacity>
+struct SummaryCells {
+  std::array<SummaryCell, Capacity> items{};
+  size_t count = 0;
+
+  void add(const StrId label, const ReadingStatsMetric& metric, const MetricFormat format) {
+    if (metric.state != ReadingStatsMetricState::Known && metric.state != ReadingStatsMetricState::Estimated) return;
+    if (count >= Capacity) return;
+    items[count++] = {label, &metric, format};
+  }
 };
 
 constexpr std::array<StrId, READING_TIME_BUCKET_COUNT> TIME_BUCKET_LABELS = {
@@ -29,13 +42,11 @@ constexpr std::array<StrId, READING_DAY_OF_WEEK_COUNT> DAY_LABELS = {
     StrId::STR_STATS_MON, StrId::STR_STATS_TUE, StrId::STR_STATS_WED, StrId::STR_STATS_THU,
     StrId::STR_STATS_FRI, StrId::STR_STATS_SAT, StrId::STR_STATS_SUN};
 
-std::string formatDuration(const uint32_t seconds, const bool estimated, const bool preferSeconds = false) {
+std::string formatDuration(const uint32_t seconds, const bool estimated) {
   char value[28];
   const char* prefix = estimated ? "~" : "";
   if (seconds == 0) {
     snprintf(value, sizeof(value), "%s0m", prefix);
-  } else if (preferSeconds && seconds < 60) {
-    snprintf(value, sizeof(value), "%s%lus", prefix, static_cast<unsigned long>(seconds));
   } else if (seconds < 60) {
     snprintf(value, sizeof(value), "%s<1m", prefix);
   } else {
@@ -57,27 +68,27 @@ std::string formatDuration(const uint32_t seconds, const bool estimated, const b
 }
 
 std::string formatMetric(const ReadingStatsMetric& metric, const MetricFormat format) {
+  if (metric.state == ReadingStatsMetricState::NotApplicable) return tr(STR_STATS_NOT_APPLICABLE);
+  if (metric.state == ReadingStatsMetricState::NoData) return tr(STR_STATS_NO_DATA);
   if (metric.state == ReadingStatsMetricState::Unavailable) return tr(STR_STATS_UNAVAILABLE);
   const bool estimated = metric.state == ReadingStatsMetricState::Estimated;
   switch (format) {
     case MetricFormat::Duration:
       return formatDuration(metric.value, estimated);
-    case MetricFormat::Pace:
-      return formatDuration(metric.value, estimated, true);
     case MetricFormat::Percent:
       return std::string(estimated ? "~" : "") + std::to_string(metric.value) + "%";
-    case MetricFormat::Completion:
-      return I18N.get(metric.value != 0 ? StrId::STR_YES : StrId::STR_NO);
     case MetricFormat::Remaining:
       return metric.state == ReadingStatsMetricState::Known && metric.value == 0
                  ? std::string(tr(STR_STATS_FINISHED))
                  : formatDuration(metric.value, estimated);
-    case MetricFormat::Date: {
-      ReadingStatsDate date;
-      if (!readingStatsDateFromDayIndex(metric.value, date)) return tr(STR_STATS_UNAVAILABLE);
+    case MetricFormat::DateTime: {
+      ReadingStatsDateTime dateTime;
+      if (!readingStatsDateTimeFromMinuteIndex(metric.value, dateTime)) return tr(STR_STATS_UNAVAILABLE);
       char value[20];
-      snprintf(value, sizeof(value), "%s%04u-%02u-%02u", estimated ? "~" : "", static_cast<unsigned>(date.year),
-               static_cast<unsigned>(date.month), static_cast<unsigned>(date.day));
+      snprintf(value, sizeof(value), "%s%02u:%02u %02u/%02u/%02u", estimated ? "~" : "",
+               static_cast<unsigned>(dateTime.hour), static_cast<unsigned>(dateTime.minute),
+               static_cast<unsigned>(dateTime.date.day), static_cast<unsigned>(dateTime.date.month),
+               static_cast<unsigned>(dateTime.date.year % 100u));
       return value;
     }
     case MetricFormat::Count:
@@ -103,24 +114,35 @@ void drawSummaryCell(const GfxRenderer& renderer, const Rect& rect, const Summar
   drawCentered(renderer, SMALL_FONT_ID, rect.x + 4, rect.width - 8, top + valueLineHeight + 2, label.c_str());
 }
 
-template <size_t N>
-void drawSummaryCard(const GfxRenderer& renderer, const Rect& rect, const std::array<SummaryCell, N>& cells,
-                     const int columns) {
-  const int rows = (static_cast<int>(N) + columns - 1) / columns;
-  const int columnWidth = rect.width / columns;
+void drawSummaryCard(const GfxRenderer& renderer, const Rect& rect, const SummaryCell* cells, const size_t count,
+                     const int requestedColumns) {
+  if (!cells || count == 0) return;
+  const int columns = std::min(requestedColumns, static_cast<int>(count));
+  const int rows = (static_cast<int>(count) + columns - 1) / columns;
   const int rowHeight = rect.height / rows;
   renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
-  for (int column = 1; column < columns; ++column) {
-    renderer.drawLine(rect.x + column * columnWidth, rect.y, rect.x + column * columnWidth, rect.y + rect.height - 1);
-  }
   for (int row = 1; row < rows; ++row) {
     renderer.drawLine(rect.x, rect.y + row * rowHeight, rect.x + rect.width - 1, rect.y + row * rowHeight);
   }
-  for (size_t index = 0; index < N; ++index) {
+  for (int row = 0; row < rows; ++row) {
+    const size_t rowStart = static_cast<size_t>(row * columns);
+    const int rowCells = std::min(columns, static_cast<int>(count - rowStart));
+    const int columnWidth = rect.width / rowCells;
+    const int cellY = rect.y + row * rowHeight;
+    const int cellHeight = row == rows - 1 ? rect.y + rect.height - cellY : rowHeight;
+    for (int column = 1; column < rowCells; ++column) {
+      const int dividerX = rect.x + column * columnWidth;
+      renderer.drawLine(dividerX, cellY, dividerX, cellY + cellHeight - 1);
+    }
+  }
+  for (size_t index = 0; index < count; ++index) {
     const int row = static_cast<int>(index) / columns;
     const int column = static_cast<int>(index) % columns;
+    const size_t rowStart = static_cast<size_t>(row * columns);
+    const int rowCells = std::min(columns, static_cast<int>(count - rowStart));
+    const int columnWidth = rect.width / rowCells;
     const int cellX = rect.x + column * columnWidth;
-    const int cellWidth = column == columns - 1 ? rect.x + rect.width - cellX : columnWidth;
+    const int cellWidth = column == rowCells - 1 ? rect.x + rect.width - cellX : columnWidth;
     const int cellY = rect.y + row * rowHeight;
     const int cellHeight = row == rows - 1 ? rect.y + rect.height - cellY : rowHeight;
     drawSummaryCell(renderer, Rect{cellX, cellY, cellWidth, cellHeight}, cells[index]);
@@ -173,7 +195,9 @@ void drawChart(GfxRenderer& renderer, const Rect& rect, const StrId title, const
   const int valueWidth = std::max(42, renderer.getTextWidth(SMALL_FONT_ID, "99999h") + 8);
   const int barX = rect.x + 6 + labelWidth;
   const int barWidth = std::max(0, rect.width - labelWidth - valueWidth - 18);
-  const uint32_t maximum = *std::max_element(chart.seconds.begin(), chart.seconds.end());
+  constexpr uint32_t MINIMUM_CHART_SCALE_SECONDS = 15U * 60U;
+  const uint32_t maximum = std::max(MINIMUM_CHART_SCALE_SECONDS,
+                                    *std::max_element(chart.seconds.begin(), chart.seconds.end()));
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
 
   for (size_t index = 0; index < N; ++index) {
@@ -202,59 +226,107 @@ void drawChart(GfxRenderer& renderer, const Rect& rect, const StrId title, const
   }
 }
 
-std::array<SummaryCell, 9> bookCells(const BookReadingStatsPresentation& model) {
-  const StrId finishLabel = model.finishDate.state == ReadingStatsMetricState::Estimated
+SummaryCells<5> bookCells(const BookReadingStatsPresentation& model) {
+  SummaryCells<5> cells;
+  const bool knownIncomplete = model.completed.state == ReadingStatsMetricState::Known && model.completed.value == 0;
+  const StrId finishLabel = knownIncomplete || model.finishDate.state == ReadingStatsMetricState::Estimated
                                 ? StrId::STR_STATS_EST_FINISH_DATE
                                 : StrId::STR_STATS_FINISHED_DATE;
-  return {{{StrId::STR_STATS_READING_TIME, &model.readingTime, MetricFormat::Duration},
-           {StrId::STR_STATS_BOOK_SESSIONS, &model.sessions, MetricFormat::Count},
-           {StrId::STR_STATS_PAGES_TURNED, &model.pagesTurned, MetricFormat::Count},
-           {StrId::STR_STATS_PROGRESS, &model.progress, MetricFormat::Percent},
-           {StrId::STR_STATS_AVG_PAGE, &model.averagePage, MetricFormat::Pace},
-           {StrId::STR_STATS_TIME_LEFT, &model.timeLeft, MetricFormat::Remaining},
-           {StrId::STR_STATS_COMPLETED, &model.completed, MetricFormat::Completion},
-           {StrId::STR_STATS_STARTED_DATE, &model.startDate, MetricFormat::Date},
-           {finishLabel, &model.finishDate, MetricFormat::Date}}};
+  cells.add(StrId::STR_STATS_READING_TIME, model.readingTime, MetricFormat::Duration);
+  cells.add(StrId::STR_STATS_PROGRESS, model.progress, MetricFormat::Percent);
+  cells.add(StrId::STR_STATS_SESSIONS, model.sessions, MetricFormat::Count);
+  cells.add(StrId::STR_STATS_STARTED_DATE, model.startDate, MetricFormat::DateTime);
+  if (model.finishDate.state == ReadingStatsMetricState::Known ||
+      model.finishDate.state == ReadingStatsMetricState::Estimated) {
+    cells.add(finishLabel, model.finishDate, MetricFormat::DateTime);
+  } else if (model.timeLeft.state != ReadingStatsMetricState::Known || model.timeLeft.value != 0) {
+    cells.add(StrId::STR_STATS_TIME_LEFT, model.timeLeft, MetricFormat::Remaining);
+  }
+  return cells;
 }
 
-std::array<SummaryCell, 7> globalCells(const GlobalReadingStatsPresentation& model) {
-  return {{{StrId::STR_STATS_READING_TIME, &model.readingTime, MetricFormat::Duration},
-           {StrId::STR_STATS_SESSIONS, &model.sessions, MetricFormat::Count},
-           {StrId::STR_STATS_PAGES_TURNED, &model.pagesTurned, MetricFormat::Count},
-           {StrId::STR_STATS_COMPLETED_BOOKS, &model.completedBooks, MetricFormat::Count},
-           {StrId::STR_STATS_STREAK, &model.currentStreak, MetricFormat::Count},
-           {StrId::STR_STATS_LONGEST_STREAK, &model.longestStreak, MetricFormat::Count},
-           {StrId::STR_STATS_READING_DAYS, &model.readingDays, MetricFormat::Count}}};
+SummaryCells<4> globalCells(const GlobalReadingStatsPresentation& model) {
+  SummaryCells<4> cells;
+  cells.add(StrId::STR_STATS_READING_TIME, model.readingTime, MetricFormat::Duration);
+  cells.add(StrId::STR_STATS_COMPLETED_BOOKS, model.completedBooks, MetricFormat::Count);
+  cells.add(StrId::STR_STATS_STREAK, model.currentStreak, MetricFormat::Count);
+  cells.add(StrId::STR_STATS_LONGEST_STREAK, model.longestStreak, MetricFormat::Count);
+  return cells;
 }
 }  // namespace
 
 ReadingStatsActivity::ReadingStatsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           std::string bookTitle, ReadingStatsPresentation presentation)
+                                           std::string bookTitle, ReadingStatsPresentation presentation,
+                                           const Page initialPage, const bool allowBookDateEdit,
+                                           const bool allowDeviceBackup)
     : Activity("ReadingStats", renderer, mappedInput),
       bookTitle(std::move(bookTitle)),
-      presentation(std::move(presentation)) {}
+      presentation(std::move(presentation)),
+      page(initialPage),
+      allowBookDateEdit(allowBookDateEdit),
+      allowDeviceBackup(allowDeviceBackup) {}
 
 void ReadingStatsActivity::onEnter() {
   Activity::onEnter();
+  suppressInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   requestUpdate();
 }
 
 void ReadingStatsActivity::loop() {
-  buttonNavigator.onNext([this] {
+  if (suppressInitialConfirmRelease) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
+        !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      suppressInitialConfirmRelease = false;
+    }
+    return;
+  }
+
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
+  buttonNavigator.onNextPress([this] {
     const int next = (static_cast<int>(page) + 1) % pageCount();
     page = static_cast<Page>(next);
     requestUpdate();
   });
-  buttonNavigator.onPrevious([this] {
+  buttonNavigator.onPreviousPress([this] {
     const int previous = (static_cast<int>(page) + pageCount() - 1) % pageCount();
     page = static_cast<Page>(previous);
     requestUpdate();
   });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
+    return;
   }
+
+  if (!mappedInput.wasReleased(MappedInputManager::Button::Confirm)) return;
+  if (page == Page::Book && allowBookDateEdit) {
+    setResult(ReadingStatsActionResult{ReadingStatsActionResult::Action::EditBookDates});
+    finish();
+    return;
+  }
+  if (page == Page::Device) {
+    static constexpr std::array<StrId, 3> options = {StrId::STR_STATS_CALENDAR, StrId::STR_STATS_BACKUP,
+                                                     StrId::STR_STATS_RESTORE};
+    const int optionCount = allowDeviceBackup ? static_cast<int>(options.size()) : 1;
+    optionPopup.show(StrId::STR_STATS_MANAGE, options.data(), optionCount, 0,
+                     [this](const int selected) {
+                       if (selected == 0) {
+                         startActivityForResult(
+                             std::make_unique<ReadingCalendarActivity>(renderer, mappedInput,
+                                                                       presentation.deviceCalendar),
+                             [this](const ActivityResult&) { requestUpdate(); });
+                         return;
+                       }
+                       const auto action = selected == 1 ? ReadingStatsActionResult::Action::BackupDeviceStats
+                                                         : ReadingStatsActionResult::Action::RestoreDeviceStats;
+                       setResult(ReadingStatsActionResult{action});
+                       finish();
+                     });
+    requestUpdate();
+    return;
+  }
+  finish();
 }
 
 void ReadingStatsActivity::render(RenderLock&&) {
@@ -275,28 +347,11 @@ void ReadingStatsActivity::render(RenderLock&&) {
   const GlobalReadingStatsPresentation* globalModel = nullptr;
   StrId pageTitle = StrId::STR_STATS_THIS_BOOK;
   std::string pageTitleText;
-  int summaryRows = landscape ? 2 : 5;
-  int summaryColumns = landscape ? 5 : 2;
   if (page == Page::Device) {
     pageTitle = StrId::STR_STATS_THIS_DEVICE;
     globalModel = &presentation.device;
-    summaryRows = landscape ? 2 : 4;
-    summaryColumns = landscape ? 4 : 2;
-  } else if (page == Page::AllSynced) {
-    pageTitle = StrId::STR_STATS_ALL_SYNCED;
-    globalModel = &presentation.allSynced;
-    summaryRows = landscape ? 2 : 4;
-    summaryColumns = landscape ? 4 : 2;
   }
-
-  if (page == Page::AllSynced) {
-    char syncedTitle[64];
-    snprintf(syncedTitle, sizeof(syncedTitle), tr(STR_STATS_ALL_SYNCED_FORMAT),
-             static_cast<unsigned>(presentation.validPeerCount) + 1U);
-    pageTitleText = syncedTitle;
-  } else {
-    pageTitleText = I18N.get(pageTitle);
-  }
+  pageTitleText = I18N.get(pageTitle);
 
   char pageIndicator[16];
   snprintf(pageIndicator, sizeof(pageIndicator), "%u/%u", static_cast<unsigned>(page) + 1,
@@ -306,23 +361,18 @@ void ReadingStatsActivity::render(RenderLock&&) {
   GUI.drawSubHeader(renderer, Rect{safeArea.x, subHeaderTop, safeArea.width, metrics.tabBarHeight},
                     pageTitleText.c_str(), pageIndicator);
 
+  const SummaryCells<5> bookSummary = bookCells(presentation.book);
+  const SummaryCells<4> globalSummary = globalModel ? globalCells(*globalModel) : SummaryCells<4>{};
+  const SummaryCell* summaryCells = page == Page::Book ? bookSummary.items.data() : globalSummary.items.data();
+  const size_t summaryCount = page == Page::Book ? bookSummary.count : globalSummary.count;
+  const int summaryColumns = landscape ? std::min<int>(4, summaryCount) : std::min<int>(2, summaryCount);
+  const int summaryRows = summaryColumns > 0 ? (static_cast<int>(summaryCount) + summaryColumns - 1) / summaryColumns : 0;
   const int summaryRowHeight = renderer.getLineHeight(UI_10_FONT_ID) + renderer.getLineHeight(SMALL_FONT_ID) + 8;
   const int summaryHeight = summaryRows * summaryRowHeight;
   const Rect summaryRect{cardX, contentTop, cardWidth, std::max(1, summaryHeight)};
-  if (page == Page::Book) {
-    drawSummaryCard(renderer, summaryRect, bookCells(presentation.book), summaryColumns);
-  } else {
-    drawSummaryCard(renderer, summaryRect, globalCells(*globalModel), summaryColumns);
-  }
+  if (summaryCount > 0) drawSummaryCard(renderer, summaryRect, summaryCells, summaryCount, summaryColumns);
 
-  int chartsTop = contentTop + summaryHeight + metrics.verticalSpacing;
-  if (page == Page::AllSynced && !presentation.syncAggregateComplete) {
-    const int warningHeight = renderer.getLineHeight(SMALL_FONT_ID) + 4;
-    const std::string warning = renderer.truncatedText(SMALL_FONT_ID, tr(STR_STATS_SYNC_PARTIAL), cardWidth - 8);
-    drawCentered(renderer, SMALL_FONT_ID, cardX + 4, cardWidth - 8, chartsTop, warning.c_str());
-    chartsTop += warningHeight;
-  }
-
+  int chartsTop = contentTop + summaryHeight + (summaryHeight > 0 ? metrics.verticalSpacing : 0);
   const int chartHeight = std::max(1, contentBottom - chartsTop);
   const auto& timeChart = page == Page::Book ? presentation.book.timeOfDay : globalModel->timeOfDay;
   const auto& dayChart = page == Page::Book ? presentation.book.dayOfWeek : globalModel->dayOfWeek;
@@ -346,5 +396,6 @@ void ReadingStatsActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_DONE), tr(STR_STATS_PREVIOUS), tr(STR_STATS_NEXT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (optionPopup.processRender(renderer, mappedInput)) return;
   renderer.displayBuffer();
 }

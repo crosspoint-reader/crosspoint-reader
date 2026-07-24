@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Xtc/XtcParser.h"
+#include "Xtc/XtcPageLayout.h"
 #include "Xtc/XtcTypes.h"
 
 /**
@@ -73,6 +74,7 @@ class Xtc {
   uint16_t getPageWidth() const;
   uint16_t getPageHeight() const;
   uint8_t getBitDepth() const;  // 1 = XTC (1-bit), 2 = XTCH (2-bit)
+  bool getSourceIdentity(ZipFile::SourceIdentity& identity) const;
 
   /**
    * Load page bitmap data

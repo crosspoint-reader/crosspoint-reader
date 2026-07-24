@@ -12,6 +12,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "GlobalShortcut.h"
 #include "home/HomeMenuMapping.h"
 #include "util/ScreenshotInfo.h"
 
@@ -103,6 +104,11 @@ class ActivityManager {
   void popActivity();
 
   bool preventAutoSleep() const;
+  bool handleGlobalShortcut(GlobalShortcut shortcut);
+  // Called only by an Activity that explicitly opts into global navigation.
+  bool handleSafeGlobalShortcut(GlobalShortcut shortcut);
+  // True only when the currently visible activity is a page-turn reader.
+  // A paused reader below a modal does not qualify.
   bool isReaderActivity() const;
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;

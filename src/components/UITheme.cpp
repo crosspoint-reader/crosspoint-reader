@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
+#include "components/themes/crossvi/CrossViTheme.h"
 #include "components/themes/dashboard/DashboardTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
@@ -52,6 +53,11 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       LOG_DBG("UI", "Using Dashboard theme");
       currentTheme = std::make_unique<DashboardTheme>();
       currentMetrics = &DashboardMetrics::values;
+      break;
+    case CrossPointSettings::UI_THEME::CROSSVI:
+      LOG_DBG("UI", "Using CrossVi theme");
+      currentTheme = std::make_unique<CrossViTheme>();
+      currentMetrics = &CrossViMetrics::values;
       break;
     default:
       LOG_ERR("UI", "Unknown theme %u, falling back to Lyra", static_cast<unsigned>(type));

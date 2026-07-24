@@ -31,9 +31,12 @@ constexpr uint32_t XTH_MAGIC = 0x00485458;  // "XTH\0" for 2-bit page data
 constexpr uint16_t DISPLAY_WIDTH = 480;
 constexpr uint16_t DISPLAY_HEIGHT = 800;
 
-constexpr uint64_t XTC_LEGACY_HEADER_SIZE = 0x30;  // Original header before chapterOffset was added.
+constexpr uint64_t XTC_HEADER_SIZE = 56;
+constexpr uint64_t XTC_METADATA_SIZE = 256;
+constexpr uint64_t XTC_CHAPTER_SIZE = 96;
+constexpr uint16_t XTC_MAX_CHAPTERS = 1024;
 
-// XTC file header (56 bytes; legacy files may start the page table at 48 bytes)
+// XTC/XTCH v1.0 file header (56 bytes)
 #pragma pack(push, 1)
 struct XtcHeader {
   uint32_t magic;            // 0x00: Magic number "XTC\0" (0x00435458)
@@ -49,8 +52,7 @@ struct XtcHeader {
   uint64_t pageTableOffset;  // 0x18: Page table offset
   uint64_t dataOffset;       // 0x20: First page data offset
   uint64_t thumbOffset;      // 0x28: Thumbnail offset
-  uint32_t chapterOffset;    // 0x30: Chapter data offset
-  uint32_t padding;          // 0x34: Padding to 56 bytes
+  uint64_t chapterOffset;    // 0x30: Chapter data offset
 };
 #pragma pack(pop)
 
@@ -81,10 +83,10 @@ struct XtgPageHeader {
   //   dataSize = ((width + 7) / 8) * height
   //
   // XTH (2-bit): Two bit planes, column-major (right-to-left), 8 vertical pixels/byte
-  //   dataSize = ((width * height + 7) / 8) * 2
-  //   First plane: Bit1 for all pixels
-  //   Second plane: Bit2 for all pixels
-  //   pixelValue = (bit1 << 1) | bit2
+  //   dataSize = width * ((height + 7) / 8) * 2
+  //   First plane: Bit0 for all pixels
+  //   Second plane: Bit1 for all pixels
+  //   pixelValue = bit0 | (bit1 << 1)
 };
 #pragma pack(pop)
 
@@ -116,6 +118,13 @@ enum class XtcError {
   WRITE_ERROR,
   MEMORY_ERROR,
   DECOMPRESSION_ERROR,
+  UNSUPPORTED_DIMENSIONS,
+  UNSUPPORTED_COMPRESSION,
+  SIZE_MISMATCH,
+  OFFSET_OUT_OF_RANGE,
+  INVALID_METADATA,
+  INVALID_CHAPTERS,
+  INVALID_ARGUMENT,
 };
 
 // Convert error code to string
@@ -141,9 +150,27 @@ inline const char* errorToString(XtcError err) {
       return "Memory allocation error";
     case XtcError::DECOMPRESSION_ERROR:
       return "Decompression error";
+    case XtcError::UNSUPPORTED_DIMENSIONS:
+      return "Unsupported page dimensions";
+    case XtcError::UNSUPPORTED_COMPRESSION:
+      return "Unsupported compression";
+    case XtcError::SIZE_MISMATCH:
+      return "Page size mismatch";
+    case XtcError::OFFSET_OUT_OF_RANGE:
+      return "Offset outside file";
+    case XtcError::INVALID_METADATA:
+      return "Invalid metadata";
+    case XtcError::INVALID_CHAPTERS:
+      return "Invalid chapter table";
+    case XtcError::INVALID_ARGUMENT:
+      return "Invalid argument";
     default:
       return "Unknown error";
   }
 }
+
+static_assert(sizeof(XtcHeader) == XTC_HEADER_SIZE);
+static_assert(sizeof(PageTableEntry) == 16);
+static_assert(sizeof(XtgPageHeader) == 22);
 
 }  // namespace xtc

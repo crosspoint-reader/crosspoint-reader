@@ -25,28 +25,32 @@ constexpr int LINE_HEIGHT = 60;
 void EpubReaderBookmarksActivity::onEnter() {
   Activity::onEnter();
 
-  if (!epub) {
+  if (!textMode && !epub) {
     return;
   }
 
-  const std::string canonicalPath = BookmarkUtil::getBookmarkPath(epubPath);
-  const std::string legacyPath = BookmarkUtil::getLegacyBookmarkPath(epubPath);
+  const std::string canonicalPath = BookmarkUtil::getBookmarkPath(bookPath);
+  const std::string legacyPath = BookmarkUtil::getLegacyBookmarkPath(bookPath);
   const std::string path = Storage.exists(canonicalPath.c_str()) ? canonicalPath : legacyPath;
-  if (Storage.exists(path.c_str())) {
-    String json = Storage.readFile(path.c_str());
-    if (json.isEmpty()) {
-      LOG_ERR("EPB", "Failed to load bookmarks from %s. Empty bookmark file", path.c_str());
+  const JsonSettingsIO::BookmarkLoadStatus loaded = JsonSettingsIO::loadBookmarksFromFile(bookmarks, path.c_str());
+  if (loaded == JsonSettingsIO::BookmarkLoadStatus::Loaded ||
+      loaded == JsonSettingsIO::BookmarkLoadStatus::Missing) {
+    const bool matchingKinds = std::all_of(bookmarks.begin(), bookmarks.end(), [this](const BookmarkEntry& bookmark) {
+      return (bookmark.positionKind == BookmarkEntry::PositionKind::Text) == textMode;
+    });
+    bookmarksWritable = matchingKinds;
+    if (!matchingKinds) {
       bookmarks.clear();
-      bookmarks.shrink_to_fit();
-    } else {
-      JsonSettingsIO::loadBookmarks(bookmarks, json.c_str());
+      storageError = true;
     }
   } else {
-    LOG_DBG("EPB", "No bookmark file found at %s, starting with empty bookmarks", path.c_str());
     bookmarks.clear();
     bookmarks.shrink_to_fit();
+    bookmarksWritable = false;
+    storageError = true;
+    LOG_ERR("EPB", "Bookmark state is not writable after load failure (%u)", static_cast<unsigned>(loaded));
   }
-  LOG_DBG("EPB", "Loaded %d bookmarks for book: %s", static_cast<int>(bookmarks.size()), epubPath.c_str());
+  LOG_DBG("EPB", "Loaded %d bookmarks for book: %s", static_cast<int>(bookmarks.size()), bookPath.c_str());
 
   // Trigger first update
   requestUpdate();
@@ -74,11 +78,23 @@ void EpubReaderBookmarksActivity::loop() {
         requestUpdate();
         return;
       }
+      if (!bookmarksWritable) {
+        confirmingDelete = DELETE_MODE_OFF;
+        storageError = true;
+        requestUpdate();
+        return;
+      }
+      const std::vector<BookmarkEntry> previousBookmarks = bookmarks;
       bookmarks.erase(bookmarks.begin() + selectorIndex);
-      const std::string path = BookmarkUtil::getBookmarkPath(epubPath);
+      const std::string path = BookmarkUtil::getBookmarkPath(bookPath);
       Storage.mkdir(BookmarkUtil::getBookmarksDir().c_str());
       if (!JsonSettingsIO::saveBookmarks(bookmarks, path.c_str())) {
         LOG_ERR("EPB", "Failed to save bookmarks after delete");
+        bookmarks = previousBookmarks;
+        storageError = true;
+        confirmingDelete = DELETE_MODE_OFF;
+        requestUpdate();
+        return;
       }
 
       // Move selector up if we deleted the last item
@@ -113,7 +129,11 @@ void EpubReaderBookmarksActivity::loop() {
     result.xpath = bookmark.xpath;
     result.percentage = bookmark.percentage;
     result.hasSavedProgress = true;
-    if (bookmark.computedChapterPageCount > 0 && bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
+    if (textMode) {
+      result.textByteOffset = bookmark.byteOffset;
+      result.hasTextByteOffset = true;
+    } else if (bookmark.computedChapterPageCount > 0 &&
+               bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
         bookmark.computedSpineIndex < epub->getSpineItemsCount()) {
       result.spineIndex = bookmark.computedSpineIndex;
       result.page = bookmark.computedChapterProgress;
@@ -194,9 +214,12 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   };
   const auto getBookmarkSubtitle = [this](int index) {
     auto bookmark = bookmarks.at(confirmingDelete >= DELETE_MODE_DISPLAY ? selectorIndex : index);
+    std::string subtitle =
+        std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "%";
+    if (textMode) return subtitle;
     auto tocIndex = epub->getTocIndexForSpineIndex(bookmark.computedSpineIndex);
     auto tocTitle = (tocIndex >= 0) ? (epub->getTocItem(tocIndex)).title : tr(STR_UNNAMED);
-    std::string subtitle = std::to_string((int)(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - ";
+    subtitle += " - ";
     if (bookmark.computedChapterPageCount > 0) {
       subtitle += std::to_string(bookmark.computedChapterProgress + 1) + "/" +
                   std::to_string(bookmark.computedChapterPageCount) + " - ";
@@ -230,6 +253,11 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
       bookmarks.size() > 0 ? (confirmingDelete >= DELETE_MODE_DISPLAY ? tr(STR_DELETE) : tr(STR_SELECT)) : "";
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (storageError) {
+    storageError = false;
+    GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
+  }
 
   renderer.displayBuffer();
 }

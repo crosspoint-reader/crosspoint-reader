@@ -30,11 +30,21 @@ class HalFile : public Print {
   size_t size() const;
   size_t fileSize() const { return size(); }
   uint64_t fileSize64() const { return size(); }
+  bool isOpen() const { return open_; }
   bool seek(size_t position);
+  bool seekSet(size_t position) { return seek(position); }
+  bool seek64(uint64_t position) {
+    return position <= static_cast<uint64_t>(SIZE_MAX) && seek(static_cast<size_t>(position));
+  }
   bool seekCur(int64_t offset);
   int available() const;
   size_t position() const;
+  uint8_t getError() const { return error_ ? 1 : 0; }
   int read(void* destination, size_t length);
+  int read() {
+    uint8_t value = 0;
+    return read(&value, 1) == 1 ? value : -1;
+  }
   using Print::write;
   size_t write(const uint8_t* source, size_t length) override;
   size_t write(const void* source, size_t length);
@@ -50,6 +60,7 @@ class HalFile : public Print {
   size_t position_ = 0;
   bool writable_ = false;
   bool open_ = false;
+  bool error_ = false;
 };
 
 class HalStorage {
@@ -93,16 +104,18 @@ class HalStorage {
     return removed;
   }
   bool rename(const char* from, const char* to) {
-    if (failRename_) {
+    if (failRename_ || failRenameDestination_ == to) {
       failRename_ = false;
+      failRenameDestination_.clear();
       return false;
     }
     const auto found = files_.find(from);
     if (found == files_.end() || files_.count(to) != 0) return false;
     files_[to] = found->second;
     files_.erase(found);
-    if (corruptRename_ && !files_[to].empty()) {
+    if ((corruptRename_ || corruptRenameDestination_ == to) && !files_[to].empty()) {
       corruptRename_ = false;
+      corruptRenameDestination_.clear();
       files_[to].back() ^= 0x80U;
     }
     return true;
@@ -138,14 +151,17 @@ class HalStorage {
     failSync_ = false;
     failClosePath_.clear();
     failRename_ = false;
+    failRenameDestination_.clear();
     failRemoveDir_ = false;
     corruptRename_ = false;
+    corruptRenameDestination_.clear();
     growOnReadCall_ = 0;
     readCalls_ = 0;
     maxRead_ = 0;
     invalidOperations_ = 0;
     openReadAttempts_.clear();
     openWriteAttempts_.clear();
+    reportedSizes_.clear();
   }
   void setFile(const std::string& path, std::vector<uint8_t> data) { files_[path] = std::move(data); }
   std::vector<uint8_t>& mutableFile(const std::string& path) { return files_.at(path); }
@@ -160,9 +176,12 @@ class HalStorage {
   void failSyncOnce() { failSync_ = true; }
   void failCloseFor(const std::string& path) { failClosePath_ = path; }
   void failRenameOnce() { failRename_ = true; }
+  void failRenameTo(const std::string& destination) { failRenameDestination_ = destination; }
   void failRemoveDirOnce() { failRemoveDir_ = true; }
   void corruptRenameOnce() { corruptRename_ = true; }
+  void corruptRenameTo(const std::string& destination) { corruptRenameDestination_ = destination; }
   void growOnReadCall(size_t call) { growOnReadCall_ = call; }
+  void reportFileSize(const std::string& path, const uint64_t size) { reportedSizes_[path] = size; }
   size_t maxRead() const { return maxRead_; }
   size_t invalidOperationCount() const { return invalidOperations_; }
   size_t openReadAttemptsFor(const std::string& path) const {
@@ -186,14 +205,17 @@ class HalStorage {
   bool failSync_ = false;
   std::string failClosePath_;
   bool failRename_ = false;
+  std::string failRenameDestination_;
   bool failRemoveDir_ = false;
   bool corruptRename_ = false;
+  std::string corruptRenameDestination_;
   size_t growOnReadCall_ = 0;
   size_t readCalls_ = 0;
   size_t maxRead_ = 0;
   size_t invalidOperations_ = 0;
   std::map<std::string, size_t> openReadAttempts_;
   std::map<std::string, size_t> openWriteAttempts_;
+  std::map<std::string, uint64_t> reportedSizes_;
 
   HalFile makeFile(const std::string& path, bool writable) {
     HalFile file;
@@ -210,7 +232,9 @@ inline size_t HalFile::size() const {
     ++HalStorage::getInstance().invalidOperations_;
     return 0;
   }
-  return storage_->files_.at(path_).size();
+  const auto reported = storage_->reportedSizes_.find(path_);
+  return reported == storage_->reportedSizes_.end() ? storage_->files_.at(path_).size()
+                                                    : static_cast<size_t>(reported->second);
 }
 
 inline size_t HalFile::position() const {
@@ -255,6 +279,7 @@ inline int HalFile::read(void* destination, const size_t length) {
   if (storage_->shortReadPath_ == path_ && readLength > 0) {
     storage_->shortReadPath_.clear();
     --readLength;
+    error_ = true;
   }
   storage_->maxRead_ = std::max(storage_->maxRead_, readLength);
   const auto& bytes = storage_->files_.at(path_);

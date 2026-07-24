@@ -1,6 +1,7 @@
 #ifndef CROSSPOINT_SIMULATOR_PROJECT_WEBSERVER
 
 #include <HalStorage.h>
+#include <FsHelpers.h>
 #include <Logging.h>
 #include <WiFi.h>
 #include <arpa/inet.h>
@@ -24,6 +25,8 @@
 #include <thread>
 #include <unordered_map>
 #include <vector>
+
+#include <ArduinoJson.h>
 
 #if __has_include(<AppVersion.h>)
 #include <AppVersion.h>
@@ -58,6 +61,7 @@ struct NativeServerState {
   std::thread worker;
   mutable std::mutex uploadMutex;
   CrossPointWebServer::WsUploadStatus uploadStatus;
+  std::string pendingOpenPath;
 };
 
 std::mutex statesMutex;
@@ -212,6 +216,8 @@ void sendResponse(int client, int status, const std::string &type,
   const char *reason = "OK";
   if (status == 201)
     reason = "Created";
+  if (status == 202)
+    reason = "Accepted";
   if (status == 204)
     reason = "No Content";
   if (status == 207)
@@ -831,6 +837,12 @@ void handleClientRequest(CrossPointWebServer *owner, NativeServerState &state,
       sendResponse(client, 403, "text/plain", "Forbidden");
       return;
     }
+    if (dir == "/Inbox" &&
+        !(FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+          FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename))) {
+      sendResponse(client, 400, "text/plain", "Inbox accepts reader files only");
+      return;
+    }
     if (!Storage.exists(dir.c_str()))
       Storage.mkdir(dir.c_str());
     const std::string path = (dir == "/" ? "/" : dir + "/") + filename;
@@ -847,11 +859,49 @@ void handleClientRequest(CrossPointWebServer *owner, NativeServerState &state,
       state.uploadStatus.inProgress = false;
       state.uploadStatus.received = ok ? bytes.size() : 0;
       state.uploadStatus.lastCompleteName = ok ? filename : "";
+      state.uploadStatus.lastCompletePath =
+          ok && (FsHelpers::hasEpubExtension(path) || FsHelpers::hasXtcExtension(path) ||
+                 FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path))
+              ? path
+              : "";
       state.uploadStatus.lastCompleteSize = ok ? bytes.size() : 0;
       state.uploadStatus.lastCompleteAt = ok ? millis() : 0;
     }
     sendResponse(client, ok ? 200 : 500, "text/plain",
                  ok ? "Uploaded" : "Upload failed");
+    return;
+  }
+  if (req.method == "POST" && req.path == "/api/inbox/open") {
+    {
+      std::lock_guard<std::mutex> lock(state.uploadMutex);
+      if (state.uploadStatus.inProgress) {
+        sendResponse(client, 409, "text/plain", "An upload is still in progress");
+        return;
+      }
+    }
+    JsonDocument doc;
+    const DeserializationError error = deserializeJson(doc, req.body);
+    const char *rawName = error ? nullptr : doc["name"].as<const char *>();
+    const std::string name = rawName ? rawName : "";
+    if (name.empty() || name.size() > 230 || basenameOf(name) != name || isProtectedName(name) ||
+        !(FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) ||
+          FsHelpers::hasTxtExtension(name) || FsHelpers::hasMarkdownExtension(name))) {
+      sendResponse(client, 400, "text/plain", "Invalid book name");
+      return;
+    }
+    const std::string path = "/Inbox/" + name;
+    HalFile file = Storage.open(path.c_str());
+    if (!file || file.isDirectory()) {
+      if (file) file.close();
+      sendResponse(client, 404, "text/plain", "Book not found");
+      return;
+    }
+    file.close();
+    {
+      std::lock_guard<std::mutex> lock(state.uploadMutex);
+      state.pendingOpenPath = path;
+    }
+    sendResponse(client, 202, "text/plain", "Book will open on the reader");
     return;
   }
   if (req.method == "POST" && req.path == "/mkdir") {
@@ -1078,6 +1128,17 @@ CrossPointWebServer::getWsUploadStatus() const {
     return {};
   std::lock_guard<std::mutex> uploadLock(it->second->uploadMutex);
   return it->second->uploadStatus;
+}
+
+bool CrossPointWebServer::takeOpenRequest(std::string &path) {
+  std::lock_guard<std::mutex> statesLock(statesMutex);
+  auto it = states.find(this);
+  if (it == states.end()) return false;
+  std::lock_guard<std::mutex> uploadLock(it->second->uploadMutex);
+  if (it->second->pendingOpenPath.empty()) return false;
+  path = std::move(it->second->pendingOpenPath);
+  it->second->pendingOpenPath.clear();
+  return true;
 }
 
 #endif // CROSSPOINT_SIMULATOR_PROJECT_WEBSERVER

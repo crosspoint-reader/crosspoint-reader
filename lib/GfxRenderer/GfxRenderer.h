@@ -42,6 +42,7 @@ class GfxRenderer {
 
   HalDisplay& display;
   RenderMode renderMode;
+  uint8_t textDarkness = 0;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
@@ -234,6 +235,8 @@ class GfxRenderer {
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   RenderMode getRenderMode() const { return renderMode; }
+  void setTextDarkness(const uint8_t darkness) { textDarkness = darkness; }
+  uint8_t getTextDarkness() const { return textDarkness; }
   // Grayscale preconditioning settle pass (no-op on X4). The rect overload
   // takes the gray region in LOGICAL screen coordinates and rotates it to the
   // panel; the no-arg overload settles the full frame. Call after the BW base

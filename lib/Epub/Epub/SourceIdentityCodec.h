@@ -75,6 +75,7 @@ inline uint32_t crc32(const uint8_t* data, const size_t length) {
 }
 
 inline bool valid(const ZipFile::SourceIdentity& identity) {
+  if (identity.isRawFile()) return true;
   const uint64_t centralDirEnd = static_cast<uint64_t>(identity.centralDirOffset) + identity.centralDirSize;
   return identity.fileSize >= 22 && identity.centralDirSize > 0 && identity.totalEntries > 0 &&
          centralDirEnd <= identity.fileSize;

@@ -14,6 +14,7 @@
 #include "PerBookReaderSettings.h"
 #include "ProgressMapper.h"
 #include "ReadingSessionTracker.h"
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 #include "clippings/ClippingPageTools.h"
 #include "clippings/ClippingStore.h"
@@ -40,6 +41,7 @@ class EpubReaderActivity final : public Activity {
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
   bool pendingFinishedMoveSyncError = false;
+  bool pendingKOReaderCredentialsNotice = false;
   // Consecutive page-load failures. Each failure drops the section and rebuilds on the next render,
   // which recovers a transiently corrupt cache; capped so a persistently bad page can't spin forever.
   uint8_t pageLoadRetryCount = 0;
@@ -51,9 +53,13 @@ class EpubReaderActivity final : public Activity {
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
+  ReaderUtils::HoldGestureState confirmHold;
+  ReaderUtils::PageTurnGestureState pageTurnGesture;
   bool currentPageBookmarked = false;
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;
+  bool bookmarksWritable = false;
+  bool pendingBookmarkStorageError = false;
   // Tracks whether this book is currently removed from Recent Books by the
   // removeReadBooksFromRecents feature (set at End-of-Book, cleared if paged back in).
   bool recentsEntryRemoved = false;
@@ -74,6 +80,10 @@ class EpubReaderActivity final : public Activity {
   bool pendingBookStylesApplyError = false;
   bool pendingExternalCssWarning = false;
   bool pendingCacheClearError = false;
+  std::atomic<bool> safeModePromptRequested{false};
+  std::atomic<bool> pendingSafeModeFailureNotice{false};
+  std::atomic<bool> pendingSafeModePersistence{false};
+  bool pendingSafeModeEnabledNotice = false;
 
   ClippingStore clippingStore;
   enum class ClippingNotice : uint8_t {
@@ -237,12 +247,13 @@ class EpubReaderActivity final : public Activity {
   // later against the exact Page instance that will be rendered.
   bool preparePendingClippingJump();
   bool persistBookReaderSettings();
+  bool queueSafeModePromptIfEligible(EpubBuildStatus status);
   void invalidateReaderLayout();
   void applyAutoPageTurnRuntime(uint8_t seconds, bool active);
   void updateAutoPageTurnFromMenu(uint8_t seconds);
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();
-  void addBookmark();
+  bool addBookmark();
   void updateBookmarkFlag();
 
   void signalReadingPageVisible();
@@ -284,6 +295,7 @@ class EpubReaderActivity final : public Activity {
            (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
   }
   bool isReaderActivity() const override { return true; }
+  bool handleGlobalShortcut(GlobalShortcut shortcut) override { return handleSafeGlobalShortcut(shortcut); }
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;
 };

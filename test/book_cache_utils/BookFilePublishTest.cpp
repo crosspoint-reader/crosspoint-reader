@@ -1,5 +1,6 @@
 #include <Epub.h>
 #include <HalStorage.h>
+#include <Txt.h>
 #include <Xtc.h>
 #include <gtest/gtest.h>
 
@@ -51,11 +52,41 @@ class BookFilePublishTest : public testing::TestWithParam<const char*> {
  protected:
   void SetUp() override {
     Storage.reset();
+    Txt::clearRejectedLoadForTest();
     Storage.addDirectory("/books");
     Storage.addDirectory("/.crosspoint");
     Storage.addDirectory(BookmarkUtil::getBookmarksDir());
   }
 };
+
+TEST(BookFilePublishTextValidationTest, RejectedTxtOrMarkdownCannotReplaceBookOrMutateState) {
+  for (const char* extension : {".txt", ".md"}) {
+    SCOPED_TRACE(extension);
+    Storage.reset();
+    Txt::clearRejectedLoadForTest();
+    Storage.addDirectory("/books");
+    Storage.addDirectory("/.crosspoint");
+    const std::string bookPath = std::string("/books/story") + extension;
+    const std::string stagingPath = hiddenBookFileSibling(bookPath, ".crossvi-upload.tmp");
+    const std::string cachePath = Txt(bookPath, "/.crosspoint").getCachePath();
+    const std::vector<unsigned char> oldBook = {'O', 'L', 'D'};
+    const std::vector<unsigned char> rejectedUpload = {'N', 'E', 'W'};
+    const std::vector<unsigned char> stats = {1, 2, 3};
+    Storage.setFile(bookPath, oldBook);
+    Storage.setFile(stagingPath, rejectedUpload);
+    Storage.addDirectory(cachePath);
+    Storage.setFile(cachePath + "/stats_v6.bin", stats);
+    Txt::rejectLoadForTest(stagingPath);
+
+    EXPECT_EQ(publishStagedBookFile(stagingPath, bookPath), BookFilePublishResult::InvalidStagedFile);
+    EXPECT_EQ(Storage.file(bookPath), oldBook);
+    EXPECT_EQ(Storage.file(stagingPath), rejectedUpload);
+    EXPECT_EQ(Storage.file(cachePath + "/stats_v6.bin"), stats);
+    EXPECT_FALSE(Storage.exists(hiddenBookFileSibling(bookPath, ".crossvi-replace.bak")));
+    EXPECT_FALSE(Storage.exists(hiddenBookFileSibling(bookPath, ".crossvi-replace.pending")));
+  }
+  Txt::clearRejectedLoadForTest();
+}
 
 TEST_P(BookFilePublishTest, InvalidStagedXtcCannotReplaceBookOrMutateUserState) {
   const std::string bookPath = std::string("/books/story") + GetParam();
@@ -209,6 +240,43 @@ TEST(BookFilePublishEpubRecoveryTest, PendingStatsBlocksOnlyItsExactEpubCache) {
   EXPECT_EQ(moveBookFilePreservingUserState(bookA, "/read/a.epub"), BookPathMoveResult::StateUnavailable);
   EXPECT_TRUE(Storage.exists(bookA));
   EXPECT_FALSE(Storage.exists("/read/a.epub"));
+  EXPECT_NE(cacheA, cacheB);
+  ReadingStatsCompletionTransaction::clearBlockedCacheForTest();
+}
+
+TEST(BookFilePublishTextRecoveryTest, PendingStatsBlocksEveryMutationOfItsExactTextCache) {
+  Storage.reset();
+  Storage.addDirectory("/books");
+  Storage.addDirectory("/read");
+  Storage.addDirectory("/.crosspoint");
+  Storage.addDirectory(BookmarkUtil::getBookmarksDir());
+  const std::string bookA = "/books/a.txt";
+  const std::string bookB = "/books/b.txt";
+  const std::string movedA = "/read/a.txt";
+  const std::string stagingA = hiddenBookFileSibling(bookA, ".davtmp");
+  const std::string cacheA = Txt(bookA, "/.crosspoint").getCachePath();
+  const std::string cacheB = Txt(bookB, "/.crosspoint").getCachePath();
+  const std::vector<unsigned char> oldBook = {'O', 'L', 'D'};
+  const std::vector<unsigned char> newBook = {'N', 'E', 'W'};
+  const std::vector<unsigned char> progress = {1, 2, 3, 4};
+  Storage.setFile(bookA, oldBook);
+  Storage.setFile(stagingA, newBook);
+  Storage.addDirectory(cacheA);
+  Storage.setFile(cacheA + "/progress.bin", progress);
+
+  ReadingStatsCompletionTransaction::blockCacheForTest(cacheA);
+  EXPECT_FALSE(canDeleteOrRelocateBookFile(bookA));
+  EXPECT_TRUE(canDeleteOrRelocateBookFile(bookB));
+  EXPECT_FALSE(recoverInterruptedBookFileReplacement(bookA));
+  EXPECT_EQ(publishStagedBookFile(stagingA, bookA), BookFilePublishResult::StateUnavailable);
+  EXPECT_EQ(moveBookFilePreservingUserState(bookA, movedA), BookPathMoveResult::StateUnavailable);
+  EXPECT_FALSE(removeBookUserStateAfterDelete(bookA));
+  EXPECT_FALSE(resetBookUserStateAfterReplacement(bookA));
+
+  EXPECT_EQ(Storage.file(bookA), oldBook);
+  EXPECT_EQ(Storage.file(stagingA), newBook);
+  EXPECT_EQ(Storage.file(cacheA + "/progress.bin"), progress);
+  EXPECT_FALSE(Storage.exists(movedA));
   EXPECT_NE(cacheA, cacheB);
   ReadingStatsCompletionTransaction::clearBlockedCacheForTest();
 }

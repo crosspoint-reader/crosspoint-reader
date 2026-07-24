@@ -18,6 +18,7 @@ class SavedClippingsActivity final : public Activity {
   void onResume() override;
   void loop() override;
   void render(RenderLock&&) override;
+  bool handleGlobalShortcut(GlobalShortcut shortcut) override { return handleSafeGlobalShortcut(shortcut); }
 
  private:
   int rowCount() const { return static_cast<int>(catalog_.entries.size()) + 1; }

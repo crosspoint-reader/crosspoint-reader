@@ -5,6 +5,7 @@
 
 class CrossPointState {
   mutable std::mutex _mutex;
+  mutable bool persistenceWritable = true;
 
   // Static instance
   static CrossPointState instance;
@@ -36,6 +37,9 @@ class CrossPointState {
   bool saveToFile() const;
 
   bool loadFromFile();
+
+  void markReadOnlyForRecovery() { persistenceWritable = false; }
+  bool isPersistenceWritable() const { return persistenceWritable; }
 
  private:
   bool loadFromBinaryFile();

@@ -70,6 +70,14 @@ struct ClippingMetadata {
   // imported legacy data without an exact start-page identity; such clippings
   // remain readable but are never highlighted or opened by guessing.
   uint32_t pageFingerprint = 0;
+  // Fixed-layout EPUB positions use page/word fields above. Plain-text books
+  // additionally store exact source-byte anchors so changing font, margins or
+  // orientation cannot move a clipping to unrelated text. These values live
+  // in the record's chapter-title reserve when the title is empty, preserving
+  // the existing v3 record size and compatibility with older readers.
+  bool hasTextAnchor = false;
+  uint32_t textSourceStart = 0;
+  uint32_t textSourceEnd = 0;
 };
 
 struct Index {

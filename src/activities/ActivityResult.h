@@ -91,6 +91,9 @@ struct ClippingJumpResult {
   uint32_t textCrc32 = 0;
   // Exact identity of startPage; later pages are never matched by guessing.
   uint32_t pageFingerprint = 0;
+  bool hasTextAnchor = false;
+  uint32_t textSourceStart = 0;
+  uint32_t textSourceEnd = 0;
 };
 
 struct ProgressChangeResult {
@@ -100,6 +103,8 @@ struct ProgressChangeResult {
   std::string xpath;
   float percentage = 0.0f;
   bool hasSavedProgress = false;
+  uint32_t textByteOffset = 0;
+  bool hasTextByteOffset = false;
 };
 
 enum class NetworkMode;
@@ -116,9 +121,16 @@ struct FilePathResult {
   std::string path;
 };
 
+struct ReadingStatsActionResult {
+  enum class Action : uint8_t { EditBookDates, BackupDeviceStats, RestoreDeviceStats };
+
+  Action action = Action::EditBookDates;
+};
+
 using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
                                    IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
-                                   FilePathResult, ReaderSettingsResult, ClippingSelectionResult, ClippingJumpResult>;
+                                   FilePathResult, ReaderSettingsResult, ClippingSelectionResult, ClippingJumpResult,
+                                   ReadingStatsActionResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

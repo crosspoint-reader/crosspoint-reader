@@ -6,8 +6,9 @@
 
 #include "BookReadingStats.h"
 #include "GlobalReadingStats.h"
+#include "ReadingCalendarModel.h"
 
-enum class ReadingStatsMetricState : uint8_t { Known, Estimated, Unavailable };
+enum class ReadingStatsMetricState : uint8_t { Known, Estimated, Unavailable, NotApplicable, NoData };
 
 struct ReadingStatsMetric {
   ReadingStatsMetricState state = ReadingStatsMetricState::Unavailable;
@@ -18,6 +19,8 @@ struct ReadingStatsMetric {
     return {ReadingStatsMetricState::Estimated, value};
   }
   static constexpr ReadingStatsMetric unavailable() { return {}; }
+  static constexpr ReadingStatsMetric notApplicable() { return {ReadingStatsMetricState::NotApplicable, 0}; }
+  static constexpr ReadingStatsMetric noData() { return {ReadingStatsMetricState::NoData, 0}; }
 };
 
 template <size_t N>
@@ -61,6 +64,7 @@ struct GlobalReadingStatsPresentation {
 struct ReadingStatsPresentation {
   BookReadingStatsPresentation book;
   GlobalReadingStatsPresentation device;
+  ReadingCalendarSnapshot deviceCalendar;
   GlobalReadingStatsPresentation allSynced;
   uint16_t validPeerCount = 0;
   uint16_t skippedPeerCount = 0;
@@ -74,12 +78,18 @@ ReadingStatsPresentation buildReadingStatsPresentation(const BookReadingStats& b
                                                        const ReadingStatsDateTime* now, ReadingStatsMetric progress,
                                                        bool hasFreshTimeEstimate);
 
+// Plain text reflows when typography changes, so page pace and its derived
+// finish estimates have no stable meaning. A recorded completion date remains
+// meaningful and is preserved.
+void markReadingStatsPageMetricsNotApplicable(ReadingStatsPresentation& presentation);
+
 // Maps a chart value to pixels without overflow. A positive value remains
 // visible even when it is much smaller than the largest bar.
 int scaleReadingStatsBar(uint32_t value, uint32_t maximum, int availableWidth);
 
-// Applies the same 10-second duration and 60-second session noise filters as
-// commitReadingSession(), but only to caller-owned display copies. A null
-// target represents statistics that are currently not writable.
+// Applies CrossInk v1.4.0's 10-second duration and 60-second session filters,
+// but only to caller-owned display copies. A null target represents statistics
+// that are currently not writable.
 void previewReadingStatsSession(BookReadingStats* bookStats, GlobalReadingStats* deviceStats, uint32_t seconds,
-                                const BookReadingStats& pendingBookSpans, const GlobalReadingStats& pendingGlobalSpans);
+                                const BookReadingStats& pendingBookSpans, const GlobalReadingStats& pendingGlobalSpans,
+                                const ReadingStatsDateTime* sessionStart = nullptr);

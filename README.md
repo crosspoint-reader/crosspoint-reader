@@ -18,13 +18,15 @@ The original CrossPoint project and community remain the foundation of this firm
 
 ## What can CrossVi do?
 
-- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more. 
+- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, chapter navigation, footnotes, bookmarks, bounded StarDict lookups with optional synonym files and recent-history recall ([setup](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, forced paragraph indentation, three bounded rendering modes, per-book Safe Mode, KOReader progress sync and more.
 
-- **EPUB reading tools**: create and revisit clippings, view per-book and all-time reading statistics, and keep a separate reader profile for each EPUB without changing the device-wide defaults.
+- **Reading tools**: view per-book and all-time reading statistics for EPUB, TXT/Markdown, XTC and XTCH books. The device view includes a binary reading calendar backed by the existing bounded 730-day local history; days outside retained history are marked as unknown instead of being shown as zero. EPUB and TXT/Markdown provide a keyboard-driven reader menu with bookmarks, dictionary lookup, clippings and a separate reader profile without changing device-wide defaults. Plain-text bookmarks and clippings use source-byte anchors, so repagination after a font, margin or orientation change does not silently point at a different passage. TXT/Markdown statistics intentionally mark layout-dependent pace and finish-time estimates as not applicable instead of presenting misleading values. Per-book start/finish timestamps can be corrected explicitly; the local device totals can be backed up and restored from the Home statistics screen.
 
 - **Dashboard home theme**: a compact overview of the latest book and reading totals, with a direct shortcut to the full statistics view when its verified data is available. Enable it under **Settings → Display → UI Theme → Dashboard**.
 
-- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
+- **CrossVi home theme**: a polished two-column Home designed for the small X3/X4 display, with a personal device name, current-book card, honest progress, a prominent Continue Reading action, and a compact Today/Goal summary that opens full reading statistics. Enable it under **Settings → Display → UI Theme → CrossVi** and optionally set a daily target under **Settings → Reader → Daily Reading Goal**.
+
+- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt/.md`, and `.bmp`. XTC/XTCH support is the tested, uncompressed v1.0 subset with pre-rendered 480×800 pages: X4 displays it 1:1, while X3 fits and centers the complete page without cropping. See the [fixed-layout contract](./lib/Xtc/README); XTC/XTCH do not provide EPUB typography, dictionary, clipping, or position-sync features.
 
 - **Screenshots.**
 
@@ -47,7 +49,7 @@ The original CrossPoint project and community remain the foundation of this firm
   - OTA update checks and installs from GitHub releases
   - Experimental Nearby Sync between two CrossVi readers: manually exchange an exact-book reading position or a separate reading-statistics snapshot without an internet connection
 
-- **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
+- **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff, Dashboard, CrossVi), a user-defined display name, sleep screen modes, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
 - **Localization**: 30 UI languages and counting, including Vietnamese. RTL support. New reader tools are fully translated in English and Vietnamese; other languages currently use English fallback for some new labels.
 

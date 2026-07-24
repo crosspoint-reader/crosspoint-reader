@@ -1,5 +1,7 @@
 #include "OtaUpdateActivity.h"
 
+#include <Version.h>
+
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <WiFi.h>

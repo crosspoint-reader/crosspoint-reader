@@ -16,7 +16,7 @@ struct KeyDef {
 
 enum class SpecialKeyType { Shift, Mode, Space, Del, Ok };
 
-enum class InputType { Text, Password, Url };
+enum class InputType { Text, Identifier, Password, Url };
 
 class KeyboardEntryActivity : public Activity {
  public:
@@ -47,6 +47,8 @@ class KeyboardEntryActivity : public Activity {
   int selectedCol = 0;
   int shiftState = 0;
   bool symMode = false;
+  bool telexAvailable = false;
+  bool telexEnabled = false;
   bool confirmHeld = false;
   bool confirmLongHandled = false;
 

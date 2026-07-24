@@ -11,6 +11,7 @@
 #include <algorithm>
 
 #include "FontCacheManager.h"
+#include "TextDarkness.h"
 
 namespace {
 
@@ -420,17 +421,22 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
           // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
           const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
 
-          if (renderMode == GfxRenderer::BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            renderer.drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
-            renderer.drawPixel(screenX, screenY, false);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
-            renderer.drawPixel(screenX, screenY, false);
+          if (renderMode == GfxRenderer::BW) {
+            if (bmpVal < 3) {
+              // Black (also paints over the grays in BW mode)
+              renderer.drawPixel(screenX, screenY, pixelState);
+            }
+          } else {
+            const uint8_t adjustedBmpVal = GlyphDarkness::mapLevel(bmpVal, renderer.getTextDarkness());
+            if (renderMode == GfxRenderer::GRAYSCALE_MSB && (adjustedBmpVal == 1 || adjustedBmpVal == 2)) {
+              // Light gray (also mark the MSB if it's going to be a dark gray too)
+              // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
+              // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
+              renderer.drawPixel(screenX, screenY, false);
+            } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && adjustedBmpVal == 1) {
+              // Dark gray
+              renderer.drawPixel(screenX, screenY, false);
+            }
           }
         }
       }

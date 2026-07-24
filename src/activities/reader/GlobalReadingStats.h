@@ -26,6 +26,13 @@ struct GlobalReadingStats {
   uint32_t readingHistoryAnchorDay = 0;
   std::array<uint8_t, READING_HISTORY_BYTES> readingHistoryBits{};
   uint16_t longestReadingStreak = 0;
+  // Exact time and session count for the most recent locally recorded calendar
+  // day. These live in a separate CRC-protected sidecar so the CrossInk-
+  // compatible global payload and Nearby Sync contract remain unchanged.
+  uint32_t latestReadingDay = 0;
+  uint32_t latestDayReadingSeconds = 0;
+  uint32_t latestDaySessions = 0;
+  bool hasLatestDayReadingSeconds = false;
 
   enum class LoadStatus : uint8_t {
     Ok,
@@ -37,6 +44,8 @@ struct GlobalReadingStats {
     NewerFormat,
     IoError,
   };
+
+  enum class BackupResult : uint8_t { Ok, Missing, Invalid, NewerFormat, IoError, Protected };
 
   static constexpr bool isTrustedLoadStatus(const LoadStatus status) {
     return status == LoadStatus::Ok || status == LoadStatus::Missing || status == LoadStatus::RecoveredBackup ||
@@ -52,9 +61,15 @@ struct GlobalReadingStats {
   bool save() const;
   bool saveRedundant() const;
   static bool resetLocal();
+  static BackupResult createBackup();
+  static BackupResult restoreBackup();
+  static bool hasValidBackup();
 
   void merge(const GlobalReadingStats& other);
   void recordReadingSpan(const ReadingStatsDateTime& localStart, uint32_t seconds);
+  void recordReadingSession(const ReadingStatsDate& localDate);
+  bool readingSecondsForDate(const ReadingStatsDate& date, uint32_t& seconds) const;
+  bool readingSummaryForDate(const ReadingStatsDate& date, uint32_t& seconds, uint32_t& sessions) const;
   uint16_t currentReadingStreak(const ReadingStatsDate* today) const;
   uint16_t displayLongestReadingStreak() const;
 };

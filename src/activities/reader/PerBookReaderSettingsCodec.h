@@ -13,14 +13,18 @@ namespace PerBookReaderSettingsCodec {
 
 constexpr std::array<uint8_t, 4> MAGIC = {'C', 'V', 'R', 'S'};
 constexpr uint8_t LEGACY_VERSION = 1;
-constexpr uint8_t VERSION = 2;
-constexpr uint16_t PAYLOAD_SIZE = 46;
+constexpr uint8_t AUTO_TURN_VERSION = 2;
+constexpr uint8_t VERSION = 3;
+constexpr uint16_t LEGACY_PAYLOAD_SIZE = 46;
+constexpr uint16_t PAYLOAD_SIZE = 48;
 constexpr size_t VERSION_OFFSET = MAGIC.size();
 constexpr size_t PAYLOAD_LENGTH_OFFSET = VERSION_OFFSET + 1;
 constexpr size_t CRC_OFFSET = PAYLOAD_LENGTH_OFFSET + 2;
 constexpr size_t PAYLOAD_OFFSET = CRC_OFFSET + 4;
 constexpr size_t ENCODED_SIZE = PAYLOAD_OFFSET + PAYLOAD_SIZE;
-static_assert(ENCODED_SIZE == 57);
+constexpr size_t LEGACY_ENCODED_SIZE = PAYLOAD_OFFSET + LEGACY_PAYLOAD_SIZE;
+static_assert(ENCODED_SIZE == 59);
+static_assert(LEGACY_ENCODED_SIZE == 57);
 
 using Encoded = std::array<uint8_t, ENCODED_SIZE>;
 
@@ -124,6 +128,9 @@ inline bool isValid(const PerBookReaderSettings& settings) {
          settings.screenMargin <= 40 && isToggle(settings.embeddedStyle) && isToggle(settings.focusReadingEnabled) &&
          isToggle(settings.hyphenationEnabled) && isToggle(settings.extraParagraphSpacing) &&
          isToggle(settings.textAntiAliasing) && settings.imageRendering < 3 &&
+         isToggle(settings.forceParagraphIndents) &&
+         isValidEpubRenderMode(static_cast<uint8_t>(settings.renderMode)) &&
+         (settings.hasRenderModeOverride || settings.renderMode == EpubRenderMode::Balanced) &&
          ((!settings.hasAutoPageTurnInterval && settings.autoPageTurnSeconds == 0 &&
            !settings.autoPageTurnStartsOnOpen) ||
           (settings.hasAutoPageTurnInterval && isSupportedAutoPageTurnSeconds(settings.autoPageTurnSeconds))) &&
@@ -141,7 +148,8 @@ inline bool encode(const PerBookReaderSettings& settings, Encoded& encoded) {
   uint8_t* payload = encoded.data() + PAYLOAD_OFFSET;
   payload[0] =
       static_cast<uint8_t>((settings.hasReaderOverrides ? 1U : 0U) | (settings.hasAutoPageTurnInterval ? 2U : 0U) |
-                           (settings.autoPageTurnStartsOnOpen ? 4U : 0U));
+                           (settings.autoPageTurnStartsOnOpen ? 4U : 0U) |
+                           (settings.hasRenderModeOverride ? 8U : 0U) | (settings.safeModeEnabled ? 16U : 0U));
   payload[1] = settings.fontFamily;
   payload[2] = settings.fontSize;
   payload[3] = settings.lineSpacing;
@@ -156,6 +164,8 @@ inline bool encode(const PerBookReaderSettings& settings, Encoded& encoded) {
   payload[12] = settings.imageRendering;
   payload[13] = settings.autoPageTurnSeconds;
   std::memcpy(payload + 14, settings.sdFontFamilyName.data(), settings.sdFontFamilyName.size());
+  payload[46] = settings.forceParagraphIndents;
+  payload[47] = static_cast<uint8_t>(settings.renderMode);
 
   writeU32(encoded.data() + CRC_OFFSET, crc32(payload, PAYLOAD_SIZE));
   return true;
@@ -167,14 +177,19 @@ inline DecodeStatus decode(const uint8_t* data, const size_t length, PerBookRead
 
   const uint8_t version = data[VERSION_OFFSET];
   if (version > VERSION) return DecodeStatus::NEWER_VERSION;
-  if (version != LEGACY_VERSION && version != VERSION) return DecodeStatus::UNSUPPORTED_VERSION;
-  if (length < ENCODED_SIZE) return DecodeStatus::TRUNCATED;
-  if (length > ENCODED_SIZE) return DecodeStatus::WRONG_SIZE;
-  if (readU16(data + PAYLOAD_LENGTH_OFFSET) != PAYLOAD_SIZE) return DecodeStatus::BAD_PAYLOAD_LENGTH;
+  if (version != LEGACY_VERSION && version != AUTO_TURN_VERSION && version != VERSION) {
+    return DecodeStatus::UNSUPPORTED_VERSION;
+  }
+  const uint16_t payloadSize = version == VERSION ? PAYLOAD_SIZE : LEGACY_PAYLOAD_SIZE;
+  const size_t encodedSize = PAYLOAD_OFFSET + payloadSize;
+  if (length < encodedSize) return DecodeStatus::TRUNCATED;
+  if (length > encodedSize) return DecodeStatus::WRONG_SIZE;
+  if (readU16(data + PAYLOAD_LENGTH_OFFSET) != payloadSize) return DecodeStatus::BAD_PAYLOAD_LENGTH;
 
   const uint8_t* payload = data + PAYLOAD_OFFSET;
-  if (readU32(data + CRC_OFFSET) != crc32(payload, PAYLOAD_SIZE)) return DecodeStatus::BAD_CRC;
-  if ((payload[0] & (version == LEGACY_VERSION ? ~0x03U : ~0x07U)) != 0) return DecodeStatus::INVALID_VALUE;
+  if (readU32(data + CRC_OFFSET) != crc32(payload, payloadSize)) return DecodeStatus::BAD_CRC;
+  const uint8_t allowedFlags = version == LEGACY_VERSION ? 0x03U : (version == AUTO_TURN_VERSION ? 0x07U : 0x1FU);
+  if ((payload[0] & ~allowedFlags) != 0) return DecodeStatus::INVALID_VALUE;
 
   PerBookReaderSettings decoded;
   decoded.hasReaderOverrides = (payload[0] & 0x01U) != 0;
@@ -215,6 +230,12 @@ inline DecodeStatus decode(const uint8_t* data, const size_t length, PerBookRead
     decoded.autoPageTurnStartsOnOpen = (payload[0] & 0x04U) != 0;
   }
   std::memcpy(decoded.sdFontFamilyName.data(), payload + 14, decoded.sdFontFamilyName.size());
+  if (version == VERSION) {
+    decoded.hasRenderModeOverride = (payload[0] & 0x08U) != 0;
+    decoded.safeModeEnabled = (payload[0] & 0x10U) != 0;
+    decoded.forceParagraphIndents = payload[46];
+    decoded.renderMode = static_cast<EpubRenderMode>(payload[47]);
+  }
 
   if (!isValid(decoded)) return DecodeStatus::INVALID_VALUE;
   settings = decoded;

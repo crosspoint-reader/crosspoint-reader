@@ -79,7 +79,10 @@ void SavedClippingsActivity::handleClippingResult(const ActivityResult& result) 
     notice_ = tr(STR_BOOK_FILE_MISSING);
     return;
   }
-  if (jump->bookType != "epub" || !FsHelpers::hasEpubExtension(jump->bookPath)) {
+  const bool epubBook = jump->bookType == "epub" && FsHelpers::hasEpubExtension(jump->bookPath);
+  const bool textBook = jump->bookType == "txt" &&
+                        (FsHelpers::hasTxtExtension(jump->bookPath) || FsHelpers::hasMarkdownExtension(jump->bookPath));
+  if (!epubBook && !textBook) {
     notice_ = tr(STR_CLIPPING_JUMP_UNAVAILABLE);
     return;
   }
