@@ -28,6 +28,17 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findClosestReaderSize(const uint
   if (sizes.empty()) return nullptr;
   std::sort(sizes.begin(), sizes.end());
 
+  // If the family provides the standard reader sizes, map the enum straight to
+  // them. This keeps body text correct even when the family also ships smaller
+  // UI-fallback sizes (e.g. 8/10 for CJK book titles) that would otherwise
+  // shift the ordinal mapping below and make reading too small.
+  static constexpr uint8_t kReaderTargets[] = {12, 14, 16, 18};
+  const auto hasSizeForStyle = [&](uint8_t s) { return std::find(sizes.begin(), sizes.end(), s) != sizes.end(); };
+  if (hasSizeForStyle(12) && hasSizeForStyle(14) && hasSizeForStyle(16) && hasSizeForStyle(18)) {
+    const uint8_t idx = fontSizeEnum < 4 ? fontSizeEnum : 3;
+    return findFile(kReaderTargets[idx], style);
+  }
+
   // When the family provides at least 4 sizes, use ordinal (index-based)
   // selection so custom-built font sets (e.g. 10/12/14/16) map SMALL to
   // the smallest file, not to a hardcoded 12pt target.

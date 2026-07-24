@@ -4,6 +4,7 @@
 #include <Logging.h>
 
 #include "CrossPointSettings.h"
+#include "fontIds.h"
 
 namespace {
 
@@ -12,6 +13,19 @@ static uint8_t fontSizeEnumFromSettings() {
   if (e >= CrossPointSettings::FONT_SIZE_COUNT) e = 1;  // default to MEDIUM
   return e;
 }
+
+// Built-in UI fonts and their physical point sizes (at 150 DPI, matching the
+// SD-font converter). Each is paired with a same-size SD fallback so CJK UI
+// text matches the surrounding Latin. See SdCardFontSystem::setupUiFallbacks.
+struct UiFontSize {
+  int fontId;
+  uint8_t pointSize;
+};
+constexpr UiFontSize kUiFontSizes[] = {
+    {SMALL_FONT_ID, 8},
+    {UI_10_FONT_ID, 10},
+    {UI_12_FONT_ID, 12},
+};
 
 }  // namespace
 
@@ -30,6 +44,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
     const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
     if (family) {
       if (manager_.loadFamily(*family, renderer, fontSizeEnumFromSettings())) {
+        setupUiFallbacks(renderer);
         LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
       } else {
         LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
@@ -95,6 +110,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   const auto* family = registry_.findFamily(wantedFamily);
   if (family) {
     if (manager_.loadFamily(*family, renderer, sizeEnum)) {
+      setupUiFallbacks(renderer);
       LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);
     } else {
       LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
@@ -105,6 +121,42 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
     SETTINGS.sdFontFamilyName[0] = '\0';
     SETTINGS.saveToFile();
+  }
+}
+
+void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
+  const std::string& familyName = manager_.currentFamilyName();
+  if (familyName.empty()) return;  // no SD family loaded — nothing to fall back to
+
+  const auto* family = registry_.findFamily(familyName);
+  if (!family) return;
+
+  // Probe the already-loaded reader-size font before paying for the UI sizes:
+  // resolveTextFontId only redirects on CJK codepoints, so a Latin-only family
+  // can never act as a fallback and its UI sizes would be dead weight in RAM.
+  const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
+  if (readerIt == renderer.getFontMap().end()) return;
+  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul.
+  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
+  bool hasCjk = false;
+  for (const uint32_t cp : kCjkProbes) {
+    if (readerIt->second.hasCodepoint(cp)) {
+      hasCjk = true;
+      break;
+    }
+  }
+  if (!hasCjk) {
+    LOG_DBG("SDFS", "%s has no CJK coverage - skipping UI fallback sizes", familyName.c_str());
+    return;
+  }
+
+  for (const auto& ui : kUiFontSizes) {
+    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize);
+    if (sdFontId != 0) {
+      renderer.setFallbackFont(ui.fontId, sdFontId);
+    } else {
+      LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
+    }
   }
 }
 
