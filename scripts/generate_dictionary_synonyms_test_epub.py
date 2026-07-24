@@ -37,7 +37,7 @@ def create_epub(filename, title, chapters):
         # Build spine and manifest
         manifest_items = []
         spine_items = []
-        for i, (chapter_title, content) in enumerate(chapters):
+        for i, (_, content) in enumerate(chapters):
             chapter_id = f'chapter{i}'
             manifest_items.append(f'<item id="{chapter_id}" href="{chapter_id}.xhtml" media-type="application/xhtml+xml"/>')
             spine_items.append(f'<itemref idref="{chapter_id}"/>')
