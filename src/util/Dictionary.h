@@ -66,8 +66,8 @@ class Dictionary {
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
   // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
-  bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic,
-                    uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx);
+  bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
+                    void (*yieldFn)(void*), void* ctx);
 
   bool readDefinition(const DictLocation& location, std::string& out);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
@@ -79,7 +79,7 @@ class Dictionary {
 
   std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
   bool hasPlainDict = false;
-  bool hasSyn = false;   // a <stem>.syn synonym index exists next to the .idx
+  bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
 
   // Shared scan buffer: lookups are single-threaded and this avoids a
   // 256-byte array on the stack of every locate() call.
