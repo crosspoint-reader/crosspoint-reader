@@ -37,6 +37,24 @@ void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
   requestUpdate();
 }
 
+void EpubReaderPercentSelectionActivity::adjustPercentSnapped(const int delta) {
+  // Snap to the next/previous multiple of kLargeStep rather than adding kLargeStep directly.
+  // E.g. at 1 with delta > 0: (1/10 + 1)*10 = 10, not 11.
+  int newPercent;
+  if (delta > 0) {
+    newPercent = (percent / kLargeStep + 1) * kLargeStep;
+  } else {
+    newPercent = ((percent - 1) / kLargeStep) * kLargeStep;
+  }
+  if (newPercent < 0) {
+    newPercent = 0;
+  } else if (newPercent > 100) {
+    newPercent = 100;
+  }
+  percent = newPercent;
+  requestUpdate();
+}
+
 void EpubReaderPercentSelectionActivity::loop() {
   auto& theme = UITheme::getInstance();
   auto metrics = theme.getMetrics();
@@ -110,9 +128,10 @@ void EpubReaderPercentSelectionActivity::loop() {
   // direction there so the left button decreases and the right button increases, matching the layout.
   const int upDelta = gpio.deviceIsX3() ? -kLargeStep : kLargeStep;
   const int downDelta = gpio.deviceIsX3() ? kLargeStep : -kLargeStep;
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustPercent(upDelta); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up},
+                                       [this, upDelta] { adjustPercentSnapped(upDelta); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
-                                       [this, downDelta] { adjustPercent(downDelta); });
+                                       [this, downDelta] { adjustPercentSnapped(downDelta); });
 }
 
 void EpubReaderPercentSelectionActivity::render(RenderLock&&) {

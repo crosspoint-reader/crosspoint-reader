@@ -47,6 +47,7 @@ class IntervalSelectionActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
   void adjustValue(int delta);
+  void adjustValueSnapped(int delta);
   int clampedValue(int candidate) const;
   void drawStepHintLine(int y, StrId labelId, int step);
 };

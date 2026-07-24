@@ -26,6 +26,17 @@ void IntervalSelectionActivity::adjustValue(const int delta) {
   requestUpdate();
 }
 
+void IntervalSelectionActivity::adjustValueSnapped(const int delta) {
+  int newValue;
+  if (delta > 0) {
+    newValue = (value / largeStep + 1) * largeStep;
+  } else {
+    newValue = ((value - 1) / largeStep) * largeStep;
+  }
+  value = clampedValue(newValue);
+  requestUpdate();
+}
+
 void IntervalSelectionActivity::drawStepHintLine(const int y, const StrId labelId, const int step) {
   char stepText[24];
   if (valueFormatId != StrId::STR_NONE_OPT) {
@@ -122,9 +133,10 @@ void IntervalSelectionActivity::loop() {
   // direction there so the left button decreases and the right button increases, matching the layout.
   const int upDelta = gpio.deviceIsX3() ? -largeStep : largeStep;
   const int downDelta = gpio.deviceIsX3() ? largeStep : -largeStep;
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustValue(upDelta); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up},
+                                       [this, upDelta] { adjustValueSnapped(upDelta); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
-                                       [this, downDelta] { adjustValue(downDelta); });
+                                       [this, downDelta] { adjustValueSnapped(downDelta); });
 }
 
 void IntervalSelectionActivity::render(RenderLock&&) {
