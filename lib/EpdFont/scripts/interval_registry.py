@@ -13,9 +13,16 @@ without pulling in freetype/fonttools.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
+
+# Unnamed hex-range spec, e.g. "(0x2100-0x214F)" — mirrors fontconvert_sdcard.py's
+# resolve_intervals(), which accepts these alongside named presets. Recognised
+# here so scripts_for_presets() treats them as valid (coverage-only, no group)
+# instead of rejecting them.
+_HEX_RANGE_PATTERN = re.compile(r"^\(0x[0-9a-fA-F]+-0x[0-9a-fA-F]+\)$")
 
 _REGISTRY_PATH = Path(__file__).parent / "intervals.yaml"
 
@@ -96,11 +103,24 @@ _PRESET_GROUP = {name.lower(): spec.get("group") for name, spec in _DATA["preset
 
 def scripts_for_presets(preset_names) -> list[str]:
     """Map an iterable of preset names (case-insensitive) to their ordered,
-    deduplicated script-group tags. Coverage-only presets (no group) contribute
-    nothing."""
+    deduplicated script-group tags. Coverage-only presets (no group) and unnamed
+    hex ranges contribute nothing.
+
+    An unknown name raises ValueError — matching fontconvert_sdcard.py's
+    resolve_intervals(), which hard-errors on unknown presets. Without this a
+    typo in sd-fonts.yaml would silently drop a family's script grouping from the
+    manifest while still failing glyph rasterization, an inconsistency that hides
+    the mistake."""
     tags = set()
-    for name in preset_names:
-        tag = _PRESET_GROUP.get(name.strip().lower())
-        if tag:
-            tags.add(tag)
+    for raw in preset_names:
+        name = raw.strip().lower()
+        if name in _PRESET_GROUP:
+            tag = _PRESET_GROUP[name]
+            if tag:
+                tags.add(tag)
+        elif not _HEX_RANGE_PATTERN.fullmatch(name):
+            raise ValueError(
+                f"unknown interval preset '{name}' (known presets: "
+                f"{', '.join(sorted(_PRESET_GROUP))})"
+            )
     return sorted(tags, key=lambda t: _GROUP_ORDER.get(t, len(SCRIPT_GROUPS)))

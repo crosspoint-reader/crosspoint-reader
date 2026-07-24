@@ -25,6 +25,7 @@ groups:
   - {tag: cyrillic,  label: Cyrillic}
   - {tag: greek,     label: Greek}
   - {tag: hebrew,    label: Hebrew}
+  - {tag: arabic,    label: Arabic}
   - {tag: georgian,  label: Georgian}
   - {tag: armenian,  label: Armenian}
   - {tag: ethiopic,  label: Ethiopic}
@@ -58,6 +59,16 @@ presets:
   hebrew:
     ranges: [[0x0590, 0x05FF], [0xFB1D, 0xFB4F]]
     group: hebrew
+  # RTL, cursive-joining script — the firmware handles bidi + contextual
+  # shaping. Base blocks plus the presentation-form blocks (glyphs absent from
+  # the chosen font are dropped at rasterization time). Presentation Forms-A
+  # stops at 0xFDF9 on purpose — 0xFDFA-0xFDFD (ﷺ/ﷻ word ligatures, Bismillah,
+  # rial sign) are intentionally skipped. No font ships this yet; a family in
+  # sd-fonts.yaml sets `intervals: arabic` when one is added.
+  arabic:
+    ranges: [[0x0600, 0x06FF], [0x0750, 0x077F], [0x08A0, 0x08FF],
+             [0xFB50, 0xFDF9], [0xFE70, 0xFEFF]]
+    group: arabic
   georgian:
     ranges: [[0x10A0, 0x10FF], [0x2D00, 0x2D2F]]
     group: georgian

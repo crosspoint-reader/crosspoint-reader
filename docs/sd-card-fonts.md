@@ -115,7 +115,7 @@ To convert your own TrueType/OpenType fonts:
 
 ### Prerequisites
 
-    pip install freetype-py fonttools
+    pip install freetype-py fonttools pyyaml
 
 ### Single font (one style)
 
@@ -151,6 +151,7 @@ To convert your own TrueType/OpenType fonts:
 | `greek` | Greek + Extended Greek |
 | `cyrillic` | Cyrillic + Supplement |
 | `hebrew` | Hebrew + Alphabetic Presentation Forms |
+| `arabic` | Arabic + Supplement + Extended-A + Presentation Forms A/B (RTL, contextual shaping) |
 | `georgian` | Georgian + Georgian Supplement |
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |
