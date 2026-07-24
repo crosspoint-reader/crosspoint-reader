@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -19,6 +20,10 @@
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+
+  // Sleep screens always use normal polarity. The persisted display mode is
+  // restored on boot after the retained sleep frame has been presented.
+  display.setInverted(false);
 
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
