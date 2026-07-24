@@ -316,7 +316,7 @@ DictLocation Dictionary::locateByOrdinal(uint32_t ordinal, std::string* matchedH
   HalFile qidx;
   if (Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) {
     const SidecarHeader header = readSidecarHeader(qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
-    if (header.valid && header.sourceFileSize == idxSize) {
+    if (header.valid && header.sourceFileSize == idxSize && header.sampleCount > 0) {
       if (header.entryCount != 0 && ordinal >= header.entryCount) return result;  // out of range
       uint32_t sampleIndex = ordinal / SAMPLE_INTERVAL;
       if (sampleIndex >= header.sampleCount) sampleIndex = header.sampleCount - 1;
