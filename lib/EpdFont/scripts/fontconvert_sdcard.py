@@ -33,52 +33,21 @@ import argparse
 from collections import namedtuple
 
 from cpfont_version import CPFONT_VERSION
-
-# --- Unicode interval presets ---
-
-INTERVAL_PRESETS = {
-    "ascii":       [(0x0020, 0x007E)],
-    "latin1":      [(0x0080, 0x00FF)],
-    "latin-ext":   [(0x0020, 0x007E), (0x0080, 0x00FF), (0x0100, 0x024F),
-                    (0x02B0, 0x02FF), (0x1E00, 0x1EFF), (0x2000, 0x206F),
-                    (0xFB00, 0xFB06)],
-    "greek":       [(0x0370, 0x03FF), (0x1F00, 0x1FFF)],
-    "cyrillic":    [(0x0400, 0x04FF), (0x0500, 0x052F)],
-    "hebrew":      [(0x0590, 0x05FF), (0xFB1D, 0xFB4F)],
-    "georgian":    [(0x10A0, 0x10FF), (0x2D00, 0x2D2F)],
-    "armenian":    [(0x0530, 0x058F)],
-    "ethiopic":    [(0x1200, 0x137F), (0x1380, 0x139F), (0x2D80, 0x2DDF)],
-    "vietnamese":  [(0x01A0, 0x01B0), (0x1EA0, 0x1EF9)],
-    "ipa-chars":   [(0x0250, 0x02AF), (0x02B0, 0x02FF)],
-    "punctuation": [(0x2000, 0x206F)],
-    "cjk":         [(0x3000, 0x303F), (0x3040, 0x309F), (0x30A0, 0x30FF),
-                    (0x4E00, 0x9FFF), (0xF900, 0xFAFF), (0xFF00, 0xFFEF)],
-    "hangul":      [(0xAC00, 0xD7AF), (0x1100, 0x11FF), (0x3130, 0x318F)],
-    "cherokee":    [(0x13A0, 0x13FF), (0xAB70, 0xABBF)],
-    "tifinagh":    [(0x2D30, 0x2D7F)],
-    # Symbol blocks commonly seen in scifi/popsci/literary fiction.
-
-    "symbols":     [(0x2070, 0x209F), (0x20A0, 0x20CF), (0x2150, 0x218F),
-                    (0x2190, 0x21FF), (0x2200, 0x22FF), (0x2500, 0x257F),
-                    (0x25A0, 0x25FF), (0x2600, 0x26FF), (0x2700, 0x27BF)],
-    # Composite preset for English-language literary fiction including scifi/popsci.
-    # Greek for physics terms, math operators, geometric shapes, uncommon
-    # dialogue punctuation, CJK quote marks, miscellaneous symbols (♪♫♬), dingbats.
-    "reading":     [(0x0020, 0x024F), (0x02B0, 0x02FF), (0x0300, 0x036F), (0x0370, 0x03FF),
-                    (0x0400, 0x04FF), (0x1E00, 0x1EFF), (0x2000, 0x206F),
-                    (0x2070, 0x209F), (0x20A0, 0x20CF), (0x2150, 0x218F),
-                    (0x2190, 0x21FF), (0x2200, 0x22FF), (0x2500, 0x257F),
-                    (0x25A0, 0x25FF), (0x2600, 0x26FF), (0x2700, 0x27BF),
-                    (0x2900, 0x29FF), (0x2E00, 0x2E7F), (0x3000, 0x303F),
-                    (0xFB00, 0xFB06)],
-    # Matches the built-in font intervals from fontconvert.py exactly
-    "builtin":     [(0x0000, 0x007F), (0x0080, 0x00FF), (0x0100, 0x017F),
-                    (0x01A0, 0x01A1), (0x01AF, 0x01B0), (0x01C4, 0x021F),
-                    (0x0300, 0x036F), (0x0400, 0x04FF),
-                    (0x1EA0, 0x1EF9), (0x2000, 0x206F), (0x20A0, 0x20CF),
-                    (0x2070, 0x209F), (0x2190, 0x21FF), (0x2200, 0x22FF),
-                    (0xFB00, 0xFB06)],
-}
+# Unicode interval presets come from intervals.yaml (the single source of truth,
+# shared with generate-font-manifest.py). INTERVAL_PRESETS maps preset name ->
+# [(start, end), ...]. The registry parses intervals.yaml with pyyaml, so this is
+# now a hard dependency of the tool (the presets are the glyph ranges — there is
+# no meaningful operation without them). Fail with an actionable message instead
+# of a bare ImportError traceback when pyyaml is unavailable.
+try:
+    from interval_registry import INTERVAL_PRESETS
+except ImportError as e:
+    print(
+        f"ERROR: cannot load interval presets from intervals.yaml ({e}).\n"
+        "       This tool now requires pyyaml — install it with: pip install pyyaml",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 # Regex for parsing unnamed hex range intervals: (0xSTART-0xEND)
 _HEX_RANGE_PATTERN = re.compile(r'^\(0x([0-9a-fA-F]+)-0x([0-9a-fA-F]+)\)$')

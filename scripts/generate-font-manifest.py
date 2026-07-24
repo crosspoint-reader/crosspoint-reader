@@ -26,9 +26,22 @@ import sys
 import zlib
 from pathlib import Path
 
-# Import canonical version constants from the shared file in lib/EpdFont/scripts/
+# Import canonical version constants + the interval registry from the shared
+# files in lib/EpdFont/scripts/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib" / "EpdFont" / "scripts"))
 from cpfont_version import CPFONT_VERSION, FONTS_MANIFEST_VERSION
+
+# interval_registry needs pyyaml at import time; degrade gracefully without it
+# (matching load_families_from_yaml): the manifest is still generated, just with
+# no script grouping — every family appears only under "All fonts" on device.
+try:
+    from interval_registry import SCRIPT_GROUPS, scripts_for_presets
+except ImportError:
+    print("WARNING: pyyaml not installed, manifest will have no script groups", file=sys.stderr)
+    SCRIPT_GROUPS = []
+
+    def scripts_for_presets(preset_names) -> list[str]:
+        return []
 
 # --- .cpfont binary format constants ---
 # Global header: 8s magic, H version, H flags, B styleCount, 19x reserved
@@ -44,23 +57,36 @@ CPFONT_MAGIC = b"CPFONT\x00\x00"
 
 STYLE_NAMES = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
 
-# Family descriptions can be loaded from the sd-fonts.yaml config
-# (via --descriptions-from) or fall back to the family name.
+# Family descriptions + interval presets can be loaded from the sd-fonts.yaml
+# config (via --descriptions-from). Descriptions fall back to the family name;
+# intervals fall back to empty (family appears only under "All fonts" on device).
 FAMILY_DESCRIPTIONS: dict[str, str] = {}
+FAMILY_INTERVALS: dict[str, str] = {}
 
 
-def load_descriptions_from_yaml(yaml_path: Path) -> dict[str, str]:
-    """Load family descriptions from sd-fonts.yaml config."""
+def load_families_from_yaml(yaml_path: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """Load (descriptions, intervals) maps keyed by family name from sd-fonts.yaml."""
     try:
         import yaml
     except ImportError:
-        print("WARNING: pyyaml not installed, cannot load descriptions from YAML", file=sys.stderr)
-        return {}
+        print("WARNING: pyyaml not installed, cannot load family metadata from YAML", file=sys.stderr)
+        return {}, {}
 
     with open(yaml_path) as f:
         config = yaml.safe_load(f)
 
-    return {f["name"]: f["description"] for f in config.get("families", []) if "description" in f}
+    families = config.get("families", [])
+    descriptions = {f["name"]: f["description"] for f in families if "description" in f}
+    intervals = {f["name"]: f["intervals"] for f in families if "intervals" in f}
+    return descriptions, intervals
+
+
+def scripts_for_family(family_name: str) -> list[str]:
+    """Resolve a family's interval presets (from sd-fonts.yaml) to script-group tags."""
+    intervals = FAMILY_INTERVALS.get(family_name)
+    if not intervals:
+        return []
+    return scripts_for_presets(intervals.split(","))
 
 
 def read_cpfont_styles(filepath: Path) -> list[str]:
@@ -152,6 +178,7 @@ def build_manifest(
 ) -> dict:
     """Build the manifest dict from discovered font families."""
     manifest_families = []
+    used_script_tags: set[str] = set()
 
     for family_name in sorted(families.keys()):
         files = families[family_name]
@@ -165,10 +192,15 @@ def build_manifest(
         if description is None:
             print(
                 f"  WARNING: no description for family '{family_name}', "
-                f"consider adding one to FAMILY_DESCRIPTIONS in {__file__}",
+                f"consider adding one to sd-fonts.yaml (--descriptions-from)",
                 file=sys.stderr,
             )
             description = family_name
+
+        # Resolve script-group tags for on-device grouping (multi-membership:
+        # a family appears under every script its intervals cover).
+        scripts = scripts_for_family(family_name)
+        used_script_tags.update(scripts)
 
         file_entries = []
         for filepath in sorted(files, key=lambda p: p.name):
@@ -185,13 +217,24 @@ def build_manifest(
                 "name": family_name,
                 "description": description,
                 "styles": styles,
+                "scripts": scripts,
                 "files": file_entries,
             }
         )
 
+    # Top-level script-group display metadata (tag + English label), emitted in
+    # registry order and limited to groups actually used by ≥1 family. The device
+    # is fully data-driven from this — it holds no hardcoded script list.
+    script_groups = [
+        {"tag": tag, "label": label}
+        for tag, label in SCRIPT_GROUPS
+        if tag in used_script_tags
+    ]
+
     return {
         "version": FONTS_MANIFEST_VERSION,
         "baseUrl": base_url,
+        "scriptGroups": script_groups,
         "families": manifest_families,
     }
 
@@ -232,13 +275,16 @@ def main():
     if not base_url.endswith("/"):
         base_url += "/"
 
-    # Load descriptions from YAML config if provided
-    global FAMILY_DESCRIPTIONS
+    # Load descriptions + interval presets from YAML config if provided
+    global FAMILY_DESCRIPTIONS, FAMILY_INTERVALS
     if args.descriptions_from:
         desc_path = Path(args.descriptions_from)
         if desc_path.exists():
-            FAMILY_DESCRIPTIONS = load_descriptions_from_yaml(desc_path)
-            print(f"Loaded {len(FAMILY_DESCRIPTIONS)} descriptions from {desc_path}")
+            FAMILY_DESCRIPTIONS, FAMILY_INTERVALS = load_families_from_yaml(desc_path)
+            print(
+                f"Loaded {len(FAMILY_DESCRIPTIONS)} descriptions, "
+                f"{len(FAMILY_INTERVALS)} interval sets from {desc_path}"
+            )
         else:
             print(f"WARNING: {desc_path} not found, using family names as descriptions", file=sys.stderr)
 

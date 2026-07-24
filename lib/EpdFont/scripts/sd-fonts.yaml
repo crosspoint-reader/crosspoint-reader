@@ -8,7 +8,9 @@
 # Fields:
 #   name:        Output family name (used in filenames and on-device UI)
 #   description: Human-readable description (shown in download UI and manifest)
-#   intervals:   Comma-separated Unicode interval presets for fontconvert_sdcard.py
+#   intervals:   Comma-separated Unicode interval presets (defined in intervals.yaml,
+#                the single source of truth). Each preset's script group drives the
+#                on-device language grouping in the font browser.
 #   sizes:       Point sizes to generate
 #   force_autohint: (optional) Force FreeType auto-hinter instead of native hinting
 #   styles:      Map of style name -> font source

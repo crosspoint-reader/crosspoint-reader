@@ -141,6 +141,8 @@ To convert your own TrueType/OpenType fonts:
 
 ### Available Unicode interval presets
 
+> The presets below are defined in [`lib/EpdFont/scripts/intervals.yaml`](../lib/EpdFont/scripts/intervals.yaml) — the single source of truth for both this tool and the font-manifest generator. That file also records each preset's script group, which drives the on-device font browser's language grouping. This table is a convenience summary; if the two disagree, `intervals.yaml` wins. Run `--list-presets` (below) for the authoritative list.
+
 | Preset | Coverage |
 |--------|----------|
 | `ascii` | U+0020–U+007E (Basic Latin) |
