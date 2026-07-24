@@ -69,6 +69,11 @@ class Dictionary {
   bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
                     void (*yieldFn)(void*), void* ctx);
 
+  // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
+  // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and
+  // buildIndex() so each sidecar is rebuilt only when actually stale.
+  bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
+
   bool readDefinition(const DictLocation& location, std::string& out);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 

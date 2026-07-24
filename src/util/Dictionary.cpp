@@ -104,43 +104,47 @@ bool Dictionary::open(const char* folderName) {
   return true;
 }
 
+// A sidecar is stale when it is missing, unreadable, the wrong version, or built
+// from a different source size. Missing source returns false (not stale): the
+// dictionary is unusable without its .idx, and a vanished .syn degrades to no
+// synonyms — neither is fixable by re-indexing here.
+bool Dictionary::sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic) {
+  HalFile src;
+  if (!Storage.openFileForRead("DICT", sourcePath, src)) return false;
+  const uint32_t srcSize = static_cast<uint32_t>(src.fileSize());
+
+  HalFile sidecar;
+  if (!Storage.openFileForRead("DICT", sidecarPath, sidecar)) return true;
+  const SidecarHeader header = readSidecarHeader(sidecar, magic, SAMPLE_INTERVAL);
+  return !header.valid || header.sourceFileSize != srcSize;
+}
+
 bool Dictionary::needsIndex() {
   if (!isOpen()) return false;
-
-  HalFile idx;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) return false;
-  const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
-
-  HalFile qidx;
-  if (!Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) return true;
-  const SidecarHeader header = readSidecarHeader(qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
-  if (!header.valid || header.sourceFileSize != idxSize) return true;
-
-  if (hasSyn) {
-    HalFile syn;
-    // .syn vanished since open(); nothing to index, lookups degrade gracefully.
-    if (!Storage.openFileForRead("DICT", basePath + ".syn", syn)) return false;
-    const uint32_t synSize = static_cast<uint32_t>(syn.fileSize());
-
-    HalFile sidx;
-    if (!Storage.openFileForRead("DICT", basePath + ".sidx", sidx)) return true;
-    const SidecarHeader synHeader = readSidecarHeader(sidx, SIDX_MAGIC, SAMPLE_INTERVAL);
-    if (!synHeader.valid || synHeader.sourceFileSize != synSize) return true;
-  }
-  return false;
+  if (sidecarIsStale(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC)) return true;
+  return hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC);
 }
 
 bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx) {
   if (!isOpen()) return false;
 
-  // The .idx sidecar is mandatory — lookups binary-search it.
-  if (!buildSidecar(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC, 8, yieldFn, ctx)) return false;
+  // The .idx sidecar is mandatory — lookups binary-search it. Rebuild only when
+  // stale so a .syn-only change doesn't force a needless rescan of the (much
+  // larger) .idx, and vice versa.
+  if (sidecarIsStale(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC) &&
+      !buildSidecar(basePath + ".idx", basePath + ".qidx", QIDX_MAGIC, 8, yieldFn, ctx)) {
+    return false;
+  }
 
   // The synonym sidecar is best-effort: a failure here (e.g. transient OOM)
-  // leaves synonym lookups disabled but the dictionary otherwise usable. It is
-  // rebuilt on the next open() because needsIndex() still reports it stale.
-  if (hasSyn && !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx)) {
+  // leaves synonym lookups disabled but the dictionary otherwise usable. Clear
+  // hasSyn so this session's lookups skip locateSynonym() rather than falling
+  // back to a full linear .syn scan on every miss; needsIndex() still reports it
+  // stale, so the next open() retries the build.
+  if (hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC) &&
+      !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx)) {
     LOG_ERR("DICT", "Synonym index build failed; synonyms disabled for %s", basePath.c_str());
+    hasSyn = false;
   }
   return true;
 }
