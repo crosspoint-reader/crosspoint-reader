@@ -66,10 +66,15 @@
         in
         {
           default = pkgs.mkShell {
-            packages = [
+            packages = with pkgs; [
               pio
               fhsEnv
-              pkgs.clang-tools # for clang-format
+              clang-tools # for clang-format
+              (python3.withPackages (ps: with ps; [ # for debugging monitor
+                matplotlib
+                pyserial
+                colorama
+              ]))
             ];
 
             shellHook = setEnvs;
