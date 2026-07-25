@@ -56,13 +56,11 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
         LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
       } else {
         LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
-        SETTINGS.sdFontFamilyName[0] = '\0';
-        SETTINGS.saveToFile();
+        SETTINGS.clearSdFontFamily();
       }
     } else {
       LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
-      SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.saveToFile();
+      SETTINGS.clearSdFontFamily();
     }
   }
 
@@ -103,8 +101,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     if (!family) {
       LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       manager_.unloadAll(renderer);
-      SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.saveToFile();
+      SETTINGS.clearSdFontFamily();
       return;
     }
     const auto* selected = family->findNearestSize(SETTINGS.fontPointSize);
@@ -129,13 +126,11 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);
     } else {
       LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
-      SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.saveToFile();
+      SETTINGS.clearSdFontFamily();
     }
   } else {
     LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
-    SETTINGS.sdFontFamilyName[0] = '\0';
-    SETTINGS.saveToFile();
+    SETTINGS.clearSdFontFamily();
   }
 }
 

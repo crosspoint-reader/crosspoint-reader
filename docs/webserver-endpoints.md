@@ -215,7 +215,7 @@ Example item:
   "category": "Reader",
   "type": "enum",
   "value": 1,
-  "options": ["12", "14", "16", "18"]
+  "options": ["12 pt", "14 pt", "16 pt", "18 pt"]
 }
 ```
 

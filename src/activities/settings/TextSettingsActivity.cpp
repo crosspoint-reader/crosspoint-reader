@@ -80,18 +80,26 @@ void TextSettingsActivity::onEnter() {
 void TextSettingsActivity::onExit() { Activity::onExit(); }
 
 // The selectable sizes belong to the active family, so this runs on entry and
-// again after every family change. ensureLoaded() has already snapped
-// SETTINGS.fontPointSize into the new family's set by the time this is called.
+// again after every family change. A family change goes through ensureLoaded(),
+// which snaps SETTINGS.fontPointSize into the new family's set — but entry does
+// not, so the highlight is resolved by snapping rather than by exact match.
 void TextSettingsActivity::rebuildSizeList() {
   const std::vector<uint8_t> points = readerFontPointSizes(registry_, SETTINGS.sdFontFamilyName);
+
+  // The stored size can still sit outside this family's set — e.g. the family
+  // was deleted while selected, or the card was swapped. Highlight the size the
+  // reader actually renders, which getReaderFontId() resolves the same way.
+  const uint8_t selectedPt = snapToNearestPointSize(points, SETTINGS.fontPointSize);
 
   sizes_.clear();
   sizes_.reserve(points.size());
   currentSizeIndex_ = 0;
   for (const uint8_t pt : points) {
-    char label[8];
-    snprintf(label, sizeof(label), "%u", pt);
-    if (pt == SETTINGS.fontPointSize) currentSizeIndex_ = static_cast<int>(sizes_.size());
+    // "pt" is deliberately not translated: it is the typographic unit symbol,
+    // written the same way in every language CrossPoint ships.
+    char label[12];
+    snprintf(label, sizeof(label), "%u pt", pt);
+    if (pt == selectedPt) currentSizeIndex_ = static_cast<int>(sizes_.size());
     sizes_.push_back({label, pt});
   }
 }

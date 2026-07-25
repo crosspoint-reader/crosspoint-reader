@@ -74,7 +74,7 @@ class TextSettingsActivity final : public Activity {
   };
 
   struct SizeEntry {
-    std::string name;  // the point size, rendered for display ("14")
+    std::string name;  // the point size, rendered for display ("14 pt")
     uint8_t pointSize;
   };
 

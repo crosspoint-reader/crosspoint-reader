@@ -106,10 +106,12 @@ inline SettingInfo buildFontSizeSetting(const SdCardFontRegistry* registry) {
   // this call, so they must not reference the registry.
   const std::vector<uint8_t> sizes = readerFontPointSizes(registry, SETTINGS.sdFontFamilyName);
 
+  // "pt" is deliberately not translated — see the matching note in
+  // TextSettingsActivity::rebuildSizeList().
   std::vector<std::string> labels;
   labels.reserve(sizes.size());
   for (const uint8_t pt : sizes) {
-    labels.push_back(std::to_string(pt));
+    labels.push_back(std::to_string(pt) + " pt");
   }
 
   SettingInfo s;
@@ -181,10 +183,11 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // ACTION-type entries and entries without a key are device-only.
 //
 // The static list is constructed exactly once (master's optimization, #1086 +
-// #1636) so the per-entry SettingInfo cost is paid once. When an
-// SdCardFontRegistry is supplied AND has SD card fonts installed, the
-// font-family entry is replaced in a per-call copy with a registry-aware
-// version. Callers without SD fonts pay only a vector copy.
+// #1636) so the per-entry SettingInfo cost is paid once; every call then copies
+// it. When an SdCardFontRegistry is supplied AND has SD card fonts installed,
+// the font-family entry is replaced in that copy with a registry-aware version.
+// The font-size entry is always rebuilt, since its options are point sizes read
+// from the active family rather than a fixed enum.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
                                                 const std::vector<DictionaryEntry>* dictionaries = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
