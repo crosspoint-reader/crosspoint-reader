@@ -90,19 +90,20 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 33
+### Version 34
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 33 keeps the version 32 serialized layout unchanged. It was bumped
+Version 34 keeps the version 33 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
-than flattened paragraphs with synthetic row/cell labels, so cached v32 pages
-must be rebuilt. Version 32 added the book-internal source href to serialized
-image blocks for lazy extraction. Version 31 preserved word continuation when
-splitting long CJK text at `MAX_WORD_SIZE`; version 30 similarly invalidated
-v29 positions after Arabic contextual shaping changed text measurement.
+than flattened paragraphs with synthetic row/cell labels. Version 33 added
+serialized ruby annotations for native `<ruby>` and `<rt>` layout. Version 32
+added the book-internal source href to serialized image blocks for lazy
+extraction. Version 31 preserved word continuation when splitting long CJK text
+at `MAX_WORD_SIZE`; version 30 similarly invalidated v29 positions after Arabic
+contextual shaping changed text measurement.
 
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:
@@ -128,7 +129,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 33
+#define EXPECTED_VERSION 34
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96

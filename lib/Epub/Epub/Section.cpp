@@ -21,9 +21,10 @@ namespace {
 // v32: ImageBlock serializes the book-internal source href after the cache path
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
-// v33: Simple HTML table rows are laid out as positioned columns instead of
+// v33: Support <ruby> and <rt> tags. Skip <rp> tags
+// v34: Simple HTML table rows are laid out as positioned columns instead of
 //      flattened paragraphs with synthetic row/cell labels.
-constexpr uint8_t SECTION_FILE_VERSION = 33;
+constexpr uint8_t SECTION_FILE_VERSION = 34;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
