@@ -221,13 +221,26 @@ void HomeActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
 
-  // Back is otherwise unused on the home menu: open the most recently read
-  // book directly (recentBooks is most-recent-first and already pruned of
-  // files missing from the SD card). backPressSeen guards against the stale
-  // release of the Back press that closed the previous activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
-    onSelectBook(recentBooks[0].path);
-    return;
+  // Back is otherwise unused on the home menu, so it runs the user's configured
+  // action. backPressSeen guards against the stale release of the Back press
+  // that closed the previous activity.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen) {
+    switch (SETTINGS.homeBackAction) {
+      case CrossPointSettings::HOME_BACK_RESUME:
+        // recentBooks is most-recent-first and already pruned of files missing
+        // from the SD card.
+        if (!recentBooks.empty()) {
+          onSelectBook(recentBooks[0].path);
+          return;
+        }
+        break;
+      case CrossPointSettings::HOME_BACK_RECENTS:
+        onRecentsOpen();
+        return;
+      case CrossPointSettings::HOME_BACK_NONE:
+      default:
+        break;
+    }
   }
 
   int tx = 0;

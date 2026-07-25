@@ -32,6 +32,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
   enum DISPLAY_MODE { DISPLAY_MODE_LIGHT = 0, DISPLAY_MODE_DARK = 1, DISPLAY_MODE_COUNT };
 
+  // Action for a short Back press on the home menu, where Back has no navigation target.
+  enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_RECENTS = 2, HOME_BACK_ACTION_COUNT };
+
   enum STATUS_BAR_PROGRESS_BAR {
     BOOK_PROGRESS = 0,
     CHAPTER_PROGRESS = 1,
@@ -270,6 +273,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t moveFinishedToReadFolder = 0;
   // Short press Back goes to file browser instead of home (0 = disabled, 1 = enabled)
   uint8_t backShortToFileBrowser = 0;
+  // What a short Back press does on the home menu (HOME_BACK_ACTION)
+  uint8_t homeBackAction = HOME_BACK_RESUME;
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
