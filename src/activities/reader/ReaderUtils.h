@@ -141,6 +141,10 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
 template <typename RenderFn>
 void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
+  // FreeInk deliberately suppresses grayscale planes while output inversion is
+  // active. Skip the otherwise wasted render/allocation work as well.
+  if (renderer.isOutputInverted()) return;
+
   if (!renderer.storeBwBuffer()) {
     LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
     return;

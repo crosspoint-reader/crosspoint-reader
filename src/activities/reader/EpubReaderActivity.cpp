@@ -1484,8 +1484,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
   const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
-  const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
+  // FreeInk deliberately renders inverted output as crisp BW: grayscale plane
+  // writes are suppressed by the SDK. Do not build temporary planes in that mode.
+  const bool outputInverted = renderer.isOutputInverted();
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing && !outputInverted;
+  const bool needsAnyGrayscale = !outputInverted && (needsTextGrayscale || pageHasImages);
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   // Whole-plane buffering only pays when the BW refresh genuinely runs async
   // underneath it; on blocking panels (X3) it would just spend ~50 KB for the
