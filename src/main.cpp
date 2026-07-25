@@ -33,6 +33,7 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/ButtonShortcutController.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -42,6 +43,7 @@ FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
+static ButtonShortcutController buttonShortcutController;
 
 // Fonts
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
@@ -461,7 +463,9 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-  gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
+  gpio.setSharedConfirmPowerShortPressEmitsPower(
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK);
   gpio.update();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
@@ -498,6 +502,41 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
+  // Long power remains the safety path to deep sleep, including while Quick Lock is active.
+  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
+      return;
+    }
+    enterDeepSleep();
+    return;
+  }
+
+  const auto shortcutResult = buttonShortcutController.update(
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power),
+      SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK);
+  if (shortcutResult.event == ButtonShortcutController::Event::QuickLockChanged) {
+    LOG_DBG("MAIN", "Quick button lock %s", buttonShortcutController.isQuickLocked() ? "enabled" : "disabled");
+    {
+      RenderLock lock;
+      GUI.drawPopup(renderer,
+                    buttonShortcutController.isQuickLocked() ? tr(STR_QUICK_LOCKED) : tr(STR_QUICK_UNLOCKED));
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    }
+    delay(650);
+    activityManager.requestUpdateAndWait();
+  }
+
+  if (buttonShortcutController.isQuickLocked()) {
+    lastActivityTime = millis();
+    powerManager.setPowerSaving(false);
+    halTiltSensor.clearPendingEvents();
+    return;
+  }
+  if (shortcutResult.consumeInput) {
+    return;
+  }
+
   static bool screenshotButtonsReleased = true;
   static bool screenshotComboActive = false;
   if (gpio.isPressed(HalGPIO::BTN_POWER) && gpio.isPressed(HalGPIO::BTN_DOWN)) {
@@ -530,16 +569,6 @@ void loop() {
     return;
   }
 
-  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    // If the screenshot combination is potentially being pressed, don't sleep
-    if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
-      return;
-    }
-    enterDeepSleep();
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
-    return;
-  }
 
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
