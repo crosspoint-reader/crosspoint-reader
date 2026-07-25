@@ -180,11 +180,4 @@ class ChapterHtmlSlimParser {
   // between beginParse() and finishParse()/abortParse().
   size_t parseBytesConsumed() { return parseFile_ ? parseFile_.position() : 0; }
   size_t parseTotalBytes() { return parseFile_ ? parseFile_.size() : 0; }
-
-  // Rewrites src into dst, self-closing HTML5 void elements (<br> -> <br/>) and dropping
-  // void-element end tags (<br></br> -> <br/>) so expat's strict XML parser accepts the
-  // result. Returns false on any I/O error (dst is not usable; caller should fall back to
-  // src). On success, `modified` reports whether dst differs from src, so the caller can
-  // skip swapping files when the source was already well-formed.
-  static bool selfCloseVoidElements(const std::string& src, const std::string& dst, bool& modified);
 };

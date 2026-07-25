@@ -1,6 +1,7 @@
 #include "Section.h"
 
 #include <HalStorage.h>
+#include <HtmlSanitizer.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <Serialization.h>
@@ -382,7 +383,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   // is cheap next to the layout work a rebuild is already doing.
   bool sanitizationModified = false;
   const bool sanitizationOk =
-      ChapterHtmlSlimParser::selfCloseVoidElements(ctx->parsePath, sanitizedHtmlPath, sanitizationModified);
+      HtmlSanitizer::selfCloseVoidElements(ctx->parsePath, sanitizedHtmlPath, sanitizationModified);
   if (sanitizationOk && sanitizationModified) {
     ctx->parsePath = sanitizedHtmlPath;
     ctx->sanitizedPath = sanitizedHtmlPath;
