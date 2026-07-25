@@ -69,6 +69,7 @@
             packages = [
               pio
               fhsEnv
+              pkgs.clang-tools # for clang-format
             ];
 
             shellHook = setEnvs;
