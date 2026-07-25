@@ -92,13 +92,15 @@ void DictionaryWordSelectActivity::extractWords() {
     if (!block || !block->valid()) continue;
 
     bool rowHasWords = false;
+    const int ascender = renderer.getFontAscenderSize(fontId);
+    const int rubyShift = block->getRubyShift(ascender);
     for (uint16_t i = 0; i < block->wordCount(); i++) {
       const char* text = block->wordText(i);
       if (!isSelectableToken(text)) continue;
 
       WordBox box;
       box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
-      box.y = static_cast<int16_t>(line->yPos + marginTop);
+      box.y = static_cast<int16_t>(line->yPos + marginTop + rubyShift);
       box.style = block->wordStyle(i);
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
