@@ -20,7 +20,10 @@ namespace {
 // v32: ImageBlock serializes the book-internal source href after the cache path
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
-constexpr uint8_t SECTION_FILE_VERSION = 32;
+// v33: CJK <br> handling changed layout — a <br> inside CJK flowing text is now a
+//      plain block boundary instead of a scene-break gap, so cached pages laid out
+//      by older versions no longer match.
+constexpr uint8_t SECTION_FILE_VERSION = 33;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
