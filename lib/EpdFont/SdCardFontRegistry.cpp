@@ -15,63 +15,17 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t s
   return nullptr;
 }
 
-const SdCardFontFileInfo* SdCardFontFamilyInfo::findClosestReaderSize(const uint8_t fontSizeEnum,
-                                                                      const uint8_t style) const {
-  if (files.empty()) return nullptr;
-
-  // Collect sizes matching the requested style, sorted ascending.
-  std::vector<uint8_t> sizes;
-  for (const auto& f : files) {
-    if (f.style != style) continue;
-    sizes.push_back(f.pointSize);
-  }
-  if (sizes.empty()) return nullptr;
-  std::sort(sizes.begin(), sizes.end());
-
-  // If the family provides the standard reader sizes, map the enum straight to
-  // them. This keeps body text correct even when the family also ships smaller
-  // UI-fallback sizes (e.g. 8/10 for CJK book titles) that would otherwise
-  // shift the ordinal mapping below and make reading too small.
-  static constexpr uint8_t kReaderTargets[] = {12, 14, 16, 18};
-  const auto hasSizeForStyle = [&](uint8_t s) { return std::find(sizes.begin(), sizes.end(), s) != sizes.end(); };
-  if (hasSizeForStyle(12) && hasSizeForStyle(14) && hasSizeForStyle(16) && hasSizeForStyle(18)) {
-    const uint8_t idx = fontSizeEnum < 4 ? fontSizeEnum : 3;
-    return findFile(kReaderTargets[idx], style);
-  }
-
-  // When the family provides at least 4 sizes, use ordinal (index-based)
-  // selection so custom-built font sets (e.g. 10/12/14/16) map SMALL to
-  // the smallest file, not to a hardcoded 12pt target.
-  if (sizes.size() >= 4) {
-    uint8_t idx = fontSizeEnum;
-    if (idx >= sizes.size()) idx = sizes.size() - 1;
-    return findFile(sizes[idx], style);
-  }
-
-  // Fewer sizes than enum slots (e.g. CJK packs with only 2-3 sizes):
-  // fall back to closest-match against the built-in reader targets.
-  uint8_t target = 14;
-  switch (fontSizeEnum) {
-    case 0:
-      target = 12;
-      break;
-    case 2:
-      target = 16;
-      break;
-    case 3:
-      target = 18;
-      break;
-    case 1:
-    default:
-      target = 14;
-      break;
-  }
-
+const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t pointSize, const uint8_t style) const {
+  // The reader stores an actual point size, so an exact match is the norm and
+  // falls out of the delta search below (delta 0). The search only matters when
+  // the size was carried over from a family that ships different sizes; the
+  // caller then persists the snapped size (SdCardFontSystem::ensureLoaded).
   const SdCardFontFileInfo* best = nullptr;
   uint8_t bestDelta = 255;
   for (const auto& f : files) {
     if (f.style != style) continue;
-    const uint8_t delta = f.pointSize > target ? f.pointSize - target : target - f.pointSize;
+    const uint8_t delta = f.pointSize > pointSize ? f.pointSize - pointSize : pointSize - f.pointSize;
+    // Ties resolve to the smaller size, matching snapToNearestPointSize().
     if (!best || delta < bestDelta || (delta == bestDelta && f.pointSize < best->pointSize)) {
       best = &f;
       bestDelta = delta;

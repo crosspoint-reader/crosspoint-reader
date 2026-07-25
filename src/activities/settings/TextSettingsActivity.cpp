@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <iterator>
 #include <string>
@@ -11,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReaderFontSizes.h"
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
 #include "components/UITheme.h"
@@ -31,10 +33,6 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
   }
 
   return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
-}
-
-int findCurrentFontSizeIndex(uint8_t fontSize, size_t listSize) {
-  return fontSize < listSize ? fontSize : 1;  // default MEDIUM
 }
 
 constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE};
@@ -69,15 +67,9 @@ void TextSettingsActivity::onEnter() {
     }
   }
 
-  sizes_.clear();
-  sizes_.reserve(CrossPointSettings::FONT_SIZE_COUNT);
-  sizes_.push_back({I18N.get(StrId::STR_SMALL), static_cast<uint8_t>(CrossPointSettings::SMALL)});
-  sizes_.push_back({I18N.get(StrId::STR_MEDIUM), static_cast<uint8_t>(CrossPointSettings::MEDIUM)});
-  sizes_.push_back({I18N.get(StrId::STR_LARGE), static_cast<uint8_t>(CrossPointSettings::LARGE)});
-  sizes_.push_back({I18N.get(StrId::STR_X_LARGE), static_cast<uint8_t>(CrossPointSettings::EXTRA_LARGE)});
+  rebuildSizeList();
 
   currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
-  currentSizeIndex_ = findCurrentFontSizeIndex(SETTINGS.fontSize, sizes_.size());
   std::fill(std::begin(selectedIndex_), std::end(selectedIndex_), 1);       // default to the first list row
   selectedIndex_[static_cast<int>(Tab::Family)] = currentFamilyIndex_ + 1;  // Family/Size open on current selection
   selectedIndex_[static_cast<int>(Tab::Size)] = currentSizeIndex_ + 1;
@@ -86,6 +78,23 @@ void TextSettingsActivity::onEnter() {
 }
 
 void TextSettingsActivity::onExit() { Activity::onExit(); }
+
+// The selectable sizes belong to the active family, so this runs on entry and
+// again after every family change. ensureLoaded() has already snapped
+// SETTINGS.fontPointSize into the new family's set by the time this is called.
+void TextSettingsActivity::rebuildSizeList() {
+  const std::vector<uint8_t> points = readerFontPointSizes(registry_, SETTINGS.sdFontFamilyName);
+
+  sizes_.clear();
+  sizes_.reserve(points.size());
+  currentSizeIndex_ = 0;
+  for (const uint8_t pt : points) {
+    char label[8];
+    snprintf(label, sizeof(label), "%u", pt);
+    if (pt == SETTINGS.fontPointSize) currentSizeIndex_ = static_cast<int>(sizes_.size());
+    sizes_.push_back({label, pt});
+  }
+}
 
 TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
   const int previewTop = afterHeader;
@@ -306,6 +315,14 @@ void TextSettingsActivity::applyFamily(int listIndex) {
       currentFamilyIndex_ = listIndex;
     }
   }
+
+  if (currentFamilyIndex_ != listIndex) return;  // switch failed — keep the old size list
+
+  // The new family ships its own set of point sizes, and ensureLoaded() may have
+  // snapped the selection into it, so the Size tab's list and its nav position
+  // both have to be rebuilt.
+  rebuildSizeList();
+  selectedIndex_[static_cast<int>(Tab::Size)] = currentSizeIndex_ + 1;
 }
 
 void TextSettingsActivity::activateRow(int row) {
@@ -339,7 +356,7 @@ void TextSettingsActivity::applySize(int listIndex) {
   RenderLock lock;
 
   currentSizeIndex_ = listIndex;
-  SETTINGS.fontSize = sizes_[listIndex].settingIndex;
+  SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
   sdFontSystem.ensureLoaded(renderer);
 }
 
