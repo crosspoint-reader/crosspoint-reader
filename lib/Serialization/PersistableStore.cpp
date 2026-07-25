@@ -32,9 +32,32 @@ bool PersistableStoreBase::readDocFromFile(const char* path, JsonDocument& doc) 
   return true;
 }
 
+namespace {
+// mbedtls_base64_decode only validates base64 syntax — it has no way to know
+// whether the XOR key used to decode matches the one used to encode. A wrong
+// key (obfuscation scheme changed between firmware versions, or an SD card
+// moved to a different device — the key is derived from the hardware MAC)
+// still "succeeds" as valid base64 but yields arbitrary bytes. A genuine
+// password never contains a control character, so treat one as proof the
+// decode key didn't match rather than trust it as real credential data —
+// otherwise those raw bytes (a stray NUL truncates C-string readers; any
+// control byte breaks strict JSON consumers like the web settings page)
+// propagate to every reader of the field.
+bool containsControlChar(const std::string& s) {
+  for (unsigned char c : s) {
+    if (c < 0x20) return true;
+  }
+  return false;
+}
+}  // namespace
+
 std::string PersistableStoreBase::extractPassword(JsonVariantConst doc, bool& needsResave) {
   bool ok = false;
   std::string pass = obfuscation::deobfuscateFromBase64(doc["password_obf"] | "", &ok);
+  if (ok && containsControlChar(pass)) {
+    LOG_ERR("PERSIST", "Deobfuscated password contains control characters; treating as corrupt");
+    ok = false;
+  }
   if (!ok) {
     // Deobfuscation failed — fall back to legacy plaintext password.
     pass = doc["password"] | "";

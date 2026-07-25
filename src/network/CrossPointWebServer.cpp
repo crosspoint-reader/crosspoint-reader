@@ -205,6 +205,14 @@ void CrossPointWebServer::begin() {
   udpActive = udp.begin(LOCAL_UDP_PORT);
   LOG_DBG("WEB", "Discovery UDP %s on port %d", udpActive ? "enabled" : "failed", LOCAL_UDP_PORT);
 
+  // All request handlers run on the task that calls handleClient(). Register
+  // that task before any handler can call esp_task_wdt_reset().
+  const esp_err_t watchdogResult = esp_task_wdt_add(nullptr);
+  watchdogTaskRegistered = watchdogResult == ESP_OK;
+  if (!watchdogTaskRegistered) {
+    LOG_ERR("WEB", "Failed to register web server task with watchdog: %s", esp_err_to_name(watchdogResult));
+  }
+
   running = true;
 
   LOG_DBG("WEB", "Web server started on port %d", port);
@@ -234,6 +242,10 @@ void CrossPointWebServer::abortWsUpload(const char* tag) {
 void CrossPointWebServer::stop() {
   if (!running || !server) {
     LOG_DBG("WEB", "stop() called but already stopped (running=%d, server=%p)", running, server.get());
+    if (watchdogTaskRegistered) {
+      esp_task_wdt_delete(nullptr);
+      watchdogTaskRegistered = false;
+    }
     return;
   }
 
@@ -273,6 +285,11 @@ void CrossPointWebServer::stop() {
   server.reset();
   LOG_DBG("WEB", "Web server stopped and deleted");
   LOG_DBG("WEB", "[MEM] Free heap after delete server: %d bytes", ESP.getFreeHeap());
+
+  if (watchdogTaskRegistered) {
+    esp_task_wdt_delete(nullptr);
+    watchdogTaskRegistered = false;
+  }
 
   // Note: Static upload variables (uploadFileName, uploadPath, uploadError) are declared
   // later in the file and will be cleared when they go out of scope or on next upload

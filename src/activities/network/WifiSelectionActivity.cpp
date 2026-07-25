@@ -855,20 +855,25 @@ void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMet
 }
 
 void WifiSelectionActivity::renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const {
+  constexpr int MAX_STATUS_LINES = 2;
   const auto height = renderer.getLineHeight(UI_10_FONT_ID);
   const auto top = screen->y + (screen->height - height) / 2;
+  const int statusX = screen->x + metrics->contentSidePadding;
+  const int statusWidth = screen->width - metrics->contentSidePadding * 2;
 
   if (state == WifiSelectionState::SCANNING) {
-    UITheme::drawCenteredText(renderer, *screen, UI_10_FONT_ID, top,
-                              autoConnecting ? tr(STR_FINDING_SAVED_WIFI) : tr(STR_SCANNING));
+    const char* statusText = autoConnecting ? tr(STR_FINDING_SAVED_WIFI) : tr(STR_SCANNING);
+    const Rect statusBounds{statusX, screen->y, statusWidth, screen->height};
+    UITheme::drawCenteredWrappedText(renderer, statusBounds, UI_10_FONT_ID, statusText, MAX_STATUS_LINES);
     if (autoConnecting) {
       const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_SHOW_NETWORKS), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }
   } else {
-    UITheme::drawCenteredText(renderer, *screen, UI_12_FONT_ID, top - 40,
-                              autoConnecting ? tr(STR_CONNECTING_SAVED_WIFI) : tr(STR_CONNECTING), true,
-                              EpdFontFamily::BOLD);
+    const char* statusText = autoConnecting ? tr(STR_CONNECTING_SAVED_WIFI) : tr(STR_CONNECTING);
+    const Rect statusBounds{statusX, screen->y, statusWidth, top - metrics->verticalSpacing - screen->y};
+    UITheme::drawCenteredWrappedText(renderer, statusBounds, UI_12_FONT_ID, statusText, MAX_STATUS_LINES, true,
+                                     EpdFontFamily::BOLD, UITheme::TextVerticalAlignment::BOTTOM);
 
     std::string ssidInfo = std::string(tr(STR_TO_PREFIX)) + selectedSSID;
     if (ssidInfo.length() > 25) {

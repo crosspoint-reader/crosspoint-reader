@@ -109,17 +109,11 @@ const fui::KeyboardLayout URL_LAYOUT{URL_ROWS, 5};
 const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
 const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
 
-fui::KeyboardLayoutId layoutForLanguage(const Language language) {
-  switch (language) {
-    case Language::FR:
-      return fui::KeyboardLayoutId::AzertyFr;
-    case Language::DE:
-      return fui::KeyboardLayoutId::QwertzDe;
-    case Language::ES:
-      return fui::KeyboardLayoutId::SpanishEs;
-    default:
-      return fui::KeyboardLayoutId::QwertyEn;
-  }
+fui::KeyboardLayoutId layoutForLanguage(const Language) {
+  // This build only ships English and Indonesian translations (see
+  // lib/I18n/translations/), so I18N.getLanguage() can never return a
+  // language needing a non-QWERTY layout (AZERTY/QWERTZ/etc.).
+  return fui::KeyboardLayoutId::QwertyEn;
 }
 
 }  // namespace

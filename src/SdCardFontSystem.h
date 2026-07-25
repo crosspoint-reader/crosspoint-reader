@@ -46,6 +46,13 @@ class SdCardFontSystem {
   }
 
  private:
+  // Load the active SD family at the built-in UI point sizes and register each
+  // as a size-matched CJK fallback for the corresponding UI font, so CJK book
+  // titles/list rows render at the same size as the surrounding Latin UI text.
+  // No-op when no SD family is loaded. Safe to call repeatedly (sizes already
+  // loaded are reused).
+  void setupUiFallbacks(GfxRenderer& renderer);
+
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};

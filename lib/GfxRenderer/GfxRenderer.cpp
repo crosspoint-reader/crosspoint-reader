@@ -179,6 +179,36 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   }
 }
 
+int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (fallbackFontMap_.empty() || text == nullptr || *text == '\0') {
+    return fontId;
+  }
+  const auto fbIt = fallbackFontMap_.find(fontId);
+  if (fbIt == fallbackFontMap_.end()) {
+    return fontId;  // no fallback registered for this font
+  }
+  const int fallbackFontId = fbIt->second;
+  const auto fontIt = fontMap.find(fontId);
+  const auto fallbackIt = fontMap.find(fallbackFontId);
+  if (fontIt == fontMap.end() || fallbackIt == fontMap.end()) {
+    return fontId;  // unknown primary or fallback not loaded — let the caller handle it
+  }
+  const EpdFontFamily& primary = fontIt->second;
+  const EpdFontFamily& fallback = fallbackIt->second;
+  const char* cursor = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
+    // Only redirect for CJK the primary font cannot draw but the fallback can.
+    // Latin/symbol strings the built-in UI fonts already cover are left
+    // untouched, and a partial-coverage fallback (e.g. kana-only) is not worth
+    // dragging the whole string into for glyphs it would also miss.
+    if (utf8IsCjkCodepoint(cp) && !primary.hasCodepoint(cp, style) && fallback.hasCodepoint(cp, style)) {
+      return fallbackFontId;
+    }
+  }
+  return fontId;
+}
+
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
 // This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
@@ -499,9 +529,12 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
     return 0;
   }
 
-  const auto fontIt = fontMap.find(fontId);
+  // Measure with the same font drawText would render with (see resolveTextFontId)
+  // so wrapping, truncation and centering of CJK strings stay consistent.
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
+  const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+    LOG_ERR("GFX", "Font %d not found", resolvedFontId);
     return 0;
   }
 
@@ -526,10 +559,14 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
+  // Route CJK-bearing strings to the fallback font when the requested font
+  // lacks the glyphs (e.g. Chinese book titles drawn with a Latin UI font).
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
+
   std::string visual;
   const char* renderedText = resolveVisualText(text, visual, baseDir);
 
-  const int yPos = y + getFontAscenderSize(fontId);
+  const int yPos = y + getFontAscenderSize(resolvedFontId);
   int lastBaseX = x;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
@@ -537,13 +574,13 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   int32_t prevAdvanceFP = 0;  // 12.4 fixed-point: prev glyph's advance + next kern for snap
 
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
-    fontCacheManager_->recordText(renderedText, fontId, style);
+    fontCacheManager_->recordText(renderedText, resolvedFontId, style);
     return;
   }
 
-  const auto fontIt = fontMap.find(fontId);
+  const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+    LOG_ERR("GFX", "Font %d not found", resolvedFontId);
     return;
   }
   const auto& font = fontIt->second;
@@ -1828,6 +1865,8 @@ int GfxRenderer::getKerning(const int fontId, const uint32_t leftCp, const uint3
 }
 
 int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFamily::Style style) const {
+  // Match the font drawText would use for CJK-bearing strings (see resolveTextFontId).
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
   // Measure the exact codepoint stream drawText renders: bidi-reordered and
   // Arabic-shaped (contextual presentation forms, Lam-Alef collapse).
   // Measuring the raw logical text counts the Alef a ligature absorbs and
@@ -1840,14 +1879,14 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   // Advance table fast-path for SD card fonts during layout.
   // No kerning/ligature lookup — consistent with previous metadataOnly behavior
   // where kern/lig data was not loaded.
-  auto sdIt = sdCardFonts_.find(fontId);
+  auto sdIt = sdCardFonts_.find(resolvedFontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
     int32_t widthFP = 0;
     const bool isSupSub = (style & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0;
     const uint8_t styleIdx = resolveSdCardStyle(*sdIt->second, style);
-    const auto fontIt = fontMap.find(fontId);
+    const auto fontIt = fontMap.find(resolvedFontId);
     if (fontIt == fontMap.end()) {
-      LOG_ERR("GFX", "Font %d not found", fontId);
+      LOG_ERR("GFX", "Font %d not found", resolvedFontId);
       return 0;
     }
     const auto& font = fontIt->second;
@@ -1866,9 +1905,9 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
     return fp4::toPixel(widthFP);
   }
 
-  const auto fontIt = fontMap.find(fontId);
+  const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+    LOG_ERR("GFX", "Font %d not found", resolvedFontId);
     return 0;
   }
 
@@ -1945,9 +1984,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
     return;
   }
 
-  const auto fontIt = fontMap.find(fontId);
+  // Route CJK-bearing strings to the fallback font (see resolveTextFontId).
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
+  const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", fontId);
+    LOG_ERR("GFX", "Font %d not found", resolvedFontId);
     return;
   }
 
