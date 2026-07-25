@@ -156,6 +156,8 @@ void EpubReaderActivity::onEnter() {
     return;
   }
 
+  ReaderUtils::applyReaderDarkMode(renderer);
+
   ImageBlock::clearSessionRenderFailures();
   // Lazy image extraction: section builds only header-probe images, so the first
   // render of an image page pulls the file out of the EPUB through this hook.
@@ -213,6 +215,8 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  renderer.setOutputInverted(false);
 
   // The extractor holds a raw pointer to this activity's epub; drop it before
   // the activity (and the shared_ptr) goes away.

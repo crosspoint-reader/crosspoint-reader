@@ -31,6 +31,8 @@ void TxtReaderActivity::onEnter() {
     return;
   }
 
+  ReaderUtils::applyReaderDarkMode(renderer);
+
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   txt->setupCacheDir();
@@ -48,6 +50,8 @@ void TxtReaderActivity::onEnter() {
 
 void TxtReaderActivity::onExit() {
   Activity::onExit();
+
+  renderer.setOutputInverted(false);
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);

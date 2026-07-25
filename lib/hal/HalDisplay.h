@@ -58,6 +58,11 @@ class HalDisplay {
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 
+  // Persistent output inversion. The framebuffer remains in its normal logical
+  // colors; the SDK applies inversion only while sending a frame to the panel.
+  void setInverted(bool inverted);
+  bool isInverted() const;
+
   // Lend the framebuffer's ~48 KB STORAGE to a memory-hungry phase (chapter
   // builds) without freeing it: the allocation never moves, so repeated loans
   // cannot fragment the heap (free+realloc measurably did). No display calls

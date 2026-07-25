@@ -42,6 +42,10 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   }
 }
 
+// The SDK owns output inversion, keeping the framebuffer logical for normal
+// rendering, screenshots, and subsequent reader draws.
+inline void applyReaderDarkMode(GfxRenderer& renderer) { renderer.setOutputInverted(SETTINGS.readerDarkMode != 0); }
+
 struct PageTurnResult {
   bool prev;
   bool next;

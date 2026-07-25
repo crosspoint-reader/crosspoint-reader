@@ -1537,6 +1537,10 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::setOutputInverted(const bool inverted) const { display.setInverted(inverted); }
+
+bool GfxRenderer::isOutputInverted() const { return display.isInverted(); }
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);

@@ -178,6 +178,10 @@ class GfxRenderer {
   bool supportsAsyncRefresh() const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
+  // Persistent output inversion. Unlike invertScreen(), this leaves the
+  // framebuffer in its normal logical colors and is applied by the display SDK.
+  void setOutputInverted(bool inverted) const;
+  bool isOutputInverted() const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;

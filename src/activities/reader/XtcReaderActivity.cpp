@@ -31,6 +31,8 @@ void XtcReaderActivity::onEnter() {
     return;
   }
 
+  ReaderUtils::applyReaderDarkMode(renderer);
+
   xtc->setupCacheDir();
 
   // Load saved progress
@@ -47,6 +49,8 @@ void XtcReaderActivity::onEnter() {
 
 void XtcReaderActivity::onExit() {
   Activity::onExit();
+
+  renderer.setOutputInverted(false);
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
