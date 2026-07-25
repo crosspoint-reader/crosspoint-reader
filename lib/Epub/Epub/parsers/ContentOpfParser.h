@@ -31,6 +31,7 @@ class ContentOpfParser final : public Print {
   BookMetadataCache* cache;
   HalFile tempItemStore;
   std::string coverItemId;
+  bool hasExplicitStartReference = false;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
