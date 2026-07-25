@@ -30,6 +30,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     INVERTED_BLACK_AND_WHITE = 2,
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
+  enum DISPLAY_MODE { DISPLAY_MODE_LIGHT = 0, DISPLAY_MODE_DARK = 1, DISPLAY_MODE_COUNT };
 
   enum STATUS_BAR_PROGRESS_BAR {
     BOOK_PROGRESS = 0,
@@ -171,6 +172,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Display output polarity. Sleep screens are always rendered in light mode.
+  uint8_t displayMode = DISPLAY_MODE_LIGHT;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
