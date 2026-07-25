@@ -13,13 +13,17 @@ struct DictLocation {
   bool found = false;
 };
 
-// Slim StarDict reader: exact-match lookup with a mini stemming fallback.
+// Slim StarDict reader: exact-match lookup with a synonym and mini stemming
+// fallback.
 //
 // Expects /dictionaries/<folder>/<stem>.idx (uncompressed) plus <stem>.dict or
-// <stem>.dict.dz. Lookups binary-search a lazily built sampled-offset sidecar
-// (<stem>.qidx, byte offset of every SAMPLE_INTERVAL-th .idx entry), then
-// linear-scan at most SAMPLE_INTERVAL entries. Everything streams from SD; no
-// index is held in RAM.
+// <stem>.dict.dz, and an optional <stem>.syn synonym index. Lookups
+// binary-search a lazily built sampled-offset sidecar (<stem>.qidx, byte offset
+// of every SAMPLE_INTERVAL-th .idx entry), then linear-scan at most
+// SAMPLE_INTERVAL entries. A present .syn gets a parallel <stem>.sidx sidecar;
+// its entries carry an ordinal (the N-th .idx entry) resolved back to a byte
+// offset via the same fixed-interval .qidx samples. Everything streams from SD;
+// no index is held in RAM.
 class Dictionary {
  public:
   // Resolve the dictionary folder and validate its files. Rejects
@@ -31,8 +35,10 @@ class Dictionary {
   // so the UI can show an "Indexing…" message for the slow first pass.
   bool needsIndex();
 
-  // One streaming pass over .idx writing the .qidx sidecar. yieldFn (optional)
-  // is called every ~64KB consumed to feed the watchdog / repaint the UI.
+  // One streaming pass over .idx writing the .qidx sidecar, plus a pass over
+  // .syn writing the .sidx sidecar when a synonym file is present. yieldFn
+  // (optional) is called every ~64KB consumed to feed the watchdog / repaint
+  // the UI.
   bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr);
 
   // Clean the word, look it up, and on a miss retry mini stem variants
@@ -48,6 +54,26 @@ class Dictionary {
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
   DictLocation locate(const char* target, std::string* matchedHeadwordOut);
+
+  // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
+  // the .qidx samples. Used to follow a .syn synonym back to its headword.
+  DictLocation locateByOrdinal(uint32_t ordinal, std::string* matchedHeadwordOut);
+
+  // Bisect the .syn/.sidx synonym index for target; on a hit follow its ordinal
+  // through locateByOrdinal(). Returns not-found when no .syn exists.
+  DictLocation locateSynonym(const char* target, std::string* matchedHeadwordOut);
+
+  // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
+  // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
+  // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
+  bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
+                    void (*yieldFn)(void*), void* ctx);
+
+  // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
+  // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and
+  // buildIndex() so each sidecar is rebuilt only when actually stale.
+  bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
+
   bool readDefinition(const DictLocation& location, std::string& out);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 
@@ -58,6 +84,7 @@ class Dictionary {
 
   std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
   bool hasPlainDict = false;
+  bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
 
   // Shared scan buffer: lookups are single-threaded and this avoids a
   // 256-byte array on the stack of every locate() call.
