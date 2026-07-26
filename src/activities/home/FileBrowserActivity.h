@@ -25,6 +25,11 @@ class FileBrowserActivity final : public Activity {
   bool removeDirFile(const std::string& fullPath);
 
   ButtonNavigator buttonNavigator;
+  // Separate instance for the fast-scroll axis: it only ever uses onPressAndContinuous (no
+  // onRelease), so it never resets ButtonNavigator's shared lastContinuousNavTime back to 0.
+  // Sharing one instance across both axes would leave that timer permanently non-zero after the
+  // first fast-scroll hold, silently suppressing single-step's on-release navigation forever.
+  ButtonNavigator fastScrollNavigator;
 
   size_t selectorIndex = 0;
 

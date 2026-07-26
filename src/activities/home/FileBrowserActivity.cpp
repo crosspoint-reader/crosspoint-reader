@@ -22,6 +22,8 @@ namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
 constexpr unsigned long POPUP_MSG_MS = 2000;
+// Fast-scroll jump size for long lists (see SETTINGS.fastScrollButtons).
+constexpr int FAST_SCROLL_JUMP = 5;
 }  // namespace
 
 void FileBrowserActivity::loadFiles() {
@@ -560,23 +562,58 @@ void FileBrowserActivity::loop() {
     }
   }
 
+<<<<<<< HEAD
   int listSize = static_cast<int>(files.size() + syntheticCount());
   buttonNavigator.onNextRelease([this, listSize] {
+=======
+  int listSize = static_cast<int>(files.size());
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up) {
+    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Down) {
+    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    requestUpdate();
+    return;
+  }
+
+  // Fast-scroll axis jumps FAST_SCROLL_JUMP items per press/repeat (clamped, no wrap); the other
+  // axis keeps single-item stepping, with continuous-hold falling back to a page jump. Using
+  // Up/Down/Left/Right directly (rather than the combined NavNext/NavPrevious) is what lets the two
+  // axes carry different behavior; FileBrowserActivity always renders Portrait, so there is no
+  // orientation-swap case to account for here (unlike the reader).
+  using Btn = MappedInputManager::Button;
+  const bool fastScrollIsFront = SETTINGS.fastScrollButtons == CrossPointSettings::FAST_SCROLL_FRONT;
+  const Btn fastNextBtn = fastScrollIsFront ? Btn::Right : Btn::Down;
+  const Btn fastPrevBtn = fastScrollIsFront ? Btn::Left : Btn::Up;
+  const Btn stepNextBtn = fastScrollIsFront ? Btn::Down : Btn::Right;
+  const Btn stepPrevBtn = fastScrollIsFront ? Btn::Up : Btn::Left;
+
+  fastScrollNavigator.onPressAndContinuous({fastNextBtn}, [this, listSize] {
+    selectorIndex = ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, FAST_SCROLL_JUMP);
+    requestUpdate();
+  });
+  fastScrollNavigator.onPressAndContinuous({fastPrevBtn}, [this, listSize] {
+    selectorIndex = ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, -FAST_SCROLL_JUMP);
+    requestUpdate();
+  });
+
+  buttonNavigator.onRelease({stepNextBtn}, [this, listSize] {
+>>>>>>> feature/file-browser-fast-scroll
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
-
-  buttonNavigator.onPreviousRelease([this, listSize] {
+  buttonNavigator.onRelease({stepPrevBtn}, [this, listSize] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
-
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+  buttonNavigator.onContinuous({stepNextBtn}, [this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
-
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+  buttonNavigator.onContinuous({stepPrevBtn}, [this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
@@ -712,6 +749,7 @@ void FileBrowserActivity::render(RenderLock&&) {
   // In picker modes, Confirm on a selectable row returns to the caller (not "open"); show
   // STR_SELECT instead. Directories in the pickers still descend, so keep STR_OPEN there.
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
+<<<<<<< HEAD
   const bool syntheticSelected = selectorIndex < syntheticCount();
   // In the folder picker, Confirm over a file drops the moved book here.
   const bool moveHereOnFile = mode == Mode::PickFolder && !syntheticSelected && listCount > 0 &&
@@ -722,6 +760,16 @@ void FileBrowserActivity::render(RenderLock&&) {
                                                                             : tr(STR_OPEN);
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, listCount == 0 ? "" : tr(STR_DIR_UP),
                                             listCount == 0 ? "" : tr(STR_DIR_DOWN));
+=======
+  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  // Front-button hints (Left/Right) must match what they actually do: plain Up/Down when they
+  // single-step, or the fast-scroll jump label when SETTINGS.fastScrollButtons routes the 5-item
+  // jump to the front buttons instead of the side buttons.
+  const bool fastScrollIsFront = SETTINGS.fastScrollButtons == CrossPointSettings::FAST_SCROLL_FRONT;
+  const char* upLabel = files.empty() ? "" : (fastScrollIsFront ? tr(STR_JUMP_UP) : tr(STR_DIR_UP));
+  const char* downLabel = files.empty() ? "" : (fastScrollIsFront ? tr(STR_JUMP_DOWN) : tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, upLabel, downLabel);
+>>>>>>> feature/file-browser-fast-scroll
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

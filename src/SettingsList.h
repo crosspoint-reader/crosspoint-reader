@@ -296,6 +296,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
                           {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_MENU_RECENT_BOOKS}, "homeBackAction",
                           StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_FAST_SCROLL_BUTTONS, &CrossPointSettings::fastScrollButtons,
+                          {StrId::STR_FRONT_BUTTONS, StrId::STR_SIDE_BUTTONS}, "fastScrollButtons",
+                          StrId::STR_CAT_CONTROLS),
 
         // --- System ---
         SettingInfo::Value(
