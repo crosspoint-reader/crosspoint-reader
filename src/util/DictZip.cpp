@@ -11,6 +11,10 @@ namespace {
 // chunk length that still allows ~460MB of uncompressed dictionary data.
 constexpr uint16_t MAX_CHUNK_COUNT = 8192;
 
+// Slack required above the chunk table before reserving it, so a table that
+// would only just fit is refused rather than left to abort inside reserve().
+constexpr size_t CHUNK_TABLE_HEAP_HEADROOM_BYTES = 1024;
+
 bool readLe16(HalFile& file, uint16_t* out) {
   uint8_t raw[2];
   if (file.read(raw, 2) != 2) return false;
@@ -93,6 +97,11 @@ bool parse(HalFile& file, Info* info, ExtractError* outError) {
     if (extraRead + subLen > xlen) return fail(ExtractError::Decompress);
 
     if (subHeader[0] == 'R' && subHeader[1] == 'A') {
+      // Reject a second RA table rather than break: breaking would leave
+      // extraRead < xlen and trip the check below for valid files carrying other
+      // FEXTRA subfields after the RA one. Re-entering would push_back past the
+      // reserve() below, and that growth aborts under -fno-exceptions.
+      if (foundRa) return fail(ExtractError::Decompress);
       if (subLen < 6) return fail(ExtractError::Decompress);
 
       uint16_t version = 0;
@@ -111,7 +120,8 @@ bool parse(HalFile& file, Info* info, ExtractError* outError) {
       // heap surfaces LowMemory instead of crashing. chunkCount <= MAX_CHUNK_COUNT
       // caps this at ~32KB.
       const size_t chunkTableBytes = (static_cast<size_t>(chunkCount) + 1) * sizeof(uint32_t);
-      if (ESP.getMaxAllocHeap() < chunkTableBytes + 1024) return fail(ExtractError::LowMemory);
+      if (ESP.getMaxAllocHeap() < chunkTableBytes + CHUNK_TABLE_HEAP_HEADROOM_BYTES)
+        return fail(ExtractError::LowMemory);
       info->chunkOffsets.reserve(static_cast<size_t>(chunkCount) + 1);
       info->chunkOffsets.push_back(0);
       uint32_t cumulative = 0;

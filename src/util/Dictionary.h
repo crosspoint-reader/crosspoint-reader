@@ -11,6 +11,9 @@ struct DictLocation {
   uint32_t offset = 0;  // byte offset in .dict data
   uint32_t size = 0;    // byte length in .dict data
   bool found = false;
+  // Set when the search was cut short by an .idx open or seek failure rather than
+  // reaching a verdict, so a failed search isn't reported as a genuine miss.
+  bool readError = false;
 };
 
 // Slim StarDict reader: exact-match lookup with a mini stemming fallback.
@@ -45,9 +48,19 @@ class Dictionary {
   // so the UI can show an "Indexing…" message for the slow first pass.
   bool needsIndex();
 
+  // Why an index build failed — the scan buffer is a heap allocation, so the
+  // same fragmentation that breaks lookups can break indexing, and it deserves
+  // the same "Not enough memory" rather than a generic error.
+  enum class IndexResult : uint8_t {
+    Ok,
+    LowMemory,  // the scan buffer couldn't be allocated
+    ReadError,  // .idx open/read or .qidx write failure
+  };
+
   // One streaming pass over .idx writing the .qidx sidecar. yieldFn (optional)
   // is called every ~64KB consumed to feed the watchdog / repaint the UI.
-  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr);
+  // *outResult (if provided) reports why a failed build failed.
+  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
 
   // Clean the word, look it up, and on a miss retry mini stem variants
   // (-'s/-s/-es/-ies/-ed/-ing). On a hit fills the definition text (capped at

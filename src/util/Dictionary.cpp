@@ -17,6 +17,10 @@ namespace {
 // Shared temp file for entries lazily extracted from .dict.dz.
 constexpr const char* DICT_TMP_FILE = "/.crosspoint/dict.tmp";
 
+// Slack required above a definition buffer before we commit to reading it, so a
+// request that would only just fit is refused rather than left to abort mid-read.
+constexpr uint32_t DEFINITION_HEAP_HEADROOM_BYTES = 8 * 1024;
+
 // .qidx sidecar header: magic, version, sample interval, sample count, and the
 // .idx file size the sidecar was built from (staleness check).
 constexpr uint32_t QIDX_MAGIC = 0x58444951;  // "QIDX" little-endian
@@ -110,18 +114,23 @@ bool Dictionary::needsIndex() {
   return !header.valid || header.idxFileSize != idxSize;
 }
 
-bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx) {
-  if (!isOpen()) return false;
+bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {
+  const auto fail = [outResult](IndexResult r) {
+    if (outResult) *outResult = r;
+    return false;
+  };
+  if (outResult) *outResult = IndexResult::Ok;
+  if (!isOpen()) return fail(IndexResult::ReadError);
 
   HalFile idx;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) return false;
+  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) return fail(IndexResult::ReadError);
   const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
 
   constexpr size_t CHUNK_BYTES = 4096;
   auto buf = makeUniqueNoThrow<uint8_t[]>(CHUNK_BYTES);
   if (!buf) {
     LOG_ERR("DICT", "OOM: %u byte index scan buffer", CHUNK_BYTES);
-    return false;
+    return fail(IndexResult::LowMemory);
   }
 
   // Stream each sample offset straight to the sidecar instead of accumulating
@@ -131,7 +140,7 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx) {
   // readQidxHeader rejects (magic mismatch) and needsIndex() triggers a rebuild.
   const std::string qidxPath = basePath + ".qidx";
   HalFile out;
-  if (!Storage.openFileForWrite("DICT", qidxPath, out)) return false;
+  if (!Storage.openFileForWrite("DICT", qidxPath, out)) return fail(IndexResult::ReadError);
   const auto writeU32 = [&out](uint32_t v) { return out.write(&v, sizeof(v)) == static_cast<int>(sizeof(v)); };
   const uint32_t placeholder[5] = {};
   bool ok = out.write(placeholder, sizeof(placeholder)) == sizeof(placeholder);
@@ -182,7 +191,7 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx) {
     LOG_ERR("DICT", "Index build failed, removing %s", qidxPath.c_str());
     out.close();  // close before remove of the same path
     Storage.remove(qidxPath.c_str());
-    return false;
+    return fail(IndexResult::ReadError);
   }
 
   LOG_INF("DICT", "Indexed %lu entries (%lu samples) in %lu ms", static_cast<unsigned long>(entryCount),
@@ -215,7 +224,10 @@ DictLocation Dictionary::locate(const char* target, std::string* matchedHeadword
   if (!isOpen()) return result;
 
   HalFile idx;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) return result;
+  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) {
+    result.readError = true;
+    return result;
+  }
   const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
 
   // Bisect the sampled offsets to the last sample whose headword <= target.
@@ -247,8 +259,16 @@ DictLocation Dictionary::locate(const char* target, std::string* matchedHeadword
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
-  idx.seekSet(startByte);
+  if (!idx.seekSet(startByte)) {
+    LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
+    result.readError = true;
+    return result;
+  }
   while (static_cast<uint32_t>(idx.position()) < idxSize) {
+    // Not flagged as readError: readWordInto returns -1 for EOF and IO error
+    // alike, so a short tail can't be told from a truncated .idx. Treat it as
+    // the end of the index rather than risk reporting a read failure for what
+    // is really a miss.
     if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t suffix[8];
     if (idx.read(suffix, 8) != 8) break;
@@ -271,8 +291,20 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     if (outResult) *outResult = r;
     return false;
   };
-  if (!location.found) return fail(LookupResult::ReadError);
+  if (!location.found) return fail(LookupResult::NotFound);
   const uint32_t size = std::min(location.size, MAX_DEFINITION_BYTES);
+  if (size == 0) {
+    LOG_ERR("DICT", "Zero-length definition entry");
+    return fail(LookupResult::ReadError);
+  }
+
+  // Refuse before touching the heap or the SD: std::string growth aborts on OOM
+  // (-fno-exceptions), and the extraction below transiently holds a chunk buffer
+  // plus a 32KB inflate window we'd rather not commit to a doomed lookup.
+  if (ESP.getMaxAllocHeap() < size + DEFINITION_HEAP_HEADROOM_BYTES) {
+    LOG_ERR("DICT", "Low heap for %lu byte definition", static_cast<unsigned long>(size));
+    return fail(LookupResult::LowMemory);
+  }
 
   std::string path;
   uint32_t offset = 0;
@@ -313,21 +345,17 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     return fail(LookupResult::ReadError);
   }
 
-  // std::string growth aborts on OOM (-fno-exceptions); refuse up front unless
-  // the allocation fits comfortably in the largest free block.
-  if (ESP.getMaxAllocHeap() < size + 8 * 1024) {
-    LOG_ERR("DICT", "Low heap for %lu byte definition", static_cast<unsigned long>(size));
-    return fail(LookupResult::LowMemory);
+  if (!dict.seekSet(offset)) {
+    LOG_ERR("DICT", "Seek to %lu failed", static_cast<unsigned long>(offset));
+    return fail(LookupResult::ReadError);
   }
-
-  dict.seekSet(offset);
   out.assign(size, '\0');
-  const int bytesRead = dict.read(&out[0], size);
-  if (bytesRead < 0) {
+  // The bounds check above guarantees the bytes exist, so a short read is an IO
+  // failure — surface it instead of returning a silently truncated definition.
+  if (dict.read(&out[0], size) != static_cast<int>(size)) {
     out.clear();
     return fail(LookupResult::ReadError);
   }
-  if (static_cast<uint32_t>(bytesRead) < size) out.resize(bytesRead);
   return true;
 }
 
@@ -385,15 +413,23 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   if (cleaned.empty() || !isOpen()) return false;
 
   DictLocation location = locate(cleaned.c_str(), &matchedHeadwordOut);
+  bool searchFailed = location.readError;
   if (!location.found) {
     std::vector<std::string> variants;
     stemVariants(cleaned, variants);
     for (const auto& variant : variants) {
       location = locate(variant.c_str(), &matchedHeadwordOut);
+      searchFailed = searchFailed || location.readError;
       if (location.found) break;
     }
   }
-  if (!location.found) return false;  // genuinely not in the dictionary
+  if (!location.found) {
+    // A search that never reached a verdict (couldn't open or seek .idx) is a
+    // read failure, not a miss — reporting "Not found" is the bug this PR exists
+    // for. Otherwise the word is genuinely not in the dictionary.
+    if (searchFailed) setResult(LookupResult::ReadError);
+    return false;
+  }
 
   // Found in the index — propagate the precise failure reason from readDefinition
   // (decompression / low memory / read error) so the caller can name it.

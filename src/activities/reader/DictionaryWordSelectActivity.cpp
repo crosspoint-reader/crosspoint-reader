@@ -159,7 +159,8 @@ void DictionaryWordSelectActivity::performLookup() {
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
   bool ok = dictOpenOk;
-  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield);
+  Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
+  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
 
   std::string definition;
   std::string headword;
@@ -178,7 +179,20 @@ void DictionaryWordSelectActivity::performLookup() {
   // low-memory allocation from a generic read error.
   if (!ok) {
     popup = Popup::Error;
-    popupMsg = StrId::STR_DICT_ERROR;
+    // An index build allocates a scan buffer, so it fails the same way lookups
+    // do on a fragmented heap — name that rather than a generic error.
+    switch (indexResult) {
+      case Dictionary::IndexResult::LowMemory:
+        popupMsg = StrId::STR_DICT_LOW_MEMORY;
+        break;
+      case Dictionary::IndexResult::ReadError:
+        popupMsg = StrId::STR_DICT_READ_FAILED;
+        break;
+      case Dictionary::IndexResult::Ok:
+      default:
+        popupMsg = StrId::STR_DICT_ERROR;  // dict.open() failed, not the index
+        break;
+    }
   } else {
     switch (result) {
       case Dictionary::LookupResult::Decompress:
