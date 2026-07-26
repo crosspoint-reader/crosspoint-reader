@@ -194,8 +194,8 @@ void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
-void ActivityManager::goToRecentBooks() {
-  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
+void ActivityManager::goToRecentBooks(HomeMenuItem homeReturnItem, int homeReturnRecentIndex) {
+  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput, homeReturnItem, homeReturnRecentIndex));
 }
 
 void ActivityManager::goToBrowser() {
@@ -223,8 +223,10 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
   replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
-void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
-  if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
+void ActivityManager::goHome(HomeMenuItem initialMenuItem, int initialRecentIndex) {
+  // A caller-supplied recent book index is already an explicit selector target,
+  // so don't override it by guessing from the activity we're leaving.
+  if (initialMenuItem == HomeMenuItem::NONE && initialRecentIndex < 0 && currentActivity) {
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
@@ -268,6 +270,8 @@ bool ActivityManager::isReaderActivity() const {
                      [](const auto& activity) { return activity->isReaderActivity(); }) ||
          (currentActivity && currentActivity->isReaderActivity());
 }
+
+bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 

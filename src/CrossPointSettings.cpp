@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <string>
 
 #include "I18nKeys.h"
+#include "ReaderFontSizes.h"
 #include "SettingsList.h"
 #include "fontIds.h"
 
@@ -85,8 +87,10 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
   doc["frontButtonRight"] = frontButtonRight;
-  // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  // Font family and size — both use dynamic getter/setters in SettingsList (the
+  // option lists depend on the SD font registry), so the generic loop skips them.
   doc["fontFamily"] = fontFamily;
+  doc["fontSize"] = fontPointSize;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -176,6 +180,17 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
+
+  // Reader font size — an actual point size since 1.5. Files written by 1.4 and
+  // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is
+  // renderable at those sizes, so the range is unambiguous and folds to the
+  // point sizes those slots used to mean. Drop this once 1.4 upgrades are done.
+  uint8_t storedFontSize = doc["fontSize"] | DEFAULT_FONT_POINT_SIZE;
+  if (storedFontSize <= LEGACY_FONT_SIZE_MAX) {
+    storedFontSize = 12 + storedFontSize * 2;  // 0,1,2,3 -> 12,14,16,18
+    needsResave = true;
+  }
+  fontPointSize = storedFontSize;
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
@@ -305,39 +320,37 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+void CrossPointSettings::clearSdFontFamily() {
+  sdFontFamilyName[0] = '\0';
+  fontPointSize =
+      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  saveToFile();
+}
+
 int CrossPointSettings::getReaderFontId() const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
-    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
+    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontPointSize);
     if (id != 0) return id;
     // Fall through to built-in if SD font not found
   }
 
-  switch (fontFamily) {
-    case NOTOSERIF:
+  // A built-in family only exists at BUILTIN_READER_POINT_SIZES, so a size
+  // carried over from an SD family may not be one of them. ensureLoaded()
+  // normally persists the snap; snap again here (without allocating — this runs
+  // in the page render loop) so rendering is correct even before it has run.
+  const uint8_t pt =
+      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  const bool sans = (fontFamily == NOTOSANS);
+  switch (pt) {
+    case 12:
+      return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
+    case 16:
+      return sans ? NOTOSANS_16_FONT_ID : NOTOSERIF_16_FONT_ID;
+    case 18:
+      return sans ? NOTOSANS_18_FONT_ID : NOTOSERIF_18_FONT_ID;
+    case 14:
     default:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSERIF_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSERIF_14_FONT_ID;
-        case LARGE:
-          return NOTOSERIF_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSERIF_18_FONT_ID;
-      }
-    case NOTOSANS:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSANS_14_FONT_ID;
-        case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
-      }
+      return sans ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID;
   }
 }

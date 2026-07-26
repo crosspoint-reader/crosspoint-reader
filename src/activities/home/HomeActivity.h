@@ -32,6 +32,9 @@ class HomeActivity final : public Activity {
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
+  // Recent book cover to select on entry, or -1 for none. Takes precedence over
+  // initialMenuItem: a cover is not a HomeMenuItem, so it needs its own index.
+  const int initialRecentIndex;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
@@ -61,6 +64,8 @@ class HomeActivity final : public Activity {
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
   void onRecentsOpen();
+  // Open Recents such that returning from it restores the current selection.
+  void openRecentsAndReturnToSelection();
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
@@ -74,8 +79,10 @@ class HomeActivity final : public Activity {
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE)
-      : Activity("Home", renderer, mappedInput), initialMenuItem(initialMenuItemValue) {}
+                        HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, int initialRecentIndexValue = -1)
+      : Activity("Home", renderer, mappedInput),
+        initialMenuItem(initialMenuItemValue),
+        initialRecentIndex(initialRecentIndexValue) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

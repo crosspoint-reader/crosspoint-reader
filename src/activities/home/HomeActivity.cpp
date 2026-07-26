@@ -9,6 +9,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -117,7 +118,13 @@ void HomeActivity::onEnter() {
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  if (initialRecentIndex >= 0 && base > 0) {
+    // Clamp: the list can shrink while we're away (a book removed from recents,
+    // or its file gone from the SD card).
+    selectorIndex = std::min(initialRecentIndex, base - 1);
+  } else {
+    selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  }
 
   // Trigger first update
   requestUpdate();
@@ -235,7 +242,10 @@ void HomeActivity::loop() {
         }
         break;
       case CrossPointSettings::HOME_BACK_RECENTS:
-        onRecentsOpen();
+        // Back is a shortcut, not a menu choice: the selector must be back where
+        // the user left it when the list closes, so hand the current selection
+        // to the Recents activity for its return trip.
+        openRecentsAndReturnToSelection();
         return;
       case CrossPointSettings::HOME_BACK_NONE:
       default:
@@ -373,6 +383,16 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
+
+void HomeActivity::openRecentsAndReturnToSelection() {
+  const int recentCount = static_cast<int>(recentBooks.size());
+  // Below recentCount the selector is on a recent book cover, which has no
+  // HomeMenuItem: send back the index instead.
+  const int recentIndex = selectorIndex < recentCount ? selectorIndex : -1;
+  const HomeMenuItem menuItem =
+      recentIndex >= 0 ? HomeMenuItem::NONE : indexToMenuItem(selectorIndex - recentCount, hasOpdsServers);
+  activityManager.goToRecentBooks(menuItem, recentIndex);
+}
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

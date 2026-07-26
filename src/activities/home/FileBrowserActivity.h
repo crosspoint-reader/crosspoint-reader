@@ -31,6 +31,11 @@ class FileBrowserActivity final : public Activity {
   // True when this activity was entered while Confirm was already held; we must swallow the next
   // release so we don't immediately auto-open the first entry.
   bool lockNextConfirmRelease = false;
+  // True after optionPopup (or a pushed ConfirmationActivity, e.g. promptDelete/promptNewFolder)
+  // closed via a physical Back press: that press's release is still pending, and without this
+  // guard we'd misread it as our own Back release and navigate up a directory / go home on top of
+  // whatever the popup/dialog already did.
+  bool lockNextBackRelease = false;
 
   Mode mode = Mode::Books;
 

@@ -84,14 +84,20 @@ class ActivityManager {
   void goToFileTransfer();
   void goToSettings();
   void goToFileBrowser(std::string path = {});
-  void goToRecentBooks();
+  // homeReturn* describe where the home selector should land when this activity
+  // goes back home, for callers (the home Back shortcut) that must not move it.
+  // See goHome() for the encoding.
+  void goToRecentBooks(HomeMenuItem homeReturnItem = HomeMenuItem::NONE, int homeReturnRecentIndex = -1);
   void goToBrowser();
   void goToReader(std::string path, bool allowFastInitialRefresh = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
-  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
+  // The home selector lands on initialMenuItem, or on the recent book at
+  // initialRecentIndex when that is >= 0 (which takes precedence, since a recent
+  // book cover is not a HomeMenuItem).
+  void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, int initialRecentIndex = -1);
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);
@@ -102,6 +108,7 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
+  bool handleForcedRefresh();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 

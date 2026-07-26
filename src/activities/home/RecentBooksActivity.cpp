@@ -57,6 +57,11 @@ void RecentBooksActivity::loop() {
     return;
   }
 
+  if (lockNextBackRelease && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    lockNextBackRelease = false;
+    return;
+  }
+
   // Long-press Confirm on the selected book: prompt to remove it from the list.
   // Fires when the hold times out while still held (firmware hold-to-act pattern,
   // cf. FileBrowserActivity BACK long-press).
@@ -88,7 +93,11 @@ void RecentBooksActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    onGoHome();
+    // Pass the caller's selector target along: without it goHome() infers
+    // "Recent Books" from this activity's name, which would move the home
+    // selection for a user who only reached this list via the Back shortcut.
+    // The defaults (NONE / -1) keep that inference for every other entry point.
+    activityManager.goHome(homeReturnItem, homeReturnRecentIndex);
   }
 
   int listSize = static_cast<int>(recentBooks.size());
@@ -127,6 +136,12 @@ void RecentBooksActivity::loop() {
 
 void RecentBooksActivity::promptRemoveBook(const std::string& path, const std::string& title) {
   auto handler = [this, path](const ActivityResult& res) {
+    // The ConfirmationActivity we just left may have been dismissed by physically pressing Back
+    // (cancel); that press's release is still pending here and must not be reinterpreted as our
+    // own Back release below. (A Confirm-driven "remove" release is already handled by
+    // longPressFired, since promptRemoveBook is only reached via a Confirm long-press.)
+    lockNextBackRelease = mappedInput.isPressed(MappedInputManager::Button::Back);
+
     if (res.isCancelled) {
       LOG_DBG("RBA", "Remove from recents cancelled");
       return;

@@ -227,6 +227,13 @@ void FileBrowserActivity::showFileMenu(const std::string& entry) {
 
 void FileBrowserActivity::promptDelete(const std::string& entry, const std::string& fullPath) {
   auto handler = [this, fullPath](const ActivityResult& res) {
+    // The ConfirmationActivity we just left was dismissed by physically pressing Back (cancel)
+    // or Confirm (confirm delete); either button's release is still pending here and must not
+    // be reinterpreted as this activity's own Back/Confirm action (e.g. re-opening whatever
+    // slid into the now-deleted entry's slot).
+    lockNextBackRelease = mappedInput.isPressed(MappedInputManager::Button::Back);
+    lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+
     if (!res.isCancelled) {
       LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
       if (removeDirFile(fullPath)) {
@@ -287,6 +294,10 @@ void FileBrowserActivity::promptNewFolder() {
   startActivityForResult(
       std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_FOLDER_NAME), "", 64, InputType::Text),
       [this](const ActivityResult& res) {
+        // KeyboardEntryActivity cancels on a physical Back press (not release), so that press's
+        // release is still pending here and must not be reinterpreted as our own Back action.
+        lockNextBackRelease = mappedInput.isPressed(MappedInputManager::Button::Back);
+
         if (res.isCancelled) {
           requestUpdate();
           return;
@@ -323,7 +334,16 @@ void FileBrowserActivity::showMessage(const StrId msgId) {
 }
 
 void FileBrowserActivity::loop() {
-  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  const bool popupWasActive = optionPopup.isActive();
+  const bool popupHandledInput = optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+  if (popupWasActive && !optionPopup.isActive()) {
+    // The popup just closed this tick. Whichever physical button closed it (Back to dismiss,
+    // Confirm to pick an option) still has a pending release we must not reinterpret as our
+    // own Back/Confirm action below.
+    lockNextBackRelease = mappedInput.isPressed(MappedInputManager::Button::Back);
+    lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+  }
+  if (popupHandledInput) return;
 
   if (popupVisible && millis() - popupTime >= POPUP_MSG_MS) {
     popupVisible = false;
@@ -343,6 +363,11 @@ void FileBrowserActivity::loop() {
 
   if (lockLongPressBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     lockLongPressBack = false;
+    return;
+  }
+
+  if (lockNextBackRelease && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    lockNextBackRelease = false;
     return;
   }
 
