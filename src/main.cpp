@@ -196,22 +196,18 @@ void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
-  const bool isQuickResumeSleep =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
-  APP_STATE.showBootScreen = !isQuickResumeSleep;
-
+  // Always skip the boot splash and restore the last frame on wake,
+  // regardless of which sleep screen mode is shown on the panel.
+  APP_STATE.showBootScreen = false;
   APP_STATE.saveToFile();
+
+  // Save framebuffer BEFORE goToSleep() overwrites it with the sleep screen
+  saveSleepFrameBuffer();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
-
-  if (isQuickResumeSleep) {
-    saveSleepFrameBuffer();
-  }
 
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
@@ -381,18 +377,25 @@ void setup() {
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
       if (loadSleepFrameBuffer()) {
-        const bool useDifferentialRefresh = gpio.deviceIsX3();
+        const bool isX3 = gpio.deviceIsX3();
+        // X3 quick-resume sleep screen shows only a moon overlay on the last
+        // frame, so a differential refresh is clean. All other sleep modes
+        // (cover, dark, etc.) overwrite the entire panel and need at least a half refresh
+        // to avoid ghosting from the sleep image.
+        const bool useDifferentialRefresh =
+            isX3 && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME;
         if (useDifferentialRefresh) {
-          // begin() clears the X3 controller RAM, so restore the saved frame as
-          // the baseline before replacing the moon with the loading icon.
           renderer.cleanupGrayscaleWithFrameBuffer();
         }
 
         const auto pageHeight = renderer.getScreenHeight();
         renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        if (isX3) {
+          // we dont need to refresh the screen again after the initial HALF_REFRESH
+          allowFastInitialReaderRefresh = true;
+        }
         if (useDifferentialRefresh) {
           renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-          allowFastInitialReaderRefresh = true;
         } else {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
