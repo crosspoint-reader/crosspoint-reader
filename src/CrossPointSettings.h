@@ -135,6 +135,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
+  // Power + right-side button chord actions. Values are persisted; append only.
+  enum POWER_CHORD_ACTION {
+    CHORD_SCREENSHOT = 0,
+    CHORD_QUICK_LOCK = 1,
+    CHORD_NEXT_PAGE = 2,
+    CHORD_PREVIOUS_PAGE = 3,
+    CHORD_DISABLED = 4,
+    POWER_CHORD_ACTION_COUNT
+  };
+
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
   // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
@@ -204,6 +214,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Preserve the historical hard-coded chord behavior by default.
+  uint8_t powerChordAction = CHORD_SCREENSHOT;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;

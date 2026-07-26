@@ -2,6 +2,10 @@
 
 #include <HalGPIO.h>
 
+#include <cstdint>
+
+#include "util/InjectedButtonEvents.h"
+
 class GfxRenderer;
 
 class MappedInputManager {
@@ -21,6 +25,8 @@ class MappedInputManager {
   void update() const { gpio.update(); }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
+  void injectClick(Button button);
+  void clearInjectedEvents();
   bool isPressed(Button button) const;
   bool hasTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
@@ -81,4 +87,5 @@ class MappedInputManager {
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;
   mutable unsigned long touchHeldOverrideAt = 0;
+  InjectedButtonEvents injectedButtonEvents;
 };
