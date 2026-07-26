@@ -77,7 +77,23 @@ class Dictionary {
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
-  DictLocation locate(const char* target, std::string* matchedHeadwordOut);
+  // The .idx / .qidx handles shared by every locate() call in one lookup. A
+  // lookup probes up to ~5 stem variants; opening the two files and building
+  // their path strings per probe cost ~10 SD opens and ~10 std::string
+  // temporaries per word, churning the same heap whose fragmentation makes
+  // lookups fail mid-session. Opened once per lookup instead.
+  struct LookupSession {
+    HalFile idx;
+    HalFile qidx;
+    uint32_t idxSize = 0;
+    uint32_t sampleCount = 0;  // 0 when the sidecar is absent, stale or empty
+  };
+
+  // Open .idx (required) and .qidx (optional — locate() falls back to a full
+  // scan without it). False when the dictionary is closed or .idx won't open.
+  bool openSession(LookupSession& session);
+
+  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
   // Read the definition at location. On failure returns false and, if outResult
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
