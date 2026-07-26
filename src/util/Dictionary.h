@@ -77,11 +77,27 @@ class Dictionary {
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
+  // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
+  // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
+  // ".dict.dz", leaving ~137 chars for folder + stem — far beyond any real
+  // dictionary. open() rejects anything that would not fit, so the hot path
+  // cannot fail on length. Kept under the 256-byte stack-local guideline.
+  static constexpr size_t PATH_BUF_BYTES = 160;
+
+  // Longest suffix appended to basePath; used for the open()-time length check.
+  static constexpr const char* LONGEST_SUFFIX = ".dict.dz";
+
+  // Compose "<basePath><suffix>" into a caller-supplied stack buffer. The
+  // lookup path runs this instead of `basePath + suffix` so probing a word
+  // costs no transient heap at all — see LookupSession. False (and logs) when
+  // the path would not fit, which open() has already ruled out.
+  bool buildPath(char* buf, size_t bufSize, const char* suffix) const;
+
   // The .idx / .qidx handles shared by every locate() call in one lookup. A
-  // lookup probes up to ~5 stem variants; opening the two files and building
-  // their path strings per probe cost ~10 SD opens and ~10 std::string
-  // temporaries per word, churning the same heap whose fragmentation makes
-  // lookups fail mid-session. Opened once per lookup instead.
+  // lookup probes up to ~5 stem variants; opening the two files per probe cost
+  // ~10 SD opens and ~10 std::string path temporaries per word, churning the
+  // same heap whose fragmentation makes lookups fail mid-session. Opened once
+  // per lookup instead, with the paths built via buildPath().
   struct LookupSession {
     HalFile idx;
     HalFile qidx;

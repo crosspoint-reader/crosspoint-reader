@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 #include "DictZip.h"
@@ -96,8 +97,23 @@ bool Dictionary::open(const char* folderName) {
     LOG_ERR("DICT", "%s uses 64-bit index offsets (unsupported)", resolved.c_str());
     return false;
   }
+  // Checked once here so buildPath() can never fail on the lookup path.
+  if (resolved.size() + strlen(LONGEST_SUFFIX) + 1 > PATH_BUF_BYTES) {
+    LOG_ERR("DICT", "Dictionary path too long (%u chars, max %u)", static_cast<unsigned>(resolved.size()),
+            static_cast<unsigned>(PATH_BUF_BYTES - strlen(LONGEST_SUFFIX) - 1));
+    return false;
+  }
 
   basePath = std::move(resolved);
+  return true;
+}
+
+bool Dictionary::buildPath(char* buf, size_t bufSize, const char* suffix) const {
+  const int n = snprintf(buf, bufSize, "%s%s", basePath.c_str(), suffix);
+  if (n < 0 || static_cast<size_t>(n) >= bufSize) {
+    LOG_ERR("DICT", "Path too long: %s%s", basePath.c_str(), suffix);
+    return false;
+  }
   return true;
 }
 
@@ -221,12 +237,17 @@ int Dictionary::readWordInto(HalFile& file, char* buf, size_t bufSize) {
 
 bool Dictionary::openSession(LookupSession& session) {
   if (!isOpen()) return false;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", session.idx)) return false;
+
+  // One buffer reused for both paths — no transient heap on the lookup path.
+  char path[PATH_BUF_BYTES];
+  if (!buildPath(path, sizeof(path), ".idx")) return false;
+  if (!Storage.openFileForRead("DICT", path, session.idx)) return false;
   session.idxSize = static_cast<uint32_t>(session.idx.fileSize());
 
   // The sidecar is optional and its header only has to be validated once per
   // lookup; without a usable one locate() scans from byte 0.
-  if (Storage.openFileForRead("DICT", basePath + ".qidx", session.qidx)) {
+  if (!buildPath(path, sizeof(path), ".qidx")) return true;
+  if (Storage.openFileForRead("DICT", path, session.qidx)) {
     const QidxHeader header = readQidxHeader(session.qidx, SAMPLE_INTERVAL);
     if (header.valid && header.idxFileSize == session.idxSize) session.sampleCount = header.sampleCount;
   }
@@ -310,19 +331,21 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     return fail(LookupResult::LowMemory);
   }
 
-  std::string path;
+  char pathBuf[PATH_BUF_BYTES];
+  const char* path = pathBuf;
   uint32_t offset = 0;
   if (hasPlainDict) {
-    path = basePath + ".dict";
+    if (!buildPath(pathBuf, sizeof(pathBuf), ".dict")) return fail(LookupResult::ReadError);
     offset = location.offset;
   } else {
+    if (!buildPath(pathBuf, sizeof(pathBuf), ".dict.dz")) return fail(LookupResult::ReadError);
     HalFile tmp = Storage.open(DICT_TMP_FILE, O_WRITE | O_CREAT | O_TRUNC);
     if (!tmp) {
       LOG_ERR("DICT", "Failed to open %s", DICT_TMP_FILE);
       return fail(LookupResult::ReadError);
     }
     DictZip::ExtractError xerr = DictZip::ExtractError::None;
-    if (!DictZip::extractEntry((basePath + ".dict.dz").c_str(), location.offset, size, tmp, &xerr)) {
+    if (!DictZip::extractEntry(pathBuf, location.offset, size, tmp, &xerr)) {
       // Map the specific extraction cause to the lookup result: allocation
       // failure (heap fragmentation) vs corrupt/truncated .dz vs an IO error.
       LOG_ERR("DICT", "dictzip extraction failed for %s (error %d)", basePath.c_str(), static_cast<int>(xerr));
