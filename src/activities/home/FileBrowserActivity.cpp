@@ -562,11 +562,7 @@ void FileBrowserActivity::loop() {
     }
   }
 
-<<<<<<< HEAD
   int listSize = static_cast<int>(files.size() + syntheticCount());
-  buttonNavigator.onNextRelease([this, listSize] {
-=======
-  int listSize = static_cast<int>(files.size());
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up) {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
@@ -601,7 +597,6 @@ void FileBrowserActivity::loop() {
   });
 
   buttonNavigator.onRelease({stepNextBtn}, [this, listSize] {
->>>>>>> feature/file-browser-fast-scroll
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
@@ -749,7 +744,6 @@ void FileBrowserActivity::render(RenderLock&&) {
   // In picker modes, Confirm on a selectable row returns to the caller (not "open"); show
   // STR_SELECT instead. Directories in the pickers still descend, so keep STR_OPEN there.
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
-<<<<<<< HEAD
   const bool syntheticSelected = selectorIndex < syntheticCount();
   // In the folder picker, Confirm over a file drops the moved book here.
   const bool moveHereOnFile = mode == Mode::PickFolder && !syntheticSelected && listCount > 0 &&
@@ -758,18 +752,13 @@ void FileBrowserActivity::render(RenderLock&&) {
                              : moveHereOnFile                               ? tr(STR_MOVE_HERE)
                              : (selectingFirmwareFile || syntheticSelected) ? tr(STR_SELECT)
                                                                             : tr(STR_OPEN);
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, listCount == 0 ? "" : tr(STR_DIR_UP),
-                                            listCount == 0 ? "" : tr(STR_DIR_DOWN));
-=======
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   // Front-button hints (Left/Right) must match what they actually do: plain Up/Down when they
   // single-step, or the fast-scroll jump label when SETTINGS.fastScrollButtons routes the 5-item
   // jump to the front buttons instead of the side buttons.
   const bool fastScrollIsFront = SETTINGS.fastScrollButtons == CrossPointSettings::FAST_SCROLL_FRONT;
-  const char* upLabel = files.empty() ? "" : (fastScrollIsFront ? tr(STR_JUMP_UP) : tr(STR_DIR_UP));
-  const char* downLabel = files.empty() ? "" : (fastScrollIsFront ? tr(STR_JUMP_DOWN) : tr(STR_DIR_DOWN));
+  const char* upLabel = listCount == 0 ? "" : (fastScrollIsFront ? tr(STR_JUMP_UP) : tr(STR_DIR_UP));
+  const char* downLabel = listCount == 0 ? "" : (fastScrollIsFront ? tr(STR_JUMP_DOWN) : tr(STR_DIR_DOWN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, upLabel, downLabel);
->>>>>>> feature/file-browser-fast-scroll
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
