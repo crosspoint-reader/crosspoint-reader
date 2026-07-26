@@ -18,6 +18,8 @@
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+// Fast-scroll jump size for long lists (see SETTINGS.fastScrollButtons).
+constexpr int FAST_SCROLL_JUMP = 5;
 }  // namespace
 
 void FileBrowserActivity::loadFiles() {
@@ -337,22 +339,40 @@ void FileBrowserActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextRelease([this, listSize] {
+  // Fast-scroll axis jumps FAST_SCROLL_JUMP items per press/repeat (clamped, no wrap); the other
+  // axis keeps single-item stepping, with continuous-hold falling back to a page jump. Using
+  // Up/Down/Left/Right directly (rather than the combined NavNext/NavPrevious) is what lets the two
+  // axes carry different behavior; FileBrowserActivity always renders Portrait, so there is no
+  // orientation-swap case to account for here (unlike the reader).
+  using Btn = MappedInputManager::Button;
+  const bool fastScrollIsFront = SETTINGS.fastScrollButtons == CrossPointSettings::FAST_SCROLL_FRONT;
+  const Btn fastNextBtn = fastScrollIsFront ? Btn::Right : Btn::Down;
+  const Btn fastPrevBtn = fastScrollIsFront ? Btn::Left : Btn::Up;
+  const Btn stepNextBtn = fastScrollIsFront ? Btn::Down : Btn::Right;
+  const Btn stepPrevBtn = fastScrollIsFront ? Btn::Up : Btn::Left;
+
+  fastScrollNavigator.onPressAndContinuous({fastNextBtn}, [this, listSize] {
+    selectorIndex = ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, FAST_SCROLL_JUMP);
+    requestUpdate();
+  });
+  fastScrollNavigator.onPressAndContinuous({fastPrevBtn}, [this, listSize] {
+    selectorIndex = ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, -FAST_SCROLL_JUMP);
+    requestUpdate();
+  });
+
+  buttonNavigator.onRelease({stepNextBtn}, [this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
-
-  buttonNavigator.onPreviousRelease([this, listSize] {
+  buttonNavigator.onRelease({stepPrevBtn}, [this, listSize] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
-
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+  buttonNavigator.onContinuous({stepNextBtn}, [this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
-
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+  buttonNavigator.onContinuous({stepPrevBtn}, [this, listSize, pageItems] {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
   });
@@ -440,8 +460,13 @@ void FileBrowserActivity::render(RenderLock&&) {
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
   const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
-                                            files.empty() ? "" : tr(STR_DIR_DOWN));
+  // Front-button hints (Left/Right) must match what they actually do: plain Up/Down when they
+  // single-step, or the fast-scroll jump label when SETTINGS.fastScrollButtons routes the 5-item
+  // jump to the front buttons instead of the side buttons.
+  const bool fastScrollIsFront = SETTINGS.fastScrollButtons == CrossPointSettings::FAST_SCROLL_FRONT;
+  const char* upLabel = files.empty() ? "" : (fastScrollIsFront ? tr(STR_JUMP_UP) : tr(STR_DIR_UP));
+  const char* downLabel = files.empty() ? "" : (fastScrollIsFront ? tr(STR_JUMP_DOWN) : tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, upLabel, downLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
