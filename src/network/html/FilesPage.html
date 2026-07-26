@@ -985,6 +985,20 @@
       color: var(--label-color);
       font-size: 0.9em;
     }
+    .contents-header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .show-hidden-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      color: var(--label-color);
+      font-size: 0.9em;
+      cursor: pointer;
+      user-select: none;
+    }
     #progress-container {
       display: none;
       margin-top: 10px;
@@ -1535,7 +1549,12 @@
 <div class="card">
   <div class="contents-header">
     <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
-    <span class="summary-inline" id="folder-summary"></span>
+    <div class="contents-header-right">
+      <label class="show-hidden-toggle" title="Show files and folders starting with a dot">
+        <input type="checkbox" id="showHiddenToggle"> Show hidden
+      </label>
+      <span class="summary-inline" id="folder-summary"></span>
+    </div>
   </div>
 
   <div id="file-table">
@@ -1849,6 +1868,14 @@
     if (leaf) document.title = leaf + ' - Files - CrossPoint Reader';
   }
 
+  // Show hidden (dot-prefixed) items; persisted per browser
+  const SHOW_HIDDEN_STORAGE_KEY = 'showHiddenFiles';
+  let showHidden = localStorage.getItem(SHOW_HIDDEN_STORAGE_KEY) === 'true';
+
+  function hiddenParam() {
+    return showHidden ? '&hidden=true' : '';
+  }
+
   // Network status monitoring
   let isNetworkOnline = navigator.onLine;
 
@@ -1953,6 +1980,18 @@
       });
     });
 
+    const showHiddenToggle = document.getElementById('showHiddenToggle');
+    showHiddenToggle.checked = showHidden;
+    showHiddenToggle.addEventListener('change', function() {
+      showHidden = this.checked;
+      localStorage.setItem(SHOW_HIDDEN_STORAGE_KEY, showHidden);
+      loadFileList();
+    });
+
+    loadFileList();
+  }
+
+  async function loadFileList() {
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
@@ -1997,7 +2036,7 @@
 
     let files = [];
     try {
-      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + hiddenParam() + '&_=' + Date.now());
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
@@ -3961,7 +4000,7 @@ function reserveAvailableUploadFilename(fileName, usedFileNames) {
 }
 
 async function fetchExistingUploadNames() {
-  const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+  const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + hiddenParam() + '&_=' + Date.now());
   if (!response.ok) {
     throw new Error(response.status + ' ' + response.statusText);
   }
@@ -5879,7 +5918,7 @@ function retryAllFailedUploads() {
 
     async function fetchFolders(path) {
       try {
-        const response = await fetch('/api/files?path=' + encodeURIComponent(path));
+        const response = await fetch('/api/files?path=' + encodeURIComponent(path) + hiddenParam());
         if (!response.ok) return [];
         return await response.json();
       } catch (e) {
