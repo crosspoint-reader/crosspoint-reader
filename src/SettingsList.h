@@ -390,6 +390,22 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
+    // Sleep clock peek needs the DS3231 RTC (X3 only): pressing the side
+    // page-turn button while asleep flashes the current time. Date format
+    // controls the date line on that clock face.
+    if (halClock.isAvailable()) {
+      for (auto it = v.begin(); it != v.end(); ++it) {
+        if (it->nameId == StrId::STR_SLEEP_COVER_FILTER) {
+          it = v.insert(it + 1, SettingInfo::Toggle(StrId::STR_SLEEP_CLOCK_PEEK, &CrossPointSettings::sleepClockPeek,
+                                                    "sleepClockPeek", StrId::STR_CAT_DISPLAY));
+          v.insert(it + 1, SettingInfo::Enum(
+                               StrId::STR_DATE_FORMAT, &CrossPointSettings::dateFormat,
+                               {StrId::STR_DATE_FORMAT_ISO, StrId::STR_DATE_FORMAT_DMY, StrId::STR_DATE_FORMAT_MDY},
+                               "dateFormat", StrId::STR_CAT_DISPLAY));
+          break;
+        }
+      }
+    }
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {
       // Insert after the short power button setting (end of Controls section)

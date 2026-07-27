@@ -5,8 +5,9 @@ class Bitmap;
 
 class SleepActivity final : public Activity {
  public:
-  explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false)
-      : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
+  explicit SleepActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool fromTimeout = false,
+                         bool quiet = false)
+      : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout), quiet(quiet) {}
   void onEnter() override;
 
  private:
@@ -18,4 +19,7 @@ class SleepActivity final : public Activity {
   void renderBlankSleepScreen() const;
 
   bool fromTimeout = false;
+  // Suppress the "Entering sleep" popup — used by the clock-peek restore path,
+  // which redraws the sleep screen while the user is already looking at it.
+  bool quiet = false;
 };

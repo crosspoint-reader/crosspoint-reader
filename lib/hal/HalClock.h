@@ -34,6 +34,13 @@ class HalClock {
   // Returns false if RTC is not available.
   bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
 
+  // Get the UTC calendar date (year full e.g. 2026, month 1-12, day 1-31).
+  // Returns false if the RTC is unavailable or its calendar was never set —
+  // firmware predating the SDK Rtc only wrote H:M:S, leaving the date at the
+  // 2000-01-01 power-on default, so the date is only trustworthy after a sync
+  // on current firmware (guarded by year < 2025).
+  bool getDate(uint16_t& year, uint8_t& month, uint8_t& day) const;
+
   // Sync the RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
   // Returns true if the RTC was successfully updated.

@@ -1,6 +1,7 @@
 #include "HalPowerManager.h"
 
 #include <BoardConfig.h>
+#include <InputManager.h>
 #include <Logging.h>
 #include <PowerManager.h>
 #include <WiFi.h>
@@ -57,7 +58,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
   // Otherwise, no change needed
 }
 
-void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+void HalPowerManager::startDeepSleep(HalGPIO& gpio, bool armClockPeek) const {
 #ifdef ENABLE_SERIAL_LOG
   // Tear down HWCDC so the host sees a clean disconnect and the peripheral
   // doesn't hold power domains that interfere with USB-powered GPIO wake.
@@ -85,6 +86,20 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   // deep-sleep command while its rail is still up (enterDeepSleep() in main.cpp
   // guarantees that ordering).
   freeink::PowerManager::powerDownRailsForSleep();
+
+  if (armClockPeek) {
+    // Clock peek (X3): wake on the side page-turn button as well as the power
+    // button. Ladder pin 2 idles near the rail via the ladder bias; only
+    // BTN_DOWN pulls it to ground, i.e. below the digital-LOW wake threshold.
+    // No pullup — it would skew the ladder's ADC bands. Both pins wake LOW on
+    // the X3, so a single combined mask covers them.
+    freeink::PowerManager::waitForPowerButtonRelease();
+    pinMode(InputManager::BUTTON_ADC_PIN_2, INPUT);
+    pinMode(InputManager::POWER_BUTTON_PIN, INPUT_PULLUP);
+    freeink::PowerManager::armWakeOnPins(
+        (1ULL << InputManager::POWER_BUTTON_PIN) | (1ULL << InputManager::BUTTON_ADC_PIN_2), /*wakeLow=*/true);
+    freeink::PowerManager::deepSleep();
+  }
 
   // Waits for the power button to be physically released (so holding it doesn't
   // immediately wake the device again), then arms the wake source and sleeps.

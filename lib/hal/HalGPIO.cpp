@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
+#include <soc/soc_caps.h>
 
 // Global HalGPIO instance
 HalGPIO gpio;
@@ -370,6 +371,22 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto resetReason = esp_reset_reason();
 
   const bool usbConnected = isUsbConnected();
+
+#if SOC_GPIO_SUPPORT_DEEPSLEEP_WAKEUP
+  // Clock peek: woken from deep sleep by ladder pin 2 — only BTN_DOWN (the
+  // side/next-page button) pulls that pin to ground, so only it can trigger the
+  // wake. Must be checked before the PowerButton mapping below — a GPIO wake
+  // with the power pin bit clear can only be the ladder. RISC-V targets only:
+  // the wakeup-status API doesn't exist on EXT1 (Xtensa) boards, and the peek
+  // is X3-only anyway.
+  if (wakeupCause == ESP_SLEEP_WAKEUP_GPIO) {
+    const uint64_t wakePins = esp_sleep_get_gpio_wakeup_status();
+    if ((wakePins & (1ULL << InputManager::BUTTON_ADC_PIN_2)) != 0 &&
+        (wakePins & (1ULL << InputManager::POWER_BUTTON_PIN)) == 0) {
+      return WakeupReason::ClockPeek;
+    }
+  }
+#endif
 
   if (resetReason == ESP_RST_DEEPSLEEP &&
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {

@@ -66,6 +66,21 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   return true;
 }
 
+bool HalClock::getDate(uint16_t& year, uint8_t& month, uint8_t& day) const {
+  if (!_available) return false;
+  Rtc::DateTime dt;
+  if (!_sdkRtc.now(dt)) return false;
+  // Firmware predating the SDK Rtc wrote only H:M:S, leaving the calendar at
+  // its 2000-01-01 power-on default — refuse rather than show a bogus date.
+  if (dt.year < 2025 || dt.month < 1 || dt.month > 12 || dt.day < 1 || dt.day > 31) {
+    return false;
+  }
+  year = dt.year;
+  month = dt.month;
+  day = dt.day;
+  return true;
+}
+
 bool HalClock::syncFromNTP() {
   if (!_available) return false;
 
