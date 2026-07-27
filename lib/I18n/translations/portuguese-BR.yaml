@@ -72,8 +72,8 @@ STR_CALIBRE_RECEIVING: "Recebendo: "
 STR_CALIBRE_RECEIVED: "Recebido: "
 STR_CALIBRE_INSTRUCTION_1: "1) Instale o plugin CrossPoint Reader"
 STR_CALIBRE_INSTRUCTION_2: "2) Esteja na mesma rede Wi-Fi"
-STR_CALIBRE_INSTRUCTION_3: '3) No Calibre: "Enviar ao dispositivo"'
-STR_CALIBRE_INSTRUCTION_4: '"Mantenha esta tela aberta durante o envio"'
+STR_CALIBRE_INSTRUCTION_3: "3) No Calibre: \"Enviar ao dispositivo\""
+STR_CALIBRE_INSTRUCTION_4: "\"Mantenha esta tela aberta durante o envio\""
 STR_CAT_DISPLAY: "Tela"
 STR_CAT_READER: "Leitor"
 STR_CAT_CONTROLS: "Controles"
