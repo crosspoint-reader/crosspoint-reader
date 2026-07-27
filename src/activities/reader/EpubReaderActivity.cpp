@@ -712,6 +712,16 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Wait until the first reader render has loaded the current section. This gives
+  // ProgressMapper an accurate local page count while keeping the sync trigger out
+  // of the render task, where replacing the current activity would be unsafe.
+  if (automaticProgressCheckPending && section) {
+    automaticProgressCheckPending = false;
+    if (KOREADER_STORE.getAutomaticProgressCheck() && launchKOReaderSync(true)) {
+      return;
+    }
+  }
+
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   {
     RenderLock lock(RenderLock::Mode::Try);
@@ -1353,16 +1363,15 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
   }
 }
 
-bool EpubReaderActivity::launchKOReaderSync() {
-  flushReaderSession();
-
+bool EpubReaderActivity::launchKOReaderSync(const bool automaticPull) {
   // Without a KOReader server the sync activity only brings the device online
-  // and drains that outbox; a failed join exits back to the reader with the
-  // events still queued.
+  // and drains the plugin-event outbox; an automatic check has nothing to do.
   if (!KOREADER_STORE.hasCredentials()) {
+    if (automaticPull) return false;
+    flushReaderSession();
     activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
         renderer, mappedInput, epub->getPath(), getCurrentPosition(), SavedProgressPosition{}, "",
-        /*pluginEventsOnly=*/true));
+        KOReaderSyncActivity::Mode::MANUAL, /*pluginEventsOnly=*/true));
     return true;
   }
 
@@ -1408,8 +1417,9 @@ bool EpubReaderActivity::launchKOReaderSync() {
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName)));
-  return true;
+      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName),
+      automaticPull ? KOReaderSyncActivity::Mode::AUTO_PULL : KOReaderSyncActivity::Mode::MANUAL));
+  return true;  // acted: launched the sync activity
 }
 
 void EpubReaderActivity::applyInitialOrientation() {
