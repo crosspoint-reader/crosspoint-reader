@@ -32,3 +32,4 @@ lib/EpdFont/scripts/output/
 /sdkconfig.default
 /sdkconfig.defaults
 sdkconfig.sticky
+flake.*
