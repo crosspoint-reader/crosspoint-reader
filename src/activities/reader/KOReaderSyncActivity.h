@@ -22,15 +22,24 @@
  */
 class KOReaderSyncActivity final : public Activity, private UiAppHost {
  public:
+  enum class Mode : uint8_t {
+    MANUAL,
+    AUTO_PULL,
+  };
+
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 CrossPointPosition localPosition, SavedProgressPosition localKoPos,
-                                std::string localChapterName);
+                                std::string localChapterName, Mode mode = Mode::MANUAL);
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return state == CONNECTING || state == SYNCING || state == UPLOADING; }
+  bool preventAutoSleep() override {
+    return state == CONNECTING || state == SYNCING || state == UPLOADING ||
+           (automaticPull() && state == SHOWING_RESULT);
+  }
+  bool isReaderActivity() const override { return automaticPull(); }
 
  private:
   enum State {
@@ -62,6 +71,7 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
 
   // Local progress as KOReader format (pre-computed before Epub was released)
   SavedProgressPosition localProgress;
+  Mode mode;
 
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
@@ -80,6 +90,7 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   void performSync();
   void performUpload();
   bool smartSyncEnabled() const;
+  bool automaticPull() const { return mode == Mode::AUTO_PULL; }
   void markAutoReturn();
   void completeAlreadySynced();
   void ensureEpubLoaded();

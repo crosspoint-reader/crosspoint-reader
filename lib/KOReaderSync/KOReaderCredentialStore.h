@@ -48,6 +48,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   bool syncClippings = false;                                       // Opt-in crosspoint-sync extension
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
   KOReaderServerType serverType = KOReaderServerType::CROSSPOINT;
+  bool automaticProgressCheck = false;  // Pull remote progress when a book is explicitly opened or resumed
 
   // Fixed-size to avoid vector growth on the settings edit path; an empty
   // name marks an unused slot.
@@ -111,6 +112,10 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Custom headers sent with every sync request (index must be < MAX_CUSTOM_HEADERS)
   void setCustomHeader(size_t index, const std::string& name, const std::string& value);
   const std::array<HttpHeader, MAX_CUSTOM_HEADERS>& getCustomHeaders() const { return customHeaders; }
+
+  // Automatic pull-only progress check
+  void setAutomaticProgressCheck(bool enabled);
+  bool getAutomaticProgressCheck() const { return automaticProgressCheck; }
 };
 
 // Helper macro to access credential store
