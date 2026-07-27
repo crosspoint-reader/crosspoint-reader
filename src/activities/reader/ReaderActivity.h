@@ -45,8 +45,8 @@ class ReaderActivity : public Activity {
   ~ReaderActivity() override = default;
 
   static std::unique_ptr<ReaderActivity> create(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                std::string path, bool allowFastInitialRefresh);
-
+                                                std::string path, bool allowFastInitialRefresh,
+                                                bool allowAutomaticProgressCheck = false);
   void onEnter() override;
   void onExit() override;
   void loop() override;

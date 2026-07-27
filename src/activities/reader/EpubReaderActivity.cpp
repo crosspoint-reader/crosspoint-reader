@@ -329,6 +329,16 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Wait until the first reader render has loaded the current section. This gives
+  // ProgressMapper an accurate local page count while keeping the sync trigger out
+  // of the render task, where replacing the current activity would be unsafe.
+  if (automaticProgressCheckPending && section) {
+    automaticProgressCheckPending = false;
+    if (KOREADER_STORE.getAutomaticProgressCheck() && launchKOReaderSync(true)) {
+      return;
+    }
+  }
+
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (section && !section->isBuilding() && !RenderLock::peek() && renderer.hasFrameBuffer() &&
       lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
@@ -896,8 +906,8 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
   }
 }
 
-bool EpubReaderActivity::launchKOReaderSync() {
-  if (!KOREADER_STORE.hasCredentials()) return false;
+bool EpubReaderActivity::launchKOReaderSync(const bool automaticPull) {
+  if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
@@ -937,8 +947,9 @@ bool EpubReaderActivity::launchKOReaderSync() {
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
       renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-      std::move(localChapterName), paragraphIndex));
-  return true;
+      std::move(localChapterName), paragraphIndex,
+      automaticPull ? KOReaderSyncActivity::Mode::AUTO_PULL : KOReaderSyncActivity::Mode::MANUAL));
+  return true;  // acted: launched the sync activity
 }
 
 void EpubReaderActivity::applyInitialOrientation() {

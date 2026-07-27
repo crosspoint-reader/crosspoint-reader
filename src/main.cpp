@@ -543,7 +543,7 @@ void setup() {
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
-    activityManager.goToReader(path, allowFastInitialReaderRefresh);
+    activityManager.goToReader(path, allowFastInitialReaderRefresh, true);
   }
 
   if (resume == BootResume::Silent) {

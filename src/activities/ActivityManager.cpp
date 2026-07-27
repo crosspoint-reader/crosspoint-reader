@@ -262,7 +262,8 @@ void ActivityManager::goToBrowser() {
   }
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
+void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh,
+                                 const bool allowAutomaticProgressCheck) {
   if (path.empty()) {
     goToFileBrowser("/");
     return;
@@ -278,7 +279,8 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
     return;
   }
 
-  auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
+  auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh,
+                                         allowAutomaticProgressCheck);
   if (activity) {
     replaceActivity(std::move(activity));
   }
