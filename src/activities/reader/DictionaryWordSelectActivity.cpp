@@ -263,16 +263,27 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Left) && selected > 0) {
+  // Match the reader menu's orientation-aware direction mapping.  When the
+  // controls follow the reader orientation and its axis is flipped, every
+  // directional role flips too: physical Up/Left become logical Down/Right
+  // and vice versa.  Keep this keyed to MappedInputManager's live-renderer
+  // check rather than the persisted setting, so the selector follows the
+  // orientation currently visible to the user.
+  const bool directionSwapped = mappedInput.isNavDirectionSwapped();
+  const auto previousWord = directionSwapped ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
+  const auto nextWord = directionSwapped ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  const auto up = directionSwapped ? MappedInputManager::Button::Down : MappedInputManager::Button::Up;
+  const auto down = directionSwapped ? MappedInputManager::Button::Up : MappedInputManager::Button::Down;
+
+  if (mappedInput.wasPressed(previousWord) && selected > 0) {
     selected--;
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) &&
-             selected + 1 < static_cast<int>(words.size())) {
+  } else if (mappedInput.wasPressed(nextWord) && selected + 1 < static_cast<int>(words.size())) {
     selected++;
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+  } else if (mappedInput.wasPressed(up)) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+  } else if (mappedInput.wasPressed(down)) {
     moveVertical(1);
   }
 }
