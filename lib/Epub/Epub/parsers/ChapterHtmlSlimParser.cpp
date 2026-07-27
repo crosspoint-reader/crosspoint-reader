@@ -234,19 +234,6 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 
   // flush the buffer
   partWordBuffer[partWordBufferIndex] = '\0';
-  if (partWordBufferIndex > 0) {
-    flowHasText = true;
-    if (!flowHasCjk) {
-      const auto* p = reinterpret_cast<const unsigned char*>(partWordBuffer);
-      uint32_t cp;
-      while ((cp = utf8NextCodepoint(&p))) {
-        if (utf8IsCjkCodepoint(cp)) {
-          flowHasCjk = true;
-          break;
-        }
-      }
-    }
-  }
   currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
   partWordBufferIndex = 0;
   nextWordContinues = false;
@@ -256,10 +243,6 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
-  // New block = new text flow. The <br> handler restores these afterwards — a
-  // <br> separates lines within a flow rather than ending it.
-  flowHasText = false;
-  flowHasCjk = false;
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -926,35 +909,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      // A <br> separates lines within a text flow rather than ending it: snapshot the
-      // flow context and restore it after the block switch (startNewTextBlock resets
-      // it), so consecutive <br>s classify the same way.
-      const bool savedFlowHasText = self->flowHasText;
-      const bool savedFlowHasCjk = self->flowHasCjk;
-      if (savedFlowHasText && savedFlowHasCjk && self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
-        // First <br> after flowed CJK text, where <br> is the book's paragraph
-        // separator (common CJK formatting): plain block boundary with vertical
-        // margins stripped so the container's spacing isn't re-applied at every
-        // <br> paragraph. The scene-break gap would otherwise fire between every
-        // paragraph and collapse page capacity. fromBrElement stays inert once text
-        // follows; a consecutive <br> (block still empty) takes the branch below,
-        // where startNewTextBlock sees the flagged empty block and injects the
-        // gap — so <br><br> scene breaks in CJK books keep their blank line.
-        BlockStyle brStyle = self->currentTextBlock->getBlockStyle().withoutTop().withoutBottom();
-        brStyle.fromBrElement = true;
-        self->startNewTextBlock(brStyle);
-      } else {
-        // Tag the new block so startNewTextBlock can inject a full line-height gap if
-        // the block remains empty (i.e. <br> is a section separator between paragraphs).
-        // If the block gets text added before the next block opens it becomes non-empty,
-        // goes through makePages() normally, and the flag has no effect (inline <br> case).
-        BlockStyle brStyle =
-            self->currentTextBlock ? self->currentTextBlock->getBlockStyle() : self->blockStyleStack.back();
-        brStyle.fromBrElement = true;
-        self->startNewTextBlock(brStyle);
+      // A <br> after text is a line break: start the next block with the container's
+      // vertical margins stripped, matching browsers, which never apply paragraph
+      // margins at a <br>. This is what keeps <br>-per-paragraph books (common CJK
+      // web-novel formatting) from re-adding container spacing at every paragraph
+      // and collapsing page capacity.
+      // A <br> on an empty block (consecutive <br>s, or a standalone <br> between
+      // blocks) is a scene-break separator: keep the container margins so deposited
+      // vertical spacing survives. Either way the block is tagged so that if it
+      // stays empty, startNewTextBlock injects a full line-height gap when the next
+      // block opens; once text follows the tag is inert.
+      BlockStyle brStyle =
+          self->currentTextBlock ? self->currentTextBlock->getBlockStyle() : self->blockStyleStack.back();
+      if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+        brStyle = brStyle.withoutTop().withoutBottom();
       }
-      self->flowHasText = savedFlowHasText;
-      self->flowHasCjk = savedFlowHasCjk;
+      brStyle.fromBrElement = true;
+      self->startNewTextBlock(brStyle);
     } else {
       self->currentCssStyle = cssStyle;
       const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle,
@@ -1364,15 +1335,6 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   if (headerOrBlockTag) {
     self->currentCssStyle.reset();
     self->updateEffectiveInlineStyle();
-
-    // Closing a real block element ends the text flow: a <br> that follows is a
-    // standalone separator between blocks, not a line break inside flowing text.
-    // <br> itself is excluded — its endElement fires immediately after the start
-    // handler restored the flow context, and must not clear it again.
-    if (strcmp(name, "br") != 0) {
-      self->flowHasText = false;
-      self->flowHasCjk = false;
-    }
 
     // br is self-closing and not a container — it doesn't push/pop the stack.
     if (strcmp(name, "br") != 0 && self->blockStyleStack.size() > 1) {
