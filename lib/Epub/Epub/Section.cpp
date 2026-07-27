@@ -45,7 +45,8 @@ namespace {
 //      flattened paragraphs with synthetic row/cell labels.
 // v42: Closing a block strips inherited vertical margins and padding.
 // v43: Paragraph base direction excludes direction changes from inline elements.
-constexpr uint8_t SECTION_FILE_VERSION = 43;
+// v44: Persist internal-link rectangles with each page for touch navigation.
+constexpr uint8_t SECTION_FILE_VERSION = 44;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

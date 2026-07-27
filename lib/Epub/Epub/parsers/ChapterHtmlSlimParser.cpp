@@ -344,7 +344,14 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fallbackTableRowToStacked();
   }
 
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset);
+  uint8_t linkId = 0;
+  if (insideFootnoteLink) {
+    if (!currentTextBlock->linkTargetMatches(currentFootnoteLinkId, currentFootnote.href)) {
+      currentFootnoteLinkId = currentTextBlock->addLinkTarget(currentFootnote.href);
+    }
+    linkId = currentFootnoteLinkId;
+  }
+  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId);
   if (insideTableCell && !tableRowStacked) {
     tableCellTextBytes += wordBytes;
     if (currentTextBlock->size() > MAX_GRID_TABLE_CELL_WORDS) {
@@ -1278,6 +1285,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
+      self->currentFootnoteLinkId = self->currentTextBlock ? self->currentTextBlock->addLinkTarget(href) : 0;
       strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
       self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
       self->currentFootnote.number[0] = '\0';
@@ -1854,6 +1862,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->pendingFootnotes.push_back({wordIndex, entry});
     }
     self->insideFootnoteLink = false;
+    self->currentFootnoteLinkId = 0;
   }
 
   // Leaving skip
@@ -2123,6 +2132,15 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
+  const int rubyShift = line->getRubyShift(renderer.getFontAscenderSize(fontId));
+  const int baseLineHeight = renderer.getLineHeight(fontId, lineCompression);
+  for (const auto& link : line->takeLinkSpans()) {
+    if (!currentPage->addLink(link.href, static_cast<int16_t>(xOffset + link.x),
+                              static_cast<int16_t>(currentPageNextY + rubyShift - link.topLift), link.width,
+                              static_cast<int16_t>(baseLineHeight + link.topLift))) {
+      LOG_DBG("EHP", "Dropped page link: %.48s", link.href);
+    }
+  }
   currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
   currentPageNextY += lineHeight;
 }
