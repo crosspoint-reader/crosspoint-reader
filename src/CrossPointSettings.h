@@ -51,7 +51,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     XTC_STATUS_BAR_MODE_COUNT
   };
 
-  enum STATUS_BAR_CLOCK_MODE { STATUS_BAR_CLOCK_HIDE = 0, STATUS_BAR_CLOCK_RIGHT = 1, STATUS_BAR_CLOCK_LEFT = 2 };
+  enum STATUS_BAR_CLOCK_MODE {
+    STATUS_BAR_CLOCK_HIDE = 0,
+    STATUS_BAR_CLOCK_RIGHT = 1,
+    STATUS_BAR_CLOCK_LEFT = 2,
+    STATUS_BAR_CLOCK_MODE_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -89,8 +94,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
-  // Font size options
-  enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
+  // Reader font size is a point size, not an enum slot — see fontPointSize.
+  // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE
+  // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
+  static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
+  static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
@@ -208,7 +216,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
   uint8_t fontFamily = NOTOSERIF;
-  uint8_t fontSize = MEDIUM;
+  // Point size of the reader font. Only sizes the active family actually ships
+  // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
+  // available size (and persists the snap) whenever the family changes.
+  uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
@@ -284,6 +295,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+
+  // Drop the SD font selection and fall back to the built-in family. The reader
+  // point size comes back into BUILTIN_READER_POINT_SIZES with it, since that is
+  // the only set a built-in family ships — otherwise the settings UI would keep
+  // offering a size nothing renders at. Both fields are persisted in one write.
+  void clearSdFontFamily();
 
   // Resolved status-bar composition. Consumers read the spec; only settings
   // editors read the raw fields.

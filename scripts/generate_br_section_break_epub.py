@@ -241,7 +241,7 @@ def build_epub(path):
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">test-epub-br-section-break</dc:identifier>
-    <dc:title>Test: br Section Break & li/p</dc:title>
+    <dc:title>Test: br Section Break &amp; li/p</dc:title>
     <dc:language>en</dc:language>
   </metadata>
   <manifest>

@@ -78,13 +78,15 @@ void DictionaryWordSelectActivity::extractWords() {
     if (!block || !block->valid()) continue;
 
     bool rowHasWords = false;
+    const int ascender = renderer.getFontAscenderSize(fontId);
+    const int rubyShift = block->getRubyShift(ascender);
     for (uint16_t i = 0; i < block->wordCount(); i++) {
       const char* text = block->wordText(i);
       if (!isSelectableToken(text)) continue;
 
       WordBox box;
       box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
-      box.y = static_cast<int16_t>(line->yPos + marginTop);
+      box.y = static_cast<int16_t>(line->yPos + marginTop + rubyShift);
       box.style = block->wordStyle(i);
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
@@ -159,11 +161,13 @@ void DictionaryWordSelectActivity::performLookup() {
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
   bool ok = dictOpenOk;
-  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield);
+  Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
+  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
 
   std::string definition;
   std::string headword;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword);
+  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
+  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -172,8 +176,46 @@ void DictionaryWordSelectActivity::performLookup() {
                            [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-  popup = ok ? Popup::NotFound : Popup::Error;
-  popupMsg = ok ? StrId::STR_DICT_NOT_FOUND : StrId::STR_DICT_ERROR;
+  // Name the failure: a genuine miss is "Not found"; a word that WAS found but
+  // couldn't be read is a real error — and we distinguish decompression from a
+  // low-memory allocation from a generic read error.
+  if (!ok) {
+    popup = Popup::Error;
+    // An index build allocates a scan buffer, so it fails the same way lookups
+    // do on a fragmented heap — name that rather than a generic error.
+    switch (indexResult) {
+      case Dictionary::IndexResult::LowMemory:
+        popupMsg = StrId::STR_DICT_LOW_MEMORY;
+        break;
+      case Dictionary::IndexResult::ReadError:
+        popupMsg = StrId::STR_DICT_READ_FAILED;
+        break;
+      case Dictionary::IndexResult::Ok:
+      default:
+        popupMsg = StrId::STR_DICT_ERROR;  // dict.open() failed, not the index
+        break;
+    }
+  } else {
+    switch (result) {
+      case Dictionary::LookupResult::Decompress:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_DECOMPRESS_ERROR;
+        break;
+      case Dictionary::LookupResult::LowMemory:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_LOW_MEMORY;
+        break;
+      case Dictionary::LookupResult::ReadError:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_READ_FAILED;
+        break;
+      case Dictionary::LookupResult::NotFound:
+      default:
+        popup = Popup::NotFound;
+        popupMsg = StrId::STR_DICT_NOT_FOUND;
+        break;
+    }
+  }
   popupTime = millis();
   requestUpdate();
 }
