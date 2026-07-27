@@ -89,6 +89,17 @@ class GfxRenderer {
   // call stays single-font (consistent bit depth, metrics, wrapping).
   int resolveTextFontId(int fontId, const char* text, EpdFontFamily::Style style) const;
 
+  // Batch-load `text`'s glyphs into an SD-card font's resident mini tables
+  // before a per-glyph measure/draw loop runs. Called when resolveTextFontId
+  // redirected a string to the SD fallback: UI screens (file browser, home)
+  // draw those strings without the reader's PrewarmScope, and every glyph
+  // would otherwise fault through SdCardFont::onGlyphMiss — one .cpfont file
+  // open + seek + read per glyph, per redraw, through an 8-slot overflow ring
+  // (#2725). One prewarm per string costs a single file open; re-measuring or
+  // re-drawing resident glyphs is a RAM-only subset check. No-op for built-in
+  // fonts.
+  void ensureSdGlyphsResident(int fontId, const char* text, EpdFontFamily::Style style) const;
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
