@@ -84,6 +84,9 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
 
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
+  // Headless mode used by automatic progress checks: try only the last saved
+  // network, then return failure without scanning or showing the picker.
+  const bool autoConnectOnly;
 
   // Whether we are attempting to auto-connect or auto-scan saved networks.
   bool autoConnecting = false;
@@ -101,6 +104,7 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   // Connection timeout
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   static constexpr unsigned long AUTO_CONNECTION_TIMEOUT_MS = 7000;
+  static constexpr unsigned long AUTO_ONLY_CONNECTION_TIMEOUT_MS = 6000;
   unsigned long connectionStartTime = 0;
 
   // The UiAppHost app hosts the network list and the save/forget prompts
@@ -141,7 +145,8 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   void onComplete(bool connected);
 
  public:
-  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true);
+  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true,
+                                 bool autoConnectOnly = false);
   void onEnter() override;
   void onExit() override;
   void loop() override;

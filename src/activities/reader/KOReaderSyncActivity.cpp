@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cassert>
 
+#include "AutomaticProgressCheckPolicy.h"
 #include "Epub/Section.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
@@ -49,7 +50,7 @@ const char* matchMethodName(const DocumentMatchMethod method) {
 
 KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const std::string& epubPath, CrossPointPosition localPosition,
-                                           SavedProgressPosition localKoPos, std::string localChapterName)
+                                           SavedProgressPosition localKoPos, std::string localChapterName, Mode mode)
     : Activity("KOReaderSync", renderer, mappedInput),
       UiAppHost(renderer),
       epubPath(epubPath),
@@ -57,7 +58,8 @@ KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputMan
       localPosition(localPosition),
       remoteProgress{},
       remotePosition{},
-      localProgress(std::move(localKoPos)) {}
+      localProgress(std::move(localKoPos)),
+      mode(mode) {}
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
@@ -97,7 +99,7 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
 void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
 
 bool KOReaderSyncActivity::smartSyncEnabled() const {
-  return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
+  return !automaticPull() && KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
 }
 
 void KOReaderSyncActivity::markAutoReturn() { autoReturnAt = millis() + AUTO_RETURN_DELAY_MS; }
@@ -141,6 +143,10 @@ void KOReaderSyncActivity::performSync() {
   const DocumentMatchMethod primaryMethod = KOREADER_STORE.getMatchMethod();
   documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod);
   if (documentHash.empty()) {
+    if (automaticPull()) {
+      returnToReader();
+      return;
+    }
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -192,6 +198,11 @@ void KOReaderSyncActivity::performSync() {
   }
 
   if (result == KOReaderSyncClient::NOT_FOUND) {
+    if (automaticPull()) {
+      returnToReader();
+      return;
+    }
+
     if (smartSyncEnabled()) {
       LOG_DBG("KOSync", "Smart sync: no remote progress found for known document hashes; uploading local %.6f",
               localProgress.percentage);
@@ -210,6 +221,11 @@ void KOReaderSyncActivity::performSync() {
   }
 
   if (result != KOReaderSyncClient::OK) {
+    if (automaticPull()) {
+      returnToReader();
+      return;
+    }
+
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -219,10 +235,29 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
+  if (automaticPull()) {
+    const auto automaticDecision =
+        AutomaticProgressCheckPolicy::decide(localProgress.percentage, remoteProgress.percentage);
+    if (automaticDecision == AutomaticProgressDecision::INVALID_REMOTE) {
+      LOG_ERR("KOSync", "Ignoring invalid remote percentage: %.6f", remoteProgress.percentage);
+      returnToReader();
+      return;
+    }
+
+    if (automaticDecision != AutomaticProgressDecision::PROMPT) {
+      returnToReader();
+      return;
+    }
+  }
+
   // Epub was released before sync to free RAM for the TLS handshake — reload it now.
   hasRemoteProgress = true;
   ensureEpubLoaded();
   if (!epub) {
+    if (automaticPull()) {
+      returnToReader();
+      return;
+    }
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -269,6 +304,21 @@ void KOReaderSyncActivity::performSync() {
 
   const ProgressComparison comparison =
       compareProgress(localPosition, localProgress.percentage, remotePosition, remoteProgress.percentage);
+
+  if (automaticPull()) {
+    // The prompt can remain visible while the user decides; drop the radio now
+    // instead of keeping WiFi powered for an interaction that needs no network.
+    WiFi.disconnect(false);
+    esp_wifi_stop();
+    {
+      RenderLock lock(*this);
+      state = SHOWING_RESULT;
+      selectedOption = 0;  // Resume remotely by default.
+    }
+    requestUpdate(true);
+    return;
+  }
+
   if (smartSyncEnabled()) {
     LOG_DBG("KOSync", "Smart decision: doc=%s result=%d local=%.6f remote=%.6f remoteXpath=%s mapped=%d/%d",
             primaryHash.c_str(), static_cast<int>(comparison), localProgress.percentage, remoteProgress.percentage,
@@ -388,6 +438,10 @@ void KOReaderSyncActivity::onEnter() {
 
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
+    if (automaticPull()) {
+      returnToReader();
+      return;
+    }
     state = NO_CREDENTIALS;
     requestUpdate();
     return;
@@ -405,7 +459,7 @@ void KOReaderSyncActivity::onEnter() {
 
   // Launch WiFi selection subactivity
   LOG_DBG("KOSync", "Launching WifiSelectionActivity...");
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, true, automaticPull()),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
@@ -415,6 +469,10 @@ void KOReaderSyncActivity::onExit() {
   if (wifiActivated) {
     WiFi.disconnect(false);
     delay(30);
+    if (automaticPull()) {
+      esp_wifi_stop();
+      return;
+    }
     silentRestartToReader();
   }
 }
@@ -422,6 +480,8 @@ void KOReaderSyncActivity::onExit() {
 void KOReaderSyncActivity::chooseResultOption() {
   if (selectedOption == 0) {
     saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+  } else if (automaticPull()) {
+    returnToReader();
   } else {
     performUpload();
   }
@@ -531,10 +591,10 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
     // users and tap works either way.
     screen.spacer(screen.theme().spaceMd);
     fui::ListItem actions[2];
-    actions[0].label = tr(STR_APPLY_REMOTE);
+    actions[0].label = automaticPull() ? tr(STR_RESUME) : tr(STR_APPLY_REMOTE);
     actions[0].icon = fui::bitmapFromIcon(icon_download_24);
     actions[0].actionValue = 0;
-    actions[1].label = tr(STR_UPLOAD_LOCAL);
+    actions[1].label = automaticPull() ? tr(STR_NO) : tr(STR_UPLOAD_LOCAL);
     actions[1].icon = fui::bitmapFromIcon(icon_upload_24);
     actions[1].actionValue = 1;
     fui::ListProps actionProps;
@@ -596,6 +656,13 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
 }
 
 void KOReaderSyncActivity::render(RenderLock&&) {
+  // Automatic checks preserve the existing e-ink page unless there is an
+  // actionable remote-ahead result. The render task still completes normally,
+  // so requestUpdateAndWait() remains safe without sending pixels to the panel.
+  if (automaticPull() && state != SHOWING_RESULT) {
+    return;
+  }
+
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();

@@ -548,7 +548,7 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path, false, true); }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
