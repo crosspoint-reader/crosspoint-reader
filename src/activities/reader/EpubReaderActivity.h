@@ -11,6 +11,7 @@
 
 #include "BookmarkEntry.h"
 #include "EpubReaderMenuActivity.h"
+#include "KOReaderSyncActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
@@ -104,6 +105,9 @@ class EpubReaderActivity final : public ReaderActivity {
   int lastSavedSpineIndex = -1;
   int lastSavedPage = -1;
   int lastSavedPageCount = -1;
+  int sessionStartSpineIndex = -1;
+  int sessionStartPage = -1;
+  bool sessionStartPositionCaptured = false;
 
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
   static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
@@ -152,7 +156,15 @@ class EpubReaderActivity final : public ReaderActivity {
   void openDictionaryWordSelect();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
-  bool launchKOReaderSync(bool automaticPull = false);
+  bool launchKOReaderSync(
+      KOReaderSyncActivity::Mode mode = KOReaderSyncActivity::Mode::MANUAL,
+      KOReaderSyncActivity::CompletionTarget completionTarget = KOReaderSyncActivity::CompletionTarget::READER);
+  bool tryAutomaticProgressUpload(KOReaderSyncActivity::CompletionTarget completionTarget);
+  void leaveReader(KOReaderSyncActivity::CompletionTarget completionTarget);
+  void leaveToHome() override { leaveReader(KOReaderSyncActivity::CompletionTarget::HOME); }
+  void leaveToFileBrowser(const std::string&) override {
+    leaveReader(KOReaderSyncActivity::CompletionTarget::FILE_BROWSER);
+  }
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
@@ -195,6 +207,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void onReturnFromEndOfBook() override;
 
   bool skipLoopDelay() override;
+  bool prepareForSleep(bool fromTimeout) override;
+  bool handleHomeGesture() override;
 
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;

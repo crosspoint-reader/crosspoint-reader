@@ -25,13 +25,23 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   enum class Mode : uint8_t {
     MANUAL,
     AUTO_PULL,
+    AUTO_PUSH,
+  };
+
+  enum class CompletionTarget : uint8_t {
+    READER,
+    HOME,
+    FILE_BROWSER,
+    SLEEP,
+    SLEEP_TIMEOUT,
   };
 
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
-                                int currentSpineIndex, int currentPage, int totalPagesInSpine,
-                                SavedProgressPosition localKoPos, std::string localChapterName,
+                                const CrossPointPosition& localPosition, SavedProgressPosition localKoPos,
+                                std::string localChapterName,
                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt,
-                                Mode mode = Mode::MANUAL);
+                                Mode mode = Mode::MANUAL,
+                                CompletionTarget completionTarget = CompletionTarget::READER);
 
   void onEnter() override;
   void onExit() override;
@@ -41,7 +51,7 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
     return state == CONNECTING || state == SYNCING || state == UPLOADING ||
            (automaticPull() && state == SHOWING_RESULT);
   }
-  bool isReaderActivity() const override { return automaticPull(); }
+  bool isReaderActivity() const override { return automaticMode(); }
 
  private:
   enum State {
@@ -77,6 +87,7 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   // Local progress as KOReader format (pre-computed before Epub was released)
   SavedProgressPosition localProgress;
   Mode mode;
+  CompletionTarget completionTarget;
 
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
@@ -86,21 +97,26 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1200;
 
   // Tracks whether this session activated WiFi. Set in onEnter past the credentials
-  // check; checked in onExit to decide whether to silent-reboot. Can't rely on
-  // WiFi.getMode() because performUpload() calls esp_wifi_stop() on the way out,
-  // which makes WiFi.getMode() return WIFI_MODE_NULL.
+  // check; checked in onExit to decide whether to silent-reboot.
   bool wifiActivated = false;
+  uint32_t automaticOperationStartedAt = 0;
 
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
+  KOReaderSyncClient::Error getProgress(const std::string& hash, KOReaderProgress& progress);
+  KOReaderSyncClient::Error updateProgress(const KOReaderProgress& progress);
+  bool automaticOperationDeadlineExpired() const;
+  uint32_t automaticOperationRemainingMs() const;
   bool smartSyncEnabled() const;
   bool automaticPull() const { return mode == Mode::AUTO_PULL; }
+  bool automaticPush() const { return mode == Mode::AUTO_PUSH; }
+  bool automaticMode() const { return mode != Mode::MANUAL; }
   void markAutoReturn();
   void completeAlreadySynced();
   void ensureEpubLoaded();
   void saveProgressAndReturn(int spineIndex, int page);
-  void returnToReader();
+  void completeFlow();
 
   // The UiAppHost app hosts the interactive states (SHOWING_RESULT compare
   // rows and the NO_REMOTE_PROGRESS upload prompt) so they get themed

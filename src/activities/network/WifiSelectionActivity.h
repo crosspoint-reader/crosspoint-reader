@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,12 @@ enum class WifiSelectionState {
   SAVE_PROMPT,        // Asking user if they want to save the password
   CONNECTION_FAILED,  // Connection failed
   FORGET_PROMPT       // Asking user if they want to forget the network
+};
+
+enum class WifiAutoConnectMode : uint8_t {
+  INTERACTIVE,
+  HEADLESS_QUICK,
+  HEADLESS_BACKGROUND,
 };
 
 /**
@@ -84,9 +91,12 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
 
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
-  // Headless mode used by automatic progress checks: try only the last saved
-  // network, then return failure without scanning or showing the picker.
-  const bool autoConnectOnly;
+  // Automatic progress checks never show the network picker. Foreground checks
+  // use a short single attempt; background checks get a longer bounded window.
+  const WifiAutoConnectMode autoConnectMode;
+  // Automatic uploads pass their operation start so WiFi and HTTP share one
+  // application-level budget. Other modes start their connection clock on entry.
+  const std::optional<uint32_t> backgroundOperationStartedAt;
 
   // Whether we are attempting to auto-connect or auto-scan saved networks.
   bool autoConnecting = false;
@@ -96,6 +106,8 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
 
   // Saved SSIDs already attempted during the current auto-connect session.
   std::vector<std::string> autoAttemptedSsids;
+  unsigned long autoConnectSessionStartTime = 0;
+  unsigned long backgroundConnectionAttemptTimeoutMs = 0;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
@@ -104,7 +116,7 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   // Connection timeout
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   static constexpr unsigned long AUTO_CONNECTION_TIMEOUT_MS = 7000;
-  static constexpr unsigned long AUTO_ONLY_CONNECTION_TIMEOUT_MS = 6000;
+  static constexpr unsigned long HEADLESS_QUICK_CONNECTION_TIMEOUT_MS = 6000;
   unsigned long connectionStartTime = 0;
 
   // The UiAppHost app hosts the network list and the save/forget prompts
@@ -136,17 +148,24 @@ class WifiSelectionActivity final : public Activity, private UiAppHost {
   void attemptConnection();
   void checkConnectionStatus();
   bool tryAutoConnectCredential(const WifiCredential& cred);
+  bool tryNextSavedCredential();
   bool tryNextSavedNetworkFromScan();
+  bool hasUnattemptedSavedCredential() const;
   void handleAutoConnectFailure();
   void showNetworkListFromAutoConnect();
   bool hasAttemptedAutoSsid(const std::string& ssid) const;
+  bool autoConnectOnly() const { return autoConnectMode != WifiAutoConnectMode::INTERACTIVE; }
+  bool backgroundAutoConnect() const { return autoConnectMode == WifiAutoConnectMode::HEADLESS_BACKGROUND; }
+  bool backgroundAutoConnectExpired() const;
+  unsigned long connectionTimeoutMs() const;
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
   void onComplete(bool connected);
 
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true,
-                                 bool autoConnectOnly = false);
+                                 WifiAutoConnectMode autoConnectMode = WifiAutoConnectMode::INTERACTIVE,
+                                 std::optional<uint32_t> backgroundOperationStartedAt = std::nullopt);
   void onEnter() override;
   void onExit() override;
   void loop() override;

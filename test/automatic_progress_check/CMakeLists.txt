@@ -1,5 +1,7 @@
 add_executable(AutomaticProgressCheckPolicyTest
   AutomaticProgressCheckPolicyTest.cpp
+  AutomaticProgressUploadPolicyTest.cpp
+  AutomaticWifiConnectionPolicyTest.cpp
   MappedProgressPositionPolicyTest.cpp
 )
 

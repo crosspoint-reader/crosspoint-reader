@@ -512,6 +512,15 @@ To check for newer remote progress automatically, enable **Settings -> System ->
 - Automatic checks never upload local progress. Manual **Sync Progress** remains available with the configured **Sync Behavior**.
 - Wi-Fi is disconnected and the radio is turned off when the check finishes or while the confirmation prompt is shown.
 
+To upload newer local progress automatically, enable **Settings -> System -> KOReader Sync -> Automatic progress upload**. This is a separate opt-in setting and defaults to **Off**.
+
+- After the reading position changes, leaving an EPUB for Home or the file browser, or putting the device to sleep, starts one silent sync attempt with a 15-second application-level network budget.
+- CrossPoint tries the last connected saved Wi-Fi network first, then other saved networks while time remains. A slow first network is capped so it cannot consume the entire attempt.
+- CrossPoint fetches remote progress first. It uploads only when no remote progress exists or local progress is meaningfully ahead of the progress returned by that check.
+- The budget is shared by Wi-Fi connection, remote progress checks, and upload. When sleeping, the configured sleep screen appears immediately and deep sleep begins when the attempt finishes. A stalled low-level TLS connection may take longer than the application budget because the bundled networking SDK applies its own connection timeout.
+- Connection and server failures are silent. Wi-Fi is disconnected and the radio is turned off after the attempt.
+- Manual **Sync Progress** remains available when automatic upload is enabled.
+
 ### 3.7 Sleep Screen
 
 The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
