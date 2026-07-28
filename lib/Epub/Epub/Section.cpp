@@ -941,9 +941,17 @@ std::optional<uint16_t> Section::getPageForImageSource(const std::string& source
   serialization::readPod(cacheFile, storedPageCount);
   if (storedPageCount == 0) return std::nullopt;
 
+  uint32_t lutOffset;
+  cacheFile.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  serialization::readPod(cacheFile, lutOffset);
+
   uint16_t matched = 0;
   for (uint16_t pageIndex = 0; pageIndex < storedPageCount; pageIndex++) {
-    const auto page = loadPageAt(pageIndex);
+    cacheFile.seek(lutOffset + sizeof(uint32_t) * pageIndex);
+    uint32_t pageOffset;
+    serialization::readPod(cacheFile, pageOffset);
+    cacheFile.seek(pageOffset);
+    const auto page = Page::deserialize(cacheFile);
     if (!page) continue;
     for (const auto& element : page->elements) {
       if (element->getTag() != TAG_PageImage) continue;

@@ -715,6 +715,7 @@ class ImageXPathResolver final : public Print {
     if (!parser) return;
     XML_SetUserData(parser, this);
     XML_SetElementHandler(parser, &ImageXPathResolver::startElement, &ImageXPathResolver::endElement);
+    XML_SetDefaultHandlerExpand(parser, &ImageXPathResolver::defaultHandlerExpand);
   }
 
   ~ImageXPathResolver() override { destroyXmlParser(parser); }
@@ -789,6 +790,8 @@ class ImageXPathResolver final : public Print {
   static void XMLCALL endElement(void* userData, const XML_Char* name) {
     static_cast<ImageXPathResolver*>(userData)->onEndElement(name);
   }
+
+  static void XMLCALL defaultHandlerExpand(void*, const XML_Char*, int) {}
 
   bool pathMatches() const {
     if (static_cast<int>(path.size()) != stepCount) return false;
@@ -1045,6 +1048,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
         Section tempSection(epub, result.spineIndex, renderer);
         if (const auto imagePage = tempSection.getPageForImageSource(imageSource, imageOccurrence)) {
           if (const auto cachedCount = tempSection.getCachedPageCount()) result.totalPages = *cachedCount;
+          result.totalPages = std::max(result.totalPages, static_cast<int>(*imagePage) + 1);
           result.pageNumber = *imagePage;
           LOG_DBG("PM", "Image XPath %s source=%s occurrence=%u -> page=%d/%d", koPos.xpath.c_str(),
                   imageSource.c_str(), imageOccurrence, result.pageNumber, result.totalPages);
@@ -1087,6 +1091,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
         Section tempSection(epub, result.spineIndex, renderer);
         if (const auto paragraphPage = tempSection.getPageForParagraphIndex(paragraphIndex)) {
           if (const auto cachedCount = tempSection.getCachedPageCount()) result.totalPages = *cachedCount;
+          result.totalPages = std::max(result.totalPages, static_cast<int>(*paragraphPage) + 1);
           result.paragraphIndex = paragraphIndex;
           result.hasParagraphIndex = true;
           result.pageNumber = *paragraphPage;
