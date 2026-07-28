@@ -722,7 +722,7 @@ class ImageXPathResolver final : public Print {
   size_t write(uint8_t c) override { return write(&c, 1); }
 
   size_t write(const uint8_t* buffer, const size_t size) override {
-    if (!parser || !parseOk || foundImage) return size;
+    if (!parser || !parseOk || foundTarget) return size;
     if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(size), XML_FALSE) != XML_STATUS_OK) {
       if (XML_GetErrorCode(parser) != XML_ERROR_ABORTED) {
         LOG_DBG("PM", "Image XPath XML parse failed: %s", XML_ErrorString(XML_GetErrorCode(parser)));
@@ -734,16 +734,18 @@ class ImageXPathResolver final : public Print {
 
   bool finish() {
     if (!parser || !parseOk) return false;
-    if (!foundImage && XML_Parse(parser, "", 0, XML_TRUE) != XML_STATUS_OK) {
+    if (!foundTarget && XML_Parse(parser, "", 0, XML_TRUE) != XML_STATUS_OK) {
       LOG_DBG("PM", "Image XPath XML final parse failed: %s", XML_ErrorString(XML_GetErrorCode(parser)));
       parseOk = false;
     }
     return parseOk;
   }
 
+  bool matched() const { return foundTarget; }
   bool found() const { return foundImage && !source.empty() && occurrence > 0; }
   const std::string& imageSource() const { return source; }
   uint16_t imageOccurrence() const { return occurrence; }
+  uint16_t paragraphIndex() const { return targetParagraph; }
 
  private:
   struct ChildCount {
@@ -811,18 +813,27 @@ class ImageXPathResolver final : public Print {
     path.push_back({name, index});
     parents.emplace_back();
 
-    if (strcasecmp(name.c_str(), "img") != 0) return;
-    const std::string candidateSource = imageSourceFromAttributes(attrs);
-    uint16_t candidateOccurrence = 1;
-    for (const auto& earlierSource : imageSources) {
-      if (earlierSource == candidateSource) candidateOccurrence++;
-    }
-    if (!candidateSource.empty()) imageSources.push_back(candidateSource);
+    if (strcasecmp(name.c_str(), "p") == 0) paragraphCount++;
 
-    if (pathMatches() && !candidateSource.empty()) {
-      source = candidateSource;
-      occurrence = candidateOccurrence;
-      foundImage = true;
+    std::string candidateSource;
+    uint16_t candidateOccurrence = 0;
+    if (strcasecmp(name.c_str(), "img") == 0) {
+      candidateSource = imageSourceFromAttributes(attrs);
+      candidateOccurrence = 1;
+      for (const auto& earlierSource : imageSources) {
+        if (earlierSource == candidateSource) candidateOccurrence++;
+      }
+      if (!candidateSource.empty()) imageSources.push_back(candidateSource);
+    }
+
+    if (pathMatches()) {
+      targetParagraph = paragraphCount;
+      foundTarget = true;
+      if (!candidateSource.empty()) {
+        source = std::move(candidateSource);
+        occurrence = candidateOccurrence;
+        foundImage = true;
+      }
       XML_StopParser(parser, XML_FALSE);
     }
   }
@@ -849,7 +860,10 @@ class ImageXPathResolver final : public Print {
   int stepCount;
   bool parseOk = true;
   bool insideBody = false;
+  bool foundTarget = false;
   bool foundImage = false;
+  uint16_t paragraphCount = 0;
+  uint16_t targetParagraph = 0;
   std::vector<ParentState> parents;
   std::vector<PathNode> path;
   std::vector<std::string> imageSources;
@@ -869,6 +883,14 @@ bool resolveImageXPath(const std::shared_ptr<Epub>& epub, const int spineIndex, 
   source = resolver.imageSource();
   occurrence = resolver.imageOccurrence();
   return true;
+}
+
+bool resolveXPathParagraph(const std::shared_ptr<Epub>& epub, const int spineIndex, const XPathStep* steps,
+                           const int stepCount, uint16_t& paragraphIndex) {
+  ImageXPathResolver resolver(steps, stepCount);
+  if (!streamSpine(epub, spineIndex, resolver) || !resolver.finish() || !resolver.matched()) return false;
+  paragraphIndex = resolver.paragraphIndex();
+  return paragraphIndex > 0;
 }
 
 std::string resolveImageSource(const std::shared_ptr<Epub>& epub, const int spineIndex, std::string source) {
@@ -1059,6 +1081,21 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
               xpathSteps[xpathStepCount - 1].tag, xpathSteps[xpathStepCount - 1].siblingIndex, xpathTextNode, xpathChar,
               intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
               result.hasLiIndex ? static_cast<int>(result.liIndex) : 0, anchorId ? anchorId : "none");
+    } else {
+      uint16_t paragraphIndex = 0;
+      if (resolveXPathParagraph(epub, result.spineIndex, xpathSteps, xpathStepCount, paragraphIndex)) {
+        Section tempSection(epub, result.spineIndex, renderer);
+        if (const auto paragraphPage = tempSection.getPageForParagraphIndex(paragraphIndex)) {
+          if (const auto cachedCount = tempSection.getCachedPageCount()) result.totalPages = *cachedCount;
+          result.paragraphIndex = paragraphIndex;
+          result.hasParagraphIndex = true;
+          result.pageNumber = *paragraphPage;
+          LOG_DBG("PM", "XPath fallback %s paragraph %u -> page=%d/%d", koPos.xpath.c_str(), paragraphIndex,
+                  result.pageNumber, result.totalPages);
+          return result;
+        }
+        LOG_DBG("PM", "XPath fallback %s paragraph %u not found in section LUT", koPos.xpath.c_str(), paragraphIndex);
+      }
     }
   } else if (xpathP > 0) {
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
