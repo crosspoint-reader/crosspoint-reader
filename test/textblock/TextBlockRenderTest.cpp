@@ -20,22 +20,12 @@
 #include <vector>
 
 #include "Epub/blocks/TextBlock.h"
+#include "TestHelpers.h"
 
 namespace {
 
-using Style = EpdFontFamily::Style;
 constexpr int GW = GfxRenderer::GLYPH_W;
 constexpr int ASC = GfxRenderer::ASCENDER;
-
-// Build a TextBlock from words at explicit x positions, with no focus-reading
-// annotations. `ruby` may be empty (the common, ruby-less case).
-std::unique_ptr<TextBlock> makeBlock(const std::vector<std::string>& words, const std::vector<int16_t>& xpos,
-                                     const std::vector<Style>& styles, const std::vector<std::string>& ruby = {}) {
-  return std::make_unique<TextBlock>(words, xpos, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, BlockStyle(),
-                                     ruby);
-}
-
-std::vector<Style> regularStyles(const size_t n) { return std::vector<Style>(n, EpdFontFamily::REGULAR); }
 
 // ---------------------------------------------------------------------------
 // Ruby-less lines: the overwhelmingly common case.
