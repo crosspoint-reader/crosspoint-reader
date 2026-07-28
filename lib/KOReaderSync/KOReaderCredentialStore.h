@@ -48,7 +48,8 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   bool syncClippings = false;                                       // Opt-in crosspoint-sync extension
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
   KOReaderServerType serverType = KOReaderServerType::CROSSPOINT;
-  bool automaticProgressCheck = false;  // Pull remote progress when a book is explicitly opened or resumed
+  bool automaticProgressCheck = false;   // Pull remote progress when a book is explicitly opened or resumed
+  bool automaticProgressUpload = false;  // Push newer local progress when leaving a book
 
   // Fixed-size to avoid vector growth on the settings edit path; an empty
   // name marks an unused slot.
@@ -116,6 +117,10 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Automatic pull-only progress check
   void setAutomaticProgressCheck(bool enabled);
   bool getAutomaticProgressCheck() const { return automaticProgressCheck; }
+
+  // Automatic local-ahead upload when leaving a book
+  void setAutomaticProgressUpload(bool enabled);
+  bool getAutomaticProgressUpload() const { return automaticProgressUpload; }
 };
 
 // Helper macro to access credential store

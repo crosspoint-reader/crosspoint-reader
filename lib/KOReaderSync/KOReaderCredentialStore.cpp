@@ -35,6 +35,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
     headerObj["value_obf"] = obfuscation::obfuscateToBase64(header.value);
   }
   doc["automaticProgressCheck"] = getAutomaticProgressCheck();
+  doc["automaticProgressUpload"] = getAutomaticProgressUpload();
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
@@ -107,6 +108,7 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
   setAutomaticProgressCheck(doc["automaticProgressCheck"] | false);
+  setAutomaticProgressUpload(doc["automaticProgressUpload"] | false);
 
   if (needsResave) {
     LOG_DBG("KRS", "Resaving KOReader credentials to update format");
@@ -205,4 +207,9 @@ void KOReaderCredentialStore::setCustomHeader(size_t index, const std::string& n
 void KOReaderCredentialStore::setAutomaticProgressCheck(const bool enabled) {
   automaticProgressCheck = enabled;
   LOG_DBG("KRS", "Set automatic progress check: %s", enabled ? "On" : "Off");
+}
+
+void KOReaderCredentialStore::setAutomaticProgressUpload(const bool enabled) {
+  automaticProgressUpload = enabled;
+  LOG_DBG("KRS", "Set automatic progress upload: %s", enabled ? "On" : "Off");
 }

@@ -322,6 +322,14 @@ void forEachBaseSetting(SettingVisitor visit, void* context) {
       },
       "koAutomaticProgressCheck", StrId::STR_KOREADER_SYNC));
   emit(SettingInfo::DynamicEnum(
+      StrId::STR_AUTOMATIC_PROGRESS_UPLOAD, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+      [] { return static_cast<uint8_t>(KOREADER_STORE.getAutomaticProgressUpload()); },
+      [](uint8_t v) {
+        KOREADER_STORE.setAutomaticProgressUpload(v != 0);
+        KOREADER_STORE.saveToFile();
+      },
+      "koAutomaticProgressUpload", StrId::STR_KOREADER_SYNC));
+  emit(SettingInfo::DynamicEnum(
       StrId::STR_SYNC_CLIPPINGS, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
       [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncClippings()); },
       [](uint8_t v) {
