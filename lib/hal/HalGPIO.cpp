@@ -94,8 +94,7 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
   uint8_t score1 = 0;
   uint8_t score2 = 0;
   const freeink::XteinkVerdict verdict = freeink::detectXteinkVerdict(&score1, &score2);
-  LOG_INF("HW", "Xteink probe scores: pass1=%u pass2=%u verdict=%u", score1, score2,
-          static_cast<unsigned>(verdict));
+  LOG_INF("HW", "Xteink probe scores: pass1=%u pass2=%u verdict=%u", score1, score2, static_cast<unsigned>(verdict));
 
   if (verdict == freeink::XteinkVerdict::X3Confirmed) {
     writeNvsDeviceValue(NVS_KEY_DEV_CACHED, NvsDeviceValue::X3);
