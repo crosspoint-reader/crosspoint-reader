@@ -12,9 +12,9 @@ enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 }  // namespace BidiUtils
 
 // Host-test stub for lib/GfxRenderer/GfxRenderer.h. The real renderer owns the
-// framebuffer, font cache and e-ink driver. TextBlock::render() only calls the
-// seven methods below, so this records the draw calls instead of rasterising
-// and reports deterministic, synthetic font metrics.
+// framebuffer, font cache and e-ink driver. This records the draw calls instead
+// of rasterising, and reports deterministic, synthetic font metrics. Only the
+// members TextBlock::render() and the serialize paths actually call are here.
 //
 // Metrics are chosen to make expected positions trivial to compute by hand:
 // every codepoint advances GLYPH_W at full size and GLYPH_W/2 at SUP/SUB (the
@@ -47,11 +47,6 @@ class GfxRenderer {
   // allocation-counting tests turn it off so the measured count reflects only
   // what production code allocates.
   mutable bool recording = true;
-
-  void reset() const {
-    textCalls.clear();
-    lineCalls.clear();
-  }
 
   // Count UTF-8 codepoints: continuation bytes (0b10xxxxxx) are not advances.
   static int codepoints(const char* text) {
@@ -86,10 +81,6 @@ class GfxRenderer {
     textCalls.push_back({x, y, std::string(text), style, baseDir});
   }
 
-  void drawLine(const int x1, const int y1, const int x2, const int y2, const bool = true) const {
-    if (!recording) return;
-    lineCalls.push_back({x1, y1, x2, y2, 1});
-  }
   void drawLine(const int x1, const int y1, const int x2, const int y2, const int lineWidth, bool) const {
     if (!recording) return;
     lineCalls.push_back({x1, y1, x2, y2, lineWidth});

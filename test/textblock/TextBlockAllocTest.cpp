@@ -133,11 +133,7 @@ TEST(TextBlockAlloc, RubyRenderStillAllocatesAndDraws) {
 
   const GfxRenderer recording;
   block->render(recording, 0, 0, 100);
-  int supCount = 0;
-  for (const auto& call : recording.textCalls) {
-    if ((call.style & EpdFontFamily::SUP) != 0) supCount++;
-  }
-  EXPECT_EQ(supCount, 1) << "ruby annotation must still be drawn";
+  EXPECT_EQ(countSupCalls(recording), 1) << "ruby annotation must still be drawn";
 }
 
 }  // namespace
