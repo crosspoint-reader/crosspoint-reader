@@ -43,6 +43,14 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
                      std::vector<std::string> rubyTexts)
     : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)) {
+  // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
+  // ruby-less line costs nothing beyond its arena. The layout engine hands one over for
+  // every line it extracts, ruby or not; release it here rather than carrying it for the
+  // block's lifetime. Move-assigning an empty vector frees the buffer (clear() would not).
+  if (!hasRuby()) {
+    this->rubyTexts = std::vector<std::string>{};
+  }
+
   // Focus annotations are optional: empty vectors mean no word in this block has a split.
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
@@ -435,12 +443,25 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
     }
   }
 
-  // Ruby text data
-  std::vector<std::string> rubyTexts(wc);
-  for (auto& rt : rubyTexts) {
-    serialization::readString(file, rt);
+  // Ruby text data. Ruby is a CJK feature, so for nearly every book every entry here
+  // is the empty string. Materializing the vector regardless costs wordCount * 24 bytes
+  // (sizeof(std::string)) plus a heap block per line, held for as long as the page is
+  // resident -- several KB of DRAM on a full page, none of it ever read. An empty
+  // rubyTexts is already the "no ruby" representation: hasRuby() reports false and every
+  // other reader is guarded by `i < rubyTexts.size()`, so allocate lazily and only once a
+  // non-empty annotation actually shows up.
+  //
+  // `scratch` is reused across words: readString() resizes it to the incoming length and
+  // overwrites every byte, so a moved-from value carries nothing into the next iteration.
+  std::string scratch;
+  for (uint16_t i = 0; i < wc; i++) {
+    serialization::readString(file, scratch);
+    if (scratch.empty()) continue;
+    if (block->rubyTexts.empty()) {
+      block->rubyTexts.resize(wc);
+    }
+    block->rubyTexts[i] = std::move(scratch);
   }
-  block->rubyTexts = std::move(rubyTexts);
 
   // Style (alignment + margins/padding/indent)
   BlockStyle& blockStyle = block->blockStyle;
