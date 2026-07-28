@@ -27,6 +27,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["sendMetadata"] = getSendMetadata();
   doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
   doc["automaticProgressCheck"] = getAutomaticProgressCheck();
+  doc["automaticProgressUpload"] = getAutomaticProgressUpload();
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
@@ -72,6 +73,7 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
   setAutomaticProgressCheck(doc["automaticProgressCheck"] | false);
+  setAutomaticProgressUpload(doc["automaticProgressUpload"] | false);
 
   if (needsResave) {
     LOG_DBG("KRS", "Resaving KOReader credentials to update format");
@@ -157,4 +159,9 @@ void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
 void KOReaderCredentialStore::setAutomaticProgressCheck(const bool enabled) {
   automaticProgressCheck = enabled;
   LOG_DBG("KRS", "Set automatic progress check: %s", enabled ? "On" : "Off");
+}
+
+void KOReaderCredentialStore::setAutomaticProgressUpload(const bool enabled) {
+  automaticProgressUpload = enabled;
+  LOG_DBG("KRS", "Set automatic progress upload: %s", enabled ? "On" : "Off");
 }

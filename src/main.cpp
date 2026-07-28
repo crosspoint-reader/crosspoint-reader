@@ -25,6 +25,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeepSleep.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -160,6 +161,9 @@ enum class BootResume : uint8_t {
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
+static bool deferredSleepPending = false;
+static bool deferredSleepCompletionRequested = false;
+static bool deferredSleepFromTimeout = false;
 
 // A silent restart is internal maintenance, so the light must come back exactly
 // as the user left it. SETTINGS.frontlightOn is the saved preference and
@@ -258,9 +262,7 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
-// Enter deep sleep mode
-void enterDeepSleep(bool fromTimeout = false) {
-  HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+static bool prepareSleepState(const bool fromTimeout) {
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -272,13 +274,22 @@ void enterDeepSleep(bool fromTimeout = false) {
   APP_STATE.showBootScreen = false;
 
   APP_STATE.saveToFile();
+  return isQuickResumeSleep;
+}
+
+// Enter deep sleep after any activity-owned preparation has completed.
+static void commitDeepSleep(const bool fromTimeout, const bool renderScreen) {
+  HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
-  activityManager.goToSleep(fromTimeout);
+  activityManager.goToSleep(fromTimeout, renderScreen);
 
-  if (isQuickResumeSleep) {
+  if (renderScreen &&
+      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
+       (fromTimeout && SETTINGS.quickResumeSleepScreen ==
+                           CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT))) {
     saveSleepFrameBuffer();
   } else if (Storage.exists(SLEEP_FRAME_FILE)) {
     // A stale Quick Resume frame must not replace the selected sleep screen during wake.
@@ -298,6 +309,28 @@ void enterDeepSleep(bool fromTimeout = false) {
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
+}
+
+void enterDeepSleep(const bool fromTimeout) {
+  if (deferredSleepPending) {
+    return;
+  }
+  HalPowerManager::Lock powerLock;  // Keep local preparation and sleep rendering at normal CPU frequency
+  const bool isQuickResumeSleep = prepareSleepState(fromTimeout);
+  if (activityManager.prepareForSleep(fromTimeout)) {
+    deferredSleepPending = true;
+    activityManager.showSleepScreen(fromTimeout);
+    if (isQuickResumeSleep) {
+      saveSleepFrameBuffer();
+    }
+    return;
+  }
+  commitDeepSleep(fromTimeout, true);
+}
+
+void completeDeferredDeepSleep(const bool fromTimeout) {
+  deferredSleepFromTimeout = fromTimeout;
+  deferredSleepCompletionRequested = true;
 }
 
 void setupDisplayAndFonts(bool seamless = false) {
@@ -608,6 +641,24 @@ void loop() {
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
+
+  // Automatic sleep sync completes from inside an activity callback. Finish the
+  // sleep transition only after ActivityManager::loop() has unwound, so the
+  // manager never destroys an activity while one of its methods is still active.
+  if (deferredSleepCompletionRequested) {
+    deferredSleepCompletionRequested = false;
+    deferredSleepPending = false;
+    commitDeepSleep(deferredSleepFromTimeout, false);
+    return;
+  }
+
+  // The sleep screen is already visible. Keep servicing only the queued sync
+  // workflow until it requests completion; ignore input and repeated timeouts.
+  if (deferredSleepPending) {
+    activityManager.loop();
+    delay(10);
+    return;
+  }
 
   // The ROM console does not depend on Arduino USB CDC's connection state.
   if ((Serial || FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF) && millis() - lastMemPrint >= 10000) {
