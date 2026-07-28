@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "Epub/blocks/TextBlock.h"
+#include "TestHelpers.h"
 
 namespace {
 
@@ -37,14 +38,6 @@ struct CountScope {
   ~CountScope() { g_counting = false; }
   static size_t count() { return g_allocCount; }
 };
-
-using Style = EpdFontFamily::Style;
-
-std::unique_ptr<TextBlock> makeBlock(const std::vector<std::string>& words, const std::vector<int16_t>& xpos,
-                                     const std::vector<Style>& styles, const std::vector<std::string>& ruby = {}) {
-  return std::make_unique<TextBlock>(words, xpos, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, BlockStyle(),
-                                     ruby);
-}
 
 // A representative justified line: 12 words, no ruby, no focus annotations.
 std::unique_ptr<TextBlock> makeTypicalLine(const std::vector<std::string>& ruby = {}) {
