@@ -21,7 +21,12 @@ namespace {
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
 // v33: Support <ruby> and <rt> tags. Skip <rp> tags
-constexpr uint8_t SECTION_FILE_VERSION = 33;
+// v34: <br> handling changed layout — a <br> after text is now a margin-stripped
+//      line break (browser-like) and only a <br> whose block stays empty injects
+//      the scene-break gap, so cached pages laid out by older versions no longer
+//      match. Keeps <br>-per-paragraph books (common CJK formatting) from
+//      re-adding container spacing at every paragraph.
+constexpr uint8_t SECTION_FILE_VERSION = 34;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
