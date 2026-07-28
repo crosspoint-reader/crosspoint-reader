@@ -389,7 +389,11 @@ void EpubReaderActivity::loop() {
   // Wait until the first reader render has loaded the current section. This gives
   // ProgressMapper an accurate local page count while keeping the sync trigger out
   // of the render task, where replacing the current activity would be unsafe.
-  if (automaticProgressCheckPending && section) {
+  // A non-zero cached total means a settings-change pagination remap is still
+  // pending. Do not tear the section down for sync until that semantic resume
+  // position has either been applied or explicitly consumed.
+  if (automaticProgressCheckPending && initialRenderCompleted.load(std::memory_order_acquire) && section &&
+      cachedChapterTotalPageCount == 0) {
     automaticProgressCheckPending = false;
     if (KOREADER_STORE.getAutomaticProgressCheck() && launchKOReaderSync(true)) {
       return;
@@ -984,6 +988,8 @@ bool EpubReaderActivity::launchKOReaderSync(const bool automaticPull) {
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
 
+  // Persist current position so the reader resumes at the right page on return.
+  // goToReader() depends on this file, so abort the sync if the write fails.
   if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
     LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
     pendingSyncSaveError = true;
@@ -1485,6 +1491,7 @@ void EpubReaderActivity::renderBook() {
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
+  initialRenderCompleted.store(true, std::memory_order_release);
 
   // Toolbar menu: overlay the toolbar / panel on top of the freshly rendered page.
   if (overlay != Overlay::None && usesToolbarMenu()) {
