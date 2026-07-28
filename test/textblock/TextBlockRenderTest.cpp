@@ -78,12 +78,7 @@ TEST(TextBlockRender, AllEmptyRubyVectorBehavesAsRubyless) {
   withoutRuby->render(r1, 0, 10, 30);
   withEmptyRuby->render(r2, 0, 10, 30);
 
-  ASSERT_EQ(r1.textCalls.size(), r2.textCalls.size());
-  for (size_t i = 0; i < r1.textCalls.size(); i++) {
-    EXPECT_EQ(r1.textCalls[i].text, r2.textCalls[i].text);
-    EXPECT_EQ(r1.textCalls[i].x, r2.textCalls[i].x);
-    EXPECT_EQ(r1.textCalls[i].y, r2.textCalls[i].y);
-  }
+  expectSameTextCalls(r1, r2);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,9 +108,10 @@ TEST(TextBlockRender, RubyLineShiftsBaselineAndDrawsAnnotation) {
   EXPECT_EQ(ruby.style & EpdFontFamily::SUP, EpdFontFamily::SUP);
   // Ruby sits one full ascender above the (already shifted) base baseline.
   EXPECT_EQ(ruby.y, base.y - ASC);
-  // Annotation (15) is narrower than the base word (20), so it is centred:
-  // rubyX = baseX + (20 - 15) / 2.
-  EXPECT_EQ(ruby.x, 2);
+  // Annotation is narrower than the base word, so it is centred over it.
+  const int baseW = renderer.getTextAdvanceX(0, "ab", EpdFontFamily::REGULAR);
+  const int rubyW = renderer.getTextAdvanceX(0, "xyz", EpdFontFamily::SUP);
+  EXPECT_EQ(ruby.x, base.x + (baseW - rubyW) / 2);
 }
 
 TEST(TextBlockRender, WideRubyRecentresBaseWord) {
@@ -132,8 +128,10 @@ TEST(TextBlockRender, WideRubyRecentresBaseWord) {
 
   EXPECT_EQ(ruby.text, "abcdef");
   EXPECT_EQ(ruby.x, 0) << "first word's ruby must not start left of the line origin";
-  // Base word centred under the 30px-wide annotation: 0 + (30 - 10) / 2.
-  EXPECT_EQ(base.x, 10);
+  // Base word recentred under the wider annotation.
+  const int baseW = renderer.getTextAdvanceX(0, "a", EpdFontFamily::REGULAR);
+  const int rubyW = renderer.getTextAdvanceX(0, "abcdef", EpdFontFamily::SUP);
+  EXPECT_EQ(base.x, ruby.x + (rubyW - baseW) / 2);
 }
 
 TEST(TextBlockRender, AdjacentRubyAnnotationsDoNotOverlap) {
@@ -165,11 +163,7 @@ TEST(TextBlockRender, RubyContinueWordsGetNoOwnAnnotation) {
   const GfxRenderer renderer;
   block->render(renderer, 0, 0, 100);
 
-  int supCount = 0;
-  for (const auto& call : renderer.textCalls) {
-    if ((call.style & EpdFontFamily::SUP) != 0) supCount++;
-  }
-  EXPECT_EQ(supCount, 1) << "a group-ruby run must draw exactly one annotation";
+  EXPECT_EQ(countSupCalls(renderer), 1) << "a group-ruby run must draw exactly one annotation";
 }
 
 // ---------------------------------------------------------------------------
@@ -245,13 +239,7 @@ TEST(TextBlockSerialization, RubylessRoundTripRendersIdentically) {
   original->render(before, 0, 7, 21);
   restored->render(after, 0, 7, 21);
 
-  ASSERT_EQ(before.textCalls.size(), after.textCalls.size());
-  for (size_t i = 0; i < before.textCalls.size(); i++) {
-    EXPECT_EQ(before.textCalls[i].text, after.textCalls[i].text);
-    EXPECT_EQ(before.textCalls[i].x, after.textCalls[i].x);
-    EXPECT_EQ(before.textCalls[i].y, after.textCalls[i].y);
-    EXPECT_EQ(before.textCalls[i].style, after.textCalls[i].style);
-  }
+  expectSameTextCalls(before, after);
 }
 
 TEST(TextBlockSerialization, RejectsImplausibleWordCount) {
