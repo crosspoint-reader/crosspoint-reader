@@ -964,11 +964,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
         self->flushPartWordBuffer();
       }
-      // Tag the new block so startNewTextBlock can inject a full line-height gap if
-      // the block remains empty (i.e. <br> is a section separator between paragraphs).
-      // If the block gets text added before the next block opens it becomes non-empty,
-      // goes through makePages() normally, and the flag has no effect (inline <br> case).
+      // A <br> after text is a line break: start the next block with the container's
+      // vertical margins stripped, matching browsers, which never apply paragraph
+      // margins at a <br>. This is what keeps <br>-per-paragraph books (common CJK
+      // web-novel formatting) from re-adding container spacing at every paragraph
+      // and collapsing page capacity.
+      // A <br> on an empty block (consecutive <br>s, or a standalone <br> between
+      // blocks) is a scene-break separator: keep the container margins so deposited
+      // vertical spacing survives. Either way the block is tagged so that if it
+      // stays empty, startNewTextBlock injects a full line-height gap when the next
+      // block opens; once text follows the tag is inert.
+      // Style comes from the block style stack, not the current block, so a closed
+      // element's style can't leak through (#2679).
       BlockStyle brStyle = self->blockStyleStack.back();
+      if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+        brStyle = brStyle.withoutTop().withoutBottom();
+      }
       brStyle.fromBrElement = true;
       self->startNewTextBlock(brStyle);
     } else {

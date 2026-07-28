@@ -24,6 +24,12 @@ namespace {
 // v34: Word gaps are only suppressed for tokens glued in the source, so spaces between
 //      Hangul words survive again; ruby element boundaries carry the continuation flag
 //      instead. Invalidates v33 caches, whose word positions have the spaces collapsed.
+
+// v34: <br> handling changed layout — a <br> after text is now a margin-stripped
+//      line break (browser-like) and only a <br> whose block stays empty injects
+//      the scene-break gap, so cached pages laid out by older versions no longer
+//      match. Keeps <br>-per-paragraph books (common CJK formatting) from
+//      re-adding container spacing at every paragraph.
 constexpr uint8_t SECTION_FILE_VERSION = 34;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
