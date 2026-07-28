@@ -12,6 +12,9 @@ class ImageBlock final : public Block {
   ~ImageBlock() override = default;
 
   const std::string& getImagePath() const { return imagePath; }
+  // Book-internal path (normalised relative to the EPUB root). This remains
+  // available after lazy extraction so sync can identify the rendered image.
+  const std::string& getSourcePath() const { return srcPath; }
   int16_t getWidth() const { return width; }
   int16_t getHeight() const { return height; }
 

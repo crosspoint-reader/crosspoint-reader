@@ -1,11 +1,16 @@
 #include "ProgressMapper.h"
 
+#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Print.h>
+#include <XmlParserUtils.h>
+#include <expat.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <vector>
 
 #include "ChapterXPathResolver.h"
 #include "Epub/Section.h"
@@ -174,7 +179,7 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
       }
       step.siblingIndex = idx;
     } else {
-      step.siblingIndex = 1;
+      step.siblingIndex = 0;  // An omitted XPath index selects any matching sibling.
     }
 
     count++;
@@ -464,7 +469,7 @@ class ParagraphStreamer final : public Print {
         const bool atCorrectDepth = (matchedDepth == 0) || (htmlDepth == stepEnteredAtDepth[matchedDepth - 1] + 1);
         if (!atCorrectDepth) return;
         siblingCounters[matchedDepth]++;
-        if (siblingCounters[matchedDepth] == target.siblingIndex) {
+        if (target.siblingIndex == 0 || siblingCounters[matchedDepth] == target.siblingIndex) {
           insideStep[matchedDepth] = true;
           stepEnteredAtDepth[matchedDepth] = htmlDepth;
           matchedDepth++;
@@ -697,9 +702,182 @@ class ParagraphStreamer final : public Print {
   }
 };
 
-bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStreamer& s) {
+// Expat-backed resolver for KOReader image positions. The lightweight text
+// streamer above deliberately does not retain a DOM, which makes it prone to
+// missing Kindle's unindexed wrapper paths. Images have no visible text, so
+// use the XML parser here to match the real XHTML tree and identify the image
+// that CrossPoint laid out.
+class ImageXPathResolver final : public Print {
+ public:
+  ImageXPathResolver(const XPathStep* targetSteps, const int targetStepCount)
+      : steps(targetSteps), stepCount(targetStepCount) {
+    parser = XML_ParserCreate(nullptr);
+    if (!parser) return;
+    XML_SetUserData(parser, this);
+    XML_SetElementHandler(parser, &ImageXPathResolver::startElement, &ImageXPathResolver::endElement);
+  }
+
+  ~ImageXPathResolver() override { destroyXmlParser(parser); }
+
+  size_t write(uint8_t c) override { return write(&c, 1); }
+
+  size_t write(const uint8_t* buffer, const size_t size) override {
+    if (!parser || !parseOk || foundImage) return size;
+    if (XML_Parse(parser, reinterpret_cast<const char*>(buffer), static_cast<int>(size), XML_FALSE) != XML_STATUS_OK) {
+      if (XML_GetErrorCode(parser) != XML_ERROR_ABORTED) {
+        LOG_DBG("PM", "Image XPath XML parse failed: %s", XML_ErrorString(XML_GetErrorCode(parser)));
+        parseOk = false;
+      }
+    }
+    return size;
+  }
+
+  bool finish() {
+    if (!parser || !parseOk) return false;
+    if (!foundImage && XML_Parse(parser, "", 0, XML_TRUE) != XML_STATUS_OK) {
+      LOG_DBG("PM", "Image XPath XML final parse failed: %s", XML_ErrorString(XML_GetErrorCode(parser)));
+      parseOk = false;
+    }
+    return parseOk;
+  }
+
+  bool found() const { return foundImage && !source.empty() && occurrence > 0; }
+  const std::string& imageSource() const { return source; }
+  uint16_t imageOccurrence() const { return occurrence; }
+
+ private:
+  struct ChildCount {
+    std::string name;
+    int count = 0;
+  };
+
+  struct ParentState {
+    std::vector<ChildCount> children;
+
+    int nextIndex(const std::string& name) {
+      for (auto& child : children) {
+        if (child.name == name) return ++child.count;
+      }
+      children.push_back({name, 1});
+      return 1;
+    }
+  };
+
+  static std::string localName(const XML_Char* rawName) {
+    if (!rawName) return "";
+    const char* colon = strrchr(rawName, ':');
+    return colon ? std::string(colon + 1) : std::string(rawName);
+  }
+
+  static std::string imageSourceFromAttributes(const XML_Char** attrs) {
+    if (!attrs) return "";
+    for (int i = 0; attrs[i]; i += 2) {
+      const std::string name = localName(attrs[i]);
+      if (strcasecmp(name.c_str(), "src") == 0 || strcasecmp(name.c_str(), "href") == 0) {
+        return attrs[i + 1] ? attrs[i + 1] : "";
+      }
+    }
+    return "";
+  }
+
+  static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** attrs) {
+    static_cast<ImageXPathResolver*>(userData)->onStartElement(name, attrs);
+  }
+
+  static void XMLCALL endElement(void* userData, const XML_Char* name) {
+    static_cast<ImageXPathResolver*>(userData)->onEndElement(name);
+  }
+
+  bool pathMatches() const {
+    if (static_cast<int>(path.size()) != stepCount) return false;
+    for (int i = 0; i < stepCount; i++) {
+      if (strcasecmp(path[i].name.c_str(), steps[i].tag) != 0) return false;
+      if (steps[i].siblingIndex > 0 && path[i].index != steps[i].siblingIndex) return false;
+    }
+    return true;
+  }
+
+  void onStartElement(const XML_Char* rawName, const XML_Char** attrs) {
+    const std::string name = localName(rawName);
+    if (!insideBody) {
+      if (strcasecmp(name.c_str(), "body") == 0) {
+        insideBody = true;
+        parents.emplace_back();
+      }
+      return;
+    }
+
+    const int index = parents.back().nextIndex(name);
+    path.push_back({name, index});
+    parents.emplace_back();
+
+    if (strcasecmp(name.c_str(), "img") != 0) return;
+    const std::string candidateSource = imageSourceFromAttributes(attrs);
+    uint16_t candidateOccurrence = 1;
+    for (const auto& earlierSource : imageSources) {
+      if (earlierSource == candidateSource) candidateOccurrence++;
+    }
+    if (!candidateSource.empty()) imageSources.push_back(candidateSource);
+
+    if (pathMatches() && !candidateSource.empty()) {
+      source = candidateSource;
+      occurrence = candidateOccurrence;
+      foundImage = true;
+      XML_StopParser(parser, XML_FALSE);
+    }
+  }
+
+  void onEndElement(const XML_Char* rawName) {
+    const std::string name = localName(rawName);
+    if (!insideBody) return;
+    if (path.empty() && strcasecmp(name.c_str(), "body") == 0) {
+      insideBody = false;
+      parents.clear();
+      return;
+    }
+    if (!path.empty()) path.pop_back();
+    if (parents.size() > 1) parents.pop_back();
+  }
+
+  struct PathNode {
+    std::string name;
+    int index;
+  };
+
+  XML_Parser parser = nullptr;
+  const XPathStep* steps;
+  int stepCount;
+  bool parseOk = true;
+  bool insideBody = false;
+  bool foundImage = false;
+  std::vector<ParentState> parents;
+  std::vector<PathNode> path;
+  std::vector<std::string> imageSources;
+  std::string source;
+  uint16_t occurrence = 0;
+};
+
+bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, Print& s) {
   const auto href = epub->getSpineItem(spineIndex).href;
   return !href.empty() && epub->readItemContentsToStream(href, s, 1024);
+}
+
+bool resolveImageXPath(const std::shared_ptr<Epub>& epub, const int spineIndex, const XPathStep* steps,
+                       const int stepCount, std::string& source, uint16_t& occurrence) {
+  ImageXPathResolver resolver(steps, stepCount);
+  if (!streamSpine(epub, spineIndex, resolver) || !resolver.finish() || !resolver.found()) return false;
+  source = resolver.imageSource();
+  occurrence = resolver.imageOccurrence();
+  return true;
+}
+
+std::string resolveImageSource(const std::shared_ptr<Epub>& epub, const int spineIndex, std::string source) {
+  const size_t fragmentPos = source.find('#');
+  if (fragmentPos != std::string::npos) source.resize(fragmentPos);
+  const auto href = epub->getSpineItem(spineIndex).href;
+  const size_t slash = href.rfind('/');
+  const std::string base = slash == std::string::npos ? "" : href.substr(0, slash + 1);
+  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(base + source));
 }
 }  // namespace
 
@@ -837,6 +1015,26 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   float intra = 0.0f;
   bool resolvedIntra = false;
   if (useAncestry) {
+    if (strcasecmp(xpathSteps[xpathStepCount - 1].tag, "img") == 0) {
+      std::string rawImageSource;
+      uint16_t imageOccurrence = 0;
+      if (resolveImageXPath(epub, result.spineIndex, xpathSteps, xpathStepCount, rawImageSource, imageOccurrence)) {
+        const std::string imageSource = resolveImageSource(epub, result.spineIndex, rawImageSource);
+        Section tempSection(epub, result.spineIndex, renderer);
+        if (const auto imagePage = tempSection.getPageForImageSource(imageSource, imageOccurrence)) {
+          if (const auto cachedCount = tempSection.getCachedPageCount()) result.totalPages = *cachedCount;
+          result.pageNumber = *imagePage;
+          LOG_DBG("PM", "Image XPath %s source=%s occurrence=%u -> page=%d/%d", koPos.xpath.c_str(),
+                  imageSource.c_str(), imageOccurrence, result.pageNumber, result.totalPages);
+          return result;
+        }
+        LOG_DBG("PM", "Image XPath %s source=%s occurrence=%u not found in section cache", koPos.xpath.c_str(),
+                imageSource.c_str(), imageOccurrence);
+      } else {
+        LOG_DBG("PM", "Image XPath %s did not resolve in spine %d", koPos.xpath.c_str(), result.spineIndex);
+      }
+    }
+
     ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();

@@ -144,6 +144,11 @@ class Section {
   // Look up the page number for a running list-item index from the li LUT.
   std::optional<uint16_t> getPageForListItemIndex(uint16_t liIndex) const;
 
+  // Locate a rendered inline image by its normalised EPUB source path and its
+  // 1-based occurrence within this spine item. Used to apply KOReader image
+  // XPath positions without falling back to an incompatible book percentage.
+  std::optional<uint16_t> getPageForImageSource(const std::string& sourcePath, uint16_t occurrence) const;
+
   // Look up the synthetic paragraph index for the given rendered page.
   std::optional<uint16_t> getParagraphIndexForPage(uint16_t page) const;
 };

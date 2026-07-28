@@ -923,3 +923,34 @@ std::optional<uint16_t> Section::getPageForListItemIndex(const uint16_t liIndex)
 
   return resultPage;
 }
+
+std::optional<uint16_t> Section::getPageForImageSource(const std::string& sourcePath, const uint16_t occurrence) const {
+  if (sourcePath.empty() || occurrence == 0) return std::nullopt;
+
+  // A sync can be opened while the target chapter is still being indexed. Its
+  // suspended cache nevertheless contains valid pages and ImageBlocks, even
+  // though getCachedPageCount() intentionally rejects partial files because
+  // their count is not the chapter total.
+  HalFile cacheFile;
+  if (!Storage.openFileForRead("SCT", filePath, cacheFile)) return std::nullopt;
+  uint8_t version;
+  serialization::readPod(cacheFile, version);
+  if (version != SECTION_FILE_VERSION && version != SECTION_FILE_PARTIAL_VERSION) return std::nullopt;
+  cacheFile.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(uint16_t));
+  uint16_t storedPageCount;
+  serialization::readPod(cacheFile, storedPageCount);
+  if (storedPageCount == 0) return std::nullopt;
+
+  uint16_t matched = 0;
+  for (uint16_t pageIndex = 0; pageIndex < storedPageCount; pageIndex++) {
+    const auto page = loadPageAt(pageIndex);
+    if (!page) continue;
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageImage) continue;
+      const auto& image = static_cast<const PageImage&>(*element);
+      if (image.getImageBlock().getSourcePath() != sourcePath) continue;
+      if (++matched == occurrence) return pageIndex;
+    }
+  }
+  return std::nullopt;
+}
