@@ -1,5 +1,6 @@
 add_executable(AutomaticProgressCheckPolicyTest
   AutomaticProgressCheckPolicyTest.cpp
+  MappedProgressPositionPolicyTest.cpp
 )
 
 target_include_directories(AutomaticProgressCheckPolicyTest PRIVATE

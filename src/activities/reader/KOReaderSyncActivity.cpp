@@ -17,6 +17,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
+#include "MappedProgressPositionPolicy.h"
 #include "ReaderUtils.h"
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
@@ -236,19 +237,11 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  if (automaticPull()) {
-    const auto automaticDecision =
-        AutomaticProgressCheckPolicy::decide(localProgress.percentage, remoteProgress.percentage);
-    if (automaticDecision == AutomaticProgressDecision::INVALID_REMOTE) {
-      LOG_ERR("KOSync", "Ignoring invalid remote percentage: %.6f", remoteProgress.percentage);
-      returnToReader();
-      return;
-    }
-
-    if (automaticDecision != AutomaticProgressDecision::PROMPT) {
-      returnToReader();
-      return;
-    }
+  if (automaticPull() && AutomaticProgressCheckPolicy::decide(localProgress.percentage, remoteProgress.percentage) ==
+                             AutomaticProgressDecision::INVALID_REMOTE) {
+    LOG_ERR("KOSync", "Ignoring invalid remote percentage: %.6f", remoteProgress.percentage);
+    returnToReader();
+    return;
   }
 
   // Epub was released before sync to free RAM for the TLS handshake — reload it now.
@@ -282,10 +275,18 @@ void KOReaderSyncActivity::performSync() {
   }
 
   if (automaticPull()) {
+    const auto mappedOrder = MappedProgressPositionPolicy::compare(
+        currentSpineIndex, currentPage, remotePosition.spineIndex, remotePosition.pageNumber);
+    LOG_DBG("KOSync", "Mapped decision: local=%d/%d remote=%d/%d order=%d", currentSpineIndex, currentPage,
+            remotePosition.spineIndex, remotePosition.pageNumber, static_cast<int>(mappedOrder));
+    if (mappedOrder != MappedProgressPositionOrder::REMOTE_AHEAD) {
+      returnToReader();
+      return;
+    }
+
     // The prompt can remain visible while the user decides; drop the radio now
     // instead of keeping WiFi powered for an interaction that needs no network.
-    WiFi.disconnect(false);
-    esp_wifi_stop();
+    WiFi.disconnect(true, false);
     {
       RenderLock lock(*this);
       state = SHOWING_RESULT;
@@ -449,12 +450,13 @@ void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
   if (wifiActivated) {
-    WiFi.disconnect(false);
-    delay(30);
     if (automaticPull()) {
-      esp_wifi_stop();
+      WiFi.disconnect(true, false);
+      delay(30);
       return;
     }
+    WiFi.disconnect(false);
+    delay(30);
     silentRestartToReader();
   }
 }

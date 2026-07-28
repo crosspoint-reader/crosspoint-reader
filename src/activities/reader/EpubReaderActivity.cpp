@@ -332,7 +332,11 @@ void EpubReaderActivity::loop() {
   // Wait until the first reader render has loaded the current section. This gives
   // ProgressMapper an accurate local page count while keeping the sync trigger out
   // of the render task, where replacing the current activity would be unsafe.
-  if (automaticProgressCheckPending && section) {
+  // A non-zero cached total means a settings-change pagination remap is still
+  // pending. Do not tear the section down for sync until that semantic resume
+  // position has either been applied or explicitly consumed.
+  if (automaticProgressCheckPending && initialRenderCompleted.load(std::memory_order_acquire) && section &&
+      cachedChapterTotalPageCount == 0) {
     automaticProgressCheckPending = false;
     if (KOREADER_STORE.getAutomaticProgressCheck() && launchKOReaderSync(true)) {
       return;
@@ -909,24 +913,30 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 bool EpubReaderActivity::launchKOReaderSync(const bool automaticPull) {
   if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
-  const int currentPage = section ? section->currentPage : nextPageNumber;
-  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  // Synchronize the snapshot and teardown with the render task so the automatic
+  // comparison always uses the page that finished rendering.
+  RenderLock renderLock(*this);
+  if (!epub) return false;
+
+  const CrossPointPosition launchPosition = getCurrentPosition();
   std::optional<uint16_t> paragraphIndex;
-  if (section && currentPage >= 0 && currentPage < section->pageCount) {
-    const uint16_t paragraphPage =
-        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
+  if (section && launchPosition.pageNumber >= 0 && launchPosition.pageNumber < section->pageCount) {
+    const uint16_t paragraphPage = launchPosition.pageNumber > 0 ? static_cast<uint16_t>(launchPosition.pageNumber - 1)
+                                                                 : static_cast<uint16_t>(launchPosition.pageNumber);
     if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
       paragraphIndex = *pIdx;
     }
   }
 
-  CrossPointPosition localPos = getCurrentPosition();
-  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
+  // Pre-compute local KO position and chapter name while Epub is still in RAM.
+  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, launchPosition);
   const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
 
-  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
+  // Persist current position so the reader resumes at the right page on return.
+  // goToReader() depends on this file, so abort the sync if the write fails.
+  if (!saveProgress(launchPosition.spineIndex, launchPosition.pageNumber, launchPosition.totalPages)) {
     LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
     pendingSyncSaveError = true;
     requestUpdate();
@@ -934,20 +944,22 @@ bool EpubReaderActivity::launchKOReaderSync(const bool automaticPull) {
   }
 
   LOG_DBG("KOSync", "Releasing epub for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
-  {
-    RenderLock lock;
-    if (section) {
-      nextPageNumber = section->currentPage;
-    }
-    ImageBlock::setExtractor(nullptr, nullptr);
-    section.reset();
-    epub.reset();
+  if (section) {
+    nextPageNumber = section->currentPage;
+    cachedChapterTotalPageCount = section->estimatedTotalPages();
   }
+  // The image extractor holds a raw pointer into this epub (see onEnter);
+  // clear it before the early release, mirroring onExit(), or a later image
+  // render would call through a dangling context.
+  ImageBlock::setExtractor(nullptr, nullptr);
+  section.reset();
+  epub.reset();
+  renderLock.unlock();
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-      std::move(localChapterName), paragraphIndex,
+      renderer, mappedInput, savedEpubPath, launchPosition.spineIndex, launchPosition.pageNumber,
+      launchPosition.totalPages, std::move(localKoPos), std::move(localChapterName), paragraphIndex,
       automaticPull ? KOReaderSyncActivity::Mode::AUTO_PULL : KOReaderSyncActivity::Mode::MANUAL));
   return true;  // acted: launched the sync activity
 }
@@ -1386,6 +1398,7 @@ void EpubReaderActivity::renderBook() {
   if (showDictionaryMessage) {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
+  initialRenderCompleted.store(true, std::memory_order_release);
 
   // Toolbar menu: overlay the toolbar / panel on top of the freshly rendered page.
   if (overlay != Overlay::None && usesToolbarMenu()) {
