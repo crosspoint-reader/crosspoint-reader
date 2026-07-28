@@ -127,7 +127,7 @@ bool isChapterStartXPath(const std::string& xpath) {
 // Parsed representation of one step in the XPath ancestry.
 struct XPathStep {
   char tag[12];      // element name, null-terminated
-  int siblingIndex;  // 1-based sibling index, or 0 if unspecified (treat as 1)
+  int siblingIndex;  // 1-based sibling index, or 0 if unspecified (match any sibling)
 };
 
 static constexpr int MAX_XPATH_DEPTH = 16;
@@ -707,10 +707,18 @@ class ParagraphStreamer final : public Print {
 // missing Kindle's unindexed wrapper paths. Images have no visible text, so
 // use the XML parser here to match the real XHTML tree and identify the image
 // that CrossPoint laid out.
+std::string normaliseImageSource(const std::string& spineHref, std::string source) {
+  const size_t fragmentPos = source.find('#');
+  if (fragmentPos != std::string::npos) source.resize(fragmentPos);
+  const size_t slash = spineHref.rfind('/');
+  const std::string base = slash == std::string::npos ? "" : spineHref.substr(0, slash + 1);
+  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(base + source));
+}
+
 class ImageXPathResolver final : public Print {
  public:
-  ImageXPathResolver(const XPathStep* targetSteps, const int targetStepCount)
-      : steps(targetSteps), stepCount(targetStepCount) {
+  ImageXPathResolver(const XPathStep* targetSteps, const int targetStepCount, std::string spineHref)
+      : steps(targetSteps), stepCount(targetStepCount), spineHref(std::move(spineHref)) {
     parser = XML_ParserCreate(nullptr);
     if (!parser) return;
     XML_SetUserData(parser, this);
@@ -819,14 +827,18 @@ class ImageXPathResolver final : public Print {
     if (strcasecmp(name.c_str(), "p") == 0) paragraphCount++;
 
     std::string candidateSource;
+    std::string candidateKey;
     uint16_t candidateOccurrence = 0;
     if (strcasecmp(name.c_str(), "img") == 0) {
       candidateSource = imageSourceFromAttributes(attrs);
-      candidateOccurrence = 1;
-      for (const auto& earlierSource : imageSources) {
-        if (earlierSource == candidateSource) candidateOccurrence++;
+      if (!candidateSource.empty()) {
+        candidateKey = normaliseImageSource(spineHref, candidateSource);
+        candidateOccurrence = 1;
+        for (const auto& earlierKey : imageSources) {
+          if (earlierKey == candidateKey) candidateOccurrence++;
+        }
+        imageSources.push_back(std::move(candidateKey));
       }
-      if (!candidateSource.empty()) imageSources.push_back(candidateSource);
     }
 
     if (pathMatches()) {
@@ -861,6 +873,7 @@ class ImageXPathResolver final : public Print {
   XML_Parser parser = nullptr;
   const XPathStep* steps;
   int stepCount;
+  std::string spineHref;
   bool parseOk = true;
   bool insideBody = false;
   bool foundTarget = false;
@@ -881,7 +894,7 @@ bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, Print& s) {
 
 bool resolveImageXPath(const std::shared_ptr<Epub>& epub, const int spineIndex, const XPathStep* steps,
                        const int stepCount, std::string& source, uint16_t& occurrence) {
-  ImageXPathResolver resolver(steps, stepCount);
+  ImageXPathResolver resolver(steps, stepCount, epub->getSpineItem(spineIndex).href);
   if (!streamSpine(epub, spineIndex, resolver) || !resolver.finish() || !resolver.found()) return false;
   source = resolver.imageSource();
   occurrence = resolver.imageOccurrence();
@@ -890,19 +903,14 @@ bool resolveImageXPath(const std::shared_ptr<Epub>& epub, const int spineIndex, 
 
 bool resolveXPathParagraph(const std::shared_ptr<Epub>& epub, const int spineIndex, const XPathStep* steps,
                            const int stepCount, uint16_t& paragraphIndex) {
-  ImageXPathResolver resolver(steps, stepCount);
+  ImageXPathResolver resolver(steps, stepCount, epub->getSpineItem(spineIndex).href);
   if (!streamSpine(epub, spineIndex, resolver) || !resolver.finish() || !resolver.matched()) return false;
   paragraphIndex = resolver.paragraphIndex();
   return paragraphIndex > 0;
 }
 
 std::string resolveImageSource(const std::shared_ptr<Epub>& epub, const int spineIndex, std::string source) {
-  const size_t fragmentPos = source.find('#');
-  if (fragmentPos != std::string::npos) source.resize(fragmentPos);
-  const auto href = epub->getSpineItem(spineIndex).href;
-  const size_t slash = href.rfind('/');
-  const std::string base = slash == std::string::npos ? "" : href.substr(0, slash + 1);
-  return FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(base + source));
+  return normaliseImageSource(epub->getSpineItem(spineIndex).href, std::move(source));
 }
 }  // namespace
 
