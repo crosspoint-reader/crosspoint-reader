@@ -174,6 +174,16 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   uint16_t count;
   serialization::readPod(file, count);
 
+  // Reserve up front so a page load costs one allocation for the element vector
+  // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
+  // comes straight off the SD cache), so clamp it: a real page holds a few dozen
+  // elements, while a corrupt header could ask for 65535 * sizeof(shared_ptr) and
+  // abort() on the failed allocation (vector's operator new is throwing, and this
+  // firmware builds with -fno-exceptions). Under-reserving is harmless -- the
+  // push_back path below still grows normally.
+  static constexpr uint16_t RESERVE_CAP = 256;
+  page->elements.reserve(std::min(count, RESERVE_CAP));
+
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
     serialization::readPod(file, tag);
