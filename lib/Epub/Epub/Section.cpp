@@ -21,7 +21,10 @@ namespace {
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
 // v33: Support <ruby> and <rt> tags. Skip <rp> tags
-constexpr uint8_t SECTION_FILE_VERSION = 33;
+// v34: Word gaps are only suppressed for tokens glued in the source, so spaces between
+//      Hangul words survive again; ruby element boundaries carry the continuation flag
+//      instead. Invalidates v33 caches, whose word positions have the spaces collapsed.
+constexpr uint8_t SECTION_FILE_VERSION = 34;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
