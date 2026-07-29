@@ -16,6 +16,11 @@ constexpr uint16_t COMPRESSION_NONE = 1;
 constexpr uint16_t COMPRESSION_PALMDOC = 2;
 constexpr uint16_t COMPRESSION_HUFF = 17480;  // 0x4448 'DH'
 
+// Sanity caps for file-controlled sizes (records are 4-8 KB in real books;
+// EXTH blocks hold a few dozen entries).
+constexpr uint32_t MAX_RECORD_BYTES = 1u << 20;
+constexpr uint32_t MAX_EXTH_ENTRIES = 1024;
+
 // Trailing-entry size: backward varint over the record's last 4 bytes
 // (mobi_unpack getSizeOfTrailingDataEntry). Returned size includes itself.
 uint32_t sizeOfTrailingEntry(const uint8_t* data, uint32_t len) {
@@ -102,7 +107,20 @@ bool MobiParser::readRecordOffsets() {
 bool MobiParser::readRecord(uint16_t index, std::vector<uint8_t>& out) {
   if (index >= numRecords) return false;
   const uint32_t len = recordOffsets[index + 1] - recordOffsets[index];
+  // Record lengths come straight from the file. A corrupt table can claim
+  // hundreds of MB; resize() would abort() (no exceptions) long before the
+  // allocator returns. MOBI records are 4-8 KB in practice.
+  if (len > MAX_RECORD_BYTES) {
+    LOG_ERR("MOBI", "record %u absurd length %lu", index, (unsigned long)len);
+    err = Error::BadHeader;
+    return false;
+  }
+  out.clear();
   out.resize(len);
+  if (out.size() != len) {
+    err = Error::Oom;
+    return false;
+  }
   if (!file->seek(recordOffsets[index])) return false;
   return file->read(out.data(), len) == (int)len;
 }
@@ -145,7 +163,10 @@ bool MobiParser::parseRecord0() {
 
   const uint32_t fullNameOffset = be32(&rec[84]);
   const uint32_t fullNameLength = be32(&rec[88]);
-  if (fullNameOffset + fullNameLength <= rec.size() && fullNameLength > 0 && fullNameLength < 512) {
+  // Subtract, never add: offset+length is uint32 arithmetic and wraps, which
+  // would let a crafted header pass the check and read before the buffer.
+  if (fullNameLength > 0 && fullNameLength < 512 && fullNameOffset <= rec.size() &&
+      fullNameLength <= rec.size() - fullNameOffset) {
     bookTitle.assign((const char*)&rec[fullNameOffset], fullNameLength);
   }
 
@@ -166,20 +187,25 @@ bool MobiParser::parseRecord0() {
   // EXTH: follows the MOBI header.
   if (exthFlags & 0x40) {
     const uint32_t exthStart = 16 + mobiLen;
-    if (exthStart + 12 <= rec.size() && memcmp(&rec[exthStart], "EXTH", 4) == 0) {
-      const uint32_t count = be32(&rec[exthStart + 8]);
+    if (mobiLen <= rec.size() && exthStart <= rec.size() && rec.size() - exthStart >= 12 &&
+        memcmp(&rec[exthStart], "EXTH", 4) == 0) {
+      uint32_t count = be32(&rec[exthStart + 8]);
+      // Real EXTH blocks hold a few dozen entries; a wrapped/garbage count
+      // would otherwise spin for billions of iterations.
+      if (count > MAX_EXTH_ENTRIES) count = MAX_EXTH_ENTRIES;
       uint32_t pos = exthStart + 12;
-      for (uint32_t i = 0; i < count && pos + 8 <= rec.size(); i++) {
+      for (uint32_t i = 0; i < count && pos <= rec.size() && rec.size() - pos >= 8; i++) {
         const uint32_t type = be32(&rec[pos]);
         const uint32_t len = be32(&rec[pos + 4]);
-        if (len < 8 || pos + len > rec.size()) break;
+        // Subtraction form again (pos+len wraps); len >= 8 keeps pos advancing.
+        if (len < 8 || len > rec.size() - pos) break;
         const uint8_t* data = &rec[pos + 8];
         const uint32_t dataLen = len - 8;
         if (type == 100 && bookAuthor.empty() && dataLen < 256) {
           bookAuthor.assign((const char*)data, dataLen);
         } else if (type == 503 && dataLen > 0 && dataLen < 512) {
           bookTitle.assign((const char*)data, dataLen);
-        } else if (type == 201 && dataLen >= 4) {
+        } else if (type == 201 && dataLen >= 4 && len >= 12) {
           const uint32_t off = be32(data);
           if (off != 0xFFFFFFFF) coverOffset = (int32_t)off + 1;  // to 1-based recindex
         }
@@ -208,7 +234,9 @@ bool MobiParser::parseHuffCdic() {
   }
   const uint32_t off1 = be32(&rec[8]);
   const uint32_t off2 = be32(&rec[12]);
-  if (off1 + 256 * 4 > rec.size() || off2 + 64 * 4 > rec.size()) {
+  // Subtraction form: off + size is uint32 and wraps on crafted offsets.
+  if (rec.size() < 256 * 4 || rec.size() < 64 * 4 || off1 > rec.size() - 256 * 4 ||
+      off2 > rec.size() - 64 * 4) {
     LOG_ERR("MOBI", "bad header: HUFF offsets %lu/%lu size %u", (unsigned long)off1, (unsigned long)off2, (unsigned)rec.size());
     err = Error::BadHeader;
     return false;
