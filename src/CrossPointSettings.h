@@ -262,6 +262,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // (e.g. Murphy). Persisted manually in toJson/fromJson — the SettingsList
   // entry is dynamic, so the generic loop skips it.
   uint8_t frontlightBrightness = 0;
+  // Audio player volume percent (ES8388 analog out). Round-tripped by the
+  // generic settings loop via the SettingsList entry on audio-capable builds.
+  uint8_t audioVolume = 60;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
