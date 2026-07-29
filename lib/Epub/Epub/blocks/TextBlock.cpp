@@ -142,9 +142,16 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     std::string text;
     BidiUtils::BidiBaseDir baseDir;
   };
-  std::vector<int> wordShiftArr(numWords, 0);
-  std::vector<RubyDrawInfo> rubies(numWords);
-  if (hasRuby()) {
+  // hasRuby() is an O(numWords) scan, so resolve it once here rather than per word.
+  // Both arrays below are only ever read when the line carries ruby, so they stay
+  // empty (zero allocations) for the ruby-less case, which is every line of a
+  // non-CJK book. Sized lazily inside the branch.
+  const bool blockHasRuby = hasRuby();
+  std::vector<int> wordShiftArr;
+  std::vector<RubyDrawInfo> rubies;
+  if (blockHasRuby) {
+    wordShiftArr.assign(numWords, 0);
+    rubies.resize(numWords);
     int accumulatedShift = 0;
     int lastEnd = -9999;
     for (uint16_t i = 0; i < numWords; i++) {
@@ -245,6 +252,10 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     }
   };
 
+  // Loop-invariant: hoisted out of the word loop so rubyTexts is scanned once,
+  // not once per word.
+  const int rubyShift = getRubyShift(ascender);
+
   for (uint16_t i = 0; i < numWords; i++) {
     const char* word = wordText(i);
     const int wordX = xposArr[i] + x;
@@ -257,7 +268,6 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     // drawText, so these offsets are chosen relative to the full-size ascender:
     //   SUP: raise by 40% of ascender — sits clearly above the cap-height
     //   SUB: lower by 25% of ascender — descends below baseline without clashing with ascenders below
-    const int rubyShift = getRubyShift(ascender);
     int wordY = y + rubyShift;
     if ((currentStyle & EpdFontFamily::SUP) != 0) {
       wordY -= ascender * 2 / 5;
@@ -265,7 +275,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       wordY += ascender / 4;
     }
 
-    const int drawX = wordX + wordShiftArr[i];
+    const int drawX = wordX + (blockHasRuby ? wordShiftArr[i] : 0);
 
     if (boundary > 0) {
       // Focus split: draw bold prefix, then the regular suffix at a pre-computed x offset.
@@ -289,7 +299,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     }
 
     // Horizontal ruby text rendering
-    if (i < rubyTexts.size() && !rubyTexts[i].empty() && (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
+    if (blockHasRuby && i < rubyTexts.size() && !rubyTexts[i].empty() &&
+        (wordStyle(i) & EpdFontFamily::RUBY_CONTINUE) == 0) {
       const int rubyY = wordY - ascender;
       renderer.drawText(fontId, rubies[i].x, rubyY, rubies[i].text.c_str(), true, EpdFontFamily::SUP,
                         rubies[i].baseDir);

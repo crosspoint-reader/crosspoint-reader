@@ -99,13 +99,15 @@ current reader settings, the section is discarded and rebuilt.
 Version 35 keeps the version 34 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
 than flattened paragraphs with synthetic row/cell labels. Version 34 likewise
-kept the serialized layout unchanged and invalidated cached sections after
-`<br>` handling changed page layout for CJK-style paragraph breaks. Version 33
-added serialized ruby annotations for native `<ruby>` and `<rt>` layout.
-Version 32 added the book-internal source href to serialized image blocks for
-lazy extraction. Version 31 preserved word continuation when splitting long CJK
-text at `MAX_WORD_SIZE`; version 30 similarly invalidated v29 positions after
-Arabic contextual shaping changed text measurement.
+kept the serialized layout unchanged and invalidated cached sections after two
+CJK layout changes: word-gap suppression was narrowed to tokens glued together
+in the source so spaces between Hangul words survive, and `<br>` handling
+changed page layout for CJK-style paragraph breaks. Version 33 added serialized
+ruby annotations for native `<ruby>` and `<rt>` layout. Version 32 added the
+book-internal source href to serialized image blocks for lazy extraction.
+Version 31 preserved word continuation when splitting long CJK text at
+`MAX_WORD_SIZE`; version 30 similarly invalidated v29 positions after Arabic
+contextual shaping changed text measurement.
 
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:
