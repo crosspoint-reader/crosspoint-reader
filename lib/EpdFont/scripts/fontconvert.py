@@ -22,6 +22,7 @@ parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--ink-floor", dest="ink_floor", type=int, default=4, help="4-bit coverage value (1-4) at which a pixel becomes the lightest ink level instead of white. The default 4 discards coverage 1-3, which is invisible on a grayscale panel but on a 1-bit panel (every ink level paints black) drops ~20%% of the ink in small cuts, leaving thin strokes patchy. Lower it to 2 for B/W-only devices.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
@@ -294,6 +295,7 @@ for i_start, i_end in intervals:
 
         if is2Bit:
             # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
+            # (the white cutoff is --ink-floor; see the argument's help text)
             # Downsample to 2-bit bitmap
             pixels2b = []
             px = 0
@@ -308,7 +310,7 @@ for i_start, i_end in intervals:
                         px += 3
                     elif bm >= 8:
                         px += 2
-                    elif bm >= 4:
+                    elif bm >= args.ink_floor:
                         px += 1
 
                     if (y * bitmap.width + x) % 4 == 3:
