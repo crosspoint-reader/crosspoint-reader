@@ -594,27 +594,6 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
-#if FREEINK_DEVICE_MURPHY && defined(MURPHY_CHARGE_PROBE)
-  // Charge-status pin hunt: GPIO47 is the only unaccounted usable pin on the
-  // M3 (33-37 belong to the octal PSRAM). TP4054 CHRG is open-drain LOW while
-  // charging — with a pullup it reads 0=charging / 1=idle IF it is routed
-  // here. Logs level + raw VBAT so plug/unplug events show in serial.
-  static bool chargeProbeInit = false;
-  static unsigned long lastChargeProbe = 0;
-  static int lastG47 = -1;
-  if (!chargeProbeInit) {
-    pinMode(47, INPUT_PULLUP);
-    chargeProbeInit = true;
-  }
-  if (millis() - lastChargeProbe >= 2000) {
-    lastChargeProbe = millis();
-    const int g47 = digitalRead(47);
-    (void)lastG47;
-    // Log exactly what the UI consumes: HAL percentage + HalGPIO USB state.
-    LOG_INF("PROBE", "battery=%u%% usb=%d vbat_raw=%dmV g47=%d", powerManager.getBatteryPercentage(),
-            (int)gpio.isUsbConnected(), analogReadMilliVolts(9), g47);
-  }
-#endif
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
