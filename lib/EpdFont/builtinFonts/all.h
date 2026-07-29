@@ -37,3 +37,14 @@
 #include <builtinFonts/ubuntu_10_regular.h>
 #include <builtinFonts/ubuntu_12_bold.h>
 #include <builtinFonts/ubuntu_12_regular.h>
+
+// Small-panel UI cuts (Murphy M3, 416x240 @ ~130 PPI): the standard 10/12pt UI
+// faces render physically huge there, so the murphy build binds these under the
+// same UI font IDs. Compiled in only for that device to keep other builds lean.
+#if FREEINK_DEVICE_MURPHY
+#include <builtinFonts/notosans_6_regular.h>
+#include <builtinFonts/ubuntu_7_bold.h>
+#include <builtinFonts/ubuntu_7_regular.h>
+#include <builtinFonts/ubuntu_8_bold.h>
+#include <builtinFonts/ubuntu_8_regular.h>
+#endif

@@ -97,6 +97,21 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 
 #endif  // OMIT_FONTS
 
+#if FREEINK_DEVICE_MURPHY
+// 416x240 @ ~130 PPI: bind smaller cuts under the same UI font IDs so every
+// call site scales down with zero changes. Physical size roughly matches the
+// X4's UI chrome (its 10/12pt at ~218 PPI).
+EpdFont smallFont(&notosans_6_regular);
+EpdFontFamily smallFontFamily(&smallFont);
+
+EpdFont ui10RegularFont(&ubuntu_7_regular);
+EpdFont ui10BoldFont(&ubuntu_7_bold);
+EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
+
+EpdFont ui12RegularFont(&ubuntu_8_regular);
+EpdFont ui12BoldFont(&ubuntu_8_bold);
+EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+#else
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
@@ -107,6 +122,7 @@ EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+#endif
 
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;

@@ -17,11 +17,16 @@
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
 
-// Internal constants
+// Internal constants (density-scaled; subtitleY is a bottom-anchored absolute
+// on the 800-tall canvas, so it scales with the canvas, not the chrome)
 namespace {
-constexpr int homeMenuMargin = 20;
-constexpr int homeMarginTop = 30;
+constexpr int homeMenuMargin = scaledDim(20);
+constexpr int homeMarginTop = scaledDim(30);
+#if FREEINK_DEVICE_MURPHY
+constexpr int subtitleY = 384;  // 416-tall canvas; keeps the 738/800 anchor ratio
+#else
 constexpr int subtitleY = 738;
+#endif
 constexpr int bookmarkStatusIconWidth = 16;
 constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
@@ -343,7 +348,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
         auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 22, subtitle.c_str(),
+        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + scaledDim(22), subtitle.c_str(),
                           i != selectedIndex);
       }
     }
@@ -352,7 +357,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
       int valueY = itemY;
       if (rowSubtitle != nullptr) {
-        valueY = itemY + 10;
+        valueY = itemY + scaledDim(10);
       }
       renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth,
                         valueY, valueText.c_str(), i != selectedIndex);
@@ -362,7 +367,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   // Hide last battery draw
-  constexpr int maxBatteryWidth = 80;
+  constexpr int maxBatteryWidth = scaledDim(80);
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
                     BaseMetrics::values.batteryHeight + 10, false);
 
@@ -393,7 +398,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
-  constexpr int maxListValueWidth = 200;
+  constexpr int maxListValueWidth = scaledDim(200);
 
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
   int rightSpace = BaseMetrics::values.contentSidePadding;

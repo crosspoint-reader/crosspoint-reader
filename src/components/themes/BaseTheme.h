@@ -103,11 +103,67 @@ struct ThemeMetrics {
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
 
+// Small-panel density scale. The metric sets below were hand-tuned for the
+// 480x800-logical X4/X3 class; the Murphy M3's logical canvas is 240x416 at
+// ~130 PPI, so the same pixel values render both physically larger and out of
+// proportion to the halved canvas. Each theme's constexpr set (not the
+// getMetrics() accessor — theme drawing reads the sets directly) is passed
+// through scaledMetrics() at compile time. Touch-relevant heights are floored
+// so the scale can't produce sub-finger targets (~28px = 5.5mm at 130 PPI).
+#if FREEINK_DEVICE_MURPHY
+constexpr float kUiDensityScale = 0.6f;
+#else
+constexpr float kUiDensityScale = 1.0f;
+#endif
+
+constexpr int scaledDim(int v) { return static_cast<int>(v * kUiDensityScale + 0.5f); }
+constexpr int scaledTouchDim(int v) {
+  return (v >= 28 && scaledDim(v) < 28) ? 28 : scaledDim(v);
+}
+
+constexpr ThemeMetrics scaledMetrics(ThemeMetrics m) {
+  m.batteryWidth = scaledDim(m.batteryWidth);
+  m.batteryHeight = scaledDim(m.batteryHeight);
+  m.topPadding = scaledDim(m.topPadding);
+  m.batteryBarHeight = scaledDim(m.batteryBarHeight);
+  m.headerHeight = scaledDim(m.headerHeight);
+  m.verticalSpacing = scaledDim(m.verticalSpacing);
+  m.previewPadding = scaledDim(m.previewPadding);
+  m.contentSidePadding = scaledDim(m.contentSidePadding);
+  m.listRowHeight = scaledTouchDim(m.listRowHeight);
+  m.listWithSubtitleRowHeight = scaledTouchDim(m.listWithSubtitleRowHeight);
+  m.menuRowHeight = scaledTouchDim(m.menuRowHeight);
+  m.menuSpacing = scaledDim(m.menuSpacing);
+  m.tabSpacing = scaledDim(m.tabSpacing);
+  m.tabBarHeight = scaledTouchDim(m.tabBarHeight);
+  m.scrollBarRightOffset = scaledDim(m.scrollBarRightOffset);
+  m.homeTopPadding = scaledDim(m.homeTopPadding);
+  m.homeCoverHeight = scaledDim(m.homeCoverHeight);
+  m.homeCoverTileHeight = scaledDim(m.homeCoverTileHeight);
+  m.homeMenuTopOffset = scaledDim(m.homeMenuTopOffset);
+  m.buttonHintsHeight = scaledDim(m.buttonHintsHeight);
+  m.sideButtonHintsWidth = scaledDim(m.sideButtonHintsWidth);
+  m.progressBarHeight = scaledDim(m.progressBarHeight);
+  m.statusBarVerticalMargin = scaledDim(m.statusBarVerticalMargin);
+  m.keyboardKeyHeight = scaledTouchDim(m.keyboardKeyHeight);
+  m.keyboardVerticalOffset = scaledDim(m.keyboardVerticalOffset);
+  m.popupMarginX = scaledDim(m.popupMarginX);
+  m.popupMarginY = scaledDim(m.popupMarginY);
+  m.popupTextBaselineOffsetY = scaledDim(m.popupTextBaselineOffsetY);
+  m.optionPopupItemSpacing = scaledDim(m.optionPopupItemSpacing);
+  m.optionPopupInnerPadding = scaledDim(m.optionPopupInnerPadding);
+  m.optionPopupSelectionHPadding = scaledDim(m.optionPopupSelectionHPadding);
+  m.optionPopupSelectionVPadding = scaledDim(m.optionPopupSelectionVPadding);
+  m.optionPopupTitleGap = scaledDim(m.optionPopupTitleGap);
+  m.optionPopupDialogSideMargin = scaledDim(m.optionPopupDialogSideMargin);
+  return m;
+}
+
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed
 
 namespace BaseMetrics {
-constexpr ThemeMetrics values = {.batteryWidth = 15,
+constexpr ThemeMetrics rawValues = {.batteryWidth = 15,
                                  .batteryHeight = 12,
                                  .topPadding = 5,
                                  .batteryBarHeight = 20,
@@ -171,6 +227,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
                                  .textFieldLineEndOffset = 0};
+constexpr ThemeMetrics values = scaledMetrics(rawValues);
 }
 
 class BaseTheme {
