@@ -101,7 +101,7 @@ struct ThemeMetrics {
   int textFieldLineEndOffset;
 };
 
-enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
+enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark, Music };
 
 // Small-panel density scale. The metric sets below were hand-tuned for the
 // 480x800-logical X4/X3 class; the Murphy M3's logical canvas is 240x416 at

@@ -11,8 +11,9 @@
 
 class FileBrowserActivity final : public Activity {
  public:
-  // Books = standard reader browser; PickFirmware = filter to .bin only and return path via ActivityResult.
-  enum class Mode { Books, PickFirmware };
+  // Books = standard reader browser; PickFirmware = filter to .bin only and return path via
+  // ActivityResult; Audio = music browser (folders + audio files only).
+  enum class Mode { Books, PickFirmware, Audio };
 
  private:
   // Deletion
