@@ -352,22 +352,31 @@ int CrossPointSettings::getReaderFontId() const {
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
   const bool sans = (fontFamily == NOTOSANS);
   switch (pt) {
-    case 12:
-      return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
 #if FREEINK_DEVICE_MURPHY
-    // Murphy compiles 9/10pt in place of 16/18pt (see BUILTIN_READER_POINT_SIZES).
+    // Murphy compiles 5-10pt in place of 12-18pt (see BUILTIN_READER_POINT_SIZES).
+    case 5:
+      return sans ? NOTOSANS_5_FONT_ID : NOTOSERIF_5_FONT_ID;
+    case 6:
+      return sans ? NOTOSANS_6_FONT_ID : NOTOSERIF_6_FONT_ID;
+    case 7:
+      return sans ? NOTOSANS_7_FONT_ID : NOTOSERIF_7_FONT_ID;
     case 9:
       return sans ? NOTOSANS_9_FONT_ID : NOTOSERIF_9_FONT_ID;
     case 10:
       return sans ? NOTOSANS_10_FONT_ID : NOTOSERIF_10_FONT_ID;
+    case 8:
+    default:
+      return sans ? NOTOSANS_8_FONT_ID : NOTOSERIF_8_FONT_ID;
 #else
+    case 12:
+      return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
     case 16:
       return sans ? NOTOSANS_16_FONT_ID : NOTOSERIF_16_FONT_ID;
     case 18:
       return sans ? NOTOSANS_18_FONT_ID : NOTOSERIF_18_FONT_ID;
-#endif
     case 14:
     default:
       return sans ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID;
+#endif
   }
 }

@@ -52,21 +52,49 @@ FrontlightManager frontlight;  // inert on boards without a frontlight
 static unsigned long allowSleepAt = 0;
 
 // Fonts
+#if !FREEINK_DEVICE_MURPHY  // murphy drops the 12-18pt reader cuts (see all.h)
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
 EpdFont notoserif14BoldFont(&notoserif_14_bold);
 EpdFont notoserif14ItalicFont(&notoserif_14_italic);
 EpdFont notoserif14BoldItalicFont(&notoserif_14_bolditalic);
 EpdFontFamily notoserif14FontFamily(&notoserif14RegularFont, &notoserif14BoldFont, &notoserif14ItalicFont,
                                     &notoserif14BoldItalicFont);
+#endif  // !FREEINK_DEVICE_MURPHY
 #ifndef OMIT_FONTS
+#if !FREEINK_DEVICE_MURPHY
 EpdFont notoserif12RegularFont(&notoserif_12_regular);
 EpdFont notoserif12BoldFont(&notoserif_12_bold);
 EpdFont notoserif12ItalicFont(&notoserif_12_italic);
 EpdFont notoserif12BoldItalicFont(&notoserif_12_bolditalic);
 EpdFontFamily notoserif12FontFamily(&notoserif12RegularFont, &notoserif12BoldFont, &notoserif12ItalicFont,
                                     &notoserif12BoldItalicFont);
+#endif  // !FREEINK_DEVICE_MURPHY
 #if FREEINK_DEVICE_MURPHY
-// 416x240 reader cuts (see all.h): 9/10pt replace the dropped 16/18pt.
+// 416x240 reader cuts (see all.h): 5-10pt replace the dropped 12-18pt.
+EpdFont notoserif5RegularFont(&notoserif_5_regular);
+EpdFont notoserif5BoldFont(&notoserif_5_bold);
+EpdFont notoserif5ItalicFont(&notoserif_5_italic);
+EpdFont notoserif5BoldItalicFont(&notoserif_5_bolditalic);
+EpdFontFamily notoserif5FontFamily(&notoserif5RegularFont, &notoserif5BoldFont, &notoserif5ItalicFont,
+                                   &notoserif5BoldItalicFont);
+EpdFont notoserif6RegularFont(&notoserif_6_regular);
+EpdFont notoserif6BoldFont(&notoserif_6_bold);
+EpdFont notoserif6ItalicFont(&notoserif_6_italic);
+EpdFont notoserif6BoldItalicFont(&notoserif_6_bolditalic);
+EpdFontFamily notoserif6FontFamily(&notoserif6RegularFont, &notoserif6BoldFont, &notoserif6ItalicFont,
+                                   &notoserif6BoldItalicFont);
+EpdFont notoserif7RegularFont(&notoserif_7_regular);
+EpdFont notoserif7BoldFont(&notoserif_7_bold);
+EpdFont notoserif7ItalicFont(&notoserif_7_italic);
+EpdFont notoserif7BoldItalicFont(&notoserif_7_bolditalic);
+EpdFontFamily notoserif7FontFamily(&notoserif7RegularFont, &notoserif7BoldFont, &notoserif7ItalicFont,
+                                   &notoserif7BoldItalicFont);
+EpdFont notoserif8RegularFont(&notoserif_8_regular);
+EpdFont notoserif8BoldFont(&notoserif_8_bold);
+EpdFont notoserif8ItalicFont(&notoserif_8_italic);
+EpdFont notoserif8BoldItalicFont(&notoserif_8_bolditalic);
+EpdFontFamily notoserif8FontFamily(&notoserif8RegularFont, &notoserif8BoldFont, &notoserif8ItalicFont,
+                                   &notoserif8BoldItalicFont);
 EpdFont notoserif9RegularFont(&notoserif_9_regular);
 EpdFont notoserif9BoldFont(&notoserif_9_bold);
 EpdFont notoserif9ItalicFont(&notoserif_9_italic);
@@ -91,6 +119,30 @@ EpdFont notosans10ItalicFont(&notosans_10_italic);
 EpdFont notosans10BoldItalicFont(&notosans_10_bolditalic);
 EpdFontFamily notosans10FontFamily(&notosans10RegularFont, &notosans10BoldFont, &notosans10ItalicFont,
                                    &notosans10BoldItalicFont);
+EpdFont notosans5RegularFont(&notosans_5_regular);
+EpdFont notosans5BoldFont(&notosans_5_bold);
+EpdFont notosans5ItalicFont(&notosans_5_italic);
+EpdFont notosans5BoldItalicFont(&notosans_5_bolditalic);
+EpdFontFamily notosans5FontFamily(&notosans5RegularFont, &notosans5BoldFont, &notosans5ItalicFont,
+                                  &notosans5BoldItalicFont);
+EpdFont notosans6RegularFont(&notosans_6_regular);
+EpdFont notosans6BoldFont(&notosans_6_bold);
+EpdFont notosans6ItalicFont(&notosans_6_italic);
+EpdFont notosans6BoldItalicFont(&notosans_6_bolditalic);
+EpdFontFamily notosans6FontFamily(&notosans6RegularFont, &notosans6BoldFont, &notosans6ItalicFont,
+                                  &notosans6BoldItalicFont);
+EpdFont notosans7RegularFont(&notosans_7_regular);
+EpdFont notosans7BoldFont(&notosans_7_bold);
+EpdFont notosans7ItalicFont(&notosans_7_italic);
+EpdFont notosans7BoldItalicFont(&notosans_7_bolditalic);
+EpdFontFamily notosans7FontFamily(&notosans7RegularFont, &notosans7BoldFont, &notosans7ItalicFont,
+                                  &notosans7BoldItalicFont);
+EpdFont notosans8RegularFont(&notosans_8_regular);
+EpdFont notosans8BoldFont(&notosans_8_bold);
+EpdFont notosans8ItalicFont(&notosans_8_italic);
+EpdFont notosans8BoldItalicFont(&notosans_8_bolditalic);
+EpdFontFamily notosans8FontFamily(&notosans8RegularFont, &notosans8BoldFont, &notosans8ItalicFont,
+                                  &notosans8BoldItalicFont);
 #else
 EpdFont notoserif16RegularFont(&notoserif_16_regular);
 EpdFont notoserif16BoldFont(&notoserif_16_bold);
@@ -106,6 +158,7 @@ EpdFontFamily notoserif18FontFamily(&notoserif18RegularFont, &notoserif18BoldFon
                                     &notoserif18BoldItalicFont);
 #endif  // FREEINK_DEVICE_MURPHY
 
+#if !FREEINK_DEVICE_MURPHY
 EpdFont notosans12RegularFont(&notosans_12_regular);
 EpdFont notosans12BoldFont(&notosans_12_bold);
 EpdFont notosans12ItalicFont(&notosans_12_italic);
@@ -118,7 +171,6 @@ EpdFont notosans14ItalicFont(&notosans_14_italic);
 EpdFont notosans14BoldItalicFont(&notosans_14_bolditalic);
 EpdFontFamily notosans14FontFamily(&notosans14RegularFont, &notosans14BoldFont, &notosans14ItalicFont,
                                    &notosans14BoldItalicFont);
-#if !FREEINK_DEVICE_MURPHY
 EpdFont notosans16RegularFont(&notosans_16_regular);
 EpdFont notosans16BoldFont(&notosans_16_bold);
 EpdFont notosans16ItalicFont(&notosans_16_italic);
@@ -293,23 +345,33 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
+#if !FREEINK_DEVICE_MURPHY  // murphy drops the 12-18pt reader cuts (see all.h)
   renderer.insertFont(NOTOSERIF_14_FONT_ID, notoserif14FontFamily);
+#endif
 #ifndef OMIT_FONTS
-  renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
 #if FREEINK_DEVICE_MURPHY
+  renderer.insertFont(NOTOSERIF_5_FONT_ID, notoserif5FontFamily);
+  renderer.insertFont(NOTOSERIF_6_FONT_ID, notoserif6FontFamily);
+  renderer.insertFont(NOTOSERIF_7_FONT_ID, notoserif7FontFamily);
+  renderer.insertFont(NOTOSERIF_8_FONT_ID, notoserif8FontFamily);
   renderer.insertFont(NOTOSERIF_9_FONT_ID, notoserif9FontFamily);
   renderer.insertFont(NOTOSERIF_10_FONT_ID, notoserif10FontFamily);
 #else
+  renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
   renderer.insertFont(NOTOSERIF_16_FONT_ID, notoserif16FontFamily);
   renderer.insertFont(NOTOSERIF_18_FONT_ID, notoserif18FontFamily);
 #endif
 
-  renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
-  renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
 #if FREEINK_DEVICE_MURPHY
+  renderer.insertFont(NOTOSANS_5_FONT_ID, notosans5FontFamily);
+  renderer.insertFont(NOTOSANS_6_FONT_ID, notosans6FontFamily);
+  renderer.insertFont(NOTOSANS_7_FONT_ID, notosans7FontFamily);
+  renderer.insertFont(NOTOSANS_8_FONT_ID, notosans8FontFamily);
   renderer.insertFont(NOTOSANS_9_FONT_ID, notosans9FontFamily);
   renderer.insertFont(NOTOSANS_10_FONT_ID, notosans10FontFamily);
 #else
+  renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
+  renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
   renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
   renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
 #endif
