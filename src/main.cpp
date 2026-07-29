@@ -477,6 +477,32 @@ void loop() {
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
 
+#if FREEINK_DEVICE_MURPHY && defined(MURPHY_CHARGE_PROBE)
+  // Charge-status pin hunt: GPIO47 is the only unaccounted usable pin on the
+  // M3 (33-37 belong to the octal PSRAM). TP4054 CHRG is open-drain LOW while
+  // charging — with a pullup it reads 0=charging / 1=idle IF it is routed
+  // here. Logs level + raw VBAT so plug/unplug events show in serial.
+  static bool chargeProbeInit = false;
+  static unsigned long lastChargeProbe = 0;
+  static int lastG47 = -1;
+  if (!chargeProbeInit) {
+    pinMode(47, INPUT_PULLUP);
+    chargeProbeInit = true;
+  }
+  if (millis() - lastChargeProbe >= 1000) {
+    lastChargeProbe = millis();
+    const int g47 = digitalRead(47);
+    const int vbatMv = analogReadMilliVolts(9);
+    if (g47 != lastG47) {
+      LOG_INF("PROBE", "GPIO47 CHANGED -> %d (vbat_raw=%dmV scaled=%dmV)", g47, vbatMv,
+              (int)(vbatMv * 3.030303f));
+      lastG47 = g47;
+    } else {
+      LOG_INF("PROBE", "GPIO47=%d vbat_raw=%dmV scaled=%dmV", g47, vbatMv, (int)(vbatMv * 3.030303f));
+    }
+  }
+#endif
+
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
