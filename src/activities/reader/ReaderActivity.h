@@ -16,12 +16,15 @@ class ReaderActivity final : public Activity {
   std::unique_ptr<Epub> loadEpub(const std::string& path);
   // Converts (or reuses the cached conversion of) a MOBI to EPUB, then loads it.
   std::unique_ptr<Epub> loadMobi(const std::string& path);
+  // Converts (or reuses the cached conversion of) a PDF to EPUB (text reflow), then loads it.
+  std::unique_ptr<Epub> loadPdf(const std::string& path);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
   static std::unique_ptr<Txt> loadTxt(const std::string& path);
   static bool isXtcFile(const std::string& path);
   static bool isTxtFile(const std::string& path);
   static bool isBmpFile(const std::string& path);
   static bool isMobiFile(const std::string& path);
+  static bool isPdfFile(const std::string& path);
 #if CROSSPOINT_AUDIO_PLAYER
   static bool isAudioFile(const std::string& path);
 #endif

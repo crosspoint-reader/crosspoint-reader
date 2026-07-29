@@ -59,7 +59,8 @@ void FileBrowserActivity::loadFiles() {
         }
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename) || FsHelpers::hasMobiExtension(filename)) {
+                 FsHelpers::hasBmpExtension(filename) || FsHelpers::hasMobiExtension(filename) ||
+                 FsHelpers::hasPdfExtension(filename)) {
         files.emplace_back(filename);
       }
     }

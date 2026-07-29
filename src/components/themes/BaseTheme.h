@@ -140,6 +140,15 @@ constexpr ThemeMetrics scaledMetrics(ThemeMetrics m) {
   m.homeTopPadding = scaledDim(m.homeTopPadding);
   m.homeCoverHeight = scaledDim(m.homeCoverHeight);
   m.homeCoverTileHeight = scaledDim(m.homeCoverTileHeight);
+#if FREEINK_DEVICE_MURPHY
+  // Plain 0.6x keeps the X4's cover tile at 58% of the murphy's 416px screen,
+  // which leaves room for only 4 menu rows below it (5 with the Audio entry
+  // overflow the panel). Cap the tile so 6 rows (OPDS + Audio both enabled)
+  // fit: 24 top pad + 186 tile + 6 offset + 6 spacing + 6*(28+5) = 420 ~ 416
+  // with the last row's trailing gap clipped, all rows fully visible.
+  if (m.homeCoverTileHeight > 186) m.homeCoverTileHeight = 186;
+  if (m.homeCoverHeight > 186) m.homeCoverHeight = 186;
+#endif
   m.homeMenuTopOffset = scaledDim(m.homeMenuTopOffset);
   m.buttonHintsHeight = scaledDim(m.buttonHintsHeight);
   m.sideButtonHintsWidth = scaledDim(m.sideButtonHintsWidth);

@@ -702,9 +702,13 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
+  const int screenBottom = renderer.getScreenHeight();
   for (int i = 0; i < buttonCount; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
                       static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+    // Never paint a row the panel can't show (an overfull menu otherwise
+    // draws half-tiles into the hint bar / off the bottom edge).
+    if (tileY + BaseMetrics::values.menuRowHeight > screenBottom) break;
 
     const bool selected = selectedIndex == i;
 

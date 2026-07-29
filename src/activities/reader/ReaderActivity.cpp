@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Memory.h>
 #include <MobiToEpub.h>
+#include <PdfToEpub.h>
 
 #include <optional>
 
@@ -33,6 +34,25 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
 
 bool ReaderActivity::isMobiFile(const std::string& path) { return FsHelpers::hasMobiExtension(path); }
+
+bool ReaderActivity::isPdfFile(const std::string& path) { return FsHelpers::hasPdfExtension(path); }
+
+std::unique_ptr<Epub> ReaderActivity::loadPdf(const std::string& path) {
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
+    return nullptr;
+  }
+  allowFastInitialRefresh = false;
+  GUI.drawPopup(renderer, tr(STR_CONVERTING));
+  std::string convertError;
+  const std::string epubPath = PdfToEpub::ensureConverted(path, &convertError);
+  if (epubPath.empty()) {
+    GUI.drawPopup(renderer, convertError.c_str());
+    delay(2500);
+    return nullptr;
+  }
+  return loadEpub(epubPath);
+}
 
 std::unique_ptr<Epub> ReaderActivity::loadMobi(const std::string& path) {
   if (!Storage.exists(path.c_str())) {
@@ -207,6 +227,13 @@ void ReaderActivity::onEnter() {
     onGoToTxtReader(std::move(txt));
   } else if (isMobiFile(initialBookPath)) {
     auto epub = loadMobi(initialBookPath);
+    if (!epub) {
+      onGoBack();
+      return;
+    }
+    onGoToEpubReader(std::move(epub));
+  } else if (isPdfFile(initialBookPath)) {
+    auto epub = loadPdf(initialBookPath);
     if (!epub) {
       onGoBack();
       return;
