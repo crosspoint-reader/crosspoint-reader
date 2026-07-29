@@ -95,6 +95,7 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // (the setter drives the hardware), so the generic loop skips it. Stored as
   // percent 0-100.
   doc["frontlightBrightness"] = frontlightBrightness;
+  doc["murphyReaderDefaultsV2"] = murphyReaderDefaultsV2;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -216,6 +217,17 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
 
   // Frontlight brightness — uses dynamic getter/setter in SettingsList, load
   // manually. Percent 0-100; clamp anything larger down to full brightness.
+#if FREEINK_DEVICE_MURPHY
+  // One-shot: pull existing installs onto the current murphy reader defaults
+  // (7pt, tight leading). Runs once; afterwards the user's choices stick.
+  murphyReaderDefaultsV2 = doc["murphyReaderDefaultsV2"] | 0;
+  if (murphyReaderDefaultsV2 == 0) {
+    fontPointSize = DEFAULT_FONT_POINT_SIZE;
+    lineSpacing = TIGHT;
+    murphyReaderDefaultsV2 = 1;
+    needsResave = true;
+  }
+#endif
   const uint8_t storedFrontlight = doc["frontlightBrightness"] | frontlightBrightness;
   frontlightBrightness = storedFrontlight > 100 ? (uint8_t)100 : storedFrontlight;
 

@@ -213,7 +213,11 @@ void AudioPlayerActivity::seekToFraction(float frac) {
   MutexLock lock(audioMutex);
   const uint32_t duration = audio->getAudioFileDuration();
   if (duration == 0) return;
+  // setAudioPlayTime only acts on a running stream, so a paused seek would be
+  // a silent no-op: resume, seek, re-pause.
+  if (paused) audio->pauseResume();
   audio->setAudioPlayTime(static_cast<uint16_t>(frac * duration));
+  if (paused) audio->pauseResume();
 }
 
 void AudioPlayerActivity::changeVolume(int delta) {
@@ -261,7 +265,10 @@ void AudioPlayerActivity::handleTouch() {
 
 void AudioPlayerActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
+    // Return to the audio browser at this track's folder (the player replaced
+    // it on the stack, so finish() would drop the user all the way home).
+    const std::string here = playlist.empty() ? initialPath : playlist[trackIndex];
+    activityManager.goToAudioBrowser(FsHelpers::extractFolderPath(here));
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {

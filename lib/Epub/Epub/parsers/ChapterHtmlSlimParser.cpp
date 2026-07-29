@@ -570,11 +570,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
       if (!src.empty() && self->imageRendering != 1) {
         LOG_DBG("EHP", "Found image: src=%s", src.c_str());
+#if defined(MURPHY_CHARGE_PROBE)
+        LOG_INF("IMGDIAG", "img src=%s base=%s", src.c_str(), self->contentBase.c_str());
+#endif
 
         {
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
 
+#if defined(MURPHY_CHARGE_PROBE)
+          LOG_INF("IMGDIAG", "resolved=%s supported=%d", resolvedPath.c_str(),
+                  ImageDecoderFactory::isFormatSupported(resolvedPath) ? 1 : 0);
+#endif
           if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
             // Create a unique filename for the cached image
             std::string ext;
@@ -625,6 +632,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 }
               }
 
+#if defined(MURPHY_CHARGE_PROBE)
+              LOG_INF("IMGDIAG", "dims ok=%d %dx%d", gotDimensions ? 1 : 0, dims.width, dims.height);
+#endif
               if (gotDimensions) {
                 LOG_DBG("EHP", "Image dimensions: %dx%d", dims.width, dims.height);
 

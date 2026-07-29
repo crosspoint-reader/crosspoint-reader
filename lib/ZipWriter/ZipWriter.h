@@ -32,6 +32,9 @@ class ZipWriter {
   bool writeChunk(const uint8_t* data, size_t len);
   bool endStreamedFile();
   bool finish();
+  // Close the output without writing a central directory (failed conversion).
+  // Must be called before removing the file — SdFat must not have it open.
+  void abort();
 
  private:
   struct Entry {

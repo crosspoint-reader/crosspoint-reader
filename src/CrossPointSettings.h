@@ -100,7 +100,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
 #if FREEINK_DEVICE_MURPHY
   // 416x240 panel: 14pt reads huge there, 8pt is the comfortable default.
-  static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 8;
+  static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 7;
 #else
   static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
 #endif
@@ -225,7 +225,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
+#if FREEINK_DEVICE_MURPHY
+  // Tight by default on the M3: the 240x416 panel fits far fewer lines, so
+  // NORMAL leading wastes a noticeable fraction of every page.
+  uint8_t lineSpacing = TIGHT;
+#else
   uint8_t lineSpacing = NORMAL;
+#endif
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
@@ -265,6 +271,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Audio player volume percent (ES8388 analog out). Round-tripped by the
   // generic settings loop via the SettingsList entry on audio-capable builds.
   uint8_t audioVolume = 60;
+  // One-shot migration marker: existing installs already persisted the older
+  // murphy reader defaults (8pt / NORMAL leading), so a changed default alone
+  // would never reach them. Applied once in fromJson, then user-changeable.
+  uint8_t murphyReaderDefaultsV2 = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)

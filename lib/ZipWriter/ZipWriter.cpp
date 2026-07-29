@@ -111,6 +111,15 @@ bool ZipWriter::endStreamedFile() {
   return true;
 }
 
+void ZipWriter::abort() {
+  if (!out) return;
+  out->flush();
+  out->close();
+  out.reset();
+  streaming = false;
+  entries.clear();
+}
+
 bool ZipWriter::finish() {
   if (!out || streaming) return false;
   const uint32_t cdStart = offset;

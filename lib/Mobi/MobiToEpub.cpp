@@ -14,7 +14,20 @@
 
 namespace {
 
+// Bumped whenever the converter's output changes: the generated EPUB keeps a
+// stable path, so without this a stale conversion (and the reader's section
+// caches derived from it) would survive a firmware upgrade.
+constexpr uint32_t CONVERTER_VERSION = 2;
+
 constexpr size_t CHAPTER_SOFT_LIMIT = 160 * 1024;  // split oversized flows at block boundaries
+// Hard ceiling: a book whose whole body sits inside one never-closed <div> has
+// no block boundary to split at, so the soft limit alone would grow the buffer
+// to the entire book and abort() on OOM. At the ceiling we split mid-flow and
+// re-open the tag stack in the next chapter.
+constexpr size_t CHAPTER_HARD_LIMIT = 320 * 1024;
+constexpr size_t MAX_TAG_NAME = 64;
+constexpr size_t MAX_ATTR_NAME = 64;
+constexpr size_t MAX_ATTR_VALUE = 512;
 
 // ---------------------------------------------------------------------------
 // Entities: named -> Unicode codepoint. Unknown names are emitted as literal
@@ -195,9 +208,11 @@ struct EpubBuilder {
     } else if (bytes[0] == 'G') {
       ext = "gif";
       media = "image/gif";
+      LOG_ERR("MOBI", "image %u is GIF - reader decodes only JPEG/PNG, it will not render", recindex);
     } else if (bytes[0] == 'B') {
       ext = "bmp";
       media = "image/bmp";
+      LOG_ERR("MOBI", "image %u is BMP - reader decodes only JPEG/PNG, it will not render", recindex);
     }
     char name[32];
     snprintf(name, sizeof(name), "images/img%05u.%s", recindex, ext);
@@ -224,7 +239,11 @@ struct EpubBuilder {
   }
 
   bool flushChapter() {
-    if (chapterCount >= 9999) return false;
+    if (chapterCount >= 9999) {
+      // Never silently drop the tail and then cache it as a good conversion.
+      failed = true;
+      return false;
+    }
     closeAllTags();
     chapterBuf += "\n</body>\n</html>\n";
     char name[40];
@@ -242,6 +261,18 @@ struct EpubBuilder {
 
   // Chapter has real content beyond the skeleton?
   bool chapterHasContent() const { return chapterBuf.size() > 120; }
+
+  // Split mid-flow when no block boundary has appeared: close the open tags,
+  // flush, then re-open the same tags in the fresh chapter so formatting and
+  // nesting survive the cut.
+  void forceSplit() {
+    std::vector<std::string> saved = openTags;
+    flushChapter();
+    for (const auto& t : saved) {
+      chapterBuf += "<" + t + ">";
+      openTags.push_back(t);
+    }
+  }
 };
 
 // Parses one tag starting at html[i] == '<'. Returns index past '>'.
@@ -257,13 +288,15 @@ size_t parseTag(const char* html, size_t len, size_t i, std::string& name, std::
     i++;
   }
   while (i < len && (isalnum((unsigned char)html[i]) || html[i] == ':' || html[i] == '-')) {
-    name += (char)tolower((unsigned char)html[i]);
+    if (name.size() < MAX_TAG_NAME) name += (char)tolower((unsigned char)html[i]);
     i++;
   }
   // Attributes
   while (i < len && html[i] != '>') {
-    if (html[i] == '/' && i + 1 < len && html[i + 1] == '>') {
-      selfClose = true;
+    if (html[i] == '/') {
+      // '/' inside a tag: '/>' closes it, a stray '/' (e.g. "<hr / >", a URL in
+      // a comment) must still advance or the loop spins forever.
+      if (i + 1 < len && html[i + 1] == '>') selfClose = true;
       i++;
       continue;
     }
@@ -273,11 +306,11 @@ size_t parseTag(const char* html, size_t len, size_t i, std::string& name, std::
     }
     Attr a;
     while (i < len && html[i] != '=' && html[i] != '>' && html[i] != '/' && !isspace((unsigned char)html[i])) {
-      a.name += (char)tolower((unsigned char)html[i]);
+      if (a.name.size() < MAX_ATTR_NAME) a.name += (char)tolower((unsigned char)html[i]);
       i++;
     }
     if (a.name.empty() && i < len && html[i] != '=' && html[i] != '>') {
-      i++;  // junk char ('/' not part of '/>', etc.) — must advance or we spin forever
+      i++;  // junk char — must advance or we spin forever
       continue;
     }
     while (i < len && isspace((unsigned char)html[i])) i++;
@@ -286,10 +319,18 @@ size_t parseTag(const char* html, size_t len, size_t i, std::string& name, std::
       while (i < len && isspace((unsigned char)html[i])) i++;
       if (i < len && (html[i] == '"' || html[i] == '\'')) {
         const char q = html[i++];
-        while (i < len && html[i] != q) a.value += html[i++];
+        // An unterminated quote would otherwise copy the rest of the book into
+        // this string; only the first MAX_ATTR_VALUE bytes are ever used.
+        while (i < len && html[i] != q) {
+          if (a.value.size() < MAX_ATTR_VALUE) a.value += html[i];
+          i++;
+        }
         if (i < len) i++;
       } else {
-        while (i < len && html[i] != '>' && !isspace((unsigned char)html[i])) a.value += html[i++];
+        while (i < len && html[i] != '>' && !isspace((unsigned char)html[i])) {
+          if (a.value.size() < MAX_ATTR_VALUE) a.value += html[i];
+          i++;
+        }
       }
     }
     if (!a.name.empty()) attrs.push_back(std::move(a));
@@ -333,8 +374,8 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   {
     HalFile f;
     if (Storage.openFileForRead("MOBI", tagPath.c_str(), f)) {
-      if (f.read(srcTag, sizeof(srcTag)) == (int)sizeof(srcTag) && srcTag[1] == mobi.rawTextLength() &&
-          Storage.exists(epubPath.c_str())) {
+      if (f.read(srcTag, sizeof(srcTag)) == (int)sizeof(srcTag) && srcTag[0] == CONVERTER_VERSION &&
+          srcTag[1] == mobi.rawTextLength() && Storage.exists(epubPath.c_str())) {
         return epubPath;  // valid cached conversion
       }
     }
@@ -435,6 +476,10 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
           }
           if (recindex && recindex <= 0xFFFF) {
             const auto* im = b.ensureImage((uint16_t)recindex);
+            if (!im) {
+              LOG_ERR("MOBI", "image recindex %lu unavailable (missing record or non-raster)",
+                      (unsigned long)recindex);
+            }
             if (im) {
               b.chapterBuf += "<img src=\"";
               b.chapterBuf += im->name;
@@ -453,6 +498,8 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
             // Oversized chapter: split before opening a new block.
             if (isBlockKind(rule->kind) && b.chapterBuf.size() > CHAPTER_SOFT_LIMIT && b.openTags.empty()) {
               b.flushChapter();
+            } else if (b.chapterBuf.size() > CHAPTER_HARD_LIMIT) {
+              b.forceSplit();
             }
             // Auto-close a dangling <p> when a new block opens (HTML allows
             // implicit </p>, XHTML doesn't).
@@ -550,6 +597,8 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
       continue;
     }
 
+    if (b.chapterBuf.size() > CHAPTER_HARD_LIMIT) b.forceSplit();
+
     const uint8_t uc = (uint8_t)c;
     (void)cp;
     if (uc < 0x80) {
@@ -569,6 +618,7 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   if (b.chapterHasContent() || b.chapterCount == 0) b.flushChapter();
   if (b.failed) {
     setError("EPUB write failed (SD full?)");
+    b.zip.abort();  // SdFat must not hold the file open across remove()
     Storage.remove(epubPath.c_str());
     return "";
   }
@@ -633,6 +683,8 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   opf += "</spine>\n</package>\n";
   if (!b.zip.addFile("OEBPS/content.opf", (const uint8_t*)opf.data(), opf.size())) {
     setError("EPUB write failed");
+    b.zip.abort();
+    Storage.remove(epubPath.c_str());
     return "";
   }
 
@@ -662,6 +714,8 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   ncx += "</navMap>\n</ncx>\n";
   if (!b.zip.addFile("OEBPS/toc.ncx", (const uint8_t*)ncx.data(), ncx.size()) || !b.zip.finish()) {
     setError("EPUB write failed");
+    b.zip.abort();
+    Storage.remove(epubPath.c_str());
     return "";
   }
 
@@ -669,7 +723,7 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   {
     HalFile f;
     if (Storage.openFileForWrite("MOBI", tagPath.c_str(), f)) {
-      uint32_t tag[2] = {(uint32_t)0, mobi.rawTextLength()};
+      uint32_t tag[2] = {CONVERTER_VERSION, mobi.rawTextLength()};
       f.write(tag, sizeof(tag));
     }
   }
