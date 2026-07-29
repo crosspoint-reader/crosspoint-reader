@@ -511,7 +511,12 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
-  const auto chordAction = static_cast<ButtonShortcutController::ChordAction>(SETTINGS.powerChordAction);
+  // Validate persisted powerChordAction before casting (values 0-4 are valid; clamp unknown to default)
+  constexpr uint8_t MAX_VALID_CHORD_ACTION = 4;  // CHORD_DISABLED
+  const uint8_t rawChordAction = SETTINGS.powerChordAction <= MAX_VALID_CHORD_ACTION
+                                     ? SETTINGS.powerChordAction
+                                     : CrossPointSettings::CHORD_SCREENSHOT;
+  const auto chordAction = static_cast<ButtonShortcutController::ChordAction>(rawChordAction);
   const auto shortcutResult = buttonShortcutController.update(
       gpio.isPressed(HalGPIO::BTN_POWER), gpio.isPressed(HalGPIO::BTN_DOWN),
       mappedInputManager.wasReleased(MappedInputManager::Button::Power),

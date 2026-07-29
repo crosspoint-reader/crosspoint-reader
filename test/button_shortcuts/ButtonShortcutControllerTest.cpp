@@ -8,17 +8,17 @@ using Controller = ButtonShortcutController;
 TEST(ButtonShortcutControllerTest, ShortPowerReleaseTogglesQuickLockAndSuppressesInput) {
   Controller controller;
 
-  auto result = controller.update(true, true);
+  auto result = controller.update(false, false, true, true, Controller::ChordAction::Disabled);
   EXPECT_EQ(result.event, Controller::Event::QuickLockChanged);
   EXPECT_TRUE(result.consumeInput);
   EXPECT_TRUE(controller.isQuickLocked());
 
-  result = controller.update(false, true);
+  result = controller.update(false, false, false, true, Controller::ChordAction::Disabled);
   EXPECT_EQ(result.event, Controller::Event::None);
   EXPECT_TRUE(result.consumeInput);
   EXPECT_TRUE(controller.isQuickLocked());
 
-  result = controller.update(true, true);
+  result = controller.update(false, false, true, true, Controller::ChordAction::Disabled);
   EXPECT_EQ(result.event, Controller::Event::QuickLockChanged);
   EXPECT_TRUE(result.consumeInput);
   EXPECT_FALSE(controller.isQuickLocked());
@@ -27,7 +27,7 @@ TEST(ButtonShortcutControllerTest, ShortPowerReleaseTogglesQuickLockAndSuppresse
 TEST(ButtonShortcutControllerTest, UnconfiguredPowerReleaseDoesNotLockOrConsume) {
   Controller controller;
 
-  const auto result = controller.update(true, false);
+  const auto result = controller.update(false, false, true, false, Controller::ChordAction::Disabled);
   EXPECT_EQ(result.event, Controller::Event::None);
   EXPECT_FALSE(result.consumeInput);
   EXPECT_FALSE(controller.isQuickLocked());
@@ -96,7 +96,7 @@ TEST(ButtonShortcutControllerTest, DisabledChordDoesNotInterceptButtons) {
 
 TEST(ButtonShortcutControllerTest, LockedStateSuppressesNonUnlockChordActions) {
   Controller controller;
-  (void)controller.update(true, true);
+  (void)controller.update(false, false, true, true, Controller::ChordAction::Disabled);
   ASSERT_TRUE(controller.isQuickLocked());
 
   auto result = controller.update(true, true, false, true, Controller::ChordAction::Screenshot);

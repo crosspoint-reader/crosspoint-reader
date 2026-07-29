@@ -12,10 +12,6 @@ class ButtonShortcutController {
     bool consumeInput = false;
   };
 
-  [[nodiscard]] Result update(bool powerReleased, bool quickLockOnShortPower) {
-    return update(false, false, powerReleased, quickLockOnShortPower, ChordAction::Disabled);
-  }
-
   [[nodiscard]] Result update(bool powerPressed, bool downPressed, bool powerReleased, bool quickLockOnShortPower,
                               ChordAction chordAction) {
     if (chordActive) {
