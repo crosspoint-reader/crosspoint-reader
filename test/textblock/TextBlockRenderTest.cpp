@@ -242,6 +242,37 @@ TEST(TextBlockSerialization, RubylessRoundTripRendersIdentically) {
   expectSameTextCalls(before, after);
 }
 
+// The block's RTL flag feeds the bidi base direction passed to every drawText
+// call, so losing it in the round trip would silently flip text direction.
+//
+// The words are digits deliberately. BidiUtils::detectParagraphLevel() only
+// falls back to the block's RTL flag for direction-neutral text -- a word with a
+// strong class (any Latin or Hebrew/Arabic letter) decides the direction by
+// itself and the flag never gets consulted. So a Latin-text block round-trips
+// identically whether or not the flag survives, which is why the ruby-less
+// comparison above cannot catch a dropped isRtl.
+TEST(TextBlockSerialization, RtlBlockRoundTripsBaseDirection) {
+  BlockStyle rtl;
+  rtl.isRtl = true;
+  auto original = makeBlock({"123", "456"}, {0, 60}, regularStyles(2), {}, rtl);
+
+  HalFile file;
+  ASSERT_TRUE(original->serialize(file));
+  file.rewind();
+  auto restored = TextBlock::deserialize(file);
+  ASSERT_NE(restored, nullptr);
+
+  const GfxRenderer before;
+  const GfxRenderer after;
+  original->render(before, 0, 7, 21);
+  restored->render(after, 0, 7, 21);
+
+  ASSERT_FALSE(before.textCalls.empty());
+  EXPECT_EQ(static_cast<int>(before.textCalls[0].baseDir), static_cast<int>(BidiUtils::BidiBaseDir::RTL))
+      << "an RTL block must draw with an RTL base direction";
+  expectSameTextCalls(before, after);
+}
+
 TEST(TextBlockSerialization, RejectsImplausibleWordCount) {
   // Corrupt header: word count beyond the 10000 cap must be refused rather than
   // driving a huge arena allocation.

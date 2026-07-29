@@ -24,9 +24,9 @@ using Style = EpdFontFamily::Style;
 // Build a TextBlock from words at explicit x positions, with no focus-reading
 // annotations. `ruby` may be empty (the common, ruby-less case).
 inline std::unique_ptr<TextBlock> makeBlock(const std::vector<std::string>& words, const std::vector<int16_t>& xpos,
-                                            const std::vector<Style>& styles,
-                                            const std::vector<std::string>& ruby = {}) {
-  return std::make_unique<TextBlock>(words, xpos, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, BlockStyle(),
+                                            const std::vector<Style>& styles, const std::vector<std::string>& ruby = {},
+                                            const BlockStyle& blockStyle = BlockStyle()) {
+  return std::make_unique<TextBlock>(words, xpos, styles, std::vector<uint8_t>{}, std::vector<uint16_t>{}, blockStyle,
                                      ruby);
 }
 
@@ -53,5 +53,8 @@ inline void expectSameTextCalls(const GfxRenderer& a, const GfxRenderer& b) {
     EXPECT_EQ(a.textCalls[i].x, b.textCalls[i].x);
     EXPECT_EQ(a.textCalls[i].y, b.textCalls[i].y);
     EXPECT_EQ(a.textCalls[i].style, b.textCalls[i].style);
+    // Compared as an int: BidiBaseDir's underlying type is signed char, which
+    // gtest would otherwise print as a character rather than a value.
+    EXPECT_EQ(static_cast<int>(a.textCalls[i].baseDir), static_cast<int>(b.textCalls[i].baseDir));
   }
 }
