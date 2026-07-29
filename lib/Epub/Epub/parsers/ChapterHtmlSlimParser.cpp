@@ -835,7 +835,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Ruby tag handling
   if (strcmp(name, "ruby") == 0) {
-    self->flushPartWordBuffer();
+    // <ruby> is an inline element: a base that follows text with no whitespace between them
+    // continues the same visual word, exactly like <b>/<i> handling in endElement().
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
     self->inRuby = true;
     self->rubyStartWordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
     if (self->currentTextBlock) {
@@ -846,7 +851,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
   if (strcmp(name, "rt") == 0) {
-    self->flushPartWordBuffer();
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
     self->collectingRubyText = true;
     self->depth += 1;
     return;
@@ -1317,6 +1324,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       }
     }
     self->rubyTextBuffer.clear();
+    // Inline close: the next base (e.g. 字 in <ruby>漢<rt>かん</rt>字<rt>じ</rt></ruby>) joins the
+    // preceding one with no space. Whitespace in the source resets this in characterData().
+    if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+      self->nextWordContinues = true;
+    }
     self->depth -= 1;
     return;
   }
@@ -1324,6 +1336,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->inRuby = false;
     self->rubyStartWordIndex = -1;
     self->rubyTextBuffer.clear();
+    // Inline close: text following </ruby> joins the annotated base with no space.
+    if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
+      self->nextWordContinues = true;
+    }
     self->depth -= 1;
     return;
   }
