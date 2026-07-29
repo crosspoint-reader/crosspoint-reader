@@ -6,7 +6,7 @@ class GfxRenderer;
 
 // Lyra theme metrics (zero runtime cost)
 namespace LyraMetrics {
-constexpr ThemeMetrics values = {.batteryWidth = 16,
+constexpr ThemeMetrics rawValues = {.batteryWidth = 16,
                                  .batteryHeight = 12,
                                  .topPadding = 5,
                                  .batteryBarHeight = 40,
@@ -70,6 +70,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
                                  .textFieldLineEndOffset = 0};
+constexpr ThemeMetrics values = scaledMetrics(rawValues);
 }
 
 class LyraTheme : public BaseTheme {
