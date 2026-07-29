@@ -276,6 +276,10 @@ size_t parseTag(const char* html, size_t len, size_t i, std::string& name, std::
       a.name += (char)tolower((unsigned char)html[i]);
       i++;
     }
+    if (a.name.empty() && i < len && html[i] != '=' && html[i] != '>') {
+      i++;  // junk char ('/' not part of '/>', etc.) — must advance or we spin forever
+      continue;
+    }
     while (i < len && isspace((unsigned char)html[i])) i++;
     if (i < len && html[i] == '=') {
       i++;

@@ -85,10 +85,13 @@ bool MobiParser::readRecordOffsets() {
   }
   for (uint16_t i = 0; i < numRecords; i++) recordOffsets.push_back(be32(&list[i * 8]));
   recordOffsets.push_back((uint32_t)file->fileSize());
-  // Offsets must be monotonically increasing and inside the file.
+  // Offsets must be non-decreasing and inside the file. Equality is legal:
+  // PDB permits zero-length records (padding/EOF markers, common in large
+  // builds like Bibles) — only strictly decreasing offsets are corrupt.
   for (uint16_t i = 0; i < numRecords; i++) {
-    if (recordOffsets[i] >= recordOffsets[i + 1]) {
-      LOG_ERR("MOBI", "bad header: record %u offset %lu >= next %lu", i, (unsigned long)recordOffsets[i], (unsigned long)recordOffsets[i + 1]);
+    if (recordOffsets[i] > recordOffsets[i + 1]) {
+      LOG_ERR("MOBI", "bad header: record %u offset %lu > next %lu", i, (unsigned long)recordOffsets[i],
+              (unsigned long)recordOffsets[i + 1]);
       err = Error::BadHeader;
       return false;
     }
