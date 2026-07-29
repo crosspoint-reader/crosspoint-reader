@@ -143,9 +143,21 @@ bool MappedInputManager::listItemFromPoint(const int x, const int y, int& index,
   const int pageItems = theme.getListPageItems(listHeight, hasSubtitle);
   if (pageItems <= 0) return false;
   const int pageStart = std::max(0, selectedIndex / pageItems) * pageItems;
-  const int row = (y - listTop) / rowStep;
+  int row = (y - listTop) / rowStep;
+  if (row < 0) return false;
+  // The band is rarely an exact multiple of the row height, so the leftover
+  // pixels below the last row belong to no row. Ignoring taps there leaves a
+  // dead strip up to one row tall at the bottom of every list -- very visible on
+  // a short panel, where it can be over half a row. Treat the last drawn row as
+  // extending to the bottom of the band instead.
+  const int rowsOnPage = std::min(pageItems, std::max(0, itemCount - pageStart));
+  if (rowsOnPage <= 0) return false;
+  if (row >= rowsOnPage) {
+    if (row > rowsOnPage) return false;  // genuinely below the list content
+    row = rowsOnPage - 1;
+  }
   const int tapped = pageStart + row;
-  if (row < 0 || row >= pageItems || tapped >= itemCount) return false;
+  if (tapped >= itemCount) return false;
   index = tapped;
   return true;
 }
