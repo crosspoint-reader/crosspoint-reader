@@ -1,6 +1,7 @@
 #include "MappedInputManager.h"
 
 #include <GfxRenderer.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -99,6 +100,11 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   float ny = 0.0f;
   if (!gpio.wasTouchTap(nx, ny)) return false;
   renderer.tapToLogical(nx, ny, x, y);
+#if defined(MURPHY_CHARGE_PROBE)
+  // Corner-tap calibration aid for the M3 mount transform (temporary).
+  LOG_INF("PROBE", "tap n=(%.2f,%.2f) logical=(%d,%d) screen=%dx%d", nx, ny, x, y,
+          renderer.getScreenWidth(), renderer.getScreenHeight());
+#endif
   rememberTouchHeldTime();
   return true;
 }
