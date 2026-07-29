@@ -246,7 +246,13 @@ bool HalGPIO::isUsbConnected() const {
     return false;
   }
   if (BoardConfig::ACTIVE.usbDetect < 0) {
+#if FREEINK_USB_PRESENCE_AS_CHARGING
+    // No VBUS-detect GPIO exists (Murphy M3): infer host presence from the
+    // USB-Serial/JTAG SOF frame counter — zero wiring, see BoardConfig.h.
+    return freeink::usbHostPresent();
+#else
     return false;
+#endif
   }
   return digitalRead(BoardConfig::ACTIVE.usbDetect) == HIGH;
 }

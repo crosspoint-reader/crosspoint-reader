@@ -91,6 +91,10 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // option lists depend on the SD font registry), so the generic loop skips them.
   doc["fontFamily"] = fontFamily;
   doc["fontSize"] = fontPointSize;
+  // Frontlight brightness — the SettingsList entry uses dynamic getter/setters
+  // (the setter drives the hardware), so the generic loop skips it. Stored as
+  // percent 0-100.
+  doc["frontlightBrightness"] = frontlightBrightness;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -209,6 +213,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+
+  // Frontlight brightness — uses dynamic getter/setter in SettingsList, load
+  // manually. Percent 0-100; clamp anything larger down to full brightness.
+  const uint8_t storedFrontlight = doc["frontlightBrightness"] | frontlightBrightness;
+  frontlightBrightness = storedFrontlight > 100 ? (uint8_t)100 : storedFrontlight;
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
