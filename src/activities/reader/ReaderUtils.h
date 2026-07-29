@@ -135,6 +135,11 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
 template <typename RenderFn>
 void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
+  // B/W-only panels: the BW pass already displayed the thresholded frame and
+  // the driver's displayGray is a no-op — skip the double re-render.
+  if (!renderer.supportsGrayscale()) {
+    return;
+  }
   if (!renderer.storeBwBuffer()) {
     LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
     return;
