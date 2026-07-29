@@ -12,8 +12,13 @@
 // .cpfont files a user installed for an SD family.
 
 // The built-in Noto Serif / Noto Sans families are compiled in at exactly these
-// point sizes (see the global font objects in main.cpp).
+// point sizes (see the global font objects in main.cpp). The Murphy M3's
+// 416x240 panel swaps the oversized 16/18pt cuts for 9/10pt ones.
+#if FREEINK_DEVICE_MURPHY
+inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {9, 10, 12, 14};
+#else
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
+#endif
 
 // Point sizes selectable for the active reader font, ascending: the SD family's
 // installed sizes when `sdFamilyName` names one the registry knows, otherwise

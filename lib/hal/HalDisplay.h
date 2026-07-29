@@ -91,6 +91,8 @@ class HalDisplay {
   // EInkDisplay::writeGrayscalePlaneStrip.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
   bool supportsStripGrayscale() const;
+  // False on B/W-only panels: reader activities skip the grayscale AA pass.
+  bool supportsGrayscale() const;
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;

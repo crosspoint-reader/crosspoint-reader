@@ -98,7 +98,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE
   // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
   static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
+#if FREEINK_DEVICE_MURPHY
+  // 416x240 panel: 14pt reads huge there, 10pt is the comfortable default.
+  static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 10;
+#else
   static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
+#endif
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
