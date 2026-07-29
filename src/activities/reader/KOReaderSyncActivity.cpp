@@ -232,9 +232,8 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  // Prefer the exact spine/page from a crosspoint-sync rich position (lossless
-  // CrossPoint<->CrossPoint sync); fall back to the approximate XPath mapping
-  // for plain kosync servers or when the rich position cannot be applied.
+  // Prefer the exact spine/page supplied by the CrossPoint sync server; fall
+  // back to the approximate XPath mapping when it cannot be applied.
   std::optional<CrossPointPosition> richMapped;
   if (remoteProgress.position.has_value()) {
     richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
@@ -298,9 +297,10 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
 
-  // Rich CrossPoint position for crosspoint-sync servers (lossless
-  // CrossPoint<->CrossPoint sync); plain kosync servers ignore the extra field.
-  {
+  // Rich CrossPoint position for the default CrossPoint sync server (lossless
+  // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
+  // before serializing the extension.
+  if (KOREADER_STORE.usesCrossPointSyncServer()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f
