@@ -1,8 +1,10 @@
 #include "MobiToEpub.h"
 
+#include <GifDecoder.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <PngWriter.h>
 #include <ZipWriter.h>
 
 #include <cctype>
@@ -17,7 +19,7 @@ namespace {
 // Bumped whenever the converter's output changes: the generated EPUB keeps a
 // stable path, so without this a stale conversion (and the reader's section
 // caches derived from it) would survive a firmware upgrade.
-constexpr uint32_t CONVERTER_VERSION = 2;
+constexpr uint32_t CONVERTER_VERSION = 3;
 
 constexpr size_t CHAPTER_SOFT_LIMIT = 160 * 1024;  // split oversized flows at block boundaries
 // Hard ceiling: a book whose whole body sits inside one never-closed <div> has
@@ -206,9 +208,42 @@ struct EpubBuilder {
       ext = "png";
       media = "image/png";
     } else if (bytes[0] == 'G') {
-      ext = "gif";
-      media = "image/gif";
-      LOG_ERR("MOBI", "image %u is GIF - reader decodes only JPEG/PNG, it will not render", recindex);
+      // The reader decodes only JPEG and PNG, so GIF illustrations would never
+      // render. Transcode the first frame here (lossless: a GIF colour table
+      // maps 1:1 onto PNG's PLTE + tRNS). A failure skips this one image —
+      // never the whole book.
+      gif::Frame frame;
+      if (!gif::decodeFirstFrame(bytes.data(), bytes.size(), frame)) {
+        LOG_ERR("MOBI", "image %u: GIF decode failed, skipping", recindex);
+        return nullptr;
+      }
+      // png::encode builds its output in std::vectors, which abort() on OOM
+      // (no exceptions). Probe the worst case (raw scanlines + encoded copy)
+      // nothrow first so an oversized illustration is skipped instead.
+      const size_t needed = ((size_t)frame.width + 1) * frame.height * 2 + 4096;
+      if (!makeUniqueNoThrow<uint8_t[]>(needed)) {
+        LOG_ERR("MOBI", "image %u: %ux%u GIF too large to transcode", recindex, frame.width, frame.height);
+        return nullptr;
+      }
+      // The reader's PNG decoder ignores tRNS, so a transparent pixel would
+      // render as whatever colour that palette slot happens to hold — often
+      // black, which turns a transparent illustration background into a solid
+      // block. Force the transparent entry to white so it disappears into the
+      // page there, while still emitting tRNS for decoders that honour it.
+      if (frame.transparentIndex >= 0 && (size_t)frame.transparentIndex < frame.count &&
+          frame.palette.size() >= ((size_t)frame.transparentIndex + 1) * 3) {
+        uint8_t* slot = frame.palette.data() + (size_t)frame.transparentIndex * 3;
+        slot[0] = slot[1] = slot[2] = 0xFF;
+      }
+      std::vector<uint8_t> encoded;
+      const png::Palette pal{frame.palette.data(), frame.count, frame.transparentIndex};
+      if (!png::encode(frame.indices.data(), frame.width, frame.height, png::Color::Palette8, pal, encoded)) {
+        LOG_ERR("MOBI", "image %u: GIF re-encode failed, skipping", recindex);
+        return nullptr;
+      }
+      bytes = std::move(encoded);
+      ext = "png";
+      media = "image/png";
     } else if (bytes[0] == 'B') {
       ext = "bmp";
       media = "image/bmp";
