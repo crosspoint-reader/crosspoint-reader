@@ -75,6 +75,15 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
   };
   if (extractSize == 0) return true;
 
+  // Largest block FIRST. Every allocation here is carved from the same big free
+  // run, so taking the ~3KB ChunkSource before the 32KB ring left the ring's
+  // block 12 bytes short on device (largest=32756 against need=32768) even on a
+  // barely fragmented heap. Ordering by size removes that failure mode: the ring
+  // gets the big block while it is still whole, and the small buffers fit in
+  // what remains — or in one of the smaller free blocks.
+  auto window = makeUniqueNoThrow<uint8_t[]>(InflateReader::RING_BYTES);
+  if (!window) return fail(ExtractError::LowMemory);
+
   auto src = makeUniqueNoThrow<ChunkSource>();
   if (!src) return fail(ExtractError::LowMemory);
   src->file = &file;
@@ -84,9 +93,11 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
   // seek is possible — guard it rather than reading from the prior position.
   if (!file.seekSet(compressedOffset)) return fail(ExtractError::ReadError);
 
-  if (!src->reader.init(true)) return fail(ExtractError::LowMemory);  // 32KB inflate window
-  // After init() source/source_limit are both null, so the very first byte
-  // already comes through the callback. Set it after init(), which resets state.
+  // `window` outlives the reader (declared above it, destroyed after), as
+  // initWithRing() requires.
+  src->reader.initWithRing(window.get());
+  // initWithRing() leaves source/source_limit null, so the very first byte
+  // already comes through the callback. Set it after, which resets state.
   src->reader.setReadCallback(&chunkReadCb);
 
   auto buf = makeUniqueNoThrow<uint8_t[]>(512);
