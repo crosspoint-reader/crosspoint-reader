@@ -64,6 +64,24 @@ inline bool hasTxtExtension(const String& fileName) {
 // Check for .md extension (case-insensitive)
 bool hasMarkdownExtension(std::string_view fileName);
 
+// Check for a playable audio extension: .mp3 .wav .flac .m4a .aac .ogg .opus (case-insensitive)
+bool hasAudioExtension(std::string_view fileName);
+inline bool hasAudioExtension(const String& fileName) {
+  return hasAudioExtension(std::string_view{fileName.c_str(), fileName.length()});
+}
+
+// Check for .mobi or .azw/.azw3 extension (case-insensitive)
+bool hasMobiExtension(std::string_view fileName);
+inline bool hasMobiExtension(const String& fileName) {
+  return hasMobiExtension(std::string_view{fileName.c_str(), fileName.length()});
+}
+
+// Check for .pdf extension (case-insensitive)
+bool hasPdfExtension(std::string_view fileName);
+inline bool hasPdfExtension(const String& fileName) {
+  return hasPdfExtension(std::string_view{fileName.c_str(), fileName.length()});
+}
+
 // Check for .css extension (case-insensitive)
 bool hasCssExtension(std::string_view fileName);
 inline bool hasCssExtension(const String& fileName) {

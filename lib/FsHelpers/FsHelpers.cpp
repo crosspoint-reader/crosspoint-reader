@@ -175,6 +175,20 @@ bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension
 
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
+bool hasAudioExtension(std::string_view fileName) {
+  return checkFileExtension(fileName, ".mp3") || checkFileExtension(fileName, ".wav") ||
+         checkFileExtension(fileName, ".flac") || checkFileExtension(fileName, ".m4a") ||
+         checkFileExtension(fileName, ".aac") || checkFileExtension(fileName, ".ogg") ||
+         checkFileExtension(fileName, ".opus");
+}
+
+bool hasMobiExtension(std::string_view fileName) {
+  return checkFileExtension(fileName, ".mobi") || checkFileExtension(fileName, ".azw") ||
+         checkFileExtension(fileName, ".azw3");
+}
+
+bool hasPdfExtension(std::string_view fileName) { return checkFileExtension(fileName, ".pdf"); }
+
 std::string extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
   if (lastSlash == std::string::npos || lastSlash == 0) {

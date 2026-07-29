@@ -344,6 +344,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
                             "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM),
+#if CROSSPOINT_AUDIO_PLAYER
+        // Audio player volume (ES8388 analog out). The player applies it on
+        // entry and adjusts it live; this entry covers settings UI + web API.
+        SettingInfo::Value(StrId::STR_VOLUME, &CrossPointSettings::audioVolume, {0, 100, 10}, "audioVolume",
+                           StrId::STR_CAT_SYSTEM),
+#endif
 
         // OPDS download folder: persisted + web-exposed, but category-less so it
         // is hidden from the on-device Settings screen (edited via OPDS UI).
