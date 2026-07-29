@@ -67,7 +67,9 @@ class InflateReader {
   // 32768 requirement. A caller that allocates the ring FIRST, then its own
   // state, never hits that. The buffer must outlive the reader; deinit() does
   // not free it.
-  void initWithRing(uint8_t* ring);
+  // Returns false if ring is null (e.g. a forwarded failed allocation), leaving
+  // the reader deinitialised.
+  bool initWithRing(uint8_t* ring);
 
   // Release the ring buffer (only if this reader owns it) and reset state.
   void deinit();

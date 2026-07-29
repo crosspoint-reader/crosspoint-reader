@@ -95,7 +95,7 @@ bool extractChunkSlice(HalFile& file, uint32_t compressedOffset, uint32_t compre
 
   // `window` outlives the reader (declared above it, destroyed after), as
   // initWithRing() requires.
-  src->reader.initWithRing(window.get());
+  if (!src->reader.initWithRing(window.get())) return fail(ExtractError::LowMemory);
   // initWithRing() leaves source/source_limit null, so the very first byte
   // already comes through the callback. Set it after, which resets state.
   src->reader.setReadCallback(&chunkReadCb);

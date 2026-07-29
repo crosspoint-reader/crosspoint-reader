@@ -27,12 +27,14 @@ bool InflateReader::init(const bool streaming) {
   return true;
 }
 
-void InflateReader::initWithRing(uint8_t* ring) {
+bool InflateReader::initWithRing(uint8_t* ring) {
   deinit();  // free any owned ring buffer and reset state
+  if (!ring) return false;
   ringBuffer = ring;
   ownsRing = false;  // caller's buffer: never freed here
   memset(ringBuffer, 0, INFLATE_DICT_SIZE);
   uzlib_uncompress_init(&decomp, ringBuffer, INFLATE_DICT_SIZE);
+  return true;
 }
 
 void InflateReader::deinit() {
