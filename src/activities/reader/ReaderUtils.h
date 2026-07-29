@@ -42,6 +42,12 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   }
 }
 
+// The SDK owns output inversion, keeping the framebuffer logical for normal
+// rendering, screenshots, and subsequent reader draws.
+inline void applyReaderDarkMode(const GfxRenderer& renderer) {
+  renderer.setOutputInverted(SETTINGS.readerDarkMode != 0);
+}
+
 struct PageTurnResult {
   bool prev;
   bool next;
@@ -135,6 +141,10 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
 template <typename RenderFn>
 void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
+  // FreeInk deliberately suppresses grayscale planes while output inversion is
+  // active. Skip the otherwise wasted render/allocation work as well.
+  if (renderer.isOutputInverted()) return;
+
   if (!renderer.storeBwBuffer()) {
     LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
     return;
