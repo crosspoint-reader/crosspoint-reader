@@ -194,6 +194,11 @@ void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
+void ActivityManager::goToAudioBrowser(std::string path) {
+  replaceActivity(
+      std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path), FileBrowserActivity::Mode::Audio));
+}
+
 void ActivityManager::goToRecentBooks() {
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
 }

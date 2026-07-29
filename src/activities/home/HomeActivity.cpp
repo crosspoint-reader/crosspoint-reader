@@ -22,6 +22,9 @@
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
+#if CROSSPOINT_AUDIO_PLAYER
+  count++;  // Audio
+#endif
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -186,6 +189,11 @@ void HomeActivity::loop() {
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
         break;
+#if CROSSPOINT_AUDIO_PLAYER
+      case HomeMenuItem::AUDIO:
+        onAudioOpen();
+        break;
+#endif
       case HomeMenuItem::FILE_TRANSFER:
         onFileTransferOpen();
         break;
@@ -308,6 +316,14 @@ void HomeActivity::render(RenderLock&&) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
+#if CROSSPOINT_AUDIO_PLAYER
+  {
+    // Audio sits right before File Transfer (mirrors indexToMenuItem).
+    const int audioPos = hasOpdsServers ? 3 : 2;
+    menuItems.insert(menuItems.begin() + audioPos, tr(STR_AUDIO));
+    menuIcons.insert(menuIcons.begin() + audioPos, Music);
+  }
+#endif
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
@@ -351,3 +367,17 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+#if CROSSPOINT_AUDIO_PLAYER
+void HomeActivity::onAudioOpen() {
+  // Prefer a dedicated audio folder when the card has one.
+  const char* start = "/";
+  for (const char* cand : {"/Audio", "/Audiobooks", "/Music"}) {
+    if (Storage.exists(cand)) {
+      start = cand;
+      break;
+    }
+  }
+  activityManager.goToAudioBrowser(start);
+}
+#endif

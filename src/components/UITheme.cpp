@@ -143,6 +143,9 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (FsHelpers::hasBmpExtension(filename)) {
     return Image;
   }
+  if (FsHelpers::hasAudioExtension(filename)) {
+    return Music;
+  }
   return File;
 }
 

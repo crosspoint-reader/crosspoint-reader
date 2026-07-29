@@ -70,6 +70,7 @@ bool MobiParser::readRecordOffsets() {
   }
   numRecords = be16(hdr + 76);
   if (numRecords < 2) {
+    LOG_ERR("MOBI", "bad header: numRecords=%u", numRecords);
     err = Error::BadHeader;
     return false;
   }
@@ -78,6 +79,7 @@ bool MobiParser::readRecordOffsets() {
   // Record list: 8 bytes per record, offset in the first 4.
   std::vector<uint8_t> list(numRecords * 8);
   if (file->read(list.data(), list.size()) != (int)list.size()) {
+    LOG_ERR("MOBI", "bad header: record list read failed (%u records)", numRecords);
     err = Error::BadHeader;
     return false;
   }
@@ -86,6 +88,7 @@ bool MobiParser::readRecordOffsets() {
   // Offsets must be monotonically increasing and inside the file.
   for (uint16_t i = 0; i < numRecords; i++) {
     if (recordOffsets[i] >= recordOffsets[i + 1]) {
+      LOG_ERR("MOBI", "bad header: record %u offset %lu >= next %lu", i, (unsigned long)recordOffsets[i], (unsigned long)recordOffsets[i + 1]);
       err = Error::BadHeader;
       return false;
     }
@@ -104,6 +107,7 @@ bool MobiParser::readRecord(uint16_t index, std::vector<uint8_t>& out) {
 bool MobiParser::parseRecord0() {
   std::vector<uint8_t> rec;
   if (!readRecord(0, rec) || rec.size() < 16) {
+    LOG_ERR("MOBI", "bad header: record0 unreadable (%u bytes)", (unsigned)rec.size());
     err = Error::BadHeader;
     return false;
   }
@@ -117,6 +121,7 @@ bool MobiParser::parseRecord0() {
     return false;
   }
   if (compression != COMPRESSION_NONE && compression != COMPRESSION_PALMDOC && compression != COMPRESSION_HUFF) {
+    LOG_ERR("MOBI", "bad header: unknown compression %u", compression);
     err = Error::BadHeader;
     return false;
   }
@@ -127,7 +132,7 @@ bool MobiParser::parseRecord0() {
     return true;
   }
   const uint32_t mobiLen = be32(&rec[20]);
-  const uint32_t mobiVersion = be32(&rec[52]);  // "version" field @0x24 from MOBI start
+  const uint32_t mobiVersion = be32(&rec[36]);  // "file version" @0x14 from MOBI start
   textEncoding = be32(&rec[28]);
 
   if (mobiVersion >= 8) {
@@ -147,7 +152,8 @@ bool MobiParser::parseRecord0() {
   huffCount = be32(&rec[116]);
   const uint32_t exthFlags = be32(&rec[128]);
 
-  if (rec.size() >= 196) lastContentRecord = be16(&rec[194]);
+  // First/last content record: 0xC0/0xC2 from MOBI start = 208/210 absolute.
+  if (rec.size() >= 212) lastContentRecord = be16(&rec[210]);
 
   extraDataFlags = 0;
   if (mobiLen >= 0xE4 && mobiVersion >= 5 && rec.size() >= 0xF4) {
@@ -185,6 +191,7 @@ bool MobiParser::parseRecord0() {
 
 bool MobiParser::parseHuffCdic() {
   if (huffRecord == 0 || huffCount < 2 || huffRecord + huffCount > numRecords) {
+    LOG_ERR("MOBI", "bad header: huff rec=%lu count=%lu of %u", (unsigned long)huffRecord, (unsigned long)huffCount, numRecords);
     err = Error::BadHeader;
     return false;
   }
@@ -192,12 +199,14 @@ bool MobiParser::parseHuffCdic() {
 
   std::vector<uint8_t> rec;
   if (!readRecord((uint16_t)huffRecord, rec) || rec.size() < 24 || memcmp(rec.data(), "HUFF", 4) != 0) {
+    LOG_ERR("MOBI", "bad header: HUFF record invalid");
     err = Error::BadHeader;
     return false;
   }
   const uint32_t off1 = be32(&rec[8]);
   const uint32_t off2 = be32(&rec[12]);
   if (off1 + 256 * 4 > rec.size() || off2 + 64 * 4 > rec.size()) {
+    LOG_ERR("MOBI", "bad header: HUFF offsets %lu/%lu size %u", (unsigned long)off1, (unsigned long)off2, (unsigned)rec.size());
     err = Error::BadHeader;
     return false;
   }
@@ -217,6 +226,7 @@ bool MobiParser::parseHuffCdic() {
   for (uint32_t i = 1; i < huffCount; i++) {
     std::vector<uint8_t> cdic;
     if (!readRecord((uint16_t)(huffRecord + i), cdic) || cdic.size() < 16 || memcmp(cdic.data(), "CDIC", 4) != 0) {
+      LOG_ERR("MOBI", "bad header: CDIC %lu invalid", (unsigned long)i);
       err = Error::BadHeader;
       return false;
     }
@@ -224,6 +234,7 @@ bool MobiParser::parseHuffCdic() {
     huff->dicts.push_back(std::move(cdic));
   }
   if (huff->codeLength == 0 || huff->codeLength > 16) {
+    LOG_ERR("MOBI", "bad header: CDIC codeLength %lu", (unsigned long)huff->codeLength);
     err = Error::BadHeader;
     return false;
   }
