@@ -13,9 +13,9 @@
 
 // The built-in Noto Serif / Noto Sans families are compiled in at exactly these
 // point sizes (see the global font objects in main.cpp). The Murphy M3's
-// 416x240 panel swaps the oversized 16/18pt cuts for 9/10pt ones.
+// 416x240 panel swaps the oversized 12-18pt cuts for 5-10pt ones.
 #if FREEINK_DEVICE_MURPHY
-inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {9, 10, 12, 14};
+inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {5, 6, 7, 8, 9, 10};
 #else
 inline constexpr uint8_t BUILTIN_READER_POINT_SIZES[] = {12, 14, 16, 18};
 #endif
