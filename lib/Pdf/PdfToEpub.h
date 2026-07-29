@@ -11,10 +11,12 @@
 // tree, interprets each page's content stream (BT/Tj/TJ/Td/Tm + CTM), decodes
 // show strings through /ToUnicode CMaps or simple-font encodings, and reflows
 // the positioned runs into paragraphs (line/paragraph breaks from Y deltas,
-// hyphen joining, gap-driven spaces). Chapters are 10-page groups. Images are
-// ignored — text reflow only.
-// ponytail: image passthrough (DCT streams -> EPUB img entries) is the v2
-// upgrade path if scanned-with-text-layer PDFs matter.
+// hyphen joining, gap-driven spaces). Chapters are 10-page groups.
+//
+// Image XObjects are emitted in reading order as OEBPS/images/imgNNNN.{jpg,png}
+// (see PdfImage), stored once per object number however many pages draw them. A
+// PDF with no text but usable images converts to an image-only book, which is
+// what a scanned or comic PDF is.
 
 #include <string>
 

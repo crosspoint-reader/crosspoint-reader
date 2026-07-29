@@ -84,11 +84,12 @@ struct Interp {
   PdfDoc& doc;
   PdfFontCache& fonts;
   Assembler& asmb;
+  const PdfText::ImageSink* images = nullptr;
   int lostShows = 0;
   int totalShows = 0;
 
   bool run(const uint8_t* data, size_t len, const PdfObj* res, const Mat& ctm0, int depth);
-  void invokeForm(const std::string& name, const PdfObj* res, const Mat& ctm, int depth);
+  void invokeXObject(const std::string& name, const PdfObj* res, const Mat& ctm, int depth);
   const PdfFont* lookupFont(const PdfObj* res, const std::string& name);
 };
 
@@ -102,17 +103,35 @@ const PdfFont* Interp::lookupFont(const PdfObj* res, const std::string& name) {
   return fonts.get(doc, fontMap->find(name.c_str()));
 }
 
-void Interp::invokeForm(const std::string& name, const PdfObj* res, const Mat& ctm, int depth) {
+void Interp::invokeXObject(const std::string& name, const PdfObj* res, const Mat& ctm, int depth) {
   if (depth >= MAX_FORM_DEPTH || !res) return;
   // Heap scratch keeps recursion frames small (this nests up to 8 deep).
   auto xs = makeUniqueNoThrow<PdfObj[]>(3);
   if (!xs) return;
   const PdfObj* xmap = doc.resolve(res->find("XObject"), xs[0]);
   if (!xmap || !xmap->isDict()) return;
-  const PdfObj* form = doc.resolve(xmap->find(name.c_str()), xs[1]);
+  const PdfObj* entry = xmap->find(name.c_str());
+  const uint32_t objNum = entry && entry->kind == Kind::Ref ? entry->ref : 0;
+  const PdfObj* form = doc.resolve(entry, xs[1]);
   if (!form || form->kind != Kind::Stream) return;
   const PdfObj* st = form->find("Subtype");
-  if (!st || !st->isName("Form")) return;  // images etc.: ignored
+  if (st && st->isName("Image")) {
+    if (!images || !images->emit) return;
+    // The image is a block: close any open paragraph first, then let the sink
+    // append its markup. If it emits nothing (unsupported or corrupt image),
+    // undo the break so a skipped image leaves no stray paragraph split.
+    const bool wasOpen = asmb.open;
+    const size_t mark = asmb.out->size();
+    asmb.finish();
+    const size_t base = asmb.out->size();
+    images->emit(images->ctx, doc, *form, objNum, res);
+    if (asmb.out->size() == base) {
+      asmb.out->resize(mark);
+      asmb.open = wasOpen;
+    }
+    return;
+  }
+  if (!st || !st->isName("Form")) return;  // PostScript XObjects etc: ignored
 
   ByteBuf content;
   if (!doc.getStreamData(*form, content, PdfDoc::MAX_DECODED)) return;
@@ -286,10 +305,19 @@ bool Interp::run(const uint8_t* data, size_t len, const PdfObj* res, const Mat& 
       }
     } else if (strcmp(op, "Do") == 0) {
       if (!stack.empty() && stack.back().kind == Kind::Name) {
-        invokeForm(stack.back().str, res, ctm, depth);
+        invokeXObject(stack.back().str, res, ctm, depth);
       }
     } else if (strcmp(op, "BI") == 0) {
-      // Inline image: skip to whitespace-delimited EI.
+      // Inline image: skipped, not extracted. Finding the true EI inside binary
+      // sample data is guesswork, and inline images are near-always 1x1 masks
+      // or rules rather than illustrations.
+      // ponytail: extract them if a real book turns up that needs it.
+      static bool inlineNoted = false;
+      if (!inlineNoted) {
+        inlineNoted = true;
+        LOG_ERR("PDF", "image: inline images (BI/ID/EI) are skipped");
+      }
+      // Skip to whitespace-delimited EI.
       size_t q = lx.pos();
       while (q + 2 < len) {
         if (PdfLexer::isWs(data[q]) && data[q + 1] == 'E' && data[q + 2] == 'I' &&
@@ -309,7 +337,8 @@ bool Interp::run(const uint8_t* data, size_t len, const PdfObj* res, const Mat& 
 
 }  // namespace
 
-bool PdfText::extractPage(PdfDoc& doc, const PdfDoc::Page& page, PdfFontCache& fonts, std::string& out, bool* anyText) {
+bool PdfText::extractPage(PdfDoc& doc, const PdfDoc::Page& page, PdfFontCache& fonts, std::string& out, bool* anyText,
+                          const ImageSink* images) {
   if (anyText) *anyText = false;
   fonts.trim();
 
@@ -346,7 +375,7 @@ bool PdfText::extractPage(PdfDoc& doc, const PdfDoc::Page& page, PdfFontCache& f
 
   Assembler asmb;
   asmb.out = &out;
-  Interp interp{doc, fonts, asmb};
+  Interp interp{doc, fonts, asmb, images};
   Mat identity;
   interp.run(content.data(), content.size(), res, identity, 0);
   asmb.finish();

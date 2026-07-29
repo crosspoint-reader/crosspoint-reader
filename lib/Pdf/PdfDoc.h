@@ -67,6 +67,9 @@ class PdfDoc {
   // Decode a Stream object's data through its /Filter chain. False when the
   // stream is corrupt or uses an unsupported filter (DCT/JPX/LZW/...).
   bool getStreamData(const PdfObj& stream, ByteBuf& out, size_t maxOut);
+  // Raw (still encoded) stream bytes. Used for /DCTDecode image passthrough,
+  // where the encoded JPEG *is* the wanted output.
+  bool getRawStream(const PdfObj& stream, ByteBuf& out, size_t maxOut);
 
   const std::vector<Page>& pages() const { return pageList; }
   const PdfObj& info() const { return infoDict; }

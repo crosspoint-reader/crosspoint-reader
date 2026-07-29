@@ -588,6 +588,17 @@ bool PdfDoc::getStreamData(const PdfObj& stream, ByteBuf& out, size_t maxOut) {
   return true;
 }
 
+bool PdfDoc::getRawStream(const PdfObj& stream, ByteBuf& out, size_t maxOut) {
+  out.clear();
+  if (stream.kind != Kind::Stream || stream.streamLen == 0 || stream.streamLen > maxOut) return false;
+  if (!out.setSize(stream.streamLen)) return false;
+  if (readUpTo(stream.streamOfs, out.data(), stream.streamLen) != stream.streamLen) {
+    out.clear();
+    return false;
+  }
+  return true;
+}
+
 bool PdfDoc::applyFilter(const std::string& name, const PdfObj* parms, ByteBuf& in, ByteBuf& out, size_t maxOut) {
   if (name == "FlateDecode" || name == "Fl") {
     if (!inflateAll(in.data(), in.size(), out, maxOut)) return false;
@@ -636,8 +647,8 @@ bool PdfDoc::applyFilter(const std::string& name, const PdfObj* parms, ByteBuf& 
     }
     return out.size() <= maxOut;
   }
-  // DCTDecode/JPXDecode are images (ignored — text-reflow converter), LZW and
-  // the rest are unsupported: the stream degrades to "no data".
+  // DCTDecode/JPXDecode are image codecs (PdfImage handles DCT by passing the
+  // raw stream through), LZW and the rest are unsupported: no data.
   LOG_DBG("PDF", "unsupported filter: %s", name.c_str());
   return false;
 }

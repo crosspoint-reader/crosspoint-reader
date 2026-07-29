@@ -9,15 +9,21 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "PdfDoc.h"
 #include "PdfFont.h"
+#include "PdfImage.h"
 #include "PdfText.h"
 #include "PdfUtil.h"
 
 namespace {
 
 constexpr int PAGES_PER_CHAPTER = 10;
+// Bump whenever the emitted EPUB changes shape, so cached conversions from an
+// older firmware are regenerated instead of reused. 2 = images.
+constexpr uint32_t CONVERTER_VERSION = 2;
+constexpr size_t MAX_IMAGES = 2000;
 
 // PDF text string -> UTF-8: UTF-16BE with BOM, else PDFDocEncoding (~latin1).
 std::string pdfTextString(const std::string& s) {
@@ -46,6 +52,72 @@ bool hasReadableChar(const std::string& s) {
 
 void xmlEscapeInto(std::string& out, const std::string& s) { pdfXmlEscapeAppend(out, s.data(), s.size()); }
 
+// Image sink for PdfText: stores each unique image XObject in the EPUB once and
+// appends an <img> reference wherever the content stream draws it. Matches the
+// markup lib/Mobi/MobiToEpub.cpp emits, which the reader resolves correctly.
+struct ImageEmitter {
+  struct Entry {
+    uint32_t objNum;  // 0 = not an indirect object; never matched for reuse
+    uint16_t idx;
+    bool jpeg;
+  };
+
+  ZipWriter* zip = nullptr;
+  std::string* chapter = nullptr;
+  std::vector<Entry> entries;
+  uint32_t onPage = 0;  // references appended since the caller last zeroed it
+  bool truncated = false;
+
+  static void trampoline(void* ctx, PdfDoc& doc, const PdfObj& img, uint32_t objNum, const PdfObj* res) {
+    static_cast<ImageEmitter*>(ctx)->emit(doc, img, objNum, res);
+  }
+
+  void emit(PdfDoc& doc, const PdfObj& img, uint32_t objNum, const PdfObj* res) {
+    if (objNum) {
+      // ponytail: linear reuse scan, bounded by MAX_IMAGES; a map would cost
+      // more heap than the compares are worth at conversion time.
+      for (const auto& e : entries) {
+        if (e.objNum == objNum) {
+          reference(e);
+          return;
+        }
+      }
+    }
+    if (entries.size() >= MAX_IMAGES) {
+      if (!truncated) {
+        truncated = true;
+        LOG_ERR("PDF", "image cap of %u reached, later images dropped", (unsigned)MAX_IMAGES);
+      }
+      return;
+    }
+    PdfImage::Decoded dec;
+    if (!PdfImage::decode(doc, img, res, dec)) return;  // decode() logged the reason
+
+    const uint16_t idx = (uint16_t)entries.size();
+    const bool jpeg = dec.isJpeg();
+    const uint8_t* bytes = jpeg ? dec.jpeg.data() : dec.png.data();
+    const size_t len = jpeg ? dec.jpeg.size() : dec.png.size();
+    char name[48];
+    snprintf(name, sizeof(name), "OEBPS/images/img%04u.%s", (unsigned)idx, jpeg ? "jpg" : "png");
+    if (!zip->addFile(name, bytes, len)) {
+      LOG_ERR("PDF", "image %u: EPUB write failed", (unsigned)idx);
+      return;
+    }
+    LOG_INF("PDF", "image %u: %ux%u %s, %u bytes", (unsigned)idx, (unsigned)dec.width, (unsigned)dec.height,
+            jpeg ? "jpg" : "png", (unsigned)len);
+    entries.push_back({objNum, idx, jpeg});
+    reference(entries.back());
+  }
+
+  void reference(const Entry& e) {
+    char tag[112];
+    snprintf(tag, sizeof(tag), "<p style=\"text-align:center\"><img src=\"images/img%04u.%s\" alt=\"\"/></p>\n",
+             (unsigned)e.idx, e.jpeg ? "jpg" : "png");
+    *chapter += tag;
+    onPage++;
+  }
+};
+
 }  // namespace
 
 std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* errorOut) {
@@ -72,10 +144,10 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
   }
   {
     HalFile f;
-    uint32_t srcTag[2] = {0, 0};
+    uint32_t srcTag[3] = {0, 0, 0};
     if (Storage.openFileForRead("PDF", tagPath, f)) {
-      if (f.read(srcTag, sizeof(srcTag)) == (int)sizeof(srcTag) && srcTag[0] == curSize &&
-          Storage.exists(epubPath.c_str())) {
+      if (f.read(srcTag, sizeof(srcTag)) == (int)sizeof(srcTag) && srcTag[0] == CONVERTER_VERSION &&
+          srcTag[1] == curSize && Storage.exists(epubPath.c_str())) {
         return epubPath;  // valid cached conversion
       }
     }
@@ -116,6 +188,12 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
   bool anyText = false;
   bool writeFailed = false;
   std::string chapterBuf;
+  ImageEmitter imgs;
+  imgs.zip = zip.get();
+  imgs.chapter = &chapterBuf;
+  imgs.entries.reserve(32);
+  PdfImage::resetSkipLog();
+  const PdfText::ImageSink sink{&imgs, &ImageEmitter::trampoline};
   for (uint32_t ch = 0; ch < chapterCount && !writeFailed; ch++) {
     chapterBuf.clear();
     chapterBuf +=
@@ -125,10 +203,10 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
     const uint32_t lastPage = firstPage + PAGES_PER_CHAPTER < pageCount ? firstPage + PAGES_PER_CHAPTER : pageCount;
     for (uint32_t pg = firstPage; pg < lastPage; pg++) {
       bool pageAny = false;
-      PdfText::extractPage(doc, doc.pages()[pg], fonts, chapterBuf, &pageAny);
-      if (pageAny) {
-        anyText = true;
-      } else {
+      imgs.onPage = 0;
+      PdfText::extractPage(doc, doc.pages()[pg], fonts, chapterBuf, &pageAny, &sink);
+      if (pageAny) anyText = true;
+      if (!pageAny && imgs.onPage == 0) {  // truly empty page: leave a placeholder
         char marker[32];
         snprintf(marker, sizeof(marker), "<p>[page %u]</p>\n", (unsigned)(pg + 1));
         chapterBuf += marker;
@@ -141,10 +219,13 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
     vTaskDelay(1);  // yield: keep the watchdog + render task happy on big PDFs
   }
 
-  if (writeFailed || !anyText) {
+  // A document with no text but usable images is a scanned/comic PDF, and those
+  // images are renderable — ship the image-only book. Only a document that
+  // yields neither is a dead end.
+  if (writeFailed || (!anyText && imgs.entries.empty())) {
     zip.reset();  // close the output before removing it
     Storage.remove(epubPath.c_str());
-    setError(writeFailed ? "EPUB write failed (SD full?)" : "no extractable text (scanned PDF?)");
+    setError(writeFailed ? "EPUB write failed (SD full?)" : "no extractable text or images (scanned PDF?)");
     return "";
   }
 
@@ -197,6 +278,12 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
              (unsigned)ch);
     opf += line;
   }
+  for (const auto& e : imgs.entries) {
+    char line[160];
+    snprintf(line, sizeof(line), "<item id=\"img%04u\" href=\"images/img%04u.%s\" media-type=\"image/%s\"/>\n",
+             (unsigned)e.idx, (unsigned)e.idx, e.jpeg ? "jpg" : "png", e.jpeg ? "jpeg" : "png");
+    opf += line;
+  }
   opf += "</manifest>\n<spine toc=\"ncx\">\n";
   for (uint32_t ch = 0; ch < chapterCount; ch++) {
     char line[64];
@@ -233,14 +320,15 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
     return "";
   }
 
-  // Cache tag: {source file size, page count}.
+  // Cache tag: {converter version, source file size, page count}.
   {
     HalFile f;
     if (Storage.openFileForWrite("PDF", tagPath.c_str(), f)) {
-      const uint32_t tag[2] = {curSize, pageCount};
+      const uint32_t tag[3] = {CONVERTER_VERSION, curSize, pageCount};
       f.write(tag, sizeof(tag));
     }
   }
-  LOG_INF("PDF", "converted: %u pages -> %u chapters", (unsigned)pageCount, (unsigned)chapterCount);
+  LOG_INF("PDF", "converted: %u pages -> %u chapters, %u images", (unsigned)pageCount, (unsigned)chapterCount,
+          (unsigned)imgs.entries.size());
   return epubPath;
 }
