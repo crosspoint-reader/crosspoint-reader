@@ -11,6 +11,10 @@ struct DictLocation {
   uint32_t offset = 0;  // byte offset in .dict data
   uint32_t size = 0;    // byte length in .dict data
   bool found = false;
+  // Set when the search was cut short by an .idx/.syn open or seek failure
+  // rather than reaching a verdict, so a failed search isn't reported as a
+  // genuine miss.
+  bool readError = false;
 };
 
 // Slim StarDict reader: exact-match lookup with a synonym and mini stemming
@@ -26,6 +30,20 @@ struct DictLocation {
 // no index is held in RAM.
 class Dictionary {
  public:
+  // Why a lookup did not return a definition — so the UI can tell a genuine
+  // miss apart from a real failure, and name the failure.
+  enum class LookupResult : uint8_t {
+    Found,       // hit — definition filled
+    NotFound,    // the word is genuinely not in the dictionary
+    LowMemory,   // found, but an allocation failed: the ~32KB .dict.dz inflate
+                 // window / chunk buffer, or the definition text buffer, couldn't
+                 // be obtained from the fragmented heap. THIS is the "stopped
+                 // finding words until restart" case — definitively memory.
+    Decompress,  // found, but decompression genuinely failed (corrupt/truncated
+                 // .dict.dz — a read/inflate error, not a memory shortage)
+    ReadError,   // found, but a file open/bounds/IO error prevented reading it
+  };
+
   // Resolve the dictionary folder and validate its files. Rejects
   // dictionaries with 64-bit index offsets (idxoffsetbits=64 in .ifo).
   bool open(const char* folderName);
@@ -35,16 +53,30 @@ class Dictionary {
   // so the UI can show an "Indexing…" message for the slow first pass.
   bool needsIndex();
 
+  // Why an index build failed — the scan buffer is a heap allocation, so the
+  // same fragmentation that breaks lookups can break indexing, and it deserves
+  // the same "Not enough memory" rather than a generic error.
+  enum class IndexResult : uint8_t {
+    Ok,
+    LowMemory,  // the scan buffer couldn't be allocated
+    ReadError,  // .idx/.syn open/read or .qidx/.sidx write failure
+  };
+
   // One streaming pass over .idx writing the .qidx sidecar, plus a pass over
   // .syn writing the .sidx sidecar when a synonym file is present. yieldFn
   // (optional) is called every ~64KB consumed to feed the watchdog / repaint
-  // the UI.
-  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr);
+  // the UI. *outResult (if provided) reports why the mandatory .idx build
+  // failed; a failed best-effort .syn build only disables synonyms and does
+  // not affect *outResult.
+  bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
 
   // Clean the word, look it up, and on a miss retry mini stem variants
   // (-'s/-s/-es/-ies/-ed/-ing). On a hit fills the definition text (capped at
-  // MAX_DEFINITION_BYTES) and the headword as stored in the index.
-  bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut);
+  // MAX_DEFINITION_BYTES) and the headword as stored in the index. Returns true
+  // on a hit. *outResult (if provided) reports the precise outcome so the UI can
+  // distinguish a genuine miss from a decompression / low-memory / read failure.
+  bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
+              LookupResult* outResult = nullptr);
 
   static std::string cleanWord(const char* word);
 
@@ -66,15 +98,18 @@ class Dictionary {
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
   // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
+  // *outResult (if provided) reports why a failed build failed.
   bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
-                    void (*yieldFn)(void*), void* ctx);
+                    void (*yieldFn)(void*), void* ctx, IndexResult* outResult = nullptr);
 
   // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
   // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and
   // buildIndex() so each sidecar is rebuilt only when actually stale.
   bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
 
-  bool readDefinition(const DictLocation& location, std::string& out);
+  // Read the definition at location. On failure returns false and, if outResult
+  // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
+  bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
   static void stemVariants(const std::string& word, std::vector<std::string>& out);
 
   // Read a null-terminated word from an open file into buf (max bufSize-1
