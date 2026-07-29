@@ -196,11 +196,22 @@ void SettingsActivity::loop() {
     const int rowStep = GUI.getListRowStep(false);
     if (rowStep <= 0) return false;
     const int pageItems = GUI.getListPageItems(listHeight, false);
+    if (pageItems <= 0) return false;
     const int selectedRow = std::max(0, selectedSettingIndex - 1);
     const int pageStart = selectedRow / pageItems * pageItems;
-    const int row = (y - listTop) / rowStep;
+    int row = (y - listTop) / rowStep;
+    if (row < 0) return false;
+    // Same trailing-slack handling as MappedInputManager::listItemFromPoint:
+    // the band is not an exact multiple of the row height, and discarding taps
+    // in the leftover pixels leaves a dead strip below the last setting.
+    const int rowsOnPage = std::min(pageItems, std::max(0, settingsCount - pageStart));
+    if (rowsOnPage <= 0) return false;
+    if (row >= rowsOnPage) {
+      if (row > rowsOnPage) return false;
+      row = rowsOnPage - 1;
+    }
     const int touched = pageStart + row;
-    if (row < 0 || row >= pageItems || touched < 0 || touched >= settingsCount) return false;
+    if (touched < 0 || touched >= settingsCount) return false;
     settingIndex = touched + 1;
     return true;
   };
