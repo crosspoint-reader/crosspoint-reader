@@ -18,6 +18,37 @@
 #include "activities/settings/SettingsActivity.h"
 #include "util/DictionaryRegistry.h"
 
+// FrontlightManager is only in lib_deps on builds for boards that wire a
+// frontlight (e.g. Murphy), so gate on the header actually being available.
+#if __has_include(<FrontlightManager.h>)
+#include <FrontlightManager.h>
+extern FrontlightManager frontlight;  // defined in main.cpp
+
+// Frontlight brightness entry. Percent is persisted in
+// SETTINGS.frontlightBrightness (saved/loaded manually in CrossPointSettings::
+// toJson/fromJson — the generic loop skips dynamic entries), while the ENUM
+// contract shared with the web UI stays index-based, like the font size entry.
+// The setter drives the hardware immediately so the change is visible before
+// the settings screen saves.
+inline SettingInfo buildFrontlightSetting() {
+  constexpr uint8_t FRONTLIGHT_UI_STEP_PERCENT = 20;
+  SettingInfo s = SettingInfo::DynamicEnum(
+      StrId::STR_FRONTLIGHT, {},
+      [] {
+        const uint8_t pct = SETTINGS.frontlightBrightness > 100 ? (uint8_t)100 : SETTINGS.frontlightBrightness;
+        return static_cast<uint8_t>(pct / FRONTLIGHT_UI_STEP_PERCENT);
+      },
+      [](uint8_t idx) {
+        SETTINGS.frontlightBrightness = static_cast<uint8_t>(idx * FRONTLIGHT_UI_STEP_PERCENT);
+        frontlight.setBrightness(SETTINGS.frontlightBrightness);
+      },
+      "frontlightBrightness", StrId::STR_CAT_DISPLAY);
+  // Percentages are language-neutral, so no translation — same as "pt" sizes.
+  s.enumStringValues = {"0%", "20%", "40%", "60%", "80%", "100%"};
+  return s;
+}
+#endif  // __has_include(<FrontlightManager.h>)
+
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
 inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
@@ -403,6 +434,19 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
+#if __has_include(<FrontlightManager.h>)
+    // Only show the frontlight setting on boards that wire one (e.g. Murphy).
+    // present() reads BoardConfig only, so it is valid before begin().
+    if (frontlight.present()) {
+      // Insert after Refresh Frequency (Display category)
+      for (auto it = v.begin(); it != v.end(); ++it) {
+        if (it->nameId == StrId::STR_REFRESH_FREQ) {
+          v.insert(it + 1, buildFrontlightSetting());
+          break;
+        }
+      }
+    }
+#endif
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {
       // Insert after the short power button setting (end of Controls section)

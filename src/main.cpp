@@ -17,6 +17,11 @@
 #include <WiFi.h>
 #include <builtinFonts/all.h>
 
+// Only in lib_deps on builds for boards that wire a frontlight (e.g. Murphy).
+#if __has_include(<FrontlightManager.h>)
+#include <FrontlightManager.h>
+#endif
+
 #include <cstring>
 
 #include "CrossPointSettings.h"
@@ -41,6 +46,9 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
+#if __has_include(<FrontlightManager.h>)
+FrontlightManager frontlight;  // inert on boards without a frontlight
+#endif
 static unsigned long allowSleepAt = 0;
 
 // Fonts
@@ -331,6 +339,13 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
+#if __has_include(<FrontlightManager.h>)
+  // Restore the persisted frontlight brightness now that settings are loaded.
+  frontlight.begin();
+  frontlight.setBrightness(SETTINGS.frontlightBrightness);
+  LOG_DBG("MAIN", "Frontlight: present=%d brightness=%u%%", frontlight.present(), SETTINGS.frontlightBrightness);
+#endif
+
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
@@ -489,17 +504,13 @@ void loop() {
     pinMode(47, INPUT_PULLUP);
     chargeProbeInit = true;
   }
-  if (millis() - lastChargeProbe >= 1000) {
+  if (millis() - lastChargeProbe >= 2000) {
     lastChargeProbe = millis();
     const int g47 = digitalRead(47);
-    const int vbatMv = analogReadMilliVolts(9);
-    if (g47 != lastG47) {
-      LOG_INF("PROBE", "GPIO47 CHANGED -> %d (vbat_raw=%dmV scaled=%dmV)", g47, vbatMv,
-              (int)(vbatMv * 3.030303f));
-      lastG47 = g47;
-    } else {
-      LOG_INF("PROBE", "GPIO47=%d vbat_raw=%dmV scaled=%dmV", g47, vbatMv, (int)(vbatMv * 3.030303f));
-    }
+    (void)lastG47;
+    // Log exactly what the UI consumes: HAL percentage + HalGPIO USB state.
+    LOG_INF("PROBE", "battery=%u%% usb=%d vbat_raw=%dmV g47=%d", powerManager.getBatteryPercentage(),
+            (int)gpio.isUsbConnected(), analogReadMilliVolts(9), g47);
   }
 #endif
 
