@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
+#include <MobiToEpub.h>
 
 #include <optional>
 
@@ -18,6 +19,9 @@
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
+#if CROSSPOINT_AUDIO_PLAYER
+#include "activities/audio/AudioPlayerActivity.h"
+#endif
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -27,6 +31,35 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
 }
 
 bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
+
+bool ReaderActivity::isMobiFile(const std::string& path) { return FsHelpers::hasMobiExtension(path); }
+
+std::unique_ptr<Epub> ReaderActivity::loadMobi(const std::string& path) {
+  if (!Storage.exists(path.c_str())) {
+    LOG_ERR("READER", "File does not exist: %s", path.c_str());
+    return nullptr;
+  }
+  // First conversion takes seconds on a big book — show a popup (the cached
+  // path returns instantly, in which case the popup never appears).
+  allowFastInitialRefresh = false;
+  GUI.drawPopup(renderer, tr(STR_CONVERTING));
+  std::string convertError;
+  const std::string epubPath = MobiToEpub::ensureConverted(path, &convertError);
+  if (epubPath.empty()) {
+    GUI.drawPopup(renderer, convertError.c_str());
+    delay(2500);
+    return nullptr;
+  }
+  return loadEpub(epubPath);
+}
+
+#if CROSSPOINT_AUDIO_PLAYER
+bool ReaderActivity::isAudioFile(const std::string& path) { return FsHelpers::hasAudioExtension(path); }
+
+void ReaderActivity::onGoToAudioPlayer(const std::string& path) {
+  activityManager.replaceActivity(std::make_unique<AudioPlayerActivity>(renderer, mappedInput, path));
+}
+#endif
 
 int ReaderActivity::initialRefreshCountdown() const {
   if (!allowFastInitialRefresh) return 0;
@@ -154,6 +187,10 @@ void ReaderActivity::onEnter() {
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {
     onGoToBmpViewer(initialBookPath);
+#if CROSSPOINT_AUDIO_PLAYER
+  } else if (isAudioFile(initialBookPath)) {
+    onGoToAudioPlayer(initialBookPath);
+#endif
   } else if (isXtcFile(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {
@@ -168,6 +205,13 @@ void ReaderActivity::onEnter() {
       return;
     }
     onGoToTxtReader(std::move(txt));
+  } else if (isMobiFile(initialBookPath)) {
+    auto epub = loadMobi(initialBookPath);
+    if (!epub) {
+      onGoBack();
+      return;
+    }
+    onGoToEpubReader(std::move(epub));
   } else {
     auto epub = loadEpub(initialBookPath);
     if (!epub) {

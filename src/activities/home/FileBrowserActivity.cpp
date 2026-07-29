@@ -54,7 +54,11 @@ void FileBrowserActivity::loadFiles() {
         }
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename)) {
+                 FsHelpers::hasBmpExtension(filename) || FsHelpers::hasMobiExtension(filename)
+#if CROSSPOINT_AUDIO_PLAYER
+                 || FsHelpers::hasAudioExtension(filename)
+#endif
+      ) {
         files.emplace_back(filename);
       }
     }
