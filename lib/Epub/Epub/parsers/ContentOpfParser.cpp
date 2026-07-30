@@ -126,7 +126,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0)) {
     self->state = IN_MANIFEST;
     if (!Storage.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      LOG_ERR("COF", "Couldn't open temp items file for writing. This is probably going to be a fatal error.");
+      LOG_ERR("COF", "Couldn't open temp items file for writing; spine cannot be resolved");
+      self->itemStoreUnusable = true;
     }
     return;
   }
@@ -134,7 +135,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->state == IN_PACKAGE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_SPINE;
     if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
+      LOG_ERR("COF", "Couldn't open temp items file for reading; spine cannot be resolved");
+      self->itemStoreUnusable = true;
     }
 
     // Sort the (unconditionally-built) item index so every idref lookup uses binary
@@ -155,7 +157,11 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     // TODO Remove print
     LOG_DBG("COF", "Entering guide state.");
     if (!Storage.openFileForRead("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
-      LOG_ERR("COF", "Couldn't open temp items file for reading. This is probably going to be a fatal error.");
+      // Not marked unusable, unlike the manifest and spine opens: nothing in the
+      // guide state reads the item store (every read lives in the itemref handler,
+      // which has already run by now), so failing here costs the spine nothing and
+      // discarding the build over it would throw away good work.
+      LOG_ERR("COF", "Couldn't open temp items file for reading in guide state");
     }
     return;
   }
@@ -275,16 +281,23 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
             // Check for match (may need to check a few due to hash collisions)
             while (it != self->itemIndex.end() && it->idHash == targetHash) {
-              self->tempItemStore.seek(it->fileOffset);
+              // A failed seek leaves the cursor on whatever record it was already
+              // on, so the reads below would succeed against the wrong entry and
+              // hand back another item's href -- worse than dropping the itemref.
+              if (!self->tempItemStore.seek(it->fileOffset)) {
+                LOG_ERR("COF", "Item store seek to %u failed", it->fileOffset);
+                self->itemStoreUnusable = true;
+                break;
+              }
               std::string itemId;
               if (!serialization::readString(self->tempItemStore, itemId)) {
-                self->itemStoreReadFailed = true;
+                self->itemStoreUnusable = true;
                 break;
               }
               if (itemId == idref) {
                 found = serialization::readString(self->tempItemStore, href);
                 if (!found) {
-                  self->itemStoreReadFailed = true;
+                  self->itemStoreUnusable = true;
                 }
                 break;
               }
@@ -293,15 +306,20 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
           } else {
             // Fallback linear scan, only reached when the index is empty (no manifest
             // items). The fast binary-search path above is used for all real manifests.
-            self->tempItemStore.seek(0);
+            // Without a successful rewind the scan would start mid-record and
+            // misparse every field after it, so treat a failed seek as unusable.
+            if (!self->tempItemStore.seek(0)) {
+              LOG_ERR("COF", "Item store rewind failed");
+              self->itemStoreUnusable = true;
+            }
             std::string itemId;
-            while (self->tempItemStore.available()) {
+            while (!self->itemStoreUnusable && self->tempItemStore.available()) {
               if (!serialization::readString(self->tempItemStore, itemId) ||
                   !serialization::readString(self->tempItemStore, href)) {
                 // Distinguish a read failure from a clean walk to EOF: the loop
                 // condition already excludes the latter, so arriving here means
                 // the store itself is unreadable, not that the id is absent.
-                self->itemStoreReadFailed = true;
+                self->itemStoreUnusable = true;
                 break;
               }
               if (itemId == idref) {
