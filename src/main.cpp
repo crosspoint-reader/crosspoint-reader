@@ -498,6 +498,16 @@ void setup() {
   allowSleepAt = millis() + 2000;
 }
 
+// delay() counts ticks, and the tick stops while onEinkBusyWaitSlice() light-sleeps
+// the chip (millis() is RTC-corrected on wake; the tick is not). A delay(10) mid-refresh
+// would stretch to ~210 ms and starve button sampling. millis() stays honest.
+static void delayWallClock(const unsigned long ms) {
+  const unsigned long deadline = millis() + ms;
+  while (static_cast<long>(millis() - deadline) < 0) {
+    vTaskDelay(1);
+  }
+}
+
 void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
@@ -608,6 +618,9 @@ void loop() {
   activityManager.loop();
   const unsigned long activityDuration = millis() - activityStartTime;
 
+  // Body complete: releases the slice hook's yield (see onEinkBusyWaitSlice).
+  powerManager.noteMainLoopIteration();
+
   const unsigned long loopDuration = millis() - loopStartTime;
   if (loopDuration > maxLoopDuration) {
     maxLoopDuration = loopDuration;
@@ -640,14 +653,14 @@ void loop() {
         // matching sample, so poll again quickly instead of sleeping a slice —
         // a tap shorter than the 50 ms cadence would otherwise land in a single
         // sample and be dropped, and every press would commit a slice late.
-        delay(10);
+        delayWallClock(10);
       } else if (!powerManager.lightSleep(gpio)) {
         // Light sleep declined = a render Lock, USB, or WiFi is active — the
         // chip is at full clock anyway, so poll at 100 Hz. A 50 ms cadence
         // here dropped sub-slice power taps (a press needs two samples >=5 ms
         // apart to commit), which made short-press sleep flaky during renders
         // — exactly when a render Lock forces this fallback.
-        delay(10);
+        delayWallClock(10);
       }
     } else {
       // Response window after recent input: keep 100 Hz polling for snappy interaction,
@@ -656,7 +669,7 @@ void loop() {
       if (idleMs >= HalPowerManager::IDLE_DOWNCLOCK_MS) {
         powerManager.setPowerSaving(true);
       }
-      delay(10);
+      delayWallClock(10);
     }
   }
 }

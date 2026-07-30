@@ -26,6 +26,19 @@ class HalPowerManager {
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  // Bumped by the main loop, read by the render task (see onEinkBusyWaitSlice).
+  // Single writer, naturally aligned: the 32-bit access is atomic on RISC-V.
+  volatile uint32_t mainLoopIterations = 0;
+
+  // Cap on how long one slice may stay awake waiting for that iteration.
+  // Productive yields measure ~0.4 ms, so two ticks is ample headroom.
+  static constexpr unsigned SLICE_YIELD_MAX_TICKS = 2;
+
+  // Set while the main loop is blocked in requestUpdateAndWait(). Captured in
+  // begin(), which Arduino runs on the loop task, so the handle compare below
+  // ignores any other task that might wait on a render.
+  TaskHandle_t mainLoopTask = nullptr;
+  volatile bool mainLoopBlocked = false;
 
   // Serializes wake-source arm -> esp_light_sleep_start() -> disarm across the
   // two sleepers (main-loop lightSleep() and the render task's BUSY-wait slice).
@@ -76,6 +89,20 @@ class HalPowerManager {
   // Leaves the CPU clock alone: the chip is asleep for most of the wait, so a
   // downclock buys nothing and only slows the main loop's awake windows.
   bool onEinkBusyWaitSlice(int8_t busyPin, uint8_t busyLevel);
+
+  // Call at the end of every main-loop iteration; paces the slice hook's yield.
+  // Read-then-assign, not ++: C++20 deprecates increment on a volatile lvalue.
+  void noteMainLoopIteration() { mainLoopIterations = mainLoopIterations + 1; }
+
+  // Bracket a blocking wait on the render task (requestUpdateAndWait). While the
+  // main loop is parked there it cannot poll, so the slice hook skips its yield
+  // instead of burning the full cap awake once per slice for nothing.
+  void noteRenderWaitBegin() {
+    if (xTaskGetCurrentTaskHandle() == mainLoopTask) mainLoopBlocked = true;
+  }
+  void noteRenderWaitEnd() {
+    if (xTaskGetCurrentTaskHandle() == mainLoopTask) mainLoopBlocked = false;
+  }
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;

@@ -26,6 +26,7 @@ void HalPowerManager::begin() {
   } else {
     pinMode(BAT_GPIO0, INPUT);
   }
+  mainLoopTask = xTaskGetCurrentTaskHandle();  // Arduino runs setup() on the loop task
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
@@ -185,6 +186,13 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
     return false;
   }
 
+  // Mid-debounce: committing needs a second sample, so let the SDK's short poll
+  // delay run instead of halting the chip. Same guard lightSleep() gets in loop().
+  // Unsynchronized like the checks above; stale costs at most one slice.
+  if (gpio.isDebouncePending()) {
+    return false;
+  }
+
   xSemaphoreTake(sleepMutex, portMAX_DELAY);
 
   // Wake the instant BUSY leaves its active level (refresh complete). Level
@@ -230,10 +238,22 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
     return false;  // e.g. ESP_ERR_SLEEP_REJECT — fall back to the SDK's poll delay
   }
 
-  // Yield one tick so the equal-priority main loop can run its input poll:
-  // without this the render task re-enters sleep within microseconds and
-  // starves button sampling for the entire refresh.
-  vTaskDelay(1);
+  // Yield until the equal-priority main loop finishes an iteration, not just one
+  // tick: one tick is less awake CPU than an iteration needs, so we would re-halt
+  // the chip mid-poll. Capped so a loop parked on SD I/O can't hold the panel awake.
+  const uint32_t seenIterations = mainLoopIterations;
+  // Skipped entirely when the loop cannot make progress and the yield would just
+  // burn the cap awake: parked in requestUpdateAndWait() on this very render;
+  // never started (setup-time paints, iterations still 0); or this task IS the
+  // loop task (direct displayBuffer calls from setup()/loop() busy-wait here).
+  const bool loopCanPoll =
+      !mainLoopBlocked && seenIterations != 0 && xTaskGetCurrentTaskHandle() != mainLoopTask;
+  unsigned yieldTicks = 0;
+  if (loopCanPoll) {
+    for (; yieldTicks < SLICE_YIELD_MAX_TICKS && mainLoopIterations == seenIterations; ++yieldTicks) {
+      vTaskDelay(1);
+    }
+  }
   return true;
 }
 
