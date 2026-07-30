@@ -219,7 +219,8 @@ bool MobiParser::parseRecord0() {
 }
 
 bool MobiParser::parseHuffCdic() {
-  if (huffRecord == 0 || huffCount < 2 || huffRecord + huffCount > numRecords) {
+  // Subtraction form: huffRecord + huffCount is uint32 and wraps on crafted values.
+  if (huffRecord == 0 || huffCount < 2 || huffRecord > numRecords || huffCount > numRecords - huffRecord) {
     LOG_ERR("MOBI", "bad header: huff rec=%lu count=%lu of %u", (unsigned long)huffRecord, (unsigned long)huffCount, numRecords);
     err = Error::BadHeader;
     return false;

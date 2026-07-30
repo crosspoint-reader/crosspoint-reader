@@ -1,6 +1,8 @@
 #include "PdfToEpub.h"
 
+#include <FsHelpers.h>
 #include <HalStorage.h>
+#include <MinizConfig.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <ZipWriter.h>
@@ -39,7 +41,13 @@ std::string pdfTextString(const std::string& s) {
       if (u >= 0x20) pdfAppendUtf8(out, u);
     }
   }
-  if (out.size() > 256) out.resize(256);
+  if (out.size() > 256) {
+    // Trim back off any continuation bytes so the cut never lands mid-sequence
+    // (a split code point would make the OPF malformed XML).
+    size_t end = 256;
+    while (end > 0 && ((uint8_t)out[end] & 0xC0) == 0x80) end--;
+    out.resize(end);
+  }
   return out;
 }
 
@@ -134,6 +142,7 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
   const std::string tagPath = std::string(cacheDir) + "/src.bin";
 
   uint32_t curSize = 0;
+  uint32_t curFingerprint = 0;
   {
     HalFile f;
     if (!Storage.openFileForRead("PDF", pdfPath, f)) {
@@ -141,13 +150,17 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
       return "";
     }
     curSize = (uint32_t)f.fileSize();
+    curFingerprint = FsHelpers::sourceFingerprint(f, curSize);
   }
   {
     HalFile f;
-    uint32_t srcTag[3] = {0, 0, 0};
+    uint32_t srcTag[4] = {0, 0, 0, 0};
     if (Storage.openFileForRead("PDF", tagPath, f)) {
+      // Size alone can't tell two different files apart, and the cache
+      // directory is keyed on a path hash, so a same-size replacement (or a
+      // hash collision) would otherwise be served the previous book.
       if (f.read(srcTag, sizeof(srcTag)) == (int)sizeof(srcTag) && srcTag[0] == CONVERTER_VERSION &&
-          srcTag[1] == curSize && Storage.exists(epubPath.c_str())) {
+          srcTag[1] == curSize && srcTag[2] == curFingerprint && Storage.exists(epubPath.c_str())) {
         return epubPath;  // valid cached conversion
       }
     }
@@ -324,7 +337,7 @@ std::string PdfToEpub::ensureConverted(const std::string& pdfPath, std::string* 
   {
     HalFile f;
     if (Storage.openFileForWrite("PDF", tagPath.c_str(), f)) {
-      const uint32_t tag[3] = {CONVERTER_VERSION, curSize, pageCount};
+      const uint32_t tag[4] = {CONVERTER_VERSION, curSize, curFingerprint, pageCount};
       f.write(tag, sizeof(tag));
     }
   }

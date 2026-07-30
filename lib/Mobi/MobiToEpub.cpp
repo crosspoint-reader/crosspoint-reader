@@ -1,9 +1,11 @@
 #include "MobiToEpub.h"
 
 #include <GifDecoder.h>
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MinizConfig.h>
 #include <PngWriter.h>
 #include <ZipWriter.h>
 
@@ -19,7 +21,7 @@ namespace {
 // Bumped whenever the converter's output changes: the generated EPUB keeps a
 // stable path, so without this a stale conversion (and the reader's section
 // caches derived from it) would survive a firmware upgrade.
-constexpr uint32_t CONVERTER_VERSION = 3;
+constexpr uint32_t CONVERTER_VERSION = 4;
 
 constexpr size_t CHAPTER_SOFT_LIMIT = 160 * 1024;  // split oversized flows at block boundaries
 // Hard ceiling: a book whose whole body sits inside one never-closed <div> has
@@ -81,7 +83,9 @@ constexpr uint16_t CP1252_HIGH[32] = {8364, 0,    8218, 402,  8222, 8230, 8224, 
                                       8211, 8212, 732,  8482, 353,  8250, 339,  0,    382,  376};
 
 void appendUtf8(std::string& out, uint32_t cp) {
-  if (cp == 0) cp = 0xFFFD;
+  // A numeric character reference can name anything; past U+10FFFF the
+  // four-byte branch would emit malformed UTF-8.
+  if (cp == 0 || cp > 0x10FFFF) cp = 0xFFFD;
   if (cp < 0x80) {
     out += (char)cp;
   } else if (cp < 0x800) {
@@ -107,6 +111,24 @@ void appendTextChar(std::string& out, uint32_t cp) {
     case '>': out += "&gt;"; break;
     default: appendUtf8(out, cp);
   }
+}
+
+// Title/author carry the same encoding as the body, so they need the same
+// decoding: passing UTF-8 bytes through and mapping cp1252 high bytes, rather
+// than replacing every non-ASCII byte with U+FFFD.
+std::string metadataToXml(const std::string& in, bool isUtf8) {
+  std::string out;
+  for (char ch : in) {
+    const uint8_t u = (uint8_t)ch;
+    if (u < 0x80) {
+      appendTextChar(out, u);
+    } else if (isUtf8) {
+      out += ch;  // continuation bytes are never '&', '<' or '>'
+    } else {
+      appendUtf8(out, u < 0xA0 ? CP1252_HIGH[u - 0x80] : u);
+    }
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +185,6 @@ struct EpubBuilder {
   MobiParser& mobi;
   std::string chapterBuf;
   std::vector<std::string> chapterTitles;
-  std::vector<uint16_t> usedImages;  // recindex values, order of first use
   std::vector<std::string> openTags; // emitted-tag stack for auto-close
   std::string pendingHeadingText;    // first heading text of current chapter
   bool inHeading = false;
@@ -172,20 +193,6 @@ struct EpubBuilder {
 
   explicit EpubBuilder(MobiParser& m) : mobi(m) {}
 
-  const char* imageExt(uint16_t recindex) {
-    // Cheap signature re-check when writing; during tidy assume jpg and fix
-    // the manifest at write time instead — keep a single source of truth by
-    // probing here (records are small to probe? no — probe = full read).
-    // Simpler: extension chosen at write time; chapters reference by index
-    // with .img extension-neutral name is invalid for some readers, so we
-    // standardize on the real extension recorded at write time. During tidy
-    // we don't know it yet — so images are collected first and chapters
-    // reference "images/imgNNNNN" + ext placeholder resolved in a second
-    // pass. To avoid the two-pass complexity, use ".jpg" name for all —
-    // renderers key on content, but CrossPoint keys on extension.
-    (void)recindex;
-    return nullptr;  // unused; see imageName()
-  }
 
   // recindex -> zip-local name. Extension resolved lazily from record bytes
   // (cached), so chapter references and manifest entries agree.
@@ -405,12 +412,23 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   const std::string epubPath = std::string(cacheDir) + "/book.epub";
   const std::string tagPath = std::string(cacheDir) + "/src.bin";
 
-  uint32_t srcTag[2] = {0, 0};
+  uint32_t curFingerprint = 0;
+  {
+    HalFile f;
+    if (Storage.openFileForRead("MOBI", mobiPath.c_str(), f)) {
+      curFingerprint = FsHelpers::sourceFingerprint(f, (uint32_t)f.fileSize());
+    }
+  }
+  uint32_t srcTag[3] = {0, 0, 0};
   {
     HalFile f;
     if (Storage.openFileForRead("MOBI", tagPath.c_str(), f)) {
+      // Text length alone can't distinguish two books, and the cache directory
+      // is keyed on a path hash, so a replaced file (or a hash collision) would
+      // otherwise be served the previous conversion.
       if (f.read(srcTag, sizeof(srcTag)) == (int)sizeof(srcTag) && srcTag[0] == CONVERTER_VERSION &&
-          srcTag[1] == mobi.rawTextLength() && Storage.exists(epubPath.c_str())) {
+          srcTag[1] == mobi.rawTextLength() && srcTag[2] == curFingerprint &&
+          Storage.exists(epubPath.c_str())) {
         return epubPath;  // valid cached conversion
       }
     }
@@ -455,11 +473,6 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
     setError("cannot write EPUB");
     return "";
   }
-
-  const bool cp1252 = true;  // MOBI textEncoding 1252 vs 65001 handled below
-  const bool isUtf8 = false;
-  (void)cp1252;
-  (void)isUtf8;
 
   b.openChapter();
   const char* html = (const char*)raw.get();
@@ -667,15 +680,11 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
       "<metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:opf=\"http://www.idpf.org/2007/opf\">\n";
   opf += "<dc:title>";
   {
-    std::string t;
-    for (char ch : mobi.title()) appendTextChar(t, (uint8_t)ch < 0x80 ? (uint8_t)ch : 0xFFFD);
-    opf += t;
+    opf += metadataToXml(mobi.title(), mobi.isUtf8());
   }
   opf += "</dc:title>\n<dc:creator>";
   {
-    std::string a;
-    for (char ch : mobi.author()) appendTextChar(a, (uint8_t)ch < 0x80 ? (uint8_t)ch : 0xFFFD);
-    opf += a;
+    opf += metadataToXml(mobi.author(), mobi.isUtf8());
   }
   opf += "</dc:creator>\n<dc:language>en</dc:language>\n<dc:identifier id=\"bookid\">mobi-";
   {
@@ -758,7 +767,7 @@ std::string MobiToEpub::ensureConverted(const std::string& mobiPath, std::string
   {
     HalFile f;
     if (Storage.openFileForWrite("MOBI", tagPath.c_str(), f)) {
-      uint32_t tag[2] = {CONVERTER_VERSION, mobi.rawTextLength()};
+      uint32_t tag[3] = {CONVERTER_VERSION, mobi.rawTextLength(), curFingerprint};
       f.write(tag, sizeof(tag));
     }
   }

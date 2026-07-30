@@ -87,6 +87,9 @@ struct Interp {
   const PdfText::ImageSink* images = nullptr;
   int lostShows = 0;
   int totalShows = 0;
+  // Reported once per interpreter run rather than once per process, so a later
+  // conversion in the same session still says what it skipped.
+  bool inlineNoted = false;
 
   bool run(const uint8_t* data, size_t len, const PdfObj* res, const Mat& ctm0, int depth);
   void invokeXObject(const std::string& name, const PdfObj* res, const Mat& ctm, int depth);
@@ -312,10 +315,9 @@ bool Interp::run(const uint8_t* data, size_t len, const PdfObj* res, const Mat& 
       // sample data is guesswork, and inline images are near-always 1x1 masks
       // or rules rather than illustrations.
       // ponytail: extract them if a real book turns up that needs it.
-      static bool inlineNoted = false;
       if (!inlineNoted) {
         inlineNoted = true;
-        LOG_ERR("PDF", "image: inline images (BI/ID/EI) are skipped");
+        LOG_DBG("PDF", "image: inline images (BI/ID/EI) are skipped");
       }
       // Skip to whitespace-delimited EI.
       size_t q = lx.pos();
