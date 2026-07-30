@@ -26,10 +26,13 @@ namespace {
 //      the scene-break gap, so cached pages laid out by older versions no longer
 //      match. Keeps <br>-per-paragraph books (common CJK formatting) from
 //      re-adding container spacing at every paragraph.
-// v35: Word gaps are only suppressed for tokens glued in the source (and, when real
-//      whitespace separated them, only away from Hangul), so spaces between Hangul
-//      words survive again; ruby element boundaries carry the continuation flag
-//      instead. Invalidates v34 caches, whose word positions have the spaces collapsed.
+// v35: At a CJK break opportunity, the word gap is now dropped only when no whitespace
+//      separated the two tokens in the source, or when whitespace did but neither side
+//      is Hangul; ruby element boundaries carry the continuation flag instead. Bumped
+//      because the rule changed twice under version 34 -- as first shipped it dropped
+//      the gap at every break opportunity (collapsing Hangul spaces), then the word-gap
+//      fix narrowed it to glued tokens only -- so a v34 file does not identify one
+//      layout. 35 makes the current rule distinguishable from both.
 constexpr uint8_t SECTION_FILE_VERSION = 35;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
