@@ -109,7 +109,7 @@ The Recent Books screen lists the most recently opened books in a chronological 
 
 ### 3.5 File Transfer Screen
 
-The File Transfer screen allows you to upload and manage files on the device over SSH. When you enter the screen, choose **Join a Network** or **Create Hotspot**. The reader then starts an SSH server and shows the connection command (`ssh crosspoint@<ip>`) together with a password generated for that session.
+The SSH Server screen allows you to upload and manage files on the device over SSH. When you enter the screen, choose **Join a Network** or **Create Hotspot**. The reader then starts an SSH server and shows the connection command (`ssh crosspoint@<ip>`) together with a password generated for that session.
 
 Upload a book from your computer:
 
@@ -126,6 +126,14 @@ scp crosspoint@<ip>:/mybook.epub .
 An interactive session (`ssh crosspoint@<ip>`) provides basic file management commands (`ls`, `cd`, `pwd`, `cat`, `rm`, `mv`, `mkdir`) with relative paths and tab completion; type `help` for the full list. The device is also reachable as `crosspoint.local` on networks with mDNS support.
 
 Only single-file transfers are supported (no `scp -r`). The device presents a persistent ed25519 host key, stored on the SD card, so your SSH client only asks you to trust it once.
+
+To skip the on-screen password, install your public key once (using the session password shown on screen):
+
+```
+scp ~/.ssh/id_rsa.pub crosspoint@<ip>:/.ssh/authorized_keys
+```
+
+From then on `ssh` and `scp` authenticate with your key automatically. The file uses the standard `authorized_keys` format, so you can list multiple keys (one per line) by editing `/.ssh/authorized_keys` on the SD card.
 
 A **Wi-Fi signal strength indicator** is displayed on-screen during joined-network sessions.
 

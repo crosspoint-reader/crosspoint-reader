@@ -7,12 +7,14 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 // libssh opaque handle types (identical to the typedefs in <libssh/libssh.h>;
 // repeated here so the rest of the firmware never includes libssh headers).
 typedef struct ssh_bind_struct* ssh_bind;
 typedef struct ssh_session_struct* ssh_session;
 typedef struct ssh_channel_struct* ssh_channel;
+typedef struct ssh_key_struct* ssh_key;
 
 /**
  * SshServer provides remote access to the SD card over SSH (port 22).
@@ -60,6 +62,9 @@ class SshServer {
   void handleClient();
 
   bool authenticate(ssh_session session);
+  void loadAuthorizedKeys();
+  void freeAuthorizedKeys();
+  bool isAuthorizedKey(ssh_key clientKey) const;
   ssh_channel openChannel(ssh_session session);
   void serveChannel(ssh_session session, ssh_channel channel);
 
@@ -90,6 +95,9 @@ class SshServer {
 
   ssh_bind sshbind = nullptr;
   int listenFd = -1;
+
+  // Public keys from /.ssh/authorized_keys, imported at begin().
+  std::vector<ssh_key> authorizedKeys;
 
   TaskHandle_t taskHandle = nullptr;
   std::atomic<bool> running{false};

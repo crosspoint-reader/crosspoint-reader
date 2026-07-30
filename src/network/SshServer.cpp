@@ -27,6 +27,8 @@ namespace {
 constexpr const char* TAG = "SSH";
 constexpr const char* HOST_KEY_PATH = "/.crosspoint/ssh_host_key";
 constexpr const char* CACHE_DIR = "/.crosspoint";
+constexpr const char* SSH_DIR = "/.ssh";
+constexpr const char* AUTHORIZED_KEYS_PATH = "/.ssh/authorized_keys";
 
 // Task sized from the LibSSH-ESP32 server example (10240) plus headroom for
 // the SD write path that runs on this task during scp uploads.
@@ -149,12 +151,17 @@ bool SshServer::begin(const char* sessionPassword) {
   }
   listenFd = ssh_bind_get_fd(sshbind);
 
+  // Make the drop location for `scp id_rsa.pub ...:/.ssh/authorized_keys` exist.
+  Storage.ensureDirectoryExists(SSH_DIR);
+  loadAuthorizedKeys();
+
   stopRequested.store(false);
   running.store(true);
   const BaseType_t created = xTaskCreate(&taskTrampoline, "SshServer", TASK_STACK_BYTES, this, 1, &taskHandle);
   if (created != pdPASS) {
     LOG_ERR(TAG, "Failed to create server task");
     running.store(false);
+    freeAuthorizedKeys();
     ssh_bind_free(sshbind);
     sshbind = nullptr;
     listenFd = -1;
@@ -257,6 +264,7 @@ void SshServer::serverTaskLoop() {
     ssh_bind_free(sshbind);
     sshbind = nullptr;
   }
+  freeAuthorizedKeys();
   listenFd = -1;
   running.store(false);
   vTaskDelete(nullptr);
@@ -304,33 +312,124 @@ void SshServer::handleClient() {
           static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
 }
 
+void SshServer::loadAuthorizedKeys() {
+  freeAuthorizedKeys();
+
+  const String content = Storage.readFile(AUTHORIZED_KEYS_PATH);
+  if (content.length() == 0) {
+    LOG_DBG(TAG, "No %s; public key auth disabled", AUTHORIZED_KEYS_PATH);
+    return;
+  }
+  authorizedKeys.reserve(4);
+
+  // Standard authorized_keys format: "<type> <base64> [comment]" per line.
+  const std::string text(content.c_str());
+  size_t pos = 0;
+  while (pos < text.size()) {
+    size_t eol = text.find('\n', pos);
+    if (eol == std::string::npos) {
+      eol = text.size();
+    }
+    std::string lineStr = text.substr(pos, eol - pos);
+    pos = eol + 1;
+    if (!lineStr.empty() && lineStr.back() == '\r') {
+      lineStr.pop_back();
+    }
+    if (lineStr.empty() || lineStr[0] == '#') {
+      continue;
+    }
+
+    char* savePtr = nullptr;
+    const char* typeName = strtok_r(lineStr.data(), " ", &savePtr);
+    const char* b64 = strtok_r(nullptr, " ", &savePtr);
+    if (!typeName || !b64) {
+      continue;
+    }
+    const enum ssh_keytypes_e type = ssh_key_type_from_name(typeName);
+    if (type == SSH_KEYTYPE_UNKNOWN) {
+      LOG_ERR(TAG, "authorized_keys: unsupported key type '%s'", typeName);
+      continue;
+    }
+    ssh_key key = nullptr;
+    if (ssh_pki_import_pubkey_base64(b64, type, &key) == SSH_OK && key) {
+      authorizedKeys.push_back(key);
+    } else {
+      LOG_ERR(TAG, "authorized_keys: failed to parse a '%s' key", typeName);
+    }
+  }
+  LOG_INF(TAG, "Loaded %u authorized public key(s)", static_cast<unsigned>(authorizedKeys.size()));
+}
+
+void SshServer::freeAuthorizedKeys() {
+  for (ssh_key key : authorizedKeys) {
+    ssh_key_free(key);
+  }
+  authorizedKeys.clear();
+}
+
+bool SshServer::isAuthorizedKey(ssh_key clientKey) const {
+  for (ssh_key key : authorizedKeys) {
+    if (ssh_key_cmp(clientKey, key, SSH_KEY_CMP_PUBLIC) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool SshServer::authenticate(ssh_session session) {
+  const int methods = SSH_AUTH_METHOD_PASSWORD | (authorizedKeys.empty() ? 0 : SSH_AUTH_METHOD_PUBLICKEY);
   int attempts = 0;
   ssh_message message = nullptr;
   while (!stopRequested.load() && (message = ssh_message_get(session)) != nullptr) {
     bool authenticated = false;
-    if (ssh_message_type(message) == SSH_REQUEST_AUTH && ssh_message_subtype(message) == SSH_AUTH_METHOD_PASSWORD) {
+    bool rejected = false;
+    if (ssh_message_type(message) == SSH_REQUEST_AUTH) {
+      const int method = ssh_message_subtype(message);
       const char* user = ssh_message_auth_user(message);
-      // The suggested replacement (callback-based auth_password_function) needs
-      // the ssh_event polling model; the message-loop server keeps this accessor.
+      const bool userOk = user && strcmp(user, USERNAME) == 0;
+
+      // The suggested replacements (callback-based auth_*_function) need the
+      // ssh_event polling model; the message-loop server keeps these accessors.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-      const char* pass = ssh_message_auth_password(message);
-#pragma GCC diagnostic pop
-      if (user && pass && strcmp(user, USERNAME) == 0 && strcmp(pass, password) == 0) {
-        ssh_message_auth_reply_success(message, 0);
-        authenticated = true;
+      if (method == SSH_AUTH_METHOD_PASSWORD) {
+        const char* pass = ssh_message_auth_password(message);
+        if (userOk && pass && strcmp(pass, password) == 0) {
+          ssh_message_auth_reply_success(message, 0);
+          authenticated = true;
+        } else {
+          rejected = true;
+          attempts++;
+          LOG_DBG(TAG, "Password failure %d for user '%s'", attempts, user ? user : "?");
+          vTaskDelay(pdMS_TO_TICKS(500));  // slow down brute-force attempts
+        }
+      } else if (method == SSH_AUTH_METHOD_PUBLICKEY) {
+        ssh_key clientKey = ssh_message_auth_pubkey(message);
+        if (userOk && clientKey && isAuthorizedKey(clientKey)) {
+          if (ssh_message_auth_publickey_state(message) == SSH_PUBLICKEY_STATE_VALID) {
+            // libssh verified the signature against this key.
+            ssh_message_auth_reply_success(message, 0);
+            authenticated = true;
+            LOG_INF(TAG, "Public key auth for '%s'", user);
+          } else {
+            // Probe for a known key: invite the signed request.
+            ssh_message_auth_reply_pk_ok_simple(message);
+          }
+        } else {
+          // Unknown-key probes are normal (clients try every key they hold),
+          // so they are rejected without counting toward the attempt limit.
+          rejected = true;
+        }
       } else {
-        attempts++;
-        LOG_DBG(TAG, "Auth failure %d for user '%s'", attempts, user ? user : "?");
-        vTaskDelay(pdMS_TO_TICKS(500));  // slow down brute-force attempts
-        ssh_message_auth_set_methods(message, SSH_AUTH_METHOD_PASSWORD);
+        rejected = true;
+      }
+#pragma GCC diagnostic pop
+
+      if (rejected) {
+        ssh_message_auth_set_methods(message, methods);
         ssh_message_reply_default(message);
       }
     } else {
-      if (ssh_message_type(message) == SSH_REQUEST_AUTH) {
-        ssh_message_auth_set_methods(message, SSH_AUTH_METHOD_PASSWORD);
-      }
       ssh_message_reply_default(message);
     }
     ssh_message_free(message);
