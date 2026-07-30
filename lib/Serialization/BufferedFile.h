@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 #include <Memory.h>
+#include <Serialization.h>
 
 #include <algorithm>
 #include <cstring>
@@ -139,8 +140,8 @@ void writePod(BufferedFileWriter& out, const T& value) {
 }
 
 template <typename T>
-void readPod(BufferedFileReader& in, T& value) {
-  in.read(&value, sizeof(T));
+bool readPod(BufferedFileReader& in, T& value) {
+  return in.read(&value, sizeof(T)) == sizeof(T);
 }
 
 inline void writeString(BufferedFileWriter& out, const std::string& s) {
@@ -149,13 +150,25 @@ inline void writeString(BufferedFileWriter& out, const std::string& s) {
   out.write(s.data(), len);
 }
 
-inline void readString(BufferedFileReader& in, std::string& s) {
-  uint32_t len;
-  readPod(in, len);
-  s.resize(len);
-  if (len > 0) {
-    in.read(&s[0], len);
+// Bounded for the same reason as the HalFile overload in Serialization.h: the
+// length comes off the file before it can be trusted, and an unbounded resize()
+// is a throwing allocation that aborts under -fno-exceptions.
+inline bool readString(BufferedFileReader& in, std::string& s) {
+  uint32_t len = 0;
+  if (!readPod(in, len)) {
+    s.clear();
+    return false;
   }
+  if (len > MAX_STRING_LEN) {
+    LOG_ERR("SER", "String length %u exceeds maximum %u", len, MAX_STRING_LEN);
+    s.clear();
+    return false;
+  }
+  s.resize(len);
+  if (len == 0) {
+    return true;
+  }
+  return in.read(&s[0], len) == len;
 }
 
 }  // namespace serialization
