@@ -4,6 +4,7 @@
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>
 
+#include <algorithm>
 #include <cctype>
 #include <string>
 
@@ -26,14 +27,17 @@ constexpr char DEFAULT_SERVER_HOST[] = "sync.crosspointreader.com";
 // Bumped when a change to defaults would alter behavior for existing configs.
 constexpr uint8_t CONFIG_VERSION = 2;
 
-// Host component of a base URL: scheme stripped, path and port removed. Returns
-// lowercase so the comparison is case-insensitive, as host names are.
+// Host component of a base URL: scheme stripped, port and everything from the
+// path/query/fragment onward removed. Returns lowercase so the comparison is
+// case-insensitive, as host names are.
 std::string urlHost(const std::string& url) {
   size_t start = url.find("://");
   start = (start == std::string::npos) ? 0 : start + 3;
+  // The authority ends at the first '/', '?' or '#'. Stopping only at '/' would
+  // leave a query or fragment glued to the host ("host?x=1"), which then matches
+  // nothing. getBaseUrl() strips trailing slashes but not either of those.
+  const size_t authorityEnd = std::min(url.find_first_of("/?#", start), url.size());
   // Skip any userinfo ("user:pass@host") so it cannot masquerade as the host.
-  const size_t pathEnd = url.find('/', start);
-  const size_t authorityEnd = (pathEnd == std::string::npos) ? url.size() : pathEnd;
   const size_t at = url.rfind('@', authorityEnd);
   if (at != std::string::npos && at >= start) {
     start = at + 1;
