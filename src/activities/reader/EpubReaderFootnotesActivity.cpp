@@ -18,6 +18,13 @@ void EpubReaderFootnotesActivity::onEnter() {
 void EpubReaderFootnotesActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderFootnotesActivity::loop() {
+  auto selectFootnote = [this] {
+    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(footnotes.size())) {
+      setResult(FootnoteResult{footnotes[selectedIndex].href});
+      finish();
+    }
+  };
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
@@ -28,11 +35,51 @@ void EpubReaderFootnotesActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
       mappedInput.wasReleased(MappedInputManager::Button::Power)) {
-    if (selectedIndex >= 0 && selectedIndex < static_cast<int>(footnotes.size())) {
-      setResult(FootnoteResult{footnotes[selectedIndex].href});
-      finish();
-    }
+    selectFootnote();
     return;
+  }
+
+  if (!footnotes.empty()) {
+    const auto orientation = renderer.getOrientation();
+    const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+    const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+    const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+    const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
+    const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+    const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
+    const int contentY = isPortraitInverted ? 50 : 0;
+    constexpr int lineHeight = 36;
+    const int listTop = 60 + contentY;
+    const int visibleCount = std::max(1, (renderer.getScreenHeight() - listTop) / lineHeight);
+    int row = -1;
+    const auto touch = mappedInput.rowTouch(row, listTop, lineHeight, visibleCount, contentX, contentX + contentWidth);
+    if (touch != MappedInputManager::RowTouch::None) {
+      const int touched = scrollOffset + row;
+      if (touched >= 0 && touched < static_cast<int>(footnotes.size())) {
+        if (touch == MappedInputManager::RowTouch::Down) {
+          if (selectedIndex != touched) {
+            selectedIndex = touched;
+            requestUpdate();
+          }
+        } else {
+          selectedIndex = touched;
+          selectFootnote();
+        }
+        return;
+      }
+    }
+
+    const auto swipe = mappedInput.wasSwipe();
+    if (swipe == MappedInputManager::SwipeDir::Up) {
+      selectedIndex = std::min(static_cast<int>(footnotes.size()) - 1, selectedIndex + visibleCount);
+      requestUpdate();
+      return;
+    }
+    if (swipe == MappedInputManager::SwipeDir::Down) {
+      selectedIndex = std::max(0, selectedIndex - visibleCount);
+      requestUpdate();
+      return;
+    }
   }
 
   buttonNavigator.onNext([this] {
@@ -83,13 +130,14 @@ void EpubReaderFootnotesActivity::render(RenderLock&&) {
   constexpr int lineHeight = 36;
   const int screenWidth = renderer.getScreenWidth();
   const int marginLeft = contentX + 20;
+  const int listTop = 60 + contentY;
 
-  const int visibleCount = std::max(1, (renderer.getScreenHeight() - contentY) / lineHeight);
+  const int visibleCount = std::max(1, (renderer.getScreenHeight() - listTop) / lineHeight);
   if (selectedIndex < scrollOffset) scrollOffset = selectedIndex;
   if (selectedIndex >= scrollOffset + visibleCount) scrollOffset = selectedIndex - visibleCount + 1;
 
   for (int i = scrollOffset; i < static_cast<int>(footnotes.size()) && i < scrollOffset + visibleCount; i++) {
-    const int y = 60 + contentY + (i - scrollOffset) * lineHeight;
+    const int y = listTop + (i - scrollOffset) * lineHeight;
     const bool isSelected = (i == selectedIndex);
 
     if (isSelected) {
