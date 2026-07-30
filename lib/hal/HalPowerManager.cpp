@@ -249,8 +249,7 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   // burn the cap awake: parked in requestUpdateAndWait() on this very render;
   // never started (setup-time paints, iterations still 0); or this task IS the
   // loop task (direct displayBuffer calls from setup()/loop() busy-wait here).
-  const bool loopCanPoll =
-      !mainLoopBlocked && seenIterations != 0 && xTaskGetCurrentTaskHandle() != mainLoopTask;
+  const bool loopCanPoll = !mainLoopBlocked && seenIterations != 0 && xTaskGetCurrentTaskHandle() != mainLoopTask;
   unsigned yieldTicks = 0;
   if (loopCanPoll) {
     for (; yieldTicks < SLICE_YIELD_MAX_TICKS && mainLoopIterations == seenIterations; ++yieldTicks) {

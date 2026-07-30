@@ -515,8 +515,7 @@ void loop() {
         uint8_t* buf = display.getFrameBuffer();
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
-      }
-      else {
+      } else {
         handled = false;
       }
       // Raw print, not LOG_*: debugging_monitor.py keys on this ack to report
