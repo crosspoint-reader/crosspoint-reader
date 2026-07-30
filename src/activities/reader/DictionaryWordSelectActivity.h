@@ -57,6 +57,12 @@ class DictionaryWordSelectActivity final : public Activity {
     uint16_t row;
     const char* text;
     EpdFontFamily::Style style;
+    // Hyphenation chain links (word indices, -1 = none), set by
+    // detectHyphenJoins(): a word the layout split across lines is selected,
+    // highlighted and looked up as one unit. joinedSuffix points to the
+    // fragment continuing this word on the next row; joinedPrefix back.
+    int16_t joinedSuffix = -1;
+    int16_t joinedPrefix = -1;
   };
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error, Saved };
@@ -66,6 +72,9 @@ class DictionaryWordSelectActivity final : public Activity {
 
   void extractWords();
   void buildReadingOrder();
+  void detectHyphenJoins();
+  int canonicalIndex(int idx) const;
+  int selectionEndPos(int hi) const;
   int closestInRow(uint16_t row, int centerX) const;
   void moveVertical(int direction);
   void performLookup();
@@ -141,7 +150,10 @@ class DictionaryWordSelectActivity final : public Activity {
   // reloads every SD-font glyph on the page). snapshotIdx is the word whose
   // under-pixels are saved; -1 means the framebuffer no longer holds a clean
   // page (popup drawn, sub-activity shown) and the next render must be full.
-  static constexpr size_t SNAPSHOT_CAPACITY = 4096;
+  // 8 KB covers the union box of a two-row hyphenation chain at the largest
+  // built-in line height in landscape (~100 B/row); longer chains fall back
+  // to a full repaint via the saved=false path.
+  static constexpr size_t SNAPSHOT_CAPACITY = 8192;
   std::unique_ptr<uint8_t[]> snapshot;
   int16_t snapshotX = 0;
   int16_t snapshotY = 0;
