@@ -123,7 +123,7 @@ Download a file from the device:
 scp crosspoint@<ip>:/mybook.epub .
 ```
 
-An interactive session (`ssh crosspoint@<ip>`) provides basic file management commands (`ls`, `cat`, `rm`, `mv`, `mkdir`); type `help` for the full list. The device is also reachable as `crosspoint.local` on networks with mDNS support.
+An interactive session (`ssh crosspoint@<ip>`) provides basic file management commands (`ls`, `cd`, `pwd`, `cat`, `rm`, `mv`, `mkdir`) with relative paths and tab completion; type `help` for the full list. The device is also reachable as `crosspoint.local` on networks with mDNS support.
 
 Only single-file transfers are supported (no `scp -r`). The device presents a persistent ed25519 host key, stored on the SD card, so your SSH client only asks you to trust it once.
 

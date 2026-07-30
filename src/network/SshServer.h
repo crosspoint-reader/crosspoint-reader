@@ -63,9 +63,16 @@ class SshServer {
   ssh_channel openChannel(ssh_session session);
   void serveChannel(ssh_session session, ssh_channel channel);
 
+  // Per-shell-session state (one interactive client at a time).
+  struct ShellContext {
+    std::string cwd = "/";
+  };
+
   void runShell(ssh_channel channel);
   // Returns false when the client asked to exit.
-  bool executeCommand(ssh_channel channel, char* line, bool interactive);
+  bool executeCommand(ssh_channel channel, ShellContext& ctx, char* line, bool interactive);
+  void handleTabCompletion(ssh_channel channel, const ShellContext& ctx, char* line, size_t& lineLen);
+  void printPrompt(ssh_channel channel, const ShellContext& ctx);
 
   void commandLs(ssh_channel channel, const char* path);
   void commandCat(ssh_channel channel, const char* path);

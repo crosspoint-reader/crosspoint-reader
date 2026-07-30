@@ -20,6 +20,8 @@
 #include <cerrno>
 #include <cstdarg>
 #include <cstring>
+#include <string_view>
+#include <vector>
 
 namespace {
 constexpr const char* TAG = "SSH";
@@ -40,6 +42,53 @@ constexpr int MAX_AUTH_ATTEMPTS = 3;
 const char* scpBasename(const char* name) {
   const char* slash = strrchr(name, '/');
   return slash ? slash + 1 : name;
+}
+
+// Resolve `path` against `cwd` into a normalized absolute path
+// ("." and ".." components are folded, never escaping the root).
+std::string resolvePath(const std::string& cwd, const char* path) {
+  std::string joined;
+  if (!path || path[0] == '\0') {
+    joined = cwd;
+  } else if (path[0] == '/') {
+    joined = path;
+  } else {
+    joined = cwd;
+    if (joined.back() != '/') {
+      joined += '/';
+    }
+    joined += path;
+  }
+
+  std::string out;
+  out.reserve(joined.size());
+  size_t i = 0;
+  while (i < joined.size()) {
+    while (i < joined.size() && joined[i] == '/') {
+      i++;
+    }
+    size_t j = joined.find('/', i);
+    if (j == std::string::npos) {
+      j = joined.size();
+    }
+    const std::string_view comp(joined.data() + i, j - i);
+    if (comp.empty() || comp == ".") {
+      // skip
+    } else if (comp == "..") {
+      const size_t slash = out.rfind('/');
+      if (slash != std::string::npos) {
+        out.resize(slash);
+      }
+    } else {
+      out += '/';
+      out.append(comp);
+    }
+    i = j;
+  }
+  if (out.empty()) {
+    out = "/";
+  }
+  return out;
 }
 }  // namespace
 
@@ -378,7 +427,8 @@ void SshServer::serveChannel(ssh_session session, ssh_channel channel) {
         scpSource(channel, target);
       }
     } else {
-      executeCommand(channel, execCmd.get(), false);
+      ShellContext ctx;  // one-shot exec commands run from the root
+      executeCommand(channel, ctx, execCmd.get(), false);
     }
   }
 
@@ -391,6 +441,10 @@ void SshServer::serveChannel(ssh_session session, ssh_channel channel) {
 // Interactive shell
 // ---------------------------------------------------------------------------
 
+void SshServer::printPrompt(ssh_channel channel, const ShellContext& ctx) {
+  channelPrintf(channel, "%s:%s> ", USERNAME, ctx.cwd.c_str());
+}
+
 void SshServer::runShell(ssh_channel channel) {
   auto line = makeUniqueNoThrow<char[]>(MAX_LINE_LEN + 1);
   if (!line) {
@@ -398,9 +452,15 @@ void SshServer::runShell(ssh_channel channel) {
     return;
   }
   size_t lineLen = 0;
+  ShellContext ctx;
+
+  // ANSI escape-sequence parser state: 0 = normal, 1 = got ESC, 2 = in CSI.
+  // Arrow keys etc. arrive as ESC [ <final>; swallow them instead of letting
+  // their printable bytes land in the line buffer.
+  int escState = 0;
 
   channelPrintf(channel, "CrossPoint Reader SSH - type 'help' for commands.\r\n");
-  channelPrintf(channel, "%s> ", USERNAME);
+  printPrompt(channel, ctx);
 
   while (!stopRequested.load() && ssh_channel_is_open(channel) && !ssh_channel_is_eof(channel)) {
     char ch = 0;
@@ -412,16 +472,32 @@ void SshServer::runShell(ssh_channel channel) {
       continue;  // timeout - poll stop flag again
     }
 
-    if (ch == '\r' || ch == '\n') {
+    if (escState == 1) {
+      escState = (ch == '[') ? 2 : 0;
+      continue;
+    }
+    if (escState == 2) {
+      if (ch >= 0x40 && ch <= 0x7e) {  // CSI final byte
+        escState = 0;
+      }
+      continue;
+    }
+
+    if (ch == 0x1b) {  // ESC
+      escState = 1;
+    } else if (ch == '\r' || ch == '\n') {
       channelPrintf(channel, "\r\n");
       line[lineLen] = '\0';
-      if (lineLen > 0 && !executeCommand(channel, line.get(), true)) {
+      if (lineLen > 0 && !executeCommand(channel, ctx, line.get(), true)) {
         break;
       }
       lineLen = 0;
-      channelPrintf(channel, "%s> ", USERNAME);
+      printPrompt(channel, ctx);
+    } else if (ch == '\t') {
+      handleTabCompletion(channel, ctx, line.get(), lineLen);
     } else if (ch == 0x03) {  // ctrl-C: discard the current line
-      channelPrintf(channel, "^C\r\n%s> ", USERNAME);
+      channelPrintf(channel, "^C\r\n");
+      printPrompt(channel, ctx);
       lineLen = 0;
     } else if (ch == 0x04) {  // ctrl-D on an empty line: exit
       if (lineLen == 0) {
@@ -439,7 +515,111 @@ void SshServer::runShell(ssh_channel channel) {
   }
 }
 
-bool SshServer::executeCommand(ssh_channel channel, char* line, bool interactive) {
+void SshServer::handleTabCompletion(ssh_channel channel, const ShellContext& ctx, char* line, size_t& lineLen) {
+  line[lineLen] = '\0';
+
+  // The token being completed runs from the last space to the end of the line.
+  size_t tokenStart = lineLen;
+  while (tokenStart > 0 && line[tokenStart - 1] != ' ') {
+    tokenStart--;
+  }
+  const char* token = line + tokenStart;
+  const bool completeCommand = (tokenStart == 0);
+
+  // Transient, bounded (MAX_MATCHES entries of one filename each) and freed on
+  // return; a fixed pool would complicate the two string-length dimensions.
+  constexpr size_t MAX_MATCHES = 32;
+  std::vector<std::string> matches;
+  matches.reserve(8);
+
+  size_t prefixLen = 0;  // length of the part of the token already typed
+
+  if (completeCommand) {
+    static constexpr const char* COMMANDS[] = {"ls", "cat", "rm", "mv", "mkdir", "cd", "pwd", "free", "help", "exit"};
+    prefixLen = strlen(token);
+    for (const char* cmd : COMMANDS) {
+      if (strncmp(cmd, token, prefixLen) == 0) {
+        matches.emplace_back(cmd);
+      }
+    }
+  } else {
+    // Split the token into a directory part and a name prefix.
+    std::string dirPath;
+    const char* namePrefix;
+    const char* slash = strrchr(token, '/');
+    if (slash) {
+      dirPath = resolvePath(ctx.cwd, std::string(token, slash - token + 1).c_str());
+      namePrefix = slash + 1;
+    } else {
+      dirPath = ctx.cwd;
+      namePrefix = token;
+    }
+    prefixLen = strlen(namePrefix);
+
+    HalFile dir = Storage.open(dirPath.c_str());
+    if (!dir || !dir.isDirectory()) {
+      return;
+    }
+    auto name = makeUniqueNoThrow<char[]>(128);
+    if (!name) {
+      LOG_ERR(TAG, "OOM: completion buffer");
+      return;
+    }
+    while (matches.size() < MAX_MATCHES && !stopRequested.load()) {
+      HalFile entry = dir.openNextFile();
+      if (!entry) {
+        break;
+      }
+      entry.getName(name.get(), 128);
+      if (strncmp(name.get(), namePrefix, prefixLen) == 0) {
+        // Directories get a trailing '/' so completion can descend into them.
+        matches.emplace_back(std::string(name.get()) + (entry.isDirectory() ? "/" : ""));
+      }
+    }
+  }
+
+  if (matches.empty()) {
+    channelPrintf(channel, "\a");  // bell
+    return;
+  }
+
+  // Extend the line by the longest common prefix of all matches.
+  std::string common = matches[0];
+  for (const auto& m : matches) {
+    size_t k = 0;
+    while (k < common.size() && k < m.size() && common[k] == m[k]) {
+      k++;
+    }
+    common.resize(k);
+  }
+
+  bool extended = false;
+  for (size_t k = prefixLen; k < common.size() && lineLen < MAX_LINE_LEN; k++) {
+    line[lineLen++] = common[k];
+    channelPrintf(channel, "%c", common[k]);
+    extended = true;
+  }
+
+  if (matches.size() == 1) {
+    // Unique completion: follow with a space unless it is a directory.
+    if (common.back() != '/' && lineLen < MAX_LINE_LEN) {
+      line[lineLen++] = ' ';
+      channelPrintf(channel, " ");
+    }
+  } else if (!extended) {
+    // Nothing more to add automatically: show the candidates.
+    channelPrintf(channel, "\r\n");
+    for (const auto& m : matches) {
+      channelPrintf(channel, "%s  ", m.c_str());
+    }
+    channelPrintf(channel, "\r\n");
+    line[lineLen] = '\0';
+    printPrompt(channel, ctx);
+    channelPrintf(channel, "%s", line);
+  }
+}
+
+bool SshServer::executeCommand(ssh_channel channel, ShellContext& ctx, char* line, bool interactive) {
   char* savePtr = nullptr;
   const char* cmd = strtok_r(line, " ", &savePtr);
   const char* arg1 = strtok_r(nullptr, " ", &savePtr);
@@ -455,11 +635,13 @@ bool SshServer::executeCommand(ssh_channel channel, char* line, bool interactive
   if (strcmp(cmd, "help") == 0) {
     // Split into chunks: channelPrintf formats into a fixed 224-byte buffer.
     channelPrintf(channel,
-                  "Commands (paths are absolute, no spaces):\r\n"
+                  "Commands (paths may be relative, no spaces; tab completes):\r\n"
                   "  ls [path]        list directory\r\n"
-                  "  cat <file>       print file contents\r\n"
-                  "  rm <path>        delete file or empty directory\r\n");
+                  "  cd [path]        change directory\r\n"
+                  "  pwd              print working directory\r\n"
+                  "  cat <file>       print file contents\r\n");
     channelPrintf(channel,
+                  "  rm <path>        delete file or empty directory\r\n"
                   "  mv <src> <dst>   move/rename\r\n"
                   "  mkdir <path>     create directory\r\n"
                   "  free             show free heap\r\n"
@@ -467,33 +649,50 @@ bool SshServer::executeCommand(ssh_channel channel, char* line, bool interactive
     channelPrintf(channel, "Upload:   scp book.epub %s@<ip>:/\r\n", USERNAME);
     channelPrintf(channel, "Download: scp %s@<ip>:/book.epub .\r\n", USERNAME);
   } else if (strcmp(cmd, "ls") == 0) {
-    commandLs(channel, arg1 ? arg1 : "/");
+    commandLs(channel, resolvePath(ctx.cwd, arg1).c_str());
+  } else if (strcmp(cmd, "cd") == 0) {
+    const std::string path = arg1 ? resolvePath(ctx.cwd, arg1) : "/";
+    HalFile dir = Storage.open(path.c_str());
+    if (dir && dir.isDirectory()) {
+      ctx.cwd = path;
+    } else {
+      channelPrintf(channel, "cd: not a directory: %s\r\n", path.c_str());
+    }
+  } else if (strcmp(cmd, "pwd") == 0) {
+    channelPrintf(channel, "%s\r\n", ctx.cwd.c_str());
   } else if (strcmp(cmd, "cat") == 0) {
     if (arg1) {
-      commandCat(channel, arg1);
+      commandCat(channel, resolvePath(ctx.cwd, arg1).c_str());
     } else {
       channelPrintf(channel, "usage: cat <file>\r\n");
     }
   } else if (strcmp(cmd, "rm") == 0) {
     if (!arg1) {
       channelPrintf(channel, "usage: rm <path>\r\n");
-    } else if (Storage.remove(arg1) || Storage.rmdir(arg1)) {
-      channelPrintf(channel, "removed %s\r\n", arg1);
     } else {
-      channelPrintf(channel, "rm: cannot remove %s\r\n", arg1);
+      const std::string path = resolvePath(ctx.cwd, arg1);
+      if (Storage.remove(path.c_str()) || Storage.rmdir(path.c_str())) {
+        channelPrintf(channel, "removed %s\r\n", path.c_str());
+      } else {
+        channelPrintf(channel, "rm: cannot remove %s\r\n", path.c_str());
+      }
     }
   } else if (strcmp(cmd, "mv") == 0) {
     if (!arg1 || !arg2) {
       channelPrintf(channel, "usage: mv <src> <dst>\r\n");
-    } else if (Storage.rename(arg1, arg2)) {
-      channelPrintf(channel, "%s -> %s\r\n", arg1, arg2);
     } else {
-      channelPrintf(channel, "mv: failed\r\n");
+      const std::string src = resolvePath(ctx.cwd, arg1);
+      const std::string dst = resolvePath(ctx.cwd, arg2);
+      if (Storage.rename(src.c_str(), dst.c_str())) {
+        channelPrintf(channel, "%s -> %s\r\n", src.c_str(), dst.c_str());
+      } else {
+        channelPrintf(channel, "mv: failed\r\n");
+      }
     }
   } else if (strcmp(cmd, "mkdir") == 0) {
     if (!arg1) {
       channelPrintf(channel, "usage: mkdir <path>\r\n");
-    } else if (Storage.mkdir(arg1)) {
+    } else if (Storage.mkdir(resolvePath(ctx.cwd, arg1).c_str())) {
       channelPrintf(channel, "created %s\r\n", arg1);
     } else {
       channelPrintf(channel, "mkdir: failed\r\n");
