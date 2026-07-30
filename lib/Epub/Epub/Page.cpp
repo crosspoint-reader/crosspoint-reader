@@ -36,8 +36,10 @@ bool PageLine::serialize(HalFile& file) {
 std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  if (!serialization::readPod(file, xPos) || !serialization::readPod(file, yPos)) {
+    LOG_ERR("PGE", "Deserialization failed: line position");
+    return nullptr;
+  }
 
   auto tb = TextBlock::deserialize(file);
   if (!tb) {
@@ -73,8 +75,10 @@ bool PageImage::serialize(HalFile& file) {
 std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
-  serialization::readPod(file, xPos);
-  serialization::readPod(file, yPos);
+  if (!serialization::readPod(file, xPos) || !serialization::readPod(file, yPos)) {
+    LOG_ERR("PGE", "Deserialization failed: image position");
+    return nullptr;
+  }
 
   auto ib = ImageBlock::deserialize(file);
   if (!ib) {
@@ -204,7 +208,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
-    serialization::readPod(file, tag);
+    if (!serialization::readPod(file, tag)) {
+      LOG_ERR("PGE", "Deserialization failed: element tag %u of %u", i, count);
+      return nullptr;
+    }
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
@@ -232,7 +239,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   // Deserialize footnotes
   uint16_t fnCount;
-  serialization::readPod(file, fnCount);
+  if (!serialization::readPod(file, fnCount)) {
+    LOG_ERR("PGE", "Deserialization failed: footnote count");
+    return nullptr;
+  }
   if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
     LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
     return nullptr;
