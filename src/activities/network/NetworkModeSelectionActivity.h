@@ -5,12 +5,11 @@
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT };
+enum class NetworkMode { JOIN_NETWORK, CREATE_HOTSPOT };
 
 /**
  * NetworkModeSelectionActivity presents the user with a choice:
  * - "Join a Network" - Connect to an existing WiFi network (STA mode)
- * - "Connect to Calibre" - Use Calibre wireless device transfers
  * - "Create Hotspot" - Create an Access Point that others can connect to (AP mode)
  *
  * The onModeSelected callback is called with the user's choice.

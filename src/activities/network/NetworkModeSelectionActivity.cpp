@@ -8,7 +8,7 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEM_COUNT = 3;
+constexpr int MENU_ITEM_COUNT = 2;
 }  // namespace
 
 void NetworkModeSelectionActivity::onEnter() {
@@ -27,8 +27,6 @@ void NetworkModeSelectionActivity::loop() {
   auto selectCurrent = [this] {
     NetworkMode mode = NetworkMode::JOIN_NETWORK;
     if (selectedIndex == 1) {
-      mode = NetworkMode::CONNECT_CALIBRE;
-    } else if (selectedIndex == 2) {
       mode = NetworkMode::CREATE_HOTSPOT;
     }
     onModeSelected(mode);
@@ -84,11 +82,9 @@ void NetworkModeSelectionActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
   // Menu items and descriptions
-  static constexpr StrId menuItems[MENU_ITEM_COUNT] = {StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS,
-                                                       StrId::STR_CREATE_HOTSPOT};
-  static constexpr StrId menuDescs[MENU_ITEM_COUNT] = {StrId::STR_JOIN_DESC, StrId::STR_CALIBRE_DESC,
-                                                       StrId::STR_HOTSPOT_DESC};
-  static constexpr UIIcon menuIcons[MENU_ITEM_COUNT] = {UIIcon::Wifi, UIIcon::Library, UIIcon::Hotspot};
+  static constexpr StrId menuItems[MENU_ITEM_COUNT] = {StrId::STR_JOIN_NETWORK, StrId::STR_CREATE_HOTSPOT};
+  static constexpr StrId menuDescs[MENU_ITEM_COUNT] = {StrId::STR_JOIN_DESC, StrId::STR_HOTSPOT_DESC};
+  static constexpr UIIcon menuIcons[MENU_ITEM_COUNT] = {UIIcon::Wifi, UIIcon::Hotspot};
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEM_COUNT), selectedIndex,

@@ -1,0 +1,798 @@
+#include "SshServer.h"
+
+#include <Arduino.h>
+#include <HalStorage.h>
+#include <Logging.h>
+#include <Memory.h>
+
+// libssh include order follows the LibSSH-ESP32 examples: the Arduino glue
+// header first, then the port config, then the libssh API headers.
+#include "libssh_esp32.h"
+// clang-format off
+#include "libssh_esp32_config.h"
+#include <libssh/libssh.h>
+#include <libssh/server.h>
+// clang-format on
+
+#include <lwip/sockets.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <cstdarg>
+#include <cstring>
+
+namespace {
+constexpr const char* TAG = "SSH";
+constexpr const char* HOST_KEY_PATH = "/.crosspoint/ssh_host_key";
+constexpr const char* CACHE_DIR = "/.crosspoint";
+
+// Task sized from the LibSSH-ESP32 server example (10240) plus headroom for
+// the SD write path that runs on this task during scp uploads.
+constexpr uint32_t TASK_STACK_BYTES = 12288;
+
+constexpr size_t TRANSFER_BUF_SIZE = 4096;
+constexpr size_t MAX_LINE_LEN = 200;
+constexpr int SHELL_POLL_MS = 200;     // shell read poll; bounds stop() latency
+constexpr int SCP_TIMEOUT_MS = 15000;  // per-read timeout during scp transfers
+constexpr int MAX_AUTH_ATTEMPTS = 3;
+
+// Strip any directory components a client may send in an scp header.
+const char* scpBasename(const char* name) {
+  const char* slash = strrchr(name, '/');
+  return slash ? slash + 1 : name;
+}
+}  // namespace
+
+SshServer::SshServer() { statusMutex = xSemaphoreCreateMutex(); }
+
+SshServer::~SshServer() {
+  stop();
+  if (statusMutex) {
+    vSemaphoreDelete(statusMutex);
+    statusMutex = nullptr;
+  }
+}
+
+bool SshServer::begin(const char* sessionPassword) {
+  if (running.load()) {
+    return true;
+  }
+  if (!sessionPassword || sessionPassword[0] == '\0') {
+    LOG_ERR(TAG, "No session password supplied");
+    return false;
+  }
+  snprintf(password, sizeof(password), "%s", sessionPassword);
+
+  LOG_DBG(TAG, "Free heap before SSH start: %d bytes", ESP.getFreeHeap());
+
+  static bool libsshInitialized = false;
+  if (!libsshInitialized) {
+    libssh_begin();
+    libsshInitialized = true;
+  }
+
+  std::string hostKeyB64;
+  if (!loadOrCreateHostKey(hostKeyB64)) {
+    LOG_ERR(TAG, "No host key available");
+    return false;
+  }
+
+  sshbind = ssh_bind_new();
+  if (!sshbind) {
+    LOG_ERR(TAG, "ssh_bind_new failed");
+    return false;
+  }
+
+  unsigned int port = PORT;
+  ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_BINDPORT, &port);
+  if (ssh_bind_options_set(sshbind, SSH_BIND_OPTIONS_IMPORT_KEY_STR, hostKeyB64.c_str()) < 0) {
+    LOG_ERR(TAG, "Host key import failed: %s", ssh_get_error(sshbind));
+    ssh_bind_free(sshbind);
+    sshbind = nullptr;
+    return false;
+  }
+
+  if (ssh_bind_listen(sshbind) < 0) {
+    LOG_ERR(TAG, "Listen failed: %s", ssh_get_error(sshbind));
+    ssh_bind_free(sshbind);
+    sshbind = nullptr;
+    return false;
+  }
+  listenFd = ssh_bind_get_fd(sshbind);
+
+  stopRequested.store(false);
+  running.store(true);
+  const BaseType_t created = xTaskCreate(&taskTrampoline, "SshServer", TASK_STACK_BYTES, this, 1, &taskHandle);
+  if (created != pdPASS) {
+    LOG_ERR(TAG, "Failed to create server task");
+    running.store(false);
+    ssh_bind_free(sshbind);
+    sshbind = nullptr;
+    listenFd = -1;
+    return false;
+  }
+
+  LOG_INF(TAG, "SSH server listening on port %u", PORT);
+  return true;
+}
+
+void SshServer::stop() {
+  if (!running.load()) {
+    return;
+  }
+  stopRequested.store(true);
+  // The task frees all libssh resources and clears `running` before deleting
+  // itself. Shell/scp reads poll the stop flag at least every SHELL_POLL_MS.
+  for (int i = 0; i < 100 && running.load(); i++) {
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
+  if (running.load()) {
+    // A wedged client kept the task alive; the activity restarts the device on
+    // exit anyway, so log it rather than yanking the task mid-malloc.
+    LOG_ERR(TAG, "Server task did not stop in time");
+  } else {
+    LOG_DBG(TAG, "Free heap after SSH stop: %d bytes", ESP.getFreeHeap());
+  }
+}
+
+SshServer::TransferStatus SshServer::getStatus() const {
+  TransferStatus copy;
+  if (xSemaphoreTake(statusMutex, portMAX_DELAY) == pdTRUE) {
+    copy = status;
+    xSemaphoreGive(statusMutex);
+  }
+  return copy;
+}
+
+void SshServer::setClientConnected(bool connected) {
+  if (xSemaphoreTake(statusMutex, portMAX_DELAY) == pdTRUE) {
+    status.clientConnected = connected;
+    if (!connected) {
+      status.inProgress = false;
+      status.received = 0;
+      status.total = 0;
+      status.filename.clear();
+    }
+    xSemaphoreGive(statusMutex);
+  }
+}
+
+void SshServer::setTransferProgress(const char* filename, size_t received, size_t total) {
+  if (xSemaphoreTake(statusMutex, portMAX_DELAY) == pdTRUE) {
+    status.inProgress = true;
+    status.received = received;
+    status.total = total;
+    status.filename = filename;
+    xSemaphoreGive(statusMutex);
+  }
+}
+
+void SshServer::setTransferComplete(const char* filename) {
+  if (xSemaphoreTake(statusMutex, portMAX_DELAY) == pdTRUE) {
+    status.inProgress = false;
+    status.received = 0;
+    status.total = 0;
+    status.filename.clear();
+    // An empty name means the transfer was aborted: clear progress without
+    // announcing a completed file.
+    if (filename[0] != '\0') {
+      status.lastCompleteName = filename;
+      status.lastCompleteAt = millis();
+    }
+    xSemaphoreGive(statusMutex);
+  }
+}
+
+void SshServer::taskTrampoline(void* param) { static_cast<SshServer*>(param)->serverTaskLoop(); }
+
+void SshServer::serverTaskLoop() {
+  while (!stopRequested.load()) {
+    // ssh_bind_accept() blocks, so wait for a pending connection with select()
+    // and keep polling the stop flag in between.
+    fd_set readSet;
+    FD_ZERO(&readSet);
+    FD_SET(listenFd, &readSet);
+    timeval tv = {.tv_sec = 0, .tv_usec = 500 * 1000};
+    const int ready = select(listenFd + 1, &readSet, nullptr, nullptr, &tv);
+    if (ready < 0) {
+      LOG_ERR(TAG, "select failed: %d", errno);
+      break;
+    }
+    if (ready > 0 && FD_ISSET(listenFd, &readSet)) {
+      handleClient();
+    }
+    vTaskDelay(1);
+  }
+
+  if (sshbind) {
+    ssh_bind_free(sshbind);
+    sshbind = nullptr;
+  }
+  listenFd = -1;
+  running.store(false);
+  vTaskDelete(nullptr);
+}
+
+void SshServer::handleClient() {
+  ssh_session session = ssh_new();
+  if (!session) {
+    LOG_ERR(TAG, "OOM: ssh session");
+    return;
+  }
+
+  // Bound blocking libssh calls so a stalled client can't wedge the task.
+  long timeoutSec = 30;
+  ssh_options_set(session, SSH_OPTIONS_TIMEOUT, &timeoutSec);
+
+  if (ssh_bind_accept(sshbind, session) != SSH_OK) {
+    LOG_ERR(TAG, "Accept failed: %s", ssh_get_error(sshbind));
+    ssh_free(session);
+    return;
+  }
+
+  LOG_DBG(TAG, "Client connected, free heap: %d bytes", ESP.getFreeHeap());
+
+  if (ssh_handle_key_exchange(session) != SSH_OK) {
+    LOG_ERR(TAG, "Key exchange failed: %s", ssh_get_error(session));
+    ssh_disconnect(session);
+    ssh_free(session);
+    return;
+  }
+
+  if (authenticate(session)) {
+    setClientConnected(true);
+    ssh_channel channel = openChannel(session);
+    if (channel) {
+      serveChannel(session, channel);
+      ssh_channel_free(channel);
+    }
+    setClientConnected(false);
+  }
+
+  ssh_disconnect(session);
+  ssh_free(session);
+  LOG_DBG(TAG, "Client disconnected, free heap: %d bytes, stack high water: %u", ESP.getFreeHeap(),
+          static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
+}
+
+bool SshServer::authenticate(ssh_session session) {
+  int attempts = 0;
+  ssh_message message = nullptr;
+  while (!stopRequested.load() && (message = ssh_message_get(session)) != nullptr) {
+    bool authenticated = false;
+    if (ssh_message_type(message) == SSH_REQUEST_AUTH && ssh_message_subtype(message) == SSH_AUTH_METHOD_PASSWORD) {
+      const char* user = ssh_message_auth_user(message);
+      // The suggested replacement (callback-based auth_password_function) needs
+      // the ssh_event polling model; the message-loop server keeps this accessor.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+      const char* pass = ssh_message_auth_password(message);
+#pragma GCC diagnostic pop
+      if (user && pass && strcmp(user, USERNAME) == 0 && strcmp(pass, password) == 0) {
+        ssh_message_auth_reply_success(message, 0);
+        authenticated = true;
+      } else {
+        attempts++;
+        LOG_DBG(TAG, "Auth failure %d for user '%s'", attempts, user ? user : "?");
+        vTaskDelay(pdMS_TO_TICKS(500));  // slow down brute-force attempts
+        ssh_message_auth_set_methods(message, SSH_AUTH_METHOD_PASSWORD);
+        ssh_message_reply_default(message);
+      }
+    } else {
+      if (ssh_message_type(message) == SSH_REQUEST_AUTH) {
+        ssh_message_auth_set_methods(message, SSH_AUTH_METHOD_PASSWORD);
+      }
+      ssh_message_reply_default(message);
+    }
+    ssh_message_free(message);
+    if (authenticated) {
+      return true;
+    }
+    if (attempts >= MAX_AUTH_ATTEMPTS) {
+      break;
+    }
+  }
+  return false;
+}
+
+ssh_channel SshServer::openChannel(ssh_session session) {
+  ssh_message message = nullptr;
+  while (!stopRequested.load() && (message = ssh_message_get(session)) != nullptr) {
+    ssh_channel channel = nullptr;
+    if (ssh_message_type(message) == SSH_REQUEST_CHANNEL_OPEN && ssh_message_subtype(message) == SSH_CHANNEL_SESSION) {
+      channel = ssh_message_channel_request_open_reply_accept(message);
+    } else {
+      ssh_message_reply_default(message);
+    }
+    ssh_message_free(message);
+    if (channel) {
+      return channel;
+    }
+  }
+  return nullptr;
+}
+
+void SshServer::serveChannel(ssh_session session, ssh_channel channel) {
+  // Wait for the client to tell us what it wants: an interactive shell, or an
+  // exec request (scp, or a one-shot command).
+  bool shell = false;
+  auto execCmd = makeUniqueNoThrow<char[]>(MAX_LINE_LEN + 1);
+  if (!execCmd) {
+    LOG_ERR(TAG, "OOM: exec buffer");
+    return;
+  }
+  execCmd[0] = '\0';
+
+  ssh_message message = nullptr;
+  while (!shell && execCmd[0] == '\0' && !stopRequested.load() && (message = ssh_message_get(session)) != nullptr) {
+    if (ssh_message_type(message) == SSH_REQUEST_CHANNEL) {
+      const int subtype = ssh_message_subtype(message);
+      if (subtype == SSH_CHANNEL_REQUEST_SHELL) {
+        shell = true;
+        ssh_message_channel_request_reply_success(message);
+      } else if (subtype == SSH_CHANNEL_REQUEST_PTY) {
+        ssh_message_channel_request_reply_success(message);
+      } else if (subtype == SSH_CHANNEL_REQUEST_EXEC) {
+        const char* cmd = ssh_message_channel_request_command(message);
+        if (cmd) {
+          snprintf(execCmd.get(), MAX_LINE_LEN + 1, "%s", cmd);
+        }
+        ssh_message_channel_request_reply_success(message);
+      } else {
+        // env, window-change, etc. - acknowledge and ignore
+        ssh_message_channel_request_reply_success(message);
+      }
+    } else {
+      ssh_message_reply_default(message);
+    }
+    ssh_message_free(message);
+  }
+
+  int exitStatus = 0;
+  if (shell) {
+    runShell(channel);
+  } else if (execCmd[0] != '\0') {
+    LOG_DBG(TAG, "exec: %s", execCmd.get());
+    // scp runs as an exec request: "scp -t <target>" (upload to us) or
+    // "scp -f <path>" (download from us).
+    if (strncmp(execCmd.get(), "scp ", 4) == 0) {
+      char* savePtr = nullptr;
+      char mode = '\0';
+      const char* target = nullptr;
+      bool recursive = false;
+      for (char* tok = strtok_r(execCmd.get() + 4, " ", &savePtr); tok; tok = strtok_r(nullptr, " ", &savePtr)) {
+        if (strcmp(tok, "-t") == 0 || strcmp(tok, "-f") == 0) {
+          mode = tok[1];
+        } else if (strcmp(tok, "-r") == 0) {
+          recursive = true;
+        } else if (tok[0] != '-') {
+          target = tok;
+        }
+      }
+      if (recursive || !mode || !target) {
+        channelPrintf(channel, "\x02scp: only single-file transfers are supported\n");
+        exitStatus = 1;
+      } else if (mode == 't') {
+        scpSink(channel, target);
+      } else {
+        scpSource(channel, target);
+      }
+    } else {
+      executeCommand(channel, execCmd.get(), false);
+    }
+  }
+
+  ssh_channel_request_send_exit_status(channel, exitStatus);
+  ssh_channel_send_eof(channel);
+  ssh_channel_close(channel);
+}
+
+// ---------------------------------------------------------------------------
+// Interactive shell
+// ---------------------------------------------------------------------------
+
+void SshServer::runShell(ssh_channel channel) {
+  auto line = makeUniqueNoThrow<char[]>(MAX_LINE_LEN + 1);
+  if (!line) {
+    LOG_ERR(TAG, "OOM: shell line buffer");
+    return;
+  }
+  size_t lineLen = 0;
+
+  channelPrintf(channel, "CrossPoint Reader SSH - type 'help' for commands.\r\n");
+  channelPrintf(channel, "%s> ", USERNAME);
+
+  while (!stopRequested.load() && ssh_channel_is_open(channel) && !ssh_channel_is_eof(channel)) {
+    char ch = 0;
+    const int n = ssh_channel_read_timeout(channel, &ch, 1, 0, SHELL_POLL_MS);
+    if (n == SSH_ERROR) {
+      break;
+    }
+    if (n <= 0) {
+      continue;  // timeout - poll stop flag again
+    }
+
+    if (ch == '\r' || ch == '\n') {
+      channelPrintf(channel, "\r\n");
+      line[lineLen] = '\0';
+      if (lineLen > 0 && !executeCommand(channel, line.get(), true)) {
+        break;
+      }
+      lineLen = 0;
+      channelPrintf(channel, "%s> ", USERNAME);
+    } else if (ch == 0x03) {  // ctrl-C: discard the current line
+      channelPrintf(channel, "^C\r\n%s> ", USERNAME);
+      lineLen = 0;
+    } else if (ch == 0x04) {  // ctrl-D on an empty line: exit
+      if (lineLen == 0) {
+        break;
+      }
+    } else if (ch == 0x08 || ch == 0x7f) {  // backspace
+      if (lineLen > 0) {
+        lineLen--;
+        channelPrintf(channel, "\b \b");
+      }
+    } else if (ch >= 0x20 && lineLen < MAX_LINE_LEN) {
+      line[lineLen++] = ch;
+      channelPrintf(channel, "%c", ch);  // echo
+    }
+  }
+}
+
+bool SshServer::executeCommand(ssh_channel channel, char* line, bool interactive) {
+  char* savePtr = nullptr;
+  const char* cmd = strtok_r(line, " ", &savePtr);
+  const char* arg1 = strtok_r(nullptr, " ", &savePtr);
+  const char* arg2 = strtok_r(nullptr, " ", &savePtr);
+  if (!cmd) {
+    return true;
+  }
+
+  if (strcmp(cmd, "exit") == 0 || strcmp(cmd, "quit") == 0 || strcmp(cmd, "logout") == 0) {
+    return false;
+  }
+
+  if (strcmp(cmd, "help") == 0) {
+    // Split into chunks: channelPrintf formats into a fixed 224-byte buffer.
+    channelPrintf(channel,
+                  "Commands (paths are absolute, no spaces):\r\n"
+                  "  ls [path]        list directory\r\n"
+                  "  cat <file>       print file contents\r\n"
+                  "  rm <path>        delete file or empty directory\r\n");
+    channelPrintf(channel,
+                  "  mv <src> <dst>   move/rename\r\n"
+                  "  mkdir <path>     create directory\r\n"
+                  "  free             show free heap\r\n"
+                  "  exit             close the session\r\n");
+    channelPrintf(channel, "Upload:   scp book.epub %s@<ip>:/\r\n", USERNAME);
+    channelPrintf(channel, "Download: scp %s@<ip>:/book.epub .\r\n", USERNAME);
+  } else if (strcmp(cmd, "ls") == 0) {
+    commandLs(channel, arg1 ? arg1 : "/");
+  } else if (strcmp(cmd, "cat") == 0) {
+    if (arg1) {
+      commandCat(channel, arg1);
+    } else {
+      channelPrintf(channel, "usage: cat <file>\r\n");
+    }
+  } else if (strcmp(cmd, "rm") == 0) {
+    if (!arg1) {
+      channelPrintf(channel, "usage: rm <path>\r\n");
+    } else if (Storage.remove(arg1) || Storage.rmdir(arg1)) {
+      channelPrintf(channel, "removed %s\r\n", arg1);
+    } else {
+      channelPrintf(channel, "rm: cannot remove %s\r\n", arg1);
+    }
+  } else if (strcmp(cmd, "mv") == 0) {
+    if (!arg1 || !arg2) {
+      channelPrintf(channel, "usage: mv <src> <dst>\r\n");
+    } else if (Storage.rename(arg1, arg2)) {
+      channelPrintf(channel, "%s -> %s\r\n", arg1, arg2);
+    } else {
+      channelPrintf(channel, "mv: failed\r\n");
+    }
+  } else if (strcmp(cmd, "mkdir") == 0) {
+    if (!arg1) {
+      channelPrintf(channel, "usage: mkdir <path>\r\n");
+    } else if (Storage.mkdir(arg1)) {
+      channelPrintf(channel, "created %s\r\n", arg1);
+    } else {
+      channelPrintf(channel, "mkdir: failed\r\n");
+    }
+  } else if (strcmp(cmd, "free") == 0) {
+    channelPrintf(channel, "free heap: %d bytes\r\n", ESP.getFreeHeap());
+  } else {
+    channelPrintf(channel, "unknown command: %s%s\r\n", cmd, interactive ? " (try 'help')" : "");
+  }
+  return true;
+}
+
+void SshServer::commandLs(ssh_channel channel, const char* path) {
+  HalFile dir = Storage.open(path);
+  if (!dir || !dir.isDirectory()) {
+    channelPrintf(channel, "ls: not a directory: %s\r\n", path);
+    return;
+  }
+  auto name = makeUniqueNoThrow<char[]>(128);
+  if (!name) {
+    LOG_ERR(TAG, "OOM: ls buffer");
+    return;
+  }
+  while (!stopRequested.load()) {
+    HalFile entry = dir.openNextFile();
+    if (!entry) {
+      break;
+    }
+    entry.getName(name.get(), 128);
+    if (entry.isDirectory()) {
+      channelPrintf(channel, "%10s  %s/\r\n", "<dir>", name.get());
+    } else {
+      channelPrintf(channel, "%10u  %s\r\n", static_cast<unsigned>(entry.fileSize()), name.get());
+    }
+  }
+}
+
+void SshServer::commandCat(ssh_channel channel, const char* path) {
+  HalFile file;
+  if (!Storage.openFileForRead(TAG, path, file)) {
+    channelPrintf(channel, "cat: cannot open %s\r\n", path);
+    return;
+  }
+  auto buf = makeUniqueNoThrow<char[]>(512);
+  if (!buf) {
+    LOG_ERR(TAG, "OOM: cat buffer");
+    return;
+  }
+  int n = 0;
+  while (!stopRequested.load() && (n = file.read(buf.get(), 512)) > 0) {
+    if (ssh_channel_write(channel, buf.get(), n) == SSH_ERROR) {
+      break;
+    }
+  }
+  channelPrintf(channel, "\r\n");
+}
+
+// ---------------------------------------------------------------------------
+// scp (single files only; -r is rejected up front)
+// ---------------------------------------------------------------------------
+
+namespace {
+// Read one scp control line ("C0644 <size> <name>\n", "T...", "E") byte by
+// byte. Returns length, 0 on clean EOF, -1 on error/timeout.
+int readScpLine(ssh_channel channel, char* buf, size_t bufSize) {
+  size_t len = 0;
+  while (len + 1 < bufSize) {
+    char ch = 0;
+    const int n = ssh_channel_read_timeout(channel, &ch, 1, 0, SCP_TIMEOUT_MS);
+    if (n == 0) {
+      return len == 0 ? 0 : -1;  // EOF
+    }
+    if (n < 0) {
+      return -1;
+    }
+    if (ch == '\n') {
+      buf[len] = '\0';
+      return static_cast<int>(len);
+    }
+    buf[len++] = ch;
+  }
+  return -1;  // control line too long
+}
+
+bool scpAck(ssh_channel channel) {
+  const char zero = 0;
+  return ssh_channel_write(channel, &zero, 1) != SSH_ERROR;
+}
+}  // namespace
+
+void SshServer::scpSink(ssh_channel channel, const char* target) {
+  auto line = makeUniqueNoThrow<char[]>(MAX_LINE_LEN + 1);
+  auto buf = makeUniqueNoThrow<uint8_t[]>(TRANSFER_BUF_SIZE);
+  if (!line || !buf) {
+    LOG_ERR(TAG, "OOM: scp buffers");
+    return;
+  }
+
+  // Uploads land in `target` when it is a directory, otherwise at `target`.
+  bool targetIsDir = strcmp(target, "/") == 0;
+  if (!targetIsDir) {
+    HalFile t = Storage.open(target);
+    targetIsDir = t && t.isDirectory();
+  }
+
+  if (!scpAck(channel)) {
+    return;
+  }
+
+  while (!stopRequested.load()) {
+    const int lineLen = readScpLine(channel, line.get(), MAX_LINE_LEN + 1);
+    if (lineLen <= 0) {
+      return;  // clean EOF after last file, or error
+    }
+
+    if (line[0] == 'T' || line[0] == 'E') {
+      // Timestamps / end-of-directory: acknowledge and ignore.
+      if (!scpAck(channel)) {
+        return;
+      }
+      continue;
+    }
+    if (line[0] == 'D') {
+      channelPrintf(channel, "\x02scp: directories are not supported\n");
+      return;
+    }
+    if (line[0] != 'C') {
+      channelPrintf(channel, "\x02scp: unexpected control record\n");
+      return;
+    }
+
+    // "C0644 <size> <name>"
+    char* sizeStart = strchr(line.get(), ' ');
+    char* nameStart = sizeStart ? strchr(sizeStart + 1, ' ') : nullptr;
+    if (!nameStart) {
+      channelPrintf(channel, "\x02scp: malformed file header\n");
+      return;
+    }
+    const size_t fileSize = strtoul(sizeStart + 1, nullptr, 10);
+    const char* baseName = scpBasename(nameStart + 1);
+    if (baseName[0] == '\0' || strstr(baseName, "..") != nullptr) {
+      channelPrintf(channel, "\x02scp: bad file name\n");
+      return;
+    }
+
+    std::string destPath;
+    if (targetIsDir) {
+      destPath = target;
+      if (destPath.back() != '/') {
+        destPath += '/';
+      }
+      destPath += baseName;
+    } else {
+      destPath = target;
+    }
+
+    if (Storage.exists(destPath.c_str())) {
+      Storage.remove(destPath.c_str());
+    }
+    HalFile file;
+    if (!Storage.openFileForWrite(TAG, destPath, file)) {
+      channelPrintf(channel, "\x02scp: cannot open %s for writing\n", destPath.c_str());
+      return;
+    }
+    if (!scpAck(channel)) {
+      return;
+    }
+
+    LOG_INF(TAG, "scp upload: %s (%u bytes)", destPath.c_str(), static_cast<unsigned>(fileSize));
+    setTransferProgress(baseName, 0, fileSize);
+
+    size_t received = 0;
+    bool ok = true;
+    while (received < fileSize && !stopRequested.load()) {
+      const size_t want = std::min(fileSize - received, TRANSFER_BUF_SIZE);
+      const int n = ssh_channel_read_timeout(channel, buf.get(), want, 0, SCP_TIMEOUT_MS);
+      if (n <= 0) {
+        ok = false;
+        break;
+      }
+      if (file.write(buf.get(), n) != static_cast<size_t>(n)) {
+        channelPrintf(channel, "\x02scp: write failed (SD card full?)\n");
+        ok = false;
+        break;
+      }
+      received += n;
+      setTransferProgress(baseName, received, fileSize);
+    }
+
+    // Close (and flush) before reporting success or removing the partial file.
+    file.close();
+    if (!ok || stopRequested.load()) {
+      Storage.remove(destPath.c_str());  // drop the partial file
+      setTransferComplete("");
+      return;
+    }
+
+    // Sender follows the data with a status byte; consume it and acknowledge.
+    char senderStatus = 0;
+    ssh_channel_read_timeout(channel, &senderStatus, 1, 0, SCP_TIMEOUT_MS);
+    if (!scpAck(channel)) {
+      return;
+    }
+    setTransferComplete(baseName);
+    LOG_INF(TAG, "scp upload complete: %s", destPath.c_str());
+  }
+}
+
+void SshServer::scpSource(ssh_channel channel, const char* path) {
+  HalFile file;
+  if (!Storage.openFileForRead(TAG, path, file)) {
+    channelPrintf(channel, "\x02scp: no such file: %s\n", path);
+    return;
+  }
+  auto buf = makeUniqueNoThrow<uint8_t[]>(TRANSFER_BUF_SIZE);
+  if (!buf) {
+    LOG_ERR(TAG, "OOM: scp buffer");
+    return;
+  }
+
+  // The receiving side starts the exchange with an ack.
+  char clientStatus = 0;
+  if (ssh_channel_read_timeout(channel, &clientStatus, 1, 0, SCP_TIMEOUT_MS) <= 0 || clientStatus != 0) {
+    return;
+  }
+
+  const size_t fileSize = file.fileSize();
+  channelPrintf(channel, "C0644 %u %s\n", static_cast<unsigned>(fileSize), scpBasename(path));
+  if (ssh_channel_read_timeout(channel, &clientStatus, 1, 0, SCP_TIMEOUT_MS) <= 0 || clientStatus != 0) {
+    return;
+  }
+
+  LOG_INF(TAG, "scp download: %s (%u bytes)", path, static_cast<unsigned>(fileSize));
+  setTransferProgress(scpBasename(path), 0, fileSize);
+
+  size_t sent = 0;
+  int n = 0;
+  while (!stopRequested.load() && (n = file.read(buf.get(), TRANSFER_BUF_SIZE)) > 0) {
+    int written = 0;
+    while (written < n) {
+      const int w = ssh_channel_write(channel, buf.get() + written, n - written);
+      if (w == SSH_ERROR) {
+        setTransferComplete("");
+        return;
+      }
+      written += w;
+    }
+    sent += n;
+    setTransferProgress(scpBasename(path), sent, fileSize);
+  }
+
+  scpAck(channel);
+  ssh_channel_read_timeout(channel, &clientStatus, 1, 0, SCP_TIMEOUT_MS);
+  setTransferComplete(scpBasename(path));
+  LOG_INF(TAG, "scp download complete: %s", path);
+}
+
+// ---------------------------------------------------------------------------
+// Host key
+// ---------------------------------------------------------------------------
+
+bool SshServer::loadOrCreateHostKey(std::string& b64Key) {
+  const String cached = Storage.readFile(HOST_KEY_PATH);
+  if (cached.length() > 0) {
+    b64Key = cached.c_str();
+    return true;
+  }
+
+  LOG_INF(TAG, "Generating ed25519 host key...");
+  ssh_key key = nullptr;
+  if (ssh_pki_generate(SSH_KEYTYPE_ED25519, 0, &key) != SSH_OK) {
+    LOG_ERR(TAG, "Host key generation failed");
+    return false;
+  }
+  char* b64 = nullptr;
+  const int rc = ssh_pki_export_privkey_base64(key, nullptr, nullptr, nullptr, &b64);
+  ssh_key_free(key);
+  if (rc != SSH_OK || !b64) {
+    LOG_ERR(TAG, "Host key export failed");
+    return false;
+  }
+  b64Key = b64;
+  ssh_string_free_char(b64);
+
+  Storage.ensureDirectoryExists(CACHE_DIR);
+  if (!Storage.writeFile(HOST_KEY_PATH, b64Key.c_str())) {
+    // Not fatal: the key still works, clients just see a new host key next time.
+    LOG_ERR(TAG, "Failed to persist host key to %s", HOST_KEY_PATH);
+  }
+  return true;
+}
+
+void SshServer::channelPrintf(ssh_channel channel, const char* fmt, ...) {
+  char buf[224];
+  va_list args;
+  va_start(args, fmt);
+  const int len = vsnprintf(buf, sizeof(buf), fmt, args);
+  va_end(args);
+  if (len > 0) {
+    ssh_channel_write(channel, buf, std::min(static_cast<size_t>(len), sizeof(buf) - 1));
+  }
+}
