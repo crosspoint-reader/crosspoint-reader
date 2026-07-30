@@ -71,7 +71,11 @@ inline bool readString(std::istream& is, std::string& s) {
     return true;
   }
   is.read(&s[0], len);
-  return is.gcount() == static_cast<std::streamsize>(len);
+  if (is.gcount() != static_cast<std::streamsize>(len)) {
+    s.clear();
+    return false;
+  }
+  return true;
 }
 
 inline bool readString(HalFile& file, std::string& s) {
@@ -89,6 +93,10 @@ inline bool readString(HalFile& file, std::string& s) {
   if (len == 0) {
     return true;
   }
-  return file.read(&s[0], len) == static_cast<int>(len);
+  if (file.read(&s[0], len) != static_cast<int>(len)) {
+    s.clear();
+    return false;
+  }
+  return true;
 }
 }  // namespace serialization
