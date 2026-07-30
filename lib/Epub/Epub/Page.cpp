@@ -172,7 +172,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   auto page = std::unique_ptr<Page>(new Page());
 
   uint16_t count;
-  serialization::readPod(file, count);
+  if (!serialization::readPod(file, count)) {
+    LOG_ERR("PGE", "Deserialization failed: element count");
+    return nullptr;
+  }
 
   // Reserve up front so a page load costs one allocation for the element vector
   // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it

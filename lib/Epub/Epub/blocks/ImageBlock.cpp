@@ -433,8 +433,10 @@ bool ImageBlock::serialize(HalFile& file) {
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   std::string path;
   std::string src;
-  serialization::readString(file, path);
-  serialization::readString(file, src);
+  if (!serialization::readString(file, path) || !serialization::readString(file, src)) {
+    LOG_ERR("IMG", "Deserialization failed: image paths");
+    return nullptr;
+  }
   int16_t w, h;
   serialization::readPod(file, w);
   serialization::readPod(file, h);
