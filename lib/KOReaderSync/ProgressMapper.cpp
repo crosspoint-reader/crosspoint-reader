@@ -742,7 +742,7 @@ class ParagraphStreamer final : public Print {
   int getListItemAtMatch() const { return liCountAtMatch; }
   const char* getCapturedAnchorId() const { return capturedAnchorIdLen > 0 ? capturedAnchorId : nullptr; }
   size_t totalBytes() const { return bytesWritten; }
-  bool found() const { return revDone || revPFound; }
+  bool found() const { return revDone; }
   size_t getTotalVisChars() const { return totalVisChars; }
   size_t getTargetVisChars() const { return targetVisChars; }
   float progress() const {
