@@ -278,10 +278,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
               self->tempItemStore.seek(it->fileOffset);
               std::string itemId;
               if (!serialization::readString(self->tempItemStore, itemId)) {
+                self->itemStoreReadFailed = true;
                 break;
               }
               if (itemId == idref) {
                 found = serialization::readString(self->tempItemStore, href);
+                if (!found) {
+                  self->itemStoreReadFailed = true;
+                }
                 break;
               }
               ++it;
@@ -294,6 +298,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             while (self->tempItemStore.available()) {
               if (!serialization::readString(self->tempItemStore, itemId) ||
                   !serialization::readString(self->tempItemStore, href)) {
+                // Distinguish a read failure from a clean walk to EOF: the loop
+                // condition already excludes the latter, so arriving here means
+                // the store itself is unreadable, not that the id is absent.
+                self->itemStoreReadFailed = true;
                 break;
               }
               if (itemId == idref) {

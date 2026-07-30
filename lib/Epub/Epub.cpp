@@ -74,6 +74,14 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
     return false;
   }
 
+  // A failed item-store read drops the itemref that needed it, so the spine
+  // would be cached a chapter short and nothing would ever notice. Fail the
+  // parse instead: the caller abandons this build, so the next open rebuilds.
+  if (!opfParser.spineIsComplete()) {
+    LOG_ERR("EBP", "Spine incomplete: item store read failed, discarding metadata build");
+    return false;
+  }
+
   // Grab data from opfParser into epub. Normalize titles to NFC so NFD (combining
   // mark) text renders correctly — the device fonts have no mark positioning.
   bookMetadata.title = utf8ComposeNfc(opfParser.title);

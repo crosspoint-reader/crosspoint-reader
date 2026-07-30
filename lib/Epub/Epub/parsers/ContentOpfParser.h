@@ -32,6 +32,11 @@ class ContentOpfParser final : public Print {
   HalFile tempItemStore;
   std::string coverItemId;
   bool hasExplicitStartReference = false;
+  // Set when a read from the temporary item store fails mid-spine. Such a read
+  // yields no href, so the itemref is silently skipped and the spine would be
+  // written a chapter short -- and the resulting book.bin looks valid forever
+  // after. Surfaced so the caller can discard the build and rebuild instead.
+  bool itemStoreReadFailed = false;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
@@ -73,6 +78,10 @@ class ContentOpfParser final : public Print {
   ~ContentOpfParser() override;
 
   bool setup();
+
+  // False when a spine itemref could not be resolved because the item store
+  // read failed. The parsed spine is incomplete and must not be cached.
+  [[nodiscard]] bool spineIsComplete() const { return !itemStoreReadFailed; }
 
   size_t write(uint8_t) override;
   size_t write(const uint8_t* buffer, size_t size) override;
