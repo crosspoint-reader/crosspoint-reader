@@ -6,15 +6,20 @@
 
 namespace serialization {
 
-// Upper bound on any length-prefixed string in a cache file. Every string these
-// helpers carry is a book metadata field, an EPUB href, an anchor id or a ruby
-// annotation -- hundreds of bytes at the very most. The bound exists because the
-// length is read from the file before it is trusted: a truncated read leaves it
-// unset and a desynced cursor makes it arbitrary, and `resize()` on a bogus
-// length is a throwing allocation, which under -fno-exceptions aborts the
-// firmware (field crash: bad_alloc -> terminate -> abort on the page-load path).
-// Same rationale as the `wc > 10000` guard in TextBlock::deserialize.
-inline constexpr uint32_t MAX_STRING_LEN = 4096;
+// A length-prefixed string is bounded by the bytes actually left in the source,
+// never by a fixed content cap. The length is read from the file before it can
+// be trusted: a truncated read leaves it unset and a desynced cursor makes it
+// arbitrary, and `resize()` on a bogus length is a throwing allocation, which
+// under -fno-exceptions aborts the firmware (field crash: bad_alloc ->
+// terminate -> abort on the page-load path).
+//
+// A fixed cap would be the wrong bound here. `writeString` is unbounded and so
+// is the parser feeding it -- ruby <rt> text accumulates into an unbounded
+// std::string in ChapterHtmlSlimParser -- so any cap the reader enforces and
+// the writer does not turns a legitimately long string into a cache that
+// serializes fine and then fails every reload, rebuilding forever. Bounding by
+// remaining bytes rejects exactly the corrupt lengths (which point past EOF)
+// while leaving every string the writer can actually produce readable.
 
 template <typename T>
 void writePod(std::ostream& os, const T& value) {
@@ -61,8 +66,14 @@ inline bool readString(std::istream& is, std::string& s) {
     s.clear();
     return false;
   }
-  if (len > MAX_STRING_LEN) {
-    LOG_ERR("SER", "String length %u exceeds maximum %u", len, MAX_STRING_LEN);
+  // Bytes left in the stream, restoring the cursor afterwards.
+  const auto cur = is.tellg();
+  is.seekg(0, std::ios::end);
+  const auto endPos = is.tellg();
+  is.seekg(cur);
+  if (cur < 0 || endPos < cur || len > static_cast<uint64_t>(endPos - cur)) {
+    LOG_ERR("SER", "String length %u exceeds %lld bytes remaining", len,
+            static_cast<long long>(endPos < cur ? 0 : endPos - cur));
     s.clear();
     return false;
   }
@@ -84,8 +95,9 @@ inline bool readString(HalFile& file, std::string& s) {
     s.clear();
     return false;
   }
-  if (len > MAX_STRING_LEN) {
-    LOG_ERR("SER", "String length %u exceeds maximum %u", len, MAX_STRING_LEN);
+  const int remaining = file.available();
+  if (remaining < 0 || len > static_cast<uint32_t>(remaining)) {
+    LOG_ERR("SER", "String length %u exceeds %d bytes remaining", len, remaining);
     s.clear();
     return false;
   }

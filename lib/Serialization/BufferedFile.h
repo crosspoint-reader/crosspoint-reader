@@ -111,6 +111,15 @@ class BufferedFileReader {
   // Logical read position.
   size_t position() const { return bufStart + off; }
 
+  // Bytes between the logical cursor and end of file. Measured against the file
+  // rather than the buffer, so it is the true remaining count even when the
+  // buffer is empty or holds a window that ends before EOF.
+  size_t available() const {
+    const size_t end = file.size();
+    const size_t pos = position();
+    return end > pos ? end - pos : 0;
+  }
+
   bool seek(const size_t target) {
     // Within the buffered window: just move the cursor.
     if (cap != 0 && target >= bufStart && target < bufStart + fill) {
@@ -160,8 +169,9 @@ inline bool readString(BufferedFileReader& in, std::string& s) {
     s.clear();
     return false;
   }
-  if (len > MAX_STRING_LEN) {
-    LOG_ERR("SER", "String length %u exceeds maximum %u", len, MAX_STRING_LEN);
+  const size_t remaining = in.available();
+  if (len > remaining) {
+    LOG_ERR("SER", "String length %u exceeds %u bytes remaining", len, static_cast<unsigned>(remaining));
     s.clear();
     return false;
   }
@@ -169,7 +179,11 @@ inline bool readString(BufferedFileReader& in, std::string& s) {
   if (len == 0) {
     return true;
   }
-  return in.read(&s[0], len) == len;
+  if (in.read(&s[0], len) != len) {
+    s.clear();
+    return false;
+  }
+  return true;
 }
 
 }  // namespace serialization
