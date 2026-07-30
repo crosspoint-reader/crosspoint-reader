@@ -32,3 +32,8 @@ lib/EpdFont/scripts/output/
 /sdkconfig.default
 /sdkconfig.defaults
 sdkconfig.sticky
+
+# Agent working notes and file backups: local scratch, never published.
+.agent/
+# Stock firmware dumps: NVS holds the device owner's WiFi credentials.
+backup/
