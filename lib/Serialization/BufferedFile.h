@@ -141,6 +141,7 @@ void writePod(BufferedFileWriter& out, const T& value) {
 
 template <typename T>
 bool readPod(BufferedFileReader& in, T& value) {
+  value = T{};
   return in.read(&value, sizeof(T)) == sizeof(T);
 }
 

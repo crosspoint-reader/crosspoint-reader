@@ -26,17 +26,20 @@ void writePod(HalFile& file, const T& value) {
   file.write(reinterpret_cast<const uint8_t*>(&value), sizeof(T));
 }
 
-// Return false when the source could not supply a whole T. Callers that do not
-// care may ignore the result, but anything that then uses `value` as a size or
-// an offset must check it.
+// Return false when the source could not supply a whole T, leaving `value`
+// zeroed rather than holding whatever was already on the stack. Callers that do
+// not care may ignore the result, but anything that then uses `value` as a size
+// or an offset must check it.
 template <typename T>
 bool readPod(std::istream& is, T& value) {
+  value = T{};
   is.read(reinterpret_cast<char*>(&value), sizeof(T));
   return is.gcount() == static_cast<std::streamsize>(sizeof(T));
 }
 
 template <typename T>
 bool readPod(HalFile& file, T& value) {
+  value = T{};
   return file.read(reinterpret_cast<uint8_t*>(&value), sizeof(T)) == static_cast<int>(sizeof(T));
 }
 
