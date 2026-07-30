@@ -1,6 +1,7 @@
 #pragma once
 #include <I18n.h>
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -8,6 +9,7 @@
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "fontIds.h"
 
 class OptionPopup {
  public:
@@ -20,6 +22,7 @@ class OptionPopup {
     }
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
+    layoutValid = false;
     active = true;
   }
 
@@ -32,6 +35,7 @@ class OptionPopup {
     }
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
+    layoutValid = false;
     active = true;
   }
 
@@ -41,6 +45,7 @@ class OptionPopup {
     ownedStrings = options;
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
+    layoutValid = false;
     active = true;
   }
 
@@ -48,6 +53,39 @@ class OptionPopup {
     if (!active) return false;
 
     const int count = static_cast<int>(ownedStrings.size());
+    int tx = 0;
+    int ty = 0;
+    if (input.wasScreenTouchDown(tx, ty)) {
+      const auto& hitLayout = getLayout(input.getRenderer());
+      for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
+        if (contains(hitLayout.options[i], tx, ty)) {
+          if (selectedIndex != i) {
+            selectedIndex = i;
+            requestUpdate();
+          }
+          break;
+        }
+      }
+      return true;
+    }
+    if (input.wasScreenTapped(tx, ty)) {
+      const auto& hitLayout = getLayout(input.getRenderer());
+      for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
+        if (contains(hitLayout.options[i], tx, ty)) {
+          selectedIndex = i;
+          active = false;
+          if (onSelectCallback) onSelectCallback(selectedIndex);
+          requestUpdate();
+          return true;
+        }
+      }
+      // Taps on the dialog chrome (title, padding) keep the popup open; taps outside dismiss it
+      if (contains(hitLayout.dialog, tx, ty)) return true;
+      active = false;
+      requestUpdate();
+      return true;
+    }
+
     if (input.wasPressed(MappedInputManager::Button::Up) || input.wasPressed(MappedInputManager::Button::Left)) {
       selectedIndex = (selectedIndex - 1 + count) % count;
       requestUpdate();
@@ -87,9 +125,69 @@ class OptionPopup {
   bool isActive() const { return active; }
 
  private:
+  struct Layout {
+    Rect dialog{0, 0, 0, 0};
+    std::vector<Rect> options;
+  };
+
+  // Text measurement is expensive and wasScreenTouchDown() is level-triggered, so the
+  // layout is computed once per show() and cached rather than rebuilt every loop().
+  const Layout& getLayout(const GfxRenderer& renderer) const {
+    if (layoutValid) return layout;
+
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    const auto pageWidth = renderer.getScreenWidth();
+    const auto pageHeight = renderer.getScreenHeight();
+    const int optionFontId = metrics.optionPopupUseSmallFont ? UI_10_FONT_ID : UI_12_FONT_ID;
+    const EpdFontFamily::Style optionStyle =
+        metrics.optionPopupOptionFontBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+
+    const int itemSpacing = metrics.optionPopupItemSpacing;
+    const int innerPadding = metrics.optionPopupInnerPadding;
+    const int selectionHPadding = metrics.optionPopupSelectionHPadding;
+    const int selectionVPadding = metrics.optionPopupSelectionVPadding;
+
+    const int optionLineHeight = renderer.getLineHeight(optionFontId);
+    const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+    const int rowHeight = optionLineHeight + selectionVPadding * 2;
+
+    int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title.c_str(), EpdFontFamily::BOLD);
+    for (const auto& opt : ownedStrings) {
+      const int width = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
+      if (width > maxTextWidth) maxTextWidth = width;
+    }
+
+    const int optionCount = static_cast<int>(ownedStrings.size());
+    const int listHeight = rowHeight * optionCount + itemSpacing * (optionCount - 1);
+    const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10,
+                                 pageWidth - metrics.optionPopupDialogSideMargin * 2);
+    const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
+    const int dialogH = contentHeight + innerPadding * 2;
+    const int dialogX = (pageWidth - dialogW) / 2;
+    const int dialogY = (pageHeight - dialogH) / 2;
+    const int itemRectX = dialogX + innerPadding;
+    const int itemRectW = dialogW - innerPadding * 2;
+    const int firstItemY = dialogY + innerPadding + titleLineHeight + metrics.optionPopupTitleGap;
+
+    layout.dialog = Rect{dialogX, dialogY, dialogW, dialogH};
+    layout.options.clear();
+    layout.options.reserve(optionCount);
+    for (int i = 0; i < optionCount; i++) {
+      layout.options.push_back(Rect{itemRectX, firstItemY + i * (rowHeight + itemSpacing), itemRectW, rowHeight});
+    }
+    layoutValid = true;
+    return layout;
+  }
+
+  static bool contains(const Rect& rect, const int x, const int y) {
+    return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+  }
+
   bool active = false;
   std::string title;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;
+  mutable Layout layout;
+  mutable bool layoutValid = false;
 };

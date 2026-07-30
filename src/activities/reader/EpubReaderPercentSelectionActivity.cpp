@@ -4,6 +4,7 @@
 #include <HalGPIO.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "MappedInputManager.h"
@@ -25,23 +26,73 @@ void EpubReaderPercentSelectionActivity::onEnter() {
 void EpubReaderPercentSelectionActivity::onExit() { Activity::onExit(); }
 
 void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
-  // Apply delta and clamp within 0-100.
-  percent += delta;
-  if (percent < 0) {
-    percent = 0;
-  } else if (percent > 100) {
+  // Wrap using a 100-value ring (0% and 100% are the same wrap point), but keep 100 as the
+  // natural landing value when reached without crossing the boundary (e.g. 90 + 10 = 100).
+  const int raw = percent + delta;
+  if (raw > 0 && raw % 100 == 0) {
     percent = 100;
+  } else {
+    percent = ((raw % 100) + 100) % 100;
   }
   requestUpdate();
 }
 
 void EpubReaderPercentSelectionActivity::loop() {
+  auto& theme = UITheme::getInstance();
+  auto metrics = theme.getMetrics();
+  Rect screen = theme.getScreenSafeArea(renderer, true, false);
+  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4;
+  constexpr int barWidth = 360;
+  constexpr int barHeight = 16;
+  const int barX = screen.x + (screen.width - barWidth) / 2;
+  const int barY = contentTop + metrics.verticalSpacing * 2;
+  int tx = 0;
+  int ty = 0;
+
+  // Live drag on the slider: once a touch lands on the bar, the percent follows the
+  // finger until release. Runs before the Back handler because the release of a drag
+  // can also register as a swipe (e.g. the left-edge rightward back gesture) — the
+  // drag must consume it so it can't cancel the dialog or step the percent.
+  if (mappedInput.isScreenTouchHeld(tx, ty)) {
+    if (draggingBar ||
+        (tx >= barX - 20 && tx < barX + barWidth + 20 && ty >= barY - 24 && ty < barY + barHeight + 24)) {
+      draggingBar = true;
+      const int dragged = std::clamp((tx - barX) * 100 / barWidth, 0, 100);
+      if (dragged != percent) {
+        percent = dragged;
+        requestUpdate();
+      }
+      return;
+    }
+  } else if (draggingBar) {
+    // Release frame of a drag: swallow the tap/swipe events it produced.
+    draggingBar = false;
+    return;
+  }
+
   // Back cancels, confirm selects, arrows adjust the percent.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
     finish();
+    return;
+  }
+
+  if (mappedInput.wasScreenTapped(tx, ty) && tx >= barX - 20 && tx < barX + barWidth + 20 && ty >= barY - 24 &&
+      ty < barY + barHeight + 24) {
+    percent = std::clamp((tx - barX) * 100 / barWidth, 0, 100);
+    requestUpdate();
+    return;
+  }
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Right) {
+    adjustPercent(kLargeStep);
+    return;
+  }
+  if (swipe == MappedInputManager::SwipeDir::Left) {
+    adjustPercent(-kLargeStep);
     return;
   }
 

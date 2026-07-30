@@ -1,23 +1,21 @@
 #pragma once
+#include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 
+#include <atomic>
 #include <cstdint>
-#include <functional>
 #include <string>
 #include <utility>
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
-struct KeyDef {
-  char primary;
-  char secondary;
-};
-
-enum class SpecialKeyType { Shift, Mode, Space, Del, Ok };
-
 enum class InputType { Text, Password, Url };
 
+// Text entry on the FreeInkUI keyboard component: the SDK layout tables and
+// keyboard() do the key rendering and hit-rect registration, InteractionBuffer
+// routes taps/long-presses, and this activity owns the text field, cursor
+// editing, and the URL snippet layouts.
 class KeyboardEntryActivity : public Activity {
  public:
   explicit KeyboardEntryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -43,16 +41,30 @@ class KeyboardEntryActivity : public Activity {
 
   ButtonNavigator buttonNavigator;
 
-  int selectedRow = 0;
-  int selectedCol = 0;
-  int shiftState = 0;
-  bool symMode = false;
+  // Keyboard layers. The letter/symbol layers come from the SDK's builtin
+  // layouts (with the always-visible number row); the URL layers are
+  // app-defined tables in the .cpp.
+  freeink::ui::KeyboardLayoutId layoutId = freeink::ui::KeyboardLayoutId::QwertyEn;
+  bool shifted = false;
+  bool symbols = false;
+  bool urlPanel = false;  // URL snippet panel replaces the letter layer
+
+  // Key hit rects registered by the keyboard component during render();
+  // loop() routes touch snapshots against them. 5-row EN layout registers 41
+  // keys, so 48 leaves headroom.
+  freeink::ui::InteractionBuffer<48> interactions;
+
+  // GPIO selection over the current layout grid (row/col in layout terms;
+  // the bottom action row is just the last row).
+  int selRow = 0;
+  int selCol = 0;
+
   bool confirmHeld = false;
   bool confirmLongHandled = false;
 
   bool cursorMode = false;
   bool togglePos = false;
-  size_t cursorPos = 0;
+  size_t cursorPos = 0;  // byte offset into text (always on a code point boundary)
   bool upHeld = false;
   bool upLongHandled = false;
   bool downHeld = false;
@@ -62,10 +74,15 @@ class KeyboardEntryActivity : public Activity {
   size_t savedCursorPos = 0;
   size_t rightStartCursorPos = 0;
 
-  bool urlMode = false;
-  static constexpr int URL_SNIPPET_COUNT = 9;
-  static constexpr const char* const urlSnippets[URL_SNIPPET_COUNT] = {
-      "https://", "www.", ".com", "http://", "192.168.", ".org", "/opds", ":8080", ".net"};
+  // Tap/hold routing (threshold long-press, release swallow, slide re-arm)
+  // lives in the SDK; loop() feeds it the level-triggered touch state.
+  freeink::ui::TouchHoldRouter touchRouter;
+
+  // loop() runs on the main task while render() rebuilds the interaction
+  // table on the render task; routing against a half-built table would read
+  // torn entries, so taps are dropped during the rebuild window. atomic (not
+  // volatile) so the flag also orders the table writes on dual-core targets.
+  std::atomic<bool> interactionsReady{false};
 
   int delPressCount = 0;
   bool hintVisible = false;
@@ -73,154 +90,40 @@ class KeyboardEntryActivity : public Activity {
 
   void onComplete(std::string text);
   void onCancel();
+  bool cursorPositionFromPoint(int x, int y, size_t& position) const;
+  std::string displayTextForCurrentState() const;
+  // Advance of s[start, end) measured in place by temporarily null-terminating
+  // at `end` — avoids a substr temporary per measurement.
+  int measureRange(std::string& s, int start, int end) const;
+  // Largest line end in (start, s.length()] whose advance fits maxWidth.
+  // Binary search over the monotonic prefix advance; always advances at least
+  // one byte so an oversized glyph cannot stall the wrap loop.
+  int lineBreakEnd(std::string& s, int start, int maxWidth) const;
+
+  const freeink::ui::KeyboardLayout& currentLayout() const;
+  const freeink::ui::KeyboardKey* selectedKey() const;
+  int selectedLogicalIndex() const;
+  void clampSelection();
+  void moveSelectionRow(int delta);
+  void moveSelectionCol(int delta);
+  bool syncSelectionToValue(int16_t value);
+  // Handles one key activation (by stable key id). Returns true when the
+  // screen needs a repaint; OK/cancel finish the activity instead.
+  bool activateValue(int16_t value, bool longPress);
+  bool clearAllOrAltOnSelected();
+
+  void insertUtf8(const char* out);
+  bool backspaceUtf8();
+  static size_t utf8Prev(const std::string& s, size_t pos);
+  static size_t utf8Next(const std::string& s, size_t pos);
+
+  freeink::ui::Rect keyboardRect() const;
 
   static constexpr uint16_t LONG_PRESS_MS = 500;
   static constexpr uint16_t DEL_LONG_PRESS_MS = 1500;
+  static constexpr uint16_t TOUCH_LONG_PRESS_MS = 350;
+  static constexpr uint16_t TOUCH_DEL_LONG_PRESS_MS = 900;
 
-  static constexpr int COLS = 10;
-  static constexpr int ABC_ROWS = 4;
-  static constexpr int SYM_ROWS = 4;
-  static constexpr int BOTTOM_KEY_COUNT = 5;
-
-  static constexpr KeyDef abcLayout[ABC_ROWS][COLS] = {
-      {{'1', '!'},
-       {'2', '@'},
-       {'3', '#'},
-       {'4', '$'},
-       {'5', '%'},
-       {'6', '^'},
-       {'7', '&'},
-       {'8', '*'},
-       {'9', '('},
-       {'0', ')'}},
-      {{'q', 'Q'},
-       {'w', 'W'},
-       {'e', 'E'},
-       {'r', 'R'},
-       {'t', 'T'},
-       {'y', 'Y'},
-       {'u', 'U'},
-       {'i', 'I'},
-       {'o', 'O'},
-       {'p', 'P'}},
-      {{'a', 'A'},
-       {'s', 'S'},
-       {'d', 'D'},
-       {'f', 'F'},
-       {'g', 'G'},
-       {'h', 'H'},
-       {'j', 'J'},
-       {'k', 'K'},
-       {'l', 'L'},
-       {'-', '_'}},
-      {{'z', 'Z'},
-       {'x', 'X'},
-       {'c', 'C'},
-       {'v', 'V'},
-       {'b', 'B'},
-       {'n', 'N'},
-       {'m', 'M'},
-       {'=', '+'},
-       {'.', '>'},
-       {',', '<'}},
-  };
-
-  static constexpr KeyDef urlLayout[ABC_ROWS][COLS] = {
-      {{'1', '!'},
-       {'2', '@'},
-       {'3', '#'},
-       {'4', '$'},
-       {'5', '%'},
-       {'6', '^'},
-       {'7', '&'},
-       {'8', '*'},
-       {'9', '('},
-       {'0', ')'}},
-      {{'q', 'Q'},
-       {'w', 'W'},
-       {'e', 'E'},
-       {'r', 'R'},
-       {'t', 'T'},
-       {'y', 'Y'},
-       {'u', 'U'},
-       {'i', 'I'},
-       {'o', 'O'},
-       {'p', 'P'}},
-      {{'a', 'A'},
-       {'s', 'S'},
-       {'d', 'D'},
-       {'f', 'F'},
-       {'g', 'G'},
-       {'h', 'H'},
-       {'j', 'J'},
-       {'k', 'K'},
-       {'l', 'L'},
-       {'-', '_'}},
-      {{'z', 'Z'},
-       {'x', 'X'},
-       {'c', 'C'},
-       {'v', 'V'},
-       {'b', 'B'},
-       {'n', 'N'},
-       {'m', 'M'},
-       {':', '+'},
-       {'.', '>'},
-       {'/', '<'}},
-  };
-
-  static constexpr KeyDef symLayout[SYM_ROWS][COLS] = {
-      {{'1', '\0'},
-       {'2', '\0'},
-       {'3', '\0'},
-       {'4', '\0'},
-       {'5', '\0'},
-       {'6', '\0'},
-       {'7', '\0'},
-       {'8', '\0'},
-       {'9', '\0'},
-       {'0', '\0'}},
-      {{'!', '\0'},
-       {'@', '\0'},
-       {'#', '\0'},
-       {'$', '\0'},
-       {'%', '\0'},
-       {'^', '\0'},
-       {'&', '\0'},
-       {'*', '\0'},
-       {'(', '\0'},
-       {')', '\0'}},
-      {{'-', '\0'},
-       {'_', '\0'},
-       {'=', '\0'},
-       {'+', '\0'},
-       {'[', '\0'},
-       {']', '\0'},
-       {'{', '\0'},
-       {'}', '\0'},
-       {';', '\0'},
-       {':', '\0'}},
-      {{'\'', '\0'},
-       {'"', '\0'},
-       {'/', '\0'},
-       {'\\', '\0'},
-       {'|', '\0'},
-       {'?', '\0'},
-       {'.', '\0'},
-       {',', '\0'},
-       {'~', '\0'},
-       {'`', '\0'}},
-  };
-
-  static const char* const shiftString[2];
-
-  int getContentRowCount() const;
-  int getContentColCount() const;
-  int getTotalRowCount() const;
-  bool isBottomRow(int row) const;
-  char getSelectedChar() const;
-  char getAlternativeChar() const;
-  bool handleKeyPress();
-  bool insertChar(char c);
-  void insertString(const std::string& str);
-  void mapColContentBottom(int& col, bool goingUp) const;
+  // App-specific key id: toggles the URL snippet panel (URL fields only).
+  static constexpr int16_t URL_PANEL_KEY = -3;
 };

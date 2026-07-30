@@ -12,6 +12,7 @@
 #include <string>
 #include <utility>
 
+#include "EndOfBookOptions.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -19,6 +20,8 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
+  // Next-book suggestion menu for the End-of-Book screen
+  EndOfBookOptions endOfBookOptions;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
@@ -28,18 +31,31 @@ class XtcReaderActivity final : public Activity {
   };
 
   void renderPage();
+  // Opens chapter selection when the book has chapters (short-press Confirm); no-op otherwise
+  void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;
   void loadProgress();
 
  public:
-  explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)
-      : Activity("XtcReader", renderer, mappedInput), xtc(std::move(xtc)) {}
+  explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
+                             int initialRefreshCountdown)
+      : Activity("XtcReader", renderer, mappedInput),
+        xtc(std::move(xtc)),
+        pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool handleForcedRefresh() override {
+    {
+      RenderLock lock(*this);
+      pagesUntilFullRefresh = 1;
+    }
+    requestUpdate();
+    return true;
+  }
   ScreenshotInfo getScreenshotInfo() const override;
 };

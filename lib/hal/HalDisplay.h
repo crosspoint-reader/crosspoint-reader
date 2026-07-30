@@ -39,6 +39,17 @@ class HalDisplay {
                             bool fromProgmem = false) const;
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  // Non-blocking refresh (shadow-free): starts the panel waveform and returns
+  // while the panel refreshes on its own. The framebuffer must stay untouched
+  // until waitRefreshComplete(), and the caller must rebuild the differential
+  // baseline before the next differential update (the tiled grayscale cleanup
+  // does). Panels without deferral fall back to a blocking refresh.
+  void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
+  // Block until a pending deferred refresh completes (no-op when none is).
+  void waitRefreshComplete();
+  // True when displayBufferAsync() genuinely overlaps (panel driver defers);
+  // false where it falls back to a blocking refresh.
+  bool supportsAsyncRefresh() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Power management
@@ -50,6 +61,14 @@ class HalDisplay {
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
+
+  // Lend the framebuffer's ~48 KB STORAGE to a memory-hungry phase (chapter
+  // builds) without freeing it: the allocation never moves, so repeated loans
+  // cannot fragment the heap (free+realloc measurably did). No display calls
+  // between lend and return; the panel keeps its last refreshed image. The
+  // buffer comes back white — redraw fully. Returns nullptr if already lent.
+  uint8_t* lendFrameBufferStorage(uint32_t* sizeOut);
+  void returnFrameBufferStorage();
 
   // X3 grayscale preconditioning (OEM "AA-pre-BW(mid)" settle pass), windowed
   // to the gray region in physical panel coordinates (no-arg = full frame).

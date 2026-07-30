@@ -5,7 +5,6 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <WiFi.h>
-#include <esp_task_wdt.h>
 
 #include <cstddef>
 
@@ -17,6 +16,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/QrUtils.h"
+#include "util/TaskWatchdog.h"
 
 namespace {
 // AP Mode configuration
@@ -328,7 +328,7 @@ void CrossPointWebServerActivity::loop() {
       }
 
       // Reset watchdog BEFORE processing - HTTP header parsing can be slow
-      esp_task_wdt_reset();
+      resetTaskWatchdogIfSubscribed();
 
       // Process HTTP requests in tight loop for maximum throughput
       // More iterations = more data processed per main loop cycle
@@ -337,7 +337,7 @@ void CrossPointWebServerActivity::loop() {
         webServer->handleClient();
         // Reset watchdog every 32 iterations
         if ((i & 0x1F) == 0x1F) {
-          esp_task_wdt_reset();
+          resetTaskWatchdogIfSubscribed();
         }
         // Yield and check for exit button every 64 iterations
         if ((i & 0x3F) == 0x3F) {
@@ -410,7 +410,8 @@ void CrossPointWebServerActivity::renderServerRunning() const {
     startY += height10 + metrics.verticalSpacing * 2;
 
     // Show QR code for Wifi
-    const std::string wifiConfig = std::string("WIFI:S:") + connectedSSID + ";;";
+    // follows spec at https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
+    const std::string wifiConfig = std::string("WIFI:T:nopass;S:") + connectedSSID + ";;";
     const Rect qrBoundsWifi(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
     QrUtils::drawQrCode(renderer, qrBoundsWifi, wifiConfig);
 
