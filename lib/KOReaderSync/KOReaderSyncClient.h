@@ -17,11 +17,11 @@ struct KOReaderMetadata {
 /**
  * Rich CrossPoint position sent alongside progress uploads. Maps 1:1 onto the
  * crosspoint-sync extended `position` object (see crosspoint-sync docs/API.md).
- * It is only transmitted to sync.crosspointreader.com, where it makes
- * CrossPoint<->CrossPoint sync lossless instead of xpath-approximated.
+ * It is only transmitted to sync.crosspointreader.com. These fields remain
+ * layout-dependent compatibility hints; the standard XPath is the content anchor.
  */
 struct KOReaderRichPosition {
-  uint32_t pctQ = 0;                       // Percentage quantized 0..1,000,000 (authoritative)
+  uint32_t pctQ = 0;                       // Percentage quantized 0..1,000,000 (metadata/fallback)
   uint16_t spineIndex = 0;                 // Spine (chapter) index
   uint16_t pageNumber = 0;                 // Page within spine (layout-dependent hint)
   uint16_t totalPages = 1;                 // Spine page count (layout-dependent hint)
