@@ -788,7 +788,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                                     TextSettingsActivity::Tab::Family),
                              [this](const ActivityResult&) {
-                               SETTINGS.saveToFile();
+                               // TextSettingsActivity saves on each change; no save needed here.
                                // Font/size/spacing/margin changes invalidate the current
                                // layout: preserve position and force a re-layout, mirroring
                                // applyOrientation()'s reflow.
