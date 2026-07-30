@@ -102,6 +102,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
+  // Dictionary definition font: follow the book font, or pin one built-in
+  // family so definitions render the same regardless of the reading font.
+  enum DICTIONARY_FONT { DICT_FONT_BOOK = 0, DICT_FONT_NOTOSERIF = 1, DICT_FONT_NOTOSANS = 2, DICTIONARY_FONT_COUNT };
   // Reader font size is a point size, not an enum slot — see fontPointSize.
   // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE
   // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
@@ -280,6 +283,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Font for dictionary definitions (DICTIONARY_FONT values). Persisted manually
+  // in toJson/fromJson — its settings entry is only inserted when dictionaries
+  // exist, so the generic SettingsList loop never sees it.
+  uint8_t dictionaryFont = DICT_FONT_BOOK;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Which button pair fast-scrolls the file browser (FAST_SCROLL_BUTTONS)
@@ -317,6 +324,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  int getDictionaryFontId() const;
 
   // Drop the SD font selection and fall back to the built-in family. The reader
   // point size comes back into BUILTIN_READER_POINT_SIZES with it, since that is

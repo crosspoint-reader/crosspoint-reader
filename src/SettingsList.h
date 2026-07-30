@@ -462,7 +462,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // Insert at the end of the Reader category (just before the first Controls entry).
     auto it =
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.category == StrId::STR_CAT_CONTROLS; });
-    v.insert(it, buildDictionarySetting(*dictionaries));
+    it = v.insert(it, buildDictionarySetting(*dictionaries));
+    // Definition font pin, right under the dictionary selector. Persisted
+    // manually in CrossPointSettings::toJson/fromJson — this entry is absent
+    // from the base list the generic persistence loop iterates.
+    v.insert(it + 1, SettingInfo::Enum(StrId::STR_DICTIONARY_FONT, &CrossPointSettings::dictionaryFont,
+                                       {StrId::STR_BOOK_FONT, StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS},
+                                       "dictionaryFont", StrId::STR_CAT_READER));
   }
   return v;
 }
