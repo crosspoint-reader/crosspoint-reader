@@ -12,6 +12,8 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cstdio>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -46,6 +48,47 @@ namespace {
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
+
+// Every setting TextSettingsActivity can edit. Snapshotted before the activity is
+// pushed and compared on return so backing out unchanged costs neither a SPIFFS
+// write nor a full chapter re-layout, mirroring applyOrientation()'s no-op guard.
+struct TextSettingsSnapshot {
+  uint8_t fontFamily;
+  uint8_t fontPointSize;
+  uint8_t lineSpacing;
+  uint8_t paragraphAlignment;
+  uint8_t extraParagraphSpacing;
+  uint8_t screenMargin;
+  uint8_t hyphenationEnabled;
+  uint8_t embeddedStyle;
+  uint8_t focusReadingEnabled;
+  uint8_t textAntiAliasing;
+  char sdFontFamilyName[sizeof(CrossPointSettings::getInstance().sdFontFamilyName)];
+
+  static TextSettingsSnapshot capture() {
+    TextSettingsSnapshot s{};
+    s.fontFamily = SETTINGS.fontFamily;
+    s.fontPointSize = SETTINGS.fontPointSize;
+    s.lineSpacing = SETTINGS.lineSpacing;
+    s.paragraphAlignment = SETTINGS.paragraphAlignment;
+    s.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+    s.screenMargin = SETTINGS.screenMargin;
+    s.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+    s.embeddedStyle = SETTINGS.embeddedStyle;
+    s.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+    s.textAntiAliasing = SETTINGS.textAntiAliasing;
+    snprintf(s.sdFontFamilyName, sizeof(s.sdFontFamilyName), "%s", SETTINGS.sdFontFamilyName);
+    return s;
+  }
+
+  bool operator==(const TextSettingsSnapshot& o) const {
+    return fontFamily == o.fontFamily && fontPointSize == o.fontPointSize && lineSpacing == o.lineSpacing &&
+           paragraphAlignment == o.paragraphAlignment && extraParagraphSpacing == o.extraParagraphSpacing &&
+           screenMargin == o.screenMargin && hyphenationEnabled == o.hyphenationEnabled &&
+           embeddedStyle == o.embeddedStyle && focusReadingEnabled == o.focusReadingEnabled &&
+           textAntiAliasing == o.textAntiAliasing && strcmp(sdFontFamilyName, o.sdFontFamilyName) == 0;
+  }
+};
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -808,9 +851,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
+      const TextSettingsSnapshot before = TextSettingsSnapshot::capture();
       startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                                     TextSettingsActivity::Tab::Family),
-                             [this](const ActivityResult&) {
+                             [this, before](const ActivityResult&) {
+                               // Backing out without touching anything must not write SPIFFS
+                               // (finite erase cycles) or throw away the laid-out chapter.
+                               if (TextSettingsSnapshot::capture() == before) {
+                                 requestUpdate();  // still need to repaint over the settings UI
+                                 return;
+                               }
                                SETTINGS.saveToFile();
                                // Font/size/spacing/margin changes invalidate the current
                                // layout: preserve position and force a re-layout, mirroring
