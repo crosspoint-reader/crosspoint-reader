@@ -127,6 +127,13 @@ data_lock: threading.Lock = threading.Lock()  # Prevent reading while writing
 # Global shutdown flag
 shutdown_event = threading.Event()
 
+# Command-ack handshake: the firmware answers every CMD: line with CMDACK:<cmd>
+# (a handler ran) or CMDERR:<reason>:<cmd> (e.g. unknown — includes commands
+# compiled out of the running build). The reader thread sets ack_event when
+# either arrives so input_worker can report success, rejection, or a timeout.
+ACK_TIMEOUT_S = 2.0
+ack_event = threading.Event()
+
 # Initialize colors
 init(autoreset=True)
 
@@ -333,6 +340,17 @@ def serial_worker(ser_holder: dict, kwargs: dict[str, str]) -> None:
                 if not clean_line:
                     continue
 
+                # Command acks bypass filter/suppress: they are direct feedback
+                # for a command the user just typed, never routine log noise.
+                if clean_line.startswith("CMDACK:"):
+                    print(f"{Fore.GREEN}Command OK: {clean_line[len('CMDACK:'):]}{Style.RESET_ALL}")
+                    ack_event.set()
+                    continue
+                if clean_line.startswith("CMDERR:"):
+                    print(f"{Fore.RED}Command REJECTED: {clean_line[len('CMDERR:'):]}{Style.RESET_ALL}")
+                    ack_event.set()
+                    continue
+
                 if clean_line.startswith("SCREENSHOT_START:"):
                     screenshot_size = int(clean_line.split(":")[1])
                     expecting_screenshot = True
@@ -384,8 +402,20 @@ def input_worker(ser_holder: dict) -> None:
     """
     while not shutdown_event.is_set():
         try:
-            cmd = input("Command: ")
+            cmd = input("Command: ").strip()
+            if not cmd:
+                continue
+            ack_event.clear()
             ser_holder["ser"].write(f"CMD:{cmd}\n".encode())
+            # The reader thread prints the ack/rejection line itself; this wait
+            # only exists to catch silence. SCREENSHOT acks after the ~48KB
+            # transfer, which finishes well inside the timeout at 115200 baud
+            # over USB-CDC (native USB, not actually rate-limited).
+            if not ack_event.wait(ACK_TIMEOUT_S):
+                print(
+                    f"{Fore.YELLOW}No response to CMD:{cmd} after {ACK_TIMEOUT_S:g}s - device may be "
+                    f"asleep/rebooting, or running firmware without command acks.{Style.RESET_ALL}"
+                )
         except (EOFError, KeyboardInterrupt):
             break
         except (OSError, serial.SerialException):

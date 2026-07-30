@@ -512,6 +512,7 @@ void loop() {
     if (line.startsWith("CMD:")) {
       String cmd = line.substring(4);
       cmd.trim();
+      bool handled = true;
       if (cmd == "SCREENSHOT") {
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
@@ -519,6 +520,13 @@ void loop() {
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
       }
+      else {
+        handled = false;
+      }
+      // Raw print, not LOG_*: debugging_monitor.py keys on this ack to report
+      // command success, so it must survive LOG_LEVEL=0 builds. Commands
+      // compiled out of this build report unknown.
+      logSerial.printf(handled ? "CMDACK:%s\n" : "CMDERR:unknown:%s\n", cmd.c_str());
     }
   }
 
