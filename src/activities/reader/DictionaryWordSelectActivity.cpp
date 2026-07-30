@@ -9,7 +9,6 @@
 #include <cctype>
 #include <climits>
 #include <cstdlib>
-#include <utility>
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
@@ -264,45 +263,16 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  auto previousWord = MappedInputManager::Button::Left;
-  auto nextWord = MappedInputManager::Button::Right;
-  auto up = MappedInputManager::Button::Up;
-  auto down = MappedInputManager::Button::Down;
-  if (SETTINGS.frontButtonFollowOrientation) {
-    // The raw button roles describe the portrait frame. Rotate both axes into
-    // the live frame so navigation follows the physical position of each button.
-    switch (renderer.getOrientation()) {
-    case GfxRenderer::PortraitInverted:
-      std::swap(previousWord, nextWord);
-      std::swap(up, down);
-      break;
-    case GfxRenderer::LandscapeClockwise:
-      previousWord = MappedInputManager::Button::Down;
-      nextWord = MappedInputManager::Button::Up;
-      up = MappedInputManager::Button::Left;
-      down = MappedInputManager::Button::Right;
-      break;
-    case GfxRenderer::LandscapeCounterClockwise:
-      previousWord = MappedInputManager::Button::Up;
-      nextWord = MappedInputManager::Button::Down;
-      up = MappedInputManager::Button::Right;
-      down = MappedInputManager::Button::Left;
-      break;
-    case GfxRenderer::Portrait:
-    default:
-      break;
-    }
-  }
-
-  if (mappedInput.wasPressed(previousWord) && selected > 0) {
+  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
+  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) && selected > 0) {
     selected--;
     requestUpdate();
-  } else if (mappedInput.wasPressed(nextWord) && selected + 1 < static_cast<int>(words.size())) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) && hasNextWord) {
     selected++;
     requestUpdate();
-  } else if (mappedInput.wasPressed(up)) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(down)) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
     moveVertical(1);
   }
 }
@@ -356,16 +326,8 @@ void DictionaryWordSelectActivity::drawHints() const {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }
-  const bool isLandscape = SETTINGS.frontButtonFollowOrientation && renderer.getScreenWidth() > renderer.getScreenHeight();
-  // In landscape the front buttons move between rows, while the side buttons
-  // move between words.
-  const char* previousLabel = tr(STR_DIR_LEFT);
-  const char* nextLabel = tr(STR_DIR_RIGHT);
-  if (isLandscape) {
-    previousLabel = tr(STR_DIR_UP);
-    nextLabel = tr(STR_DIR_DOWN);
-  }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), previousLabel, nextLabel);
+  const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT),
+                                                       tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
