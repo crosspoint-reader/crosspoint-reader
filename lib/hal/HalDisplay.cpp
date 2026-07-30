@@ -75,10 +75,6 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
 
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
-void HalDisplay::setBusyWaitHooks(void (*beginHook)(), void (*endHook)()) {
-  einkDisplay.setBusyWaitHooks(beginHook, endHook);
-}
-
 void HalDisplay::setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel)) {
   einkDisplay.setBusyWaitSliceHook(sliceHook);
 }

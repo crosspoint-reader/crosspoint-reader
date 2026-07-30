@@ -178,30 +178,6 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   return true;
 }
 
-void HalPowerManager::onEinkBusyWaitBegin() {
-  if (normalFreq <= 0) {
-    return;
-  }
-  // Same exclusions as setPowerSaving()/lightSleep(): a low clock breaks an
-  // active WiFi association and an enumerated USB-CDC link.
-  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
-    return;
-  }
-  if (setCpuFrequencyMhz(LOW_POWER_FREQ)) {
-    busyWaitLowClock = true;
-  }
-}
-
-void HalPowerManager::onEinkBusyWaitEnd() {
-  if (!busyWaitLowClock) {
-    return;
-  }
-  busyWaitLowClock = false;
-  if (!setCpuFrequencyMhz(normalFreq)) {
-    LOG_ERR("PWR", "Failed to restore CPU frequency after busy wait");
-  }
-}
-
 bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t busyLevel) {
   // Same exclusions as lightSleep(): light sleep drops a WiFi association and
   // kills an enumerated USB-CDC link. No LOG here — this runs ~50x/s mid-refresh.

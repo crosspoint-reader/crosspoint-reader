@@ -44,8 +44,6 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
-  // Install hooks fired around long e-ink BUSY waits (see EInkDisplay::setBusyWaitHooks)
-  void setBusyWaitHooks(void (*beginHook)(), void (*endHook)());
   // Install the slice hook that replaces the BUSY poll delay on proven-long
   // waits (see EpdBus::setBusyWaitSliceHook for the contract)
   void setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel));

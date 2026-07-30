@@ -26,7 +26,6 @@ class HalPowerManager {
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
-  bool busyWaitLowClock = false;          // Set/cleared only by the render task (see onEinkBusyWait*)
 
   // Serializes wake-source arm -> esp_light_sleep_start() -> disarm across the
   // two sleepers (main-loop lightSleep() and the render task's BUSY-wait slice).
@@ -68,21 +67,14 @@ class HalPowerManager {
   // fall back to delay() in that case.
   bool lightSleep(const HalGPIO& gpio) const;
 
-  // E-ink BUSY-wait hooks (installed on EInkDisplay via HalDisplay): during a
-  // refresh the render task only polls the BUSY pin for 0.3-2 s, so drop the CPU
-  // clock for the wait and restore it after. Deliberately raw setCpuFrequencyMhz,
-  // NOT setPowerSaving(): the render task holds a Lock (mode != None) which blocks
-  // setPowerSaving, and isLowPower must stay false so input-driven
-  // setPowerSaving(false) calls stay no-ops during the wait.
-  void onEinkBusyWaitBegin();
-  void onEinkBusyWaitEnd();
-
   // BUSY-wait slice hook (EpdBus::setBusyWaitSliceHook): light-sleep the chip
   // for up to BUSY_SLEEP_SLICE_MS while the panel refreshes autonomously,
   // waking early the moment the BUSY pin leaves `busyLevel`. Returns false
   // WITHOUT sleeping when unsafe (WiFi active, USB connected, or sleep
   // rejected) — the SDK then falls back to its plain poll delay. Called from
   // the render task; safe by construction (the waiter IS the locked task).
+  // Leaves the CPU clock alone: the chip is asleep for most of the wait, so a
+  // downclock buys nothing and only slows the main loop's awake windows.
   bool onEinkBusyWaitSlice(int8_t busyPin, uint8_t busyLevel);
 
   // Get battery percentage (range 0-100)

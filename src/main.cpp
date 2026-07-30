@@ -338,12 +338,9 @@ void setup() {
   // data-only cable). See HalGPIO::pollUsbState().
   gpio.pollUsbState();
 
-  // Downclock the CPU while the render task busy-waits on an e-ink refresh
-  // (0.3-2 s of pure pin polling); the hooks no-op when WiFi/USB is active
-  display.setBusyWaitHooks([] { powerManager.onEinkBusyWaitBegin(); }, [] { powerManager.onEinkBusyWaitEnd(); });
-  // On top of the downclock, light-sleep through the refresh in short slices,
-  // waking exactly on the BUSY pin's completion level (falls back to polling
-  // when WiFi/USB blocks light sleep)
+  // Light-sleep through the render task's e-ink BUSY wait (0.3-2 s of pure pin
+  // polling) in short slices, waking exactly on the BUSY pin's completion level
+  // (falls back to plain polling when WiFi/USB blocks light sleep)
   display.setBusyWaitSliceHook(
       [](int8_t busyPin, uint8_t busyLevel) { return powerManager.onEinkBusyWaitSlice(busyPin, busyLevel); });
 
