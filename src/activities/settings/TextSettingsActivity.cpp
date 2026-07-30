@@ -73,6 +73,7 @@ void TextSettingsActivity::onEnter() {
   std::fill(std::begin(selectedIndex_), std::end(selectedIndex_), 1);       // default to the first list row
   selectedIndex_[static_cast<int>(Tab::Family)] = currentFamilyIndex_ + 1;  // Family/Size open on current selection
   selectedIndex_[static_cast<int>(Tab::Size)] = currentSizeIndex_ + 1;
+  selectedIndex_[static_cast<int>(tab_)] = 0;  // screen opens with the tab bar focused, not a list row
 
   requestUpdate();
 }
@@ -177,7 +178,7 @@ bool TextSettingsActivity::handleTouch() {
 void TextSettingsActivity::loop() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
     return;
   }

@@ -183,22 +183,23 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
     outProgress.deviceId = doc["device_id"].as<std::string>();
     outProgress.timestamp = doc["timestamp"].as<int64_t>();
 
-    // Extended crosspoint-sync field; absent on plain kosync servers.
     outProgress.position.reset();
-    const JsonObjectConst pos = doc["position"].as<JsonObjectConst>();
-    if (!pos.isNull()) {
-      KOReaderRichPosition rich;
-      rich.pctQ = pos["pctQ"].as<uint32_t>();
-      rich.spineIndex = pos["spine"].as<uint16_t>();
-      rich.pageNumber = pos["page"].as<uint16_t>();
-      const uint16_t pages = pos["pages"].as<uint16_t>();
-      rich.totalPages = pages > 0 ? pages : 1;
-      const uint16_t para = pos["para"].as<uint16_t>();
-      if (para > 0) rich.paragraphIndex = para;
-      rich.xpath = pos["xpath"].as<const char*>() ? pos["xpath"].as<const char*>() : "";
-      LOG_DBG("KOSync", "Got rich position: spine=%u page=%u/%u para=%u", rich.spineIndex, rich.pageNumber,
-              rich.totalPages, para);
-      outProgress.position = std::move(rich);
+    if (KOREADER_STORE.usesCrossPointSyncServer()) {
+      const JsonObjectConst pos = doc["position"].as<JsonObjectConst>();
+      if (!pos.isNull()) {
+        KOReaderRichPosition rich;
+        rich.pctQ = pos["pctQ"].as<uint32_t>();
+        rich.spineIndex = pos["spine"].as<uint16_t>();
+        rich.pageNumber = pos["page"].as<uint16_t>();
+        const uint16_t pages = pos["pages"].as<uint16_t>();
+        rich.totalPages = pages > 0 ? pages : 1;
+        const uint16_t para = pos["para"].as<uint16_t>();
+        if (para > 0) rich.paragraphIndex = para;
+        rich.xpath = pos["xpath"].as<const char*>() ? pos["xpath"].as<const char*>() : "";
+        LOG_DBG("KOSync", "Got rich position: spine=%u page=%u/%u para=%u", rich.spineIndex, rich.pageNumber,
+                rich.totalPages, para);
+        outProgress.position = std::move(rich);
+      }
     }
 
     LOG_DBG("KOSync", "Got progress: %.2f%% at %s", outProgress.percentage * 100, outProgress.progress.c_str());
@@ -235,8 +236,8 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   doc["percentage"] = progress.percentage;
   doc["device"] = DEVICE_NAME;
   doc["device_id"] = DEVICE_ID;
-  if (progress.position.has_value()) {
-    // Extended crosspoint-sync field; kosync servers ignore unknown keys.
+  if (progress.position.has_value() && KOREADER_STORE.usesCrossPointSyncServer()) {
+    // CrossPoint-specific extension: do not send it to third-party KOSync servers.
     const auto& p = *progress.position;
     auto pos = doc["position"].to<JsonObject>();
     pos["pctQ"] = p.pctQ;
