@@ -116,7 +116,14 @@ constexpr float kUiDensityScale = 0.6f;
 constexpr float kUiDensityScale = 1.0f;
 #endif
 
-constexpr int scaledDim(int v) { return static_cast<int>(v * kUiDensityScale + 0.5f); }
+constexpr int scaledDim(int v) {
+  // Round half away from zero. Adding 0.5 unconditionally then truncating
+  // toward zero biases negatives upward, which at scale 1.0 would silently
+  // shift metrics like keyboardVerticalOffset (-13 -> -12) on every device that
+  // does not scale.
+  const float scaled = v * kUiDensityScale;
+  return static_cast<int>(scaled >= 0.0f ? scaled + 0.5f : scaled - 0.5f);
+}
 constexpr int scaledTouchDim(int v) {
   return (v >= 28 && scaledDim(v) < 28) ? 28 : scaledDim(v);
 }

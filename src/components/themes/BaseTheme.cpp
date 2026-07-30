@@ -706,9 +706,14 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   for (int i = 0; i < buttonCount; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
                       static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
-    // Never paint a row the panel can't show (an overfull menu otherwise
-    // draws half-tiles into the hint bar / off the bottom edge).
-    if (tileY + BaseMetrics::values.menuRowHeight > screenBottom) break;
+    // Never paint a row the panel can't show (an overfull menu otherwise draws
+    // half-tiles into the hint bar / off the bottom edge). No current theme and
+    // device combination overflows -- the metric scaling is sized so the full
+    // menu fits -- so log loudly rather than silently hiding a reachable item.
+    if (tileY + BaseMetrics::values.menuRowHeight > screenBottom) {
+      LOG_ERR("UI", "home menu overflows the panel: %d of %d rows shown", i, buttonCount);
+      break;
+    }
 
     const bool selected = selectedIndex == i;
 

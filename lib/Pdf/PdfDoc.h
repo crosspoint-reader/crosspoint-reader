@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -15,8 +16,23 @@
 class ByteBuf {
  public:
   ByteBuf() = default;
-  ByteBuf(ByteBuf&&) = default;
-  ByteBuf& operator=(ByteBuf&&) = default;
+  // The defaulted moves would move the pointer but copy len/cap, leaving the
+  // moved-from buffer claiming a non-zero size over null data -- size() lies and
+  // data() is nullptr. Reset the source's bookkeeping explicitly.
+  ByteBuf(ByteBuf&& o) noexcept : d(std::move(o.d)), len(o.len), cap(o.cap) {
+    o.len = 0;
+    o.cap = 0;
+  }
+  ByteBuf& operator=(ByteBuf&& o) noexcept {
+    if (this != &o) {
+      d = std::move(o.d);
+      len = o.len;
+      cap = o.cap;
+      o.len = 0;
+      o.cap = 0;
+    }
+    return *this;
+  }
   ByteBuf(const ByteBuf&) = delete;
   ByteBuf& operator=(const ByteBuf&) = delete;
 

@@ -1,6 +1,10 @@
 #pragma once
 #include <WString.h>
 
+#include <cstdint>
+
+class HalFile;
+
 #include <string>
 #include <string_view>
 #include <vector>
@@ -88,6 +92,21 @@ inline bool hasCssExtension(const String& fileName) {
   return hasCssExtension(std::string_view{fileName.c_str(), fileName.length()});
 }
 std::string extractFolderPath(const std::string& filePath);
+
+/**
+ * Cheap content identity for validating a converted-book cache.
+ *
+ * CRC32 over 32 evenly-spaced 8 KB windows plus the size, so the cost is
+ * constant (at most ~256 KB read) no matter how large the source is -- reading a
+ * 50 MB PDF in full on every cached open would cost seconds on SD.
+ *
+ * This is a cache-invalidation heuristic, not a checksum. It reliably separates
+ * one book from another (two different files differ in far more than the sampled
+ * bytes, and files under ~256 KB are covered end to end), but a change confined
+ * to unsampled bytes of a large file can be missed. Callers pair it with the
+ * file size and the converter version.
+ */
+uint32_t sourceFingerprint(HalFile& file, uint32_t size);
 
 /**
  * Sanitize a filename/path component for FAT32 in a caller-provided buffer.

@@ -15,6 +15,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#include <atomic>
 #include <memory>
 #include <string>
 #include <vector>
@@ -55,8 +56,10 @@ class AudioPlayerActivity : public Activity {
   std::unique_ptr<Audio> audio;
   SemaphoreHandle_t audioMutex = nullptr;
   TaskHandle_t audioTask = nullptr;
-  volatile bool taskStop = false;
-  volatile bool taskDone = false;
+  // Cross-core flags: the decode task runs on core 0 while the UI writes these
+  // from core 1, so they need atomics rather than just volatile.
+  std::atomic<bool> taskStop{false};
+  std::atomic<bool> taskDone{false};
 
   bool audioReady = false;  // codec + Audio object up
   bool playing = false;     // a track is loaded

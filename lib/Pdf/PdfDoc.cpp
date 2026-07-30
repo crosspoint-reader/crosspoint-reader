@@ -541,6 +541,10 @@ bool PdfDoc::getStreamData(const PdfObj& stream, ByteBuf& out, size_t maxOut) {
   const PdfObj* parms = resolve(parmsRoot, parmStore);
 
   ByteBuf raw;
+  // For an unfiltered stream the raw bytes *are* the output, so reject an
+  // oversized declared length before allocating for it. Encoded streams may
+  // legitimately exceed maxOut and are checked after decoding.
+  if ((!filt || filt->kind == Kind::Null) && stream.streamLen > maxOut) return false;
   if (!raw.setSize(stream.streamLen)) return false;
   if (readUpTo(stream.streamOfs, raw.data(), stream.streamLen) != stream.streamLen) return false;
 

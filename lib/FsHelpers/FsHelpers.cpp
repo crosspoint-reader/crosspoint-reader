@@ -1,5 +1,8 @@
 #include "FsHelpers.h"
 
+#include <HalStorage.h>
+#include <MinizConfig.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -213,6 +216,33 @@ void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLe
     }
   }
   output[i] = '\0';
+}
+
+uint32_t sourceFingerprint(HalFile& file, uint32_t size) {
+  constexpr uint32_t WINDOWS = 32;
+  constexpr uint32_t WINDOW_BYTES = 8192;
+  uint8_t buf[512];
+  uint32_t crc = (uint32_t)mz_crc32(MZ_CRC32_INIT, (const uint8_t*)&size, sizeof(size));
+  if (size == 0) return crc;
+
+  // Whole-file stride: window i starts at i * (size / WINDOWS). Small files are
+  // covered end to end; large ones are sampled evenly rather than only at the
+  // head and tail, so an edit in the middle still changes the result.
+  const uint32_t stride = (size > WINDOWS * WINDOW_BYTES) ? (size / WINDOWS) : WINDOW_BYTES;
+  for (uint32_t w = 0; w < WINDOWS; w++) {
+    const uint64_t start = (uint64_t)w * stride;
+    if (start >= size) break;
+    uint32_t remaining = (uint32_t)((size - start) < WINDOW_BYTES ? (size - start) : WINDOW_BYTES);
+    if (!file.seek((size_t)start)) break;
+    while (remaining > 0) {
+      const uint32_t want = remaining < sizeof(buf) ? remaining : (uint32_t)sizeof(buf);
+      const int got = file.read(buf, want);
+      if (got <= 0) break;
+      crc = (uint32_t)mz_crc32(crc, buf, (size_t)got);
+      remaining -= (uint32_t)got;
+    }
+  }
+  return crc;
 }
 
 }  // namespace FsHelpers
