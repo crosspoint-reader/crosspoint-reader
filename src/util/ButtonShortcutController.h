@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "QuickLockState.h"
+
 class ButtonShortcutController {
  public:
   enum class ChordAction : uint8_t { Screenshot = 0, QuickLock = 1, NextPage = 2, PreviousPage = 3, Disabled = 4 };
@@ -12,8 +14,8 @@ class ButtonShortcutController {
     bool consumeInput = false;
   };
 
-  [[nodiscard]] Result update(bool powerPressed, bool downPressed, bool powerReleased, bool quickLockOnShortPower,
-                              ChordAction chordAction) {
+  [[nodiscard]] Result update(uint32_t nowMs, bool powerPressed, bool downPressed, bool powerReleased,
+                              bool quickLockOnShortPower, ChordAction chordAction) {
     if (chordActive) {
       if (!powerPressed && !downPressed) {
         chordActive = false;
@@ -23,14 +25,14 @@ class ButtonShortcutController {
 
     if (powerPressed && downPressed && chordAction != ChordAction::Disabled) {
       chordActive = true;
-      if (quickLocked && chordAction != ChordAction::QuickLock) {
+      if (quickLockState.isLocked() && chordAction != ChordAction::QuickLock) {
         return {Event::None, true};
       }
       switch (chordAction) {
         case ChordAction::Screenshot:
           return {Event::Screenshot, true};
         case ChordAction::QuickLock:
-          quickLocked = !quickLocked;
+          (void)quickLockState.toggle(nowMs);
           return {Event::QuickLockChanged, true};
         case ChordAction::NextPage:
           return {Event::NextPage, true};
@@ -42,17 +44,25 @@ class ButtonShortcutController {
     }
 
     if (powerReleased && quickLockOnShortPower) {
-      quickLocked = !quickLocked;
+      (void)quickLockState.toggle(nowMs);
       return {Event::QuickLockChanged, true};
     }
 
-    return {Event::None, quickLocked};
+    return {Event::None, quickLockState.isLocked()};
   }
 
-  [[nodiscard]] bool isQuickLocked() const { return quickLocked; }
+  [[nodiscard]] bool isQuickLocked() const { return quickLockState.isLocked(); }
+  void restoreQuickLock(uint32_t nowMs) {
+    if (!quickLockState.isLocked()) {
+      (void)quickLockState.toggle(nowMs);
+    }
+  }
+  [[nodiscard]] bool shouldQuickLockSleep(uint32_t nowMs, uint32_t timeoutMs) const {
+    return quickLockState.shouldSleep(nowMs, timeoutMs);
+  }
   [[nodiscard]] bool isChordActive() const { return chordActive; }
 
  private:
-  bool quickLocked = false;
+  QuickLockState quickLockState;
   bool chordActive = false;
 };

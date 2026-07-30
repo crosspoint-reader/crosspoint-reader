@@ -131,6 +131,11 @@ constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 
+// Quick Lock's timeout sleep restores the lock after wake. Ordinary sleep and
+// cold boot do not set this marker.
+RTC_NOINIT_ATTR uint32_t quickLockResumeMagic;
+constexpr uint32_t QUICK_LOCK_RESUME_MAGIC = 0x514C4F43;  // "QLOC"
+
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
 // plain boot shows the splash. See setup() for the resolution.
@@ -201,6 +206,32 @@ static bool loadSleepFrameBuffer() {
   }
   Storage.remove(SLEEP_FRAME_FILE);
   return true;
+}
+
+void drawQuickLockIndicator() {
+  constexpr int badgeSize = 48;
+  constexpr int bodyX = 9;
+  constexpr int bodyY = 21;
+  constexpr int bodyWidth = 30;
+  constexpr int bodyHeight = 22;
+  const int badgeY = renderer.getScreenHeight() - badgeSize;
+
+  // Mask the pixels below the persistent lock badge so it remains legible on
+  // text and images. CrossPoint's current reader theme uses a white page.
+  renderer.fillRect(0, badgeY, badgeSize, badgeSize, false);
+  renderer.drawRoundedRect(15, badgeY + 5, 18, 24, 4, 9, true);
+  renderer.fillRect(bodyX, badgeY + bodyY, bodyWidth, bodyHeight, true);
+  renderer.fillRect(22, badgeY + 28, 4, 9, false);
+}
+
+void renderQuickLockState(const bool locked) {
+  if (locked) {
+    RenderLock lock;
+    drawQuickLockIndicator();
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  } else {
+    activityManager.requestUpdateAndWait();
+  }
 }
 
 // Enter deep sleep mode
@@ -328,11 +359,19 @@ void setup() {
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
   const auto wakeupReason = gpio.getWakeupReason();
+  const bool quickLockResumePending = quickLockResumeMagic == QUICK_LOCK_RESUME_MAGIC;
+  const bool restoreQuickLock = quickLockResumePending && wakeupReason == HalGPIO::WakeupReason::PowerButton;
+  // USB power immediately re-enters sleep below. Preserve the marker across
+  // that transient wake so the next real power-button wake remains locked.
+  if (wakeupReason != HalGPIO::WakeupReason::AfterUSBPower) {
+    quickLockResumeMagic = 0;
+  }
+  const bool allowShortPowerWake = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
+                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK;
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
-      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
-                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
+      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(), allowShortPowerWake)) {
         powerManager.startDeepSleep(gpio);
       }
       break;
@@ -465,6 +504,12 @@ void setup() {
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
+  if (restoreQuickLock) {
+    // Restore the activity before repainting the persistent lock indicator.
+    activityManager.requestUpdateAndWait();
+    buttonShortcutController.restoreQuickLock(millis());
+    renderQuickLockState(true);
+  }
   allowSleepAt = millis() + 2000;
 }
 
@@ -511,14 +556,13 @@ void loop() {
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
 
-  // Validate persisted powerChordAction before casting (values 0-4 are valid; clamp unknown to default)
-  constexpr uint8_t MAX_VALID_CHORD_ACTION = 4;  // CHORD_DISABLED
-  const uint8_t rawChordAction = SETTINGS.powerChordAction <= MAX_VALID_CHORD_ACTION
+  // Validate the persisted value before converting it to the controller enum.
+  const uint8_t rawChordAction = SETTINGS.powerChordAction < CrossPointSettings::POWER_CHORD_ACTION_COUNT
                                      ? SETTINGS.powerChordAction
                                      : CrossPointSettings::CHORD_SCREENSHOT;
   const auto chordAction = static_cast<ButtonShortcutController::ChordAction>(rawChordAction);
   const auto shortcutResult = buttonShortcutController.update(
-      gpio.isPressed(HalGPIO::BTN_POWER), gpio.isPressed(HalGPIO::BTN_DOWN),
+      millis(), gpio.isPressed(HalGPIO::BTN_POWER), gpio.isPressed(HalGPIO::BTN_DOWN),
       mappedInputManager.wasReleased(MappedInputManager::Button::Power),
       SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK, chordAction);
 
@@ -540,40 +584,55 @@ void loop() {
       break;
     case ButtonShortcutController::Event::QuickLockChanged:
       LOG_DBG("MAIN", "Quick button lock %s", buttonShortcutController.isQuickLocked() ? "enabled" : "disabled");
-      {
-        RenderLock lock;
-        GUI.drawPopup(renderer,
-                      buttonShortcutController.isQuickLocked() ? tr(STR_QUICK_LOCKED) : tr(STR_QUICK_UNLOCKED));
-        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-      }
-      delay(650);
-      activityManager.requestUpdateAndWait();
+      renderQuickLockState(buttonShortcutController.isQuickLocked());
       break;
     case ButtonShortcutController::Event::None:
       break;
-  }
-
-  // Long power is always the safety path to deep sleep, including while Quick Lock
-  // or a chord latch is active.
-  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
-    enterDeepSleep();
-    return;
   }
 
   if (shortcutResult.consumeInput) {
     halTiltSensor.clearPendingEvents();
   }
 
-  // Swallow the rest of the chord cycle so no short-release event leaks through.
+  // Swallow the entire chord cycle so normal long-power handling cannot race a
+  // deliberately held Power + Right shortcut.
   if (buttonShortcutController.isChordActive()) {
     return;
   }
 
+  // Long Power remains the safety path to deep sleep, including while Quick
+  // Lock is active, once no chord is in progress.
+  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+    enterDeepSleep();
+    return;
+  }
+
   if (buttonShortcutController.isQuickLocked()) {
-    lastActivityTime = millis();
-    powerManager.setPowerSaving(false);
+    // Synthetic page input is one-shot. Never let it survive the locked early
+    // return and fire after unlock.
+    mappedInputManager.clearInjectedEvents();
     halTiltSensor.clearPendingEvents();
+
+    const unsigned long now = millis();
+    const unsigned long quickLockTimeoutMs = SETTINGS.getQuickLockSleepTimeoutMs();
+    if (buttonShortcutController.shouldQuickLockSleep(now, quickLockTimeoutMs)) {
+      LOG_DBG("SLP", "Quick Lock auto-sleep triggered after %lu ms", quickLockTimeoutMs);
+      quickLockResumeMagic = QUICK_LOCK_RESUME_MAGIC;
+      enterDeepSleep(true);
+      // Hardware deep sleep does not return. Avoid a false restore in simulator
+      // or error paths where the sleep call returns.
+      quickLockResumeMagic = 0;
+      return;
+    }
+
+    if (now - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
+      powerManager.setPowerSaving(true);
+      delay(50);
+    } else {
+      powerManager.setPowerSaving(false);
+      delay(10);
+    }
     return;
   }
   if (shortcutResult.consumeInput) {

@@ -313,6 +313,10 @@ void SettingsActivity::toggleCurrentSetting() {
     openSleepTimeoutPicker();
     return;
   }
+  if (setting.nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT) {
+    openQuickLockSleepTimeoutPicker();
+    return;
+  }
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -462,6 +466,22 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openQuickLockSleepTimeoutPicker() {
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "QuickLockSleepTimeoutInterval", StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT,
+          SETTINGS.quickLockSleepTimeoutMinutes, CrossPointSettings::MIN_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES,
+          CrossPointSettings::MAX_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT, false,
+          true, StrId::STR_SLEEP_NEVER),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.quickLockSleepTimeoutMinutes = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
 void SettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
 
@@ -508,13 +528,17 @@ void SettingsActivity::render(RenderLock&&) {
             valueText = I18N.get(setting.enumValues[value]);
           }
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
+          if (setting.nameId == StrId::STR_TIME_TO_SLEEP || setting.nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT) {
+            const bool quickLockTimeout = setting.nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT;
+            const uint8_t timeoutMinutes = SETTINGS.*(setting.valuePtr);
+            const uint8_t neverMinutes = quickLockTimeout ? CrossPointSettings::QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES
+                                                          : CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES;
             char valueBuffer[32];
-            if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
+            if (timeoutMinutes >= neverMinutes) {
               valueText = tr(STR_SLEEP_NEVER);
             } else {
               snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
-                       static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
+                       static_cast<unsigned int>(timeoutMinutes));
               valueText = valueBuffer;
             }
           } else {
@@ -526,12 +550,13 @@ void SettingsActivity::render(RenderLock&&) {
       true);
 
   // Draw help text
-  const auto confirmLabel =
-      (selectedSettingIndex == 0)
-          ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-          : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
-                 ? tr(STR_SELECT)
-                 : tr(STR_TOGGLE));
+  const bool selectedValuePicker =
+      selectedSettingIndex > 0 &&
+      ((*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP ||
+       (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_QUICK_LOCK_SLEEP_TIMEOUT);
+  const auto confirmLabel = (selectedSettingIndex == 0)
+                                ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
+                                : (selectedValuePicker ? tr(STR_SELECT) : tr(STR_TOGGLE));
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

@@ -304,6 +304,13 @@ unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
 }
 
+unsigned long CrossPointSettings::getQuickLockSleepTimeoutMs() const {
+  if (quickLockSleepTimeoutMinutes >= QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
+  const uint8_t minutes = std::clamp(quickLockSleepTimeoutMinutes, MIN_QUICK_LOCK_SLEEP_TIMEOUT_MINUTES,
+                                     static_cast<uint8_t>(QUICK_LOCK_SLEEP_TIMEOUT_NEVER_MINUTES - 1));
+  return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
+}
+
 int CrossPointSettings::getRefreshFrequency() const {
   switch (refreshFrequency) {
     case REFRESH_1:
