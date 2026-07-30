@@ -4,6 +4,7 @@
 #include <SPI.h>
 #include <Wire.h>
 #include <esp_sleep.h>
+#include <soc/usb_serial_jtag_struct.h>
 
 // Global HalGPIO instance
 HalGPIO gpio;
@@ -204,17 +205,42 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
-  // Throttle the X3's I2C-based USB detection; see USB_POLL_X3_MS. First call
-  // (usbLastPollMs == 0) always polls so boot state is correct.
-  const unsigned long now = millis();
-  if (deviceIsX3() && usbLastPollMs != 0 && now - usbLastPollMs < USB_POLL_X3_MS) {
-    usbStateChanged = false;
-    return;
+  updateUsbState(millis());
+}
+
+void HalGPIO::updateUsbState(const unsigned long now) {
+  // SOF-based host-link sampling (see the member comment). A cheap register
+  // read, so it runs at its own short cadence on both devices and is never
+  // behind the I2C throttle below — a fresh enumeration must cancel light
+  // sleep within a poll or two, or the next slice kills the CDC link again.
+  if (sofLastSampleMs == 0 || now - sofLastSampleMs >= SOF_SAMPLE_MS) {
+    const auto sof = static_cast<uint16_t>(USB_SERIAL_JTAG.fram_num.sof_frame_index);
+    usbSofActive = (sof != lastSofFrameIndex);
+    lastSofFrameIndex = sof;
+    sofLastSampleMs = now;
   }
-  usbLastPollMs = now;
-  const bool connected = isUsbConnected();
+
+  // Throttle the X3's I2C-based USB detection; see USB_POLL_X3_MS. First call
+  // (usbLastPollMs == 0) always polls so boot state is correct. The combined
+  // verdict below is still recomputed every call so a SOF-detected attach is
+  // not held back by the throttle window.
+  if (usbLastPollMs == 0 || !deviceIsX3() || now - usbLastPollMs >= USB_POLL_X3_MS) {
+    usbLastPollMs = now;
+    usbElectricalConnected = isUsbElectricalConnected();
+  }
+  const bool connected = usbSofActive || usbElectricalConnected;
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
+}
+
+void HalGPIO::pollUsbState() {
+  // Wait out the SOF sample floor so the comparison sees a real frame delta:
+  // two reads inside one USB frame compare equal and read as "no host".
+  const unsigned long elapsed = millis() - sofLastSampleMs;
+  if (sofLastSampleMs != 0 && elapsed < SOF_SAMPLE_MS) {
+    delay(SOF_SAMPLE_MS - elapsed);
+  }
+  updateUsbState(millis());
 }
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
@@ -280,9 +306,16 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 }
 
 bool HalGPIO::isUsbConnected() const {
+  // Recent SOF activity means an enumerated host regardless of what the
+  // electrical check says (false at boot until update() has sampled twice).
+  return usbSofActive || isUsbElectricalConnected();
+}
+
+bool HalGPIO::isUsbElectricalConnected() const {
   if (deviceIsX3()) {
     // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
+    // Positive current means charging. Misses a data-only cable and a full
+    // battery — the SOF check in update() covers those.
     for (uint8_t attempt = 0; attempt < 2; ++attempt) {
       int16_t currentMa = 0;
       if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {

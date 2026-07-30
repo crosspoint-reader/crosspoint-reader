@@ -46,6 +46,7 @@ class HalGPIO {
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
   unsigned long usbLastPollMs = 0;
+  bool usbElectricalConnected = false;  // last result of the per-device electrical/charge check
 
   // X3 USB detection is a BQ27220 I2C read (~0.3-1 ms of awake CPU per call);
   // polled every loop it costs a few percent of the light-sleep idle floor for
@@ -53,6 +54,26 @@ class HalGPIO {
   // is chosen for prompt plug/unplug UX (battery icon, light-sleep USB guard /
   // CDC recovery). X4 detection is a single digitalRead and stays per-loop.
   static constexpr unsigned long USB_POLL_X3_MS = 1000;
+
+  // USB-Serial-JTAG SOF activity, sampled by update(): the host sends a SOF
+  // frame every 1 ms while the bus is enumerated, so a frame index that moved
+  // between two samples means a live host link. Catches what the charge-based
+  // X3 check misses: a data-only cable, and any cable once the battery is full
+  // (charge current ~0). Samples must be >SOF_SAMPLE_MS apart — update() can be
+  // called back-to-back (inner input loops), and adjacent reads would compare
+  // equal and flicker the verdict.
+  uint16_t lastSofFrameIndex = 0;
+  unsigned long sofLastSampleMs = 0;
+  bool usbSofActive = false;
+  static constexpr unsigned long SOF_SAMPLE_MS = 10;
+
+  // Per-device electrical/charge-inference USB check (fresh read; X3 = BQ27220
+  // charge current over I2C, X4 = VBUS-driven level on GPIO20).
+  bool isUsbElectricalConnected() const;
+
+  // Shared body of update()/pollUsbState(): SOF sampling + throttled electrical
+  // check + combined-verdict edge tracking.
+  void updateUsbState(unsigned long now);
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
@@ -95,6 +116,15 @@ class HalGPIO {
 
   // Check if USB is connected
   bool isUsbConnected() const;
+
+  // Sample USB state without a full input update. Called during setup() BEFORE
+  // the first e-ink refresh: the boot paint happens before loop() ever runs
+  // update(), so without this the light-sleep slice guards see the unsampled
+  // default ("no USB") and sleeping through the boot refresh kills a live CDC
+  // link (charge-based X3 detection also reads false whenever the battery is
+  // full). Two calls >=SOF_SAMPLE_MS apart establish the SOF verdict; the
+  // method itself waits out the floor if called too soon after the last sample.
+  void pollUsbState();
 
   // USB state as sampled by the last update() call.
   // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.

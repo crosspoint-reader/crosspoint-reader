@@ -331,6 +331,13 @@ void setup() {
   halTiltSensor.begin();
   halClock.begin();
 
+  // First of two USB samples (second below, before display bring-up): the SOF
+  // verdict needs two samples a frame apart, and it must be settled before the
+  // first refresh — the boot paint's light-sleep slices would otherwise kill a
+  // live CDC link whenever the charge-based check reads false (full battery,
+  // data-only cable). See HalGPIO::pollUsbState().
+  gpio.pollUsbState();
+
   // Downclock the CPU while the render task busy-waits on an e-ink refresh
   // (0.3-2 s of pure pin polling); the hooks no-op when WiFi/USB is active
   display.setBusyWaitHooks([] { powerManager.onEinkBusyWaitBegin(); }, [] { powerManager.onEinkBusyWaitEnd(); });
@@ -346,6 +353,7 @@ void setup() {
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
+    gpio.pollUsbState();  // settle the USB verdict before the error paint (see above)
     setupDisplayAndFonts(isSilentReboot);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
@@ -410,6 +418,10 @@ void setup() {
   const BootResume resume = isSilentReboot              ? BootResume::Silent
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
+
+  // Second USB sample (first one right after powerManager.begin()): settles the
+  // SOF host-link verdict before the first refresh can slice-sleep.
+  gpio.pollUsbState();
 
   setupDisplayAndFonts(resume != BootResume::Splash);
 
