@@ -4,6 +4,9 @@
 #include <MD5Builder.h>
 #include <ObfuscationUtils.h>
 
+#include <cctype>
+#include <string>
+
 namespace {
 // Default sync server URL. crosspoint-sync speaks the full KOSync protocol, so
 // pointing at any other kosync server (e.g. https://sync.koreader.rocks:443)
@@ -14,8 +17,38 @@ constexpr char DEFAULT_SERVER_URL[] = "https://sync.crosspointreader.com";
 // empty serverUrl were implicitly syncing here — they get pinned on upgrade.
 constexpr char LEGACY_DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
+// Host of the official sync server, matched on its own so the CrossPoint position
+// extension survives an equivalent hand-typed URL. getBaseUrl() prefixes a
+// scheme-less entry with "http://", so a plain "sync.crosspointreader.com" would
+// never equal DEFAULT_SERVER_URL as a whole string.
+constexpr char DEFAULT_SERVER_HOST[] = "sync.crosspointreader.com";
+
 // Bumped when a change to defaults would alter behavior for existing configs.
 constexpr uint8_t CONFIG_VERSION = 2;
+
+// Host component of a base URL: scheme stripped, path and port removed. Returns
+// lowercase so the comparison is case-insensitive, as host names are.
+std::string urlHost(const std::string& url) {
+  size_t start = url.find("://");
+  start = (start == std::string::npos) ? 0 : start + 3;
+  // Skip any userinfo ("user:pass@host") so it cannot masquerade as the host.
+  const size_t pathEnd = url.find('/', start);
+  const size_t authorityEnd = (pathEnd == std::string::npos) ? url.size() : pathEnd;
+  const size_t at = url.rfind('@', authorityEnd);
+  if (at != std::string::npos && at >= start) {
+    start = at + 1;
+  }
+  size_t end = authorityEnd;
+  const size_t colon = url.find(':', start);
+  if (colon != std::string::npos && colon < end) {
+    end = colon;
+  }
+  std::string host = url.substr(start, end - start);
+  for (char& c : host) {
+    c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+  }
+  return host;
+}
 }  // namespace
 
 void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
@@ -132,7 +165,7 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
   return url;
 }
 
-bool KOReaderCredentialStore::usesCrossPointSyncServer() const { return getBaseUrl() == DEFAULT_SERVER_URL; }
+bool KOReaderCredentialStore::usesCrossPointSyncServer() const { return urlHost(getBaseUrl()) == DEFAULT_SERVER_HOST; }
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;
