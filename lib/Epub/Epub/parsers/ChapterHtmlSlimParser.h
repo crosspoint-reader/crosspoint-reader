@@ -104,7 +104,7 @@ class ChapterHtmlSlimParser {
   bool currentPageVisibleOffsetSet = false;
   bool insideBody = false;
   bool syntheticCharacterData = false;
-  uint8_t nonVisibleTextDepth = 0;
+  uint16_t nonVisibleTextDepth = 0;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;

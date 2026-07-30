@@ -116,7 +116,7 @@ bool isChapterStartXPath(const std::string& xpath) {
   for (size_t i = dotPos + 1; i < xpath.size(); i++) {
     if (xpath[i] != '0') return false;
   }
-  return true;
+  return parseTextNodeIndex(xpath) <= 1;
 }
 
 bool isBodyTextXPath(const std::string& xpath) {
