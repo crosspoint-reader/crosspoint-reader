@@ -277,10 +277,13 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 
-- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
-  
-  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
-  - "Page Scroll" - Long-pressing scrolls a page up/down
+- **Long-press Behavior**: Choose what happens when a page-turn button is held:
+
+  - "Off" - Use only the configured short-press page-turn action.
+  - "Chapter Skip" - Long-pressing skips to the next or previous chapter.
+  - "Orientation change" - Long-pressing rotates the reading view.
+  - "Previous Page" - Long-pressing either side button turns back one page while its short press keeps the configured
+    direction.
 - **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
   - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
   - "KOSync" - Hold Confirm (~1 second) to launch KOReader sync directly.
