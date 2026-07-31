@@ -99,10 +99,11 @@ bool BookMetadataCache::endContentOpfPass() {
 bool BookMetadataCache::beginTocPass() {
   LOG_DBG("BMC", "Beginning toc pass");
 
-  // Reset the entry counter so the pass can be restarted (the tmp file is
+  // Reset the entry counters so the pass can be restarted (the tmp file is
   // truncated by openFileForWrite). Without this, a rerun would append its
-  // count on top of the discarded entries' count.
+  // counts on top of the discarded entries' counts.
   tocCount = 0;
+  tocMappedCount = 0;
 
   if (!Storage.openFileForRead("BMC", cachePath + tmpSpineBinFile, spineFile)) {
     return false;
@@ -458,6 +459,9 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     writeTocEntry(tocFile, entry);
   }
   tocCount++;
+  if (spineIndex >= 0) {
+    tocMappedCount++;
+  }
 }
 
 /* ============= READING / LOADING FUNCTIONS ================ */
