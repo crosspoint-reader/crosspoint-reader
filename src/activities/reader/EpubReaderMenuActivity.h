@@ -26,6 +26,7 @@ class EpubReaderMenuActivity final : public Activity {
     GO_HOME,
     SYNC,
     DELETE_CACHE,
+    SAVE_CLIPPING,
     DICTIONARY
   };
 

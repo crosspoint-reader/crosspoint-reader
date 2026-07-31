@@ -1543,6 +1543,41 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   display.displayBuffer(refreshMode, fadingFix);
 }
 
+void GfxRenderer::displayWindow(int x, int y, int width, int height) const {
+  int phyX, phyY, phyW, phyH;
+  switch (orientation) {
+    case Portrait:
+      phyX = x;
+      phyY = panelHeight - y - height;
+      phyW = width;
+      phyH = height;
+      break;
+    case LandscapeClockwise:
+      phyX = panelWidth - x - width;
+      phyY = panelHeight - y - height;
+      phyW = width;
+      phyH = height;
+      break;
+    case PortraitInverted:
+      phyX = panelWidth - x - width;
+      phyY = y;
+      phyW = width;
+      phyH = height;
+      break;
+    case LandscapeCounterClockwise:
+    default:
+      phyX = x;
+      phyY = y;
+      phyW = width;
+      phyH = height;
+      break;
+  }
+  // Align to 8-pixel (byte) boundaries required by e-ink panel DMA
+  const int alignedX = (phyX / 8) * 8;
+  const int alignedW = ((phyX + phyW + 7) / 8) * 8 - alignedX;
+  display.displayWindow(alignedX, phyY, alignedW, phyH);
+}
+
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.

@@ -23,6 +23,7 @@ enum class SettingAction {
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
+  ClippingSettings,
   DownloadFonts,
   TextSettings,
 };
@@ -179,8 +180,8 @@ class SettingsActivity final : public Activity {
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Settings", renderer, mappedInput) {}
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int initialCategoryIndex = 0)
+      : Activity("Settings", renderer, mappedInput), selectedCategoryIndex(initialCategoryIndex) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

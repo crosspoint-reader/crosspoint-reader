@@ -96,6 +96,9 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
+Version 35 adds a trailing `paragraphStart` flag to each serialized TextBlock
+(text clippings feature), so v34 caches no longer match the on-disk layout.
+
 Version 34 is binary-identical to version 33. The version was bumped because
 word-gap suppression was narrowed to tokens glued together in the source: v33
 dropped the gap between any two words meeting at a CJK break opportunity, which

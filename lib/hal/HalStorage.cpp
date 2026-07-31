@@ -3,6 +3,7 @@
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
 #include <SDCardManager.h>
+#include <freertos/task.h>
 
 #include <cassert>
 
@@ -28,6 +29,8 @@ bool HalStorage::begin() { return SDCard.begin(); }
 bool HalStorage::ready() const { return SDCard.ready(); }
 
 // For the rest of the methods, we acquire the mutex to ensure thread safety
+
+static uint32_t lockLogCount = 0;
 
 class HalStorage::StorageLock {
  public:
