@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "AutoSleepSyncPolicy.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -75,6 +76,8 @@ class WifiSelectionActivity final : public Activity {
 
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
+  const WifiSelectionMode mode;
+  const AutoSleepSyncDeadline deadline;
 
   // Whether we are attempting to auto-connect or auto-scan saved networks.
   bool autoConnecting = false;
@@ -84,6 +87,8 @@ class WifiSelectionActivity final : public Activity {
 
   // Saved SSIDs already attempted during the current auto-connect session.
   std::vector<std::string> autoAttemptedSsids;
+  bool savedNetworkScanStarted = false;
+  bool completionRequested = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
@@ -93,6 +98,7 @@ class WifiSelectionActivity final : public Activity {
   static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
   static constexpr unsigned long AUTO_CONNECTION_TIMEOUT_MS = 7000;
   unsigned long connectionStartTime = 0;
+  unsigned long connectionTimeoutMs = CONNECTION_TIMEOUT_MS;
 
   void renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderPasswordEntry(const Rect* screen, const ThemeMetrics* metrics) const;
@@ -114,16 +120,27 @@ class WifiSelectionActivity final : public Activity {
   bool tryNextSavedNetworkFromScan();
   void handleAutoConnectFailure();
   void showNetworkListFromAutoConnect();
+  void handleExhaustedNetworks();
+  bool completeHeadlessIfExpired();
+  bool isHeadless() const { return mode == WifiSelectionMode::HEADLESS; }
   bool hasAttemptedAutoSsid(const std::string& ssid) const;
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
   void onComplete(bool connected);
 
  public:
-  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true)
-      : Activity("WifiSelection", renderer, mappedInput), allowAutoConnect(autoConnect) {}
+  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true,
+                                 WifiSelectionMode mode = WifiSelectionMode::MANUAL,
+                                 AutoSleepSyncDeadline deadline = {})
+      : Activity("WifiSelection", renderer, mappedInput),
+        allowAutoConnect(autoConnect),
+        mode(mode),
+        deadline(deadline) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  // Headless sleep preflight is noninteractive: consuming the home gesture keeps
+  // goHome() from replacing the preflight and stranding the sleep coordinator.
+  bool handleHomeGesture() override { return isHeadless(); }
 };

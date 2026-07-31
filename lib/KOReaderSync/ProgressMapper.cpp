@@ -184,6 +184,10 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
 }
 
 class ParagraphStreamer final : public Print {
+  // Sleep preflight: when set, streaming aborts (short write -> early stop)
+  // once the absolute deadline expires, so a large chapter cannot extend the
+  // bounded sleep window. The caller re-checks expiry and discards the result.
+  const AutoSleepSyncDeadline* deadline = nullptr;
   size_t bytesWritten = 0;
   bool globalInTag = false;
   bool globalInEntity = false;
@@ -680,9 +684,15 @@ class ParagraphStreamer final : public Print {
   }
 
   size_t write(const uint8_t* buffer, size_t size) override {
+    // One expiry check per chunk (<=1KB) keeps the scan interruptible without
+    // a per-byte millis() cost.
+    if (deadline && deadline->expired(millis())) return 0;
     for (size_t i = 0; i < size; i++) write(buffer[i]);
     return size;
   }
+
+  void setDeadline(const AutoSleepSyncDeadline* absoluteDeadline) { deadline = absoluteDeadline; }
+  bool hasDeadline() const { return deadline != nullptr; }
 
   int paragraphCount() const { return fwdCaptured ? fwdResult : pCount; }
   int getParagraphAtMatch() const { return paragraphAtMatch; }
@@ -699,7 +709,9 @@ class ParagraphStreamer final : public Print {
 
 bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStreamer& s) {
   const auto href = epub->getSpineItem(spineIndex).href;
-  return !href.empty() && epub->readItemContentsToStream(href, s, 1024);
+  // With a deadline, a short write is a deliberate abort, not a stream error;
+  // early-stop keeps ZipFile from logging it as a failed write.
+  return !href.empty() && epub->readItemContentsToStream(href, s, 1024, s.hasDeadline());
 }
 }  // namespace
 
@@ -779,7 +791,8 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(const std::sh
 
 CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& koPos,
                                                 GfxRenderer& renderer, int currentSpineIndex,
-                                                int totalPagesInCurrentSpine, int fallbackTotalPages) {
+                                                int totalPagesInCurrentSpine, int fallbackTotalPages,
+                                                const AutoSleepSyncDeadline* deadline) {
   CrossPointPosition result{};
   const size_t bookSize = epub->getBookSize();
   if (bookSize == 0) return result;
@@ -838,6 +851,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   bool resolvedIntra = false;
   if (useAncestry) {
     ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
+    s.setDeadline(deadline);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
       resolvedIntra = true;
@@ -864,6 +878,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
     }
   } else if (xpathP > 0) {
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
+    s.setDeadline(deadline);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
       intra = s.progress();
       resolvedIntra = true;

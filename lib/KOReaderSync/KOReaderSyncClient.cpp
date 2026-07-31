@@ -61,12 +61,28 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
 bool insufficientHeap() {
   const uint32_t freeHeap = ESP.getFreeHeap();
   const uint32_t maxAllocHeap = ESP.getMaxAllocHeap();
+  LOG_DBG("KOSync", "TLS preflight: heap=%u maxAlloc=%u", freeHeap, maxAllocHeap);
   if (freeHeap < MIN_FREE_FOR_TLS || maxAllocHeap < MIN_BLOCK_FOR_TLS) {
     LOG_ERR("KOSync", "Insufficient heap for TLS handshake: %u bytes free (need %u), %u max alloc (need %u)", freeHeap,
             MIN_FREE_FOR_TLS, maxAllocHeap, MIN_BLOCK_FOR_TLS);
     return true;
   }
   return false;
+}
+
+bool applyDeadline(freeink::SecureHttpClient& http, const AutoSleepSyncDeadline* deadline) {
+  if (!deadline) return true;
+  const uint32_t remainingMs = deadline->remainingMs(millis());
+  if (remainingMs == 0) return false;
+  http.setTimeout(remainingMs);
+  return true;
+}
+
+freeink::SecureHttpClient::AbortCallback deadlineAbort(const AutoSleepSyncDeadline* deadline) {
+  if (!deadline) return nullptr;
+  // SecureHttpClient already represents abort checks as std::function. This
+  // short-lived closure is created only after the reader EPUB has been released.
+  return [deadline] { return deadline->expired(millis()); };
 }
 }  // namespace
 
@@ -138,12 +154,14 @@ KOReaderSyncClient::Error KOReaderSyncClient::createUser() {
 }
 
 KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& documentHash,
-                                                          KOReaderProgress& outProgress) {
+                                                          KOReaderProgress& outProgress,
+                                                          const AutoSleepSyncDeadline* deadline) {
   lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
   }
+  if (deadline && deadline->expired(millis())) return DEADLINE_EXPIRED;
 
   const std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress/" + documentHash;
   LOG_DBG("KOSync", "Getting progress: %s (heap: %u)", url.c_str(), (unsigned)ESP.getFreeHeap());
@@ -151,19 +169,21 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   freeink::SecureHttpClient http;
   http.setInsecure();
+  if (!applyDeadline(http, deadline)) return DEADLINE_EXPIRED;
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
   applyAuthHeaders(http);
-  const int httpCode = http.GET();
+  const int httpCode = http.GET(deadlineAbort(deadline));
   lastHttpCode = httpCode;
 
   LOG_DBG("KOSync", "Get progress response: %d", httpCode);
 
   if (httpCode <= 0) {
+    const bool expired = deadline && deadline->expired(millis());
     http.end();
-    return NETWORK_ERROR;
+    return expired ? DEADLINE_EXPIRED : NETWORK_ERROR;
   }
 
   if (httpCode == 200) {
@@ -212,12 +232,14 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
   return SERVER_ERROR;
 }
 
-KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgress& progress) {
+KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgress& progress,
+                                                             const AutoSleepSyncDeadline* deadline) {
   lastHttpCode = 0;
   if (!KOREADER_STORE.hasCredentials()) {
     LOG_DBG("KOSync", "No credentials configured");
     return NO_CREDENTIALS;
   }
+  if (deadline && deadline->expired(millis())) return DEADLINE_EXPIRED;
 
   const std::string url = KOREADER_STORE.getBaseUrl() + "/syncs/progress";
   LOG_DBG("KOSync", "Updating progress: %s (heap: %u)", url.c_str(), (unsigned)ESP.getFreeHeap());
@@ -256,19 +278,20 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 
   freeink::SecureHttpClient http;
   http.setInsecure();
+  if (!applyDeadline(http, deadline)) return DEADLINE_EXPIRED;
   if (!http.begin(url)) {
     LOG_ERR("KOSync", "Bad URL: %s", url.c_str());
     return NETWORK_ERROR;
   }
   applyAuthHeaders(http);
   http.addHeader("Content-Type", "application/json");
-  const int httpCode = http.sendRequest("PUT", body);
+  const int httpCode = http.sendRequest("PUT", body, deadlineAbort(deadline));
   http.end();
   lastHttpCode = httpCode;
 
   LOG_DBG("KOSync", "Update progress response: %d", httpCode);
 
-  if (httpCode <= 0) return NETWORK_ERROR;
+  if (httpCode <= 0) return deadline && deadline->expired(millis()) ? DEADLINE_EXPIRED : NETWORK_ERROR;
   if (httpCode == 200 || httpCode == 202) return OK;
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
@@ -292,6 +315,8 @@ const char* KOReaderSyncClient::errorString(Error error) {
       return "No progress found";
     case LOW_MEMORY:
       return "Not enough memory for sync — please retry";
+    case DEADLINE_EXPIRED:
+      return "Sync deadline expired";
     default:
       return "Unknown error";
   }

@@ -3,6 +3,8 @@
 #include <optional>
 #include <string>
 
+#include "AutoSleepSyncPolicy.h"
+
 /**
  * Optional document metadata sent alongside progress sync requests.
  * Mirrors the metadata object added in KOReader PR #15306.
@@ -68,7 +70,8 @@ class KOReaderSyncClient {
     JSON_ERROR,
     NOT_FOUND,
     LOW_MEMORY,
-    USER_EXISTS
+    USER_EXISTS,
+    DEADLINE_EXPIRED
   };
 
   /**
@@ -91,14 +94,15 @@ class KOReaderSyncClient {
    * @param outProgress Output: the progress data
    * @return OK on success, NOT_FOUND if no progress exists, error code on failure
    */
-  static Error getProgress(const std::string& documentHash, KOReaderProgress& outProgress);
+  static Error getProgress(const std::string& documentHash, KOReaderProgress& outProgress,
+                           const AutoSleepSyncDeadline* deadline = nullptr);
 
   /**
    * Update reading progress for a document.
    * @param progress The progress data to upload
    * @return OK on success, error code on failure
    */
-  static Error updateProgress(const KOReaderProgress& progress);
+  static Error updateProgress(const KOReaderProgress& progress, const AutoSleepSyncDeadline* deadline = nullptr);
 
   /**
    * Get human-readable error message.

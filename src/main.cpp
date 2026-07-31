@@ -19,6 +19,7 @@
 
 #include <cstring>
 
+#include "AutoSleepSyncPolicy.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
@@ -128,13 +129,14 @@ enum class BootResume : uint8_t {
   QuickResume,  // wake from a quick-resume deep sleep (SD flag; survives power loss)
 };
 
-// Latched true once enterDeepSleep() commits to sleeping, before it tears down
+// Latched true once commitDeepSleep() commits to sleeping, before it tears down
 // the current activity. WiFi activities call silentRestart() in onExit() to
 // clear heap fragmentation on the way out, but deep sleep is a full chip reset
 // on wake and already clears the heap, so rebooting here would just power the
 // device back up against the user's sleep gesture. Never cleared:
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
+static AutoSleepSyncCoordinator sleepCoordinator;
 
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
@@ -169,47 +171,87 @@ void waitForPowerRelease() {
 }
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
+constexpr char SLEEP_PREFLIGHT_FRAME_FILE[] = "/.crosspoint/sleep_preflight_frame.bin";
+
+static bool saveFrameBuffer(const char* path) {
+  HalFile file;
+  if (!Storage.openFileForWrite("SLP", path, file)) return false;
+  const size_t bufferSize = renderer.getBufferSize();
+  return file.write(renderer.getFrameBuffer(), bufferSize) == bufferSize;
+}
+
+static bool loadFrameBufferAndRemove(const char* path) {
+  bool loaded = false;
+  {
+    HalFile file;
+    if (Storage.openFileForRead("SLP", path, file)) {
+      const size_t bufferSize = display.getBufferSize();
+      const int bytesRead = file.fileSize() == bufferSize ? file.read(display.getFrameBuffer(), bufferSize) : -1;
+      loaded = bytesRead >= 0 && static_cast<size_t>(bytesRead) == bufferSize;
+    }
+  }
+  // The local HalFile is destroyed before removal, as required for deleting an
+  // SdFat-backed path safely with DESTRUCTOR_CLOSES_FILE enabled.
+  Storage.remove(path);
+  return loaded;
+}
 
 static void saveSleepFrameBuffer() {
-  HalFile file;
-  if (!Storage.openFileForWrite("SLP", SLEEP_FRAME_FILE, file)) return;
-  file.write(renderer.getFrameBuffer(), renderer.getBufferSize());
-  file.close();
+  if (!saveFrameBuffer(SLEEP_FRAME_FILE)) LOG_ERR("SLP", "Failed to save sleep framebuffer");
 }
 
-static bool loadSleepFrameBuffer() {
-  HalFile file;
-  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
-  const size_t bufferSize = display.getBufferSize();
-  const size_t bytesRead = file.read(display.getFrameBuffer(), bufferSize);
-  file.close();
-  if (bytesRead != bufferSize) {
-    Storage.remove(SLEEP_FRAME_FILE);
-    return false;
-  }
-  Storage.remove(SLEEP_FRAME_FILE);
-  return true;
+static bool loadSleepFrameBuffer() { return loadFrameBufferAndRemove(SLEEP_FRAME_FILE); }
+
+static bool saveSleepPreflightFrameBuffer() {
+  if (saveFrameBuffer(SLEEP_PREFLIGHT_FRAME_FILE)) return true;
+  Storage.remove(SLEEP_PREFLIGHT_FRAME_FILE);
+  return false;
 }
 
-// Enter deep sleep mode
-void enterDeepSleep(bool fromTimeout = false) {
+static bool restoreSleepPreflightFrameBuffer() { return loadFrameBufferAndRemove(SLEEP_PREFLIGHT_FRAME_FILE); }
+
+static void requestSleepCommit() { sleepCoordinator.requestCommit(); }
+
+// R9 terminal metrics for commits that never enter the sync activity (ineligible,
+// snapshot failure, preparation failure). Preflight terminals log the same shape
+// from KOReaderSyncActivity::routeTerminal.
+static void logSleepTerminal(const char* reason) {
+  const uint32_t startedAtMs =
+      sleepCoordinator.context().deadline.deadlineAtMs() - AutoSleepSyncDeadline::DEFAULT_BUDGET_MS;
+  LOG_DBG("SLP", "Sleep terminal: reason=%s elapsed=%u heap=%u maxAlloc=%u", reason,
+          static_cast<unsigned>(millis() - startedAtMs), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+}
+
+// The only terminal hardware-sleep path. requestDeepSleep() and every asynchronous
+// preflight result converge here; claimCommit() absorbs duplicate terminal callbacks.
+static void commitDeepSleep() {
+  if (!sleepCoordinator.claimCommit()) return;
+
+  const AutoSleepSyncContext context = sleepCoordinator.context();
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
-  APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-
-  const bool isQuickResumeSleep =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
-  APP_STATE.showBootScreen = !isQuickResumeSleep;
+  APP_STATE.lastSleepFromReader = context.fromReader;
+  APP_STATE.showBootScreen = !context.quickResume;
 
   APP_STATE.saveToFile();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
-  activityManager.goToSleep(fromTimeout);
 
-  if (isQuickResumeSleep) {
+  if (sleepCoordinator.snapshotCleanupAction() == AutoSleepSyncSnapshotCleanupAction::RESTORE_AND_REMOVE) {
+    // Restore the reader-page frame snapshotted when sleep was requested
+    // before SleepActivity adds the existing moon.
+    RenderLock lock;
+    if (!restoreSleepPreflightFrameBuffer()) {
+      LOG_ERR("SLP", "Failed to restore sleep preflight framebuffer");
+    }
+  } else {
+    // Also removes stale snapshots on ineligible and snapshot-failure commits.
+    Storage.remove(SLEEP_PREFLIGHT_FRAME_FILE);
+  }
+  activityManager.goToSleep(context.fromTimeout);
+
+  if (context.quickResume) {
     saveSleepFrameBuffer();
   }
 
@@ -225,6 +267,90 @@ void enterDeepSleep(bool fromTimeout = false) {
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
+}
+
+static void requestDeepSleep(const bool fromTimeout = false) {
+  const AutoSleepSyncDeadline deadline = AutoSleepSyncDeadline::fromNow(millis());
+  // Reader origin (any reader type; drives lastSleepFromReader and wake-to-reader
+  // behavior) is intentionally distinct from EPUB auto-sync eligibility: TXT/XTC
+  // readers set fromReader but never qualify for KOReader sync.
+  const bool fromReader = activityManager.isReaderActivity();
+  const bool epubSyncCapable = activityManager.hasAutoSleepSyncActivity();
+  const bool quickResume =
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
+      (fromTimeout &&
+       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+  const bool smartSyncEnabled = KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART;
+  const bool hasCredentials = KOREADER_STORE.hasCredentials();
+  const bool eligible = AutoSleepSyncPolicy::isEligible(KOREADER_STORE.getAutoSleepSyncPreference(), smartSyncEnabled,
+                                                        hasCredentials, epubSyncCapable);
+  // Skip the whole preflight when the position hasn't moved since the last
+  // successful sync (marker checked only when otherwise eligible: one small SD
+  // read). Sleep then behaves exactly like the pre-feature path.
+  const bool positionUnchanged = eligible && activityManager.autoSleepSyncPositionUnchanged();
+
+  const AutoSleepSyncRequestAction action =
+      sleepCoordinator.request({fromReader, fromTimeout, quickResume, deadline}, eligible && !positionUnchanged);
+  if (action == AutoSleepSyncRequestAction::IGNORE) {
+    LOG_DBG("SLP", "Duplicate sleep request ignored");
+    return;
+  }
+
+  LOG_DBG("SLP", "Sleep request: reader=%d epubSync=%d timeout=%d quickResume=%d eligible=%d unchanged=%d", fromReader,
+          epubSyncCapable, fromTimeout, quickResume, eligible, positionUnchanged);
+  if (action == AutoSleepSyncRequestAction::COMMIT) {
+    logSleepTerminal(positionUnchanged ? "unchanged" : "ineligible");
+    commitDeepSleep();
+    return;
+  }
+
+  // A timeout-triggered request arrives with the CPU in power-saving mode
+  // (inactivity is what fired it). WiFi/TLS cannot run at the reduced clock, so
+  // restore full speed for the whole preflight; the loop tail must not lower it
+  // again while the coordinator is active (see the IDLE guard there).
+  powerManager.setPowerSaving(false);
+
+  bool snapshotSucceeded = true;
+  if (sleepCoordinator.context().quickResume) {
+    // Freeze the reader-context frame before preparation can release activities
+    // or schedule any preflight rendering. If sleep was requested from a stacked
+    // subactivity, the underlying reader page is redrawn first so Quick Resume
+    // wakes to the reader page, not the overlay (AE8). The SD snapshot avoids
+    // allocating an otherwise impossible second 48 KB framebuffer.
+    snapshotSucceeded = activityManager.snapshotAutoSleepSyncFrame(&saveSleepPreflightFrameBuffer);
+  }
+  if (sleepCoordinator.finishSnapshot(snapshotSucceeded) == AutoSleepSyncSnapshotAction::COMMIT_SLEEP) {
+    LOG_ERR("SLP", "Sleep sync framebuffer snapshot failed; committing sleep");
+    logSleepTerminal("snapshot-failed");
+    commitDeepSleep();
+    return;
+  }
+
+  // The headless preflight can run for up to the 25 s deadline; blank the page
+  // and show a status popup so sleep doesn't look broken or frozen on the last
+  // page (input is ignored throughout). Drawn only after the Quick Resume
+  // snapshot above, so it can never leak into the saved wake frame (R8) —
+  // restore/SleepActivity replace it on every terminal path.
+  {
+    RenderLock lock;
+    renderer.clearScreen();
+    GUI.drawPopup(renderer, tr(STR_AUTO_SLEEP_SYNC_IN_PROGRESS));
+  }
+
+  std::unique_ptr<Activity> syncActivity;
+  const bool prepared =
+      activityManager.prepareAutoSleepSync(&requestSleepCommit, sleepCoordinator.context().deadline, syncActivity);
+  const AutoSleepSyncPreflightAction preflightAction =
+      sleepCoordinator.finishPreparation(prepared, syncActivity != nullptr);
+  if (preflightAction == AutoSleepSyncPreflightAction::COMMIT) {
+    LOG_ERR("SLP", "Sleep sync preparation failed; committing sleep");
+    logSleepTerminal("prepare-failed");
+    commitDeepSleep();
+    return;
+  }
+
+  LOG_DBG("SLP", "Sleep sync prepared; scheduling preflight");
+  activityManager.replaceActivity(std::move(syncActivity));
 }
 
 void setupDisplayAndFonts(bool seamless = false) {
@@ -490,6 +616,11 @@ void loop() {
     }
   }
 
+  if (sleepCoordinator.state() == AutoSleepSyncState::COMMITTED) {
+    commitDeepSleep();
+    return;
+  }
+
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
@@ -522,22 +653,27 @@ void loop() {
     screenshotComboActive = false;
   }
 
+  // While a preflight is in flight, the triggers below must not fire again: the
+  // coordinator would just absorb the duplicate, but the early `return` would
+  // starve activityManager.loop() of the deferred preflight launch (the timeout
+  // condition re-fires every pass, so an inactivity sleep would hang until the
+  // next button press).
+  const bool sleepRequestable = sleepCoordinator.state() == AutoSleepSyncState::IDLE;
+
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
+  if (sleepRequestable && sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
-    enterDeepSleep(true);
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    requestDeepSleep(true);
     return;
   }
 
-  if (millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+  if (sleepRequestable && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
       gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
-    enterDeepSleep();
-    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    requestDeepSleep();
     return;
   }
 
@@ -576,8 +712,11 @@ void loop() {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // If we've been inactive for a while, increase the delay to save power
+    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS &&
+        sleepCoordinator.state() == AutoSleepSyncState::IDLE) {
+      // If we've been inactive for a while, increase the delay to save power.
+      // Never while a sleep preflight is active: lastActivityTime is stale then
+      // by definition, and WiFi/TLS cannot run at the reduced CPU frequency.
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
       delay(50);
     } else {

@@ -5,6 +5,7 @@
 #include <memory>
 #include <optional>
 
+#include "AutoSleepSyncPolicy.h"
 #include "KOReaderSyncClient.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
@@ -24,7 +25,9 @@ class KOReaderSyncActivity final : public Activity {
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 int currentSpineIndex, int currentPage, int totalPagesInSpine,
                                 SavedProgressPosition localKoPos, std::string localChapterName,
-                                std::optional<uint16_t> currentParagraphIndex = std::nullopt)
+                                std::optional<uint16_t> currentParagraphIndex = std::nullopt,
+                                KOReaderSyncRunMode runMode = KOReaderSyncRunMode::MANUAL,
+                                SleepCommitCallback sleepCommitCallback = nullptr, AutoSleepSyncDeadline deadline = {})
       : Activity("KOReaderSync", renderer, mappedInput),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
@@ -34,13 +37,19 @@ class KOReaderSyncActivity final : public Activity {
         localChapterName(std::move(localChapterName)),
         remoteProgress{},
         remotePosition{},
-        localProgress(std::move(localKoPos)) {}
+        localProgress(std::move(localKoPos)),
+        runMode(runMode),
+        sleepCommitCallback(sleepCommitCallback),
+        deadline(deadline) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override { return state == CONNECTING || state == SYNCING || state == UPLOADING; }
+  // Sleep preflight is terminal: a home gesture must not replace this activity,
+  // or the coordinator would wait forever for a commit that can no longer come.
+  bool handleHomeGesture() override { return isSleepMode(); }
 
  private:
   enum State {
@@ -75,6 +84,9 @@ class KOReaderSyncActivity final : public Activity {
 
   // Local progress as KOReader format (pre-computed before Epub was released)
   SavedProgressPosition localProgress;
+  KOReaderSyncRunMode runMode;
+  SleepCommitCallback sleepCommitCallback;
+  AutoSleepSyncDeadline deadline;
 
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;
@@ -93,6 +105,10 @@ class KOReaderSyncActivity final : public Activity {
   void performSync();
   void performUpload();
   bool smartSyncEnabled() const;
+  bool isSleepMode() const { return runMode == KOReaderSyncRunMode::SLEEP; }
+  bool startStage(KOReaderSyncStage stage);
+  bool routeTerminal(KOReaderSyncTerminalReason reason, KOReaderSyncTerminalAction manualAction);
+  uint32_t elapsedMs() const;
   void markAutoReturn();
   void completeAlreadySynced();
   void ensureEpubLoaded();

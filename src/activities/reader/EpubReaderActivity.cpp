@@ -17,6 +17,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "AutoSleepSyncMarker.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -317,6 +318,10 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 }
 
 void EpubReaderActivity::loop() {
+  // Sleep preflight released the EPUB and a deferred activity replacement is
+  // pending; stay inert so finish() below cannot clobber that replacement.
+  if (autoSleepSyncPrepared) return;
+
   if (!epub) {
     // Should never happen
     finish();
@@ -955,6 +960,63 @@ bool EpubReaderActivity::launchKOReaderSync() {
       renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
       std::move(localChapterName), paragraphIndex));
   return true;  // acted: launched the sync activity
+}
+
+bool EpubReaderActivity::autoSleepSyncPositionUnchanged() const {
+  if (!epub) return false;
+  AutoSleepSyncMarkerData marker;
+  if (!AutoSleepSyncMarker::load(AutoSleepSyncMarker::bookCachePathFor(epub->getPath()), marker)) return false;
+  // Mirror prepareAutoSleepSync's position derivation so the compared position
+  // is exactly the one a preflight would sync.
+  const int page = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  return AutoSleepSyncPolicy::positionUnchanged(marker, AutoSleepSyncMarker::serverFingerprint(), currentSpineIndex,
+                                                page, totalPages);
+}
+
+bool EpubReaderActivity::prepareAutoSleepSync(const SleepCommitCallback commitCallback,
+                                              const AutoSleepSyncDeadline deadline,
+                                              std::unique_ptr<Activity>& syncActivity) {
+  if (!epub) return false;
+
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  std::optional<uint16_t> paragraphIndex;
+  if (section && currentPage >= 0 && currentPage < section->pageCount) {
+    const uint16_t paragraphPage =
+        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
+    paragraphIndex = section->getParagraphIndexForPage(paragraphPage);
+  }
+
+  CrossPointPosition localPos = getCurrentPosition();
+  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
+  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
+  const std::string savedEpubPath = epub->getPath();
+
+  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
+    LOG_ERR("KOSync", "Sleep sync skipped because current progress could not be saved");
+    return false;
+  }
+
+  LOG_DBG("KOSync", "Preparing sleep sync (heap before EPUB release: %u)", (unsigned)ESP.getFreeHeap());
+  {
+    RenderLock lock(*this);
+    autoSleepSyncPrepared = true;
+    if (section) nextPageNumber = section->currentPage;
+    ImageBlock::setExtractor(nullptr, nullptr);
+    section.reset();
+    epub.reset();
+  }
+  LOG_DBG("KOSync", "Sleep sync EPUB released (heap after: %u)", (unsigned)ESP.getFreeHeap());
+
+  syncActivity = makeUniqueNoThrow<KOReaderSyncActivity>(
+      renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
+      std::move(localChapterName), paragraphIndex, KOReaderSyncRunMode::SLEEP, commitCallback, deadline);
+  if (!syncActivity) {
+    LOG_ERR("KOSync", "OOM: sleep-mode KOReaderSyncActivity");
+  }
+  return true;
 }
 
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {

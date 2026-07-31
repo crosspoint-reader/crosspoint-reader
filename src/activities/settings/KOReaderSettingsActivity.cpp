@@ -13,10 +13,10 @@
 #include "fontIds.h"
 
 namespace {
-constexpr int MENU_ITEMS = 8;
+constexpr int MENU_ITEMS = 9;
 const StrId menuNames[MENU_ITEMS] = {StrId::STR_USERNAME,          StrId::STR_PASSWORD,      StrId::STR_SYNC_SERVER_URL,
                                      StrId::STR_DOCUMENT_MATCHING, StrId::STR_SEND_METADATA, StrId::STR_SYNC_BEHAVIOR,
-                                     StrId::STR_SIGN_UP,           StrId::STR_AUTHENTICATE};
+                                     StrId::STR_AUTO_SLEEP_SYNC,   StrId::STR_SIGN_UP,       StrId::STR_AUTHENTICATE};
 }  // namespace
 
 void KOReaderSettingsActivity::onEnter() {
@@ -126,6 +126,15 @@ void KOReaderSettingsActivity::handleSelection() {
     KOREADER_STORE.saveToFile();
     requestUpdate();
   } else if (selectedIndex == 6) {
+    // Automatic sync on sleep - toggle on/off.
+    const auto current = KOREADER_STORE.getAutoSleepSyncPreference();
+    const auto newPreference =
+        current == AutoSleepSyncPreference::OFF ? AutoSleepSyncPreference::WHEN_SLEEPING : AutoSleepSyncPreference::OFF;
+    if (KOREADER_STORE.setAutoSleepSyncPreference(newPreference)) {
+      KOREADER_STORE.saveToFile();
+    }
+    requestUpdate();
+  } else if (selectedIndex == 7) {
     // Sign Up - create a new account on the sync server with the entered credentials
     if (!KOREADER_STORE.hasCredentials()) {
       return;
@@ -133,7 +142,7 @@ void KOReaderSettingsActivity::handleSelection() {
     startActivityForResult(
         std::make_unique<KOReaderAuthActivity>(renderer, mappedInput, KOReaderAuthActivity::Mode::SIGN_UP),
         [](const ActivityResult&) {});
-  } else if (selectedIndex == 7) {
+  } else if (selectedIndex == 8) {
     // Authenticate
     if (!KOREADER_STORE.hasCredentials()) {
       // Can't authenticate without credentials - just show message briefly
@@ -185,7 +194,11 @@ void KOReaderSettingsActivity::render(RenderLock&&) {
         } else if (index == 5) {
           return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? std::string(tr(STR_SMART_SYNC))
                                                                                  : std::string(tr(STR_ASK_EVERY_TIME));
-        } else if (index == 6 || index == 7) {
+        } else if (index == 6) {
+          return KOREADER_STORE.getAutoSleepSyncPreference() == AutoSleepSyncPreference::WHEN_SLEEPING
+                     ? std::string(tr(STR_WHEN_SLEEPING))
+                     : std::string(tr(STR_STATE_OFF));
+        } else if (index == 7 || index == 8) {
           return KOREADER_STORE.hasCredentials() ? "" : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
         }
         return std::string(tr(STR_NOT_SET));

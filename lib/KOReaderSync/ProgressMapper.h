@@ -62,11 +62,15 @@ class ProgressMapper {
    * @param renderer GfxRenderer for page count estimation
    * @param currentSpineIndex Index of the currently open spine item (for density estimation)
    * @param totalPagesInCurrentSpine Total pages in the current spine item (for density estimation)
+   * @param deadline Optional absolute deadline (sleep preflight). The XHTML
+   *        scan aborts once it expires; the caller must re-check expiry and
+   *        discard the (fallback-quality) result.
    * @return CrossPoint position
    */
   static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& savedPos,
                                          GfxRenderer& renderer, int currentSpineIndex = -1,
-                                         int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
+                                         int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0,
+                                         const AutoSleepSyncDeadline* deadline = nullptr);
 
   /**
    * Convert a rich CrossPoint position (downloaded from a crosspoint-sync

@@ -41,28 +41,37 @@ void WifiSelectionActivity::onEnter() {
   manualNetworkListRequested = false;
   autoAttemptedSsids.clear();
   autoAttemptedSsids.reserve(WIFI_STORE.getCredentials().size());
+  savedNetworkScanStarted = false;
+  completionRequested = false;
 
-  // Cache MAC address for display
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  char macStr[64];
-  snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
-           mac[3], mac[4], mac[5]);
-  cachedMacAddress = std::string(macStr);
+  if (!isHeadless()) {
+    // Cache MAC address for the interactive network screen only.
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char macStr[64];
+    snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
+             mac[3], mac[4], mac[5]);
+    cachedMacAddress = std::string(macStr);
+    requestUpdate();
+  }
 
-  // Trigger first update to show scanning message
-  requestUpdate();
+  const bool hasSavedCredentials = !WIFI_STORE.getCredentials().empty();
+  if (isHeadless() && (!hasSavedCredentials || deadline.expired(millis()))) {
+    onComplete(false);
+    return;
+  }
 
   // Attempt to auto-connect to known networks. Try the last successful
   // network first for speed, then scan and try any visible saved networks by
   // signal strength. The user can interrupt this and show the scan result.
-  if (allowAutoConnect && !WIFI_STORE.getCredentials().empty()) {
-    const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
+  if (allowAutoConnect && hasSavedCredentials) {
+    const std::string& lastSsid = WIFI_STORE.getLastConnectedSsid();
     if (!lastSsid.empty()) {
       const auto* cred = WIFI_STORE.findCredential(lastSsid);
       if (cred && tryAutoConnectCredential(*cred)) {
         return;
       }
+      if (completionRequested) return;
     }
 
     startWifiScan(true);
@@ -91,22 +100,39 @@ void WifiSelectionActivity::onExit() {
 }
 
 void WifiSelectionActivity::startWifiScan(const bool autoScan) {
+  const bool hasSavedCredentials = !WIFI_STORE.getCredentials().empty();
+  if (!AutoSleepSyncPolicy::shouldStartWifiScan(mode, hasSavedCredentials, savedNetworkScanStarted, deadline,
+                                                millis())) {
+    handleExhaustedNetworks();
+    return;
+  }
+  if (isHeadless()) savedNetworkScanStarted = true;
+
   autoConnecting = autoScan;
   manualNetworkListRequested = false;
   state = WifiSelectionState::SCANNING;
   networks.clear();
-  requestUpdate();
+  if (!isHeadless()) requestUpdate();
 
   // Set WiFi mode to station
   WiFi.mode(WIFI_STA);
   WiFi.disconnect();
-  delay(100);
+  const uint32_t settleMs = isHeadless() ? AutoSleepSyncPolicy::clampWifiStageMs(deadline, millis(), 100) : 100;
+  if (isHeadless() && settleMs == 0) {
+    onComplete(false);
+    return;
+  }
+  delay(settleMs);
+  if (completeHeadlessIfExpired()) return;
 
   // Start async scan
-  WiFi.scanNetworks(true);  // true = async scan
+  if (WiFi.scanNetworks(true) == WIFI_SCAN_FAILED) {  // true = async scan
+    handleExhaustedNetworks();
+  }
 }
 
 void WifiSelectionActivity::processWifiScanResults() {
+  if (completeHeadlessIfExpired()) return;
   const int16_t scanResult = WiFi.scanComplete();
 
   if (scanResult == WIFI_SCAN_RUNNING) {
@@ -115,6 +141,11 @@ void WifiSelectionActivity::processWifiScanResults() {
   }
 
   if (scanResult == WIFI_SCAN_FAILED) {
+    WiFi.scanDelete();
+    if (isHeadless()) {
+      onComplete(false);
+      return;
+    }
     networks.clear();
     realNetworkCount = 0;
     appendHiddenNetworkEntry();
@@ -128,7 +159,10 @@ void WifiSelectionActivity::processWifiScanResults() {
 
   // Scan complete, process results — deduplicate in-place, keeping strongest signal
   networks.clear();
-  networks.reserve(scanResult);
+  const size_t scanCapacity = isHeadless()
+                                  ? std::min(static_cast<size_t>(scanResult), WIFI_STORE.getCredentials().size())
+                                  : static_cast<size_t>(scanResult) + 1u;
+  networks.reserve(scanCapacity);
 
   for (int i = 0; i < scanResult; i++) {
     char ssid[33];
@@ -139,6 +173,8 @@ void WifiSelectionActivity::processWifiScanResults() {
     if (ssid[0] == '\0') {
       continue;
     }
+    const auto* savedCredential = WIFI_STORE.findCredential(ssid);
+    if (isHeadless() && !savedCredential) continue;
 
     auto it =
         std::find_if(networks.begin(), networks.end(), [&ssid](const WifiNetworkInfo& n) { return n.ssid == ssid; });
@@ -147,7 +183,7 @@ void WifiSelectionActivity::processWifiScanResults() {
       network.ssid = ssid;
       network.rssi = rssi;
       network.isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
-      network.hasSavedPassword = WIFI_STORE.hasSavedCredential(network.ssid);
+      network.hasSavedPassword = savedCredential != nullptr;
       networks.push_back(std::move(network));
     } else if (rssi > it->rssi) {
       it->rssi = rssi;
@@ -164,7 +200,7 @@ void WifiSelectionActivity::processWifiScanResults() {
   });
 
   realNetworkCount = networks.size();
-  appendHiddenNetworkEntry();
+  if (!isHeadless()) appendHiddenNetworkEntry();
 
   WiFi.scanDelete();
 
@@ -172,11 +208,7 @@ void WifiSelectionActivity::processWifiScanResults() {
     return;
   }
 
-  autoConnecting = false;
-  manualNetworkListRequested = false;
-  state = WifiSelectionState::NETWORK_LIST;
-  selectedNetworkIndex = 0;
-  requestUpdate();
+  handleExhaustedNetworks();
 }
 
 void WifiSelectionActivity::appendHiddenNetworkEntry() {
@@ -277,6 +309,7 @@ bool WifiSelectionActivity::hasAttemptedAutoSsid(const std::string& ssid) const 
 }
 
 bool WifiSelectionActivity::tryAutoConnectCredential(const WifiCredential& cred) {
+  if (completeHeadlessIfExpired()) return false;
   if (hasAttemptedAutoSsid(cred.ssid)) {
     return false;
   }
@@ -290,7 +323,7 @@ bool WifiSelectionActivity::tryAutoConnectCredential(const WifiCredential& cred)
   autoConnecting = true;
   manualNetworkListRequested = false;
   attemptConnection();
-  requestUpdate();
+  if (!isHeadless()) requestUpdate();
   return true;
 }
 
@@ -316,14 +349,35 @@ void WifiSelectionActivity::handleAutoConnectFailure() {
     if (tryNextSavedNetworkFromScan()) {
       return;
     }
-    autoConnecting = false;
-    state = WifiSelectionState::NETWORK_LIST;
-    selectedNetworkIndex = 0;
-    requestUpdate();
+    handleExhaustedNetworks();
     return;
   }
 
   startWifiScan(true);
+}
+
+void WifiSelectionActivity::handleExhaustedNetworks() {
+  autoConnecting = false;
+  manualNetworkListRequested = false;
+  if (AutoSleepSyncPolicy::wifiExhaustedAction(mode) == WifiSelectionExhaustedAction::COMPLETE_FAILURE) {
+    WiFi.scanDelete();
+    onComplete(false);
+    return;
+  }
+
+  if (networks.empty()) appendHiddenNetworkEntry();
+  state = WifiSelectionState::NETWORK_LIST;
+  selectedNetworkIndex = 0;
+  requestUpdate();
+}
+
+bool WifiSelectionActivity::completeHeadlessIfExpired() {
+  if (!isHeadless() || !deadline.expired(millis())) return false;
+  LOG_DBG("WIFI", "Headless WiFi deadline expired");
+  WiFi.scanDelete();
+  WiFi.disconnect();
+  onComplete(false);
+  return true;
 }
 
 void WifiSelectionActivity::showNetworkListFromAutoConnect() {
@@ -343,16 +397,26 @@ void WifiSelectionActivity::showNetworkListFromAutoConnect() {
 }
 
 void WifiSelectionActivity::attemptConnection() {
+  if (completeHeadlessIfExpired()) return;
   state = autoConnecting ? WifiSelectionState::AUTO_CONNECTING : WifiSelectionState::CONNECTING;
   connectionStartTime = millis();
+  connectionTimeoutMs =
+      isHeadless() ? AutoSleepSyncPolicy::clampWifiStageMs(deadline, connectionStartTime, AUTO_CONNECTION_TIMEOUT_MS)
+                   : (autoConnecting ? AUTO_CONNECTION_TIMEOUT_MS : CONNECTION_TIMEOUT_MS);
   connectedIP.clear();
   connectionError.clear();
-  requestUpdate();
+  if (!isHeadless()) requestUpdate();
 
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
-  delay(100);
+  const uint32_t settleMs = isHeadless() ? AutoSleepSyncPolicy::clampWifiStageMs(deadline, millis(), 100) : 100;
+  if (isHeadless() && settleMs == 0) {
+    onComplete(false);
+    return;
+  }
+  delay(settleMs);
+  if (completeHeadlessIfExpired()) return;
 
   // Scan all channels so networks with multiple APs use the strongest matching
   // BSSID instead of the first match found by the framework's default fast scan.
@@ -377,6 +441,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     return;
   }
 
+  if (completeHeadlessIfExpired()) return;
   const wl_status_t status = WiFi.status();
 
   if (status == WL_CONNECTED) {
@@ -400,7 +465,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
     // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    if (!isHeadless() && halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();
@@ -445,8 +510,8 @@ void WifiSelectionActivity::checkConnectionStatus() {
   }
 
   // Check for timeout
-  const unsigned long timeoutMs = autoConnecting ? AUTO_CONNECTION_TIMEOUT_MS : CONNECTION_TIMEOUT_MS;
-  if (millis() - connectionStartTime > timeoutMs) {
+  const unsigned long elapsedMs = millis() - connectionStartTime;
+  if ((isHeadless() && elapsedMs >= connectionTimeoutMs) || (!isHeadless() && elapsedMs > connectionTimeoutMs)) {
     WiFi.disconnect();
     connectionError = tr(STR_ERROR_CONNECTION_TIMEOUT);
     if (autoConnecting) {
@@ -460,6 +525,20 @@ void WifiSelectionActivity::checkConnectionStatus() {
 }
 
 void WifiSelectionActivity::loop() {
+  if (completionRequested) return;
+  if (completeHeadlessIfExpired()) return;
+
+  if (isHeadless()) {
+    if (state == WifiSelectionState::SCANNING) {
+      processWifiScanResults();
+    } else if (state == WifiSelectionState::CONNECTING || state == WifiSelectionState::AUTO_CONNECTING) {
+      checkConnectionStatus();
+    } else {
+      onComplete(false);
+    }
+    return;
+  }
+
   // Check scan progress
   if (state == WifiSelectionState::SCANNING) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -759,6 +838,7 @@ std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi
 }
 
 void WifiSelectionActivity::render(RenderLock&&) {
+  if (isHeadless()) return;
   // Don't render if we're in a keyboard-entry state - we're just transitioning
   // from the keyboard subactivity back to the main activity
   if (state == WifiSelectionState::PASSWORD_ENTRY || state == WifiSelectionState::HIDDEN_SSID_ENTRY) {
@@ -1006,6 +1086,8 @@ void WifiSelectionActivity::renderForgetPrompt(const Rect* screen, const ThemeMe
 }
 
 void WifiSelectionActivity::onComplete(const bool connected) {
+  if (completionRequested) return;
+  completionRequested = true;
   ActivityResult result;
   result.isCancelled = !connected;
   if (connected) {

@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+#include "AutoSleepSyncPolicy.h"
+
 // Document matching method for KOReader sync
 enum class DocumentMatchMethod : uint8_t {
   FILENAME = 0,  // Match by filename (simpler, works across different file sources)
@@ -32,6 +34,7 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   DocumentMatchMethod matchMethod = DocumentMatchMethod::FILENAME;  // Default to filename for compatibility
   bool sendMetadata = false;                                        // Send document metadata with progress sync
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
+  AutoSleepSyncPreference autoSleepSyncPreference = AutoSleepSyncPreference::OFF;
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
@@ -79,6 +82,10 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Sync behavior
   void setSyncBehavior(KOReaderSyncBehavior behavior);
   KOReaderSyncBehavior getSyncBehavior() const { return syncBehavior; }
+
+  // Automatic sleep sync. Returns true only when the persisted value changed.
+  bool setAutoSleepSyncPreference(AutoSleepSyncPreference preference);
+  AutoSleepSyncPreference getAutoSleepSyncPreference() const { return autoSleepSyncPreference; }
 };
 
 // Helper macro to access credential store

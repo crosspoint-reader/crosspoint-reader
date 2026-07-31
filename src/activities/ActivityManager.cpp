@@ -5,6 +5,7 @@
 
 #include <algorithm>
 
+#include "NearestEligibleActivity.h"
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
@@ -267,6 +268,41 @@ bool ActivityManager::isReaderActivity() const {
   return std::any_of(stackActivities.begin(), stackActivities.end(),
                      [](const auto& activity) { return activity->isReaderActivity(); }) ||
          (currentActivity && currentActivity->isReaderActivity());
+}
+
+namespace {
+// Shared function-pointer predicate keeps findNearestEligibleActivity at one
+// firmware template instantiation (distinct lambdas would mint one copy each).
+bool activitySupportsAutoSleepSync(const Activity& activity) { return activity.supportsAutoSleepSync(); }
+}  // namespace
+
+bool ActivityManager::hasAutoSleepSyncActivity() const {
+  return findNearestEligibleActivity(currentActivity, stackActivities, &activitySupportsAutoSleepSync) != nullptr;
+}
+
+bool ActivityManager::autoSleepSyncPositionUnchanged() const {
+  const Activity* owner = findNearestEligibleActivity(currentActivity, stackActivities, &activitySupportsAutoSleepSync);
+  return owner && owner->autoSleepSyncPositionUnchanged();
+}
+
+bool ActivityManager::snapshotAutoSleepSyncFrame(bool (*const saveFrameSnapshot)()) {
+  Activity* owner = findNearestEligibleActivity(currentActivity, stackActivities, &activitySupportsAutoSleepSync);
+  // One lock spans redraw and snapshot so a queued render cannot repaint the
+  // framebuffer in between (render(RenderLock&&) binds the caller's lock; it
+  // stays held here until this scope exits).
+  RenderLock lock;
+  if (owner && owner != currentActivity.get()) {
+    // Sleep was requested from a stacked subactivity: redraw the underlying
+    // reader page so Quick Resume snapshots the page, not the overlay (AE8).
+    owner->render(std::move(lock));
+  }
+  return saveFrameSnapshot();
+}
+
+bool ActivityManager::prepareAutoSleepSync(void (*const commitCallback)(), const AutoSleepSyncDeadline deadline,
+                                           std::unique_ptr<Activity>& syncActivity) {
+  Activity* owner = findNearestEligibleActivity(currentActivity, stackActivities, &activitySupportsAutoSleepSync);
+  return owner && owner->prepareAutoSleepSync(commitCallback, deadline, syncActivity);
 }
 
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }

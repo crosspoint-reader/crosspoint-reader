@@ -26,6 +26,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
   doc["sendMetadata"] = getSendMetadata();
   doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
+  doc["autoSleepSync"] = static_cast<uint8_t>(getAutoSleepSyncPreference());
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
@@ -68,6 +69,18 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   } else {
     LOG_DBG("KRS", "Invalid syncBehavior %u in JSON, resetting to ASK_EVERY_TIME", behavior);
     setSyncBehavior(KOReaderSyncBehavior::ASK_EVERY_TIME);
+    needsResave = true;
+  }
+
+  const JsonVariantConst autoSleepValue = doc["autoSleepSync"];
+  const bool missingAutoSleepPreference = autoSleepValue.isNull();
+  const int32_t rawAutoSleepPreference = autoSleepValue | static_cast<int32_t>(AutoSleepSyncPreference::OFF);
+  const AutoSleepSyncPreference normalizedAutoSleepPreference =
+      AutoSleepSyncPolicy::normalizePreference(rawAutoSleepPreference);
+  setAutoSleepSyncPreference(normalizedAutoSleepPreference);
+  if (missingAutoSleepPreference || rawAutoSleepPreference != static_cast<int32_t>(normalizedAutoSleepPreference)) {
+    LOG_DBG("KRS", "Missing or invalid autoSleepSync %ld in JSON, resetting to OFF",
+            static_cast<long>(rawAutoSleepPreference));
     needsResave = true;
   }
 
@@ -150,4 +163,16 @@ void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
   }
   syncBehavior = behavior;
   LOG_DBG("KRS", "Set sync behavior: %s", behavior == KOReaderSyncBehavior::SMART ? "Smart" : "Ask");
+}
+
+bool KOReaderCredentialStore::setAutoSleepSyncPreference(const AutoSleepSyncPreference preference) {
+  const AutoSleepSyncPreference normalized = AutoSleepSyncPolicy::normalizePreference(static_cast<uint8_t>(preference));
+  if (!AutoSleepSyncPolicy::shouldPersistPreference(autoSleepSyncPreference, normalized)) {
+    return false;
+  }
+
+  autoSleepSyncPreference = normalized;
+  LOG_DBG("KRS", "Set automatic sleep sync: %s",
+          normalized == AutoSleepSyncPreference::WHEN_SLEEPING ? "When sleeping" : "Off");
+  return true;
 }

@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "AutoSleepSyncPolicy.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "util/ScreenshotInfo.h"
@@ -102,6 +103,11 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
+  bool hasAutoSleepSyncActivity() const;
+  bool autoSleepSyncPositionUnchanged() const;
+  bool snapshotAutoSleepSyncFrame(bool (*saveFrameSnapshot)());
+  bool prepareAutoSleepSync(void (*commitCallback)(), AutoSleepSyncDeadline deadline,
+                            std::unique_ptr<Activity>& syncActivity);
   bool handleForcedRefresh();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;

@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 
+#include "AutoSleepSyncPolicy.h"
+
 /**
  * Calculate KOReader document ID (partial MD5 hash).
  *
@@ -20,9 +22,11 @@ class KOReaderDocumentId {
    * Calculate the KOReader document hash for a file (binary/content-based).
    *
    * @param filePath Path to the file (typically an EPUB)
+   * @param deadline Optional absolute deadline (sleep preflight); checked
+   *        between chunk reads, returns empty string once expired
    * @return 32-character lowercase hex string, or empty string on failure
    */
-  static std::string calculate(const std::string& filePath);
+  static std::string calculate(const std::string& filePath, const AutoSleepSyncDeadline* deadline = nullptr);
 
   /**
    * Calculate document hash from filename only (filename-based sync mode).

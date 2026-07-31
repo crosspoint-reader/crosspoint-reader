@@ -34,6 +34,11 @@ class EpubReaderActivity final : public Activity {
   // Normalized 0.0-1.0 progress within the target spine item, computed from book percentage.
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
+  // Set once prepareAutoSleepSync releases the EPUB. The activity is about to be
+  // replaced by the sleep preflight; loop() must go inert instead of tripping the
+  // null-epub guard, whose finish() would overwrite the pending replacement and
+  // strand the sleep coordinator in PREFLIGHT (power button dead until reboot).
+  bool autoSleepSyncPrepared = false;
   bool pendingSyncSaveError = false;
   // Consecutive page-load failures. Each failure drops the section and rebuilds on the next render,
   // which recovers a transiently corrupt cache; capped so a persistently bad page can't spin forever.
@@ -202,6 +207,10 @@ class EpubReaderActivity final : public Activity {
   // speed would only burn battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
+  bool supportsAutoSleepSync() const override { return epub != nullptr; }
+  bool autoSleepSyncPositionUnchanged() const override;
+  bool prepareAutoSleepSync(SleepCommitCallback commitCallback, AutoSleepSyncDeadline deadline,
+                            std::unique_ptr<Activity>& syncActivity) override;
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

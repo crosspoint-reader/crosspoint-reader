@@ -41,7 +41,7 @@ size_t KOReaderDocumentId::getOffset(int i) {
   return CHUNK_SIZE << (2 * i);
 }
 
-std::string KOReaderDocumentId::calculate(const std::string& filePath) {
+std::string KOReaderDocumentId::calculate(const std::string& filePath, const AutoSleepSyncDeadline* deadline) {
   HalFile file;
   if (!Storage.openFileForRead("KODoc", filePath, file)) {
     LOG_DBG("KODoc", "Failed to open file: %s", filePath.c_str());
@@ -61,6 +61,11 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
 
   // Read from each offset (i = -1 to 10)
   for (int i = -1; i < OFFSET_COUNT - 1; i++) {
+    // Sleep preflight: abandon the hash mid-operation once the absolute deadline expires.
+    if (deadline && deadline->expired(millis())) {
+      LOG_DBG("KODoc", "Hash abandoned: deadline expired");
+      return "";
+    }
     const size_t offset = getOffset(i);
 
     // Skip if offset is beyond file size
