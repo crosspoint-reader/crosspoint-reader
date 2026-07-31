@@ -422,6 +422,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
+  const bool isX3 = strncmp(BoardConfig::ACTIVE.name, "xteink_x3", sizeof("xteink_x3") - 1) == 0;
+  if (!isX3) {
+    v.erase(
+        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_REFRESH_ACTION; }),
+        v.end());
+  }
   if (!BoardConfig::hasTouch()) {
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_READER_CONTROLS; }),

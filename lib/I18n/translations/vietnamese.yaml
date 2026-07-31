@@ -113,7 +113,7 @@ STR_MOVE_FINISHED_TO_READ: "Chuyển sách đọc xong vào thư mục Đã đ�
 STR_REFRESH_FREQ: "Tần suất làm tươi"
 STR_REFRESH_ACTION: "Làm sạch màn hình"
 STR_REFRESH_ACTION_FULL: "Toàn phần (có nháy)"
-STR_REFRESH_ACTION_BW_REINFORCEMENT: "Không nháy (X3)"
+STR_REFRESH_ACTION_BW_REINFORCEMENT: "Không nháy"
 STR_KOREADER_SYNC: "Đồng bộ KOReader"
 STR_CHECK_UPDATES: "Kiểm tra cập nhật"
 STR_LANGUAGE: "Ngôn ngữ"

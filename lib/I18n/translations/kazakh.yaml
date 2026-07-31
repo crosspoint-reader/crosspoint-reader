@@ -90,7 +90,7 @@ STR_MOVE_FINISHED_TO_READ: "Оқылған кітаптарды Read қалта�
 STR_REFRESH_FREQ: "Жаңарту жиілігі"
 STR_REFRESH_ACTION: "Экранды тазалау"
 STR_REFRESH_ACTION_FULL: "Толық (жыпылықтаумен)"
-STR_REFRESH_ACTION_BW_REINFORCEMENT: "Жыпылықтаусыз (X3)"
+STR_REFRESH_ACTION_BW_REINFORCEMENT: "Жыпылықтаусыз"
 STR_KOREADER_SYNC: "KOReader синхронизациясы"
 STR_CHECK_UPDATES: "Жаңартуларды тексеру"
 STR_LANGUAGE: "Тіл"
