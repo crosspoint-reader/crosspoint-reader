@@ -262,6 +262,73 @@ bool isWordCharacter(uint32_t cp) {
 
 }  // namespace
 
+uint32_t ParsedText::visibleOffsetBaseAt(const size_t wordIndex) const {
+  uint32_t base = visibleOffsetBase;
+  for (const auto& rebase : visibleOffsetRebases) {
+    if (rebase.wordIndex > wordIndex) break;
+    base = rebase.base;
+  }
+  return base;
+}
+
+uint32_t ParsedText::visibleOffsetAt(const size_t wordIndex) const {
+  if (wordIndex >= wordVisibleOffsetDeltas.size()) return 0;
+  return visibleOffsetBaseAt(wordIndex) + wordVisibleOffsetDeltas[wordIndex];
+}
+
+void ParsedText::pushVisibleOffset(const uint32_t offset) {
+  uint32_t base = visibleOffsetBase;
+  if (wordVisibleOffsetDeltas.empty()) {
+    visibleOffsetBase = offset;
+    base = offset;
+  } else if (!visibleOffsetRebases.empty()) {
+    base = visibleOffsetRebases.back().base;
+  }
+
+  if (offset < base || offset - base > std::numeric_limits<uint16_t>::max()) {
+    visibleOffsetRebases.push_back({wordVisibleOffsetDeltas.size(), offset});
+    base = offset;
+  }
+  wordVisibleOffsetDeltas.push_back(static_cast<uint16_t>(offset - base));
+}
+
+void ParsedText::insertVisibleOffset(const size_t wordIndex, const uint32_t offset) {
+  const uint32_t base = wordIndex > 0 ? visibleOffsetBaseAt(wordIndex - 1) : visibleOffsetBase;
+  for (auto& rebase : visibleOffsetRebases) {
+    if (rebase.wordIndex >= wordIndex) rebase.wordIndex++;
+  }
+
+  uint32_t insertionBase = base;
+  if (offset < base || offset - base > std::numeric_limits<uint16_t>::max()) {
+    const auto rebaseIt = std::find_if(visibleOffsetRebases.begin(), visibleOffsetRebases.end(),
+                                       [wordIndex](const auto& rebase) { return rebase.wordIndex > wordIndex; });
+    visibleOffsetRebases.insert(rebaseIt, {wordIndex, offset});
+    insertionBase = offset;
+  }
+  wordVisibleOffsetDeltas.insert(wordVisibleOffsetDeltas.begin() + wordIndex,
+                                 static_cast<uint16_t>(offset - insertionBase));
+}
+
+void ParsedText::eraseVisibleOffsetPrefix(const size_t count) {
+  if (count >= wordVisibleOffsetDeltas.size()) {
+    wordVisibleOffsetDeltas.clear();
+    visibleOffsetRebases.clear();
+    visibleOffsetBase = 0;
+    return;
+  }
+
+  const uint32_t newBase = visibleOffsetBaseAt(count);
+  wordVisibleOffsetDeltas.erase(wordVisibleOffsetDeltas.begin(), wordVisibleOffsetDeltas.begin() + count);
+  size_t writeIndex = 0;
+  for (auto rebase : visibleOffsetRebases) {
+    if (rebase.wordIndex <= count) continue;
+    rebase.wordIndex -= count;
+    visibleOffsetRebases[writeIndex++] = rebase;
+  }
+  visibleOffsetRebases.resize(writeIndex);
+  visibleOffsetBase = newBase;
+}
+
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious, const uint32_t visibleTextOffset) {
   if (word.empty()) return;
@@ -288,7 +355,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
     wordIsFocusSuffix.push_back(isFocusSuffix);
-    wordVisibleOffsets.push_back(tokenOffset);
+    pushVisibleOffset(tokenOffset);
     if (!rubyTexts.empty()) {
       rubyTexts.push_back("");
     }
@@ -325,7 +392,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
     wordIsFocusSuffix.reserve(newCapacity);
-    wordVisibleOffsets.reserve(newCapacity);
+    wordVisibleOffsetDeltas.reserve(newCapacity);
   };
 
   if (auto breakOffsets = cjkCharacterBreakByteOffsets(word); !breakOffsets.empty()) {
@@ -394,7 +461,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordContinues.push_back(attach);
       wordNoSpaceBefore.push_back(noSpaceBefore);
       wordIsFocusSuffix.push_back(false);
-      wordVisibleOffsets.push_back(segmentOffset);
+      pushVisibleOffset(segmentOffset);
     } else {
       size_t charCount = 0;
       const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
@@ -417,7 +484,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
-        wordVisibleOffsets.push_back(segmentOffset);
+        pushVisibleOffset(segmentOffset);
       } else {
         countPtr = reinterpret_cast<const unsigned char*>(segment.data());
         for (size_t i = 0; i < targetBoldChars; ++i) {
@@ -431,7 +498,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
-        wordVisibleOffsets.push_back(segmentOffset);
+        pushVisibleOffset(segmentOffset);
 
         // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
         words.emplace_back(segment.substr(splitByteOffset));
@@ -439,7 +506,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(true);
         wordNoSpaceBefore.push_back(false);
         wordIsFocusSuffix.push_back(true);
-        wordVisibleOffsets.push_back(segmentOffset + static_cast<uint32_t>(targetBoldChars));
+        pushVisibleOffset(segmentOffset + static_cast<uint32_t>(targetBoldChars));
       }
     }
   };
@@ -601,7 +668,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
-    wordVisibleOffsets.erase(wordVisibleOffsets.begin(), wordVisibleOffsets.begin() + consumed);
+    eraseVisibleOffsetPrefix(consumed);
     if (!rubyTexts.empty()) {
       const size_t rtConsumed = std::min(consumed, rubyTexts.size());
       rubyTexts.erase(rubyTexts.begin(), rubyTexts.begin() + rtConsumed);
@@ -1031,7 +1098,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     return false;
   }
 
-  uint32_t remainderOffset = wordVisibleOffsets[wordIndex];
+  uint32_t remainderOffset = visibleOffsetAt(wordIndex);
   const unsigned char* offsetPtr = reinterpret_cast<const unsigned char*>(word.data());
   const unsigned char* splitPtr = offsetPtr + chosenOffset;
   while (offsetPtr < splitPtr) {
@@ -1049,7 +1116,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
-  wordVisibleOffsets.insert(wordVisibleOffsets.begin() + wordIndex + 1, remainderOffset);
+  insertVisibleOffset(wordIndex + 1, remainderOffset);
   // The hyphen remainder is not a focus suffix - it starts fresh on the next line.
   wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, false);
   if (wordIndex + 1 <= rubyTexts.size()) {
@@ -1094,7 +1161,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
-  const uint32_t lineVisibleOffset = lastBreakAt < wordVisibleOffsets.size() ? wordVisibleOffsets[lastBreakAt] : 0;
+  const uint32_t lineVisibleOffset = visibleOffsetAt(lastBreakAt);
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 

@@ -28,10 +28,17 @@ class ParsedText {
   std::vector<bool> wordContinues;      // true = word attaches to previous with no break
   std::vector<bool> wordNoSpaceBefore;  // true = may break before token, but no synthetic space when joined
   std::vector<bool> wordIsFocusSuffix;  // true = token is the regular tail of a focus bold-prefix split
-  // Zero-based visible Unicode-codepoint offset in the spine body for each logical
-  // token. This is layout-only metadata: page-start offsets are persisted in the
-  // section LUT, so rendered TextBlocks do not need to carry it.
-  std::vector<uint32_t> wordVisibleOffsets;
+  // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
+  // uint16_t deltas from a shared base to keep this layout-only metadata small.
+  // Pathological spans wider than uint16_t use sparse rebases; rendered
+  // TextBlocks do not carry any of this metadata.
+  struct VisibleOffsetRebase {
+    size_t wordIndex;
+    uint32_t base;
+  };
+  std::vector<uint16_t> wordVisibleOffsetDeltas;
+  uint32_t visibleOffsetBase = 0;
+  std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
@@ -47,6 +54,11 @@ class ParsedText {
   std::vector<bool> reorderedFocusSuffixScratch;
   std::vector<uint16_t> visualOrderScratch;
 
+  uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
+  uint32_t visibleOffsetAt(size_t wordIndex) const;
+  void pushVisibleOffset(uint32_t offset);
+  void insertVisibleOffset(size_t wordIndex, uint32_t offset);
+  void eraseVisibleOffsetPrefix(size_t count);
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
