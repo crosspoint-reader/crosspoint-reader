@@ -84,13 +84,15 @@ class Dictionary {
   // cannot fail on length. Kept under the 256-byte stack-local guideline.
   static constexpr size_t PATH_BUF_BYTES = 160;
 
-  // Longest suffix appended to basePath; used for the open()-time length check.
-  static constexpr const char* LONGEST_SUFFIX = ".dict.dz";
+  // Length of the longest suffix appended to basePath (".dict.dz"); used for
+  // the open()-time length check.
+  static constexpr size_t LONGEST_SUFFIX_LEN = sizeof(".dict.dz") - 1;
 
   // Compose "<basePath><suffix>" into a caller-supplied stack buffer. The
-  // lookup path runs this instead of `basePath + suffix` so probing a word
-  // costs no transient heap at all — see LookupSession. False (and logs) when
-  // the path would not fit, which open() has already ruled out.
+  // lookup path runs this instead of `basePath + suffix` so path construction
+  // costs no transient heap — see LookupSession. (A lookup still allocates
+  // elsewhere: cleanWord(), stemVariants() and the matched headword.) False
+  // (and logs) when the path would not fit, which open() has already ruled out.
   bool buildPath(char* buf, size_t bufSize, const char* suffix) const;
 
   // The .idx / .qidx handles shared by every locate() call in one lookup. A

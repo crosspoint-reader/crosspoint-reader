@@ -98,9 +98,9 @@ bool Dictionary::open(const char* folderName) {
     return false;
   }
   // Checked once here so buildPath() can never fail on the lookup path.
-  if (resolved.size() + strlen(LONGEST_SUFFIX) + 1 > PATH_BUF_BYTES) {
+  if (resolved.size() + LONGEST_SUFFIX_LEN + 1 > PATH_BUF_BYTES) {
     LOG_ERR("DICT", "Dictionary path too long (%u chars, max %u)", static_cast<unsigned>(resolved.size()),
-            static_cast<unsigned>(PATH_BUF_BYTES - strlen(LONGEST_SUFFIX) - 1));
+            static_cast<unsigned>(PATH_BUF_BYTES - LONGEST_SUFFIX_LEN - 1));
     return false;
   }
 
@@ -118,16 +118,13 @@ bool Dictionary::buildPath(char* buf, size_t bufSize, const char* suffix) const 
 }
 
 bool Dictionary::needsIndex() {
-  if (!isOpen()) return false;
-
-  HalFile idx;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) return false;
-  const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
-
-  HalFile qidx;
-  if (!Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) return true;
-  const QidxHeader header = readQidxHeader(qidx, SAMPLE_INTERVAL);
-  return !header.valid || header.idxFileSize != idxSize;
+  // Expressed on openSession() so the "is the sidecar usable?" rule lives in
+  // exactly one place, and so this costs no path allocations either. A
+  // successful buildIndex() always writes at least one sample (entry 0), so
+  // sampleCount == 0 means absent, stale or corrupt — all of which rebuild.
+  LookupSession session;
+  if (!openSession(session)) return false;
+  return session.sampleCount == 0;
 }
 
 bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outResult) {

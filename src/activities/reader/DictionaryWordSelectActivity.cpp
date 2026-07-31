@@ -155,14 +155,20 @@ void DictionaryWordSelectActivity::performLookup() {
   if (!dictOpenAttempted) {
     dictOpenAttempted = true;
     dictOpenOk = dict.open(SETTINGS.dictionaryName);
+    // needsIndex() opens and validates the .qidx sidecar, so ask it once per
+    // open rather than once per word: the answer only changes when we build
+    // the sidecar ourselves, which is handled below.
+    dictNeedsIndex = dictOpenOk && dict.needsIndex();
   }
-  const bool indexing = dictOpenOk && dict.needsIndex();
-  popupMsg = indexing ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
   bool ok = dictOpenOk;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+  if (ok && dictNeedsIndex) {
+    ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+    dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
+  }
 
   std::string definition;
   std::string headword;
