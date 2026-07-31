@@ -97,7 +97,7 @@ void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_
   }
 }
 
-void GfxRenderer::ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+void GfxRenderer::ensureSdCardFontReady(int fontId, const std::deque<std::string>& words, bool includeHyphen,
                                         uint8_t styleMask) const {
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {

@@ -294,27 +294,25 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     effectiveNoSpaceBefore = true;
   }
 
+  // Bulk-reserve the per-token parallel arrays before a burst of pushes so they
+  // don't repeatedly double. Only the std::vector arrays are reserved: words and
+  // rubyTexts are std::deque (chunked growth, no reserve()/capacity() and no large
+  // contiguous reallocation to avoid). wordStyles' capacity gauges them all since
+  // pushToken() keeps every array in lockstep.
   const auto ensureTokenCapacity = [&](const size_t additionalTokens) {
     if (additionalTokens == 0) return;
     const size_t requiredSize = words.size() + additionalTokens;
-    if (words.capacity() >= requiredSize) return;
+    if (wordStyles.capacity() >= requiredSize) return;
 
-    size_t newCapacity = words.capacity();
-    if (newCapacity < 16) {
-      newCapacity = 16;
-    }
+    size_t newCapacity = wordStyles.capacity() < 16 ? 16 : wordStyles.capacity();
     while (newCapacity < requiredSize) {
       newCapacity *= 2;
     }
 
-    words.reserve(newCapacity);
     wordStyles.reserve(newCapacity);
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
     wordIsFocusSuffix.reserve(newCapacity);
-    if (!rubyTexts.empty()) {
-      rubyTexts.reserve(newCapacity);
-    }
   };
 
   if (auto breakOffsets = cjkCharacterBreakByteOffsets(word); !breakOffsets.empty()) {
@@ -488,9 +486,8 @@ void ParsedText::setRubyGroupAt(size_t startIndex, size_t count, const std::stri
 }
 
 void ParsedText::ensureRubyCapacity() {
-  if (rubyTexts.capacity() < words.capacity()) {
-    rubyTexts.reserve(words.capacity());
-  }
+  // No-op: rubyTexts is a std::deque (chunked growth, no capacity to pre-reserve
+  // and no large contiguous reallocation to avoid). Kept for call-site stability.
 }
 
 int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {
