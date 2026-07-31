@@ -129,6 +129,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     REFRESH_FREQUENCY_COUNT
   };
 
+  enum REFRESH_ACTION { REFRESH_ACTION_FULL = 0, REFRESH_ACTION_BW_REINFORCEMENT = 1, REFRESH_ACTION_COUNT };
+
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
 
@@ -226,6 +228,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
+  // Periodic screen-maintenance action. Required cleanup refreshes remain full.
+  uint8_t refreshAction = REFRESH_ACTION_FULL;
   uint8_t hyphenationEnabled = 0;
 
   // Reader screen margin settings

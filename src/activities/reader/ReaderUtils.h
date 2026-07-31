@@ -116,13 +116,22 @@ inline bool isTouchMenuGesture(const MappedInputManager& input) {
 // renderer.waitRefreshComplete() and must rebuild the differential baseline
 // before the next page turn (the tiled grayscale cleanup does).
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
-  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
-  if (async) {
+  const bool refreshDue = pagesUntilFullRefresh <= 1;
+  const bool useBwReinforcement = pagesUntilFullRefresh == 1 && gpio.deviceIsX3() &&
+                                  SETTINGS.refreshAction == CrossPointSettings::REFRESH_ACTION_BW_REINFORCEMENT;
+
+  if (useBwReinforcement) {
+    // The X3 OEM grayscale-base waveform turns the page while gently settling
+    // unchanged black and white pixels, avoiding a separate full-screen flash.
+    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+  } else if (async) {
+    const auto mode = refreshDue ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
     renderer.displayBufferAsync(mode);
   } else {
+    const auto mode = refreshDue ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
     renderer.displayBuffer(mode);
   }
-  if (pagesUntilFullRefresh <= 1) {
+  if (refreshDue) {
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     pagesUntilFullRefresh--;
