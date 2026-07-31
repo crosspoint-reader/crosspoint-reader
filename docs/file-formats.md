@@ -96,11 +96,23 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 34 is binary-identical to version 33. The version was bumped because
-word-gap suppression was narrowed to tokens glued together in the source: v33
-dropped the gap between any two words meeting at a CJK break opportunity, which
-collapsed the spaces between Hangul words, so v33 word positions no longer match
-what the layout engine now produces.
+Version 35 is binary-identical to version 34. The version was bumped because
+word-gap suppression changed twice while the version field stayed at 34, so a
+v34 file does not describe one layout. In all three cases the gap is only ever
+dropped where `hasCjkBreakOpportunityBetween()` reports a break opportunity
+between the two adjoining codepoints; what changed is which such pairs qualify:
+
+- v33 and v34 as originally shipped dropped the gap for *every* qualifying
+  pair, which collapsed the spaces between Hangul words.
+- v34 after the word-gap fix dropped it only when no whitespace separated the
+  two tokens in the source. This restored Hangul spacing, but also re-added a
+  gap between Han/Kana whose source is line-wrapped mid-paragraph, where
+  browsers drop it.
+- v35 drops it when no whitespace separated the tokens, or when whitespace did
+  but neither side is Hangul.
+
+So v34 word positions may or may not match what the layout engine now produces,
+depending on which build wrote them. v35 makes the distinction observable.
 
 Version 30 is binary-identical to version 29. The version was bumped because
 Arabic contextual shaping changed text measurement (`getTextAdvanceX` now

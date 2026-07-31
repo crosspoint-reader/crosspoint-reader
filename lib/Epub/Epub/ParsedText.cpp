@@ -284,14 +284,21 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   bool effectiveAttachToPrevious = attachToPrevious;
   bool effectiveNoSpaceBefore = false;
-  // Only a glued token (attachToPrevious == true, i.e. no whitespace separated it from the
-  // previous one in the source) may be turned into a gap-less break opportunity. When real
-  // whitespace separated the two words, that space is content and must be rendered: Korean
-  // is a space-delimited script written in Hangul, which utf8IsCjkBreakable() covers.
-  if (attachToPrevious && !words.empty() &&
-      hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
-    effectiveAttachToPrevious = false;
-    effectiveNoSpaceBefore = true;
+  // A glued token (attachToPrevious == true, i.e. no whitespace separated it from the
+  // previous one in the source) always becomes a gap-less break opportunity. When real
+  // whitespace separated the two words, the gap may only be dropped away from Hangul:
+  // Korean is a space-delimited script that utf8IsCjkBreakable() covers, so there the
+  // space is content and must be rendered. Between Han/Kana the collapsed whitespace is
+  // almost always a source line wrap, which browsers drop (CSS text segment-break rules),
+  // so suppressing the gap there matches how the same book renders elsewhere.
+  if (!words.empty()) {
+    const uint32_t leftCp = lastCodepoint(words.back());
+    const uint32_t rightCp = firstCodepoint(word);
+    const bool spanHangul = utf8IsHangul(leftCp) || utf8IsHangul(rightCp);
+    if ((attachToPrevious || !spanHangul) && hasCjkBreakOpportunityBetween(leftCp, rightCp)) {
+      effectiveAttachToPrevious = false;
+      effectiveNoSpaceBefore = true;
+    }
   }
 
   // Bulk-reserve the per-token parallel arrays before a burst of pushes so they
