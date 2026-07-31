@@ -145,8 +145,13 @@ class AutoSleepSyncPolicy final {
   static bool shouldPersistPreference(AutoSleepSyncPreference current, AutoSleepSyncPreference requested);
   static bool isEligible(AutoSleepSyncPreference preference, bool smartSyncEnabled, bool hasCredentials,
                          bool fromReader);
-  static bool positionUnchanged(const AutoSleepSyncMarkerData& marker, uint32_t serverFingerprint, int spineIndex,
-                                int pageNumber, int totalPages);
+  // True when the current position is at or behind the last-synced marker, so
+  // an eligible sleep should skip the sync: equal means nothing to do, behind
+  // means the user is deliberately rereading and a Smart pull of the
+  // further-ahead remote would yank them forward. Only a position strictly
+  // ahead of the marker (or an incomparable one) syncs.
+  static bool shouldSkipForPosition(const AutoSleepSyncMarkerData& marker, uint32_t serverFingerprint, int spineIndex,
+                                    int pageNumber, int totalPages);
   static KOReaderSyncTerminalAction terminalAction(KOReaderSyncRunMode mode, KOReaderSyncTerminalAction manualAction);
   static bool shouldStartStage(KOReaderSyncRunMode mode, AutoSleepSyncDeadline deadline, uint32_t nowMs);
   static WifiSelectionExhaustedAction wifiExhaustedAction(WifiSelectionMode mode);

@@ -962,7 +962,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
   return true;  // acted: launched the sync activity
 }
 
-bool EpubReaderActivity::autoSleepSyncPositionUnchanged() const {
+bool EpubReaderActivity::shouldSkipAutoSleepSync() const {
   if (!epub) return false;
   AutoSleepSyncMarkerData marker;
   if (!AutoSleepSyncMarker::load(AutoSleepSyncMarker::bookCachePathFor(epub->getPath()), marker)) return false;
@@ -970,8 +970,8 @@ bool EpubReaderActivity::autoSleepSyncPositionUnchanged() const {
   // is exactly the one a preflight would sync.
   const int page = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-  return AutoSleepSyncPolicy::positionUnchanged(marker, AutoSleepSyncMarker::serverFingerprint(), currentSpineIndex,
-                                                page, totalPages);
+  return AutoSleepSyncPolicy::shouldSkipForPosition(marker, AutoSleepSyncMarker::serverFingerprint(), currentSpineIndex,
+                                                    page, totalPages);
 }
 
 bool EpubReaderActivity::prepareAutoSleepSync(const SleepCommitCallback commitCallback,

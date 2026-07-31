@@ -280,9 +280,9 @@ bool ActivityManager::hasAutoSleepSyncActivity() const {
   return findNearestEligibleActivity(currentActivity, stackActivities, &activitySupportsAutoSleepSync) != nullptr;
 }
 
-bool ActivityManager::autoSleepSyncPositionUnchanged() const {
+bool ActivityManager::shouldSkipAutoSleepSync() const {
   const Activity* owner = findNearestEligibleActivity(currentActivity, stackActivities, &activitySupportsAutoSleepSync);
-  return owner && owner->autoSleepSyncPositionUnchanged();
+  return owner && owner->shouldSkipAutoSleepSync();
 }
 
 bool ActivityManager::snapshotAutoSleepSyncFrame(bool (*const saveFrameSnapshot)()) {

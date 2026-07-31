@@ -208,7 +208,7 @@ class EpubReaderActivity final : public Activity {
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
   bool supportsAutoSleepSync() const override { return epub != nullptr; }
-  bool autoSleepSyncPositionUnchanged() const override;
+  bool shouldSkipAutoSleepSync() const override;
   bool prepareAutoSleepSync(SleepCommitCallback commitCallback, AutoSleepSyncDeadline deadline,
                             std::unique_ptr<Activity>& syncActivity) override;
   bool handleForcedRefresh() override {

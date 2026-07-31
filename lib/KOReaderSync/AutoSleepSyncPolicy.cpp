@@ -71,17 +71,22 @@ bool AutoSleepSyncPolicy::isEligible(const AutoSleepSyncPreference preference, c
   return preference == AutoSleepSyncPreference::WHEN_SLEEPING && smartSyncEnabled && hasCredentials && fromReader;
 }
 
-bool AutoSleepSyncPolicy::positionUnchanged(const AutoSleepSyncMarkerData& marker, const uint32_t serverFingerprint,
-                                            const int spineIndex, const int pageNumber, const int totalPages) {
+bool AutoSleepSyncPolicy::shouldSkipForPosition(const AutoSleepSyncMarkerData& marker, const uint32_t serverFingerprint,
+                                                const int spineIndex, const int pageNumber, const int totalPages) {
   if (marker.serverFingerprint != serverFingerprint) return false;
   // Out-of-range values cannot have been recorded in the uint16 marker fields.
   if (spineIndex < 0 || pageNumber < 0 || totalPages < 0 || spineIndex > UINT16_MAX || pageNumber > UINT16_MAX ||
       totalPages > UINT16_MAX) {
     return false;
   }
-  return marker.spineIndex == static_cast<uint16_t>(spineIndex) &&
-         marker.pageNumber == static_cast<uint16_t>(pageNumber) &&
-         marker.totalPages == static_cast<uint16_t>(totalPages);
+  // Spine indexes are stable across relayouts (one spine per chapter), so an
+  // earlier chapter is unambiguously behind.
+  if (spineIndex < marker.spineIndex) return true;
+  if (spineIndex > marker.spineIndex) return false;
+  // Same spine: page numbers are only comparable under the same pagination.
+  // A different page count means render settings changed; sync to be safe.
+  if (marker.totalPages != static_cast<uint16_t>(totalPages)) return false;
+  return static_cast<uint16_t>(pageNumber) <= marker.pageNumber;
 }
 
 KOReaderSyncTerminalAction AutoSleepSyncPolicy::terminalAction(const KOReaderSyncRunMode mode,

@@ -201,34 +201,41 @@ TEST(AutoSleepSyncCoordinator, NonQuickResumePreflightNeedsNoSnapshotButStillCle
   EXPECT_EQ(coordinator.snapshotCleanupAction(), AutoSleepSyncSnapshotCleanupAction::REMOVE_ONLY);
 }
 
-TEST(AutoSleepSyncMarkerPolicy, UnchangedPositionMatchesOnlyExactMarker) {
+TEST(AutoSleepSyncMarkerPolicy, SyncsOnlyWhenStrictlyAheadOfMarker) {
   AutoSleepSyncMarkerData marker;
   marker.serverFingerprint = 0xABCD1234u;
   marker.spineIndex = 7;
   marker.pageNumber = 42;
   marker.totalPages = 180;
 
-  EXPECT_TRUE(AutoSleepSyncPolicy::positionUnchanged(marker, 0xABCD1234u, 7, 42, 180));
-  // Any movement, relayout, or server identity change re-enables the sync.
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 0xABCD1234u, 7, 43, 180));
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 0xABCD1234u, 8, 42, 180));
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 0xABCD1234u, 7, 42, 181));
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 0xDEAD0000u, 7, 42, 180));
+  // Equal position: nothing to sync.
+  EXPECT_TRUE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xABCD1234u, 7, 42, 180));
+  // Behind within the same spine (rereading): skip, or the Smart pull would
+  // jump the reader forward to the remote high-water mark.
+  EXPECT_TRUE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xABCD1234u, 7, 10, 180));
+  // Behind in an earlier spine: skip regardless of that spine's page count.
+  EXPECT_TRUE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xABCD1234u, 6, 90, 95));
+  // Strictly ahead: sync.
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xABCD1234u, 7, 43, 180));
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xABCD1234u, 8, 0, 60));
+  // Same spine but repaginated: pages are incomparable, sync to be safe.
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xABCD1234u, 7, 42, 181));
+  // Different server identity invalidates the marker entirely.
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 0xDEAD0000u, 7, 10, 180));
 }
 
-TEST(AutoSleepSyncMarkerPolicy, OutOfRangePositionsNeverMatch) {
+TEST(AutoSleepSyncMarkerPolicy, OutOfRangePositionsNeverSkip) {
   AutoSleepSyncMarkerData marker;
   marker.serverFingerprint = 1;
   marker.spineIndex = 0;
   marker.pageNumber = 0;
   marker.totalPages = 0;
 
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 1, -1, 0, 0));
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 1, 0, -1, 0));
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 1, 0, 0, UINT16_MAX + 1));
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 1, -1, 0, 0));
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 1, 0, -1, 0));
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 1, 0, 0, UINT16_MAX + 1));
   // A truncated int must not alias into a uint16 marker value.
-  marker.pageNumber = 0;
-  EXPECT_FALSE(AutoSleepSyncPolicy::positionUnchanged(marker, 1, 0, 65536, 0));
+  EXPECT_FALSE(AutoSleepSyncPolicy::shouldSkipForPosition(marker, 1, 0, 65536, 0));
 }
 
 TEST(AutoSleepSyncTraversal, SelectsCurrentThenNearestEligibleStackedOwner) {

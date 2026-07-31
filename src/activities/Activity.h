@@ -48,9 +48,11 @@ class Activity {
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
   virtual bool supportsAutoSleepSync() const { return false; }
-  // True when the reading position still matches the persisted last-synced
-  // marker, letting an eligible sleep skip the network preflight entirely.
-  virtual bool autoSleepSyncPositionUnchanged() const { return false; }
+  // True when the reading position is at or behind the persisted last-synced
+  // marker, letting an eligible sleep skip the network preflight entirely
+  // (equal: nothing to sync; behind: the user is rereading and a Smart pull
+  // would yank them forward to the remote high-water mark).
+  virtual bool shouldSkipAutoSleepSync() const { return false; }
   virtual bool prepareAutoSleepSync(SleepCommitCallback, AutoSleepSyncDeadline, std::unique_ptr<Activity>&) {
     return false;
   }

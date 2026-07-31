@@ -284,22 +284,23 @@ static void requestDeepSleep(const bool fromTimeout = false) {
   const bool hasCredentials = KOREADER_STORE.hasCredentials();
   const bool eligible = AutoSleepSyncPolicy::isEligible(KOREADER_STORE.getAutoSleepSyncPreference(), smartSyncEnabled,
                                                         hasCredentials, epubSyncCapable);
-  // Skip the whole preflight when the position hasn't moved since the last
+  // Skip the whole preflight when the position is at or behind the last
   // successful sync (marker checked only when otherwise eligible: one small SD
-  // read). Sleep then behaves exactly like the pre-feature path.
-  const bool positionUnchanged = eligible && activityManager.autoSleepSyncPositionUnchanged();
+  // read). Equal: nothing to sync. Behind: the user is rereading and a Smart
+  // pull would jump them forward. Sleep then behaves like the pre-feature path.
+  const bool skipForPosition = eligible && activityManager.shouldSkipAutoSleepSync();
 
   const AutoSleepSyncRequestAction action =
-      sleepCoordinator.request({fromReader, fromTimeout, quickResume, deadline}, eligible && !positionUnchanged);
+      sleepCoordinator.request({fromReader, fromTimeout, quickResume, deadline}, eligible && !skipForPosition);
   if (action == AutoSleepSyncRequestAction::IGNORE) {
     LOG_DBG("SLP", "Duplicate sleep request ignored");
     return;
   }
 
-  LOG_DBG("SLP", "Sleep request: reader=%d epubSync=%d timeout=%d quickResume=%d eligible=%d unchanged=%d", fromReader,
-          epubSyncCapable, fromTimeout, quickResume, eligible, positionUnchanged);
+  LOG_DBG("SLP", "Sleep request: reader=%d epubSync=%d timeout=%d quickResume=%d eligible=%d notAhead=%d", fromReader,
+          epubSyncCapable, fromTimeout, quickResume, eligible, skipForPosition);
   if (action == AutoSleepSyncRequestAction::COMMIT) {
-    logSleepTerminal(positionUnchanged ? "unchanged" : "ineligible");
+    logSleepTerminal(skipForPosition ? "not-ahead" : "ineligible");
     commitDeepSleep();
     return;
   }

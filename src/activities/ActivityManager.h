@@ -104,7 +104,7 @@ class ActivityManager {
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
   bool hasAutoSleepSyncActivity() const;
-  bool autoSleepSyncPositionUnchanged() const;
+  bool shouldSkipAutoSleepSync() const;
   bool snapshotAutoSleepSyncFrame(bool (*saveFrameSnapshot)());
   bool prepareAutoSleepSync(void (*commitCallback)(), AutoSleepSyncDeadline deadline,
                             std::unique_ptr<Activity>& syncActivity);
