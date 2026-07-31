@@ -13,6 +13,8 @@
 #include <utility>
 #include <vector>
 
+#include "Epub/VisibleTextUtils.h"
+
 namespace {
 std::string stripPrefix(const XML_Char* name) {
   if (!name) {
@@ -59,10 +61,6 @@ std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegm
     xpath += "/text()[" + std::to_string(textNodeIndex) + "]." + std::to_string(charOffset);
   }
   return xpath;
-}
-
-bool isNonVisibleTextElement(const std::string& name) {
-  return name == "head" || name == "style" || name == "script" || name == "title" || name == "rp";
 }
 
 size_t countUtf8Codepoints(const XML_Char* data, const int len) {
@@ -162,7 +160,7 @@ class ParagraphTextCounter final : public Print {
     if (name == "p") {
       paragraphDepth++;
     }
-    if (nonVisibleDepth > 0 || isNonVisibleTextElement(name)) {
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
       nonVisibleDepth++;
     }
     depth++;
@@ -437,7 +435,7 @@ class XPathProgressResolver final : public Print {
     if (name == "li") {
       liDepth++;
     }
-    if (nonVisibleDepth > 0 || isNonVisibleTextElement(name)) {
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
       nonVisibleDepth++;
     }
 

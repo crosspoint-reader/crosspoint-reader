@@ -15,6 +15,7 @@
 #include "../../../../src/fontIds.h"
 #include "Epub.h"
 #include "Epub/Page.h"
+#include "Epub/VisibleTextUtils.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 #include "Epub/converters/ImageDimsProbe.h"
 #include "Epub/converters/ImageToFramebufferDecoder.h"
@@ -49,8 +50,6 @@ constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
 constexpr const char* LINETHROUGH_TAGS[] = {"del", "s", "strike"};
 constexpr const char* IMAGE_TAGS[] = {"img", "image"};
-constexpr const char* SKIP_TAGS[] = {"head", "style", "script", "title", "rp"};
-
 bool isWhitespace(const char c) { return c == ' ' || c == '\r' || c == '\n' || c == '\t'; }
 
 std::string trimAndNormalize(const std::string& str) {
@@ -90,10 +89,7 @@ bool matches(const char* tag_name, const char* const* possible_tags, size_t coun
   return false;
 }
 
-bool isNonVisibleTextTag(const char* name) {
-  return strcmp(name, "head") == 0 || strcmp(name, "style") == 0 || strcmp(name, "script") == 0 ||
-         strcmp(name, "title") == 0 || strcmp(name, "rp") == 0;
-}
+bool isNonVisibleTextTag(const char* name) { return VisibleTextUtils::isNonVisibleElement(name); }
 
 const char* getAttribute(const XML_Char** atts, const char* attrName) {
   if (!atts) return nullptr;
@@ -889,7 +885,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  if (matches(name, SKIP_TAGS, std::size(SKIP_TAGS))) {
+  if (VisibleTextUtils::isNonVisibleElement(name)) {
     // start skip
     self->skipUntilDepth = self->depth;
     self->depth += 1;
@@ -1021,7 +1017,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
         self->listItemBulletOnly = true;
       }
     }

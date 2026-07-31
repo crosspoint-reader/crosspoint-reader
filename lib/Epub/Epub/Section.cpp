@@ -995,12 +995,11 @@ std::optional<uint16_t> Section::getPageForVisibleTextOffset(const uint32_t offs
   };
 
   if (build_ && !build_->lut.empty()) {
-    // The final completed page of an in-flight build has no known upper
-    // boundary yet. Do not misclassify a later chapter offset as that page.
-    if (offset > build_->lut.back().visibleTextOffset) {
-      return std::nullopt;
+    // Resolve within the active build's known range. Later offsets may still be
+    // covered by an on-disk partial that the resumed build has not reached yet.
+    if (offset <= build_->lut.back().visibleTextOffset) {
+      return findInEntries(build_->lut);
     }
-    return findInEntries(build_->lut);
   }
 
   HalFile f;
