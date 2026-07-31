@@ -1,6 +1,7 @@
 _language_name: "Русский"
 _language_code: "RU"
 _order: "6"
+_bcp47: "ru"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "Загрузка"

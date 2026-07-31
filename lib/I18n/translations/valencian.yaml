@@ -1,6 +1,7 @@
 _language_name: "Valencià"
 _language_code: "CAV"
 _order: "22"
+_bcp47: "ca-valencia"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ARRENCANT"

@@ -1,6 +1,7 @@
 _language_name: "Беларуская"
 _language_code: "BE"
 _order: "11"
+_bcp47: "be"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "Загрузка"

@@ -1,6 +1,7 @@
 _language_name: "Română"
 _language_code: "RO"
 _order: "8"
+_bcp47: "ro"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "PORNEŞTE"
