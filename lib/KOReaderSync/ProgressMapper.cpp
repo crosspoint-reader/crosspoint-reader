@@ -760,10 +760,7 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub->calculateProgress(pos.spineIndex, intra);
-  if (pos.hasVisibleTextOffset) {
-    result.xpath = ChapterXPathResolver::findXPathForVisibleOffset(epub, pos.spineIndex, pos.visibleTextOffset);
-  }
-  if (result.xpath.empty() && pos.hasParagraphIndex && pos.paragraphIndex > 0) {
+  if (pos.hasParagraphIndex && pos.paragraphIndex > 0) {
     result.xpath = ChapterXPathResolver::findXPathForParagraph(epub, pos.spineIndex, pos.paragraphIndex);
   }
   // Fall back to progress-based XPath, then synthetic progress mapping.
@@ -773,8 +770,8 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
   if (result.xpath.empty()) {
     result.xpath = generateXPath(epub, pos.spineIndex, intra);
   }
-  LOG_DBG("PM", "-> Progress: spine=%d offset=%u page=%d/%d %.2f%% %s", pos.spineIndex, pos.visibleTextOffset,
-          pos.pageNumber, pos.totalPages, result.percentage * 100, result.xpath.c_str());
+  LOG_DBG("PM", "-> Progress: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
+          static_cast<double>(result.percentage * 100), result.xpath.c_str());
   return result;
 }
 
