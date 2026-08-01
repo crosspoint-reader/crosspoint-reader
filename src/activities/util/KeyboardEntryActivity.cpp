@@ -93,6 +93,74 @@ const fui::KeyboardKey URL_SNIP_BOTTOM[] = {UKS("abc", fui::KeyKind::Mode, fui::
                                             UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2),
                                             UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
+// ---------------------------------------------------------------------------
+// Cyrillic (ЙЦУКЕН) layers. The SDK ships Latin layouts only, so — like the URL
+// layers above — these are app-defined tables over the same public structs.
+//
+// Key ids are the Unicode code points of the letters (U+0410..U+044F). They fit
+// int16_t and cannot collide with the ASCII ids (8/13/32, 'a'-'z'), the
+// negative control ids (-1..-4) or the URL snippet ids (2001+).
+//
+// `alt` (long-press) mirrors the Latin behaviour of hold-for-opposite-case,
+// which the SDK's implicit case-flip cannot provide here: it only handles ASCII
+// a-z/A-Z and returns null for anything else. The one deliberate exception is
+// е/Е, whose long-press yields ё/Ё — the letter has no key of its own in the
+// ЙЦУКЕН arrangement, and reaching it matters more than a redundant case flip.
+// ---------------------------------------------------------------------------
+
+constexpr int16_t LANG_TOGGLE_VALUE = -4;  // mirrors KeyboardEntryActivity::LANG_KEY
+
+const fui::KeyboardKey RU_ROW1[] = {UKA("й", "й", 0x439, "Й"), UKA("ц", "ц", 0x446, "Ц"), UKA("у", "у", 0x443, "У"),
+                                    UKA("к", "к", 0x43A, "К"), UKA("е", "е", 0x435, "ё"), UKA("н", "н", 0x43D, "Н"),
+                                    UKA("г", "г", 0x433, "Г"), UKA("ш", "ш", 0x448, "Ш"), UKA("щ", "щ", 0x449, "Щ"),
+                                    UKA("з", "з", 0x437, "З"), UKA("х", "х", 0x445, "Х"), UKA("ъ", "ъ", 0x44A, "Ъ")};
+const fui::KeyboardKey RU_ROW2[] = {UKA("ф", "ф", 0x444, "Ф"), UKA("ы", "ы", 0x44B, "Ы"), UKA("в", "в", 0x432, "В"),
+                                    UKA("а", "а", 0x430, "А"), UKA("п", "п", 0x43F, "П"), UKA("р", "р", 0x440, "Р"),
+                                    UKA("о", "о", 0x43E, "О"), UKA("л", "л", 0x43B, "Л"), UKA("д", "д", 0x434, "Д"),
+                                    UKA("ж", "ж", 0x436, "Ж"), UKA("э", "э", 0x44D, "Э")};
+const fui::KeyboardKey RU_ROW3[] = {UKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 2),
+                                    UKA("я", "я", 0x44F, "Я"),
+                                    UKA("ч", "ч", 0x447, "Ч"),
+                                    UKA("с", "с", 0x441, "С"),
+                                    UKA("м", "м", 0x43C, "М"),
+                                    UKA("и", "и", 0x438, "И"),
+                                    UKA("т", "т", 0x442, "Т"),
+                                    UKA("ь", "ь", 0x44C, "Ь"),
+                                    UKA("б", "б", 0x431, "Б"),
+                                    UKA("ю", "ю", 0x44E, "Ю"),
+                                    UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
+
+const fui::KeyboardKey RU_SHIFT_ROW1[] = {
+    UKA("Й", "Й", 0x419, "й"), UKA("Ц", "Ц", 0x426, "ц"), UKA("У", "У", 0x423, "у"), UKA("К", "К", 0x41A, "к"),
+    UKA("Е", "Е", 0x415, "Ё"), UKA("Н", "Н", 0x41D, "н"), UKA("Г", "Г", 0x413, "г"), UKA("Ш", "Ш", 0x428, "ш"),
+    UKA("Щ", "Щ", 0x429, "щ"), UKA("З", "З", 0x417, "з"), UKA("Х", "Х", 0x425, "х"), UKA("Ъ", "Ъ", 0x42A, "ъ")};
+const fui::KeyboardKey RU_SHIFT_ROW2[] = {
+    UKA("Ф", "Ф", 0x424, "ф"), UKA("Ы", "Ы", 0x42B, "ы"), UKA("В", "В", 0x412, "в"), UKA("А", "А", 0x410, "а"),
+    UKA("П", "П", 0x41F, "п"), UKA("Р", "Р", 0x420, "р"), UKA("О", "О", 0x41E, "о"), UKA("Л", "Л", 0x41B, "л"),
+    UKA("Д", "Д", 0x414, "д"), UKA("Ж", "Ж", 0x416, "ж"), UKA("Э", "Э", 0x42D, "э")};
+const fui::KeyboardKey RU_SHIFT_ROW3[] = {UKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 2),
+                                          UKA("Я", "Я", 0x42F, "я"),
+                                          UKA("Ч", "Ч", 0x427, "ч"),
+                                          UKA("С", "С", 0x421, "с"),
+                                          UKA("М", "М", 0x41C, "м"),
+                                          UKA("И", "И", 0x418, "и"),
+                                          UKA("Т", "Т", 0x422, "т"),
+                                          UKA("Ь", "Ь", 0x42C, "ь"),
+                                          UKA("Б", "Б", 0x411, "б"),
+                                          UKA("Ю", "Ю", 0x42E, "ю"),
+                                          UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
+
+// Bottom rows carry the layer toggle, labelled with the alphabet it switches
+// *to*. The label is the alphabet's own name, so it is not run through tr():
+// these tables are static and tr() resolves at runtime, and "ABC"/"РУС" read
+// the same regardless of UI language — the same reasoning as the SDK's "?123".
+const fui::KeyboardKey RU_BOTTOM[] = {
+    UKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2), UKW("ABC", nullptr, LANG_TOGGLE_VALUE, 2),
+    UKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 4), UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+const fui::KeyboardKey LAT_BOTTOM[] = {
+    UKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2), UKW("РУС", nullptr, LANG_TOGGLE_VALUE, 2),
+    UKS("Space", fui::KeyKind::Space, fui::QWERTY_KEY_SPACE, 4), UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+
 #undef UK
 #undef UKA
 #undef UKW
@@ -108,6 +176,31 @@ const fui::KeyboardRow URL_SNIP_ROWS[] = {
 const fui::KeyboardLayout URL_LAYOUT{URL_ROWS, 5};
 const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
 const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
+
+// Cyrillic layers, plus the Latin layers that pair with them: a Cyrillic UI
+// still has to type Wi-Fi passwords and server URLs, so the Latin side needs a
+// way back and therefore its own bottom row. The letter rows are the URL
+// tables' — identical QWERTY, already defined above.
+const fui::KeyboardRow RU_ROWS[] = {
+    {URL_NUM_ROW, 10, 0}, {RU_ROW1, 12, 0}, {RU_ROW2, 11, 0}, {RU_ROW3, 11, 0}, {RU_BOTTOM, 4, 0}};
+const fui::KeyboardRow RU_SHIFT_ROWS[] = {
+    {URL_NUM_ROW, 10, 0}, {RU_SHIFT_ROW1, 12, 0}, {RU_SHIFT_ROW2, 11, 0}, {RU_SHIFT_ROW3, 11, 0}, {RU_BOTTOM, 4, 0}};
+const fui::KeyboardRow LAT_ROWS[] = {
+    {URL_NUM_ROW, 10, 0}, {URL_ROW1, 10, 0}, {URL_ROW2, 9, 1}, {URL_ROW3, 9, 0}, {LAT_BOTTOM, 4, 0}};
+const fui::KeyboardRow LAT_SHIFT_ROWS[] = {
+    {URL_NUM_ROW, 10, 0}, {URL_SHIFT_ROW1, 10, 0}, {URL_SHIFT_ROW2, 9, 1}, {URL_SHIFT_ROW3, 9, 0}, {LAT_BOTTOM, 4, 0}};
+
+const fui::KeyboardLayout RU_LAYOUT{RU_ROWS, 5};
+const fui::KeyboardLayout RU_SHIFT_LAYOUT{RU_SHIFT_ROWS, 5};
+const fui::KeyboardLayout LAT_LAYOUT{LAT_ROWS, 5};
+const fui::KeyboardLayout LAT_SHIFT_LAYOUT{LAT_SHIFT_ROWS, 5};
+
+bool languageUsesCyrillic(const Language language) {
+  // Only RU is wired up: the ЙЦУКЕН table above is the Russian arrangement.
+  // UK/BE/KK are Cyrillic too but each swaps in letters this table lacks
+  // (і/ї/є/ґ, ў, ә/ң/ө/ұ/…), so they need their own rows before being added.
+  return language == Language::RU;
+}
 
 fui::KeyboardLayoutId layoutForLanguage(const Language language) {
   switch (language) {
@@ -133,6 +226,10 @@ void KeyboardEntryActivity::onEnter() {
   shifted = false;
   symbols = false;
   urlPanel = false;
+  // Free text starts in the user's own alphabet; credentials start on Latin,
+  // which is what Wi-Fi passwords and usernames overwhelmingly are. Either way
+  // the РУС/ABC key switches in one press.
+  cyrillic = cyrillicLayoutAvailable() && inputType == InputType::Text;
   cursorMode = false;
   togglePos = false;
   passwordVisible = false;
@@ -154,11 +251,21 @@ void KeyboardEntryActivity::onEnter() {
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
+bool KeyboardEntryActivity::cyrillicLayoutAvailable() const {
+  // URL fields stay on the EN-arranged app tables: hostnames and paths are
+  // ASCII, and those layers carry the ":" / "/" / snippet keys instead.
+  return inputType != InputType::Url && languageUsesCyrillic(I18N.getLanguage());
+}
+
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
   if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
   if (inputType == InputType::Url) {
     if (urlPanel) return URL_SNIPPET_LAYOUT;
     return shifted ? URL_SHIFT_LAYOUT : URL_LAYOUT;
+  }
+  if (cyrillicLayoutAvailable()) {
+    if (cyrillic) return shifted ? RU_SHIFT_LAYOUT : RU_LAYOUT;
+    return shifted ? LAT_SHIFT_LAYOUT : LAT_LAYOUT;
   }
   return fui::builtinKeyboardLayout(layoutId, shifted, false, /*numberRow=*/true);
 }
@@ -287,6 +394,15 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
       urlPanel = !urlPanel;
       symbols = false;
       shifted = false;
+      clampSelection();
+      return true;
+    case LANG_KEY:
+      delPressCount = 0;
+      hintVisible = false;
+      cyrillic = !cyrillic;
+      shifted = false;
+      // Row lengths differ between the layers (12/11/11 vs 10/9/9), so the
+      // selection can land past the end of its row after the swap.
       clampSelection();
       return true;
     case fui::QWERTY_KEY_ENTER:
@@ -916,7 +1032,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
-  fui::Frame<48> frame(target, device, noInput, interactions);
+  fui::Frame<MAX_INTERACTIONS> frame(target, device, noInput, interactions);
 
   fui::KeyboardProps props;
   const fui::KeyboardLayout& layout = currentLayout();
@@ -926,8 +1042,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.shiftLabel = tr(STR_KEY_SHIFT);
   // Match the label to the layer the mode key leads back from: the symbols
   // layer and the URL snippet panel both label it "abc" in the static tables.
+  // When the Cyrillic layer is the one being returned to, name that alphabet
+  // instead — "abc" would point at the Latin layer the key does not lead to.
+  const char* letterLayerLabel = (cyrillicLayoutAvailable() && cyrillic) ? "АБВ" : tr(STR_KEY_MODE_ABC);
   props.modeLabel =
-      (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
+      (symbols || (inputType == InputType::Url && urlPanel)) ? letterLayerLabel : tr(STR_KEY_MODE_SYMBOLS);
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;

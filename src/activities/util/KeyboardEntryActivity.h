@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -42,17 +43,22 @@ class KeyboardEntryActivity : public Activity {
   ButtonNavigator buttonNavigator;
 
   // Keyboard layers. The letter/symbol layers come from the SDK's builtin
-  // layouts (with the always-visible number row); the URL layers are
-  // app-defined tables in the .cpp.
+  // layouts (with the always-visible number row); the URL and Cyrillic layers
+  // are app-defined tables in the .cpp.
   freeink::ui::KeyboardLayoutId layoutId = freeink::ui::KeyboardLayoutId::QwertyEn;
   bool shifted = false;
   bool symbols = false;
   bool urlPanel = false;  // URL snippet panel replaces the letter layer
+  bool cyrillic = false;  // ЙЦУКЕН layer active (Cyrillic UI languages only)
 
   // Key hit rects registered by the keyboard component during render();
-  // loop() routes touch snapshots against them. 5-row EN layout registers 41
-  // keys, so 48 leaves headroom.
-  freeink::ui::InteractionBuffer<48> interactions;
+  // loop() routes touch snapshots against them. The 5-row EN layout registers
+  // 41 keys; ЙЦУКЕН needs 48 (33 letters vs 26), so 56 keeps the same headroom
+  // for both. Costs ~160 bytes over the previous 48 — one-off per activity.
+  // render() must build its Frame with this same capacity — the Frame template
+  // argument and the buffer's are one and the same type parameter.
+  static constexpr size_t MAX_INTERACTIONS = 56;
+  freeink::ui::InteractionBuffer<MAX_INTERACTIONS> interactions;
 
   // GPIO selection over the current layout grid (row/col in layout terms;
   // the bottom action row is just the last row).
@@ -101,6 +107,9 @@ class KeyboardEntryActivity : public Activity {
   int lineBreakEnd(std::string& s, int start, int maxWidth) const;
 
   const freeink::ui::KeyboardLayout& currentLayout() const;
+  // True when the UI language is written in Cyrillic, which is what puts the
+  // ЙЦУКЕН layer and its РУС/ABC toggle key on the keyboard at all.
+  bool cyrillicLayoutAvailable() const;
   const freeink::ui::KeyboardKey* selectedKey() const;
   int selectedLogicalIndex() const;
   void clampSelection();
@@ -126,4 +135,6 @@ class KeyboardEntryActivity : public Activity {
 
   // App-specific key id: toggles the URL snippet panel (URL fields only).
   static constexpr int16_t URL_PANEL_KEY = -3;
+  // App-specific key id: switches between the Cyrillic and Latin letter layers.
+  static constexpr int16_t LANG_KEY = -4;
 };
