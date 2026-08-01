@@ -5,6 +5,7 @@
 #include <HalGPIO.h>
 #include <Logging.h>
 
+#include <algorithm>
 #include <memory>
 
 #include "MappedInputManager.h"
@@ -146,23 +147,18 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
+  const auto sb = SETTINGS.statusBarSpec();
 
-  // Add status bar margin
-  const bool showStatusBar =
-      SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-      SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE || SETTINGS.statusBarBattery ||
-      SETTINGS.statusBarClock != CrossPointSettings::STATUS_BAR_CLOCK_MODE::STATUS_BAR_CLOCK_HIDE;
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  return (showStatusBar ? (metrics.statusBarVerticalMargin) : 0) +
-         (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+  // Layout reservation is hardware-agnostic: pass clockAvailable=true so the
+  // reserved height does not depend on whether an RTC is present.
+  return (sb.textLaneVisible(true) ? (metrics.statusBarVerticalMargin) : 0) +
+         (sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0);
 }
 
 int UITheme::getProgressBarHeight() {
   const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+  const auto sb = SETTINGS.statusBarSpec();
+  return sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0;
 }
 
 // Centered text implementation that takes the safe area into account
@@ -170,4 +166,40 @@ void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fon
                                bool black, EpdFontFamily::Style style) {
   const int x = screen.x + (screen.width - renderer.getTextWidth(fontId, text, style)) / 2;
   renderer.drawText(fontId, x, y, text, black, style);
+}
+
+void UITheme::drawCenteredWrappedText(const GfxRenderer& renderer, Rect bounds, int fontId, const char* text,
+                                      int maxLines, bool black, EpdFontFamily::Style style,
+                                      TextVerticalAlignment verticalAlignment) {
+  if (!text || *text == '\0' || bounds.width <= 0 || bounds.height <= 0 || maxLines <= 0) return;
+
+  const int lineHeight = renderer.getLineHeight(fontId);
+  if (lineHeight <= 0) return;
+
+  const int lineLimit = std::min(maxLines, bounds.height / lineHeight);
+  if (lineLimit <= 0) return;
+
+  const auto alignedTop = [&](const int textHeight) {
+    switch (verticalAlignment) {
+      case TextVerticalAlignment::CENTER:
+        return bounds.y + (bounds.height - textHeight) / 2;
+      case TextVerticalAlignment::BOTTOM:
+        return bounds.y + bounds.height - textHeight;
+      case TextVerticalAlignment::TOP:
+      default:
+        return bounds.y;
+    }
+  };
+
+  if (renderer.getTextWidth(fontId, text, style) <= bounds.width) {
+    drawCenteredText(renderer, bounds, fontId, alignedTop(lineHeight), text, black, style);
+    return;
+  }
+
+  const auto lines = renderer.wrappedText(fontId, text, bounds.width, lineLimit, style);
+  int y = alignedTop(static_cast<int>(lines.size()) * lineHeight);
+  for (const auto& line : lines) {
+    drawCenteredText(renderer, bounds, fontId, y, line.c_str(), black, style);
+    y += lineHeight;
+  }
 }

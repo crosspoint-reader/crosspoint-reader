@@ -1,29 +1,18 @@
 #pragma once
-#include <HalStorage.h>
+#include <ArduinoJson.h>
+#include <Epub/ReaderRenderSpec.h>
+#include <PersistableStore.h>
 
 #include <cstdint>
-#include <iosfwd>
-#include <mutex>
 
-class CrossPointSettings {
+class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
-  mutable std::mutex _mutex;
-
   // Private constructor for singleton
   CrossPointSettings() = default;
 
-  // Static instance
-  static CrossPointSettings instance;
+  friend class PersistableStore<CrossPointSettings>;
 
  public:
-  // Delete copy constructor and assignment
-  CrossPointSettings(const CrossPointSettings&) = delete;
-  CrossPointSettings& operator=(const CrossPointSettings&) = delete;
-
-  // Access the settings mutex for protecting multi-field reads/writes from other cores.
-  // Callers must not re-enter SETTINGS methods that lock _mutex while holding it.
-  std::mutex& getMutex() const { return _mutex; }
-
   enum SLEEP_SCREEN_MODE {
     DARK = 0,
     LIGHT = 1,
@@ -42,16 +31,6 @@ class CrossPointSettings {
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
 
-  // Status bar enum - legacy
-  enum STATUS_BAR_MODE {
-    NONE = 0,
-    NO_PROGRESS = 1,
-    FULL = 2,
-    BOOK_PROGRESS_BAR = 3,
-    ONLY_BOOK_PROGRESS_BAR = 4,
-    CHAPTER_PROGRESS_BAR = 5,
-    STATUS_BAR_MODE_COUNT
-  };
   enum STATUS_BAR_PROGRESS_BAR {
     BOOK_PROGRESS = 0,
     CHAPTER_PROGRESS = 1,
@@ -72,7 +51,12 @@ class CrossPointSettings {
     XTC_STATUS_BAR_MODE_COUNT
   };
 
-  enum STATUS_BAR_CLOCK_MODE { STATUS_BAR_CLOCK_HIDE = 0, STATUS_BAR_CLOCK_RIGHT = 1, STATUS_BAR_CLOCK_LEFT = 2 };
+  enum STATUS_BAR_CLOCK_MODE {
+    STATUS_BAR_CLOCK_HIDE = 0,
+    STATUS_BAR_CLOCK_RIGHT = 1,
+    STATUS_BAR_CLOCK_LEFT = 2,
+    STATUS_BAR_CLOCK_MODE_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -110,8 +94,11 @@ class CrossPointSettings {
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
-  // Font size options
-  enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
+  // Reader font size is a point size, not an enum slot — see fontPointSize.
+  // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE
+  // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
+  static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
+  static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
@@ -190,8 +177,7 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
-  // Status bar settings (statusBar retained for migration only)
-  uint8_t statusBar = FULL;
+  // Status bar settings
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
   uint8_t statusBarProgressBar = HIDE_PROGRESS;
@@ -230,7 +216,10 @@ class CrossPointSettings {
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
   uint8_t fontFamily = NOTOSERIF;
-  uint8_t fontSize = MEDIUM;
+  // Point size of the reader font. Only sizes the active family actually ships
+  // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
+  // available size (and persists the snap) whenever the family changes.
+  uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
   uint8_t lineSpacing = NORMAL;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
@@ -240,7 +229,10 @@ class CrossPointSettings {
   uint8_t hyphenationEnabled = 0;
 
   // Reader screen margin settings
-  uint8_t screenMargin = 5;
+  static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
+  static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
+  uint8_t screenMargin = SCREEN_MARGIN_MIN;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.
@@ -289,11 +281,6 @@ class CrossPointSettings {
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 
-  ~CrossPointSettings() = default;
-
-  // Get singleton instance
-  static CrossPointSettings& getInstance() { return instance; }
-
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
@@ -309,20 +296,59 @@ class CrossPointSettings {
   }
   int getReaderFontId() const;
 
-  // If count_only is true, returns the number of settings items that would be written.
-  uint8_t writeSettings(HalFile& file, bool count_only = false) const;
+  // Drop the SD font selection and fall back to the built-in family. The reader
+  // point size comes back into BUILTIN_READER_POINT_SIZES with it, since that is
+  // the only set a built-in family ships — otherwise the settings UI would keep
+  // offering a size nothing renders at. Both fields are persisted in one write.
+  void clearSdFontFamily();
 
-  bool saveToFile() const;
-  bool loadFromFile();
+  // Resolved status-bar composition. Consumers read the spec; only settings
+  // editors read the raw fields.
+  //
+  // Deliberately NOT built under storeMutex: every field it reads is a single
+  // byte, so a concurrent settings write can never produce a corrupt value —
+  // only a snapshot mixing pre- and post-change fields. That costs at most one
+  // e-ink frame drawn with a mixed status bar, which self-corrects on the next
+  // refresh. Locking here would instead put a mutex on the render path and
+  // stall it behind the SD write inside saveToFile(). Don't add one back.
+  struct StatusBarSpec {
+    bool showChapterPageCount = false;
+    bool showBookProgressPercent = false;
+    uint8_t titleMode = HIDE_TITLE;  // STATUS_BAR_TITLE
+    bool showBattery = false;
+    bool showBatteryPercent = false;
+    uint8_t clockMode = STATUS_BAR_CLOCK_HIDE;  // STATUS_BAR_CLOCK_MODE
+    bool clock12h = false;
+    uint8_t clockUtcOffsetQ = 48;             // 48 = UTC+0
+    uint8_t progressBarMode = HIDE_PROGRESS;  // STATUS_BAR_PROGRESS_BAR
+    uint8_t progressBarHeightPx = 0;          // (thickness+1)*2; 0 when the bar is hidden
+    uint8_t xtcMode = XTC_STATUS_BAR_HIDE;    // XTC_STATUS_BAR_MODE
+
+    bool showsProgressBar() const { return progressBarMode != HIDE_PROGRESS; }
+    bool showsTitle() const { return titleMode != HIDE_TITLE; }
+    bool showsClock() const { return clockMode != STATUS_BAR_CLOCK_HIDE; }
+    // Visibility of the text lane. Clock hardware presence is the caller's
+    // concern: pass halClock.isAvailable(), or true for layout reservation.
+    bool textLaneVisible(bool clockAvailable) const {
+      return showChapterPageCount || showBookProgressPercent || showsTitle() || showBattery ||
+             (showsClock() && clockAvailable);
+    }
+  };
+  StatusBarSpec statusBarSpec() const;
+
+  // Resolved text-rendering configuration for the Epub layout engine. The
+  // viewport is renderer/orientation-derived, so the caller supplies it —
+  // passing it in keeps a spec from ever existing in a half-filled state.
+  // Unlocked for the same reason as statusBarSpec(); see the note above.
+  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
+
+  static const char* getFilePath() { return "/.crosspoint/settings.json"; }
+  void toJson(JsonDocument& doc) const;
+  bool fromJson(JsonVariantConst doc);
 
   static void validateFrontButtonMapping(CrossPointSettings& settings);
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
 
- private:
-  bool loadFromBinaryFile();
-  bool migrateLanguageBinaryFile();
-
- public:
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;

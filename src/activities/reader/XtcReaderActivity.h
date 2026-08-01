@@ -39,12 +39,23 @@ class XtcReaderActivity final : public Activity {
   void loadProgress();
 
  public:
-  explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)
-      : Activity("XtcReader", renderer, mappedInput), xtc(std::move(xtc)) {}
+  explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
+                             int initialRefreshCountdown)
+      : Activity("XtcReader", renderer, mappedInput),
+        xtc(std::move(xtc)),
+        pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool handleForcedRefresh() override {
+    {
+      RenderLock lock(*this);
+      pagesUntilFullRefresh = 1;
+    }
+    requestUpdate();
+    return true;
+  }
   ScreenshotInfo getScreenshotInfo() const override;
 };

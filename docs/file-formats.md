@@ -6,7 +6,7 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
-### Version 7
+### Version 10
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
@@ -18,7 +18,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 7
+#define EXPECTED_VERSION 10
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -95,6 +95,12 @@ if (parsedSize != fileSize) {
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 34 is binary-identical to version 33. The version was bumped because
+word-gap suppression was narrowed to tokens glued together in the source: v33
+dropped the gap between any two words meeting at a CJK break opportunity, which
+collapsed the spaces between Hangul words, so v33 word positions no longer match
+what the layout engine now produces.
 
 Version 30 is binary-identical to version 29. The version was bumped because
 Arabic contextual shaping changed text measurement (`getTextAdvanceX` now

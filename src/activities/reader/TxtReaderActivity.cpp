@@ -410,7 +410,7 @@ void TxtReaderActivity::renderPage() {
 void TxtReaderActivity::renderStatusBar() const {
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
   std::string title;
-  if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
+  if (SETTINGS.statusBarSpec().showsTitle()) {
     title = txt->getTitle();
   }
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);

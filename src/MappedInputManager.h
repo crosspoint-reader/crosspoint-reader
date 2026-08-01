@@ -6,7 +6,23 @@ class GfxRenderer;
 
 class MappedInputManager {
  public:
-  enum class Button { Back, Confirm, Left, Right, Up, Down, Power, PageBack, PageForward, NavNext, NavPrevious };
+  enum class Button {
+    Back,
+    Confirm,
+    Left,
+    Right,
+    Up,
+    Down,
+    Power,
+    PageBack,
+    PageForward,
+    NavNext,
+    NavPrevious,
+    ScreenLeft,
+    ScreenRight,
+    ScreenUp,
+    ScreenDown
+  };
   enum class SwipeDir { None, Left, Right, Up, Down };
 
   struct Labels {
@@ -52,6 +68,10 @@ class MappedInputManager {
   unsigned long getHeldTime() const;
   const GfxRenderer& getRenderer() const { return renderer; }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
+  // Maps four screen-direction labels onto the two physical front-button roles
+  // using the same live-orientation transform as ScreenLeft/Right/Up/Down.
+  Labels mapDirectionalLabels(const char* back, const char* confirm, const char* left, const char* right,
+                              const char* up, const char* down) const;
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
 
@@ -70,6 +90,8 @@ class MappedInputManager {
   // preference and stays "rotated" even while portrait UI like home/settings is on screen.
   const GfxRenderer& renderer;
 
+  Button mapScreenDirection(Button button) const;
+  Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   bool wasBackGesture() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords

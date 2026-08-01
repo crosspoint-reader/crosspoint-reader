@@ -256,8 +256,44 @@ void Epub::parseCssFiles() const {
     return;
   }
 
+  // Some converters emit one byte-identical stylesheet per chapter (100+ .css
+  // entries), and each parse costs a zip locate plus an SD extract round-trip.
+  // Map every CSS path to its central-directory (CRC32, compressed size) in a
+  // single scan and parse only the first of each identical pair. Rules merge
+  // into one global set, so dropping exact duplicates cannot lose styles. A
+  // path that never matches a directory entry keeps key 0 and always parses.
+  std::vector<uint64_t> dedupKeys(cssFiles.size(), 0);
+  if (cssFiles.size() > 1) {
+    std::unordered_map<std::string, size_t> pathToIndex;
+    pathToIndex.reserve(cssFiles.size());
+    for (size_t i = 0; i < cssFiles.size(); i++) {
+      pathToIndex.emplace(FsHelpers::normalisePath(cssFiles[i]), i);
+    }
+    ZipFile(filepath).enumerateFileEntries([&](std::string_view entryPath, uint32_t crc32, uint32_t compressedSize) {
+      if (!FsHelpers::hasCssExtension(entryPath)) {
+        return;
+      }
+      const auto it = pathToIndex.find(std::string{entryPath});
+      if (it != pathToIndex.end()) {
+        dedupKeys[it->second] = (static_cast<uint64_t>(crc32) << 32) | compressedSize;
+      }
+    });
+  }
+  std::vector<uint64_t> seenKeys;
+  seenKeys.reserve(cssFiles.size());
+  size_t skippedDuplicates = 0;
+
   // No cache yet - parse CSS files
-  for (const auto& cssPath : cssFiles) {
+  for (size_t cssIndex = 0; cssIndex < cssFiles.size(); cssIndex++) {
+    const auto& cssPath = cssFiles[cssIndex];
+    const uint64_t dedupKey = dedupKeys[cssIndex];
+    if (dedupKey != 0) {
+      if (std::find(seenKeys.begin(), seenKeys.end(), dedupKey) != seenKeys.end()) {
+        skippedDuplicates++;
+        continue;
+      }
+      seenKeys.push_back(dedupKey);
+    }
     LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
     // Check heap before parsing - CSS parsing allocates heavily
@@ -312,7 +348,8 @@ void Epub::parseCssFiles() const {
     LOG_ERR("EBP", "Failed to save CSS rules to cache");
   }
 
-  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files", cssParser->ruleCount(), cssFiles.size());
+  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files (%zu identical duplicates skipped)", cssParser->ruleCount(),
+          cssFiles.size(), skippedDuplicates);
   cssParser->clear();
 }
 
@@ -728,14 +765,29 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
   return content;
 }
 
-bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize) const {
+bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
+                                    const bool allowEarlyStop) const {
   if (itemHref.empty()) {
     LOG_DBG("EBP", "Failed to read item, empty href");
     return false;
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize, allowEarlyStop);
+}
+
+bool Epub::extractItemToFile(const std::string& itemHref, const std::string& destPath) const {
+  HalFile out;
+  if (!Storage.openFileForWrite("EBP", destPath, out)) {
+    return false;
+  }
+  const bool ok = readItemContentsToStream(itemHref, out, 4096);
+  out.flush();
+  out.close();
+  if (!ok) {
+    Storage.remove(destPath.c_str());
+  }
+  return ok;
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {

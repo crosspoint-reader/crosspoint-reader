@@ -18,9 +18,24 @@ struct Info {
   bool valid = false;
 };
 
-bool parse(HalFile& file, Info* info);
+// Why an extraction failed, so callers can report the accurate cause.
+enum class ExtractError : uint8_t {
+  None,        // success
+  LowMemory,   // an allocation failed — the ~32KB inflate window or a chunk
+               // buffer couldn't be obtained from the fragmented heap
+  ReadError,   // file open / read / write / bad-offset failure (IO or a bogus
+               // .idx offset), not a compression problem
+  Decompress,  // the compressed stream itself was bad (inflate failed, or the
+               // .dz header/chunk table didn't parse) — corrupt/truncated .dz
+};
+
+// Parse the dictzip header/chunk table. On failure, *outError (if provided)
+// reports ReadError for a truncated/IO read or Decompress for a malformed file.
+bool parse(HalFile& file, Info* info, ExtractError* outError = nullptr);
 
 // Decompress the uncompressed byte range [offset, offset+size) into outFile.
-bool extractEntry(const char* path, uint32_t offset, uint32_t size, HalFile& outFile);
+// On failure, *outError (if provided) reports the specific cause so callers can
+// distinguish low memory from IO from a corrupt file.
+bool extractEntry(const char* path, uint32_t offset, uint32_t size, HalFile& outFile, ExtractError* outError = nullptr);
 
 }  // namespace DictZip

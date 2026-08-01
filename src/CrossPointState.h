@@ -1,18 +1,16 @@
 #pragma once
+#include <ArduinoJson.h>
+#include <PersistableStore.h>
+
 #include <cstdint>
-#include <mutex>
 #include <string>
 
-class CrossPointState {
-  mutable std::mutex _mutex;
+class CrossPointState : public PersistableStore<CrossPointState> {
+  CrossPointState() = default;
 
-  // Static instance
-  static CrossPointState instance;
+  friend class PersistableStore<CrossPointState>;
 
  public:
-  // Access the state mutex for protecting multi-field reads/writes from other cores.
-  std::mutex& getMutex() const { return _mutex; }
-
   static constexpr uint8_t SLEEP_RECENT_COUNT = 16;
 
   std::string openEpubPath;
@@ -23,23 +21,16 @@ class CrossPointState {
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
 
+  static const char* getFilePath() { return "/.crosspoint/state.json"; }
+  void toJson(JsonDocument& doc) const;
+  bool fromJson(JsonVariantConst doc);
+
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.
   bool isRecentSleep(uint16_t idx, uint8_t checkCount) const;
 
   void pushRecentSleep(uint16_t idx);
-  ~CrossPointState() = default;
-
-  // Get singleton instance
-  static CrossPointState& getInstance() { return instance; }
-
-  bool saveToFile() const;
-
-  bool loadFromFile();
-
- private:
-  bool loadFromBinaryFile();
 };
 
-// Helper macro to access settings
+// Helper macro to access state
 #define APP_STATE CrossPointState::getInstance()

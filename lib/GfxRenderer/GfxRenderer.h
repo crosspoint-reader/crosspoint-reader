@@ -15,6 +15,7 @@ class FontCacheManager;
 class SdCardFont;
 
 #include <cstring>
+#include <deque>
 #include <map>
 #include <string>
 #include <vector>
@@ -56,6 +57,7 @@ class GfxRenderer {
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
   // fontCacheManager_ below.
   mutable std::map<int, SdCardFont*> sdCardFonts_;
+  mutable std::map<int, uint16_t> sdCardFontScales_;  // fontId -> 8.8 fixed point scale (256=1.0x)
 
   // Mutable because drawText() is const but needs to delegate scan-mode
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
@@ -73,6 +75,20 @@ class GfxRenderer {
   mutable int _stripY0 = 0;
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
+
+  // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
+  // size-matched SD-card font id that carries CJK glyphs. When a string drawn
+  // or measured with a mapped primary font contains a CJK codepoint the primary
+  // cannot render, the whole string is routed to the mapped fallback so it
+  // appears at the same point size as the surrounding UI text. Populated by the
+  // app-level SD font setup when an SD family is loaded. See resolveTextFontId().
+  std::map<int, int> fallbackFontMap_;
+
+  // If `text` contains a CJK codepoint that `fontId` cannot render and `fontId`
+  // has a registered fallback, returns the fallback id; otherwise returns
+  // fontId unchanged. The whole string is routed as a unit so each draw/measure
+  // call stays single-font (consistent bit depth, metrics, wrapping).
+  int resolveTextFontId(int fontId, const char* text, EpdFontFamily::Style style) const;
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
@@ -107,6 +123,7 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
+    sdCardFontScales_.erase(fontId);
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -114,14 +131,27 @@ class GfxRenderer {
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
   void unregisterSdCardFont(int fontId) { removeFont(fontId); }
-  void clearSdCardFonts() { sdCardFonts_.clear(); }
+  void clearSdCardFonts() {
+    sdCardFonts_.clear();
+    sdCardFontScales_.clear();
+  }
+  void registerSdCardFontScale(int fontId, uint16_t scale) { sdCardFontScales_[fontId] = scale; }
+  void clearSdCardFontScales() { sdCardFontScales_.clear(); }
+  uint16_t getSdCardFontScale(int fontId) const {
+    auto it = sdCardFontScales_.find(fontId);
+    return (it != sdCardFontScales_.end()) ? it->second : 256;
+  }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
+  // Register/clear size-matched CJK UI fallbacks (see fallbackFontMap_).
+  // setFallbackFont maps a primary UI font id to an SD font id of the same size.
+  void setFallbackFont(int primaryFontId, int fallbackFontId) { fallbackFontMap_[primaryFontId] = fallbackFontId; }
+  void clearFallbackFonts() { fallbackFontMap_.clear(); }
   // Ensure SD card font glyph data is loaded for the given text. Called from layout code
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
   void ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F) const;
-  void ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+  void ensureSdCardFontReady(int fontId, const std::deque<std::string>& words, bool includeHyphen,
                              uint8_t styleMask = 0x0F) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
@@ -229,6 +259,7 @@ class GfxRenderer {
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
+  int getLineHeight(int fontId, float compression) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
                             EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Word-wrap \p text into at most \p maxLines lines, each no wider than

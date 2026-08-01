@@ -27,12 +27,6 @@ constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
 constexpr int bookmarkStatusIconTopCrop = 2;
 
-bool statusBarTextLaneVisible() {
-  return SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-         SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE || SETTINGS.statusBarBattery ||
-         (SETTINGS.statusBarClock && halClock.isAvailable());
-}
-
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
   constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
   for (int row = 0; row < bookmarkStatusIconHeight; ++row) {
@@ -792,7 +786,8 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  const bool showStatusBarTextLane = statusBarTextLaneVisible();
+  const auto sb = SETTINGS.statusBarSpec();
+  const bool showStatusBarTextLane = sb.textLaneVisible(halClock.isAvailable());
 
   // Draw Progress Text
   const auto screenHeight = renderer.getScreenHeight();
@@ -803,17 +798,17 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int leftClusterWidth = 0;
   int rightClusterWidth = 0;
 
-  if (SETTINGS.statusBarBookProgressPercentage || SETTINGS.statusBarChapterPageCount) {
+  if (sb.showBookProgressPercent || sb.showChapterPageCount) {
     // Right aligned text for progress counter
     char progressStr[32];
 
     // Prefix the page count with "~" while a still-building spine only yields an estimated total.
     const char* estimatePrefix = pageCountEstimated ? "~" : "";
 
-    if (SETTINGS.statusBarBookProgressPercentage && SETTINGS.statusBarChapterPageCount) {
+    if (sb.showBookProgressPercent && sb.showChapterPageCount) {
       snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
                bookProgress);
-    } else if (SETTINGS.statusBarBookProgressPercentage) {
+    } else if (sb.showBookProgressPercent) {
       snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
     } else {
       snprintf(progressStr, sizeof(progressStr), "%s%d/%d", estimatePrefix, currentPage, pageCount);
@@ -826,30 +821,28 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Progress Bar
-  if (SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS) {
+  if (sb.showsProgressBar()) {
     const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
     const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
     const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom -
-                             ((SETTINGS.statusBarProgressBarThickness + 1) * 2) - paddingBottom + (fillMargin ? 1 : 0);
+    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
+                             paddingBottom + (fillMargin ? 1 : 0);
     size_t progress;
-    if (SETTINGS.statusBarProgressBar == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
+    if (sb.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       progress = static_cast<size_t>(bookProgress);
     } else {
       // Chapter progress
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
-    const int barHeight =
-        ((SETTINGS.statusBarProgressBarThickness + 1) * 2) + (fillMargin ? orientedMarginBottom - 1 : 0);
+    const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
     renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
   }
 
   // Draw Battery
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_NEVER;
+  const bool showBatteryPercentage = sb.showBatteryPercent;
 
-  if (SETTINGS.statusBarBattery) {
+  if (sb.showBattery) {
     GUI.drawBatteryLeft(renderer,
                         Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage);
@@ -866,16 +859,16 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 
   // Draw Clock (X3 only — DS3231 RTC)
-  if (SETTINGS.statusBarClock && halClock.isAvailable()) {
+  if (sb.showsClock() && halClock.isAvailable()) {
     char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clockUtcOffsetQ, sb.clock12h)) {
       int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
       int clockX = 0;
       // Position to the left or right of the progress text (with a small gap)
-      if (SETTINGS.statusBarClock == CrossPointSettings::STATUS_BAR_CLOCK_LEFT) {
+      if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_LEFT) {
         clockX = leftClusterX + leftClusterWidth + (leftClusterWidth > 0 ? 10 : 0);
         leftClusterWidth += clockTextWidth + 10;
-      } else if (SETTINGS.statusBarClock == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT) {
+      } else if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT) {
         clockX = rightClusterX - rightClusterWidth - (rightClusterWidth > 0 ? 10 : 0) - clockTextWidth;
         rightClusterWidth += clockTextWidth + 10;
       }

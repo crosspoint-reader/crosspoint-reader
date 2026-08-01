@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <deque>
 #include <functional>
 #include <memory>
 #include <string>
@@ -13,11 +14,21 @@
 class GfxRenderer;
 
 class ParsedText {
-  std::vector<std::string> words;
+  // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
+  // of tokens (CJK splits every character), and a vector grows by reallocating its
+  // whole element array into one contiguous block (32 B/std::string -> 64-128 KB at
+  // a few thousand tokens). On the ESP32-C3 that single large contiguous request
+  // fails under a fragmented, BLE-resident heap and the throwing operator new
+  // abort()s the firmware (fresh-open CJK crash). A deque grows in fixed ~512 B nodes
+  // (largest contiguous alloc stays ~2 KB regardless of token count), so it never
+  // triggers that. The per-token parallel arrays below stay vectors: 1 byte / 1 bit
+  // each, they never approach the contiguous-block ceiling.
+  std::deque<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   std::vector<bool> wordContinues;      // true = word attaches to previous with no break
   std::vector<bool> wordNoSpaceBefore;  // true = may break before token, but no synthetic space when joined
   std::vector<bool> wordIsFocusSuffix;  // true = token is the regular tail of a focus bold-prefix split
+  std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
@@ -60,6 +71,13 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);
+  void setRubyForWordAt(size_t index, const std::string& ruby);
+  void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
+  EpdFontFamily::Style getWordStyleAt(size_t index) const {
+    return index < wordStyles.size() ? wordStyles[index] : EpdFontFamily::REGULAR;
+  }
+  std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
+  void ensureRubyCapacity();
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
