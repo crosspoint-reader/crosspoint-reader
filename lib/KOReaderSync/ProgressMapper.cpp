@@ -203,6 +203,7 @@ class ParagraphStreamer final : public Print {
   static constexpr size_t MAX_ENTITY_SIZE = 16;
   char entityBuffer[MAX_ENTITY_SIZE] = {};
   size_t entityLen = 0;
+  bool prevCR = false;  // last counted visible byte was a CR (XML line-ending normalization)
 
   // Forward mode: count <p> paragraphs at a byte offset (legacy, used by generateXPath)
   size_t fwdTarget;
@@ -430,6 +431,10 @@ class ParagraphStreamer final : public Print {
     const char* resolved = lookupHtmlEntity(entityBuffer, entityLen);
     if (resolved)
       onVisibleText(resolved);
+    else if (entityLen >= 3 && entityBuffer[1] == '#')
+      // Numeric character reference (&#NNN; / &#xHH;): expat -- which builds the page LUT --
+      // decodes it to a single codepoint. Count one here too, not the raw "&#NNN" characters.
+      onVisibleCodepoint();
     else
       flushEntityAsLiteral();
     globalInEntity = false;
@@ -688,6 +693,13 @@ class ParagraphStreamer final : public Print {
       return 1;
     }
 
+    // XML 1.0 §2.11 line-ending normalization: expat (which builds the page LUT) collapses a
+    // "\r\n" pair and a lone "\r" to a single "\n". Mirror that so this byte counter -- which the
+    // resolved offset is measured against -- stays codepoint-for-codepoint identical. prevCR is
+    // set only by the visible-text branch below, so any non-text byte clears it here.
+    const bool afterCR = prevCR;
+    prevCR = false;
+
     if (c == '<') {
       globalInTag = true;
       tagState = TAG_IDLE;
@@ -722,9 +734,12 @@ class ParagraphStreamer final : public Print {
         globalInEntity = true;
         entityBuffer[0] = '&';
         entityLen = 1;
+      } else if (c == '\n' && afterCR) {
+        // Second half of a CRLF: the newline was already counted on the preceding CR.
       } else {
         const bool startsCodepoint = (c & 0xC0) != 0x80;
         if (startsCodepoint) onVisibleCodepoint();
+        prevCR = (c == '\r');  // a lone/leading CR is the newline; swallow any '\n' that follows
       }
     }
     return 1;
@@ -777,7 +792,7 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
 
 std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(const std::shared_ptr<Epub>& epub,
                                                                    const KOReaderRichPosition& rich,
-                                                                   GfxRenderer& renderer) {
+                                                                   GfxRenderer& renderer, bool xpathAlreadyTried) {
   const int spineCount = epub->getSpineItemsCount();
   if (static_cast<int>(rich.spineIndex) >= spineCount) {
     LOG_DBG("PM", "Rich position spine %u out of range (%d spine items)", rich.spineIndex, spineCount);
@@ -789,8 +804,9 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(const std::sh
 
   // The existing rich extension carries the same KOReader XPath as the standard
   // progress field. Resolve that content anchor first; remote page counts are
-  // layout-dependent hints only.
-  if (!rich.xpath.empty()) {
+  // layout-dependent hints only. Skip it when the caller already resolved this exact
+  // XPath -- re-streaming the same chapter for the same failure is pure waste.
+  if (!xpathAlreadyTried && !rich.xpath.empty()) {
     SavedProgressPosition saved{rich.xpath, static_cast<float>(rich.pctQ) / 1000000.0f};
     auto contentMapped = toCrossPoint(epub, saved, renderer);
     if (contentMapped.hasVisibleTextOffset) {
@@ -955,7 +971,9 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
               s.progress() * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }
   }
-  if (xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
+  if (!result.hasVisibleTextOffset && xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
+    // Only fall back to "chapter start" when no intra-chapter offset was resolved above --
+    // otherwise a resolved deep position (e.g. body/div[3]/text().0) would be clobbered to page 0.
     result.visibleTextOffset = 0;
     result.hasVisibleTextOffset = true;
     LOG_DBG("PM", "Chapter-start XPath %s -> spine=%d page start", koPos.xpath.c_str(), result.spineIndex);

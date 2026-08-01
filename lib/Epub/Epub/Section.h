@@ -156,4 +156,14 @@ class Section {
   // preferFirstAtOffset is true, ties caused by zero-width content such as an
   // image-only page select the first page at that offset.
   std::optional<uint16_t> getPageForVisibleTextOffset(uint32_t offset, bool preferFirstAtOffset = false) const;
+
+  // True once the active build has laid out a page starting at or past `offset`, i.e.
+  // getPageForVisibleTextOffset() can resolve it from the build without laying out more.
+  // Lets a caller build to a content target instead of a page number, which is what a
+  // re-pagination needs: the old page index no longer names the same content.
+  // False with no build running -- there is nothing left to wait for, so the on-disk
+  // cache answers directly.
+  bool buildReachedVisibleTextOffset(uint32_t offset) const {
+    return build_ && !build_->lut.empty() && offset <= build_->lut.back().visibleTextOffset;
+  }
 };

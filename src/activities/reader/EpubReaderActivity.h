@@ -27,6 +27,13 @@ class EpubReaderActivity final : public Activity {
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
   std::optional<uint32_t> cachedVisibleTextOffset;
+  // Visible-codepoint offset of the page currently on screen, captured when the page is loaded
+  // (Page::visibleTextOffset). Lets saveProgress persist the offset without reopening section.bin.
+  std::optional<uint32_t> currentPageVisibleOffset;
+  // Explicit "land at this visible-codepoint offset in the target spine" request (bookmark open).
+  // Resolved in render() once the section is loaded/built far enough, then cleared. Unlike a
+  // settings-change reposition it always resolves by content, so it survives any re-pagination.
+  std::optional<uint32_t> pendingOffsetJump;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   // Signals that the next render should reposition within the newly loaded section

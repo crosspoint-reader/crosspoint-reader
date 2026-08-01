@@ -706,6 +706,9 @@ std::unique_ptr<Page> Section::loadPageDuringBuild(const int page) {
   file.seek(pos);
   auto p = Page::deserialize(file);
   file.seek(writePos);
+  if (p) {
+    p->visibleTextOffset = build_->lut[page].visibleTextOffset;
+  }
   return p;
 }
 
@@ -724,9 +727,26 @@ std::unique_ptr<Page> Section::loadPageAt(const int page) const {
   f.seek(lutOffset + sizeof(uint32_t) * page);
   uint32_t pagePos;
   serialization::readPod(f, pagePos);
-  f.seek(pagePos);
 
-  return Page::deserialize(f);
+  // Read this page's visible-codepoint start offset from the visible-offset LUT (last header slot)
+  // in the same open handle, so the reader can persist progress without reopening the section file
+  // on every page turn (see Page::visibleTextOffset). A malformed/old file leaves it at 0.
+  f.seek(HEADER_SIZE - sizeof(uint32_t));
+  uint32_t visibleLutOffset;
+  serialization::readPod(f, visibleLutOffset);
+  uint32_t visibleTextOffset = 0;
+  const uint32_t visibleEntry = visibleLutOffset + sizeof(uint32_t) * page;
+  if (visibleLutOffset >= HEADER_SIZE && visibleEntry + sizeof(uint32_t) <= f.size()) {
+    f.seek(visibleEntry);
+    serialization::readPod(f, visibleTextOffset);
+  }
+
+  f.seek(pagePos);
+  auto p = Page::deserialize(f);
+  if (p) {
+    p->visibleTextOffset = visibleTextOffset;
+  }
+  return p;
   // No f.close() needed -- DESTRUCTOR_CLOSES_FILE=1 handles it at scope exit
 }
 

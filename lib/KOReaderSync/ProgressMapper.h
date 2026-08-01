@@ -77,12 +77,16 @@ class ProgressMapper {
    * resolved to a content offset first; legacy spine/page/paragraph hints are
    * used only when that content anchor cannot be applied.
    *
+   * @param xpathAlreadyTried when true, skip re-resolving rich.xpath and go straight to the
+   *        legacy page hints. The caller sets this when it just resolved the identical XPath via
+   *        toCrossPoint(), so retrying it here would decompress the chapter twice for nothing.
    * @return The position, or std::nullopt when the rich position cannot be
    *         applied (spine out of range, no section cache) and the caller
    *         should fall back to toCrossPoint().
    */
   static std::optional<CrossPointPosition> fromRichPosition(const std::shared_ptr<Epub>& epub,
-                                                            const KOReaderRichPosition& rich, GfxRenderer& renderer);
+                                                            const KOReaderRichPosition& rich, GfxRenderer& renderer,
+                                                            bool xpathAlreadyTried = false);
 
  private:
   /**
