@@ -84,8 +84,7 @@ void WifiSelectionActivity::onExit() {
   LOG_DBG("WIFI", "Free heap after scanDelete: %d bytes", ESP.getFreeHeap());
 
   // Note: We do NOT disconnect WiFi here - the parent activity
-  // (SshServerActivity) manages WiFi connection state. We just clean
-  // up the scan and task.
+  // manages WiFi connection state. We just clean up the scan and task.
 
   LOG_DBG("WIFI", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
@@ -415,7 +414,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
     }
 
     // If we entered a new password, ask if user wants to save it
-    // Otherwise, immediately complete so parent can start web server
+    // Otherwise, immediately complete so the parent activity can proceed
     if (!usedSavedPassword && !enteredPassword.empty()) {
       state = WifiSelectionState::SAVE_PROMPT;
       savePromptSelection = 0;  // Default to "Yes"
@@ -563,7 +562,7 @@ void WifiSelectionActivity::loop() {
         RenderLock lock(*this);
         WIFI_STORE.addCredential(selectedSSID, enteredPassword);
       }
-      // Complete - parent will start web server
+      // Complete - parent activity proceeds now that Wi-Fi is connected
       onComplete(true);
     } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       // Skip saving, complete anyway

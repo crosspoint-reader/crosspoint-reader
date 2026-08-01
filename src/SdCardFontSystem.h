@@ -46,7 +46,7 @@ class SdCardFontSystem {
   SdCardFontRegistry& registry() { return registry_; }
 
   /// Mark the registry as needing re-discovery.
-  /// Thread-safe: can be called from the web server task.
+  /// Thread-safe: can be called from a background task.
   void markRegistryDirty() { registryDirty_.store(true, std::memory_order_release); }
 
   /// If the registry is dirty, re-scan the SD card now and clear the flag.

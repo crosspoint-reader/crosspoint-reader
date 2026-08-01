@@ -26,10 +26,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 - **Wireless workflows**:
   
-  - File transfer web UI
   - EPUB Optimizer
-  - SSH server with scp file transfer and shell file management
-  - AP mode (hotspot) and STA mode (join existing Wi-Fi), with QR helpers
   - OPDS browser with saved servers (up to 8), search, pagination, and direct download
   - OTA update checks and installs from GitHub releases
 

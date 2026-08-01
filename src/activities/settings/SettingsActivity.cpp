@@ -37,8 +37,8 @@ void SettingsActivity::rebuildSettingsLists() {
   controlsSettings.clear();
   systemSettings.clear();
 
-  // Pick up any fonts uploaded/deleted over the web server since the last
-  // reader activity ran — otherwise the font-family picker shows stale list.
+  // Pick up any fonts installed/deleted since the last reader activity ran —
+  // otherwise the font-family picker shows a stale list.
   sdFontSystem.refreshIfDirty();
 
   // Rescan /dictionaries on every rebuild: cheap (one directory listing) and

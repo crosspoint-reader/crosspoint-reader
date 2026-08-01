@@ -15,7 +15,7 @@ graph TD
     D --> F[State and settings]
     E --> G[Reader flows]
     E --> H[Home/Library/Settings flows]
-    E --> I[Network/Web server flows]
+    E --> I[Network flows]
     G --> J[lib/Epub parsing + layout + hyphenation]
     J --> K[SD cache in .crosspoint]
     E --> L[GfxRenderer]
@@ -52,14 +52,14 @@ Some flows use `src/activities/ActivityWithSubactivity.h` to host nested activit
 
 - `onEnter()` and `onExit()` manage setup/teardown
 - `loop()` handles per-frame behavior
-- `skipLoopDelay()` and `preventAutoSleep()` are used by long-running flows (for example web server mode)
+- `skipLoopDelay()` and `preventAutoSleep()` are used by long-running flows (for example OTA/firmware updates)
 
 Top-level activity groups:
 
 - `src/activities/home/`: home and library navigation
 - `src/activities/reader/`: EPUB/XTC/TXT reading flows
 - `src/activities/settings/`: settings menus and configuration
-- `src/activities/network/`: Wi-Fi selection, AP/STA mode, file transfer server
+- `src/activities/network/`: Wi-Fi selection, shared by OPDS, OTA updates, font downloads, and KOReader sync
 - `src/activities/boot_sleep/`: boot and sleep transitions
 
 ## Reader and content pipeline
@@ -160,31 +160,12 @@ binary cache formats, see `docs/file-formats.md`.
 
 ## Networking architecture
 
-Network file transfer is controlled by `src/activities/network/CrossPointWebServerActivity.h` and served by `src/network/CrossPointWebServer.h`.
-
-Modes:
-
-- STA: join existing Wi-Fi network
-- AP: create hotspot
-- Calibre Wireless: STA flow specialized for Calibre plugin uploads
-
-Server behavior:
-
-- HTTP server on port 80
-- WebSocket upload server on port 81
-- WebDAV handler on the HTTP server
-- UDP discovery listener for upload clients
-- file operations backed by SD storage
-- browser APIs for file management, settings, fonts, OPDS servers, and saved Wi-Fi networks
-- activity requests faster loop responsiveness while server is running
-
-Endpoint reference: `docs/webserver-endpoints.md`.
+`src/activities/network/WifiSelectionActivity.h` is the single shared Wi-Fi join flow (STA mode only), reused as a sub-activity by OTA updates, font downloads, OPDS browsing, and KOReader sync. There is no on-device AP/hotspot mode or file-transfer server; `src/network/` (`HttpDownloader`, `OtaUpdater`, `FirmwareFlasher`) is an outbound-only HTTPS client used for those flows.
 
 ## Build-time generated assets
 
 Some sources are generated and should not be edited manually.
 
-- `scripts/build_html.py` generates `src/network/html/*.generated.h` from HTML files
 - `scripts/gen_i18n.py` generates `lib/I18n/I18nKeys.h`, `I18nStrings.h`, and `I18nStrings.cpp`
 - `scripts/generate_hyphenation_trie.py` generates hyphenation headers under `lib/Epub/Epub/hyphenation/generated/`
 
@@ -193,7 +174,7 @@ When editing related source assets, regenerate via normal build steps/scripts.
 ## Key directories
 
 - `src/`: app orchestration, settings/state, and activity implementations
-- `src/network/`: web server and OTA/update networking
+- `src/network/`: OTA/firmware-update networking (outbound HTTPS client only)
 - `src/components/`: theming and shared UI components
 - `lib/hal/`: hardware abstraction wrappers around freeink-sdk
 - `lib/Epub/`: EPUB parser, layout, CSS handling, and hyphenation

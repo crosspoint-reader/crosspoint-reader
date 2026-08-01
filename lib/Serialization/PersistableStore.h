@@ -23,8 +23,8 @@ class PersistableStoreBase {
 
   // Serializes saveToFile/loadFromFile against each other across FreeRTOS
   // tasks, so the JSON snapshot cannot tear mid-serialize and two concurrent
-  // saves cannot write their documents out of order. Concurrent saves are
-  // reachable: the web server task saves settings while the main task can too.
+  // saves cannot write their documents out of order, should a background task
+  // ever save settings concurrently with the main task.
   //
   // It is deliberately held across the SD write. That is safe only because the
   // read path does NOT take it — derived stores build their snapshots (e.g.

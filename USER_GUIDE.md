@@ -14,23 +14,21 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.2 Reading Mode](#32-reading-mode)
     - [3.3 Browse Files Screen](#33-browse-files-screen)
     - [3.4 Recent Books Screen](#34-recent-books-screen)
-    - [3.5 File Transfer Screen](#35-file-transfer-screen)
-    - [3.6 Settings](#36-settings)
-      - [3.6.1 Display](#361-display)
-      - [3.6.2 Reader](#362-reader)
-      - [3.6.3 Controls](#363-controls)
-      - [3.6.4 System](#364-system)
-      - [3.6.5 OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries)
-      - [3.6.6 Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds)
-      - [3.6.7 KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)
+    - [3.5 Settings](#35-settings)
+      - [3.5.1 Display](#351-display)
+      - [3.5.2 Reader](#352-reader)
+      - [3.5.3 Controls](#353-controls)
+      - [3.5.4 System](#354-system)
+      - [3.5.5 OPDS Servers (Multiple Libraries)](#355-opds-servers-multiple-libraries)
+      - [3.5.6 KOReader Sync Quick Setup](#356-koreader-sync-quick-setup)
         - [Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)](#option-a-crosspoint-sync-server-synccrosspointreadercom-default)
         - [Option B: Legacy Public KOReader Server (`sync.koreader.rocks`)](#option-b-legacy-public-koreader-server-synckoreaderrocks)
         - [Option C: Self-Hosted Server (Docker Compose)](#option-c-self-hosted-server-docker-compose)
         - [Syncing While Reading](#syncing-while-reading)
-    - [3.7 Sleep Screen](#37-sleep-screen)
+    - [3.6 Sleep Screen](#36-sleep-screen)
       - [Cover settings](#cover-settings)
       - [Custom images](#custom-images)
-    - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
+    - [3.7 Custom Fonts (SD Card)](#37-custom-fonts-sd-card)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
@@ -56,7 +54,7 @@ The device utilises the standard buttons on the Xteink X4 (in the same layout as
 | **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right**           |
 | **Right Side**  | **Power**, **Volume Up**, **Volume Down**, **Reset** |
 
-Button layout can be customized in the **[Controls Settings](#363-controls)**.
+Button layout can be customized in the **[Controls Settings](#353-controls)**.
 
 ### Taking a Screenshot
 
@@ -71,7 +69,7 @@ Alternatively, while reading a book, press the **Confirm** button to open the re
 ### Power On / Off
 
 To turn the device on or off, **press and hold the Power button for approximately half a second**.
-In the **[Controls Settings](#363-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
+In the **[Controls Settings](#353-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
 
 To reboot the device (for example after a firmware update or if it's frozen), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
@@ -88,7 +86,7 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#33-browse-files-screen)** screen, the **[Recent Books](#34-recent-books-screen)** screen, the **[File Transfer](#35-file-transfer-screen)** screen, or **[Settings](#36-settings)**.
+The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#33-browse-files-screen)** screen, the **[Recent Books](#34-recent-books-screen)** screen, or **[Settings](#35-settings)**.
 
 ### 3.2 Reading Mode
 
@@ -107,50 +105,17 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 The Recent Books screen lists the most recently opened books in a chronological view, displaying title and author.
 
-### 3.5 File Transfer Screen
-
-The SSH Server screen allows you to upload and manage files on the device over SSH. When you enter the screen, choose **Join a Network** or **Create Hotspot**. The reader then starts an SSH server and shows the connection command (`ssh crosspoint@<ip>`) together with a password generated for that session.
-
-Upload a book from your computer:
-
-```
-scp mybook.epub crosspoint@<ip>:/
-```
-
-Download a file from the device:
-
-```
-scp crosspoint@<ip>:/mybook.epub .
-```
-
-An interactive session (`ssh crosspoint@<ip>`) provides basic file management commands (`ls`, `cd`, `pwd`, `cat`, `rm`, `mv`, `mkdir`) with relative paths and tab completion; type `help` for the full list. The device is also reachable as `crosspoint.local` on networks with mDNS support.
-
-Only single-file transfers are supported (no `scp -r`). The device presents a persistent ed25519 host key, stored on the SD card, so your SSH client only asks you to trust it once.
-
-To skip the on-screen password, install your public key once (using the session password shown on screen):
-
-```
-scp ~/.ssh/id_rsa.pub crosspoint@<ip>:/.ssh/authorized_keys
-```
-
-From then on `ssh` and `scp` authenticate with your key automatically. The file uses the standard `authorized_keys` format, so you can list multiple keys (one per line) by editing `/.ssh/authorized_keys` on the SD card.
-
-A **Wi-Fi signal strength indicator** is displayed on-screen during joined-network sessions.
-
-> [!TIP]
-> If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
-
-### 3.6 Settings
+### 3.5 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
 
-#### 3.6.1 Display
+#### 3.5.1 Display
 
 - **Sleep Screen**: Which sleep screen to display when the device sleeps:
   
   - "Dark" (default) - The default dark Crosspoint logo sleep screen
   - "Light" - The same default sleep screen, on a white background
-  - "Custom" - Custom images from the SD card; see [Sleep Screen](#37-sleep-screen) below for more information
+  - "Custom" - Custom images from the SD card; see [Sleep Screen](#36-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
@@ -201,7 +166,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 > [!NOTE]
 > A battery charging indicator is shown on the battery icon whenever the device is actively charging.
 
-#### 3.6.2 Reader
+#### 3.5.2 Reader
 
 - **Reader Font Family**: Choose the font used for reading:
   
@@ -240,7 +205,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
 
-#### 3.6.3 Controls
+#### 3.5.3 Controls
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
@@ -265,15 +230,15 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
 - **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
 
-#### 3.6.4 System
+#### 3.5.4 System
 
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
-- **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
+- **Wi-Fi Networks**: Connect to Wi-Fi networks for OPDS browsing and firmware updates.
 
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
 
-- **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
+- **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#355-opds-servers-multiple-libraries) below.
 
 - **Clear Reading Cache**: Clear the internal SD card cache.
 
@@ -281,9 +246,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Language**: Set the UI language. CrossPoint supports 24 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, and Hebrew.
 
-- **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
+- **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#37-custom-fonts-sd-card) for more information.
 
-#### 3.6.5 OPDS Servers (Multiple Libraries)
+#### 3.5.5 OPDS Servers (Multiple Libraries)
 
 CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs.
 
@@ -306,30 +271,7 @@ Behavior notes:
 - You can store up to 8 OPDS servers.
 - OPDS authentication supports HTTP Basic auth. If you use Calibre Content Server with authentication enabled, set it to Basic (not Digest).
 
-You can also manage OPDS servers from the web interface while in File Transfer mode:
-
-1. Connect to the device web UI.
-2. Open `http://<device-ip>/settings`.
-3. Use the **OPDS Servers** card to add, edit, or delete entries.
-
-For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
-
-#### 3.6.6 Web Settings (Wi-Fi + OPDS)
-
-While in **File Transfer** mode, the web settings page includes management cards for both **Wi-Fi Networks** and **OPDS Servers**.
-
-1. On device: open **File Transfer** and connect through **Join a Network** or **Create Hotspot**.
-2. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local`.
-3. In **Wi-Fi Networks**, add, edit, or delete saved network entries (SSID + optional password).
-4. In **OPDS Servers**, add, edit, or delete OPDS catalogs.
-
-Behavior notes:
-
-- Passwords are never shown back in the web UI after saving.
-- Leaving Password blank while editing keeps the existing saved password unchanged.
-- The web UI can save hidden-network SSIDs, but connecting to hidden networks still depends on the device-side Wi-Fi connection flow.
-
-#### 3.6.7 KOReader Sync Quick Setup
+#### 3.5.6 KOReader Sync Quick Setup
 
 CrossPoint can sync reading progress with KOReader-compatible sync servers.
 It also interoperates with KOReader apps/devices when they use the same server and credentials.
@@ -459,7 +401,7 @@ Once any of the options above is set up, press **Confirm** while reading to open
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
-### 3.7 Sleep Screen
+### 3.6 Sleep Screen
 
 The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
 
@@ -498,15 +440,14 @@ To use custom sleep images, set the sleep screen mode to **Custom** or **Cover +
 
 ---
 
-### 3.8 Custom Fonts (SD Card)
+### 3.7 Custom Fonts (SD Card)
 
 CrossPoint supports loading additional fonts from the SD card, extending beyond the two built-in families (Noto Serif, Noto Sans). Custom fonts can include extended Unicode coverage, enabling CJK (Chinese, Japanese, Korean) and other scripts.
 
-There are three ways to install fonts:
+There are two ways to install fonts:
 
 1. **Download from device (recommended):** Go to **Settings -> System -> Manage Fonts**, browse the available font families, and select one to download over Wi-Fi.
-2. **Upload via web interface:** While in **File Transfer** mode, open the web UI in a browser and navigate to the **Fonts** tab to upload `.cpfont` files.
-3. **Manual SD card copy:** Download font files from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) and copy them to `/.fonts/` (preferred) or `/fonts/` on your SD card.
+2. **Manual SD card copy:** Download font files from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) and copy them to `/.fonts/` (preferred) or `/fonts/` on your SD card.
 
 Once installed, custom fonts appear in **Settings → Reader → Font Family** alongside the built-in fonts.
 
@@ -525,7 +466,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 | **Previous Page** | Press **Left** _or_ **Volume Up**    |
 | **Next Page**     | Press **Right** _or_ **Volume Down** |
 
-The role of the volume (side) buttons can be swapped in the **[Controls Settings](#363-controls)**.
+The role of the volume (side) buttons can be swapped in the **[Controls Settings](#353-controls)**.
 
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
@@ -534,7 +475,7 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
 * **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
 
-This feature can be disabled in the **[Controls Settings](#363-controls)** to help avoid changing chapters by mistake.
+This feature can be disabled in the **[Controls Settings](#353-controls)** to help avoid changing chapters by mistake.
 
 ### Auto Page Turn
 
@@ -555,7 +496,7 @@ If the device goes to sleep or you close the book while viewing a footnote, the 
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
+* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#353-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
 
 ### Supported Languages
 
@@ -565,7 +506,7 @@ CrossPoint renders text using the following Unicode character blocks, enabling s
 * **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
 * **Vietnamese:** Supported via extended Latin glyph coverage in the built-in reader fonts.
 
-What is not supported with built-in reader fonts: Chinese, Japanese, Korean, Arabic, Greek, Hebrew, and Farsi. However, **CJK, Hebrew, Greek, and other extended scripts can be enabled by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
+What is not supported with built-in reader fonts: Chinese, Japanese, Korean, Arabic, Greek, Hebrew, and Farsi. However, **CJK, Hebrew, Greek, and other extended scripts can be enabled by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#37-custom-fonts-sd-card).
 
 ---
 
@@ -584,7 +525,7 @@ Available options include:
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.
-- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
+- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#356-koreader-sync-quick-setup)).
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
 
 Press **Back** at any time to close the menu and return to your current page.

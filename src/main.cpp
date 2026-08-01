@@ -574,7 +574,7 @@ void loop() {
   }
 
   // Add delay at the end of the loop to prevent tight spinning
-  // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
+  // When an activity requests skip loop delay (e.g., a network transfer in progress), use yield() for faster response
   // Otherwise, use longer delay to save power
   if (activityManager.skipLoopDelay()) {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
