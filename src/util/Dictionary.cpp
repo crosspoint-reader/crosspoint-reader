@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 
 #include "DictZip.h"
@@ -104,7 +105,23 @@ bool Dictionary::open(const char* folderName) {
   }
   hasSyn = Storage.exists((resolved + ".syn").c_str());
 
+  // Checked once here so buildPath() can never fail on the lookup path.
+  if (resolved.size() + LONGEST_SUFFIX_LEN + 1 > PATH_BUF_BYTES) {
+    LOG_ERR("DICT", "Dictionary path too long (%u chars, max %u)", static_cast<unsigned>(resolved.size()),
+            static_cast<unsigned>(PATH_BUF_BYTES - LONGEST_SUFFIX_LEN - 1));
+    return false;
+  }
+
   basePath = std::move(resolved);
+  return true;
+}
+
+bool Dictionary::buildPath(char* buf, size_t bufSize, const char* suffix) const {
+  const int n = snprintf(buf, bufSize, "%s%s", basePath.c_str(), suffix);
+  if (n < 0 || static_cast<size_t>(n) >= bufSize) {
+    LOG_ERR("DICT", "Path too long: %s%s", basePath.c_str(), suffix);
+    return false;
+  }
   return true;
 }
 
@@ -261,59 +278,68 @@ int Dictionary::readWordInto(HalFile& file, char* buf, size_t bufSize) {
   return static_cast<int>(bufSize - 1);
 }
 
-DictLocation Dictionary::locate(const char* target, std::string* matchedHeadwordOut) {
-  DictLocation result;
-  if (!isOpen()) return result;
+bool Dictionary::openSession(LookupSession& session) {
+  if (!isOpen()) return false;
 
-  HalFile idx;
-  if (!Storage.openFileForRead("DICT", basePath + ".idx", idx)) {
-    result.readError = true;
-    return result;
+  // One buffer reused for both paths — no transient heap on the lookup path.
+  char path[PATH_BUF_BYTES];
+  if (!buildPath(path, sizeof(path), ".idx")) return false;
+  if (!Storage.openFileForRead("DICT", path, session.idx)) return false;
+  session.idxSize = static_cast<uint32_t>(session.idx.fileSize());
+
+  // The sidecar is optional and its header only has to be validated once per
+  // lookup; without a usable one locate() scans from byte 0.
+  if (!buildPath(path, sizeof(path), ".qidx")) return true;
+  if (Storage.openFileForRead("DICT", path, session.qidx)) {
+    const SidecarHeader header = readSidecarHeader(session.qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
+    if (header.valid && header.sourceFileSize == session.idxSize) session.sampleCount = header.sampleCount;
   }
-  const uint32_t idxSize = static_cast<uint32_t>(idx.fileSize());
+  return true;
+}
+
+// Both files stay open across the stem-variant probes; every read below seeks
+// absolutely first, so a shared handle carries no position state between calls.
+DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
+  DictLocation result;
 
   // Bisect the sampled offsets to the last sample whose headword <= target.
   // Falls back to a full scan from byte 0 when the sidecar is unusable.
   uint32_t startByte = 0;
-  HalFile qidx;
-  if (Storage.openFileForRead("DICT", basePath + ".qidx", qidx)) {
-    const SidecarHeader header = readSidecarHeader(qidx, QIDX_MAGIC, SAMPLE_INTERVAL);
-    if (header.valid && header.sourceFileSize == idxSize && header.sampleCount > 0) {
-      uint32_t lo = 0;
-      uint32_t hi = header.sampleCount - 1;
-      while (lo < hi) {
-        const uint32_t mid = (lo + hi + 1) / 2;
-        uint32_t offset = 0;
-        if (!readSampleOffset(qidx, mid, &offset) || !idx.seekSet(offset) ||
-            readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0) {
-          lo = 0;
-          break;
-        }
-        if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
-          lo = mid;
-        } else {
-          hi = mid - 1;
-        }
+  if (session.sampleCount > 0) {
+    uint32_t lo = 0;
+    uint32_t hi = session.sampleCount - 1;
+    while (lo < hi) {
+      const uint32_t mid = (lo + hi + 1) / 2;
+      uint32_t offset = 0;
+      if (!readSampleOffset(session.qidx, mid, &offset) || !session.idx.seekSet(offset) ||
+          readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0) {
+        lo = 0;
+        break;
       }
-      readSampleOffset(qidx, lo, &startByte);
+      if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
     }
+    readSampleOffset(session.qidx, lo, &startByte);
   }
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
-  if (!idx.seekSet(startByte)) {
+  if (!session.idx.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
     return result;
   }
-  while (static_cast<uint32_t>(idx.position()) < idxSize) {
+  while (static_cast<uint32_t>(session.idx.position()) < session.idxSize) {
     // Not flagged as readError: readWordInto returns -1 for EOF and IO error
     // alike, so a short tail can't be told from a truncated .idx. Treat it as
     // the end of the index rather than risk reporting a read failure for what
     // is really a miss.
-    if (readWordInto(idx, wordBuf, sizeof(wordBuf)) < 0) break;
+    if (readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0) break;
     uint8_t suffix[8];
-    if (idx.read(suffix, 8) != 8) break;
+    if (session.idx.read(suffix, 8) != 8) break;
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
     if (cmp == 0) {
@@ -457,19 +483,21 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
     return fail(LookupResult::LowMemory);
   }
 
-  std::string path;
+  char pathBuf[PATH_BUF_BYTES];
+  const char* path = pathBuf;
   uint32_t offset = 0;
   if (hasPlainDict) {
-    path = basePath + ".dict";
+    if (!buildPath(pathBuf, sizeof(pathBuf), ".dict")) return fail(LookupResult::ReadError);
     offset = location.offset;
   } else {
+    if (!buildPath(pathBuf, sizeof(pathBuf), ".dict.dz")) return fail(LookupResult::ReadError);
     HalFile tmp = Storage.open(DICT_TMP_FILE, O_WRITE | O_CREAT | O_TRUNC);
     if (!tmp) {
       LOG_ERR("DICT", "Failed to open %s", DICT_TMP_FILE);
       return fail(LookupResult::ReadError);
     }
     DictZip::ExtractError xerr = DictZip::ExtractError::None;
-    if (!DictZip::extractEntry((basePath + ".dict.dz").c_str(), location.offset, size, tmp, &xerr)) {
+    if (!DictZip::extractEntry(pathBuf, location.offset, size, tmp, &xerr)) {
       // Map the specific extraction cause to the lookup result: allocation
       // failure (heap fragmentation) vs corrupt/truncated .dz vs an IO error.
       LOG_ERR("DICT", "dictzip extraction failed for %s (error %d)", basePath.c_str(), static_cast<int>(xerr));
@@ -563,21 +591,35 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
-  DictLocation location = locate(cleaned.c_str(), &matchedHeadwordOut);
-  bool searchFailed = location.readError;
-  // Dictionary-authored synonyms (alternate spellings, irregular forms) take
-  // precedence over the English-only stemmer, and are language-agnostic.
-  if (!location.found && hasSyn) {
-    location = locateSynonym(cleaned.c_str(), &matchedHeadwordOut);
-    searchFailed = searchFailed || location.readError;
-  }
-  if (!location.found) {
-    std::vector<std::string> variants;
-    stemVariants(cleaned, variants);
-    for (const auto& variant : variants) {
-      location = locate(variant.c_str(), &matchedHeadwordOut);
+  // One set of open handles for the exact-match probe and every stem variant,
+  // scoped so .idx/.qidx close before readDefinition() opens the data file.
+  DictLocation location;
+  bool searchFailed = false;
+  {
+    LookupSession session;
+    // Couldn't open .idx: the search never reached a verdict, so this is a read
+    // failure, not a miss.
+    if (!openSession(session)) {
+      setResult(LookupResult::ReadError);
+      return false;
+    }
+
+    location = locate(session, cleaned.c_str(), &matchedHeadwordOut);
+    searchFailed = location.readError;
+    // Dictionary-authored synonyms (alternate spellings, irregular forms) take
+    // precedence over the English-only stemmer, and are language-agnostic.
+    if (!location.found && hasSyn) {
+      location = locateSynonym(cleaned.c_str(), &matchedHeadwordOut);
       searchFailed = searchFailed || location.readError;
-      if (location.found) break;
+    }
+    if (!location.found) {
+      std::vector<std::string> variants;
+      stemVariants(cleaned, variants);
+      for (const auto& variant : variants) {
+        location = locate(session, variant.c_str(), &matchedHeadwordOut);
+        searchFailed = searchFailed || location.readError;
+        if (location.found) break;
+      }
     }
   }
   if (!location.found) {

@@ -226,6 +226,20 @@ int DictionaryWordSelectActivity::closestInRow(const uint16_t row, const int cen
   return best;
 }
 
+// Index of the word whose box (with finger-sized slop) contains the touch
+// point; -1 when the touch lands on no word. Boxes never overlap after the
+// slop grows them, at worst they touch, so first hit wins.
+int DictionaryWordSelectActivity::wordAt(const int x, const int y) const {
+  constexpr int SLOP = 4;  // matches the highlight box (+2) plus finger error
+  for (int i = 0; i < static_cast<int>(words.size()); i++) {
+    const WordBox& word = words[i];
+    if (x >= word.x - SLOP && x < word.x + word.width + SLOP && y >= word.y - SLOP && y < word.y + lineHeight + SLOP) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 void DictionaryWordSelectActivity::moveVertical(const int direction) {
   const WordBox& current = words[selected];
   const int centerX = current.x + current.width / 2;
@@ -248,14 +262,20 @@ void DictionaryWordSelectActivity::performLookup() {
   if (!dictOpenAttempted) {
     dictOpenAttempted = true;
     dictOpenOk = dict.open(SETTINGS.dictionaryName);
+    // needsIndex() opens and validates the .qidx sidecar, so ask it once per
+    // open rather than once per word: the answer only changes when we build
+    // the sidecar ourselves, which is handled below.
+    dictNeedsIndex = dictOpenOk && dict.needsIndex();
   }
-  const bool indexing = dictOpenOk && dict.needsIndex();
-  popupMsg = indexing ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
   bool ok = dictOpenOk;
   Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
-  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+  if (ok && dictNeedsIndex) {
+    ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+    dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
+  }
 
   std::string definition;
   std::string headword;
@@ -657,6 +677,33 @@ void DictionaryWordSelectActivity::loop() {
   }
 
   if (words.empty()) return;
+
+  // Touch: a touch-down moves the cursor to the touched word (differential
+  // repaint); a tap selects a word and acts on it exactly as a Confirm
+  // release would (see handleConfirmRelease — getHeldTime()'s touch override
+  // makes a tap resolve as a short press).
+  int tx = 0;
+  int ty = 0;
+  if (mappedInput.wasScreenTouchDown(tx, ty)) {
+    const int hit = wordAt(tx, ty);
+    if (hit >= 0) {
+      const int canonical = canonicalIndex(hit);
+      if (canonical != selected) {
+        selected = canonical;
+        requestUpdate();
+      }
+    }
+    return;
+  }
+  if (mappedInput.wasScreenTapped(tx, ty)) {
+    const int hit = wordAt(tx, ty);
+    if (hit >= 0) {
+      selected = canonicalIndex(hit);
+      handleConfirmRelease();
+    }
+    return;
+  }
+
   if (handleCrossPageNavigation()) return;
   // Step in reading order, not storage (visual) order. Within a row the two
   // only differ by which key means forward, but at a row boundary stepping
@@ -772,11 +819,10 @@ void DictionaryWordSelectActivity::paintWordBox(const int idx, const bool highli
 // Front-button bar (Back/Confirm/Left/Right). Drawn last on every repaint
 // path, including the differential highlight-only paths, so it always ends
 // up as the top layer even when a highlighted word's box falls under a
-// hint's screen area. No side-button hints: Up/Down row jump has no spare
-// screen area on this page (it reuses the reader's full-bleed layout), and
-// a hint box there would hide text instead of sitting in a reserved gutter.
+// hint's screen area. No side-button hints: the full-bleed reader page has no
+// spare gutter for them, so a hint box there would hide text.
 void DictionaryWordSelectActivity::drawHints() const {
-  // No selectable word on this page: Confirm/Left/Right are all no-ops
+  // No selectable word on this page: Confirm and navigation are all no-ops
   // (guarded by words.empty() in loop()/performLookup), so only Back does
   // anything and only Back is hinted.
   if (words.empty()) {

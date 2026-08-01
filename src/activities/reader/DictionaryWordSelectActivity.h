@@ -12,11 +12,14 @@
 
 class Section;
 
-// Button-driven word selection over the current reader page: the buttons
-// that physically lie horizontal step through words in reading order, the
-// vertical pair jumps rows (see wasPressedVisual — in landscape the front
-// Left/Right pair and the side buttons trade axes), Back returns to the
-// reader. What Confirm does depends on the mode:
+// Button- and touch-driven word selection over the current reader page: the
+// buttons that physically lie horizontal step through words in reading
+// order, the vertical pair jumps rows (see wasPressedVisual — in landscape
+// the front Left/Right pair and the side buttons trade axes), Back returns
+// to the reader. A touch-down moves the cursor to the touched word; a tap
+// selects it and acts on it exactly as a Confirm release would (see
+// handleConfirmRelease — getHeldTime()'s touch override makes a tap resolve
+// as a short press). What Confirm (or a tap) does depends on the mode:
 //  - Dictionary: release looks the word up in DictionaryDefinitionActivity.
 //  - Highlight: release anchors a passage selection; the next release saves
 //    the anchored range as a markdown highlight (HighlightStore).
@@ -76,6 +79,7 @@ class DictionaryWordSelectActivity final : public Activity {
   int canonicalIndex(int idx) const;
   int selectionEndPos(int hi) const;
   int closestInRow(uint16_t row, int centerX) const;
+  int wordAt(int x, int y) const;
   void moveVertical(int direction);
   void performLookup();
   void handleConfirmRelease();
@@ -139,6 +143,7 @@ class DictionaryWordSelectActivity final : public Activity {
   Dictionary dict;
   bool dictOpenAttempted = false;
   bool dictOpenOk = false;
+  bool dictNeedsIndex = false;
 
   Popup popup = Popup::None;
   StrId popupMsg = StrId::STR_DICT_NOT_FOUND;

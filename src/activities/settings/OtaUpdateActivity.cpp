@@ -126,13 +126,15 @@ void OtaUpdateActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
                       (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
-    const auto actionRects = getOtaActionRects(renderer);
-    const int cancelTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_CANCEL));
-    renderer.drawText(UI_10_FONT_ID, actionRects.cancel.x + (actionRects.cancel.width - cancelTextWidth) / 2,
-                      actionRects.cancel.y + 28, tr(STR_CANCEL));
-    const int updateTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_UPDATE));
-    renderer.drawText(UI_10_FONT_ID, actionRects.update.x + (actionRects.update.width - updateTextWidth) / 2,
-                      actionRects.update.y + 28, tr(STR_UPDATE));
+    if (mappedInput.hasTouch()) {
+      const auto actionRects = getOtaActionRects(renderer);
+      const int cancelTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_CANCEL));
+      renderer.drawText(UI_10_FONT_ID, actionRects.cancel.x + (actionRects.cancel.width - cancelTextWidth) / 2,
+                        actionRects.cancel.y + 28, tr(STR_CANCEL));
+      const int updateTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_UPDATE));
+      renderer.drawText(UI_10_FONT_ID, actionRects.update.x + (actionRects.update.width - updateTextWidth) / 2,
+                        actionRects.update.y + 28, tr(STR_UPDATE));
+    }
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
