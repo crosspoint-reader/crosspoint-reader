@@ -366,8 +366,11 @@ void setup() {
   if (wakeupReason != HalGPIO::WakeupReason::AfterUSBPower) {
     quickLockResumeMagic = 0;
   }
+  const bool quickLockChordWake =
+      quickLockResumePending && SETTINGS.powerChordAction == CrossPointSettings::POWER_CHORD_ACTION::CHORD_QUICK_LOCK;
   const bool allowShortPowerWake = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP ||
-                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK;
+                                   SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::QUICK_LOCK ||
+                                   quickLockChordWake;
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
