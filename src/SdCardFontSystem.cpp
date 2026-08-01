@@ -176,3 +176,35 @@ int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*
   // that font's ID. ensureLoaded() must have run for the current settings first.
   return manager_.getFontId(familyName);
 }
+
+int SdCardFontSystem::acquireDictionaryFont(GfxRenderer& renderer) {
+  const char* wanted = SETTINGS.dictionarySdFontName;
+  if (wanted[0] != '\0') {
+    // The reader's resident family doubles as the dictionary font when the
+    // names match — reuse it, and record nothing to release.
+    const int residentId = manager_.getFontId(wanted);
+    if (residentId != 0) return residentId;
+
+    const auto* family = registry_.findFamily(wanted);
+    const auto* file = family ? family->findNearestSize(SETTINGS.fontPointSize) : nullptr;
+    if (file) {
+      const int id = manager_.loadFamilyExtraSize(*family, renderer, file->pointSize);
+      if (id != 0) {
+        dictionaryFontId_ = id;
+        return id;
+      }
+    }
+    // Family gone from the card or load failed (OOM/IO): fall through to the
+    // built-in behaviour rather than rendering nothing.
+    LOG_ERR("SDFS", "Dictionary font %s unavailable, using fallback", wanted);
+  }
+  return SETTINGS.getDictionaryFontId();
+}
+
+void SdCardFontSystem::releaseDictionaryFont(GfxRenderer& renderer) {
+  if (dictionaryFontId_ == 0) return;
+  // A settings-driven unloadAll may already have dropped it; unloadFont
+  // ignores ids it no longer holds, so this stays safe either way.
+  manager_.unloadFont(dictionaryFontId_, renderer);
+  dictionaryFontId_ = 0;
+}

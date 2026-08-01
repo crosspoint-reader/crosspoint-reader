@@ -26,6 +26,19 @@ class SdCardFontSystem {
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t pointSize) const;
 
+  /// Font for dictionary definition text. When SETTINGS.dictionarySdFontName
+  /// names an SD family it is loaded on demand at the size nearest the reader
+  /// point size (the reader's resident family is reused, never double-loaded);
+  /// otherwise falls back to SETTINGS.getDictionaryFontId() (book font or
+  /// pinned built-in). Pair with releaseDictionaryFont() in the same
+  /// activity's onExit so the on-demand font does not stay resident while
+  /// reading continues.
+  int acquireDictionaryFont(GfxRenderer& renderer);
+
+  /// Unload the font a previous acquireDictionaryFont() loaded on demand.
+  /// No-op when it resolved to a built-in or the resident reader font.
+  void releaseDictionaryFont(GfxRenderer& renderer);
+
   /// Access the registry (e.g. for settings UI to enumerate available fonts).
   const SdCardFontRegistry& registry() const { return registry_; }
 
@@ -56,6 +69,9 @@ class SdCardFontSystem {
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
+  // Font id acquireDictionaryFont() loaded on demand (0 = none). Never the
+  // resident reader font — that path returns early without recording an id.
+  int dictionaryFontId_ = 0;
 };
 
 // Global SD card font system instance (defined in main.cpp).

@@ -17,6 +17,7 @@
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
+#include "util/DictionaryRegistry.h"
 #include "util/HighlightStore.h"
 
 namespace {
@@ -287,11 +288,55 @@ void DictionaryWordSelectActivity::performLookup() {
   }
   if (ok && !found) found = dict.lookup(words[selected].text, definition, headword, &result);
 
+  // Genuine miss in the selected dictionary: retry the word in each other
+  // installed dictionary (registry order, starting after the selected one —
+  // the same "next" the definition view's Left/Right switching uses) so the
+  // panel still opens instead of a dead-end "Not found" popup. A fallback
+  // dictionary that fails to open/index/read is skipped; if every fallback
+  // misses too, the selected dictionary's NotFound verdict below stands.
+  std::string sourceDictionary = SETTINGS.dictionaryName;
+  if (ok && !found && result == Dictionary::LookupResult::NotFound) {
+    std::vector<DictionaryEntry> installed;
+    DictionaryRegistry::discover(installed);
+    size_t startIdx = 0;
+    for (size_t i = 0; i < installed.size(); i++) {
+      if (installed[i].name == SETTINGS.dictionaryName) {
+        startIdx = i + 1;
+        break;
+      }
+    }
+    for (size_t step = 0; !found && step < installed.size(); step++) {
+      const DictionaryEntry& entry = installed[(startIdx + step) % installed.size()];
+      if (entry.name == SETTINGS.dictionaryName) continue;
+      // `dict` now leaves the selected dictionary; drop the open cache so the
+      // next lookup reopens the user's selection.
+      dictOpenAttempted = false;
+      if (!dict.open(entry.name.c_str())) continue;
+      if (dict.needsIndex()) {
+        popupMsg = StrId::STR_DICT_INDEXING;
+        requestUpdateAndWait();
+        if (!dict.buildIndex(&indexBuildYield)) continue;
+      }
+      if (!joinedStripped.empty() && dict.lookup(joinedStripped.c_str(), definition, headword)) {
+        found = true;
+        lookupWord = joinedStripped.c_str();
+      } else if (!joinedKept.empty() && dict.lookup(joinedKept.c_str(), definition, headword)) {
+        found = true;
+        lookupWord = joinedKept.c_str();
+      } else if (dict.lookup(words[selected].text, definition, headword)) {
+        found = true;
+        lookupWord = words[selected].text;
+      }
+      if (found) sourceDictionary = entry.name;
+    }
+  }
+
   if (found) {
     popup = Popup::None;
-    startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, lookupWord,
-                                                                          std::move(headword), std::move(definition)),
-                           [this](const ActivityResult&) { requestUpdate(); });
+    startActivityForResult(
+        std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, lookupWord, std::move(headword),
+                                                       std::move(definition), std::move(sourceDictionary)),
+        [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
   // Name the failure: a genuine miss is "Not found"; a word that WAS found but

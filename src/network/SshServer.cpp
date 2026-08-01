@@ -92,6 +92,62 @@ std::string resolvePath(const std::string& cwd, const char* path) {
   }
   return out;
 }
+
+// Split `line` into argv tokens in place, honoring backslash escapes and
+// single/double quotes, so names with spaces work: mv "My Book.epub" Books/
+// Returns the number of tokens found (further input is left unparsed).
+int tokenizeLine(char* line, char* argv[], int maxArgs) {
+  int argc = 0;
+  char* out = line;
+  const char* p = line;
+  while (*p && argc < maxArgs) {
+    while (*p == ' ') {
+      p++;
+    }
+    if (!*p) {
+      break;
+    }
+    argv[argc++] = out;
+    char quote = 0;
+    while (*p && (quote || *p != ' ')) {
+      if (*p == '\\' && p[1]) {
+        p++;
+        *out++ = *p++;
+      } else if (!quote && (*p == '"' || *p == '\'')) {
+        quote = *p++;
+      } else if (quote && *p == quote) {
+        quote = 0;
+        p++;
+      } else {
+        *out++ = *p++;
+      }
+    }
+    if (*p) {
+      p++;  // skip the delimiter
+    }
+    *out++ = '\0';  // never passes p: out only falls behind on quotes/escapes
+  }
+  return argc;
+}
+
+// Remove backslash escapes and surrounding quotes in place (scp remote paths
+// arrive shell-escaped, e.g. `scp -f /My\ Book.epub`).
+void unescapeInPlace(char* s) {
+  char* out = s;
+  char quote = 0;
+  for (const char* p = s; *p; p++) {
+    if (*p == '\\' && p[1]) {
+      *out++ = *++p;
+    } else if (!quote && (*p == '"' || *p == '\'')) {
+      quote = *p;
+    } else if (quote && *p == quote) {
+      quote = 0;
+    } else {
+      *out++ = *p;
+    }
+  }
+  *out = '\0';
+}
 }  // namespace
 
 SshServer::SshServer() { statusMutex = xSemaphoreCreateMutex(); }
@@ -504,20 +560,24 @@ void SshServer::serveChannel(ssh_session session, ssh_channel channel) {
     // scp runs as an exec request: "scp -t <target>" (upload to us) or
     // "scp -f <path>" (download from us).
     if (strncmp(execCmd.get(), "scp ", 4) == 0) {
-      char* savePtr = nullptr;
+      // Flags always precede the -t/-f mode switch; everything after it is
+      // the path (possibly containing spaces, escapes, or quotes).
       char mode = '\0';
-      const char* target = nullptr;
-      bool recursive = false;
-      for (char* tok = strtok_r(execCmd.get() + 4, " ", &savePtr); tok; tok = strtok_r(nullptr, " ", &savePtr)) {
-        if (strcmp(tok, "-t") == 0 || strcmp(tok, "-f") == 0) {
-          mode = tok[1];
-        } else if (strcmp(tok, "-r") == 0) {
-          recursive = true;
-        } else if (tok[0] != '-') {
-          target = tok;
-        }
+      char* target = nullptr;
+      char* modeFlag = strstr(execCmd.get(), " -t ");
+      if (modeFlag) {
+        mode = 't';
+      } else if ((modeFlag = strstr(execCmd.get(), " -f ")) != nullptr) {
+        mode = 'f';
       }
-      if (recursive || !mode || !target) {
+      bool recursive = false;
+      if (modeFlag) {
+        target = modeFlag + 4;
+        *modeFlag = '\0';  // limit the -r scan to the flags before -t/-f
+        recursive = strstr(execCmd.get(), " -r") != nullptr;
+        unescapeInPlace(target);
+      }
+      if (recursive || !mode || !target || target[0] == '\0') {
         channelPrintf(channel, "\x02scp: only single-file transfers are supported\n");
         exitStatus = 1;
       } else if (mode == 't') {
@@ -617,13 +677,18 @@ void SshServer::runShell(ssh_channel channel) {
 void SshServer::handleTabCompletion(ssh_channel channel, const ShellContext& ctx, char* line, size_t& lineLen) {
   line[lineLen] = '\0';
 
-  // The token being completed runs from the last space to the end of the line.
+  // The token being completed runs from the last unescaped space to the end
+  // of the line ("My\ Year..." is one token).
   size_t tokenStart = lineLen;
-  while (tokenStart > 0 && line[tokenStart - 1] != ' ') {
+  while (tokenStart > 0 && !(line[tokenStart - 1] == ' ' && (tokenStart < 2 || line[tokenStart - 2] != '\\'))) {
     tokenStart--;
   }
-  const char* token = line + tokenStart;
   const bool completeCommand = (tokenStart == 0);
+
+  // Matching happens in unescaped space; the line keeps the escaped form.
+  std::string token(line + tokenStart);
+  unescapeInPlace(token.data());
+  token.resize(strlen(token.c_str()));
 
   // Transient, bounded (MAX_MATCHES entries of one filename each) and freed on
   // return; a fixed pool would complicate the two string-length dimensions.
@@ -631,29 +696,29 @@ void SshServer::handleTabCompletion(ssh_channel channel, const ShellContext& ctx
   std::vector<std::string> matches;
   matches.reserve(8);
 
-  size_t prefixLen = 0;  // length of the part of the token already typed
+  size_t prefixLen = 0;  // length of the (unescaped) part already typed
 
   if (completeCommand) {
     static constexpr const char* COMMANDS[] = {"ls", "cat", "rm", "mv", "mkdir", "cd", "pwd", "free", "help", "exit"};
-    prefixLen = strlen(token);
+    prefixLen = token.size();
     for (const char* cmd : COMMANDS) {
-      if (strncmp(cmd, token, prefixLen) == 0) {
+      if (strncmp(cmd, token.c_str(), prefixLen) == 0) {
         matches.emplace_back(cmd);
       }
     }
   } else {
     // Split the token into a directory part and a name prefix.
     std::string dirPath;
-    const char* namePrefix;
-    const char* slash = strrchr(token, '/');
-    if (slash) {
-      dirPath = resolvePath(ctx.cwd, std::string(token, slash - token + 1).c_str());
-      namePrefix = slash + 1;
+    std::string namePrefix;
+    const size_t slash = token.rfind('/');
+    if (slash != std::string::npos) {
+      dirPath = resolvePath(ctx.cwd, token.substr(0, slash + 1).c_str());
+      namePrefix = token.substr(slash + 1);
     } else {
       dirPath = ctx.cwd;
       namePrefix = token;
     }
-    prefixLen = strlen(namePrefix);
+    prefixLen = namePrefix.size();
 
     HalFile dir = Storage.open(dirPath.c_str());
     if (!dir || !dir.isDirectory()) {
@@ -670,7 +735,7 @@ void SshServer::handleTabCompletion(ssh_channel channel, const ShellContext& ctx
         break;
       }
       entry.getName(name.get(), 128);
-      if (strncmp(name.get(), namePrefix, prefixLen) == 0) {
+      if (strncmp(name.get(), namePrefix.c_str(), prefixLen) == 0) {
         // Directories get a trailing '/' so completion can descend into them.
         matches.emplace_back(std::string(name.get()) + (entry.isDirectory() ? "/" : ""));
       }
@@ -692,10 +757,23 @@ void SshServer::handleTabCompletion(ssh_channel channel, const ShellContext& ctx
     common.resize(k);
   }
 
+  // Insert in escaped form so the result parses back as a single token.
+  const auto appendChar = [&](char c) {
+    const bool needsEscape = (c == ' ' || c == '\\' || c == '"' || c == '\'');
+    if (lineLen + (needsEscape ? 2u : 1u) > MAX_LINE_LEN) {
+      return false;
+    }
+    if (needsEscape) {
+      line[lineLen++] = '\\';
+      channelPrintf(channel, "\\");
+    }
+    line[lineLen++] = c;
+    channelPrintf(channel, "%c", c);
+    return true;
+  };
+
   bool extended = false;
-  for (size_t k = prefixLen; k < common.size() && lineLen < MAX_LINE_LEN; k++) {
-    line[lineLen++] = common[k];
-    channelPrintf(channel, "%c", common[k]);
+  for (size_t k = prefixLen; k < common.size() && appendChar(common[k]); k++) {
     extended = true;
   }
 
@@ -719,11 +797,17 @@ void SshServer::handleTabCompletion(ssh_channel channel, const ShellContext& ctx
 }
 
 bool SshServer::executeCommand(ssh_channel channel, ShellContext& ctx, char* line, bool interactive) {
-  char* savePtr = nullptr;
-  const char* cmd = strtok_r(line, " ", &savePtr);
-  const char* arg1 = strtok_r(nullptr, " ", &savePtr);
-  const char* arg2 = strtok_r(nullptr, " ", &savePtr);
-  if (!cmd) {
+  char* argv[4] = {nullptr, nullptr, nullptr, nullptr};
+  const int argc = tokenizeLine(line, argv, 4);
+  if (argc == 0) {
+    return true;
+  }
+  const char* cmd = argv[0];
+  const char* arg1 = argc > 1 ? argv[1] : nullptr;
+  const char* arg2 = argc > 2 ? argv[2] : nullptr;
+  if (argc > 3) {
+    // Almost always an unquoted name with spaces, not a real 4-argument call.
+    channelPrintf(channel, "%s: too many arguments (quote names with spaces: mv \"My Book.epub\" dir/)\r\n", cmd);
     return true;
   }
 
@@ -734,7 +818,7 @@ bool SshServer::executeCommand(ssh_channel channel, ShellContext& ctx, char* lin
   if (strcmp(cmd, "help") == 0) {
     // Split into chunks: channelPrintf formats into a fixed 224-byte buffer.
     channelPrintf(channel,
-                  "Commands (paths may be relative, no spaces; tab completes):\r\n"
+                  "Commands (tab completes; quote or \\-escape names with spaces):\r\n"
                   "  ls [path]        list directory\r\n"
                   "  cd [path]        change directory\r\n"
                   "  pwd              print working directory\r\n"
@@ -781,11 +865,21 @@ bool SshServer::executeCommand(ssh_channel channel, ShellContext& ctx, char* lin
       channelPrintf(channel, "usage: mv <src> <dst>\r\n");
     } else {
       const std::string src = resolvePath(ctx.cwd, arg1);
-      const std::string dst = resolvePath(ctx.cwd, arg2);
+      std::string dst = resolvePath(ctx.cwd, arg2);
+      // Moving into a directory: append the source name, as rename() itself
+      // only accepts a full destination path.
+      HalFile dstDir = Storage.open(dst.c_str());
+      if (dstDir && dstDir.isDirectory()) {
+        if (dst.back() != '/') {
+          dst += '/';
+        }
+        dst += src.substr(src.rfind('/') + 1);
+      }
+      dstDir.close();  // release the handle before renaming into the directory
       if (Storage.rename(src.c_str(), dst.c_str())) {
         channelPrintf(channel, "%s -> %s\r\n", src.c_str(), dst.c_str());
       } else {
-        channelPrintf(channel, "mv: failed\r\n");
+        channelPrintf(channel, "mv: cannot move %s to %s\r\n", src.c_str(), dst.c_str());
       }
     }
   } else if (strcmp(cmd, "mkdir") == 0) {

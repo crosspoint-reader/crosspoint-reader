@@ -50,7 +50,7 @@ int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* fami
     return 0;
   }
   renderer.registerSdCardFont(fontId, font);
-  loaded_.push_back({font, fontId, file.pointSize});
+  loaded_.push_back({font, fontId, file.pointSize, familyName});
 
   LOG_DBG("SDMGR", "Loaded %s size=%u id=%d styles=%u", file.path.c_str(), file.pointSize, fontId, font->styleCount());
 
@@ -85,13 +85,26 @@ int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, G
   const SdCardFontFileInfo* file = family.findFile(pointSize);
   if (!file) return 0;  // family has no .cpfont at this exact size
 
-  // Reuse an already-loaded font of the same size (e.g. when a reader size
-  // happens to match a UI size) instead of double-loading the file.
+  // Reuse an already-loaded font of the same family and size (e.g. when a
+  // reader size happens to match a UI size) instead of double-loading the
+  // file. The family check matters: a different family loaded at the same
+  // size (dictionary font vs reader font) must not be substituted.
   for (const auto& lf : loaded_) {
-    if (lf.size == pointSize) return lf.fontId;
+    if (lf.size == pointSize && lf.family == family.name) return lf.fontId;
   }
 
   return loadFile(*file, family.name.c_str(), renderer);
+}
+
+bool SdCardFontManager::unloadFont(const int fontId, GfxRenderer& renderer) {
+  for (auto it = loaded_.begin(); it != loaded_.end(); ++it) {
+    if (it->fontId != fontId) continue;
+    renderer.removeFont(fontId);  // also drops the SD-side registration
+    delete it->font;
+    loaded_.erase(it);
+    return true;
+  }
+  return false;
 }
 
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {

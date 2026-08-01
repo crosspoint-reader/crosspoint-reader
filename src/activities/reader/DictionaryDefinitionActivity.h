@@ -21,13 +21,15 @@
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string rawWord,
-                                        std::string headword, std::string definition)
+                                        std::string headword, std::string definition, std::string sourceDictionary)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         rawWord(std::move(rawWord)),
         headword(std::move(headword)),
-        definition(std::move(definition)) {}
+        definition(std::move(definition)),
+        sourceDictionary(std::move(sourceDictionary)) {}
 
   void onEnter() override;
+  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
 
@@ -41,6 +43,10 @@ class DictionaryDefinitionActivity final : public Activity {
 
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
+  // Body text font, resolved once in onEnter via
+  // sdFontSystem.acquireDictionaryFont() (may load an SD font on demand;
+  // released in onExit). 0 only before onEnter runs.
+  int bodyFontId = 0;
   void drawBody(int fontId, int x, int startY) const;
   // Re-looks-up `word` in the dictionary `direction` steps away (wrapping),
   // replacing headword/definition and resetting to page 0. No-op with fewer
@@ -58,6 +64,11 @@ class DictionaryDefinitionActivity final : public Activity {
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
   // separators) to newlines so C-string APIs see the whole text.
   std::string definition;
+  // Folder name of the dictionary the definition came from. Not necessarily
+  // SETTINGS.dictionaryName: the word-select activity falls back to other
+  // installed dictionaries when the selected one misses, and Left/Right
+  // switching must start from the dictionary actually shown.
+  const std::string sourceDictionary;
   std::vector<Line> lines;
   int currentPage = 0;
   int totalPages = 1;

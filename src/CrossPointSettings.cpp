@@ -117,6 +117,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   // Dictionary font — its settings entry only exists when dictionaries are
   // installed, so the generic loop above never sees it; save manually.
   doc["dictionaryFont"] = dictionaryFont;
+  if (dictionarySdFontName[0] != '\0') {
+    doc["dictionarySdFontName"] = dictionarySdFontName;
+  }
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -230,6 +233,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Dictionary font — not in the base SettingsList, load manually
   dictionaryFont =
       clamp(doc["dictionaryFont"] | (uint8_t)DICT_FONT_BOOK, DICTIONARY_FONT_COUNT, (uint8_t)DICT_FONT_BOOK);
+  copyToField(dictionarySdFontName, doc["dictionarySdFontName"] | "", sizeof(dictionarySdFontName));
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {

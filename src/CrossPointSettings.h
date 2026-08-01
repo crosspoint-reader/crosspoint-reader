@@ -287,6 +287,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // in toJson/fromJson — its settings entry is only inserted when dictionaries
   // exist, so the generic SettingsList loop never sees it.
   uint8_t dictionaryFont = DICT_FONT_BOOK;
+  // SD card font family for dictionary definitions (empty = use dictionaryFont).
+  // Lets e.g. an Arabic family render en-ar definitions the built-in fonts have
+  // no glyphs for. Loaded on demand by SdCardFontSystem::acquireDictionaryFont()
+  // — getDictionaryFontId() alone cannot resolve it. Persisted manually.
+  char dictionarySdFontName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Which button pair fast-scrolls the file browser (FAST_SCROLL_BUTTONS)
