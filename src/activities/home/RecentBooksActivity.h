@@ -35,4 +35,5 @@ class RecentBooksActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
+  static constexpr const std::string PINNED_ID = "[P]";
 };
