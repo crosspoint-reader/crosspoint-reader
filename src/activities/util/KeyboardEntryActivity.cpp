@@ -716,9 +716,16 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int maxLineWidth = textAreaWidth;
   const bool centerText = metrics.keyboardCenteredText;
 
+  // The character under the cursor is a whole code point, not a byte: slicing
+  // one byte off a Cyrillic letter hands the renderer an incomplete sequence.
+  // In the masked-password path displayText is all '*', so this is still 1.
+  const size_t cursorCharBytes = (cursorPos < text.length()) ? utf8Next(text, cursorPos) - cursorPos : 0;
+  const size_t displayCursorCharBytes =
+      (cursorPos < displayText.length()) ? utf8Next(displayText, cursorPos) - cursorPos : 0;
+
   int cursorCharWidth = 6;
-  if (cursorPos < text.length()) {
-    int w = renderer.getTextWidth(UI_12_FONT_ID, text.substr(cursorPos, 1).c_str());
+  if (cursorCharBytes > 0) {
+    int w = renderer.getTextWidth(UI_12_FONT_ID, text.substr(cursorPos, cursorCharBytes).c_str());
     if (w > cursorCharWidth) cursorCharWidth = w;
   }
 
@@ -745,12 +752,12 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         }
         int beforeWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, beforeCursor.c_str(), EpdFontFamily::REGULAR);
         int kernOffset = 0;
-        if (cursorPos < displayText.length()) {
-          std::string beforeAndCursor = beforeCursor + displayText.substr(cursorPos, 1);
+        if (displayCursorCharBytes > 0) {
+          const std::string cursorChar = displayText.substr(cursorPos, displayCursorCharBytes);
+          std::string beforeAndCursor = beforeCursor + cursorChar;
           int beforeAndCursorWidth =
               renderer.getTextAdvanceX(UI_12_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
-          int charAdvance =
-              renderer.getTextAdvanceX(UI_12_FONT_ID, displayText.substr(cursorPos, 1).c_str(), EpdFontFamily::REGULAR);
+          int charAdvance = renderer.getTextAdvanceX(UI_12_FONT_ID, cursorChar.c_str(), EpdFontFamily::REGULAR);
           kernOffset = beforeAndCursorWidth - beforeWidth - charAdvance;
         }
         if (centerText) {
@@ -772,7 +779,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         renderer.drawText(UI_12_FONT_ID, lineStartX, inputStartY + inputHeight, part1.c_str());
         // Part 2: skip cursor slot (block + actual char drawn later)
         // Part 3: chars after cursor position (skip char under cursor), starting at cursorPixelX + cursorCharWidth
-        const int afterStart = static_cast<int>(cursorPos) + (cursorPos < text.length() ? 1 : 0);
+        const int afterStart = static_cast<int>(cursorPos + displayCursorCharBytes);
         const int afterEnd = lineEndIdx;
         if (afterStart < afterEnd) {
           const std::string part3 = displayText.substr(afterStart, afterEnd - afterStart);
@@ -798,9 +805,10 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   if (cursorMode && !togglePos && cursorPos <= displayText.length()) {
     static constexpr int blockPadding = 1;
     renderer.fillRect(cursorPixelX - blockPadding, cursorLineY, cursorCharWidth + blockPadding * 2, lineHeight, true);
-    if (cursorPos < text.length()) {
-      const char buf[2] = {text[cursorPos], '\0'};
-      renderer.drawText(UI_12_FONT_ID, cursorPixelX, cursorLineY, buf, false);
+    if (cursorCharBytes > 0) {
+      // Whole code point — a lone lead byte would render as a replacement glyph.
+      renderer.drawText(UI_12_FONT_ID, cursorPixelX, cursorLineY, text.substr(cursorPos, cursorCharBytes).c_str(),
+                        false);
     }
   } else if (cursorPos <= displayText.length()) {
     static constexpr int serifW = 3;
