@@ -173,9 +173,9 @@ void EpubReaderActivity::onEnter() {
 
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[6];
-    int dataSize = f.read(data, 6);
-    if (dataSize == 4 || dataSize == 6) {
+    uint8_t data[10];
+    int dataSize = f.read(data, sizeof(data));
+    if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
       currentSpineIndex = data[0] + (data[1] << 8);
       nextPageNumber = data[2] + (data[3] << 8);
       if (nextPageNumber == UINT16_MAX) {
@@ -190,6 +190,10 @@ void EpubReaderActivity::onEnter() {
     }
     if (dataSize == 6) {
       cachedChapterTotalPageCount = data[4] + (data[5] << 8);
+    } else if (dataSize == 10) {
+      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
+      cachedVisibleTextOffset = static_cast<uint32_t>(data[6]) | (static_cast<uint32_t>(data[7]) << 8) |
+                                (static_cast<uint32_t>(data[8]) << 16) | (static_cast<uint32_t>(data[9]) << 24);
     }
   }
   // We may want a better condition to detect if we are opening for the first time.
@@ -198,6 +202,7 @@ void EpubReaderActivity::onEnter() {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
+      cachedVisibleTextOffset.reset();
       LOG_DBG("ERS", "Opened for first time, navigating to text reference at index %d", textSpineIndex);
     }
   }
@@ -817,6 +822,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                // applyOrientation()'s reflow.
                                RenderLock lock(*this);
                                if (section) {
+                                 rememberCurrentContentOffset();
                                  cachedSpineIndex = currentSpineIndex;
                                  cachedChapterTotalPageCount = section->pageCount;
                                  nextPageNumber = section->currentPage;
@@ -967,6 +973,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   {
     RenderLock lock(*this);
     if (section) {
+      rememberCurrentContentOffset();
       cachedSpineIndex = currentSpineIndex;
       cachedChapterTotalPageCount = section->pageCount;
       nextPageNumber = section->currentPage;
@@ -1001,6 +1008,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
     // Preserve current reading position so we can restore after reflow.
     RenderLock lock(*this);
     if (section) {
+      rememberCurrentContentOffset();
       cachedSpineIndex = currentSpineIndex;
       cachedChapterTotalPageCount = section->pageCount;
       nextPageNumber = section->currentPage;
@@ -1135,6 +1143,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // saved while the section was still building (i.e. a watermark, not the real count)
       // would remap the resume page against the finalized count and teleport the reader.
       cachedChapterTotalPageCount = 0;
+      cachedVisibleTextOffset.reset();
     }
     const bool cacheComplete = cacheLoaded && !section->isPartial();
     if (!cacheComplete) {
@@ -1450,16 +1459,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 }
 
 bool EpubReaderActivity::applyDeferredReposition() {
-  if (cachedChapterTotalPageCount == 0 || !section || section->isBuilding()) {
+  if ((!cachedVisibleTextOffset.has_value() && cachedChapterTotalPageCount == 0) || !section || section->isBuilding()) {
     return false;
   }
   bool changed = false;
-  // Only remap when the chapter actually re-paginated (e.g. after a settings change). A plain
-  // resume has identical pagination, so section->pageCount == cachedChapterTotalPageCount and
-  // nothing moves.
-  if (currentSpineIndex == cachedSpineIndex && section->pageCount != cachedChapterTotalPageCount) {
-    const float progress = static_cast<float>(section->currentPage) / static_cast<float>(cachedChapterTotalPageCount);
-    int newPage = static_cast<int>(progress * static_cast<float>(section->pageCount));
+  // Re-derive the page from the saved content offset after a settings reflow.
+  // Older 4/6-byte progress files retain the page-fraction fallback.
+  if (currentSpineIndex == cachedSpineIndex) {
+    int newPage = section->currentPage;
+    bool mappedOffset = false;
+    if (cachedVisibleTextOffset.has_value()) {
+      if (const auto offsetPage = section->getPageForVisibleTextOffset(*cachedVisibleTextOffset)) {
+        newPage = *offsetPage;
+        mappedOffset = true;
+      }
+    }
+    if (!mappedOffset && cachedChapterTotalPageCount > 0 && section->pageCount != cachedChapterTotalPageCount) {
+      const float progress = static_cast<float>(section->currentPage) / static_cast<float>(cachedChapterTotalPageCount);
+      newPage = static_cast<int>(progress * static_cast<float>(section->pageCount));
+    }
     if (newPage < 0) newPage = 0;
     if (section->pageCount > 0 && newPage >= static_cast<int>(section->pageCount)) {
       newPage = section->pageCount - 1;
@@ -1470,11 +1488,23 @@ bool EpubReaderActivity::applyDeferredReposition() {
     }
   }
   cachedChapterTotalPageCount = 0;  // consumed; don't read cached progress again
+  cachedVisibleTextOffset.reset();
   return changed;
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
-  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+  std::optional<uint32_t> offset;
+  if (section && spineIndex == currentSpineIndex && currentPage >= 0 && currentPage < section->pageCount) {
+    offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
+  }
+  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset);
+}
+
+void EpubReaderActivity::rememberCurrentContentOffset() {
+  cachedVisibleTextOffset.reset();
+  if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
+    cachedVisibleTextOffset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(section->currentPage));
+  }
 }
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
@@ -1970,6 +2000,12 @@ CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
   }
 
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
+  if (section && currentPage >= 0 && currentPage < section->pageCount) {
+    if (const auto offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage))) {
+      localPos.visibleTextOffset = *offset;
+      localPos.hasVisibleTextOffset = true;
+    }
+  }
   if (paragraphIndex.has_value()) {
     localPos.paragraphIndex = *paragraphIndex;
     localPos.hasParagraphIndex = true;

@@ -29,6 +29,7 @@ class Section {
     uint32_t fileOffset;
     uint16_t paragraphIndex;
     uint16_t listItemIndex;
+    uint32_t visibleTextOffset;
   };
   // Held only while an incremental build is in progress (see startBuild). Carries the
   // live parser plus the strings it references (the parser stores them by reference)
@@ -146,4 +147,13 @@ class Section {
 
   // Look up the synthetic paragraph index for the given rendered page.
   std::optional<uint16_t> getParagraphIndexForPage(uint16_t page) const;
+
+  // Exact zero-based visible Unicode-codepoint offset where a rendered page
+  // starts. Available from both an active build and finalized/partial caches.
+  std::optional<uint32_t> getVisibleTextOffsetForPage(uint16_t page) const;
+
+  // Derive the local page containing an exact visible-text offset. When
+  // preferFirstAtOffset is true, ties caused by zero-width content such as an
+  // image-only page select the first page at that offset.
+  std::optional<uint16_t> getPageForVisibleTextOffset(uint32_t offset, bool preferFirstAtOffset = false) const;
 };

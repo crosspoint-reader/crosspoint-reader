@@ -9,6 +9,7 @@
 
 #include "ChapterXPathResolver.h"
 #include "Epub/Section.h"
+#include "Epub/VisibleTextUtils.h"
 #include "Epub/htmlEntities.h"
 #include "Utf8.h"
 
@@ -116,13 +117,25 @@ bool isChapterStartXPath(const std::string& xpath) {
   for (size_t i = dotPos + 1; i < xpath.size(); i++) {
     if (xpath[i] != '0') return false;
   }
-  return true;
+  return parseTextNodeIndex(xpath) <= 1;
+}
+
+bool isBodyTextXPath(const std::string& xpath) {
+  static constexpr char kBodyFrag[] = "/body/DocFragment[";
+  const size_t fragPos = xpath.find(kBodyFrag);
+  if (fragPos == std::string::npos) return false;
+  const size_t afterBracket = xpath.find(']', fragPos + strlen(kBodyFrag));
+  if (afterBracket == std::string::npos) return false;
+  static constexpr char kBody[] = "/body/";
+  if (xpath.compare(afterBracket + 1, strlen(kBody), kBody) != 0) return false;
+  const size_t contentPos = afterBracket + 1 + strlen(kBody);
+  return xpath.compare(contentPos, strlen("text()"), "text()") == 0;
 }
 
 // Parsed representation of one step in the XPath ancestry.
 struct XPathStep {
   char tag[12];      // element name, null-terminated
-  int siblingIndex;  // 1-based sibling index, or 0 if unspecified (treat as 1)
+  int siblingIndex;  // 1-based sibling index, or 0 if unspecified (match any)
 };
 
 static constexpr int MAX_XPATH_DEPTH = 16;
@@ -174,7 +187,7 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
       }
       step.siblingIndex = idx;
     } else {
-      step.siblingIndex = 1;
+      step.siblingIndex = 0;
     }
 
     count++;
@@ -220,7 +233,9 @@ class ParagraphStreamer final : public Print {
   int siblingCounters[MAX_XPATH_DEPTH] = {};
   bool insideStep[MAX_XPATH_DEPTH] = {};
   int htmlDepth = 0;
+  int bodyHtmlDepth = -1;
   int stepEnteredAtDepth[MAX_XPATH_DEPTH] = {};
+  bool relaxFirstStepDepth = false;
 
   // Tag name accumulation
   enum TagParseState { TAG_IDLE, TAG_IN_NAME, TAG_ATTRS } tagState = TAG_IDLE;
@@ -249,11 +264,10 @@ class ParagraphStreamer final : public Print {
       false;  // true while inside a quoted attribute value (prevents '/' from being treated as self-close)
   char attrQuoteChar = 0;
   uint8_t nonVisibleDepth = 0;
+  bool insideBody = false;
+  bool targetBodyText = false;
 
-  bool isNonVisibleTag() const {
-    return strcasecmp(tagName, "head") == 0 || strcasecmp(tagName, "style") == 0 ||
-           strcasecmp(tagName, "script") == 0 || strcasecmp(tagName, "title") == 0;
-  }
+  bool isNonVisibleTag() const { return VisibleTextUtils::isNonVisibleElement(tagName); }
 
   static bool isAttrWhitespace(uint8_t c) { return c == ' ' || c == '\t' || c == '\n' || c == '\r'; }
 
@@ -383,8 +397,11 @@ class ParagraphStreamer final : public Print {
     if (revPFound && !revDone) {
       // Ancestry mode: count only while inside the fully-matched element and in the target text node.
       // Legacy mode: count only while still inside the matched paragraph and in the target text node.
-      const bool inTargetNode = (stepCount > 0) ? (matchedDepth == stepCount && currentTextNode == targetTextNode)
-                                                : (paragraphHtmlDepth >= 0 && currentTextNode == targetTextNode);
+      const bool inTargetNode =
+          (stepCount > 0)
+              ? (matchedDepth == stepCount && htmlDepth == stepEnteredAtDepth[stepCount - 1] &&
+                 currentTextNode == targetTextNode)
+              : (paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth && currentTextNode == targetTextNode);
       if (inTargetNode) {
         revVisChars++;
         if (revVisChars >= revChar) {
@@ -436,6 +453,22 @@ class ParagraphStreamer final : public Print {
   void onOpenTag() {
     htmlDepth++;
 
+    if (strcasecmp(tagName, "body") == 0) {
+      insideBody = true;
+      bodyHtmlDepth = htmlDepth;
+      if (targetBodyText) {
+        revPFound = true;
+        paragraphHtmlDepth = htmlDepth;
+        currentTextNode = 1;
+        if (revChar <= 0 && targetTextNode <= 1) {
+          targetVisChars = totalVisChars;
+          revDone = true;
+        }
+      }
+      return;
+    }
+    if (!insideBody) return;
+
     if (nonVisibleDepth > 0 || isNonVisibleTag()) {
       nonVisibleDepth++;
       return;
@@ -461,10 +494,11 @@ class ParagraphStreamer final : public Print {
       if (strcasecmp(tagName, target.tag) == 0) {
         // Count only direct children of the previously matched ancestor step.
         // For step 0 any depth is valid; subsequent steps must be exactly one level deeper.
-        const bool atCorrectDepth = (matchedDepth == 0) || (htmlDepth == stepEnteredAtDepth[matchedDepth - 1] + 1);
+        const bool atCorrectDepth = (matchedDepth == 0) ? (relaxFirstStepDepth || htmlDepth == bodyHtmlDepth + 1)
+                                                        : (htmlDepth == stepEnteredAtDepth[matchedDepth - 1] + 1);
         if (!atCorrectDepth) return;
         siblingCounters[matchedDepth]++;
-        if (siblingCounters[matchedDepth] == target.siblingIndex) {
+        if (target.siblingIndex == 0 || siblingCounters[matchedDepth] == target.siblingIndex) {
           insideStep[matchedDepth] = true;
           stepEnteredAtDepth[matchedDepth] = htmlDepth;
           matchedDepth++;
@@ -487,6 +521,16 @@ class ParagraphStreamer final : public Print {
   }
 
   void onCloseTag() {
+    if (strcasecmp(tagName, "body") == 0) {
+      insideBody = false;
+      if (htmlDepth > 0) htmlDepth--;
+      return;
+    }
+    if (!insideBody) {
+      if (htmlDepth > 0) htmlDepth--;
+      return;
+    }
+
     if (nonVisibleDepth > 0) {
       nonVisibleDepth--;
       if (htmlDepth > 0) htmlDepth--;
@@ -601,12 +645,19 @@ class ParagraphStreamer final : public Print {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
 
-  ParagraphStreamer(const XPathStep* xpathSteps, int xpathStepCount, int charOff, int textNodeIdx = 1)
+  ParagraphStreamer(const XPathStep* xpathSteps, int xpathStepCount, int charOff, int textNodeIdx = 1,
+                    bool relaxFirstStep = false)
       : fwdTarget(SIZE_MAX),
         revChar(charOff),
         steps(xpathSteps),
         stepCount(xpathStepCount),
-        targetTextNode(textNodeIdx) {
+        targetTextNode(textNodeIdx),
+        relaxFirstStepDepth(relaxFirstStep) {
+    memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
+  }
+
+  ParagraphStreamer(bool resolveBodyText, int charOff, int textNodeIdx)
+      : fwdTarget(SIZE_MAX), revChar(charOff), targetTextNode(textNodeIdx), targetBodyText(resolveBodyText) {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
 
@@ -663,7 +714,7 @@ class ParagraphStreamer final : public Print {
       tagState = TAG_IDLE;
     } else if (globalInTag) {
       processByteInTag(c);
-    } else if (nonVisibleDepth > 0) {
+    } else if (!insideBody || nonVisibleDepth > 0) {
       // Ignore head/style/script/title text. KOReader XPaths are body-relative, and CSS text
       // should not contribute to intra-spine progress.
     } else {
@@ -689,7 +740,7 @@ class ParagraphStreamer final : public Print {
   int getListItemAtMatch() const { return liCountAtMatch; }
   const char* getCapturedAnchorId() const { return capturedAnchorIdLen > 0 ? capturedAnchorId : nullptr; }
   size_t totalBytes() const { return bytesWritten; }
-  bool found() const { return revDone || revPFound; }
+  bool found() const { return revDone; }
   size_t getTotalVisChars() const { return totalVisChars; }
   size_t getTargetVisChars() const { return targetVisChars; }
   float progress() const {
@@ -720,7 +771,7 @@ SavedProgressPosition ProgressMapper::toSavedProgress(const std::shared_ptr<Epub
     result.xpath = generateXPath(epub, pos.spineIndex, intra);
   }
   LOG_DBG("PM", "-> Progress: spine=%d page=%d/%d %.2f%% %s", pos.spineIndex, pos.pageNumber, pos.totalPages,
-          result.percentage * 100, result.xpath.c_str());
+          static_cast<double>(result.percentage * 100), result.xpath.c_str());
   return result;
 }
 
@@ -735,6 +786,17 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(const std::sh
 
   CrossPointPosition result{};
   result.spineIndex = rich.spineIndex;
+
+  // The existing rich extension carries the same KOReader XPath as the standard
+  // progress field. Resolve that content anchor first; remote page counts are
+  // layout-dependent hints only.
+  if (!rich.xpath.empty()) {
+    SavedProgressPosition saved{rich.xpath, static_cast<float>(rich.pctQ) / 1000000.0f};
+    auto contentMapped = toCrossPoint(epub, saved, renderer);
+    if (contentMapped.hasVisibleTextOffset) {
+      return contentMapped;
+    }
+  }
 
   Section tempSection(epub, result.spineIndex, renderer);
   const auto cachedCount = tempSection.getCachedPageCount();
@@ -798,6 +860,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   const int xpathStepCount = parseXPathSteps(koPos.xpath, xpathSteps);
   // Use ancestry mode whenever the XPath has a structured path (always more accurate than global counting).
   const bool useAncestry = xpathStepCount > 0;
+  const bool useBodyText = !useAncestry && isBodyTextXPath(koPos.xpath);
 
   if (xpathSpine >= 0 && xpathSpine < spineCount) {
     result.spineIndex = xpathSpine;
@@ -835,12 +898,11 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
   }
 
   float intra = 0.0f;
-  bool resolvedIntra = false;
   if (useAncestry) {
-    ParagraphStreamer s(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
-    if (streamSpine(epub, result.spineIndex, s) && s.found()) {
-      intra = s.progress();
-      resolvedIntra = true;
+    const auto applyResolvedXPath = [&](const ParagraphStreamer& s) {
+      result.visibleTextOffset =
+          static_cast<uint32_t>(std::min<size_t>(s.getTargetVisChars(), static_cast<size_t>(UINT32_MAX)));
+      result.hasVisibleTextOffset = true;
       const int pAtMatch = s.getParagraphAtMatch();
       if (pAtMatch > 0) {
         result.paragraphIndex = static_cast<uint16_t>(pAtMatch);
@@ -859,27 +921,65 @@ CrossPointPosition ProgressMapper::toCrossPoint(const std::shared_ptr<Epub>& epu
       }
       LOG_DBG("PM", "XPath ancestry(%s[%d])/text()[%d]+%d -> %.1f%% (target=%zu total=%zu p~%d li~%d anchor=%s)",
               xpathSteps[xpathStepCount - 1].tag, xpathSteps[xpathStepCount - 1].siblingIndex, xpathTextNode, xpathChar,
-              intra * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
+              s.progress() * 100, s.getTargetVisChars(), s.getTotalVisChars(), pAtMatch,
               result.hasLiIndex ? static_cast<int>(result.liIndex) : 0, anchorId ? anchorId : "none");
+    };
+
+    ParagraphStreamer strict(xpathSteps, xpathStepCount, xpathChar, xpathTextNode);
+    if (streamSpine(epub, result.spineIndex, strict) && strict.found()) {
+      applyResolvedXPath(strict);
+    } else {
+      // Some KOReader producers omit an unindexed wrapper from the ancestry
+      // (the compatibility case covered by PR #2777). Retry only after the
+      // structurally exact path fails, allowing the first step at any body depth.
+      ParagraphStreamer relaxed(xpathSteps, xpathStepCount, xpathChar, xpathTextNode, true);
+      if (streamSpine(epub, result.spineIndex, relaxed) && relaxed.found()) {
+        applyResolvedXPath(relaxed);
+      }
+    }
+  } else if (useBodyText) {
+    ParagraphStreamer s(true, xpathChar, xpathTextNode);
+    if (streamSpine(epub, result.spineIndex, s) && s.found()) {
+      result.visibleTextOffset =
+          static_cast<uint32_t>(std::min<size_t>(s.getTargetVisChars(), static_cast<size_t>(UINT32_MAX)));
+      result.hasVisibleTextOffset = true;
+      LOG_DBG("PM", "XPath body/text()[%d]+%d -> offset=%u", xpathTextNode, xpathChar, result.visibleTextOffset);
     }
   } else if (xpathP > 0) {
     ParagraphStreamer s(xpathP, xpathChar, xpathTextNode);
     if (streamSpine(epub, result.spineIndex, s) && s.found()) {
-      intra = s.progress();
-      resolvedIntra = true;
+      result.visibleTextOffset =
+          static_cast<uint32_t>(std::min<size_t>(s.getTargetVisChars(), static_cast<size_t>(UINT32_MAX)));
+      result.hasVisibleTextOffset = true;
       LOG_DBG("PM", "XPath p[%d]/text()[%d]+%d -> %.1f%% (target=%zu total=%zu)", xpathP, xpathTextNode, xpathChar,
-              intra * 100, s.getTargetVisChars(), s.getTotalVisChars());
+              s.progress() * 100, s.getTargetVisChars(), s.getTotalVisChars());
     }
   }
-  if (!resolvedIntra && xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
-    intra = 0.0f;
-    resolvedIntra = true;
+  if (xpathSpine >= 0 && xpathSpine < spineCount && isChapterStartXPath(koPos.xpath)) {
+    result.visibleTextOffset = 0;
+    result.hasVisibleTextOffset = true;
     LOG_DBG("PM", "Chapter-start XPath %s -> spine=%d page start", koPos.xpath.c_str(), result.spineIndex);
   }
-  if (!resolvedIntra) {
-    const size_t bytesIn = (targetBytes > prevCum) ? (targetBytes - prevCum) : 0;
-    intra = std::max(0.0f, std::min(1.0f, static_cast<float>(bytesIn) / static_cast<float>(spineSize)));
+  if (result.hasVisibleTextOffset) {
+    Section tempSection(epub, result.spineIndex, renderer);
+    const bool imageAnchor = useAncestry && (strcasecmp(xpathSteps[xpathStepCount - 1].tag, "img") == 0 ||
+                                             strcasecmp(xpathSteps[xpathStepCount - 1].tag, "image") == 0);
+    if (const auto offsetPage = tempSection.getPageForVisibleTextOffset(result.visibleTextOffset, imageAnchor)) {
+      result.pageNumber = *offsetPage;
+      result.totalPages = std::max(result.totalPages, result.pageNumber + 1);
+      LOG_DBG("PM", "XPath content offset %u -> spine=%d page=%d/%d", result.visibleTextOffset, result.spineIndex,
+              result.pageNumber, result.totalPages);
+      return result;
+    }
+    // A valid content anchor without a local pagination LUT cannot yet be turned
+    // into a page. Retain it on the result, but use protocol percentage for the
+    // immediate page fallback.
+    LOG_DBG("PM", "No page-offset LUT for spine=%d offset=%u; using percentage fallback", result.spineIndex,
+            result.visibleTextOffset);
   }
+  const size_t bytesIn = (targetBytes > prevCum) ? (targetBytes - prevCum) : 0;
+  intra = spineSize > 0 ? std::max(0.0f, std::min(1.0f, static_cast<float>(bytesIn) / static_cast<float>(spineSize)))
+                        : 0.0f;
 
   result.pageNumber = std::max(
       0, std::min(static_cast<int>(intra * static_cast<float>(result.totalPages - 1) + 0.5f), result.totalPages - 1));
