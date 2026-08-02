@@ -7,6 +7,7 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
 
 namespace obfuscation {
 
@@ -48,6 +49,11 @@ String obfuscateToBase64(const std::string& plaintext) {
 }
 
 std::string deobfuscateFromBase64(const char* encoded, bool* ok) {
+  return deobfuscateFromBase64(encoded, std::numeric_limits<size_t>::max(), ok, nullptr);
+}
+
+std::string deobfuscateFromBase64(const char* encoded, const size_t maxDecodedLength, bool* ok, bool* tooLong) {
+  if (tooLong) *tooLong = false;
   if (encoded == nullptr || encoded[0] == '\0') {
     if (ok) *ok = false;
     return "";
@@ -60,6 +66,11 @@ std::string deobfuscateFromBase64(const char* encoded, bool* ok) {
   if (ret != 0 && ret != MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL) {
     LOG_ERR("OBF", "Base64 decode size query failed (ret=%d)", ret);
     if (ok) *ok = false;
+    return "";
+  }
+  if (decodedLen > maxDecodedLength) {
+    if (ok) *ok = false;
+    if (tooLong) *tooLong = true;
     return "";
   }
   std::string result(decodedLen, '\0');

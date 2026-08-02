@@ -38,11 +38,34 @@ bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
     if (credentials.size() >= MAX_NETWORKS) break;
     WifiCredential cred;
     cred.ssid = obj["ssid"] | "";
-    cred.password = extractPassword(obj, needsResave);
+
+    const JsonVariantConst passwordLength = obj["password_len"];
+    const bool hasPasswordLength = !passwordLength.isNull();
+    size_t expectedLength = 0;
+    if (hasPasswordLength) {
+      if (!passwordLength.is<size_t>()) {
+        LOG_ERR("WCS", "Discarding corrupted password for %s (invalid length)", cred.ssid.c_str());
+        needsResave = true;
+        continue;
+      }
+      expectedLength = passwordLength.as<size_t>();
+      if (expectedLength > MAX_PASSWORD_LENGTH) {
+        LOG_ERR("WCS", "Discarding oversized password for %s (%zu bytes)", cred.ssid.c_str(), expectedLength);
+        needsResave = true;
+        continue;
+      }
+    }
+
+    bool passwordValid = false;
+    cred.password = extractPassword(obj, needsResave, MAX_PASSWORD_LENGTH, passwordValid);
+    if (!passwordValid) {
+      LOG_ERR("WCS", "Discarding oversized password for %s", cred.ssid.c_str());
+      needsResave = true;
+      continue;
+    }
 
     bool integrityValid = true;
-    if (obj["password_len"].is<size_t>()) {
-      const size_t expectedLength = obj["password_len"].as<size_t>();
+    if (hasPasswordLength) {
       if (cred.password.size() != expectedLength) {
         LOG_ERR("WCS", "Discarding corrupted password for %s (expected %zu bytes, decoded %zu)", cred.ssid.c_str(),
                 expectedLength, cred.password.size());
