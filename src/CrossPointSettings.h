@@ -88,7 +88,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Side button layout options
   // Default: Up = Previous, Down = Next
-  enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
+  // New values must be appended at the END (persisted by index in settings.json).
+  enum SIDE_BUTTON_LAYOUT {
+    PREV_NEXT = 0,
+    NEXT_PREV = 1,
+    SIDE_BUTTONS_DISABLED = 2,
+    NEXT_NEXT = 3,
+    SIDE_BUTTON_LAYOUT_COUNT
+  };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
@@ -130,7 +137,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
+  // New values must be appended at the END (persisted by index in settings.json).
+  enum SHORT_PWRBTN {
+    IGNORE = 0,
+    SLEEP = 1,
+    PAGE_TURN = 2,
+    FORCE_REFRESH = 3,
+    FOOTNOTES = 4,
+    PAGE_TURN_BACK = 5,
+    SHORT_PWRBTN_COUNT
+  };
 
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
@@ -141,6 +157,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
+    // Long-press opens the reader menu; short-press Confirm no longer does (the "disable the menu
+    // button, move it to long-press" mode).
+    LP_MENU_OPEN_MENU = 4,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 

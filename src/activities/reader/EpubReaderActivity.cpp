@@ -517,8 +517,11 @@ void EpubReaderActivity::loop() {
 
   // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
   // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
-  // following the hold does not also open the menu.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
+  // following the hold does not also open the menu. When longPressMenuFunction is LP_MENU_OPEN_MENU, the
+  // button is "disabled" for short-press: only the long-press branch below opens the menu.
+  const bool confirmShortPressOpensMenu = SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_OPEN_MENU;
+  if ((confirmShortPressOpensMenu && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) ||
+      ReaderUtils::isTouchMenuGesture(mappedInput)) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
     } else {
@@ -529,6 +532,13 @@ void EpubReaderActivity::loop() {
   // Long-press Confirm runs the user-selected function (SETTINGS.longPressMenuFunction).
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
     switch (SETTINGS.longPressMenuFunction) {
+      case CrossPointSettings::LP_MENU_OPEN_MENU:
+        // Hold ~0.4s opens the reader menu; short-press Confirm is otherwise inert in this mode.
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
+          openReaderMenu();
+          return;
+        }
+        break;
       case CrossPointSettings::LP_MENU_BOOKMARK:
         // Hold ~0.4s drops a bookmark at the current page.
         if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showBookmarkMessage) {

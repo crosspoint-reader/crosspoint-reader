@@ -55,16 +55,19 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   const bool swapFront = input.isNavDirectionSwapped();
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  const bool powerTurnForward = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
+                                input.wasReleased(MappedInputManager::Button::Power);
+  const bool powerTurnBack = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN_BACK &&
+                             input.wasReleased(MappedInputManager::Button::Power);
   const bool prev =
-      tiltPrev ||
+      tiltPrev || powerTurnBack ||
       (usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) || input.wasPressed(prevButton))
                 : (input.wasReleased(MappedInputManager::Button::PageBack) || input.wasReleased(prevButton)));
-  const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                         input.wasReleased(MappedInputManager::Button::Power);
-  const bool next = tiltNext || (usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn ||
-                                             input.wasPressed(nextButton))
-                                          : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
-                                             input.wasReleased(nextButton)));
+  const bool next = tiltNext ||
+                    (usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurnForward ||
+                                 input.wasPressed(nextButton))
+                              : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurnForward ||
+                                 input.wasReleased(nextButton)));
   return {prev, next, tiltPrev || tiltNext};
 }
 
