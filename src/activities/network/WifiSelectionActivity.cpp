@@ -40,7 +40,8 @@ void WifiSelectionActivity::onEnter() {
   autoConnecting = false;
   manualNetworkListRequested = false;
   autoAttemptedSsids.clear();
-  autoAttemptedSsids.reserve(WIFI_STORE.getCredentials().size());
+  const size_t savedCredentialCount = WIFI_STORE.getCredentialCount();
+  autoAttemptedSsids.reserve(savedCredentialCount);
 
   // Cache MAC address for display
   uint8_t mac[6];
@@ -56,7 +57,7 @@ void WifiSelectionActivity::onEnter() {
   // Attempt to auto-connect to known networks. Try the last successful
   // network first for speed, then scan and try any visible saved networks by
   // signal strength. The user can interrupt this and show the scan result.
-  if (allowAutoConnect && !WIFI_STORE.getCredentials().empty()) {
+  if (allowAutoConnect && savedCredentialCount != 0) {
     const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
     if (!lastSsid.empty()) {
       const auto cred = WIFI_STORE.findCredential(lastSsid);

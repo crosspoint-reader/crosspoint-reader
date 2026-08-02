@@ -11,6 +11,12 @@ struct WifiCredential {
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
 };
 
+struct WifiCredentialSummary {
+  std::string ssid;
+  bool hasPassword = false;
+  bool isLastConnected = false;
+};
+
 /**
  * Singleton class for storing WiFi credentials on the SD card.
  * Passwords are XOR-obfuscated with the device's unique hardware MAC address
@@ -42,9 +48,11 @@ class WifiCredentialStore : public PersistableStore<WifiCredentialStore> {
   bool addCredential(const std::string& ssid, const std::string& password);
   bool removeCredential(const std::string& ssid);
   std::optional<WifiCredential> findCredential(const std::string& ssid) const;
-
-  // Return snapshots so callers cannot retain references across mutations.
-  std::vector<WifiCredential> getCredentials() const;
+  std::optional<WifiCredential> getCredentialAt(size_t index) const;
+  std::optional<std::string> getSsidAt(size_t index) const;
+  size_t getCredentialCount() const;
+  // Password-free snapshot for display/API consumers.
+  std::vector<WifiCredentialSummary> getCredentialSummaries() const;
 
   // Check if a network is saved
   bool hasSavedCredential(const std::string& ssid) const;
