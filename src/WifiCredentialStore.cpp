@@ -1,5 +1,6 @@
 #include "WifiCredentialStore.h"
 
+#include <CredentialIntegrity.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
@@ -18,6 +19,7 @@ void WifiCredentialStore::toJson(JsonDocument& doc) const {
     // original length lets the loader reject a decodable-but-corrupted value
     // instead of silently trying a different password.
     obj["password_len"] = cred.password.size();
+    obj["password_crc32"] = credential_integrity::crc32(cred.password);
   }
 }
 
@@ -38,17 +40,38 @@ bool WifiCredentialStore::fromJson(JsonVariantConst doc) {
     cred.ssid = obj["ssid"] | "";
     cred.password = extractPassword(obj, needsResave);
 
+    bool integrityValid = true;
     if (obj["password_len"].is<size_t>()) {
       const size_t expectedLength = obj["password_len"].as<size_t>();
       if (cred.password.size() != expectedLength) {
         LOG_ERR("WCS", "Discarding corrupted password for %s (expected %zu bytes, decoded %zu)", cred.ssid.c_str(),
                 expectedLength, cred.password.size());
-        needsResave = true;
-        continue;
+        integrityValid = false;
       }
     } else {
       // Upgrade existing JSON after it has loaded successfully.
       needsResave = true;
+    }
+
+    const JsonVariantConst checksum = obj["password_crc32"];
+    if (checksum.is<uint32_t>()) {
+      const uint32_t expectedCrc32 = checksum.as<uint32_t>();
+      if (credential_integrity::crc32(cred.password) != expectedCrc32) {
+        LOG_ERR("WCS", "Discarding corrupted password for %s (checksum mismatch)", cred.ssid.c_str());
+        integrityValid = false;
+      }
+    } else if (checksum.isNull()) {
+      // password_crc32 was added after password_len; accept and upgrade files
+      // written by older firmware.
+      needsResave = true;
+    } else {
+      LOG_ERR("WCS", "Discarding corrupted password for %s (invalid checksum)", cred.ssid.c_str());
+      integrityValid = false;
+    }
+
+    if (!integrityValid) {
+      needsResave = true;
+      continue;
     }
     credentials.push_back(cred);
   }
