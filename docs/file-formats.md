@@ -90,24 +90,29 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 35
+### Version 36
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 35 keeps the version 34 serialized layout unchanged. It was bumped
+Version 36 keeps the version 35 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
-than flattened paragraphs with synthetic row/cell labels. Version 34 likewise
-kept the serialized layout unchanged and invalidated cached sections after two
-CJK layout changes: word-gap suppression was narrowed to tokens glued together
-in the source so spaces between Hangul words survive, and `<br>` handling
-changed page layout for CJK-style paragraph breaks. Version 33 added serialized
-ruby annotations for native `<ruby>` and `<rt>` layout. Version 32 added the
-book-internal source href to serialized image blocks for lazy extraction.
-Version 31 preserved word continuation when splitting long CJK text at
-`MAX_WORD_SIZE`; version 30 similarly invalidated v29 positions after Arabic
-contextual shaping changed text measurement.
+than flattened paragraphs with synthetic row/cell labels.
+
+Version 35 adds a header offset and a `uint32_t` entry per page for the
+visible-text offset LUT. The other section LUTs remain unchanged.
+
+Version 34 is binary-identical to version 33. The version was bumped because
+word-gap suppression was narrowed to tokens glued together in the source: v33
+dropped the gap between any two words meeting at a CJK break opportunity, which
+collapsed the spaces between Hangul words, so v33 word positions no longer match
+what the layout engine now produces.
+
+Version 30 is binary-identical to version 29. The version was bumped because
+Arabic contextual shaping changed text measurement (`getTextAdvanceX` now
+measures the shaped visual text), so word positions cached by v29 no longer
+match what `drawText` renders.
 
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:
@@ -115,8 +120,9 @@ superscript, and subscript. The format also includes:
 - cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
   image rendering mode, and Focus Reading
 - page offset LUT
+- per-page visible-text offset LUT (zero-based Unicode codepoints in `<body>`)
 - anchor-to-page map for fragment and footnote navigation
-- paragraph and list-item LUTs used by KOReader sync page refinement
+- paragraph and list-item LUTs retained for navigation and legacy sync fallback
 - optional per-word Focus Reading split metadata
 - per-page footnote entries
 - serialized word style bits for underline, strikethrough, superscript, and
@@ -133,7 +139,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 35
+#define EXPECTED_VERSION 36
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
@@ -302,6 +308,7 @@ struct SectionBin {
     u32 anchorMapOffset;
     u32 paragraphLutOffset;
     u32 listItemLutOffset;
+    u32 visibleTextLutOffset;
 
     Page pages[pageCount];
 
@@ -322,6 +329,10 @@ struct SectionBin {
 
     if (listItemLutOffset != 0 && paragraphLutOffset != 0) {
         u16 listItemIndex[paragraphLut.count] @ listItemLutOffset;
+    }
+
+    if (visibleTextLutOffset != 0) {
+	u32 visibleTextOffset[pageCount] @ visibleTextLutOffset;
     }
 };
 

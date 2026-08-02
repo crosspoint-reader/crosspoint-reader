@@ -26,6 +26,14 @@ class EpubReaderActivity final : public Activity {
   bool forcedRefreshPending = false;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
+  std::optional<uint32_t> cachedVisibleTextOffset;
+  // Visible-codepoint offset of the page currently on screen, captured when the page is loaded
+  // (Page::visibleTextOffset). Lets saveProgress persist the offset without reopening section.bin.
+  std::optional<uint32_t> currentPageVisibleOffset;
+  // Explicit "land at this visible-codepoint offset in the target spine" request (bookmark open).
+  // Resolved in render() once the section is loaded/built far enough, then cleared. Unlike a
+  // settings-change reposition it always resolves by content, so it survives any re-pagination.
+  std::optional<uint32_t> pendingOffsetJump;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
   // Signals that the next render should reposition within the newly loaded section
@@ -159,10 +167,11 @@ class EpubReaderActivity final : public Activity {
   bool buildPopupPending = false;
   // Draw the indexing popup mid-build (parser image-probe callback and deadline backstop).
   void showBuildPopup();
-  // Remap the cached relative reading position once the section's real page count is known
-  // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
+  // Map the cached content position into the rebuilt section (used after a
+  // settings change re-paginates a chapter). Returns true if currentPage moved.
   // No-op while the section is still building or when the pagination is unchanged (plain resume).
   bool applyDeferredReposition();
+  void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);

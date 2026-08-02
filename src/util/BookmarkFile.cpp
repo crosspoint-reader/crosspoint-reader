@@ -29,6 +29,10 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
     bookmark.computedSpineIndex = obj["si"] | static_cast<uint16_t>(0);
     bookmark.computedChapterPageCount = obj["pc"] | static_cast<uint16_t>(0);
     bookmark.computedChapterProgress = obj["pp"] | static_cast<uint16_t>(0);
+    if (!obj["vo"].isNull()) {
+      bookmark.visibleTextOffset = obj["vo"] | static_cast<uint32_t>(0);
+      bookmark.hasVisibleTextOffset = true;
+    }
   }
 
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
@@ -47,6 +51,9 @@ bool BookmarkFile::save(const std::string& bookPath, const std::vector<BookmarkE
     obj["si"] = bookmark.computedSpineIndex;
     obj["pc"] = bookmark.computedChapterPageCount;
     obj["pp"] = bookmark.computedChapterProgress;
+    if (bookmark.hasVisibleTextOffset) {
+      obj["vo"] = bookmark.visibleTextOffset;
+    }
   }
 
   // writeDocToFile ensures /.crosspoint; the bookmarks subdirectory is ours.

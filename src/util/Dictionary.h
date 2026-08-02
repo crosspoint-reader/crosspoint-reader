@@ -77,7 +77,41 @@ class Dictionary {
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
-  DictLocation locate(const char* target, std::string* matchedHeadwordOut);
+  // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
+  // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
+  // ".dict.dz", leaving ~137 chars for folder + stem — far beyond any real
+  // dictionary. open() rejects anything that would not fit, so the hot path
+  // cannot fail on length. Kept under the 256-byte stack-local guideline.
+  static constexpr size_t PATH_BUF_BYTES = 160;
+
+  // Length of the longest suffix appended to basePath (".dict.dz"); used for
+  // the open()-time length check.
+  static constexpr size_t LONGEST_SUFFIX_LEN = sizeof(".dict.dz") - 1;
+
+  // Compose "<basePath><suffix>" into a caller-supplied stack buffer. The
+  // lookup path runs this instead of `basePath + suffix` so path construction
+  // costs no transient heap — see LookupSession. (A lookup still allocates
+  // elsewhere: cleanWord(), stemVariants() and the matched headword.) False
+  // (and logs) when the path would not fit, which open() has already ruled out.
+  bool buildPath(char* buf, size_t bufSize, const char* suffix) const;
+
+  // The .idx / .qidx handles shared by every locate() call in one lookup. A
+  // lookup probes up to ~5 stem variants; opening the two files per probe cost
+  // ~10 SD opens and ~10 std::string path temporaries per word, churning the
+  // same heap whose fragmentation makes lookups fail mid-session. Opened once
+  // per lookup instead, with the paths built via buildPath().
+  struct LookupSession {
+    HalFile idx;
+    HalFile qidx;
+    uint32_t idxSize = 0;
+    uint32_t sampleCount = 0;  // 0 when the sidecar is absent, stale or empty
+  };
+
+  // Open .idx (required) and .qidx (optional — locate() falls back to a full
+  // scan without it). False when the dictionary is closed or .idx won't open.
+  bool openSession(LookupSession& session);
+
+  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
   // Read the definition at location. On failure returns false and, if outResult
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);
