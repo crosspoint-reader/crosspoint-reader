@@ -32,3 +32,5 @@ lib/EpdFont/scripts/output/
 /sdkconfig.default
 /sdkconfig.defaults
 sdkconfig.sticky
+# Local Pi runtime state
+.atl/
