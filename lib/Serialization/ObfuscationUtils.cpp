@@ -5,6 +5,7 @@
 #include <esp_mac.h>
 #include <mbedtls/base64.h>
 
+#include <array>
 #include <cstring>
 
 namespace obfuscation {
@@ -12,15 +13,16 @@ namespace obfuscation {
 namespace {
 constexpr size_t HW_KEY_LEN = 6;
 
-// Simple lazy init — no thread-safety concern on single-core ESP32-C3.
 const uint8_t* getHwKey() {
-  static uint8_t key[HW_KEY_LEN] = {};
-  static bool initialized = false;
-  if (!initialized) {
-    esp_efuse_mac_get_default(key);
-    initialized = true;
-  }
-  return key;
+  // Function-local static initialization is synchronized by C++, including
+  // on dual-core targets. The previous hand-rolled boolean could expose a
+  // partially initialized key to another task.
+  static const std::array<uint8_t, HW_KEY_LEN> key = [] {
+    std::array<uint8_t, HW_KEY_LEN> value{};
+    esp_efuse_mac_get_default(value.data());
+    return value;
+  }();
+  return key.data();
 }
 }  // namespace
 

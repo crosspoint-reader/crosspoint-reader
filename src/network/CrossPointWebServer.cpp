@@ -1451,8 +1451,8 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
 // ---- Wi-Fi Credentials API ----
 
 void CrossPointWebServer::handleGetWifiNetworks() const {
-  const auto& credentials = WIFI_STORE.getCredentials();
-  const std::string& lastConnectedSsid = WIFI_STORE.getLastConnectedSsid();
+  const auto credentials = WIFI_STORE.getCredentials();
+  const std::string lastConnectedSsid = WIFI_STORE.getLastConnectedSsid();
 
   // Stream JSON array incrementally to avoid allocating the full response in memory
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -1510,7 +1510,7 @@ void CrossPointWebServer::handlePostWifiNetwork() {
 
   if (doc["index"].is<int>()) {
     int idx = doc["index"].as<int>();
-    const auto& credentials = WIFI_STORE.getCredentials();
+    const auto credentials = WIFI_STORE.getCredentials();
     if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
       server->send(400, "text/plain", "Invalid network index");
       return;
@@ -1566,7 +1566,7 @@ void CrossPointWebServer::handleDeleteWifiNetwork() {
   }
 
   int idx = doc["index"].as<int>();
-  const auto& credentials = WIFI_STORE.getCredentials();
+  const auto credentials = WIFI_STORE.getCredentials();
   if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
     server->send(400, "text/plain", "Invalid network index");
     return;
