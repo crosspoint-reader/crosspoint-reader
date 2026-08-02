@@ -386,7 +386,21 @@ int KeyboardEntryActivity::lineBreakEnd(std::string& s, const int start, const i
       hi = mid - 1;
     }
   }
-  return best;
+
+  // The search runs over byte indices, so `best` can land inside a multi-byte
+  // character — the caller would then slice it in half and hand both fragments
+  // to the renderer as incomplete sequences. Snap back to a code point
+  // boundary. The line must still contain at least one whole character, or the
+  // wrap loop would never advance.
+  const int firstCharEnd = static_cast<int>(utf8Next(s, static_cast<size_t>(start)));
+  while (best > start && (static_cast<uint8_t>(s[best]) & 0xC0) == 0x80) best--;
+  // Widths measured mid-sequence are unreliable (the fragment renders as a
+  // replacement glyph), so the search can overshoot; step back whole
+  // characters until the snapped line fits.
+  while (best > firstCharEnd && measureRange(s, start, best) > maxWidth) {
+    best = static_cast<int>(utf8Prev(s, static_cast<size_t>(best)));
+  }
+  return best < firstCharEnd ? firstCharEnd : best;
 }
 
 bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, size_t& position) const {
