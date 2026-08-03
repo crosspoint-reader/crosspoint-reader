@@ -112,6 +112,26 @@ EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 unsigned long t1 = 0;
 unsigned long t2 = 0;
 
+// Boot-stage timing, recorded during setup() and printed from the first
+// loop() iteration: serial output before USB CDC enumerates (~4s in) is
+// lost, so stages log into this table instead of printing directly.
+struct BootStage {
+  const char* name;
+  uint32_t ms;
+};
+constexpr uint8_t MAX_BOOT_STAGES = 12;
+BootStage bootStages[MAX_BOOT_STAGES];
+uint8_t bootStageCount = 0;
+uint32_t bootStagePrev = 0;
+
+void markBootStage(const char* name) {
+  const uint32_t now = millis();
+  if (bootStageCount < MAX_BOOT_STAGES) {
+    bootStages[bootStageCount++] = {name, now - bootStagePrev};
+  }
+  bootStagePrev = now;
+}
+
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
@@ -231,6 +251,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
   renderer.begin();
   activityManager.begin();
+  markBootStage("display");
   LOG_DBG("MAIN", "Display initialized");
 
   // Initialize font decompressor for compressed reader fonts
@@ -254,8 +275,11 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
+  markBootStage("builtin-fonts");
+
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
+  markBootStage("sd-fonts");
 
   LOG_DBG("MAIN", "Fonts setup");
 }
@@ -273,6 +297,7 @@ void setup() {
   // worked without the delay because USB was already enumerated.
   delay(250);
   Serial.begin(115200);
+  markBootStage("pre-serial");
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
 #endif
@@ -292,6 +317,7 @@ void setup() {
   powerManager.begin();
   halTiltSensor.begin();
   halClock.begin();
+  markBootStage("hal");
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
@@ -304,6 +330,8 @@ void setup() {
     return;
   }
 
+  markBootStage("sd-init");
+
   HalSystem::checkPanic();
 
   SETTINGS.loadFromFile();
@@ -314,6 +342,7 @@ void setup() {
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+  markBootStage("state-files");
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
@@ -339,6 +368,7 @@ void setup() {
   // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
   // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
   // flashing has been locked down (e.g. recent X3 firmware).
+  markBootStage("wake-verify");
   bool recoveryFirmwareMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
@@ -354,6 +384,8 @@ void setup() {
       LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
     }
   }
+
+  markBootStage("btn-settle");
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
@@ -451,8 +483,10 @@ void setup() {
     gpio.update();
   }
 
+  markBootStage("first-activity");
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
+  markBootStage("power-release");
   allowSleepAt = millis() + 2000;
 }
 
@@ -460,6 +494,18 @@ void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
+
+  // One-shot boot timing report, held back until the USB host can hear it.
+  static bool bootStagesPrinted = false;
+  if (!bootStagesPrinted && Serial) {
+    bootStagesPrinted = true;
+    uint32_t total = 0;
+    for (uint8_t i = 0; i < bootStageCount; i++) {
+      LOG_INF("BOOT", "%-14s %4lums", bootStages[i].name, static_cast<unsigned long>(bootStages[i].ms));
+      total += bootStages[i].ms;
+    }
+    LOG_INF("BOOT", "total          %4lums", static_cast<unsigned long>(total));
+  }
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
