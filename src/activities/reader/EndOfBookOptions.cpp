@@ -44,7 +44,42 @@ std::string EndOfBookOptions::fullPath(const size_t index) const {
   return folder == "/" ? "/" + names[index] : folder + "/" + names[index];
 }
 
-EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputManager& input, std::string* openPath) {
+void EndOfBookOptions::listGeometry(const GfxRenderer& renderer, int& listTop, int& listHeight) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int titleY = safe.y + safe.height / 8;
+  const int subtitleY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing;
+  listTop = subtitleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
+  listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
+}
+
+EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputManager& input, const GfxRenderer& renderer,
+                                                           std::string* openPath) {
+  // Touch first: a tap acts immediately, a touch-down only moves the highlight, which
+  // matches how every other list in the firmware behaves.
+  const int itemCountWithHome = static_cast<int>(names.size()) + 1;
+  int listTop = 0;
+  int listHeight = 0;
+  listGeometry(renderer, listTop, listHeight);
+  int touched = -1;
+  if (input.wasListItemTapped(touched, itemCountWithHome, selector, listTop, listHeight, false)) {
+    selector = touched;
+    if (selector < static_cast<int>(names.size())) {
+      if (openPath) {
+        *openPath = fullPath(selector);
+      }
+      return Action::OpenBook;
+    }
+    return Action::GoHome;
+  }
+  if (input.wasListItemTouchedDown(touched, itemCountWithHome, selector, listTop, listHeight, false)) {
+    if (selector != touched) {
+      selector = touched;
+      return Action::Redraw;
+    }
+    return Action::None;
+  }
+
   if (input.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selector < static_cast<int>(names.size())) {
       if (openPath) {
@@ -102,12 +137,13 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int titleY = safe.y + safe.height / 8;
   const int subtitleY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing;
-  const int listTop = subtitleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
+  int listTop = 0;
+  int listHeight = 0;
+  listGeometry(renderer, listTop, listHeight);
 
   UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
   UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
 
-  const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
   GUI.drawList(renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
                [this](const int index) {
                  return index < static_cast<int>(names.size()) ? displayName(names[index])

@@ -31,7 +31,10 @@ class EndOfBookOptions {
   // Back press returns to the last page of the book. Fills openPath when the result is
   // OpenBook. Returns Action::None when nothing relevant was pressed; callers continue
   // their normal input path (keeping long-press Back to the file browser working).
-  Action handleMenuInput(const MappedInputManager& input, std::string* openPath);
+  // Menu input handling as above. Taps need the renderer because the list's geometry
+  // is derived from the panel's safe area, and the same derivation has to be shared
+  // with render() or the hit rects would drift from what is drawn.
+  Action handleMenuInput(const MappedInputManager& input, const GfxRenderer& renderer, std::string* openPath);
 
   // Draws the full end screen (plain title, or the suggestion menu) onto a cleared buffer.
   void render(GfxRenderer& renderer, const MappedInputManager& input) const;
@@ -45,4 +48,6 @@ class EndOfBookOptions {
   std::atomic<bool> isLoaded{false};
 
   std::string fullPath(size_t index) const;
+  // Top edge and height of the list band, in the same terms render() lays it out.
+  void listGeometry(const GfxRenderer& renderer, int& listTop, int& listHeight) const;
 };

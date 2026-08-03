@@ -79,7 +79,7 @@ void XtcReaderActivity::loop() {
   // block.
   if (atEndOfBook && endOfBookOptions.menuActive()) {
     std::string openPath;
-    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions.handleMenuInput(mappedInput, renderer, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;

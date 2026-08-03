@@ -494,7 +494,7 @@ void EpubReaderActivity::loop() {
   if (atEndOfBook && endOfBookOptions.menuActive() &&
       !(ignoreNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     std::string openPath;
-    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions.handleMenuInput(mappedInput, renderer, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
