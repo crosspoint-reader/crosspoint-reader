@@ -226,7 +226,7 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   }
 }
 
-void GfxRenderer::prewarmUiFallbackText(const std::initializer_list<std::pair<int, const char*>> items) const {
+void GfxRenderer::prewarmUiFallbackText(const std::initializer_list<UiFallbackText> items) const {
   if (!fontCacheManager_ || fontCacheManager_->isScanning()) return;
 
   // Group per resolved SD font: prewarm REPLACES the font's resident mini
@@ -236,23 +236,28 @@ void GfxRenderer::prewarmUiFallbackText(const std::initializer_list<std::pair<in
   static constexpr size_t MAX_GROUPS = 3;  // one per UI fallback size at most
   int groupId[MAX_GROUPS] = {};
   std::string groupText[MAX_GROUPS];
+  uint8_t groupStyleMask[MAX_GROUPS] = {};
   size_t groupCount = 0;
 
-  for (const auto& [fontId, text] : items) {
-    if (!text || !*text) continue;
-    const int resolved = resolveTextFontId(fontId, text, EpdFontFamily::REGULAR);
-    if (resolved == fontId || sdCardFonts_.find(resolved) == sdCardFonts_.end()) continue;
+  for (const auto& item : items) {
+    if (!item.text || !*item.text) continue;
+    const int resolved = resolveTextFontId(item.fontId, item.text, item.style);
+    if (resolved == item.fontId || sdCardFonts_.find(resolved) == sdCardFonts_.end()) continue;
     size_t g = 0;
     while (g < groupCount && groupId[g] != resolved) g++;
     if (g == groupCount) {
       if (groupCount == MAX_GROUPS) continue;
       groupId[groupCount++] = resolved;
     }
-    groupText[g] += text;
+    groupText[g] += item.text;
+    groupStyleMask[g] |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(item.style) & 0x03));
   }
 
   for (size_t g = 0; g < groupCount; g++) {
-    fontCacheManager_->prewarmCache(groupId[g], groupText[g].c_str(), 0x01);
+    // truncatedText() appends U+2026 to any overflowing string; include it so
+    // the ellipsis never falls back to a per-glyph on-demand load.
+    groupText[g] += "\xE2\x80\xA6";
+    fontCacheManager_->prewarmCache(groupId[g], groupText[g].c_str(), groupStyleMask[g]);
   }
 }
 

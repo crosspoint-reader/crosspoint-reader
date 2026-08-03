@@ -116,6 +116,18 @@ void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
   const int totalItems = getTotalItems();
+
+  // Batch-load fallback glyphs for the visible page of chapter titles before
+  // the list draws them: Thai titles otherwise load per-glyph through the
+  // on-demand ring, which took seconds per paint.
+  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
+  const int pageStart = pageItems > 0 ? (selectorIndex / pageItems) * pageItems : 0;
+  std::string visibleTitles;
+  for (int i = pageStart; i < totalItems && i < pageStart + pageItems; ++i) {
+    visibleTitles += epub->getTocItem(i).title;
+  }
+  renderer.prewarmUiFallbackText({{UI_10_FONT_ID, visibleTitles.c_str()}});
+
   GUI.drawList(renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, totalItems, selectorIndex,
                [this](int index) {
                  auto item = epub->getTocItem(index);

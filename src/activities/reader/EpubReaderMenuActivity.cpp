@@ -167,6 +167,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   auto metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
+  // Batch-load fallback glyphs for the Thai/CJK header title (drawn bold)
+  // before drawHeader draws it per-glyph through the on-demand ring.
+  renderer.prewarmUiFallbackText({{UI_12_FONT_ID, title.c_str(), EpdFontFamily::BOLD}});
+
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
                  title.c_str());
 
