@@ -415,6 +415,9 @@ void FileBrowserActivity::render(RenderLock&&) {
     const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;
     // Left-truncate so the deepest directory is always visible
     const char* pathStr = basepath.c_str();
+    // Thai/CJK directory names in the path must be resident before the
+    // per-glyph truncation measurements below.
+    renderer.prewarmUiFallbackText({{SMALL_FONT_ID, pathStr}});
     const char* pathDisplay = pathStr;
     char leftTruncBuf[256];
     if (renderer.getTextWidth(SMALL_FONT_ID, pathStr) > pathMaxWidth) {

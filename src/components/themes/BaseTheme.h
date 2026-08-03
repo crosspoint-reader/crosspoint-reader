@@ -177,6 +177,18 @@ class BaseTheme {
  public:
   virtual ~BaseTheme() = default;
 
+  // Batch-load fallback glyphs (Thai/CJK routed to an SD font) before header
+  // or list text is measured and drawn: getTextWidth() walks glyphs one by
+  // one, so un-prewarmed strings hammer the SD per glyph — a mixed-script
+  // filename took seconds per paint. Called by every theme's drawHeader and
+  // drawList; near-free when the strings are already resident (subset check).
+  static void prewarmHeaderText(const GfxRenderer& renderer, const char* title, const char* subtitle);
+  static void prewarmListRows(const GfxRenderer& renderer, int itemCount, int selectedIndex, int pageItems,
+                              int titleFontId, int subtitleFontId,
+                              const std::function<std::string(int index)>& rowTitle,
+                              const std::function<std::string(int index)>& rowSubtitle,
+                              const std::function<std::string(int index)>& rowValue);
+
   // Component drawing methods
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,

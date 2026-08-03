@@ -273,21 +273,31 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
   const auto fontIt = fontMap.find(fontId);
   const auto fallbackIt = fontMap.find(fallbackFontId);
   if (fontIt == fontMap.end() || fallbackIt == fontMap.end()) {
+    LOG_DBG("GFX", "resolve: fb %d->%d font missing p=%d f=%d", fontId, fallbackFontId, fontIt != fontMap.end(),
+            fallbackIt != fontMap.end());
     return fontId;  // unknown primary or fallback not loaded — let the caller handle it
   }
   const EpdFontFamily& primary = fontIt->second;
   const EpdFontFamily& fallback = fallbackIt->second;
   const char* cursor = text;
   uint32_t cp;
+  uint32_t firstNonLatin = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
     // Only redirect for CJK/Thai the primary font cannot draw but the fallback
     // can. Latin/symbol strings the built-in UI fonts already cover are left
     // untouched, and a partial-coverage fallback (e.g. kana-only) is not worth
     // dragging the whole string into for glyphs it would also miss.
-    if ((utf8IsCjkCodepoint(cp) || utf8IsThaiCodepoint(cp)) && !primary.hasCodepoint(cp, style) &&
-        fallback.hasCodepoint(cp, style)) {
-      return fallbackFontId;
+    if (utf8IsCjkCodepoint(cp) || utf8IsThaiCodepoint(cp)) {
+      if (firstNonLatin == 0) firstNonLatin = cp;
+      if (!primary.hasCodepoint(cp, style) && fallback.hasCodepoint(cp, style)) {
+        return fallbackFontId;
+      }
     }
+  }
+  if (firstNonLatin != 0) {
+    LOG_DBG("GFX", "resolve: no redirect %d->%d style %d cp U+%04lX pHas=%d fHas=%d", fontId, fallbackFontId, style,
+            static_cast<unsigned long>(firstNonLatin), primary.hasCodepoint(firstNonLatin, style),
+            fallback.hasCodepoint(firstNonLatin, style));
   }
   return fontId;
 }

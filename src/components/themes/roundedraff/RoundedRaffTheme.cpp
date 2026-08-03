@@ -54,6 +54,7 @@ void RoundedRaffTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const 
   if (title == nullptr) {
     return;
   }
+  prewarmHeaderText(renderer, title, subtitle);
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
   const int titleX = rect.x + sidePadding;
   const int titleY = rect.y + 14;
@@ -292,6 +293,9 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
   const int rowStep = rowHeight + kSelectableRowGap;
   const int pageItems = std::max(1, rect.height / rowStep);
   const int pageStartIndex = std::max(0, selectedIndex / pageItems) * pageItems;
+
+  prewarmListRows(renderer, itemCount, selectedIndex, pageItems, kTitleFontId, kSubtitleFontId, rowTitle, rowSubtitle,
+                  rowValue);
 
   const int sidePadding = RoundedRaffMetrics::values.contentSidePadding;
   const int rowX = rect.x + sidePadding;

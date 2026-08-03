@@ -303,11 +303,20 @@ void HomeActivity::render(RenderLock&&) {
   coverRectW = pageWidth;
   coverRectH = metrics.homeCoverTileHeight;
 
-  // Batch-load fallback glyphs (e.g. a Thai title) before the cover tile draws
+  // Batch-load fallback glyphs (e.g. Thai titles) before the cover tile draws
   // them; the per-glyph on-demand path opens the .cpfont once per glyph.
+  // Cover ALL recent books (multi-cover themes draw up to three) in both
+  // title styles (BaseTheme draws titles regular, Lyra draws them bold).
   if (!recentBooks.empty()) {
-    renderer.prewarmUiFallbackText(
-        {{UI_12_FONT_ID, recentBooks[0].title.c_str()}, {UI_10_FONT_ID, recentBooks[0].author.c_str()}});
+    std::string titles;
+    std::string authors;
+    for (const auto& book : recentBooks) {
+      titles += book.title;
+      authors += book.author;
+    }
+    renderer.prewarmUiFallbackText({{UI_12_FONT_ID, titles.c_str(), EpdFontFamily::BOLD},
+                                    {UI_12_FONT_ID, titles.c_str()},
+                                    {UI_10_FONT_ID, authors.c_str()}});
   }
 
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},

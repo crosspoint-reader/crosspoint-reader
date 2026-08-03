@@ -274,6 +274,9 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rowHeight > 0 ? std::max(1, rect.height / rowHeight) : 1;
 
+  prewarmListRows(renderer, itemCount, selectedIndex, pageItems, UI_10_FONT_ID, SMALL_FONT_ID, rowTitle, rowSubtitle,
+                  rowValue);
+
   const int totalPages = (itemCount + pageItems - 1) / pageItems;
   if (totalPages > 1) {
     constexpr int indicatorWidth = 20;
@@ -360,7 +363,31 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   }
 }
 
+void BaseTheme::prewarmHeaderText(const GfxRenderer& renderer, const char* title, const char* subtitle) {
+  renderer.prewarmUiFallbackText(
+      {{UI_12_FONT_ID, title, EpdFontFamily::BOLD}, {SMALL_FONT_ID, subtitle, EpdFontFamily::REGULAR}});
+}
+
+void BaseTheme::prewarmListRows(const GfxRenderer& renderer, const int itemCount, const int selectedIndex,
+                                const int pageItems, const int titleFontId, const int subtitleFontId,
+                                const std::function<std::string(int index)>& rowTitle,
+                                const std::function<std::string(int index)>& rowSubtitle,
+                                const std::function<std::string(int index)>& rowValue) {
+  if (pageItems <= 0 || itemCount <= 0) return;
+  const int pageStart = selectedIndex / pageItems * pageItems;
+  const int pageEnd = itemCount < pageStart + pageItems ? itemCount : pageStart + pageItems;
+  std::string titleText;
+  std::string subtitleText;
+  for (int i = pageStart; i < pageEnd; i++) {
+    if (rowTitle) titleText += rowTitle(i);
+    if (rowValue) titleText += rowValue(i);
+    if (rowSubtitle) subtitleText += rowSubtitle(i);
+  }
+  renderer.prewarmUiFallbackText({{titleFontId, titleText.c_str()}, {subtitleFontId, subtitleText.c_str()}});
+}
+
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+  prewarmHeaderText(renderer, title, subtitle);
   // Hide last battery draw
   constexpr int maxBatteryWidth = 80;
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
