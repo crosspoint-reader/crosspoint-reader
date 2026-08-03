@@ -66,7 +66,9 @@ void SleepActivity::renderCustomSleepScreen() const {
   // This takes priority over the /sleep folder.
   HalFile file;
   if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
+    const bool adaptiveTone =
+        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+    Bitmap bitmap(file, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
@@ -134,7 +136,9 @@ void SleepActivity::renderCustomSleepScreen() const {
       if (Storage.openFileForRead("SLP", filename, randFile)) {
         LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
         delay(100);
-        Bitmap bitmap(randFile, true);
+        const bool adaptiveTone =
+            SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+        Bitmap bitmap(randFile, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
         if (bitmap.parseHeaders() == BmpReaderError::Ok) {
           renderBitmapSleepScreen(bitmap);
           randFile.close();

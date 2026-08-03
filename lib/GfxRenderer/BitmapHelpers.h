@@ -11,6 +11,32 @@ uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
 int adjustPixel(int gray);
 
+struct QuantizedGray4 {
+  uint8_t index;
+  uint8_t value;
+};
+
+enum class Gray4QuantizationMode : uint8_t { DisplayTuned, Native };
+
+inline QuantizedGray4 quantizeGray4(int gray, const Gray4QuantizationMode mode) {
+  if (gray < 0) gray = 0;
+  if (gray > 255) gray = 255;
+
+  if (mode == Gray4QuantizationMode::Native) {
+    // Midpoints between the display's four logical levels: 0, 85, 170, 255.
+    if (gray < 43) return {0, 0};
+    if (gray < 128) return {1, 85};
+    if (gray < 213) return {2, 170};
+    return {3, 255};
+  }
+
+  // Existing thresholds tuned for the X4 panel.
+  if (gray < 30) return {0, 15};
+  if (gray < 50) return {1, 30};
+  if (gray < 140) return {2, 80};
+  return {3, 210};
+}
+
 enum class BmpRowOrder { BottomUp, TopDown };
 
 // Populates a 1-bit BMP header in the provided memory.
@@ -104,7 +130,8 @@ class Atkinson1BitDitherer {
 // Less error buildup = fewer artifacts than Floyd-Steinberg
 class AtkinsonDitherer {
  public:
-  explicit AtkinsonDitherer(int width) : width(width) {
+  explicit AtkinsonDitherer(int width, Gray4QuantizationMode quantizationMode = Gray4QuantizationMode::DisplayTuned)
+      : width(width), quantizationMode(quantizationMode) {
     errorRow0 = new int16_t[width + 4]();  // Current row
     errorRow1 = new int16_t[width + 4]();  // Next row
     errorRow2 = new int16_t[width + 4]();  // Row after next
@@ -127,41 +154,10 @@ class AtkinsonDitherer {
     if (adjusted < 0) adjusted = 0;
     if (adjusted > 255) adjusted = 255;
 
-    // Quantize to 4 levels
-    uint8_t quantized;
-    int quantizedValue;
-    if (false) {  // original thresholds
-      if (adjusted < 43) {
-        quantized = 0;
-        quantizedValue = 0;
-      } else if (adjusted < 128) {
-        quantized = 1;
-        quantizedValue = 85;
-      } else if (adjusted < 213) {
-        quantized = 2;
-        quantizedValue = 170;
-      } else {
-        quantized = 3;
-        quantizedValue = 255;
-      }
-    } else {  // fine-tuned to X4 eink display
-      if (adjusted < 30) {
-        quantized = 0;
-        quantizedValue = 15;
-      } else if (adjusted < 50) {
-        quantized = 1;
-        quantizedValue = 30;
-      } else if (adjusted < 140) {
-        quantized = 2;
-        quantizedValue = 80;
-      } else {
-        quantized = 3;
-        quantizedValue = 210;
-      }
-    }
+    const QuantizedGray4 quantized = quantizeGray4(adjusted, quantizationMode);
 
     // Calculate error (only distribute 6/8 = 75%)
-    int error = (adjusted - quantizedValue) >> 3;  // error/8
+    int error = (adjusted - quantized.value) >> 3;  // error/8
 
     // Distribute 1/8 to each of 6 neighbors
     errorRow0[x + 3] += error;  // Right
@@ -171,7 +167,7 @@ class AtkinsonDitherer {
     errorRow1[x + 3] += error;  // Bottom-right
     errorRow2[x + 2] += error;  // Two rows down
 
-    return quantized;
+    return quantized.index;
   }
 
   void nextRow() {
@@ -190,6 +186,7 @@ class AtkinsonDitherer {
 
  private:
   int width;
+  Gray4QuantizationMode quantizationMode;
   int16_t* errorRow0;
   int16_t* errorRow1;
   int16_t* errorRow2;
@@ -205,7 +202,9 @@ class AtkinsonDitherer {
 //      7/16  X
 class FloydSteinbergDitherer {
  public:
-  explicit FloydSteinbergDitherer(int width) : width(width), rowCount(0) {
+  explicit FloydSteinbergDitherer(int width,
+                                  Gray4QuantizationMode quantizationMode = Gray4QuantizationMode::DisplayTuned)
+      : width(width), quantizationMode(quantizationMode), rowCount(0) {
     errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
     errorNextRow = new int16_t[width + 2]();
   }
@@ -231,41 +230,10 @@ class FloydSteinbergDitherer {
     if (adjusted < 0) adjusted = 0;
     if (adjusted > 255) adjusted = 255;
 
-    // Quantize to 4 levels (0, 85, 170, 255)
-    uint8_t quantized;
-    int quantizedValue;
-    if (false) {  // original thresholds
-      if (adjusted < 43) {
-        quantized = 0;
-        quantizedValue = 0;
-      } else if (adjusted < 128) {
-        quantized = 1;
-        quantizedValue = 85;
-      } else if (adjusted < 213) {
-        quantized = 2;
-        quantizedValue = 170;
-      } else {
-        quantized = 3;
-        quantizedValue = 255;
-      }
-    } else {  // fine-tuned to X4 eink display
-      if (adjusted < 30) {
-        quantized = 0;
-        quantizedValue = 15;
-      } else if (adjusted < 50) {
-        quantized = 1;
-        quantizedValue = 30;
-      } else if (adjusted < 140) {
-        quantized = 2;
-        quantizedValue = 80;
-      } else {
-        quantized = 3;
-        quantizedValue = 210;
-      }
-    }
+    const QuantizedGray4 quantized = quantizeGray4(adjusted, quantizationMode);
 
     // Calculate error
-    int error = adjusted - quantizedValue;
+    int error = adjusted - quantized.value;
 
     // Distribute error to neighbors (serpentine: direction-aware)
     if (!isReverseRow()) {
@@ -290,7 +258,7 @@ class FloydSteinbergDitherer {
       errorNextRow[x] += (error) >> 4;
     }
 
-    return quantized;
+    return quantized.index;
   }
 
   // Call at the end of each row to swap buffers
@@ -316,6 +284,7 @@ class FloydSteinbergDitherer {
 
  private:
   int width;
+  Gray4QuantizationMode quantizationMode;
   int rowCount;
   int16_t* errorCurRow;
   int16_t* errorNextRow;

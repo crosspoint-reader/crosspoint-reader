@@ -60,11 +60,14 @@ enum class BmpReaderError : uint8_t {
   ShortReadRow,
 };
 
+enum class BitmapToneMapping : uint8_t { None, Adaptive };
+
 class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(HalFile& file, bool dithering = false) : file(file), dithering(dithering) {}
+  explicit Bitmap(HalFile& file, bool dithering = false, BitmapToneMapping toneMapping = BitmapToneMapping::None)
+      : file(file), dithering(dithering), toneMapping(toneMapping) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
@@ -80,9 +83,12 @@ class Bitmap {
  private:
   static uint16_t readLE16(HalFile& f);
   static uint32_t readLE32(HalFile& f);
+  bool analyzeAdaptiveToneMapping();
+  uint8_t applyAdaptiveTone(uint8_t luminance) const;
 
   HalFile& file;
   bool dithering = false;
+  BitmapToneMapping toneMapping = BitmapToneMapping::None;
   int width = 0;
   int height = 0;
   bool topDown = false;
@@ -92,6 +98,9 @@ class Bitmap {
   bool nativePalette = false;  // true if all palette entries map to native gray levels
   int rowBytes = 0;
   uint8_t paletteLum[256] = {};
+  bool adaptiveToneMapping = false;
+  uint8_t adaptiveBlackPoint = 0;
+  uint8_t adaptiveWhitePoint = 255;
 
   // Dithering state (mutable for const methods)
   mutable int16_t* errorCurRow = nullptr;
