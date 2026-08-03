@@ -76,7 +76,7 @@ STR_CALIBRE_INSTRUCTION_3: "3) В Calibre выберите: «Отправить
 STR_CALIBRE_INSTRUCTION_4: "Не закрывайте этот экран во время отправки"
 STR_CAT_DISPLAY: "Экран"
 STR_CAT_READER: "Чтение"
-STR_CAT_CONTROLS: "Управление"
+STR_CAT_CONTROLS: "Кнопки"
 STR_CAT_SYSTEM: "Система"
 STR_SLEEP_SCREEN: "Экран сна"
 STR_QUICK_RESUME_TIMEOUT: "Возобновление по таймауту"
