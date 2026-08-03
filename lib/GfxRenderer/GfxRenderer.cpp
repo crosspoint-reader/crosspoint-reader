@@ -26,6 +26,53 @@ uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style st
 namespace {
 const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiUtils::BidiBaseDir baseDir);
 
+// Thai SARA AM (U+0E33) bakes a nikhahit ring into its glyph, positioned above
+// the PRECEDING consonant. When a tone mark sits on that consonant too
+// (น + mai tho + ำ in "น้ำ"), the ring and the tone mark land in the same zone
+// and collide. Shaping engines decompose SARA AM into NIKHAHIT (U+0E4D) +
+// SARA AA (U+0E32) and reorder the nikhahit before the tone mark, letting the
+// combining-mark stacker lift the tone mark clear of the ring. Mirror that
+// here: [tone][SARA AM] -> [NIKHAHIT][tone][SARA AA]. Width is unaffected
+// (SARA AM and SARA AA share an advance; the nikhahit is zero-advance), so
+// measurement paths keep using the untransformed text. Returns `text`
+// untouched (buffer unused) when no such pair exists — the common case — or
+// when the font cannot draw a standalone nikhahit.
+const char* preprocessThaiSaraAm(const char* text, std::string& buffer, const EpdFontFamily& font,
+                                 const EpdFontFamily::Style style) {
+  static constexpr char SARA_AM[] = "\xE0\xB8\xB3";     // U+0E33
+  static constexpr char NIKHAHIT[] = "\xE0\xB9\x8D";    // U+0E4D
+  static constexpr char SARA_AA[] = "\xE0\xB8\xB2";     // U+0E32
+  const auto isToneMark = [](const unsigned char* p) {  // U+0E48-0E4B
+    return p[0] == 0xE0 && p[1] == 0xB9 && p[2] >= 0x88 && p[2] <= 0x8B;
+  };
+
+  const char* found = strstr(text, SARA_AM);
+  bool needsRewrite = false;
+  while (found && !needsRewrite) {
+    if (found - text >= 3 && isToneMark(reinterpret_cast<const unsigned char*>(found - 3))) {
+      needsRewrite = true;
+    } else {
+      found = strstr(found + 3, SARA_AM);
+    }
+  }
+  if (!needsRewrite || !font.hasCodepoint(0x0E4D, style)) return text;
+
+  buffer.clear();
+  buffer.reserve(strlen(text) + 12);
+  const auto* s = reinterpret_cast<const unsigned char*>(text);
+  while (*s) {
+    if (isToneMark(s) && s[3] == 0xE0 && s[4] == 0xB8 && s[5] == 0xB3) {
+      buffer.append(NIKHAHIT, 3);
+      buffer.append(reinterpret_cast<const char*>(s), 3);
+      buffer.append(SARA_AA, 3);
+      s += 6;
+      continue;
+    }
+    buffer.push_back(static_cast<char>(*s++));
+  }
+  return buffer.c_str();
+}
+
 // Appends the shaped visual form of every RTL token in `text` to `shapedOut`.
 // getTextAdvanceX() measures the bidi-reordered, Arabic-shaped codepoint stream,
 // so the SD advance table must be warmed with the presentation forms as well as
@@ -565,8 +612,17 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   // UI font).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
 
+  const auto fontIt = fontMap.find(resolvedFontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", resolvedFontId);
+    return;
+  }
+  const auto& font = fontIt->second;
+
   std::string visual;
   const char* renderedText = resolveVisualText(text, visual, baseDir);
+  std::string saraAmBuffer;
+  renderedText = preprocessThaiSaraAm(renderedText, saraAmBuffer, font, style);
 
   int yPos = y + getFontAscenderSize(resolvedFontId);
   if (resolvedFontId != fontId) {
@@ -595,13 +651,6 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     fontCacheManager_->recordText(renderedText, resolvedFontId, style);
     return;
   }
-
-  const auto fontIt = fontMap.find(resolvedFontId);
-  if (fontIt == fontMap.end()) {
-    LOG_ERR("GFX", "Font %d not found", resolvedFontId);
-    return;
-  }
-  const auto& font = fontIt->second;
 
   const char* textCursor = renderedText;
   uint32_t cp;
@@ -2017,6 +2066,9 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
   }
 
   const auto& font = fontIt->second;
+
+  std::string saraAmBuffer;
+  text = preprocessThaiSaraAm(text, saraAmBuffer, font, style);
 
   int lastBaseY = y;
   int lastBaseLeft = 0;
