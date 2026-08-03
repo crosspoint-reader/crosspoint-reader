@@ -568,7 +568,23 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   std::string visual;
   const char* renderedText = resolveVisualText(text, visual, baseDir);
 
-  const int yPos = y + getFontAscenderSize(resolvedFontId);
+  int yPos = y + getFontAscenderSize(resolvedFontId);
+  if (resolvedFontId != fontId) {
+    // A size-mismatched fallback (e.g. 12pt Thai glyphs snapped into the 8pt
+    // status-bar slot) must not spill below the line box the caller laid out
+    // around the requested font: anchor the fallback's glyph-box bottom to the
+    // requested font's bottom so the excess height rises into the free space
+    // above instead of clipping below bottom-anchored UI.
+    const auto reqIt = fontMap.find(fontId);
+    const auto resIt = fontMap.find(resolvedFontId);
+    if (reqIt != fontMap.end() && resIt != fontMap.end()) {
+      const auto* req = reqIt->second.getData(style);
+      const auto* res = resIt->second.getData(style);
+      const int reqBottom = req->ascender - req->descender;  // descender is <= 0
+      const int resBottom = res->ascender - res->descender;
+      if (resBottom > reqBottom) yPos -= resBottom - reqBottom;
+    }
+  }
   int lastBaseX = x;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
