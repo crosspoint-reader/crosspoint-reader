@@ -108,6 +108,14 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = false;
 }
 
+bool HomeActivity::hasMissingCoverThumbs(const int coverHeight) const {
+  for (const auto& book : recentBooks) {
+    if (book.coverBmpPath.empty()) continue;
+    if (!Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight).c_str())) return true;
+  }
+  return false;
+}
+
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
@@ -340,7 +348,16 @@ void HomeActivity::render(RenderLock&&) {
 
   if (!firstRenderDone) {
     firstRenderDone = true;
-    requestUpdate();
+    // The second render pass exists only so loadRecentCovers() can run after
+    // the first paint (thumbnail generation draws progress popups). When every
+    // cover thumb already exists — the usual case — that pass would redraw
+    // identical content and burn a second full e-ink refresh (~530ms), so
+    // check first (a few Storage.exists() stats) and skip it.
+    if (!recentsLoaded && hasMissingCoverThumbs(metrics.homeCoverHeight)) {
+      requestUpdate();
+    } else {
+      recentsLoaded = true;
+    }
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
     loadRecentCovers(metrics.homeCoverHeight);
