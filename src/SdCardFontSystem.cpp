@@ -2,6 +2,8 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <SdCardFont.h>
+#include <Utf8.h>
 
 #include <iterator>
 
@@ -33,6 +35,24 @@ constexpr UiFontSize kUiFontSizes[] = {
     {UI_10_FONT_ID, 10},
     {UI_12_FONT_ID, 12},
 };
+
+// UI text (menu rows, status-bar titles) measures via getTextWidth on every
+// render, and truncation loops re-measure the same string repeatedly. Without
+// an advance table each measured codepoint costs an SD read through the 8-slot
+// on-demand ring, which made Thai menus and page turns crawl. One upfront
+// table over printable ASCII + the Thai block (~1.5KB heap per style, persists
+// across per-render cache clears) makes UI measurement RAM-only. Regular and
+// bold cover every style the UI draws; resolveStyleMask folds absent styles.
+void buildUiFallbackAdvanceTable(GfxRenderer& renderer, const int sdFontId) {
+  const auto& sdFonts = renderer.getSdCardFonts();
+  const auto it = sdFonts.find(sdFontId);
+  if (it == sdFonts.end() || it->second->hasAdvanceTable()) return;
+  std::string coverage;
+  coverage.reserve(0x7F - 0x20 + 3 * (0x5B + 1));  // 1-byte ASCII + 3-byte Thai codepoints
+  for (uint32_t cp = 0x20; cp < 0x7F; ++cp) utf8AppendCodepoint(cp, coverage);
+  for (uint32_t cp = 0x0E01; cp <= 0x0E5B; ++cp) utf8AppendCodepoint(cp, coverage);
+  it->second->buildAdvanceTable(coverage.c_str(), 0x03);
+}
 
 }  // namespace
 
@@ -161,10 +181,19 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
     return;
   }
 
+  // Thai coverage fits in the bounded advance table (CJK does not, and CJK UI
+  // strings are short enough to survive the on-demand path).
+  const bool hasThai = readerIt->second.hasCodepoint(0x0E01);
+
+  int advanceTableFontId = 0;
   for (const auto& ui : kUiFontSizes) {
     const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize);
     if (sdFontId != 0) {
       renderer.setFallbackFont(ui.fontId, sdFontId);
+      if (hasThai && sdFontId != advanceTableFontId) {
+        buildUiFallbackAdvanceTable(renderer, sdFontId);
+        advanceTableFontId = sdFontId;
+      }
     } else {
       LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
     }

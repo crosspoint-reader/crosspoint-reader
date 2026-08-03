@@ -1577,6 +1577,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
+  // Status-bar text (chapter title) prewarms too: with a non-Latin SD family
+  // it resolves to the UI fallback font, whose glyphs otherwise reload from SD
+  // through the tiny on-demand ring on every page turn. Text draws are skipped
+  // during the scan; the non-text bar graphics redraw identically below.
+  renderStatusBar();  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 

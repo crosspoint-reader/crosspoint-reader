@@ -51,7 +51,18 @@ class FontCacheManager {
 
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
-  std::string scanText_;
-  uint32_t scanStyleCounts_[4] = {};
-  int scanFontId_ = -1;
+
+  // One record per font seen during the scan pass. A page render touches the
+  // reader font plus (with a non-Latin SD family active) the UI fallback font
+  // the status bar resolves to, so prewarming only the first recorded font
+  // left the second one loading glyphs through the tiny on-demand ring on
+  // every page turn.
+  struct ScanRecord {
+    int fontId = -1;
+    std::string text;
+    uint32_t styleCounts[4] = {};
+  };
+  static constexpr size_t MAX_SCAN_RECORDS = 4;
+  ScanRecord scanRecords_[MAX_SCAN_RECORDS];
+  size_t scanRecordCount_ = 0;
 };
