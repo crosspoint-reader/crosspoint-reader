@@ -16,8 +16,10 @@ class SdCardFont;
 
 #include <cstring>
 #include <deque>
+#include <initializer_list>
 #include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Bitmap.h"
@@ -153,6 +155,14 @@ class GfxRenderer {
   void ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F) const;
   void ensureSdCardFontReady(int fontId, const std::deque<std::string>& words, bool includeHyphen,
                              uint8_t styleMask = 0x0F) const;
+
+  // Batch-load fallback glyphs for a screen's non-Latin UI strings before
+  // drawing them. Each {fontId, text} pair that resolves to an SD fallback is
+  // grouped by resolved font and prewarmed in one pass (single file open,
+  // sorted seeks) instead of per-glyph through the 8-slot on-demand ring.
+  // Repeat paints of the same strings cost zero SD reads. No-op for strings
+  // the requested font can draw itself.
+  void prewarmUiFallbackText(std::initializer_list<std::pair<int, const char*>> items) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

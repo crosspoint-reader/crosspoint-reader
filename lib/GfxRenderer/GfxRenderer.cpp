@@ -226,6 +226,36 @@ void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   }
 }
 
+void GfxRenderer::prewarmUiFallbackText(const std::initializer_list<std::pair<int, const char*>> items) const {
+  if (!fontCacheManager_ || fontCacheManager_->isScanning()) return;
+
+  // Group per resolved SD font: prewarm REPLACES the font's resident mini
+  // tables (see SdCardFont::prewarmStyle), so everything a screen draws with
+  // one font must land in a single prewarm call. Repeat paints of the same
+  // strings pass the subset check and cost zero SD reads.
+  static constexpr size_t MAX_GROUPS = 3;  // one per UI fallback size at most
+  int groupId[MAX_GROUPS] = {};
+  std::string groupText[MAX_GROUPS];
+  size_t groupCount = 0;
+
+  for (const auto& [fontId, text] : items) {
+    if (!text || !*text) continue;
+    const int resolved = resolveTextFontId(fontId, text, EpdFontFamily::REGULAR);
+    if (resolved == fontId || sdCardFonts_.find(resolved) == sdCardFonts_.end()) continue;
+    size_t g = 0;
+    while (g < groupCount && groupId[g] != resolved) g++;
+    if (g == groupCount) {
+      if (groupCount == MAX_GROUPS) continue;
+      groupId[groupCount++] = resolved;
+    }
+    groupText[g] += text;
+  }
+
+  for (size_t g = 0; g < groupCount; g++) {
+    fontCacheManager_->prewarmCache(groupId[g], groupText[g].c_str(), 0x01);
+  }
+}
+
 int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const EpdFontFamily::Style style) const {
   if (fallbackFontMap_.empty() || text == nullptr || *text == '\0') {
     return fontId;

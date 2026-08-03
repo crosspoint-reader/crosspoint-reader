@@ -295,6 +295,13 @@ void HomeActivity::render(RenderLock&&) {
   coverRectW = pageWidth;
   coverRectH = metrics.homeCoverTileHeight;
 
+  // Batch-load fallback glyphs (e.g. a Thai title) before the cover tile draws
+  // them; the per-glyph on-demand path opens the .cpfont once per glyph.
+  if (!recentBooks.empty()) {
+    renderer.prewarmUiFallbackText(
+        {{UI_12_FONT_ID, recentBooks[0].title.c_str()}, {UI_10_FONT_ID, recentBooks[0].author.c_str()}});
+  }
+
   GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));

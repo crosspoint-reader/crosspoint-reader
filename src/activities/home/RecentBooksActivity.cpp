@@ -164,6 +164,15 @@ void RecentBooksActivity::render(RenderLock&&) {
   if (recentBooks.empty()) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_RECENT_BOOKS));
   } else {
+    // Batch-load fallback glyphs (e.g. Thai titles) before the list draws
+    // them; the per-glyph on-demand path opens the .cpfont once per glyph.
+    std::string titles, authors;
+    for (const auto& book : recentBooks) {
+      titles += book.title;
+      authors += book.author;
+    }
+    renderer.prewarmUiFallbackText({{UI_10_FONT_ID, titles.c_str()}, {SMALL_FONT_ID, authors.c_str()}});
+
     GUI.drawList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, recentBooks.size(), selectorIndex,
         [this](int index) { return recentBooks[index].title; }, [this](int index) { return recentBooks[index].author; },
