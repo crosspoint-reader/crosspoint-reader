@@ -198,11 +198,12 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
   const char* cursor = text;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
-    // Only redirect for CJK the primary font cannot draw but the fallback can.
-    // Latin/symbol strings the built-in UI fonts already cover are left
+    // Only redirect for CJK/Thai the primary font cannot draw but the fallback
+    // can. Latin/symbol strings the built-in UI fonts already cover are left
     // untouched, and a partial-coverage fallback (e.g. kana-only) is not worth
     // dragging the whole string into for glyphs it would also miss.
-    if (utf8IsCjkCodepoint(cp) && !primary.hasCodepoint(cp, style) && fallback.hasCodepoint(cp, style)) {
+    if ((utf8IsCjkCodepoint(cp) || utf8IsThaiCodepoint(cp)) && !primary.hasCodepoint(cp, style) &&
+        fallback.hasCodepoint(cp, style)) {
       return fallbackFontId;
     }
   }
@@ -559,8 +560,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  // Route CJK-bearing strings to the fallback font when the requested font
-  // lacks the glyphs (e.g. Chinese book titles drawn with a Latin UI font).
+  // Route CJK/Thai-bearing strings to the fallback font when the requested
+  // font lacks the glyphs (e.g. Chinese or Thai book titles drawn with a Latin
+  // UI font).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
 
   std::string visual;
@@ -604,7 +606,13 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
           combiningMark::raiseAboveBase(anchor, combiningGlyph->top, combiningGlyph->height, lastBaseTop);
       const int combiningX = combiningMark::anchorOver(anchor, lastBaseX, lastBaseLeft, lastBaseWidth,
                                                        combiningGlyph->left, combiningGlyph->width);
+      // A following mark must clear this one, not just the base glyph (Thai
+      // stacks tone marks above upper vowels, e.g. sara uee + mai ek).
+      // Computed before renderCharImpl: SD-font glyph pointers are only valid
+      // until the next glyph lookup.
+      const int stackedTop = combiningGlyph->top + raiseBy;
       renderCharImpl<TextRotation::None>(*this, renderMode, font, cp, combiningX, yPos - raiseBy, black, style);
+      if (stackedTop > lastBaseTop) lastBaseTop = stackedTop;
       continue;
     }
 
@@ -2019,7 +2027,13 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
       const int combiningX = x - raiseBy;
       const int combiningY = combiningMark::anchorOverRotated90CW(anchor, lastBaseY, lastBaseLeft, lastBaseWidth,
                                                                   combiningGlyph->left, combiningGlyph->width);
+      // A following mark must clear this one, not just the base glyph (Thai
+      // stacks tone marks above upper vowels, e.g. sara uee + mai ek).
+      // Computed before renderCharImpl: SD-font glyph pointers are only valid
+      // until the next glyph lookup.
+      const int stackedTop = combiningGlyph->top + raiseBy;
       renderCharImpl<TextRotation::Rotated90CW>(*this, renderMode, font, cp, combiningX, combiningY, black, style);
+      if (stackedTop > lastBaseTop) lastBaseTop = stackedTop;
       continue;
     }
 

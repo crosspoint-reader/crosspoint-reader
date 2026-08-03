@@ -31,6 +31,8 @@ TEST(AnchorFor, EverythingElseKeepsCentreRaisedDefault) {
   EXPECT_EQ(anchorFor(0x064E), Anchor::CenterRaised);  // Arabic fatha
   EXPECT_EQ(anchorFor(0x0651), Anchor::CenterRaised);  // Arabic shadda
   EXPECT_EQ(anchorFor(0x0301), Anchor::CenterRaised);  // combining acute
+  EXPECT_EQ(anchorFor(0x0E37), Anchor::CenterRaised);  // Thai sara uee
+  EXPECT_EQ(anchorFor(0x0E48), Anchor::CenterRaised);  // Thai mai ek
 }
 
 // Base glyph: cursor 100, left 1, width 12.  Mark: left 2, width 4.
@@ -60,6 +62,32 @@ TEST(RaiseAboveBase, NativeAnchorsKeepFontDesignedHeight) {
   // Shin/sin dots overlapping the letter's top must not be pushed clear.
   EXPECT_EQ(raiseAboveBase(Anchor::RightNative, 13, 3, 12), 0);
   EXPECT_EQ(raiseAboveBase(Anchor::LeftNative, 13, 3, 12), 0);
+}
+
+// Thai stacks a tone mark above an upper vowel (e.g. sara uee + mai ek in
+// "เรื่อง"). drawText/getTextBounds lift the anchor top to each rendered
+// above-mark, so the next raiseAboveBase call clears the mark stack, not just
+// the base consonant.
+TEST(RaiseAboveBase, ThaiToneMarkStacksAboveUpperVowel) {
+  // Base consonant top 12. Upper vowel designed at top 16, height 3 — already
+  // clear of the base (gap 1), stays at font-native height.
+  const int vowelRaise = raiseAboveBase(Anchor::CenterRaised, 16, 3, 12);
+  EXPECT_EQ(vowelRaise, 0);
+  const int stackTop = 16 + vowelRaise;
+  // Tone mark designed in the same zone (top 17, height 3) sinks into the
+  // vowel when anchored to the bare base (gap = 17 - 3 - 12 = 2 -> no raise):
+  EXPECT_EQ(raiseAboveBase(Anchor::CenterRaised, 17, 3, 12), 0);
+  // Anchored against the lifted stack top it clears the vowel by 1px:
+  // gap = 17 - 3 - 16 = -2 -> raise 3.
+  EXPECT_EQ(raiseAboveBase(Anchor::CenterRaised, 17, 3, stackTop), 3);
+}
+
+// Below-marks (Thai sara u, phinthu) must not disturb the above-mark stack:
+// they keep font-native position and their top never exceeds the base top.
+TEST(RaiseAboveBase, BelowMarksStayNativeInAStack) {
+  // Below-baseline mark: top -1, height 3 -> no raise regardless of stack top.
+  EXPECT_EQ(raiseAboveBase(Anchor::CenterRaised, -1, 3, 12), 0);
+  EXPECT_EQ(raiseAboveBase(Anchor::CenterRaised, -1, 3, 19), 0);
 }
 
 TEST(RaiseAboveBase, CentreRaisedBehaviourUnchanged) {

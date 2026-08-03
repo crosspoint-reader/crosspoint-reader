@@ -22,11 +22,12 @@ class SdCardFontManager {
   // one size's worth of memory. Returns true on success.
   bool loadFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t pointSize);
 
-  // Additively load the .cpfont of `family` at the exact physical `pointSize`
-  // (used for size-matched CJK UI fallback alongside the reader-size font).
-  // Does not unload anything. If a font of that size is already loaded its id
-  // is reused. Returns the font id, or 0 if the family has no file at that size
-  // or loading failed.
+  // Additively load the .cpfont of `family` at the physical `pointSize`, or
+  // the nearest size it ships when that exact size is not installed (used for
+  // size-matched CJK/Thai UI fallback alongside the reader-size font).
+  // Does not unload anything. If a font of the resolved size is already loaded
+  // its id is reused. Returns the font id, or 0 if the family has no files or
+  // loading failed.
   int loadFamilyExtraSize(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t pointSize);
 
   // Unload everything, unregister from renderer.

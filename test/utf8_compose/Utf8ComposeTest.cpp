@@ -52,3 +52,30 @@ TEST(Utf8ComposeNfc, ComposesWithinWord) {
   // "Ti" + e+circ+acute + "ng" -> "Tiếng"
   EXPECT_EQ(utf8ComposeNfc("Ti" + std::string("e") + kCombCirc + kCombAcute + "ng"), "Ti\xE1\xBA\xBFng");
 }
+
+// Thai above/below vowels and tone marks are zero-advance overlays; spacing
+// Thai characters (consonants, leading/trailing vowels, sara am) are not.
+TEST(Utf8IsCombiningMark, ClassifiesThaiMarks) {
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E31));   // mai han-akat
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E34));   // sara i
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E37));   // sara uee
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E38));   // sara u (below)
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E3A));   // phinthu
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E48));   // mai ek
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E4B));   // mai chattawa
+  EXPECT_TRUE(utf8IsCombiningMark(0x0E4C));   // thanthakhat
+  EXPECT_FALSE(utf8IsCombiningMark(0x0E01));  // ko kai (consonant)
+  EXPECT_FALSE(utf8IsCombiningMark(0x0E32));  // sara aa (spacing)
+  EXPECT_FALSE(utf8IsCombiningMark(0x0E33));  // sara am (spacing)
+  EXPECT_FALSE(utf8IsCombiningMark(0x0E40));  // sara e (spacing, leading)
+  EXPECT_FALSE(utf8IsCombiningMark(0x0E46));  // maiyamok (spacing)
+}
+
+TEST(Utf8IsThaiCodepoint, CoversThaiBlockOnly) {
+  EXPECT_TRUE(utf8IsThaiCodepoint(0x0E01));   // ko kai
+  EXPECT_TRUE(utf8IsThaiCodepoint(0x0E48));   // mai ek
+  EXPECT_TRUE(utf8IsThaiCodepoint(0x0E5B));   // khomut
+  EXPECT_FALSE(utf8IsThaiCodepoint(0x0041));  // Latin A
+  EXPECT_FALSE(utf8IsThaiCodepoint(0x4E00));  // CJK ideograph
+  EXPECT_FALSE(utf8IsThaiCodepoint(0x0E80));  // Lao block starts here
+}

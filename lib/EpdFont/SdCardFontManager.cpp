@@ -83,12 +83,17 @@ bool SdCardFontManager::loadFamily(const SdCardFontFamilyInfo& family, GfxRender
 int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, GfxRenderer& renderer,
                                            uint8_t pointSize) {
   const SdCardFontFileInfo* file = family.findFile(pointSize);
-  if (!file) return 0;  // family has no .cpfont at this exact size
+  // Families that ship only reader sizes (12-18pt) would otherwise get no UI
+  // fallback at all; a nearest-size glyph beats a replacement box in UI lists.
+  if (!file) file = family.findNearestSize(pointSize);
+  if (!file) return 0;
 
   // Reuse an already-loaded font of the same size (e.g. when a reader size
-  // happens to match a UI size) instead of double-loading the file.
+  // happens to match a UI size, or several UI sizes snap to the same file)
+  // instead of double-loading the file. Compare against the resolved file's
+  // size, not the requested one, so snapped requests dedupe correctly.
   for (const auto& lf : loaded_) {
-    if (lf.size == pointSize) return lf.fontId;
+    if (lf.size == file->pointSize) return lf.fontId;
   }
 
   return loadFile(*file, family.name.c_str(), renderer);

@@ -142,21 +142,22 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   if (!family) return;
 
   // Probe the already-loaded reader-size font before paying for the UI sizes:
-  // resolveTextFontId only redirects on CJK codepoints, so a Latin-only family
-  // can never act as a fallback and its UI sizes would be dead weight in RAM.
+  // resolveTextFontId only redirects on CJK/Thai codepoints, so a Latin-only
+  // family can never act as a fallback and its UI sizes would be dead weight
+  // in RAM.
   const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
   if (readerIt == renderer.getFontMap().end()) return;
-  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul.
-  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
-  bool hasCjk = false;
-  for (const uint32_t cp : kCjkProbes) {
+  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul, Thai.
+  static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x0E01};
+  bool hasFallbackScript = false;
+  for (const uint32_t cp : kFallbackProbes) {
     if (readerIt->second.hasCodepoint(cp)) {
-      hasCjk = true;
+      hasFallbackScript = true;
       break;
     }
   }
-  if (!hasCjk) {
-    LOG_DBG("SDFS", "%s has no CJK coverage - skipping UI fallback sizes", familyName.c_str());
+  if (!hasFallbackScript) {
+    LOG_DBG("SDFS", "%s has no CJK/Thai coverage - skipping UI fallback sizes", familyName.c_str());
     return;
   }
 

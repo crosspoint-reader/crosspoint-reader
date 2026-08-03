@@ -70,7 +70,16 @@ inline bool utf8IsCjkCodepoint(const uint32_t cp) {
 // Returns true for Unicode combining diacritical marks that should not advance the cursor.
 inline bool utf8IsCombiningMark(const uint32_t cp) {
   return (cp >= 0x0300 && cp <= 0x036F)      // Combining Diacritical Marks
+         || (cp == 0x0E31)                   // Thai mai han-akat (above vowel)
+         || (cp >= 0x0E34 && cp <= 0x0E3A)   // Thai above/below vowels (sara i .. phinthu)
+         || (cp >= 0x0E47 && cp <= 0x0E4E)   // Thai tone marks, thanthakhat, nikhahit, yamakkan
          || (cp >= 0x1DC0 && cp <= 0x1DFF)   // Combining Diacritical Marks Supplement
          || (cp >= 0x20D0 && cp <= 0x20FF)   // Combining Diacritical Marks for Symbols
          || (cp >= 0xFE20 && cp <= 0xFE2F);  // Combining Half Marks
 }
+
+// Returns true for any codepoint in the Thai block. Used alongside
+// utf8IsCjkCodepoint for fallback font selection: the built-in UI fonts carry
+// no Thai glyphs, so Thai UI strings (book/chapter titles) must redirect to an
+// SD font that does.
+inline bool utf8IsThaiCodepoint(const uint32_t cp) { return cp >= 0x0E00 && cp <= 0x0E7F; }

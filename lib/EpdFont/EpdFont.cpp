@@ -68,6 +68,11 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
       lastBaseTop = glyph->top;
       prevAdvanceFP = glyph->advanceX;  // 12.4 fixed-point
       prevCp = cp;
+    } else {
+      // A following mark must clear this one, not just the base glyph (Thai
+      // stacks tone marks above upper vowels) — mirror drawText's stacking.
+      const int stackedTop = glyph->top + raiseBy;
+      if (stackedTop > lastBaseTop) lastBaseTop = stackedTop;
     }
   }
 }
