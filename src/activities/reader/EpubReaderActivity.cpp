@@ -516,7 +516,7 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
-  // that fired a bound function (bookmark, KOReader sync, or open-menu) sets ignoreNextConfirmRelease so
+  // that fired a bound function (bookmark, KOReader sync, dictionary, or go-home) sets ignoreNextConfirmRelease so
   // the release following the hold does not also open the menu. SETTINGS.menuButtonDisabled independently
   // controls whether short-press Confirm opens the menu at all (touch gesture is unaffected).
   if ((!SETTINGS.menuButtonDisabled && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) ||
@@ -531,12 +531,12 @@ void EpubReaderActivity::loop() {
   // Long-press Confirm runs the user-selected function (SETTINGS.longPressMenuFunction).
   if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
     switch (SETTINGS.longPressMenuFunction) {
-      case CrossPointSettings::LP_MENU_OPEN_MENU:
-        // Hold ~0.4s opens the reader menu. Guard against double-open on the release that follows
-        // when menuButtonDisabled is off (short-press would otherwise also open it).
+      case CrossPointSettings::LP_MENU_GO_HOME:
+        // Hold ~0.4s exits to the home/library screen. Guard against a menu-open on the release
+        // that follows when menuButtonDisabled is off (short-press would otherwise also fire).
         if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
           ignoreNextConfirmRelease = true;
-          openReaderMenu();
+          onGoHome();
           return;
         }
         break;

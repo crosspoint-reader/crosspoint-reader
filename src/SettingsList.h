@@ -292,7 +292,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY,
-                           StrId::STR_LP_OPEN_MENU},
+                           StrId::STR_LP_GO_HOME},
                           "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_DISABLE_MENU_BTN, &CrossPointSettings::menuButtonDisabled,
                             "menuButtonDisabled", StrId::STR_CAT_CONTROLS),

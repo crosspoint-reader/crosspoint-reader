@@ -157,9 +157,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
-    // Long-press opens the reader menu. Independent of menuButtonDisabled: combine the two to move
-    // menu access to a long-press, or select this alone to keep short-press opening the menu too.
-    LP_MENU_OPEN_MENU = 4,
+    // Long-press exits to the home/library screen (same action as long-press Back).
+    LP_MENU_GO_HOME = 4,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
@@ -268,8 +267,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // Disable the reader menu on short-press Confirm (0 = short-press opens menu as usual, 1 =
-  // short-press is inert). Independent of longPressMenuFunction: pair with LP_MENU_OPEN_MENU to
-  // move menu access to a long-press, or leave the menu button with no opener at all.
+  // short-press is inert). Independent of longPressMenuFunction.
   uint8_t menuButtonDisabled = 0;
   // UI Theme
   uint8_t uiTheme = LYRA;
