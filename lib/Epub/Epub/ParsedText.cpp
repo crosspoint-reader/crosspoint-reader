@@ -3,6 +3,7 @@
 #include <BidiUtils.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <ThaiDict.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -173,6 +174,9 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
 
   std::vector<CodepointBoundary> codepoints;
   codepoints.reserve(text.size());
+  // Plain codepoint values, contiguous for ThaiDict::matchLongest windows.
+  std::vector<uint32_t> cps;
+  cps.reserve(text.size());
   bool hasCjkBreakable = false;
 
   const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
@@ -184,17 +188,37 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
       hasCjkBreakable = true;
     }
     codepoints.push_back({cp, static_cast<size_t>(ptr - start)});
+    cps.push_back(cp);
   }
 
   if (!hasCjkBreakable || codepoints.size() < 2) return {};
 
   std::vector<size_t> allowedOffsets;
   allowedOffsets.reserve(codepoints.size() - 1);
-  for (size_t i = 0; i + 1 < codepoints.size(); ++i) {
-    const uint32_t current = codepoints[i].cp;
-    const uint32_t next = codepoints[i + 1].cp;
-    if (!hasCjkBreakOpportunityBetween(current, next)) continue;
-    allowedOffsets.push_back(codepoints[i].endOffset);
+  const size_t n = codepoints.size();
+  size_t i = 0;
+  while (i + 1 < n) {
+    // Thai dictionary segmentation: the longest wordlist match starting here
+    // becomes one unbreakable token, with a break opportunity after it. This
+    // is greedy longest-match (like libthai); a rare mis-split still lands on
+    // a valid word boundary. Unknown stretches (transliterated names) fall
+    // through to the per-cluster pairwise rules below.
+    size_t matched = 0;
+    if (utf8IsThaiCodepoint(codepoints[i].cp) && !utf8IsCombiningMark(codepoints[i].cp)) {
+      matched = ThaiDict::matchLongest(&cps[i], n - i);
+    }
+    if (matched > 0) {
+      const size_t j = i + matched;
+      if (j < n && hasCjkBreakOpportunityBetween(codepoints[j - 1].cp, codepoints[j].cp)) {
+        allowedOffsets.push_back(codepoints[j - 1].endOffset);
+      }
+      i = j;
+      continue;
+    }
+    if (hasCjkBreakOpportunityBetween(codepoints[i].cp, codepoints[i + 1].cp)) {
+      allowedOffsets.push_back(codepoints[i].endOffset);
+    }
+    i++;
   }
   return allowedOffsets;
 }
