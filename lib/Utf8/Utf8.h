@@ -83,3 +83,26 @@ inline bool utf8IsCombiningMark(const uint32_t cp) {
 // no Thai glyphs, so Thai UI strings (book/chapter titles) must redirect to an
 // SD font that does.
 inline bool utf8IsThaiCodepoint(const uint32_t cp) { return cp >= 0x0E00 && cp <= 0x0E7F; }
+
+// Thai line-breaking classes. Thai writes no spaces between words (spaces
+// delimit clauses), so like CJK it needs implicit break opportunities inside a
+// run. True word segmentation needs a dictionary; breaking at character-cluster
+// boundaries with the orthographic no-break rules below is the standard
+// fallback (UAX #14 treats Thai as class SA with this same fallback).
+
+// Leading vowels are written BEFORE the consonant they belong to — a break
+// after one would detach it from its syllable.
+inline bool utf8IsThaiLeadingVowel(const uint32_t cp) { return cp >= 0x0E40 && cp <= 0x0E44; }  // เ แ โ ใ ไ
+
+// Spacing characters that attach to the PRECEDING syllable — a break before
+// one would orphan it at the start of a line.
+inline bool utf8IsThaiNoBreakBefore(const uint32_t cp) {
+  return cp == 0x0E2F      // ฯ paiyannoi (abbreviation sign)
+         || cp == 0x0E30   // ะ sara a
+         || cp == 0x0E32   // า sara aa
+         || cp == 0x0E33   // ำ sara am
+         || cp == 0x0E45   // ๅ lakkhangyao
+         || cp == 0x0E46;  // ๆ maiyamok (repetition sign)
+}
+
+inline bool utf8IsThaiDigit(const uint32_t cp) { return cp >= 0x0E50 && cp <= 0x0E59; }  // ๐-๙

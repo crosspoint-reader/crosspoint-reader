@@ -129,7 +129,7 @@ bool containsCjkBreakableCodepoint(const std::string& text) {
   const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
   while (*ptr) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
-    if (utf8IsCjkBreakable(cp)) {
+    if (utf8IsCjkBreakable(cp) || utf8IsThaiCodepoint(cp)) {
       return true;
     }
   }
@@ -148,9 +148,20 @@ uint32_t countCodepoints(const std::string_view text) {
 }
 
 bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp) {
-  if (!utf8IsCjkBreakable(leftCp) && !utf8IsCjkBreakable(rightCp)) return false;
+  // Thai pairs break at cluster boundaries: the left side may be any Thai
+  // codepoint (most syllables end in a vowel/tone mark), the right side must
+  // be a spacing character that can start a cluster. Requiring both sides to
+  // be Thai keeps mixed-script boundaries (Thai next to Latin) unaffected.
+  const bool thaiPair = utf8IsThaiCodepoint(leftCp) && utf8IsThaiCodepoint(rightCp) && !utf8IsCombiningMark(rightCp);
+  if (!utf8IsCjkBreakable(leftCp) && !utf8IsCjkBreakable(rightCp) && !thaiPair) return false;
   if (isNoBreakAfterCjkPunctuation(leftCp) || isNoBreakBeforeCjkPunctuation(rightCp)) return false;
   if (utf8IsCombiningMark(rightCp)) return false;
+  // Thai orthographic no-break rules (see Utf8.h): leading vowels bind to the
+  // consonant after them, trailing signs to the syllable before them, and
+  // digit runs stay whole.
+  if (utf8IsThaiLeadingVowel(leftCp)) return false;
+  if (utf8IsThaiNoBreakBefore(rightCp)) return false;
+  if (utf8IsThaiDigit(leftCp) && utf8IsThaiDigit(rightCp)) return false;
   return true;
 }
 
@@ -169,7 +180,7 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   while (*ptr) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
     if (cp == 0) break;
-    if (utf8IsCjkBreakable(cp)) {
+    if (utf8IsCjkBreakable(cp) || utf8IsThaiCodepoint(cp)) {
       hasCjkBreakable = true;
     }
     codepoints.push_back({cp, static_cast<size_t>(ptr - start)});

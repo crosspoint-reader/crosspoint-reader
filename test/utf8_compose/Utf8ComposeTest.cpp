@@ -79,3 +79,28 @@ TEST(Utf8IsThaiCodepoint, CoversThaiBlockOnly) {
   EXPECT_FALSE(utf8IsThaiCodepoint(0x4E00));  // CJK ideograph
   EXPECT_FALSE(utf8IsThaiCodepoint(0x0E80));  // Lao block starts here
 }
+
+// Thai line-breaking classes: leading vowels forbid a break after themselves,
+// trailing signs forbid a break before themselves (see ParsedText's
+// hasCjkBreakOpportunityBetween for how they compose).
+TEST(Utf8ThaiLineBreakClasses, ClassifiesLeadingVowelsAndTrailingSigns) {
+  // Leading vowels เ แ โ ใ ไ
+  for (uint32_t cp = 0x0E40; cp <= 0x0E44; ++cp) EXPECT_TRUE(utf8IsThaiLeadingVowel(cp));
+  EXPECT_FALSE(utf8IsThaiLeadingVowel(0x0E32));  // sara aa follows its consonant
+  EXPECT_FALSE(utf8IsThaiLeadingVowel(0x0E45));  // lakkhangyao
+
+  // Trailing signs that must not start a line
+  EXPECT_TRUE(utf8IsThaiNoBreakBefore(0x0E2F));   // ฯ paiyannoi
+  EXPECT_TRUE(utf8IsThaiNoBreakBefore(0x0E30));   // ะ sara a
+  EXPECT_TRUE(utf8IsThaiNoBreakBefore(0x0E32));   // า sara aa
+  EXPECT_TRUE(utf8IsThaiNoBreakBefore(0x0E33));   // ำ sara am
+  EXPECT_TRUE(utf8IsThaiNoBreakBefore(0x0E46));   // ๆ maiyamok
+  EXPECT_FALSE(utf8IsThaiNoBreakBefore(0x0E01));  // ko kai can start a line
+  EXPECT_FALSE(utf8IsThaiNoBreakBefore(0x0E40));  // sara e can start a line
+
+  // Thai digits
+  EXPECT_TRUE(utf8IsThaiDigit(0x0E50));   // ๐
+  EXPECT_TRUE(utf8IsThaiDigit(0x0E59));   // ๙
+  EXPECT_FALSE(utf8IsThaiDigit(0x0E5A));  // angkhankhu
+  EXPECT_FALSE(utf8IsThaiDigit('0'));     // Latin digit
+}
