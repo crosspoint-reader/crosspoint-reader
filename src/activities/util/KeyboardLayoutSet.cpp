@@ -16,6 +16,35 @@ uint8_t indexOf(const freeink::ui::KeyboardLayoutId id) {
 
 }  // namespace
 
+namespace {
+// Two layouts sharing a bit would make one silently toggle the other; a gap is
+// harmless (it just means a retired layout), a collision is not.
+constexpr bool bitIndicesUnique() {
+  for (uint8_t i = 0; i < COUNT; ++i) {
+    for (uint8_t j = static_cast<uint8_t>(i + 1); j < COUNT; ++j) {
+      if (ALL[i].bitIndex == ALL[j].bitIndex) return false;
+    }
+  }
+  return true;
+}
+constexpr bool bitIndicesInRange() {
+  for (uint8_t i = 0; i < COUNT; ++i) {
+    if (ALL[i].bitIndex >= 16) return false;
+  }
+  return true;
+}
+}  // namespace
+
+static_assert(bitIndicesUnique(), "two layouts share a persisted bit");
+static_assert(bitIndicesInRange(), "a layout's persisted bit does not fit the uint16_t mask");
+
+uint16_t layoutBit(const freeink::ui::KeyboardLayoutId id) {
+  const uint8_t i = indexOf(id);
+  // An id the table does not list has no persistent bit; returning 0 keeps it
+  // out of every mask test rather than aliasing onto someone else's bit.
+  return i < COUNT ? static_cast<uint16_t>(1u << ALL[i].bitIndex) : 0;
+}
+
 freeink::ui::KeyboardLayoutId forLanguage(const Language language) {
   for (uint8_t i = 0; i < COUNT; ++i) {
     if (ALL[i].language == language) return ALL[i].id;

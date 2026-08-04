@@ -21,28 +21,38 @@ namespace keyboard_layouts {
 // layout needs no new i18n keys.
 struct LayoutInfo {
   freeink::ui::KeyboardLayoutId id;
+  // Bit position in the persisted mask. Assigned here rather than derived from
+  // the enum value: the mask lives in settings.json and outlives firmware
+  // updates, while the order of KeyboardLayoutId is the SDK's business. If a
+  // layout were ever inserted mid-enum, deriving the bit would silently
+  // reinterpret every saved mask -- a user who enabled Cyrillic would come back
+  // to Hebrew. These numbers are a storage format: append only, never reuse or
+  // renumber. 16 is the ceiling, since the mask is a uint16_t.
+  uint8_t bitIndex;
   const char* code;  // ISO 639-3, shown on the language key: "ENG", "RUS", ...
   Language language;
 };
 
 inline constexpr LayoutInfo ALL[] = {
-    {freeink::ui::KeyboardLayoutId::QwertyEn, "ENG", Language::EN},
-    {freeink::ui::KeyboardLayoutId::AzertyFr, "FRA", Language::FR},
-    {freeink::ui::KeyboardLayoutId::QwertzDe, "DEU", Language::DE},
-    {freeink::ui::KeyboardLayoutId::SpanishEs, "SPA", Language::ES},
-    {freeink::ui::KeyboardLayoutId::CyrillicRu, "RUS", Language::RU},
-    {freeink::ui::KeyboardLayoutId::CyrillicUk, "UKR", Language::UK},
-    {freeink::ui::KeyboardLayoutId::CyrillicBe, "BEL", Language::BE},
-    {freeink::ui::KeyboardLayoutId::CyrillicKk, "KAZ", Language::KK},
-    {freeink::ui::KeyboardLayoutId::HebrewIl, "HEB", Language::HE},
+    {freeink::ui::KeyboardLayoutId::QwertyEn, 0, "ENG", Language::EN},
+    {freeink::ui::KeyboardLayoutId::AzertyFr, 1, "FRA", Language::FR},
+    {freeink::ui::KeyboardLayoutId::QwertzDe, 2, "DEU", Language::DE},
+    {freeink::ui::KeyboardLayoutId::SpanishEs, 3, "SPA", Language::ES},
+    {freeink::ui::KeyboardLayoutId::CyrillicRu, 4, "RUS", Language::RU},
+    {freeink::ui::KeyboardLayoutId::CyrillicUk, 5, "UKR", Language::UK},
+    {freeink::ui::KeyboardLayoutId::CyrillicBe, 6, "BEL", Language::BE},
+    {freeink::ui::KeyboardLayoutId::CyrillicKk, 7, "KAZ", Language::KK},
+    {freeink::ui::KeyboardLayoutId::HebrewIl, 8, "HEB", Language::HE},
 };
 inline constexpr uint8_t COUNT = sizeof(ALL) / sizeof(ALL[0]);
 
+// The persisted mask is a uint16_t, so the table cannot outgrow 16 entries
+// without a storage format change.
+static_assert(COUNT <= 16, "keyboardLayouts mask is uint16_t; widen it before adding a 17th layout");
+
 // Named layoutBit rather than bit: Arduino.h defines a bit(b) macro, which would
 // otherwise expand this call site into a shift on an enum.
-inline constexpr uint16_t layoutBit(const freeink::ui::KeyboardLayoutId id) {
-  return static_cast<uint16_t>(1u << static_cast<uint8_t>(id));
-}
+uint16_t layoutBit(freeink::ui::KeyboardLayoutId id);
 
 // The layout matching a UI language, or QwertyEn when that language has none.
 // Does not consider whether that layout is enabled -- see startingLayout.
