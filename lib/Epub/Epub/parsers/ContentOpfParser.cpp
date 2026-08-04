@@ -8,6 +8,7 @@
 #include <cctype>
 
 #include "Epub/BookMetadataCache.h"
+#include "OriginalDocumentIdMetadata.h"
 
 namespace {
 constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
@@ -161,6 +162,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && (strcmp(name, "meta") == 0 || strcmp(name, "opf:meta") == 0)) {
+    if (self->originalDocumentId.empty()) {
+      extractOriginalDocumentIdMetadata(atts, self->originalDocumentId);
+    }
+
     bool isCover = false;
     std::string coverItemId;
 

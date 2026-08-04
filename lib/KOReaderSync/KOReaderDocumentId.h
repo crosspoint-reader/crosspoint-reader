@@ -18,8 +18,6 @@ class KOReaderDocumentId {
  public:
   /**
    * Calculate the KOReader document hash for a file (binary/content-based).
-   * For browser-optimized EPUBs, the embedded original document ID is
-   * preferred so the optimized copy shares the raw EPUB's sync record.
    *
    * @param filePath Path to the file (typically an EPUB)
    * @return 32-character lowercase hex string, or empty string on failure

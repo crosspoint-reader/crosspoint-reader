@@ -25,9 +25,16 @@
 #include "fontIds.h"
 
 namespace {
-std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method) {
-  return method == DocumentMatchMethod::FILENAME ? KOReaderDocumentId::calculateFromFilename(path)
-                                                 : KOReaderDocumentId::calculate(path);
+std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method,
+                                           const std::string& originalDocumentId) {
+  if (method == DocumentMatchMethod::FILENAME) {
+    return KOReaderDocumentId::calculateFromFilename(path);
+  }
+  if (!originalDocumentId.empty()) {
+    LOG_DBG("KOSync", "Using indexed original document ID: %s", originalDocumentId.c_str());
+    return originalDocumentId;
+  }
+  return KOReaderDocumentId::calculate(path);
 }
 
 DocumentMatchMethod alternateMatchMethod(const DocumentMatchMethod method) {
@@ -147,7 +154,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 
 void KOReaderSyncActivity::performSync() {
   const DocumentMatchMethod primaryMethod = KOREADER_STORE.getMatchMethod();
-  documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod);
+  documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod, originalDocumentId);
   if (documentHash.empty()) {
     {
       RenderLock lock(*this);
@@ -178,7 +185,7 @@ void KOReaderSyncActivity::performSync() {
 
   if (smartSyncEnabled()) {
     const DocumentMatchMethod altMethod = alternateMatchMethod(primaryMethod);
-    const std::string altHash = calculateDocumentHashForMethod(epubPath, altMethod);
+    const std::string altHash = calculateDocumentHashForMethod(epubPath, altMethod, originalDocumentId);
     if (!altHash.empty() && altHash != documentHash) {
       KOReaderProgress altProgress;
       const auto altResult = KOReaderSyncClient::getProgress(altHash, altProgress);
@@ -596,11 +603,7 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasScreenTapped(tx, ty) && ty > renderer.getScreenHeight() / 3 &&
         ty < renderer.getScreenHeight() * 2 / 3) {
       if (documentHash.empty()) {
-        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
-          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
-        } else {
-          documentHash = KOReaderDocumentId::calculate(epubPath);
-        }
+        documentHash = calculateDocumentHashForMethod(epubPath, KOREADER_STORE.getMatchMethod(), originalDocumentId);
       }
       performUpload();
       return;
@@ -609,11 +612,7 @@ void KOReaderSyncActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {
-        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
-          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
-        } else {
-          documentHash = KOReaderDocumentId::calculate(epubPath);
-        }
+        documentHash = calculateDocumentHashForMethod(epubPath, KOREADER_STORE.getMatchMethod(), originalDocumentId);
       }
       performUpload();
     }

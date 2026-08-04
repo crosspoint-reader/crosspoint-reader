@@ -105,9 +105,10 @@ Before optimizing an EPUB, the browser calculates its KOReader partial-MD5
 document ID from the untouched input. The optimized EPUB stores that value in
 its OPF metadata as
 `<meta name="crosspoint:original-koreader-document-id" content="..."/>`.
-When binary document matching is enabled, firmware sync prefers this embedded
-ID and falls back to calculating an ID from the current file when it is absent
-or invalid. Filename matching remains unchanged.
+The existing OPF indexing pass validates and stores this ID in the book cache.
+When binary document matching is enabled, firmware sync prefers the cached ID
+and falls back to calculating an ID from the current file when it is absent or
+invalid. Filename matching remains unchanged.
 
 ### Settings
 

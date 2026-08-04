@@ -951,6 +951,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
   const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
+  std::string originalDocumentId = epub->getOriginalDocumentId();
 
   // Persist current position so the reader resumes at the right page on return.
   // goToReader() depends on this file, so abort the sync if the write fails.
@@ -978,8 +979,8 @@ bool EpubReaderActivity::launchKOReaderSync() {
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-      std::move(localChapterName), paragraphIndex));
+      renderer, mappedInput, savedEpubPath, std::move(originalDocumentId), currentSpineIndex, currentPage, totalPages,
+      std::move(localKoPos), std::move(localChapterName), paragraphIndex));
   return true;  // acted: launched the sync activity
 }
 
