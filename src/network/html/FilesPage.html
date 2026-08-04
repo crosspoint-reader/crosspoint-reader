@@ -1746,6 +1746,8 @@
       <div class="convert-warning" id="convertWarning" style="display:none;" role="alert" aria-live="polite">
         ⚠️ Converting will modify files and can break hash‑based sync. ⚠️<br>
         Please back up or disable sync before proceeding.
+
+        Note: hash-based sync will continue to work for .epub files after optimization, as the original hash is now preserved in the optimized epub's metadata. 
       </div>
       <!-- Optimize & Upload button - shown when picker is visible, replaces Upload -->
       <button id="startConversionBtn" class="upload-btn optimize" style="display:none;" onclick="startConversionWithImageStates()">Optimize & Upload</button>
@@ -3814,6 +3816,114 @@ function xmlEscape(str) {
 
 function escapeRegex(str) { return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+// CrossPoint and KOReader identify books for binary progress sync with an MD5
+// over 1 KiB samples at these offsets, rather than an MD5 over the entire file.
+// Keep this in sync with KOReaderDocumentId::calculate() in the firmware.
+const KOREADER_DOCUMENT_HASH_OFFSETS = Object.freeze([
+  0, 1024, 4096, 16384, 65536, 262144,
+  1048576, 4194304, 16777216, 67108864, 268435456, 1073741824
+]);
+const KOREADER_DOCUMENT_HASH_CHUNK_SIZE = 1024;
+const ORIGINAL_DOCUMENT_HASH_META_NAME = 'crosspoint:original-koreader-document-id';
+
+/** Return the lowercase RFC 1321 MD5 digest for a Uint8Array. */
+function md5Hex(bytes) {
+  const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+  const padded = new Uint8Array(paddedLength);
+  padded.set(bytes);
+  padded[bytes.length] = 0x80;
+
+  const view = new DataView(padded.buffer);
+  const bitLength = bytes.length * 8;
+  view.setUint32(paddedLength - 8, bitLength >>> 0, true);
+  view.setUint32(paddedLength - 4, Math.floor(bitLength / 0x100000000), true);
+
+  const shifts = [
+    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+    5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+  ];
+  const constants = Array.from({ length: 64 }, (_, i) =>
+    Math.floor(Math.abs(Math.sin(i + 1)) * 0x100000000) >>> 0
+  );
+  const rotateLeft = (value, amount) => ((value << amount) | (value >>> (32 - amount))) >>> 0;
+
+  let h0 = 0x67452301;
+  let h1 = 0xefcdab89;
+  let h2 = 0x98badcfe;
+  let h3 = 0x10325476;
+
+  for (let offset = 0; offset < paddedLength; offset += 64) {
+    const words = new Uint32Array(16);
+    for (let i = 0; i < 16; i++) words[i] = view.getUint32(offset + i * 4, true);
+
+    let a = h0;
+    let b = h1;
+    let c = h2;
+    let d = h3;
+
+    for (let i = 0; i < 64; i++) {
+      let f;
+      let wordIndex;
+      if (i < 16) {
+        f = (b & c) | (~b & d);
+        wordIndex = i;
+      } else if (i < 32) {
+        f = (d & b) | (~d & c);
+        wordIndex = (5 * i + 1) % 16;
+      } else if (i < 48) {
+        f = b ^ c ^ d;
+        wordIndex = (3 * i + 5) % 16;
+      } else {
+        f = c ^ (b | ~d);
+        wordIndex = (7 * i) % 16;
+      }
+
+      const nextD = d;
+      d = c;
+      c = b;
+      const sum = (a + f + constants[i] + words[wordIndex]) >>> 0;
+      b = (b + rotateLeft(sum, shifts[i])) >>> 0;
+      a = nextD;
+    }
+
+    h0 = (h0 + a) >>> 0;
+    h1 = (h1 + b) >>> 0;
+    h2 = (h2 + c) >>> 0;
+    h3 = (h3 + d) >>> 0;
+  }
+
+  const digest = new DataView(new ArrayBuffer(16));
+  digest.setUint32(0, h0, true);
+  digest.setUint32(4, h1, true);
+  digest.setUint32(8, h2, true);
+  digest.setUint32(12, h3, true);
+  return Array.from(new Uint8Array(digest.buffer), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/** Calculate the same partial MD5 document ID used by KOReader binary sync. */
+async function calculateKoreaderDocumentId(file) {
+  const chunks = [];
+  let totalLength = 0;
+
+  for (const offset of KOREADER_DOCUMENT_HASH_OFFSETS) {
+    if (offset >= file.size) continue;
+    const end = Math.min(offset + KOREADER_DOCUMENT_HASH_CHUNK_SIZE, file.size);
+    const chunk = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+    chunks.push(chunk);
+    totalLength += chunk.length;
+  }
+
+  const sampledBytes = new Uint8Array(totalLength);
+  let writeOffset = 0;
+  for (const chunk of chunks) {
+    sampledBytes.set(chunk, writeOffset);
+    writeOffset += chunk.length;
+  }
+  return md5Hex(sampledBytes);
+}
+
 /**
  * Decode a URI-encoded href (e.g., "my%20image.jpg" → "my image.jpg").
  * Handles double-encoding gracefully.
@@ -4064,6 +4174,58 @@ function syncNCXIdentifier(ncxText, mainIdentifier) {
     t = t.replace(/<meta\s+name=["']dtb:uid["']\s+content=["'][^"']*["']\s*\/?>/gi, `<meta name="dtb:uid" content="${xmlEscape(mainIdentifier)}"/>`);
   }
   return t;
+}
+
+/**
+ * Store the pre-optimization KOReader document ID in the OPF metadata.
+ * A name/content meta element is valid in EPUB 2 and remains compatible with
+ * EPUB 3 readers, without requiring a custom vocabulary prefix declaration.
+ */
+function addOriginalDocumentHashMetadata(opfString, documentHash) {
+  if (!documentHash) return { o: opfString, fixed: false };
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(opfString, 'application/xml');
+    if (doc.querySelector('parsererror')) throw new Error('OPF parse failed');
+
+    const metadata = doc.getElementsByTagNameNS('*', 'metadata')[0];
+    if (!metadata) return { o: opfString, fixed: false };
+
+    const metas = [...doc.getElementsByTagNameNS('*', 'meta')];
+    let hashMeta = metas.find(meta => meta.getAttribute('name') === ORIGINAL_DOCUMENT_HASH_META_NAME);
+    if (hashMeta && hashMeta.getAttribute('content') === documentHash) {
+      return { o: opfString, fixed: false };
+    }
+
+    if (!hashMeta) {
+      const ns = metadata.namespaceURI || 'http://www.idpf.org/2007/opf';
+      hashMeta = doc.createElementNS(ns, 'meta');
+      hashMeta.setAttribute('name', ORIGINAL_DOCUMENT_HASH_META_NAME);
+      metadata.appendChild(hashMeta);
+    }
+    hashMeta.setAttribute('content', documentHash);
+    return { o: safeSerialize(doc, opfString), fixed: true };
+  } catch (e) {
+    const escapedName = escapeRegex(ORIGINAL_DOCUMENT_HASH_META_NAME);
+    const existingMeta = new RegExp(
+      `<(?:\\w+:)?meta\\b[^>]*\\bname=["']${escapedName}["'][^>]*\\/?>`,
+      'i'
+    );
+    const replacement = `<meta name="${ORIGINAL_DOCUMENT_HASH_META_NAME}" content="${xmlEscape(documentHash)}"/>`;
+    if (existingMeta.test(opfString)) {
+      return { o: opfString.replace(existingMeta, replacement), fixed: true };
+    }
+
+    const closingMetadata = /<\/(?:\w+:)?metadata\s*>/i;
+    if (closingMetadata.test(opfString)) {
+      return {
+        o: opfString.replace(closingMetadata, `    ${replacement}\n  $&`),
+        fixed: true
+      };
+    }
+    return { o: opfString, fixed: false };
+  }
 }
 
 /**
@@ -4906,6 +5068,10 @@ async function convertEpubFile(file, progressCallback) {
   log(`<strong>${file.name}</strong> <span class="log-detail">(${formatBytes(originalSize)})</span>`, '', 'INFO');
   log(`Quality: ${JPEG_QUALITY}% | Overlap: ${OVERLAP_PERCENT}% | Rotation: ${HANDEDNESS === 'right' ? 'CW' : 'CCW'} | Grayscale: ${ENABLE_GRAYSCALE ? 'ON' : 'OFF'} | Auto-crop: ${ENABLE_AUTO_CROP ? 'ON' : 'OFF'}`, '', 'INFO');
 
+  // Capture the input EPUB's binary-sync identity before changing any bytes.
+  const originalDocumentHash = await calculateKoreaderDocumentId(file);
+  log(`Original KOReader document ID: ${originalDocumentHash}`, '', 'HASH');
+
   const zip = await JSZip.loadAsync(file);
   const renamed = {};
   zip.forEach(p => {
@@ -5193,6 +5359,9 @@ async function convertEpubFile(file, progressCallback) {
     const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')) : '';
     t = fixOPF(t, opfContent, opfDir, splitImages);
     if (t !== opfContent) logFix('OPF', 'manifest updated');
+    const hashMetadata = addOriginalDocumentHashMetadata(t, originalDocumentHash);
+    t = hashMetadata.o;
+    if (hashMetadata.fixed) logFix('OPF metadata', 'original KOReader document ID stored');
     out.file(opfPath, t, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
   }
 

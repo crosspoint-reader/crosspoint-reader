@@ -3,8 +3,15 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <MD5Builder.h>
+#include <Print.h>
+#include <ZipFile.h>
+
+#include "Epub/parsers/ContainerParser.h"
+#include "OriginalDocumentIdParser.h"
 
 namespace {
+constexpr char CONTAINER_PATH[] = "META-INF/container.xml";
+
 // Extract filename from path (everything after last '/')
 std::string getFilename(const std::string& path) {
   const size_t pos = path.rfind('/');
@@ -12,6 +19,53 @@ std::string getFilename(const std::string& path) {
     return path;
   }
   return path.substr(pos + 1);
+}
+
+class OriginalDocumentIdSink final : public Print {
+  OriginalDocumentIdParser& parser;
+
+ public:
+  explicit OriginalDocumentIdSink(OriginalDocumentIdParser& parser) : parser(parser) {}
+
+  size_t write(const uint8_t byte) override { return write(&byte, 1); }
+
+  size_t write(const uint8_t* buffer, const size_t size) override {
+    const size_t written = parser.write(buffer, size);
+    // Returning a short write asks ZipFile to stop inflating once the metadata
+    // has been found. The caller enables allowEarlyStop for this stream.
+    return !parser.documentId.empty() ? 0 : written;
+  }
+};
+
+std::string findEmbeddedOriginalDocumentId(const std::string& filePath) {
+  ZipFile epub(filePath);
+
+  size_t containerSize = 0;
+  if (!epub.getInflatedFileSize(CONTAINER_PATH, &containerSize)) {
+    return {};
+  }
+
+  ContainerParser containerParser(containerSize);
+  if (!containerParser.setup() || !epub.readFileToStream(CONTAINER_PATH, containerParser, 512) ||
+      containerParser.fullPath.empty()) {
+    return {};
+  }
+
+  size_t opfSize = 0;
+  if (!epub.getInflatedFileSize(containerParser.fullPath.c_str(), &opfSize)) {
+    return {};
+  }
+
+  OriginalDocumentIdParser documentIdParser(opfSize);
+  if (!documentIdParser.setup()) {
+    return {};
+  }
+
+  OriginalDocumentIdSink sink(documentIdParser);
+  if (!epub.readFileToStream(containerParser.fullPath.c_str(), sink, 512, true)) {
+    return {};
+  }
+  return documentIdParser.documentId;
 }
 }  // namespace
 
@@ -42,6 +96,12 @@ size_t KOReaderDocumentId::getOffset(int i) {
 }
 
 std::string KOReaderDocumentId::calculate(const std::string& filePath) {
+  const std::string originalDocumentId = findEmbeddedOriginalDocumentId(filePath);
+  if (!originalDocumentId.empty()) {
+    LOG_DBG("KODoc", "Using embedded original document hash: %s", originalDocumentId.c_str());
+    return originalDocumentId;
+  }
+
   HalFile file;
   if (!Storage.openFileForRead("KODoc", filePath, file)) {
     LOG_DBG("KODoc", "Failed to open file: %s", filePath.c_str());

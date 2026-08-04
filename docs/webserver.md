@@ -90,6 +90,7 @@ The File Manager page can:
 
 - Browse SD-card folders
 - Upload files, using WebSocket upload when available and HTTP upload as a fallback
+- Optimize EPUB image assets before upload
 - Create folders
 - Download files
 - Rename files
@@ -99,6 +100,14 @@ The File Manager page can:
 Existing files with the same name are overwritten by uploads. When EPUB files
 are overwritten, moved, renamed, or deleted through the web server, the matching
 book cache is cleared so stale metadata is not reused.
+
+Before optimizing an EPUB, the browser calculates its KOReader partial-MD5
+document ID from the untouched input. The optimized EPUB stores that value in
+its OPF metadata as
+`<meta name="crosspoint:original-koreader-document-id" content="..."/>`.
+When binary document matching is enabled, firmware sync prefers this embedded
+ID and falls back to calculating an ID from the current file when it is absent
+or invalid. Filename matching remains unchanged.
 
 ### Settings
 
