@@ -52,8 +52,9 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
     }
   }
 
-  parsed.layoutAndExtractLines(renderer, fontId, static_cast<uint16_t>(textWidth),
-                               [&layout](std::shared_ptr<TextBlock> line) { layout.lines.push_back(std::move(line)); });
+  parsed.layoutAndExtractLines(
+      renderer, fontId, static_cast<uint16_t>(textWidth),
+      [&layout](std::shared_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); });
 }
 
 }  // namespace
