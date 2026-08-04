@@ -29,23 +29,24 @@ uint16_t enabled() {
   // layouts this build does not have. Without the filter such a mask would read
   // as "configured" while enabling nothing, leaving the user with no layouts.
   uint16_t all = 0;
-  for (uint8_t i = 0; i < COUNT; ++i) all = static_cast<uint16_t>(all | bit(ALL[i].id));
+  for (uint8_t i = 0; i < COUNT; ++i) all = static_cast<uint16_t>(all | layoutBit(ALL[i].id));
   const uint16_t configured = static_cast<uint16_t>(SETTINGS.keyboardLayouts & all);
   if (configured != 0) return configured;
   // Unconfigured: the UI language's layout plus English. When the UI is already
   // English this collapses to a single layout and the language key disappears,
   // which is correct -- there is nothing to switch to.
-  return static_cast<uint16_t>(bit(forLanguage(I18N.getLanguage())) | bit(freeink::ui::KeyboardLayoutId::QwertyEn));
+  return static_cast<uint16_t>(layoutBit(forLanguage(I18N.getLanguage())) |
+                               layoutBit(freeink::ui::KeyboardLayoutId::QwertyEn));
 }
 
 freeink::ui::KeyboardLayoutId startingLayout(const Language language) {
   const freeink::ui::KeyboardLayoutId preferred = forLanguage(language);
   const uint16_t mask = enabled();
-  if (mask & bit(preferred)) return preferred;
+  if (mask & layoutBit(preferred)) return preferred;
   // The UI language's layout is switched off. Opening on it anyway would ignore
   // a deliberate choice, so fall back to the first one that is enabled.
   for (uint8_t i = 0; i < COUNT; ++i) {
-    if (mask & bit(ALL[i].id)) return ALL[i].id;
+    if (mask & layoutBit(ALL[i].id)) return ALL[i].id;
   }
   // enabled() never returns an empty set, so this is unreachable in practice.
   return freeink::ui::KeyboardLayoutId::QwertyEn;
@@ -55,7 +56,7 @@ uint8_t enabledCount() {
   const uint16_t mask = enabled();
   uint8_t n = 0;
   for (uint8_t i = 0; i < COUNT; ++i) {
-    if (mask & bit(ALL[i].id)) ++n;
+    if (mask & layoutBit(ALL[i].id)) ++n;
   }
   return n;
 }
@@ -68,7 +69,7 @@ freeink::ui::KeyboardLayoutId next(const freeink::ui::KeyboardLayoutId current) 
   const uint8_t start = from < COUNT ? from : 0;
   for (uint8_t step = 1; step <= COUNT; ++step) {
     const uint8_t i = static_cast<uint8_t>((start + step) % COUNT);
-    if (mask & bit(ALL[i].id)) return ALL[i].id;
+    if (mask & layoutBit(ALL[i].id)) return ALL[i].id;
   }
   return current;
 }

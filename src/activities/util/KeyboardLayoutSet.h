@@ -38,7 +38,9 @@ inline constexpr LayoutInfo ALL[] = {
 };
 inline constexpr uint8_t COUNT = sizeof(ALL) / sizeof(ALL[0]);
 
-inline constexpr uint16_t bit(const freeink::ui::KeyboardLayoutId id) {
+// Named layoutBit rather than bit: Arduino.h defines a bit(b) macro, which would
+// otherwise expand this call site into a shift on an enum.
+inline constexpr uint16_t layoutBit(const freeink::ui::KeyboardLayoutId id) {
   return static_cast<uint16_t>(1u << static_cast<uint8_t>(id));
 }
 

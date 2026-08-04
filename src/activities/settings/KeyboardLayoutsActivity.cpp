@@ -30,7 +30,7 @@ void KeyboardLayoutsActivity::onExit() {
 
 void KeyboardLayoutsActivity::toggleSelected() {
   if (selectedIndex < 0 || selectedIndex >= totalItems) return;
-  const uint16_t b = keyboard_layouts::bit(keyboard_layouts::ALL[selectedIndex].id);
+  const uint16_t b = keyboard_layouts::layoutBit(keyboard_layouts::ALL[selectedIndex].id);
   const bool wasOn = (workingMask & b) != 0;
   // Refuse to switch off the last one: an empty set would leave the keyboard
   // with no letters at all.
@@ -115,10 +115,11 @@ void KeyboardLayoutsActivity::render(RenderLock&&) {
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
       // The layout's name is its language's name, so adding a layout needs no
       // new translation keys.
-      [](int index) { return I18N.getLanguageName(keyboard_layouts::ALL[index].language); }, nullptr, nullptr,
+      [](int index) { return std::string(I18N.getLanguageName(keyboard_layouts::ALL[index].language)); }, nullptr,
+      nullptr,
       [this](int index) {
-        return (workingMask & keyboard_layouts::bit(keyboard_layouts::ALL[index].id)) ? tr(STR_STATE_ON)
-                                                                                      : tr(STR_STATE_OFF);
+        return (workingMask & keyboard_layouts::layoutBit(keyboard_layouts::ALL[index].id)) ? tr(STR_STATE_ON)
+                                                                                            : tr(STR_STATE_OFF);
       },
       true);
 
