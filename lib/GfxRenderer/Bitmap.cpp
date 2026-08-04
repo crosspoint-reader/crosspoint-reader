@@ -303,8 +303,8 @@ bool Bitmap::analyzeAdaptiveToneMapping() {
     total += static_cast<uint32_t>(width);
   }
 
-  const uint64_t lowTarget = (total * ADAPTIVE_TONE_LOW_PERCENTILE_PERMILLE) / 1000u;
-  const uint64_t highTarget = (total * ADAPTIVE_TONE_HIGH_PERCENTILE_PERMILLE) / 1000u;
+  const uint64_t lowTarget = (total * ADAPTIVE_TONE_LOW_PERCENTILE_PERMILLE + 999u) / 1000u;
+  const uint64_t highTarget = (total * ADAPTIVE_TONE_HIGH_PERCENTILE_PERMILLE + 999u) / 1000u;
   uint64_t cumulative = 0;
   uint8_t low = 0;
   uint8_t high = 255;
