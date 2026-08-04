@@ -310,14 +310,26 @@ bool MappedInputManager::wasHomeGesture() const {
 }
 
 bool MappedInputManager::wasPressed(const Button button) const {
+  if (injectedButtonEvents.wasPressed(static_cast<uint8_t>(button))) {
+    return true;
+  }
   if (button == Button::Back && wasBackGesture()) return true;
   return mapButton(button, &HalGPIO::wasPressed);
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  if (injectedButtonEvents.wasReleased(static_cast<uint8_t>(button))) {
+    return true;
+  }
   if (button == Button::Back && wasBackGesture()) return true;
   return mapButton(button, &HalGPIO::wasReleased);
 }
+
+void MappedInputManager::injectClick(const Button button) {
+  injectedButtonEvents.injectClick(static_cast<uint8_t>(button));
+}
+
+void MappedInputManager::clearInjectedEvents() { injectedButtonEvents.clear(); }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
