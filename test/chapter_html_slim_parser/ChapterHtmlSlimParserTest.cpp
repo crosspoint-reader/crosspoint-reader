@@ -72,8 +72,8 @@ std::vector<std::unique_ptr<Page>> parseHtmlIntoPages(const std::string& html, c
   const std::string filepath = writeFixture(html);
 
   std::vector<std::unique_ptr<Page>> pages;
-  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)> completePageFn =
-      [&pages](std::unique_ptr<Page> page, uint16_t, uint16_t) { pages.push_back(std::move(page)); };
+  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)> completePageFn =
+      [&pages](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) { pages.push_back(std::move(page)); };
 
   // A real CssParser is required for inline style="..." attributes and class-based
   // CSS resolution to work at all: ChapterHtmlSlimParser only calls

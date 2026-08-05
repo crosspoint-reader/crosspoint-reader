@@ -24,9 +24,11 @@
 #include "Epub/Page.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/converters/ImageDecoderFactory.h"
+#include "Epub/converters/ImageDimsProbe.h"
 
-ImageBlock::ImageBlock(const std::string& imagePath, const int16_t width, const int16_t height)
-    : imagePath(imagePath), width(width), height(height) {}
+ImageBlock::ImageBlock(const std::string& imagePath, const std::string& srcPath, const int16_t width,
+                       const int16_t height)
+    : imagePath(imagePath), srcPath(srcPath), width(width), height(height) {}
 
 void PageLine::render(GfxRenderer& /*renderer*/, int /*fontId*/, int /*xOffset*/, int /*yOffset*/) {}
 bool PageLine::serialize(HalFile& /*file*/) { return true; }
@@ -41,6 +43,11 @@ bool PageHorizontalRule::serialize(HalFile& /*file*/) { return true; }
 bool ImageDecoderFactory::isFormatSupported(const std::string& /*imagePath*/) { return false; }
 ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string& /*imagePath*/) { return nullptr; }
 
-bool Epub::readItemContentsToStream(const std::string& /*itemHref*/, Print& /*out*/, size_t /*chunkSize*/) const {
+size_t ImageDimsProbe::write(uint8_t /*b*/) { return 0; }
+size_t ImageDimsProbe::write(const uint8_t* /*data*/, size_t /*len*/) { return 0; }
+bool ImageDimsProbe::getDimensions(ImageDimensions& /*out*/) const { return false; }
+
+bool Epub::readItemContentsToStream(const std::string& /*itemHref*/, Print& /*out*/, size_t /*chunkSize*/,
+                                    bool /*allowEarlyStop*/) const {
   return false;
 }

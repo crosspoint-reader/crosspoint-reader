@@ -42,7 +42,7 @@ void GfxRenderer::fillRect(int /*x*/, int /*y*/, int /*width*/, int /*height*/, 
 
 void GfxRenderer::ensureSdCardFontReady(int /*fontId*/, const char* /*utf8Text*/, uint8_t /*styleMask*/) const {}
 
-void GfxRenderer::ensureSdCardFontReady(int /*fontId*/, const std::vector<std::string>& /*words*/,
+void GfxRenderer::ensureSdCardFontReady(int /*fontId*/, const std::deque<std::string>& /*words*/,
                                         bool /*includeHyphen*/, uint8_t /*styleMask*/) const {}
 
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
