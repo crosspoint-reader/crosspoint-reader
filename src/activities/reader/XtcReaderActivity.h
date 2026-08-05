@@ -52,7 +52,7 @@ class XtcReaderActivity final : public Activity {
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);
-      pagesUntilFullRefresh = 1;
+      pagesUntilFullRefresh = 0;
     }
     requestUpdate();
     return true;
