@@ -20,10 +20,10 @@ void HalFile::flush() {
 
 size_t HalFile::size() {
   if (!impl_ || !impl_->open) return 0;
-  const auto cur = impl_->stream.tellg();
-  impl_->stream.seekg(0, std::ios::end);
-  const auto end = impl_->stream.tellg();
-  impl_->stream.seekg(cur);
+  const auto cur = impl_->stream.tellp();
+  impl_->stream.seekp(0, std::ios::end);
+  const auto end = impl_->stream.tellp();
+  impl_->stream.seekp(cur);
   return static_cast<size_t>(end);
 }
 
@@ -31,14 +31,14 @@ bool HalFile::isOpen() const { return impl_ && impl_->open; }
 
 int HalFile::available() const {
   if (!impl_ || !impl_->open) return 0;
-  const auto cur = impl_->stream.tellg();
-  impl_->stream.seekg(0, std::ios::end);
-  const auto end = impl_->stream.tellg();
-  impl_->stream.seekg(cur);
+  const auto cur = impl_->stream.tellp();
+  impl_->stream.seekp(0, std::ios::end);
+  const auto end = impl_->stream.tellp();
+  impl_->stream.seekp(cur);
   return static_cast<int>(end - cur);
 }
 
-size_t HalFile::position() const { return impl_ ? static_cast<size_t>(impl_->stream.tellg()) : 0; }
+size_t HalFile::position() const { return impl_ ? static_cast<size_t>(impl_->stream.tellp()) : 0; }
 
 bool HalFile::seek(size_t pos) {
   if (!impl_ || !impl_->open) return false;
