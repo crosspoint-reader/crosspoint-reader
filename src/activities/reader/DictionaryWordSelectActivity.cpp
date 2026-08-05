@@ -78,13 +78,15 @@ void DictionaryWordSelectActivity::extractWords() {
     if (!block || !block->valid()) continue;
 
     bool rowHasWords = false;
+    const int ascender = renderer.getFontAscenderSize(fontId);
+    const int rubyShift = block->getRubyShift(ascender);
     for (uint16_t i = 0; i < block->wordCount(); i++) {
       const char* text = block->wordText(i);
       if (!isSelectableToken(text)) continue;
 
       WordBox box;
       box.x = static_cast<int16_t>(line->xPos + block->wordXpos(i) + marginLeft);
-      box.y = static_cast<int16_t>(line->yPos + marginTop);
+      box.y = static_cast<int16_t>(line->yPos + marginTop + rubyShift);
       box.style = block->wordStyle(i);
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
@@ -153,17 +155,25 @@ void DictionaryWordSelectActivity::performLookup() {
   if (!dictOpenAttempted) {
     dictOpenAttempted = true;
     dictOpenOk = dict.open(SETTINGS.dictionaryName);
+    // needsIndex() opens and validates the .qidx sidecar, so ask it once per
+    // open rather than once per word: the answer only changes when we build
+    // the sidecar ourselves, which is handled below.
+    dictNeedsIndex = dictOpenOk && dict.needsIndex();
   }
-  const bool indexing = dictOpenOk && dict.needsIndex();
-  popupMsg = indexing ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
+  popupMsg = dictNeedsIndex ? StrId::STR_DICT_INDEXING : StrId::STR_DICT_LOOKING_UP;
   requestUpdateAndWait();  // paint the page + busy popup before blocking on SD
 
   bool ok = dictOpenOk;
-  if (ok && indexing) ok = dict.buildIndex(&indexBuildYield);
+  Dictionary::IndexResult indexResult = Dictionary::IndexResult::Ok;
+  if (ok && dictNeedsIndex) {
+    ok = dict.buildIndex(&indexBuildYield, nullptr, &indexResult);
+    dictNeedsIndex = !ok;  // a successful build leaves the sidecar fresh; a failed one retries
+  }
 
   std::string definition;
   std::string headword;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword);
+  Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
+  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -172,8 +182,46 @@ void DictionaryWordSelectActivity::performLookup() {
                            [this](const ActivityResult&) { requestUpdate(); });
     return;
   }
-  popup = ok ? Popup::NotFound : Popup::Error;
-  popupMsg = ok ? StrId::STR_DICT_NOT_FOUND : StrId::STR_DICT_ERROR;
+  // Name the failure: a genuine miss is "Not found"; a word that WAS found but
+  // couldn't be read is a real error — and we distinguish decompression from a
+  // low-memory allocation from a generic read error.
+  if (!ok) {
+    popup = Popup::Error;
+    // An index build allocates a scan buffer, so it fails the same way lookups
+    // do on a fragmented heap — name that rather than a generic error.
+    switch (indexResult) {
+      case Dictionary::IndexResult::LowMemory:
+        popupMsg = StrId::STR_DICT_LOW_MEMORY;
+        break;
+      case Dictionary::IndexResult::ReadError:
+        popupMsg = StrId::STR_DICT_READ_FAILED;
+        break;
+      case Dictionary::IndexResult::Ok:
+      default:
+        popupMsg = StrId::STR_DICT_ERROR;  // dict.open() failed, not the index
+        break;
+    }
+  } else {
+    switch (result) {
+      case Dictionary::LookupResult::Decompress:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_DECOMPRESS_ERROR;
+        break;
+      case Dictionary::LookupResult::LowMemory:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_LOW_MEMORY;
+        break;
+      case Dictionary::LookupResult::ReadError:
+        popup = Popup::Error;
+        popupMsg = StrId::STR_DICT_READ_FAILED;
+        break;
+      case Dictionary::LookupResult::NotFound:
+      default:
+        popup = Popup::NotFound;
+        popupMsg = StrId::STR_DICT_NOT_FOUND;
+        break;
+    }
+  }
   popupTime = millis();
   requestUpdate();
 }
@@ -221,16 +269,16 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Left) && selected > 0) {
+  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
+  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) && selected > 0) {
     selected--;
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) &&
-             selected + 1 < static_cast<int>(words.size())) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) && hasNextWord) {
     selected++;
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
     moveVertical(1);
   }
 }
@@ -273,11 +321,10 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
 // Front-button bar (Back/Confirm/Left/Right). Drawn last on every repaint
 // path, including the differential highlight-only path, so it always ends
 // up as the top layer even when a highlighted word's box falls under a
-// hint's screen area. No side-button hints: Up/Down row jump has no spare
-// screen area on this page (it reuses the reader's full-bleed layout), and
-// a hint box there would hide text instead of sitting in a reserved gutter.
+// hint's screen area. No side-button hints: the full-bleed reader page has no
+// spare gutter for them, so a hint box there would hide text.
 void DictionaryWordSelectActivity::drawHints() const {
-  // No selectable word on this page: Confirm/Left/Right are all no-ops
+  // No selectable word on this page: Confirm and navigation are all no-ops
   // (guarded by words.empty() in loop()/performLookup), so only Back does
   // anything and only Back is hinted.
   if (words.empty()) {
@@ -285,7 +332,8 @@ void DictionaryWordSelectActivity::drawHints() const {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
+  const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT),
+                                                       tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 

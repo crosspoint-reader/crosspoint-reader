@@ -61,6 +61,7 @@ class DictionaryWordSelectActivity final : public Activity {
   Dictionary dict;
   bool dictOpenAttempted = false;
   bool dictOpenOk = false;
+  bool dictNeedsIndex = false;
 
   Popup popup = Popup::None;
   StrId popupMsg = StrId::STR_DICT_NOT_FOUND;

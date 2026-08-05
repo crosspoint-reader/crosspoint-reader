@@ -402,7 +402,7 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                                       TextSettingsActivity::Tab::Family),
                                [this](const ActivityResult&) {
-                                 SETTINGS.saveToFile();
+                                 // TextSettingsActivity saves on each change; no save needed here.
                                  rebuildSettingsLists();
                                });
         break;
