@@ -89,6 +89,11 @@ class HalFile : public Print {
   size_t write(uint8_t b) override;
   bool rename(const char* newPath);
   bool isDirectory() const;
+  // FAT modification stamp as SdFat stores it: `date` is packed
+  // (year-1980, month, day), `time` is (hour, minute, second/2). Both are
+  // monotonic in their packing, so ((date << 16) | time) sorts chronologically
+  // without any calendar arithmetic. False when the entry has no stamp.
+  bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime);
   void rewindDirectory();
   bool close();
   HalFile openNextFile();

@@ -30,6 +30,10 @@ class FileBrowserActivity final : public Activity {
   // Sharing one instance across both axes would leave that timer permanently non-zero after the
   // first fast-scroll hold, silently suppressing single-step's on-release navigation forever.
   ButtonNavigator fastScrollNavigator;
+  // Third instance for the front pair in Books mode (release-only, see loop()). It must not share
+  // buttonNavigator: a hold on the *side* pair sets that instance's lastContinuousNavTime, which
+  // would then swallow the front pair's next release.
+  ButtonNavigator frontNavigator;
 
   size_t selectorIndex = 0;
 
@@ -45,10 +49,18 @@ class FileBrowserActivity final : public Activity {
 
   Mode mode = Mode::Books;
 
-  // Files state
+  // Files state. In flat view an entry is a path relative to basepath
+  // ("Fiction/Dune.epub"); otherwise it is a bare name, with a trailing '/'
+  // marking a directory.
   std::string basepath = "/";
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
+
+  // View toggles (Books mode, hold front-Left / front-Right — see loop()).
+  // Deliberately not persisted: both are a "find that book now" tool, not a
+  // preference, so every visit starts on the plain alphabetical folder view.
+  bool flatView = false;
+  bool sortNewestFirst = false;
 
   // Long-press entry menu (Books mode): rename (folders) / move / delete / new folder.
   OptionPopup optionPopup;
@@ -74,6 +86,20 @@ class FileBrowserActivity final : public Activity {
 
   // Data loading
   void loadFiles();
+  // One directory's worth of entries, appended to `files`. `times` is filled in
+  // lockstep only when sortNewestFirst needs it (reading a stamp costs an extra
+  // directory-entry access per file). With `subdirs` non-null (the flat walk),
+  // subdirectories are pushed there to be visited instead of being listed.
+  void collectDir(const std::string& dirPath, std::vector<uint32_t>& times, bool wantTimes,
+                  std::vector<std::string>* subdirs = nullptr);
+  // Recursive walk of basepath, appending "relative/path.epub" entries. Returns
+  // false when it stopped early at MAX_FLAT_ENTRIES.
+  bool collectFlat(std::vector<uint32_t>& times, bool wantTimes);
+  // Reorders `files` newest-first (directories keep their natural-order block
+  // on top), consuming the parallel `times` gathered during the walk.
+  void sortNewestFirstInPlace(std::vector<uint32_t>& times);
+  void toggleFlatView();
+  void toggleSortNewestFirst();
   size_t findEntry(const std::string& name) const;
 
   void showFileMenu(const std::string& entry);

@@ -24,22 +24,37 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 constexpr unsigned long POPUP_MSG_MS = 2000;
 // Fast-scroll jump size for long lists (see SETTINGS.fastScrollButtons).
 constexpr int FAST_SCROLL_JUMP = 5;
+// Hold this long on a front button to toggle a view instead of scrolling.
+constexpr unsigned long VIEW_TOGGLE_HOLD_MS = 600;
+// Ceiling on a flat listing. Each entry is a relative path — roughly 40 bytes
+// of string plus 12 bytes of vector slot — so 400 costs ~20 KB of the ~380 KB
+// budget. Beyond that the list stops being scrollable by hand anyway.
+constexpr size_t MAX_FLAT_ENTRIES = 400;
+
+// FAT stamps pack (year, month, day) and (hour, minute, second) so that both
+// halves compare chronologically; concatenating them keeps that property.
+uint32_t modifiedKey(HalFile& file) {
+  uint16_t date = 0;
+  uint16_t time = 0;
+  if (!file.getModifyDateTime(&date, &time)) return 0;  // undated entries sort last
+  return (static_cast<uint32_t>(date) << 16) | time;
+}
 }  // namespace
 
-void FileBrowserActivity::loadFiles() {
-  files.clear();
-
-  auto root = Storage.open(basepath.c_str());
+void FileBrowserActivity::collectDir(const std::string& dirPath, std::vector<uint32_t>& times, const bool wantTimes,
+                                     std::vector<std::string>* subdirs) {
+  auto root = Storage.open(dirPath.c_str());
   if (!root || !root.isDirectory()) {
     return;
   }
 
   root.rewindDirectory();
 
-  if (!fileNameBuffer) {
-    LOG_ERR("FileBrowser", "fileNameBuffer not allocated");
-    root.close();
-    return;
+  // In flat view an entry carries the path from basepath down to the file, so
+  // two books with the same name in different folders stay distinguishable.
+  std::string prefix;
+  if (flatView && dirPath.length() > basepath.length()) {
+    prefix = dirPath.substr(basepath.back() == '/' ? basepath.length() : basepath.length() + 1) + "/";
   }
 
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
@@ -50,25 +65,153 @@ void FileBrowserActivity::loadFiles() {
     }
 
     if (file.isDirectory()) {
-      files.emplace_back(std::string(fileNameBuffer.get()) + "/");
+      if (subdirs != nullptr) {
+        // Flat walk: the directory is a route, not a row. Hand its path back to
+        // collectFlat instead of listing it. Dot-directories are skipped even
+        // with showHiddenFiles on (the check above only skips them when it is
+        // off): /.crosspoint holds a cover .bmp per book, which would otherwise
+        // swamp the listing with cache artefacts rather than the user's files.
+        if (fileNameBuffer[0] == '.') continue;
+        std::string childPath = dirPath;
+        if (childPath.back() != '/') childPath += '/';
+        childPath += fileNameBuffer.get();
+        subdirs->push_back(std::move(childPath));
+      } else {
+        files.emplace_back(std::string(fileNameBuffer.get()) + "/");
+        // A directory has no stamp of its own to sort by, but `times` must stay
+        // index-aligned with `files`, so it gets a placeholder here rather than
+        // a fill-up afterwards (which would land on the wrong rows).
+        if (wantTimes) times.push_back(0);
+      }
     } else {
       // PickFolder lists the same files as Books mode so the user can tell
       // folders apart; Confirm on one drops the moved book into this folder.
       std::string_view filename{fileNameBuffer.get()};
+      bool keep = false;
       if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
-        if (FsHelpers::checkFileExtension(filename, ".bin")) {
-          files.emplace_back(filename);
-        }
-      } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-                 FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename)) {
-        files.emplace_back(filename);
+        keep = FsHelpers::checkFileExtension(filename, ".bin");
+      } else {
+        keep = FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+               FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
+               FsHelpers::hasBmpExtension(filename);
+      }
+      if (keep) {
+        files.emplace_back(prefix + std::string(filename));
+        if (wantTimes) times.push_back(modifiedKey(file));
       }
     }
+    if (flatView && files.size() >= MAX_FLAT_ENTRIES) break;
   }
   root.close();
-  FsHelpers::sortFileList(files);
+}
+
+bool FileBrowserActivity::collectFlat(std::vector<uint32_t>& times, const bool wantTimes) {
+  // Explicit stack rather than recursion: the activity task's stack is small
+  // and a deep shelf hierarchy would otherwise decide how much of it we use.
+  // Only paths are held, never open directory handles.
+  std::vector<std::string> pending;
+  pending.reserve(8);
+  pending.push_back(basepath);
+
+  bool complete = true;
+  while (!pending.empty()) {
+    const std::string dirPath = std::move(pending.back());
+    pending.pop_back();
+
+    // One pass per directory: files land in `files`, subdirectories in
+    // `pending`. Reading a folder off the SD card is the expensive part here,
+    // so it is worth not walking each one twice.
+    collectDir(dirPath, times, wantTimes, &pending);
+    if (files.size() >= MAX_FLAT_ENTRIES) {
+      complete = false;
+      break;
+    }
+  }
+  return complete;
+}
+
+void FileBrowserActivity::sortNewestFirstInPlace(std::vector<uint32_t>& times) {
+  if (files.size() != times.size()) {
+    LOG_ERR("FileBrowser", "timestamp/entry count mismatch (%u/%u)", (unsigned)times.size(), (unsigned)files.size());
+    FsHelpers::sortFileList(files);
+    return;
+  }
+
+  // Sort a permutation of 16-bit indices rather than the strings themselves:
+  // ~800 bytes of scratch instead of a second copy of every path. The flat walk
+  // caps well below that range; a single directory holding more entries than an
+  // index can address falls back to the alphabetical sort rather than truncating.
+  if (files.size() > UINT16_MAX) {
+    LOG_ERR("FileBrowser", "Too many entries to sort by date (%u)", (unsigned)files.size());
+    FsHelpers::sortFileList(files);
+    return;
+  }
+  std::vector<uint16_t> order(files.size());
+  for (size_t i = 0; i < order.size(); i++) order[i] = static_cast<uint16_t>(i);
+  std::sort(order.begin(), order.end(), [this, &times](const uint16_t a, const uint16_t b) {
+    // Directories are navigation, not content: they keep their alphabetical
+    // block at the top so the folder view stays usable while sorted by date.
+    const bool dirA = files[a].back() == '/';
+    const bool dirB = files[b].back() == '/';
+    if (dirA != dirB) return dirA;
+    if (dirA) return FsHelpers::naturalLess(files[a], files[b]);
+    if (times[a] != times[b]) return times[a] > times[b];
+    return FsHelpers::naturalLess(files[a], files[b]);
+  });
+
+  std::vector<std::string> sorted;
+  sorted.reserve(files.size());
+  // Moves, so no path buffer is duplicated — only the vector slots.
+  for (const uint16_t idx : order) sorted.push_back(std::move(files[idx]));
+  files = std::move(sorted);
+}
+
+void FileBrowserActivity::loadFiles() {
+  files.clear();
+
+  if (!fileNameBuffer) {
+    LOG_ERR("FileBrowser", "fileNameBuffer not allocated");
+    return;
+  }
+
+  std::vector<uint32_t> times;
+  const bool wantTimes = sortNewestFirst;
+
+  bool complete = true;
+  if (flatView) {
+    complete = collectFlat(times, wantTimes);
+  } else {
+    collectDir(basepath, times, wantTimes);
+  }
+
+  if (wantTimes) {
+    sortNewestFirstInPlace(times);
+  } else {
+    FsHelpers::sortFileList(files);
+  }
+
+  if (!complete) {
+    LOG_ERR("FileBrowser", "Flat listing capped at %u entries", (unsigned)MAX_FLAT_ENTRIES);
+    showMessage(StrId::STR_BROWSER_FLAT_TRUNCATED);
+  }
+}
+
+// Both toggles rescan from disk: the flat walk and the timestamps are only
+// gathered when the active view actually needs them, so there is no cached
+// second listing sitting in RAM.
+void FileBrowserActivity::toggleFlatView() {
+  flatView = !flatView;
+  loadFiles();
+  selectorIndex = 0;
+  requestUpdate();
+}
+
+void FileBrowserActivity::toggleSortNewestFirst() {
+  sortNewestFirst = !sortNewestFirst;
+  loadFiles();
+  selectorIndex = 0;
+  requestUpdate();
 }
 
 void FileBrowserActivity::onEnter() {
@@ -582,35 +725,78 @@ void FileBrowserActivity::loop() {
   // orientation-swap case to account for here (unlike the reader).
   using Btn = MappedInputManager::Button;
   const bool fastScrollIsFront = SETTINGS.fastScrollButtons == CrossPointSettings::FAST_SCROLL_FRONT;
-  const Btn fastNextBtn = fastScrollIsFront ? Btn::Right : Btn::Down;
-  const Btn fastPrevBtn = fastScrollIsFront ? Btn::Left : Btn::Up;
-  const Btn stepNextBtn = fastScrollIsFront ? Btn::Down : Btn::Right;
-  const Btn stepPrevBtn = fastScrollIsFront ? Btn::Up : Btn::Left;
+  // Books mode puts the two view toggles on a front-button hold, which rules out hold-to-repeat
+  // there: those buttons act on release only, and a release that came after VIEW_TOGGLE_HOLD_MS
+  // toggles instead of scrolling. The pickers have no toggles, so they keep hold-to-repeat on
+  // both axes exactly as before.
+  const bool frontToggles = mode == Mode::Books;
 
-  fastScrollNavigator.onPressAndContinuous({fastNextBtn}, [this, listSize] {
-    selectorIndex = ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, FAST_SCROLL_JUMP);
+  const auto scrollStep = [this, listSize](const int direction) {
+    selectorIndex = direction > 0 ? ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize)
+                                  : ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
-  });
-  fastScrollNavigator.onPressAndContinuous({fastPrevBtn}, [this, listSize] {
-    selectorIndex = ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, -FAST_SCROLL_JUMP);
+  };
+  const auto scrollPage = [this, listSize, pageItems](const int direction) {
+    selectorIndex = direction > 0
+                        ? ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
+                        : ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
     requestUpdate();
-  });
+  };
+  const auto scrollJump = [this, listSize](const int direction) {
+    selectorIndex =
+        ButtonNavigator::clampedJumpIndex(static_cast<int>(selectorIndex), listSize, direction * FAST_SCROLL_JUMP);
+    requestUpdate();
+  };
 
-  buttonNavigator.onRelease({stepNextBtn}, [this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
+  // The side pair is untouched by the toggles and keeps whichever role the setting gave it.
+  const Btn sideNextBtn = Btn::Down;
+  const Btn sidePrevBtn = Btn::Up;
+  if (fastScrollIsFront) {
+    buttonNavigator.onRelease({sideNextBtn}, [scrollStep] { scrollStep(1); });
+    buttonNavigator.onRelease({sidePrevBtn}, [scrollStep] { scrollStep(-1); });
+    buttonNavigator.onContinuous({sideNextBtn}, [scrollPage] { scrollPage(1); });
+    buttonNavigator.onContinuous({sidePrevBtn}, [scrollPage] { scrollPage(-1); });
+  } else {
+    fastScrollNavigator.onPressAndContinuous({sideNextBtn}, [scrollJump] { scrollJump(1); });
+    fastScrollNavigator.onPressAndContinuous({sidePrevBtn}, [scrollJump] { scrollJump(-1); });
+  }
+
+  if (!frontToggles) {
+    if (fastScrollIsFront) {
+      fastScrollNavigator.onPressAndContinuous({Btn::Right}, [scrollJump] { scrollJump(1); });
+      fastScrollNavigator.onPressAndContinuous({Btn::Left}, [scrollJump] { scrollJump(-1); });
+    } else {
+      buttonNavigator.onRelease({Btn::Right}, [scrollStep] { scrollStep(1); });
+      buttonNavigator.onRelease({Btn::Left}, [scrollStep] { scrollStep(-1); });
+      buttonNavigator.onContinuous({Btn::Right}, [scrollPage] { scrollPage(1); });
+      buttonNavigator.onContinuous({Btn::Left}, [scrollPage] { scrollPage(-1); });
+    }
+    return;
+  }
+
+  // Books mode: short press scrolls (one step, or one fast-scroll jump if the setting routes the
+  // jump to the front pair), a hold toggles the view. Left flattens the folder tree, Right sorts
+  // newest-first — see toggleFlatView / toggleSortNewestFirst.
+  const auto frontScroll = [fastScrollIsFront, scrollStep, scrollJump](const int direction) {
+    if (fastScrollIsFront) {
+      scrollJump(direction);
+    } else {
+      scrollStep(direction);
+    }
+  };
+  frontNavigator.onRelease({Btn::Right}, [this, frontScroll] {
+    if (mappedInput.getHeldTime() >= VIEW_TOGGLE_HOLD_MS) {
+      toggleSortNewestFirst();
+      return;
+    }
+    frontScroll(1);
   });
-  buttonNavigator.onRelease({stepPrevBtn}, [this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onContinuous({stepNextBtn}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-  buttonNavigator.onContinuous({stepPrevBtn}, [this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
+  frontNavigator.onRelease({Btn::Left}, [this, frontScroll] {
+    if (mappedInput.getHeldTime() >= VIEW_TOGGLE_HOLD_MS) {
+      toggleFlatView();
+      return;
+    }
+    frontScroll(-1);
   });
 }
 
@@ -717,7 +903,25 @@ void FileBrowserActivity::render(RenderLock&&) {
     const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
     const int separatorY = pathY - metrics.verticalSpacing / 2;
     renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
-    const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;
+
+    // Active view toggles are reported here rather than on the button hints:
+    // the hint chips describe the short press (which still scrolls), so the
+    // held-toggle state needs somewhere of its own to show up.
+    char tagBuf[64] = "";
+    if (flatView && sortNewestFirst) {
+      snprintf(tagBuf, sizeof(tagBuf), "%s \xc2\xb7 %s", tr(STR_BROWSER_FLAT), tr(STR_BROWSER_NEWEST));
+    } else if (flatView) {
+      snprintf(tagBuf, sizeof(tagBuf), "%s", tr(STR_BROWSER_FLAT));
+    } else if (sortNewestFirst) {
+      snprintf(tagBuf, sizeof(tagBuf), "%s", tr(STR_BROWSER_NEWEST));
+    }
+    int tagReserved = 0;
+    if (tagBuf[0] != '\0') {
+      const int tagWidth = renderer.getTextWidth(SMALL_FONT_ID, tagBuf);
+      renderer.drawText(SMALL_FONT_ID, pageWidth - metrics.contentSidePadding - tagWidth, pathY, tagBuf);
+      tagReserved = tagWidth + metrics.contentSidePadding;
+    }
+    const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2 - tagReserved;
     // Left-truncate so the deepest directory is always visible
     const char* pathStr = basepath.c_str();
     const char* pathDisplay = pathStr;
