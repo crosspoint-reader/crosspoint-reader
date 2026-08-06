@@ -65,6 +65,10 @@ enum ClixFormat : uint8_t {
 // Where a record's author came from. Surfaced in the Details row so the screen
 // never silently claims a folder name is an author.
 enum ClixAuthorProvenance : uint8_t {
+  // Legacy. A parent folder used to become the author when nothing else
+  // named one; that rule is gone (no reader parses its way to an author), and
+  // nothing writes this any more. The value stays so indexes written by an
+  // older build still decode.
   CLIX_AUTHOR_FROM_FOLDER = 0,
   CLIX_AUTHOR_FROM_CACHE = 1,
   CLIX_AUTHOR_FROM_OPF = 2,
