@@ -90,15 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 36
+### Version 37
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 36 keeps the version 35 serialized layout unchanged. It was bumped
+Version 37 keeps the version 36 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
 than flattened paragraphs with synthetic row/cell labels.
+
+Version 36 keeps the version 35 serialized layout unchanged. It was bumped
+because ruby and justified text positioning and CJK line breaking now use
+corrected word measurements, so version 35 cached page layouts no longer match.
 
 Version 35 adds a header offset and a `uint32_t` entry per page for the
 visible-text offset LUT. The other section LUTs remain unchanged.
