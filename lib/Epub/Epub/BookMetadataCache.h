@@ -49,6 +49,9 @@ class BookMetadataCache {
   uint32_t lutOffset;
   uint16_t spineCount;
   uint16_t tocCount;
+  // Toc entries whose href matched a spine item (spineIndex >= 0). Build-pass
+  // transient: not serialized to book.bin, always 0 in read mode.
+  uint16_t tocMappedCount;
   bool loaded;
   bool buildMode;
 
@@ -92,7 +95,13 @@ class BookMetadataCache {
   BookMetadata coreMetadata;
 
   explicit BookMetadataCache(std::string cachePath)
-      : cachePath(std::move(cachePath)), lutOffset(0), spineCount(0), tocCount(0), loaded(false), buildMode(false) {}
+      : cachePath(std::move(cachePath)),
+        lutOffset(0),
+        spineCount(0),
+        tocCount(0),
+        tocMappedCount(0),
+        loaded(false),
+        buildMode(false) {}
   ~BookMetadataCache() = default;
 
   // Building phase (stream to disk immediately)
@@ -115,5 +124,7 @@ class BookMetadataCache {
   TocEntry getTocEntry(int index);
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
+  // Build-pass only (see tocMappedCount); 0 in read mode.
+  int getTocMappedCount() const { return tocMappedCount; }
   bool isLoaded() const { return loaded; }
 };

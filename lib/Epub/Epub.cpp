@@ -8,6 +8,7 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include "Epub/TocFallbackPolicy.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
@@ -447,10 +448,48 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     tocParsed = parseTocNavFile();
   }
 
-  // Fall back to NCX if nav parsing failed or wasn't available
-  if (!tocParsed && !tocNcxItem.empty()) {
-    LOG_DBG("EBP", "Falling back to NCX TOC");
-    tocParsed = parseTocNcxFile();
+  // Converted books (e.g. Amazon exports) often pair a coarse EPUB 3 nav
+  // (parts and front matter only) with an NCX carrying the full chapter list.
+  // A parsed nav whose spine-mapped entries cover less than half the spine is
+  // treated as sparse and the NCX gets a chance to do better; the result with
+  // more mapped entries wins. Raw counts are unusable here: a stale NCX full
+  // of hrefs that no longer resolve to the spine would out-count a smaller,
+  // fully working nav (see TocFallbackPolicy.h). The pass is restarted before
+  // each re-parse so the loser's entries are discarded rather than appended to.
+  const int navCount = bookMetadataCache->getTocCount();
+  const int navMappedCount = bookMetadataCache->getTocMappedCount();
+  const int spineItemCount = bookMetadataCache->getSpineCount();
+  const bool navSparse = toc_fallback::navIsSparse(tocParsed, navMappedCount, spineItemCount);
+
+  if ((!tocParsed || navSparse) && !tocNcxItem.empty()) {
+    if (navSparse) {
+      LOG_DBG("EBP", "Nav TOC sparse (%d/%d entries mapped for %d spine items), trying NCX", navMappedCount, navCount,
+              spineItemCount);
+    } else {
+      LOG_DBG("EBP", "Falling back to NCX TOC");
+    }
+    bookMetadataCache->endTocPass();
+    if (!bookMetadataCache->beginTocPass()) {
+      LOG_ERR("EBP", "Could not restart toc pass");
+      return false;
+    }
+    const bool ncxParsed = parseTocNcxFile();
+    const int ncxMappedCount = bookMetadataCache->getTocMappedCount();
+    if (toc_fallback::shouldAdoptNcx(tocParsed, navMappedCount, ncxParsed, ncxMappedCount)) {
+      LOG_DBG("EBP", "NCX TOC adopted (%d/%d entries mapped)", ncxMappedCount, bookMetadataCache->getTocCount());
+      tocParsed = true;
+    } else if (tocParsed) {
+      // NCX failed or mapped no more entries - re-run nav to restore its entries
+      LOG_DBG("EBP", "Keeping nav TOC (%d/%d entries mapped)", navMappedCount, navCount);
+      bookMetadataCache->endTocPass();
+      if (!bookMetadataCache->beginTocPass()) {
+        LOG_ERR("EBP", "Could not restart toc pass");
+        return false;
+      }
+      tocParsed = parseTocNavFile();
+    } else {
+      tocParsed = ncxParsed;
+    }
   }
 
   if (!tocParsed) {
