@@ -79,6 +79,7 @@ STR_LONG_PRESS_BEHAVIOR: "Поведінка при довгому настик�
 STR_LONG_PRESS_BEHAVIOR_OFF: "Немає"
 STR_LONG_PRESS_BEHAVIOR_SKIP: "Наступ. розділ (утримув.)"
 STR_LONG_PRESS_BEHAVIOR_ORIENTATION: "Зміна орієнтації екрану"
+STR_PREVIOUS_PAGE_OPT: "Попередня сторінка"
 STR_FONT_PREVIEW_TEXT: "Єхидна, ґава, їжак ще й шиплячі плазуни бігцем форсують Янцзи"
 STR_FONT_FAMILY: "Шрифт"
 STR_FONT_SIZE: "Розмір шрифту"

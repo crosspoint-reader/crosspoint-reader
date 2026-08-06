@@ -13,6 +13,7 @@ class TxtReaderActivity final : public Activity {
   int currentPage = 0;
   int totalPages = 1;
   int pagesUntilFullRefresh = 0;
+  bool sideLongPressHandled = false;
 
   // Streaming text reader - stores file offsets for each page
   std::vector<size_t> pageOffsets;  // File offset for start of each page

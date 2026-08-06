@@ -43,6 +43,7 @@ class EpubReaderActivity final : public Activity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
+  bool sideLongPressHandled = false;
   // Consecutive page-load failures. Each failure drops the section and rebuilds on the next render,
   // which recovers a transiently corrupt cache; capped so a persistently bad page can't spin forever.
   uint8_t pageLoadRetryCount = 0;

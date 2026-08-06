@@ -48,23 +48,39 @@ struct PageTurnResult {
   bool fromTilt;
 };
 
-inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
+inline PageTurnResult detectPageTurn(const MappedInputManager& input, bool& sideLongPressHandled) {
   const bool usePress = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
+  const bool previousOnLongPress = SETTINGS.longPressButtonBehavior == SETTINGS.PREVIOUS_PAGE;
   const bool tiltNext = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedForward();
   const bool tiltPrev = SETTINGS.tiltPageTurn && halTiltSensor.wasTiltedBack();
   const bool swapFront = input.isNavDirectionSwapped();
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
-  const bool prev =
-      tiltPrev ||
-      (usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) || input.wasPressed(prevButton))
-                : (input.wasReleased(MappedInputManager::Button::PageBack) || input.wasReleased(prevButton)));
+  const bool sideBackReleased = input.wasReleased(MappedInputManager::Button::PageBack);
+  const bool sideForwardReleased = input.wasReleased(MappedInputManager::Button::PageForward);
+  const bool sideHeld =
+      input.isPressed(MappedInputManager::Button::PageBack) || input.isPressed(MappedInputManager::Button::PageForward);
+
+  bool sidePrev = usePress ? input.wasPressed(MappedInputManager::Button::PageBack) : sideBackReleased;
+  bool sideNext = usePress ? input.wasPressed(MappedInputManager::Button::PageForward) : sideForwardReleased;
+  if (previousOnLongPress && sideLongPressHandled) {
+    if (sideBackReleased || sideForwardReleased || !sideHeld) {
+      sideLongPressHandled = false;
+    }
+    sidePrev = false;
+    sideNext = false;
+  } else if (previousOnLongPress && sideHeld && input.getHeldTime() >= SKIP_HOLD_MS) {
+    sideLongPressHandled = true;
+    sidePrev = true;
+    sideNext = false;
+  }
+
+  const bool prev = tiltPrev || sidePrev || (usePress ? input.wasPressed(prevButton) : input.wasReleased(prevButton));
   const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                          input.wasReleased(MappedInputManager::Button::Power);
-  const bool next = tiltNext || (usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn ||
-                                             input.wasPressed(nextButton))
-                                          : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
-                                             input.wasReleased(nextButton)));
+  const bool next =
+      tiltNext || sideNext ||
+      (usePress ? (powerTurn || input.wasPressed(nextButton)) : (powerTurn || input.wasReleased(nextButton)));
   return {prev, next, tiltPrev || tiltNext};
 }
 
