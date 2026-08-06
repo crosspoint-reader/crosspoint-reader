@@ -24,10 +24,6 @@ namespace {
 
 constexpr unsigned long POPUP_DURATION_MS = 1500;
 
-// DictionaryHighlight mode: Confirm held at least this long looks the word
-// up; a shorter press anchors/saves the highlight selection.
-constexpr unsigned long DICT_LOOKUP_HOLD_MS = 400;
-
 // A token is selectable when it has an ASCII alphanumeric or a non-ASCII
 // codepoint outside U+2000-U+206F (dashes, bullets and other General
 // Punctuation that appear as standalone tokens are not words).
@@ -409,14 +405,10 @@ void DictionaryWordSelectActivity::handleConfirmRelease() {
       performLookup();
       break;
     case Mode::Highlight:
-      toggleHighlight();
-      break;
     case Mode::DictionaryHighlight:
-      if (mappedInput.getHeldTime() >= DICT_LOOKUP_HOLD_MS) {
-        performLookup();
-      } else {
-        toggleHighlight();
-      }
+      // Both highlight modes treat Confirm the same way — dictionary lookup
+      // lives on Power (see loop()), so press length carries no meaning here.
+      toggleHighlight();
       break;
   }
 }
@@ -675,6 +667,15 @@ void DictionaryWordSelectActivity::loop() {
     handleConfirmRelease();
     return;
   }
+  // Short Power press looks the selected word up. A long press never reaches
+  // here (main.cpp sleeps the device first), and neither does the
+  // Power+Down screenshot combo, which main.cpp consumes before this loop.
+  // Keeping lookup on its own button leaves Confirm free to mean "highlight"
+  // in every mode that can highlight.
+  if (mode != Mode::Highlight && mappedInput.wasReleased(MappedInputManager::Button::Power) && !words.empty()) {
+    performLookup();
+    return;
+  }
 
   if (words.empty()) return;
 
@@ -830,9 +831,10 @@ void DictionaryWordSelectActivity::drawHints() const {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }
-  // Confirm's meaning depends on the mode: lookup, highlight, or both
-  // (the mixed mode hints the long-press lookup; a short press highlights).
-  const char* confirmLabel = (mode == Mode::Highlight) ? tr(STR_HIGHLIGHT) : tr(STR_LOOKUP);
+  // Confirm looks a word up only in the dictionary-only mode; both highlight
+  // modes anchor/save a selection with it (lookup is on Power, which has no
+  // hint chip — the bar only covers the four front buttons).
+  const char* confirmLabel = (mode == Mode::Dictionary) ? tr(STR_LOOKUP) : tr(STR_HIGHLIGHT);
   // In landscape the front pair jumps rows instead of stepping words (see
   // wasPressedVisual), so hint the vertical directions; mapLabels' swap puts
   // each label on the chip whose button actually moves that way.

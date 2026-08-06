@@ -23,8 +23,10 @@ class Section;
 //  - Dictionary: release looks the word up in DictionaryDefinitionActivity.
 //  - Highlight: release anchors a passage selection; the next release saves
 //    the anchored range as a markdown highlight (HighlightStore).
-//  - DictionaryHighlight: long-press release looks up, short release
-//    anchors/saves a highlight. Back cancels an active selection first.
+//  - DictionaryHighlight: release anchors/saves a highlight, exactly as in
+//    Highlight mode. Back cancels an active selection first.
+// In the two dictionary-capable modes a short Power press looks the selected
+// word up, so the mixed mode needs no press-length distinction on Confirm.
 // When a Section is supplied, an anchored selection can keep extending past
 // the last word onto the following page(s) of the same chapter.
 class DictionaryWordSelectActivity final : public Activity {
@@ -49,6 +51,11 @@ class DictionaryWordSelectActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+
+  // Power drives the dictionary lookup here, so swallow the global
+  // short-Power screen refresh (SHORT_PWRBTN::FORCE_REFRESH) rather than
+  // flashing a full refresh on the way into the definition panel.
+  bool handleForcedRefresh() override { return mode != Mode::Highlight; }
 
  private:
   // Screen box of one selectable word. `text` points into the owned Page's
