@@ -12,8 +12,12 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HtmlToPlainText.h"
+#include "util/VocabStore.h"
 
 namespace {
+
+// How long the save-outcome popup stays up, matching the word-select view's.
+constexpr unsigned long POPUP_DURATION_MS = 1500;
 
 // Longest measurable/drawable span. Wrapped lines stay under the screen width
 // (far below this); only pathological unbreakable tokens are split at this cap.
@@ -177,8 +181,23 @@ void DictionaryDefinitionActivity::wrapText() {
 }
 
 void DictionaryDefinitionActivity::loop() {
+  // The popup owns the screen while it is up; swallow input until it expires.
+  if (popupVisible) {
+    if (millis() - popupTime >= POPUP_DURATION_MS) {
+      popupVisible = false;
+      requestUpdate();
+    }
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen = true;
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen) {
+    saveToVocabulary();
     return;
   }
 
@@ -211,9 +230,27 @@ void DictionaryDefinitionActivity::loop() {
   }
 }
 
+void DictionaryDefinitionActivity::saveToVocabulary() {
+  // Nothing worth filing when the panel is showing "Not found" / an error
+  // rather than a real entry.
+  if (!definitionShown) return;
+
+  const bool ok = savedCurrent || VocabStore::save(headword, definition);
+  savedCurrent = savedCurrent || ok;
+  popupMsg = ok ? StrId::STR_VOCAB_SAVED : StrId::STR_VOCAB_SAVE_FAILED;
+  popupVisible = true;
+  popupTime = millis();
+  requestUpdate();
+}
+
 void DictionaryDefinitionActivity::switchDictionary(const int direction) {
   const int n = static_cast<int>(dictionaries.size());
   dictIndex = (dictIndex + direction + n) % n;
+
+  // A different entry is about to replace the text on screen: it has not been
+  // saved, and the status lines painted below are not savable content.
+  savedCurrent = false;
+  definitionShown = false;
 
   // Paint a status line before the (possibly slow, first-open) SD work below;
   // same pattern as DictionaryWordSelectActivity::performLookup().
@@ -238,6 +275,7 @@ void DictionaryDefinitionActivity::switchDictionary(const int direction) {
     definition = std::move(newDefinition);
     std::replace(definition.begin(), definition.end(), '\0', '\n');
     definition = htmlToPlainText(definition);
+    definitionShown = true;
   } else {
     headword = rawWord;
     definition = ok ? tr(STR_DICT_NOT_FOUND) : tr(STR_DICT_ERROR);
@@ -306,7 +344,15 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
     prevLabel = dictionaries[(dictIndex - 1 + n) % n].name;
     nextLabel = dictionaries[(dictIndex + 1) % n].name;
   }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", prevLabel.c_str(), nextLabel.c_str());
+  const char* confirmLabel = definitionShown ? tr(STR_VOCAB_SAVE) : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, prevLabel.c_str(), nextLabel.c_str());
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  if (popupVisible) {
+    // drawPopup overlays the framebuffer and refreshes the display itself.
+    // I18N.get directly: tr() only accepts literal key names.
+    GUI.drawPopup(renderer, I18N.get(popupMsg));
+    return;
+  }
   renderer.displayBuffer();
 }

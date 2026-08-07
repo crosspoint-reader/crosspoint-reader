@@ -1,5 +1,7 @@
 #pragma once
 
+#include <I18n.h>
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -18,6 +20,10 @@
 // page through a multi-page definition instead — the two no longer share
 // Left/Right the way most list activities do, since here both actions need
 // to coexist on one screen).
+//
+// Confirm appends the headword and the definition on screen to the vocabulary
+// list (VocabStore), so a word is saved after reading what it means rather
+// than blind from the page.
 class DictionaryDefinitionActivity final : public Activity {
  public:
   explicit DictionaryDefinitionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string rawWord,
@@ -84,4 +90,24 @@ class DictionaryDefinitionActivity final : public Activity {
   // Reused across switches; each switchDictionary() call reopens it against
   // the newly selected folder.
   Dictionary dict;
+
+  // Confirm-to-save state. `definitionShown` is false while `definition` holds
+  // a status line ("Looking up...", "Not found") rather than real dictionary
+  // text, which must never reach the vocabulary file. `savedCurrent` suppresses
+  // the duplicate append from a second Confirm on the same definition; a
+  // dictionary switch clears it, since that is a different entry.
+  bool definitionShown = true;
+  bool savedCurrent = false;
+  // This activity is opened from a Confirm release in the word-select view, so
+  // require a fresh press here before a release can save — otherwise a stale
+  // edge from that same press files a word the user never asked for. Same
+  // guard DictionaryWordSelectActivity uses on entry from the reader.
+  bool confirmPressSeen = false;
+  bool popupVisible = false;
+  StrId popupMsg = StrId::STR_VOCAB_SAVED;
+  unsigned long popupTime = 0;
+
+  // Writes the current headword/definition to the vocabulary list and raises
+  // the outcome popup.
+  void saveToVocabulary();
 };
