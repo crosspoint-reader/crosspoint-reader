@@ -30,6 +30,28 @@ constexpr unsigned long VIEW_TOGGLE_HOLD_MS = 600;
 // of string plus 12 bytes of vector slot — so 400 costs ~20 KB of the ~380 KB
 // budget. Beyond that the list stops being scrollable by hand anyway.
 constexpr size_t MAX_FLAT_ENTRIES = 400;
+
+// The file name inside a flat entry ("Fiction/Dune.epub" -> "Dune.epub"). A tail of a
+// null-terminated string is itself null-terminated, so this points into the entry rather
+// than allocating a substring on every comparison.
+const char* entryFileName(const std::string& entry) {
+  const auto slash = entry.rfind('/');
+  return slash == std::string::npos ? entry.c_str() : entry.c_str() + slash + 1;
+}
+
+// Flat entries keep their folder so the file stays findable, but the row shows the file
+// name alone — so the order has to follow the names on screen, not the hidden paths.
+// Flat listings never contain directories, so there is no directories-first group here.
+void sortFlatEntries(std::vector<std::string>& entries) {
+  std::sort(entries.begin(), entries.end(), [](const std::string& a, const std::string& b) {
+    const char* nameA = entryFileName(a);
+    const char* nameB = entryFileName(b);
+    if (FsHelpers::naturalLess(nameA, nameB)) return true;
+    if (FsHelpers::naturalLess(nameB, nameA)) return false;
+    // Same file name in two folders: order those by folder so the pair is stable.
+    return FsHelpers::naturalLess(a, b);
+  });
+}
 }  // namespace
 
 void FileBrowserActivity::collectDir(const std::string& dirPath, std::vector<std::string>* subdirs) {
@@ -118,10 +140,11 @@ void FileBrowserActivity::loadFiles() {
   bool complete = true;
   if (flatView) {
     complete = collectFlat();
+    sortFlatEntries(files);
   } else {
     collectDir(basepath);
+    FsHelpers::sortFileList(files);
   }
-  FsHelpers::sortFileList(files);
 
   if (!complete) {
     LOG_ERR("FileBrowser", "Flat listing capped at %u entries", (unsigned)MAX_FLAT_ENTRIES);

@@ -79,10 +79,8 @@ std::string normalisePath(const std::string& path) {
   return result;
 }
 
-bool naturalLess(const std::string& str1, const std::string& str2) {
+bool naturalLess(const char* s1, const char* s2) {
   // Naive natural sort: numeric-aware, case-insensitive
-  const char* s1 = str1.c_str();
-  const char* s2 = str2.c_str();
 
   // ctype functions require unsigned char values: passing a negative char (UTF-8
   // bytes above 0x7f with signed char) is undefined behavior
