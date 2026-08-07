@@ -17,7 +17,7 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, RECENTS, OPDS_BROWSER, HIGHLIGHT_SYNC, SETTINGS_MENU };
+enum class HomeMenuItem { NONE, FILE_BROWSER, LIBRARY, RECENTS, OPDS_BROWSER, HIGHLIGHT_SYNC, SETTINGS_MENU };
 
 /**
  * ActivityManager
@@ -83,6 +83,7 @@ class ActivityManager {
   // goTo... functions are convenient wrapper for replaceActivity()
   void goToSettings();
   void goToFileBrowser(std::string path = {});
+  void goToLibrary();
   // homeReturn* describe where the home selector should land when this activity
   // goes back home, for callers (the home Back shortcut) that must not move it.
   // See goHome() for the encoding.

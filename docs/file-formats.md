@@ -339,3 +339,61 @@ if (parsedSize != fileSize) {
     std::warning(std::format("Unparsed data detected: {} bytes remaining at offset 0x{:X}", fileSize - parsedSize, parsedSize));
 }
 ```
+
+## CLX1 — library index (`.crosspoint/library.idx`)
+
+Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. One
+file describing every book on the card, so the shelf can sort and search several
+hundred titles without opening any of them.
+
+Format version 3. An index written by an older version fails validation on open
+and is rebuilt; that is the entire migration mechanism.
+
+### Layout
+
+| Section | Offset | Contents |
+|---|---|---|
+| Header | 0 | 64 bytes, `ClixHeader` |
+| Folders | `folderStart` | length-prefixed paths, one per folder |
+| Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
+| Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 date order |
+| Name blob | `nameStart` | per record: name, author, title (see below) |
+
+Sections are 512-byte aligned so each starts on an SD block boundary.
+
+### Records are exactly 128 bytes
+
+A fixed stride is what lets the reader seek straight to record *n* without an
+offset table, and read a screenful in one 4 KB block. `static_assert` enforces it.
+
+Each record carries `fold[96]`, the title normalised for search and sorting —
+accents stripped, case dropped, leading articles removed — and `authorKey[12]`,
+the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
+one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
+surname, derived separately from the display name.
+
+### The name blob
+
+Per record, at `nameStart + nameOff`:
+
+```text
+[nameLen bytes]  filename, without the directory
+[u8][author]     display author, one spelling chosen per authorKey across the library
+[u8][title]      the book's own title, or length 0 if it never gave one
+```
+
+The filename must stay first and stay the filename: `readPath` rebuilds a book's
+path from it, so writing the display title there makes the book impossible to open.
+That was a real defect, and it is why title has its own field.
+
+### Header flags
+
+`WALK_COMPLETE` is only set when the walk finished without hitting the record cap
+or being aborted, and it is written with the final header rather than the
+placeholder — an index that saw part of the card must not claim otherwise.
+`RANKS_DEGRADED` says the author and date orders fell back to walk order, which
+happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
+RAM.
+
+`selfSize` is the expected file size. Comparing it against the real one is a free
+truncation guard: a build cut short by a power failure cannot pass.
