@@ -17,6 +17,13 @@
 #include "util/OpdsFilename.h"
 
 namespace {
+// Longest folder the keyboard may return for the global default. Two below the
+// field's capacity, not one: normalization can PREPEND a '/', so a value typed
+// right up to the limit must still have room for it. Without the slack, a
+// 63-character entry normalizes to 64 and loses its last character to the
+// strncpy — silently, which is the worst way for a path to be wrong.
+constexpr size_t MAX_DEFAULT_FOLDER_INPUT = sizeof(CrossPointSettings::opdsDownloadFolder) - 2;
+
 // Label shown for the current OPDS filename format in the list subtitle.
 StrId opdsFormatLabel(uint8_t format) {
   switch (format) {
@@ -130,6 +137,8 @@ void OpdsServerListActivity::handleSelection() {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
         const auto& kb = std::get<KeyboardResult>(result.data);
+        // Fits by construction: the keyboard is capped at MAX_DEFAULT_FOLDER_INPUT
+        // and normalization only ever adds the one leading '/'.
         const std::string norm = normalizeOpdsFolder(kb.text);
         strncpy(SETTINGS.opdsDownloadFolder, norm.c_str(), sizeof(SETTINGS.opdsDownloadFolder) - 1);
         SETTINGS.opdsDownloadFolder[sizeof(SETTINGS.opdsDownloadFolder) - 1] = '\0';
@@ -137,10 +146,10 @@ void OpdsServerListActivity::handleSelection() {
         requestUpdate();
       }
     };
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DEFAULT_FOLDER),
-                                                std::string(SETTINGS.opdsDownloadFolder), 63, InputType::Text),
-        folderHandler);
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DEFAULT_FOLDER),
+                                                                   std::string(SETTINGS.opdsDownloadFolder),
+                                                                   MAX_DEFAULT_FOLDER_INPUT, InputType::Text),
+                           folderHandler);
     return;
   }
 
