@@ -101,7 +101,7 @@ struct ThemeMetrics {
   int textFieldLineEndOffset;
 };
 
-enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Library, Bookmark };
+enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Library, Bookshelf, Bookmark };
 
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed

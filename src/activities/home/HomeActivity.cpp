@@ -335,7 +335,9 @@ void HomeActivity::render(RenderLock&&) {
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_MENU_RECENT_BOOKS),
                                         tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Library, Recent, Settings};
+  // Bookshelf for the on-device library, Library for the OPDS catalogue below —
+  // the two entries need distinct icons.
+  std::vector<UIIcon> menuIcons = {Folder, Bookshelf, Recent, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
