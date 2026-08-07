@@ -33,11 +33,21 @@ namespace library {
 // and an uncapped walk would never return.
 inline constexpr int LIBRARY_MAX_DEPTH = 5;
 
-// Books held in the in-RAM sort array. 14 bytes each, so this is 7 KB — one
-// bounded allocation, in the band the codebase allows without a heap gate.
-// Beyond it the index is still built and still complete, but in walk order with
-// CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
-inline constexpr uint16_t LIBRARY_MAX_SORTED = 512;
+// Books held in the in-RAM sort arrays. The title pass costs 16 bytes a book
+// (one SortKey plus its ordinal); emitIndex is the real peak at 40 bytes a book,
+// holding the order, firstSeen, newOrdinal and canonicalFrom arrays alongside
+// the author and date SortKey/rank pairs at once. So 1024 books is a ~41 KB
+// transient during a rebuild and nothing at all while reading — the arrays are
+// gone before the screen opens.
+//
+// Raising this cannot destabilise the device: every one of those arrays comes
+// from makeUniqueNoThrow and a null result falls into the same degraded path a
+// library over the cap takes. A cap too low, by contrast, is silent — a 543-book
+// card sorts by nothing and only the title says so.
+//
+// Beyond the cap the index is still built and still complete, but in walk order
+// with CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
+inline constexpr uint16_t LIBRARY_MAX_SORTED = 1024;
 
 struct BuildStats {
   uint16_t books = 0;
