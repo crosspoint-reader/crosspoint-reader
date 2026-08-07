@@ -11,6 +11,7 @@
 #include "browser/OpdsBookBrowserActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
+#include "home/HighlightSyncActivity.h"
 #include "home/HomeActivity.h"
 #include "home/RecentBooksActivity.h"
 #include "reader/ReaderActivity.h"
@@ -203,6 +204,10 @@ void ActivityManager::goToBrowser() {
   }
 }
 
+void ActivityManager::goToHighlightSync() {
+  replaceActivity(std::make_unique<HighlightSyncActivity>(renderer, mappedInput));
+}
+
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh));
 }
@@ -229,6 +234,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, int initialRecentInde
       initialMenuItem = HomeMenuItem::RECENTS;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+    } else if (activityName == "HighlightSync") {
+      initialMenuItem = HomeMenuItem::HIGHLIGHT_SYNC;
     } else if (activityName == "Settings") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }

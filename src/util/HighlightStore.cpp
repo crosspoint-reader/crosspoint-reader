@@ -8,9 +8,6 @@
 
 namespace {
 
-constexpr const char* HIGHLIGHTS_DIR = "/Highlights";
-constexpr const char* SINGLE_FILE_PATH = "/Highlights.md";
-
 // Last successful append, used to group consecutive passages under one
 // heading without re-reading the file. Static (not per-activity) so the
 // grouping survives re-entering the reader; a reboot just re-writes one

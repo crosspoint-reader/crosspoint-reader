@@ -15,6 +15,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "KoofrCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
@@ -27,6 +28,9 @@ int HomeActivity::getMenuItemCount() const {
     count += recentBooks.size();
   }
   if (hasOpdsServers) {
+    count++;
+  }
+  if (hasKoofrCredentials) {
     count++;
   }
   return count;
@@ -113,6 +117,7 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  hasKoofrCredentials = KOOFR_STORE.hasCredentials();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
@@ -123,7 +128,9 @@ void HomeActivity::onEnter() {
     // or its file gone from the SD card).
     selectorIndex = std::min(initialRecentIndex, base - 1);
   } else {
-    selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+    selectorIndex = initialMenuItem == HomeMenuItem::NONE
+                        ? 0
+                        : base + menuItemToIndex(initialMenuItem, hasOpdsServers, hasKoofrCredentials);
   }
 
   // Trigger first update
@@ -183,7 +190,7 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+    switch (indexToMenuItem(menuIndex, hasOpdsServers, hasKoofrCredentials)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
@@ -192,6 +199,9 @@ void HomeActivity::loop() {
         break;
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
+        break;
+      case HomeMenuItem::HIGHLIGHT_SYNC:
+        onHighlightSyncOpen();
         break;
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
@@ -328,6 +338,12 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
 
+  if (hasKoofrCredentials) {
+    // Sits directly before Settings, matching indexToMenuItem's ordering.
+    menuItems.insert(menuItems.end() - 1, tr(STR_KOOFR_SYNC_HIGHLIGHTS));
+    menuIcons.insert(menuIcons.end() - 1, Bookmark);
+  }
+
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
@@ -385,11 +401,14 @@ void HomeActivity::openRecentsAndReturnToSelection() {
   // Below recentCount the selector is on a recent book cover, which has no
   // HomeMenuItem: send back the index instead.
   const int recentIndex = selectorIndex < recentCount ? selectorIndex : -1;
-  const HomeMenuItem menuItem =
-      recentIndex >= 0 ? HomeMenuItem::NONE : indexToMenuItem(selectorIndex - recentCount, hasOpdsServers);
+  const HomeMenuItem menuItem = recentIndex >= 0
+                                    ? HomeMenuItem::NONE
+                                    : indexToMenuItem(selectorIndex - recentCount, hasOpdsServers, hasKoofrCredentials);
   activityManager.goToRecentBooks(menuItem, recentIndex);
 }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onHighlightSyncOpen() { activityManager.goToHighlightSync(); }
