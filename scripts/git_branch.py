@@ -69,7 +69,7 @@ def get_base_version(project_dir):
         warn(f'platformio.ini not found at {ini_path}; base version will be "0.0.0"')
         return '0.0.0'
     config = configparser.ConfigParser()
-    config.read(ini_path)
+    config.read(ini_path, encoding='utf-8')
     if not config.has_option('crosspoint', 'version'):
         warn('No [crosspoint] version in platformio.ini; base version will be "0.0.0"')
         return '0.0.0'
