@@ -252,9 +252,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
   uint8_t screenMargin = SCREEN_MARGIN_MIN;
-  // OPDS download destination folder ("" = SD root). Global; edited from the
-  // OPDS server list. Persisted via a category-less SettingInfo::String in
-  // SettingsList.h, so it stays out of the on-device Settings screen.
+  // Default OPDS download destination folder ("" = SD root), used by every
+  // server that does not set a folder of its own (OpdsServer::downloadFolder).
+  // Edited from the OPDS server list and persisted via a category-less
+  // SettingInfo::String in SettingsList.h, so it stays out of the on-device
+  // Settings screen.
   char opdsDownloadFolder[64] = "";
   // On-disk filename format for OPDS downloads (0=Author-Title default, 1=Title-Author,
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,

@@ -7,7 +7,6 @@
 #include <vector>
 
 #include "activities/Activity.h"
-#include "components/OptionPopup.h"
 
 // One flat list of every book on the card, newest first, with the title on the
 // first lines and the author underneath at a fixed column.
@@ -35,16 +34,22 @@ class LibraryListActivity final : public Activity {
   // it is well under a second, and it only runs when the index is missing or the
   // user asks.
   bool rebuildIndex();
+  // Close the index, walk the card, reopen and re-seat the screen on what the
+  // fresh index holds. The path behind both the Power button and a deletion.
+  void rebuildAndReopen();
 
   // Input
   void handleLetterGridInput();
   bool handleListTouchInput();
   void openSelectedBook();
-  void openSortMenu();
+  void promptDeleteBook();
+  void deleteBook(const std::string& path);
   void openSearch();
   void openLetterGrid();
   void applySortOrder(library::SortOrder order);
   void cycleSortOrder(bool forward);
+  // Step the sort strip without focusing it: what a held page button does.
+  void cycleSortMode(bool forward);
   void nextPage();
   void previousPage(bool selectLast = false);
   // Sub-screens act on button press, so a button still held when we resume must
@@ -110,7 +115,6 @@ class LibraryListActivity final : public Activity {
   // says which they mean instead of the code guessing.
   bool jumpByGivenName = false;
 
-  OptionPopup sortPopup;
   bool lockNextConfirmRelease = false;
   bool lockNextBackRelease = false;
 

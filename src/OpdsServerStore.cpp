@@ -6,6 +6,16 @@
 #include <algorithm>
 #include <cstring>
 
+std::string normalizeOpdsFolder(std::string value) {
+  while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.erase(value.begin());
+  while (!value.empty() && (value.back() == ' ' || value.back() == '\t')) value.pop_back();
+  if (value.empty()) return "";
+  if (value.front() != '/') value.insert(value.begin(), '/');
+  while (value.size() > 1 && value.back() == '/') value.pop_back();
+  if (value == "/") return "";  // a bare slash is SD root, same as empty
+  return value;
+}
+
 void OpdsServerStore::toJson(JsonDocument& doc) const {
   JsonArray arr = doc["servers"].to<JsonArray>();
   for (const auto& server : servers) {
@@ -14,6 +24,7 @@ void OpdsServerStore::toJson(JsonDocument& doc) const {
     obj["url"] = server.url;
     obj["username"] = server.username;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
+    obj["download_folder"] = server.downloadFolder;
   }
 }
 
@@ -32,6 +43,9 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     server.url = obj["url"] | "";
     server.username = obj["username"] | "";
     server.password = extractPassword(obj, needsResave);
+    // Normalized on the way in as well as on the way out: a folder hand-edited
+    // into opds.json must not be the one shape the download path cannot join.
+    server.downloadFolder = normalizeOpdsFolder(obj["download_folder"] | "");
     servers.push_back(std::move(server));
   }
 

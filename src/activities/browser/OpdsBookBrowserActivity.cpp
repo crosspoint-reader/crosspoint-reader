@@ -350,9 +350,11 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  // This server's own folder when it has one, the global default otherwise
+  // ("" => SD root). `server` is a copy owned by this activity and
+  // opdsDownloadFolder is a null-terminated char[64], so both outlive the call
+  // and neither needs a std::string copy — exists()/mkdir() take const char*.
+  const char* folder = !server.downloadFolder.empty() ? server.downloadFolder.c_str() : SETTINGS.opdsDownloadFolder;
   bool haveFolder = folder[0] != '\0';
   if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every

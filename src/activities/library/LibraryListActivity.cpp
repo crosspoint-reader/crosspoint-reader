@@ -1,6 +1,7 @@
 #include "LibraryListActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <LibraryText.h>
@@ -11,9 +12,11 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 // Rows are drawn by hand rather than through GUI.drawList because that widget
@@ -25,15 +28,16 @@ constexpr int TITLE_LINES = 3;
 // marks the active tab.
 constexpr int SIDE_PADDING = 12;
 constexpr int ROW_PADDING = 10;
-// Hold threshold for the sort menu (firmware convention, cf. FileBrowserActivity).
+// Hold threshold for Confirm (delete) and the page buttons (step the sort
+// strip) — firmware convention, cf. FileBrowserActivity.
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
 // The strip's tab order, which is also the cycle order.
 constexpr library::SortOrder SORT_TABS[] = {library::SortOrder::DateDesc, library::SortOrder::TitleAsc,
                                             library::SortOrder::TitleDesc, library::SortOrder::AuthorAsc};
 constexpr int SORT_TAB_COUNT = static_cast<int>(sizeof(SORT_TABS) / sizeof(SORT_TABS[0]));
-// One label per SORT_TABS row, same order — the static_assert is what keeps
-// the two arrays honest if a sort mode is ever added.
+// The header title for each SORT_TABS row, same order — the static_assert is
+// what keeps the two arrays honest if a sort mode is ever added.
 constexpr StrId SORT_MENU_LABELS[] = {StrId::STR_LIBRARY_SORT_RECENT, StrId::STR_LIBRARY_SORT_TITLE_AZ,
                                       StrId::STR_LIBRARY_SORT_TITLE_ZA, StrId::STR_LIBRARY_SORT_AUTHOR};
 static_assert(sizeof(SORT_MENU_LABELS) / sizeof(SORT_MENU_LABELS[0]) == sizeof(SORT_TABS) / sizeof(SORT_TABS[0]),
@@ -166,22 +170,82 @@ void LibraryListActivity::openSelectedBook() {
   onSelectBook(path);
 }
 
-// A Confirm hold opens the sort menu. It is a popup rather than a value cycled
-// in place, because that is how this codebase changes an enum everywhere else
-// (OptionPopup, used by Settings) — and because Left and Right are already
-// spent on paging.
-void LibraryListActivity::openSortMenu() {
-  // Degraded means every order IS discovery order: the strip is hidden, and
-  // the hold must not offer a choice that would repaint the same list under a
-  // different title.
-  if (degraded) return;
-  sortPopup.show(StrId::STR_LIBRARY_SORT_TITLE, SORT_MENU_LABELS, SORT_TAB_COUNT, sortTabIndex(sortOrder),
-                 [this](const int choice) {
-                   if (choice < 0 || choice >= SORT_TAB_COUNT) return;
-                   tabCursor = choice;
-                   applySortOrder(SORT_TABS[choice]);
-                 });
-  requestUpdate();
+// A Confirm hold deletes the book under the cursor. The shelf is where a reader
+// sees their whole card at once, so it is where "I am done with this one" is
+// asked — and it is the only screen that can name the book being removed rather
+// than a filename. Destructive, so it goes through the same confirmation screen
+// the file browser uses; the hold alone never deletes anything.
+void LibraryListActivity::promptDeleteBook() {
+  if (!indexReady || rowCount() == 0) return;
+  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedIndex)));
+  if (ordinal == 0xFFFF) return;
+
+  library::ClixRecord record{};
+  std::string path;
+  if (!index.readRecord(ordinal, record) || !index.readPath(record, path)) {
+    LOG_ERR("LIB", "cannot resolve path for row %d", selectedIndex);
+    return;
+  }
+  // The title as the row shows it, not the filename: the reader is confirming
+  // the thing they can see.
+  std::string title;
+  std::string author;
+  rowTextFor(selectedIndex, title, author);
+
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), title),
+      [this, path](const ActivityResult& result) {
+        // The prompt was dismissed by pressing Back or Confirm; that button is
+        // still held here and its release must not act on the shelf as well.
+        swallowHeldReleases();
+        if (result.isCancelled) return;
+        deleteBook(path);
+      });
+}
+
+void LibraryListActivity::deleteBook(const std::string& path) {
+  // The index is the only file this screen holds open, and both the cache clear
+  // and the walk that follows open files of their own — on this hardware only
+  // one reader at a time.
+  index.close();
+  indexReady = false;
+  // The rendered sections and progress outlive the book itself unless they are
+  // cleared here: the cache is keyed by path, so a later book copied to the same
+  // name would inherit them.
+  clearBookCache(path);
+  if (!Storage.remove(path.c_str())) {
+    LOG_ERR("LIB", "failed to delete %s", path.c_str());
+  }
+  // The row survives in the index until the card is walked again, so the delete
+  // is not finished until the shelf is rebuilt.
+  rebuildAndReopen();
+}
+
+void LibraryListActivity::rebuildAndReopen() {
+  const int previousSelection = selectedIndex;
+  index.close();
+  indexReady = false;
+  {
+    // Held across the popup and the build, as onEnter's first-run build holds
+    // it: the render task's SD-loaded fonts read glyph data at draw time, and
+    // the walk needs the card to itself.
+    RenderLock lock(*this);
+    GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+    indexReady = rebuildIndex() && openIndex();
+  }
+  degraded = indexReady && index.ranksDegraded();
+
+  // Every position the screen was holding was measured against the old index.
+  letterGrid = false;
+  tabsFocused = false;
+  applyFilter();
+  pageStarts.clear();
+  const int count = rowCount();
+  selectedIndex = count > 0 ? std::min(previousSelection, count - 1) : 0;
+  // Page boundaries are content-dependent, so after a rebuild the only start
+  // known to be valid is the selection itself.
+  topIndex = selectedIndex;
+  requestUpdate(true);
 }
 
 void LibraryListActivity::openSearch() {
@@ -219,6 +283,19 @@ void LibraryListActivity::cycleSortOrder(const bool forward) {
     return;
   }
   applySortOrder(SORT_TABS[tabCursor]);
+}
+
+// What a HELD page button does: step the sort strip in place, leaving it
+// unfocused so the short press keeps paging — the frequent action stays on the
+// cheap gesture. Search is skipped here: a hold that opened a keyboard would be
+// a surprise, and the strip still reaches it through Up.
+void LibraryListActivity::cycleSortMode(const bool forward) {
+  // Degraded means every order IS discovery order, so there is nothing to cycle
+  // through and the strip is not even drawn.
+  if (degraded) return;
+  const int next = (sortTabIndex(sortOrder) + (forward ? 1 : SORT_TAB_COUNT - 1)) % SORT_TAB_COUNT;
+  tabCursor = next;
+  applySortOrder(SORT_TABS[next]);
 }
 
 int LibraryListActivity::rowCount() const {
@@ -374,20 +451,23 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
 }
 
 void LibraryListActivity::loop() {
-  if (sortPopup.isActive()) {
-    sortPopup.handleInput(mappedInput, [this] { requestUpdate(); });
-    // The popup acts on button press; if that button is still held when it
-    // closes, swallow its release so it does not also act here.
-    if (!sortPopup.isActive()) swallowHeldReleases();
-    return;
-  }
-
   if (lockNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     lockNextConfirmRelease = false;
     return;
   }
   if (lockNextBackRelease && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     lockNextBackRelease = false;
+    return;
+  }
+
+  // Power re-reads the card. It is the one button this screen has no other use
+  // for, and rebuilding is what a reader wants here right after copying books
+  // on — otherwise it is a trip out to Settings and back. Only a SHORT press:
+  // a longer one is the sleep gesture, and letting go of it a moment early must
+  // not start a walk of the whole card.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
+      mappedInput.getHeldTime() < SETTINGS.getPowerButtonDuration()) {
+    rebuildAndReopen();
     return;
   }
 
@@ -423,8 +503,10 @@ void LibraryListActivity::loop() {
   const int count = rowCount();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    // Only over a book. Held on the strip it would delete whatever row the
+    // cursor left behind, which is not the thing being looked at.
     if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      openSortMenu();
+      if (!tabsFocused) promptDeleteBook();
     } else if (tabsFocused) {
       if (tabCursor == SEARCH_TAB) {
         openSearch();
@@ -440,9 +522,19 @@ void LibraryListActivity::loop() {
   // Left and Right page. The front pair is the only axis the reader can spare:
   // at 69 books, stepping one row at a time is 34 presses to the middle and
   // paging is 5.
+  //
+  // Held, the same pair steps the sort strip instead. The strip is the screen's
+  // other axis and it was previously reachable only by pressing Up from row 0,
+  // which is a rule you have to be told; a hold on the button already labelled
+  // "Page »" is one the hand finds by itself.
+  //
+  // getHeldTime() is read inside the release branches, never once per frame: it
+  // clears the touch long-press override as a side effect.
   if (mappedInput.wasReleased(MappedInputManager::Button::ScreenRight) && count > 0) {
     if (tabsFocused) {
       cycleSortOrder(/*forward=*/true);
+    } else if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      cycleSortMode(/*forward=*/true);
     } else {
       nextPage();
     }
@@ -451,6 +543,8 @@ void LibraryListActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) && count > 0) {
     if (tabsFocused) {
       cycleSortOrder(/*forward=*/false);
+    } else if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      cycleSortMode(/*forward=*/false);
     } else {
       previousPage();
     }
@@ -892,8 +986,6 @@ const char* LibraryListActivity::headerTitle() const {
 }
 
 void LibraryListActivity::render(RenderLock&&) {
-  if (sortPopup.processRender(renderer, mappedInput)) return;
-
   renderer.clearScreen();
   const auto& metrics = UITheme::getInstance().getMetrics();
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, headerTitle());

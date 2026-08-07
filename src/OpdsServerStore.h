@@ -10,7 +10,17 @@ struct OpdsServer {
   std::string url;
   std::string username;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  // Where this server's downloads land. Empty means "use the global
+  // SETTINGS.opdsDownloadFolder", which is itself empty for the SD root — so a
+  // reader with one catalogue never has to know this field exists, and one with
+  // several can keep Standard Ebooks out of the Calibre shelf.
+  std::string downloadFolder;
 };
+
+// Normalizes a user-typed folder: trims spaces, "" => SD root, otherwise a
+// single leading '/' and no trailing '/'. Shared by the per-server field and
+// the global default so both store the same shape. Cold path (once per edit).
+std::string normalizeOpdsFolder(std::string value);
 
 /**
  * Singleton class for storing OPDS server configurations on the SD card.
