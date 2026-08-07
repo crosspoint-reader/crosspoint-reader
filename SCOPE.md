@@ -56,7 +56,12 @@ If you are unsure whether your idea falls into one of these categories, open a D
 * **Interactive Apps:** No notepads, calculators, or games. These belong in other forks and are not part of CrossPoint's focus. 
 * **Writing / Authoring Tools:** No typed notes, journals, or editors. Input hardware and RAM are wrong for this, and other forks already explore this space. 
 * **Active Connectivity:** No RSS readers, news aggregators, or web browsers. Background Wi-Fi drains the battery and complicates the single-core CPU. 
+
+*Rejected because, while they align with the core mission, current hardware makes them either imposssible or impractical to support.*
+
 * **PDF Rendering:** PDFs are fixed-layout documents, so rendering them requires displaying pages as images rather than reflowable text, resulting in constant panning and zooming that makes for a poor reading experience on e-ink. Out of scope on the current hardware class.
+* **EPUB embedded fonts:** EPUBs can have embedded fonts, but they are almost always vector fonts in TTF or OTF format. It would be great to support these, but due to the ESP32-C3 having no floating point unit (FPU), the math calculations are too slow to be reasonable.
+* **Color images:** the hardware has a greyscale screen, so cannot display colors.
 
 ## 5. Calls to Action
 
