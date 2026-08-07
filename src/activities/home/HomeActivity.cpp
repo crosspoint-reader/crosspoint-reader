@@ -23,7 +23,7 @@
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Library, Recents, Settings
+  int count = 4;  // Library, File Browser, Recents, Settings
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -333,11 +333,11 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_LIBRARY), tr(STR_MENU_RECENT_BOOKS),
+  std::vector<const char*> menuItems = {tr(STR_LIBRARY), tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS),
                                         tr(STR_SETTINGS_TITLE)};
   // Bookshelf for the on-device library, Library for the OPDS catalogue below —
   // the two entries need distinct icons.
-  std::vector<UIIcon> menuIcons = {Folder, Bookshelf, Recent, Settings};
+  std::vector<UIIcon> menuIcons = {Bookshelf, Folder, Recent, Settings};
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 3, tr(STR_OPDS_BROWSER));
@@ -347,7 +347,7 @@ void HomeActivity::render(RenderLock&&) {
   if (hasKoofrCredentials) {
     // Sits directly before Settings, matching indexToMenuItem's ordering.
     menuItems.insert(menuItems.end() - 1, tr(STR_KOOFR_SYNC_HIGHLIGHTS));
-    menuIcons.insert(menuIcons.end() - 1, Bookmark);
+    menuIcons.insert(menuIcons.end() - 1, BookmarkOutline);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
