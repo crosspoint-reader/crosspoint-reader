@@ -1,17 +1,17 @@
-From 4be2c0535619b8267e4b7ef172a02da0b3975618 Mon Sep 17 00:00:00 2001
+From d62096bbd7639e70227603eaffe0e38df17c3cf7 Mon Sep 17 00:00:00 2001
 From: Leopoldo Pla <leopoldo.pla@treelogic.com>
 Date: Sat, 8 Aug 2026 11:37:37 +0200
 Subject: [PATCH] fix: skip absent progressive chroma scans
 
 ---
- src/jpeg.inl | 8 ++++++--
- 1 file changed, 6 insertions(+), 2 deletions(-)
+ src/jpeg.inl | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
 
 diff --git a/src/jpeg.inl b/src/jpeg.inl
-index 1bd38b2..9be89ac 100644
+index 1bd38b2..147b89e 100644
 --- a/src/jpeg.inl
 +++ b/src/jpeg.inl
-@@ -5235,8 +5235,12 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
+@@ -5235,8 +5235,15 @@ static int DecodeJPEG(JPEGIMAGE *pJPEG)
                  if (pJPEG->ucPixelType >= EIGHT_BIT_GRAYSCALE) {
                      // We're not going to use the color channels, so avoid as much work as possible
                      if (pJPEG->ucMode == 0xc2) { // progressive
@@ -21,8 +21,11 @@ index 1bd38b2..9be89ac 100644
 +                        // Only consume entropy data for components present in this scan.
 +                        if (pJPEG->JPCI[1].component_needed)
 +                            iErr |= JPEGDecodeMCU_P(pJPEG, MCU_SKIP, &iDCPred1);
-+                        if (pJPEG->JPCI[2].component_needed)
++                        if (pJPEG->JPCI[2].component_needed) {
++                            pJPEG->ucACTable = cACTable2;
++                            pJPEG->ucDCTable = cDCTable2;
 +                            iErr |= JPEGDecodeMCU_P(pJPEG, MCU_SKIP, &iDCPred2);
++                        }
                      } else {
                          iErr |= JPEGDecodeMCU(pJPEG, MCU_SKIP, &iDCPred1); // decode Cr block
                          iErr |= JPEGDecodeMCU(pJPEG, MCU_SKIP, &iDCPred2); // decode Cb block
