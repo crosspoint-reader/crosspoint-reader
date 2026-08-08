@@ -149,6 +149,38 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
   renderer.drawCenteredText(UI_10_FONT_ID, rect.y + rect.height + 15, percentText.c_str());
 }
 
+// Centre a button-hint label inside its box. A label that fits is drawn on the
+// single baseline it always was; one too wide used to overflow the button border
+// and run into the neighbouring hint, and now wraps to at most two centred lines
+// (wrappedText() ellipsises anything that still doesn't fit). Shared so every
+// theme's drawButtonHints() gets the same behaviour.
+void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const char* label, const int x,
+                              const int boxWidth, const int boxTop, const int boxHeight,
+                              const int singleLineYOffset) {
+  constexpr int textPadding = 4;  // keeps a wrapped label off the button's border
+  const int maxTextWidth = boxWidth - (textPadding * 2);
+
+  const int textWidth = renderer.getTextWidth(fontId, label);
+  if (textWidth <= maxTextWidth) {
+    renderer.drawText(fontId, x + (boxWidth - 1 - textWidth) / 2, boxTop + singleLineYOffset, label);
+    return;
+  }
+
+  // Spaced by the glyph height, not getLineHeight() — that returns the font's
+  // full advanceY (leading included), which stacks two lines taller than the
+  // button and clips the second one.
+  constexpr int lineGap = 2;
+  const int step = renderer.getTextHeight(fontId) + lineGap;
+  const auto lines = renderer.wrappedText(fontId, label, maxTextWidth, 2);
+  const int block = static_cast<int>(lines.size()) * step - lineGap;
+  int lineY = boxTop + std::max(1, (boxHeight - block) / 2);
+  for (const auto& line : lines) {
+    const int lineWidth = renderer.getTextWidth(fontId, line.c_str());
+    renderer.drawText(fontId, x + (boxWidth - 1 - lineWidth) / 2, lineY, line.c_str());
+    lineY += step;
+  }
+}
+
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
   if (gpio.hasTouch()) {
@@ -175,9 +207,8 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       const int x = buttonPositions[i];
       renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, labels[i]);
-      const int textX = x + (buttonWidth - 1 - textWidth) / 2;
-      renderer.drawText(UI_10_FONT_ID, textX, pageHeight - buttonY + textYOffset, labels[i]);
+      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
+                    textYOffset);
     }
   }
 
