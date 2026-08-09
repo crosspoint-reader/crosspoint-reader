@@ -31,3 +31,4 @@ lib/EpdFont/scripts/output/
 /dependencies.lock
 /sdkconfig.*
 sdkconfig.sticky
+flake.*
