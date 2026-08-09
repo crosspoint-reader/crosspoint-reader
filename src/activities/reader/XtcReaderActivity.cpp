@@ -11,6 +11,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 
 #include <algorithm>
 
@@ -73,13 +74,20 @@ void XtcReaderActivity::loop() {
 
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
+  // Paged back into the book: drop the end screen's suggestion menu (its app +
+  // theme tokens, ~2KB) so long sessions read with the smaller footprint.
+  if (!atEndOfBook && endOfBookOptions) {
+    RenderLock lock(*this);
+    endOfBookOptions.reset();
+  }
+
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
   // through to the regular handlers below; page turns are absorbed by the end-of-book
   // block.
-  if (atEndOfBook && endOfBookOptions.menuActive()) {
+  if (atEndOfBook && endOfBookOptions && endOfBookOptions->menuActive()) {
     std::string openPath;
-    switch (endOfBookOptions.handleMenuInput(mappedInput, &openPath)) {
+    switch (endOfBookOptions->handleMenuInput(mappedInput, &openPath)) {
       case EndOfBookOptions::Action::OpenBook:
         activityManager.goToReader(openPath);
         return;
@@ -119,7 +127,7 @@ void XtcReaderActivity::loop() {
   // At end of the book with no suggestion menu, forward button goes home and back
   // button returns to last page
   if (currentPage >= xtc->getPageCount()) {
-    if (endOfBookOptions.menuActive()) {
+    if (endOfBookOptions && endOfBookOptions->menuActive()) {
       // Selection movement was handled above; absorb leftover page-turn triggers so
       // e.g. "previous" at the top of the list doesn't jump back into the book
       return;
@@ -161,11 +169,19 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   // Bounds check
   if (currentPage >= xtc->getPageCount()) {
-    // Show end of book screen. Sole load site: runs on the render task (serialized by
-    // RenderLock); the main task only reads the suggestions once the flag is published.
-    endOfBookOptions.loadOnce(xtc->getPath());
+    // Show end of book screen. Sole creation + load site: runs on the render
+    // task (serialized by RenderLock); the main task only reads the
+    // suggestions once the flag is published. Created here so the app + theme
+    // tokens only exist while the end screen shows; on OOM it renders empty.
+    if (!endOfBookOptions) {
+      endOfBookOptions = makeUniqueNoThrow<EndOfBookOptions>(renderer);
+      if (!endOfBookOptions) LOG_ERR("XTC", "OOM: EndOfBookOptions");
+    }
     renderer.clearScreen();
-    endOfBookOptions.render(renderer, mappedInput);
+    if (endOfBookOptions) {
+      endOfBookOptions->loadOnce(xtc->getPath());
+      endOfBookOptions->render(renderer, mappedInput);
+    }
     renderer.displayBuffer();
     return;
   }

@@ -9,6 +9,7 @@
 
 #include <Xtc.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -20,8 +21,10 @@ class XtcReaderActivity final : public Activity {
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
-  // Next-book suggestion menu for the End-of-Book screen
-  EndOfBookOptions endOfBookOptions{renderer};
+  // Next-book suggestion menu for the End-of-Book screen. Lazy (~2KB of app +
+  // theme tokens): exists only while the end screen is showing — created at
+  // the render path's sole load site, dropped by loop() on paging back in.
+  std::unique_ptr<EndOfBookOptions> endOfBookOptions;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {

@@ -3,6 +3,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <memory>
 #include <optional>
 
 #include "BookmarkEntry.h"
@@ -76,8 +77,11 @@ class EpubReaderActivity final : public Activity {
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
-  // Next-book suggestion menu for the End-of-Book screen
-  EndOfBookOptions endOfBookOptions{renderer};
+  // Next-book suggestion menu for the End-of-Book screen. Lazy: it embeds a
+  // GfxRendererTarget + FreeInkApp (theme tokens by value, ~2KB), so it only
+  // exists while the end screen is actually showing — created at the render
+  // path's sole load site, dropped by loop() when the user pages back in.
+  std::unique_ptr<EndOfBookOptions> endOfBookOptions;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
