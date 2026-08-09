@@ -262,7 +262,7 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
   props.labelText = screen.theme().smallText;
-  props.labelText.maxLines = 2;
+  props.labelText.maxLines = 2;  // also the explicitly-set marker, see SettingsActivity
   syncListViewport(screen, props);
   screen.list(props);
 }

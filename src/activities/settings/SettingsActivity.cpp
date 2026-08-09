@@ -458,6 +458,9 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   props.valueInset = 8;               // air between the value and the row edge
   // Titles match the value's font size (smallText) so both sides of a row
   // read as one unit; labels that still don't fit wrap onto a second line.
+  // maxLines=2 also marks the style explicitly set (an all-default smallText
+  // fails textStyleUnset and the list would substitute bodyText back); the
+  // common fits-on-one-line case takes the renderer's fast path anyway.
   props.labelText = screen.theme().smallText;
   props.labelText.maxLines = 2;
   syncTabListViewport(screen, props);
