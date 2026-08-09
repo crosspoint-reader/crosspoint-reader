@@ -1,0 +1,24 @@
+# Cargo configuration for the CrossPoint Rust workspace.
+#
+# Build profile settings live in the root Cargo.toml under [profile.release].
+# They are NOT valid under [build] here — Cargo silently ignores them there,
+# which is why the previous version of this file had no effect.
+#
+# Target triples per PlatformIO environment (see scripts/build_rust.py):
+#   simulator*                     host triple          stable, std
+#   default / gh_release* / slim   ESP32-C3 (RISC-V)    stable, no_std
+#   x4pro / sticky                 ESP32-S3 (Xtensa)    +esp toolchain, no_std
+#
+# The Xtensa target is tier 3 with no prebuilt core/alloc, so it needs
+# `-Z build-std=core,alloc`. That flag is passed on the command line by
+# build_rust.py rather than set here, because an [unstable] section in this
+# file would also apply to the stable host and RISC-V builds and break them.
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-dead_strip"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-Wl,-dead_strip"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--as-needed"]
