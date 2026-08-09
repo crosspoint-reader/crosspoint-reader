@@ -93,7 +93,7 @@ bool OtaUpdater::isUpdateNewer() const {
   return !latest.prerelease && current.prerelease;
 }
 
-const std::string& OtaUpdater::grtLatestVersion() const { return latestVersion; }
+const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
   if (!isUpdateNewer()) {
