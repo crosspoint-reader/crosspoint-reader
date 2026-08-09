@@ -4,7 +4,7 @@
 
 class OtaUpdater {
   bool updateAvailable = false;
-  std::string otaTag;
+  std::string latestVersion;
   std::string otaUrl;
   size_t otaSize = 0;
   size_t processedSize = 0;

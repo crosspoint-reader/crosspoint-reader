@@ -16,7 +16,7 @@
 #include <string>
 
 #include "FirmwareFlasher.h"
-#include "util/VersionUtils.h"
+#include "util/SemVersionUtils.h"
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
@@ -53,51 +53,47 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return NO_UPDATE;
   }
 
-  otaTag = releaseParser.getTagName();
+  latestVersion = releaseParser.getTagName();
   otaUrl = releaseParser.getFirmwareUrl();
   otaSize = releaseParser.getFirmwareSize();
   totalSize = otaSize;
   updateAvailable = true;
 
-  LOG_DBG("OTA", "Found update: tag=%s size=%zu", otaTag.c_str(), otaSize);
+  LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
   LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
   return OK;
 }
 
 bool OtaUpdater::isUpdateNewer() const {
-  if (!updateAvailable || otaTag.empty() || otaTag == CROSSPOINT_VERSION) {
+  if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
     return false;
   }
 
-  // If we cannot parse a version, we err on the side of caution and assume the update is newer.
-  Version currentVersion;
-  if (!parse(CROSSPOINT_VERSION, currentVersion)) {
+  SemVersion current;
+  if (!parse(CROSSPOINT_VERSION, current)) {
     LOG_ERR("OTA", "Failed to parse current version as a semantic version");
     return true;
   }
-  Version latestVersion;
-  if (!parse(otaTag, latestVersion)) {
+  SemVersion latest;
+  if (!parse(latestVersion, latest)) {
     LOG_ERR("OTA", "Failed to parse latest version as a semantic version");
     return true;
   }
 
-  if (latestVersion.major != currentVersion.major) {
-    return latestVersion.major > currentVersion.major;
+  if (latest.major != current.major) {
+    return latest.major > current.major;
   }
-  if (latestVersion.minor != currentVersion.minor) {
-    return latestVersion.minor > currentVersion.minor;
+  if (latest.minor != current.minor) {
+    return latest.minor > current.minor;
   }
-  if (latestVersion.patch != currentVersion.patch) {
-    return latestVersion.patch > currentVersion.patch;
+  if (latest.patch != current.patch) {
+    return latest.patch > current.patch;
   }
 
-  // We intentionally do not compare prerelease tags. Updates between prereleases
-  // (e.g., 1.0.0-rc-1 to 1.0.0-rc-2) are out of scope at this point in time. Instead,
-  // we only allow updates from prerelease to release (e.g., 1.0.0-rc-1 to 1.0.0).
-  return !latestVersion.prerelease && currentVersion.prerelease;
+  return !current.prerelease;
 }
 
-const std::string& OtaUpdater::getLatestOtaTag() const { return otaTag; }
+const std::string& OtaUpdater::grtLatestVersion() const { return latestVersion; }
 
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
   if (!isUpdateNewer()) {
