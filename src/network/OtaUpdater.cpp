@@ -52,61 +52,52 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
     return NO_UPDATE;
   }
 
-  latestVersion = releaseParser.getTagName();
+  otaTag = releaseParser.getTagName();
   otaUrl = releaseParser.getFirmwareUrl();
   otaSize = releaseParser.getFirmwareSize();
   totalSize = otaSize;
   updateAvailable = true;
 
-  LOG_DBG("OTA", "Found update: tag=%s size=%zu", latestVersion.c_str(), otaSize);
+  LOG_DBG("OTA", "Found update: tag=%s size=%zu", otaTag.c_str(), otaSize);
   LOG_DBG("OTA", "Firmware URL: %s", otaUrl.c_str());
   return OK;
 }
 
 bool OtaUpdater::isUpdateNewer() const {
-  if (!updateAvailable || latestVersion.empty() || latestVersion == CROSSPOINT_VERSION) {
+  if (!updateAvailable || otaTag.empty()) {
     return false;
   }
 
-  int currentMajor, currentMinor, currentPatch;
-  int latestMajor, latestMinor, latestPatch;
-
-  const auto currentVersion = CROSSPOINT_VERSION;
-
-  // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
-
-  /*
-   * Compare major versions.
-   * If they differ, return true if latest major version greater than current major version
-   * otherwise return false.
-   */
-  if (latestMajor != currentMajor) return latestMajor > currentMajor;
-
-  /*
-   * Compare minor versions.
-   * If they differ, return true if latest minor version greater than current minor version
-   * otherwise return false.
-   */
-  if (latestMinor != currentMinor) return latestMinor > currentMinor;
-
-  /*
-   * Check patch versions.
-   */
-  if (latestPatch != currentPatch) return latestPatch > currentPatch;
-
-  // If we reach here, it means all segments are equal.
-  // One final check, if we're on an RC build (contains "-rc"), we should consider the latest version as newer even if
-  // the segments are equal, since RC builds are pre-release versions.
-  if (strstr(currentVersion, "-rc") != nullptr) {
+  // If we fail to parse the current or latest version strings, assume the update is 
+  // newer to avoid blocking updates.
+  Version currentVersion;
+  if (!parse(CROSSPOINT_VERSION, currentVersion)) {
+    LOG_ERR("OTA", "Failed to parse current version as a semantic version");
+    return true;
+  }
+  Version latestVersion;
+  if (!parse(otaTag, latestVersion)) {
+    LOG_ERR("OTA", "Failed to parse latest version as a semantic version");
     return true;
   }
 
-  return false;
+  if (latestVersion.major != currentVersion.major) {
+    return latestVersion.major > currentVersion.major;
+  }
+  if (latestVersion.minor != currentVersion.minor) {
+    return latestVersion.minor > currentVersion.minor;
+  }
+  if (latestVersion.patch != currentVersion.patch) {
+    return latestVersion.patch > currentVersion.patch;
+  }
+
+  // If we reach here, it means all segments are equal.
+  // One final check, if we're on an RC build, we should consider the latest version 
+  // as newer even if the segments are equal, since RC builds are pre-release versions.
+  return !latestVersion.prerelease && currentVersion.prerelease;
 }
 
-const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
+const std::string& OtaUpdater::getLatestOtaTag() const { return otaTag; }
 
 OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
   if (!isUpdateNewer()) {

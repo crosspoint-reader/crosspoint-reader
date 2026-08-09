@@ -124,7 +124,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + metrics.verticalSpacing,
                       (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
-                      (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
+                      (std::string(tr(STR_NEW_VERSION)) + updater.getLatestOtaTag()).c_str());
 
     if (mappedInput.hasTouch()) {
       const auto actionRects = getOtaActionRects(renderer);

@@ -4,7 +4,7 @@
 
 class OtaUpdater {
   bool updateAvailable = false;
-  std::string latestVersion;
+  std::string otaTag;
   std::string otaUrl;
   size_t otaSize = 0;
   size_t processedSize = 0;
@@ -32,7 +32,7 @@ class OtaUpdater {
 
   OtaUpdater() = default;
   bool isUpdateNewer() const;
-  const std::string& getLatestVersion() const;
+  const std::string& getLatestOtaTag() const;
   OtaUpdaterError checkForUpdate();
   OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr);
 };
