@@ -22,7 +22,7 @@ void UiListActivity::onEnter() {
   Activity::onEnter();
   uiReady = false;
   activeNav().reset();
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
   app.setScreen(&UiListActivity::screenTrampoline, this);
   requestUpdate();

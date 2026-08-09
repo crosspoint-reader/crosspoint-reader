@@ -51,7 +51,7 @@ void IntervalSelectionActivity::onEnter() {
   Activity::onEnter();
   value = clampedValue(value);
   uiReady = false;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_SLIDER, &IntervalSelectionActivity::onSliderEvent, this);
   app.on(ACTION_STEP, &IntervalSelectionActivity::onStepEvent, this);
   app.on(ACTION_CANCEL, &IntervalSelectionActivity::onCancelEvent, this);

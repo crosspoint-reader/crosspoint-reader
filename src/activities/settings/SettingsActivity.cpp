@@ -27,6 +27,7 @@
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
@@ -188,7 +189,7 @@ void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valueP
     return;
   }
   UITheme::getInstance().reload();
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
 }
 
 bool SettingsActivity::handleCustomInput() {

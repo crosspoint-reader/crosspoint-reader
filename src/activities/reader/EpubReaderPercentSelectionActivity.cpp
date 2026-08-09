@@ -35,7 +35,7 @@ EpubReaderPercentSelectionActivity::EpubReaderPercentSelectionActivity(GfxRender
 void EpubReaderPercentSelectionActivity::onEnter() {
   Activity::onEnter();
   uiReady = false;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_SLIDER, &EpubReaderPercentSelectionActivity::onSliderEvent, this);
   app.on(ACTION_STEP, &EpubReaderPercentSelectionActivity::onStepEvent, this);
   app.on(ACTION_CANCEL, &EpubReaderPercentSelectionActivity::onCancelEvent, this);

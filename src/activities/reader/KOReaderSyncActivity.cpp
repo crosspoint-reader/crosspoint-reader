@@ -395,7 +395,7 @@ void KOReaderSyncActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   uiReady = false;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &KOReaderSyncActivity::onResultRow, this);
   app.setScreen(&KOReaderSyncActivity::resultScreen, this);
 

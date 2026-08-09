@@ -61,7 +61,7 @@ void OpdsBookBrowserActivity::onEnter() {
 
   uiReady = false;
   visibleRows = 1;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &OpdsBookBrowserActivity::onRowEvent, this);
   app.on(ACTION_SEARCH, &OpdsBookBrowserActivity::onSearchEvent, this);
   app.on(ACTION_CANCEL, &OpdsBookBrowserActivity::onCancelEvent, this);

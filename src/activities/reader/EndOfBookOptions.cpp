@@ -44,7 +44,7 @@ void EndOfBookOptions::loadOnce(const std::string& currentBookPath) {
   selector = 0;
   if (!names.empty()) {
     // One-time app setup on the render task, before the first render/route.
-    app.setTheme(uiThemeTokens(uiTarget));
+    applySharedUiTheme(app, uiTarget);
     app.on(ACTION_ROW, &EndOfBookOptions::onRowEvent, this);
     app.setScreen(&EndOfBookOptions::listScreen, this);
   }

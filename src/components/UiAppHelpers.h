@@ -7,11 +7,31 @@
 #include "MappedInputManager.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
 #include "components/icons/listIcons.h"
 
 // Shared glue for activities hosting a FreeInkApp: the font-bound render
 // target and the touch snapshot FreeInkApp routing consumes.
+
+// One app-wide ThemeTokens instance shared by every FreeInkApp via
+// setThemeRef: the tokens are identical on every screen, so per-app copies
+// (~1.5KB each, and one per stacked activity) were pure heap waste. Refreshed
+// on every screen entry, so theme or font changes between activities
+// re-derive it; live theme changes (Settings) refresh it in place and every
+// referencing app repaints in the new look.
+inline freeink::ui::ThemeTokens& sharedUiThemeTokens() {
+  static freeink::ui::ThemeTokens tokens;
+  return tokens;
+}
+
+// Refresh the shared tokens from the active UITheme + this target's fonts and
+// point the app at them. Replaces the old per-app `app.setTheme(...)` copies.
+template <typename App>
+inline void applySharedUiTheme(App& app, const freeink::ui::GfxRendererTarget& target) {
+  sharedUiThemeTokens() = uiThemeTokens(target);
+  app.setThemeRef(&sharedUiThemeTokens());
+}
 
 // Bind the uiScale fonts before FreeInkApp's constructor derives its theme
 // metrics from the body font's line height.

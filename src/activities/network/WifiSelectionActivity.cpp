@@ -107,7 +107,7 @@ void WifiSelectionActivity::onEnter() {
   uiReady = false;
   visibleRows = 1;
   topIndex = 0;
-  app.setTheme(uiThemeTokens(uiTarget));
+  applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &WifiSelectionActivity::onRowEvent, this);
   app.on(ACTION_SCAN, &WifiSelectionActivity::onScanEvent, this);
   app.setScreen(&WifiSelectionActivity::listScreen, this);
