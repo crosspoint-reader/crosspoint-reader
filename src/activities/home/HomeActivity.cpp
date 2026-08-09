@@ -221,13 +221,26 @@ void HomeActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
 
-  // Back is otherwise unused on the home menu: open the most recently read
-  // book directly (recentBooks is most-recent-first and already pruned of
-  // files missing from the SD card). backPressSeen guards against the stale
-  // release of the Back press that closed the previous activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
-    onSelectBook(recentBooks[0].path);
-    return;
+  // Back is otherwise unused on the home menu, so it runs the user's configured
+  // action. backPressSeen guards against the stale release of the Back press
+  // that closed the previous activity.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen) {
+    switch (SETTINGS.homeBackAction) {
+      case CrossPointSettings::HOME_BACK_RESUME:
+        // recentBooks is most-recent-first and already pruned of files missing
+        // from the SD card.
+        if (!recentBooks.empty()) {
+          onSelectBook(recentBooks[0].path);
+          return;
+        }
+        break;
+      case CrossPointSettings::HOME_BACK_RECENTS:
+        onRecentsOpen();
+        return;
+      case CrossPointSettings::HOME_BACK_NONE:
+      default:
+        break;
+    }
   }
 
   int tx = 0;
@@ -325,8 +338,23 @@ void HomeActivity::render(RenderLock&&) {
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
-                                            tr(STR_DIR_DOWN));
+  // Back's hint must match what it actually does. An empty label draws no
+  // button box at all, which is what HOME_BACK_NONE wants.
+  const char* backLabel = "";
+  switch (SETTINGS.homeBackAction) {
+    case CrossPointSettings::HOME_BACK_RESUME:
+      backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
+      break;
+    case CrossPointSettings::HOME_BACK_RECENTS:
+      // Short form: "Recent Books" is 129px wide and the hint box is only 106px.
+      backLabel = tr(STR_RECENTS_HINT);
+      break;
+    case CrossPointSettings::HOME_BACK_NONE:
+    default:
+      break;
+  }
+
+  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
