@@ -528,15 +528,21 @@ pio run -t upload && pio device monitor
 ### Code Quality
 
 ```bash
-# Static analysis (cppcheck)
-pio check
+# Everything CI checks, in one command
+./build-and-test.sh all
 
-# Format code (clang-format) - Windows Git Bash
-find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i
+# The fast gates only, no build (seconds)
+./build-and-test.sh check
 
-# Format code (clang-format) - Linux
-clang-format -i src/**/*.cpp src/**/*.h
+# Individually:
+./bin/clang-format-fix   # formatting - all platforms, honours .clang-format
+pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 ```
+
+Always format with `./bin/clang-format-fix`, never a bare `clang-format -i` over
+a glob: the script enforces the required version 21+, covers `lib/` as well as
+`src/`, and skips the script-generated font and hyphenation files that must not
+be reformatted.
 
 ### Debugging Crashes
 
@@ -794,8 +800,10 @@ build_flags =
 ### Testing Checklist
 
 **AI agent scope** (what you CAN verify):
-1. ✅ **Build**: `pio run -t clean && pio run` (0 errors/warnings)
-2. ✅ **Quality**: `pio check` + `find src -name "*.cpp" -o -name "*.h" | xargs clang-format -i`
+1. ✅ **Build**: `./build-and-test.sh all` — every gate and every environment CI
+   builds (`.github/workflows/ci.yml` is the list), 0 errors/warnings
+2. ✅ **Quality**: covered by the above; individually `./bin/clang-format-fix`
+   and `pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high`
 3. ✅ **Format**: Commit messages (`feat:`/`fix:`), no `.gitignore`-excluded files staged (e.g., `*.generated.h`, `.pio/`, `platformio.local.ini`)
 4. ✅ **CI**: Fix GitHub Actions failures before review
 5. ✅ **Code review**: Ensure orientation-aware logic is correct in all 4 modes by inspecting switch/case coverage
@@ -805,6 +813,89 @@ build_flags =
 7. 🔲 **Orientations**: Verify all 4 modes (Portrait/Inverted/Landscape CW/CCW)
 8. 🔲 **Heap**: `ESP.getFreeHeap()` > 50KB, no leaks
 9. 🔲 **Cache**: If EPUB modified, delete `.crosspoint/` and verify re-parse
+
+### Rust UI Framework Standards
+
+Full guide: [docs/rust-ui-framework.md](../docs/rust-ui-framework.md).
+
+#### Mandatory gates (EVERY Rust change)
+
+Run from the repository root — the two crates are one Cargo workspace:
+
+```bash
+./build-and-test.sh check    # cargo fmt --check, clippy -D warnings, cargo test
+```
+
+Or individually:
+
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
+cargo test --workspace --features cpui-rs/testing
+```
+
+Then build what the change affects. PlatformIO compiles Rust itself via
+`scripts/build_rust.py`, so there is no separate cargo step for the firmware:
+
+```bash
+pio run -e simulator_x4_pro   # host, std
+pio run -e default            # ESP32-C3, no_std, riscv32imc
+pio run -e x4pro              # ESP32-S3, no_std, xtensa (esp toolchain)
+```
+
+**A Rust change is not done until the device environments build.** Rust links
+into every firmware environment, so a Rust error breaks real hardware builds,
+not just the simulator.
+
+> Homebrew's `pio` may lack the `littlefs` module the espressif32 builder
+> needs. If a device build fails with `ModuleNotFoundError: No module named
+> 'littlefs'`, use `~/.platformio/penv/bin/pio`.
+
+#### Architecture rules
+
+**`lib/cpui/`** — generic framework, reusable by any firmware.
+- Contains: `View` trait, geometry, layout containers, widgets, screen roots,
+  the FFI layer, and the activity lifecycle.
+- Must NOT contain: any product name, screen, or feature. CI greps for this.
+- `unsafe` is confined to `src/ffi/` (the C boundary), `src/activity.rs` and
+  `src/runtime.rs` (C entry points), `src/testing.rs` (doubles implementing the
+  C ABI), and callback trampolines a widget hands to the theme. Nowhere else.
+
+**`lib/crosspoint_rs/`** — CrossPoint's screens.
+- Module tree mirrors `src/activities/` so both sides read the same.
+- Each screen implements `RustActivity` and calls `register_activity!` once.
+
+```
+lib/cpui/src/       lib/crosspoint_rs/src/
+├── lib.rs                     ├── lib.rs
+├── runtime.rs   heap, panic   ├── strings.rs      STR_* keys
+├── geometry.rs                └── activities/
+├── view.rs      the trait         ├── settings/
+├── activity.rs  lifecycle         │   └── about.rs
+├── testing.rs   doubles           └── ...
+├── ffi/         raw + wrappers
+├── layout/      stack, spacer, padding
+├── widgets/     text, divider, list
+└── screen/      navigation
+```
+
+#### Non-negotiables
+
+- **No hardcoded font ids.** They are content hashes that change with the
+  assets. Resolve a family and size through the firmware; handle the
+  unavailable case (`slim` sets `OMIT_FONTS`).
+- **No estimated text metrics.** Measure through the firmware's font metrics,
+  or content drifts off screen.
+- **No hardcoded `StrId` numbers.** They are positional and renumber when a key
+  is inserted. Use `tr(c"STR_KEY")`.
+- **No pixel offsets.** Ask the theme via `ThemeMetric` / `Theme::content_area()`.
+- **No per-frame allocation.** Build `CString`s when the widget is built. Keep
+  `format!` off render paths — it pulls in `core::fmt`.
+- **`no_std` on device.** Use `alloc::` types explicitly; `std` is host-only.
+- **Adding an FFI function means three edits**: `ffi/raw.rs`, the C++
+  implementation in `RustActivityStubs.cpp`, and a double in `testing.rs`.
+
+---
 
 ### CI/CD Pipeline Awareness
 

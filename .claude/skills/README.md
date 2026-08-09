@@ -9,6 +9,11 @@ These are written for capable agents, not beginners. They are principle- and
 decision-focused on purpose. They deliberately avoid line-number citations,
 which drift; they anchor on durable names (APIs, types, macros, files).
 
+`rust-screens` is the one exception: it carries the concrete file-by-file
+boilerplate for a new Rust screen, because that scaffolding is fixed and
+retyping it from the reference doc every time is pure friction. The judgment
+still lives alongside it.
+
 This is separate from `.skills/SKILL.md`, the GitHub coding-agent guide that
 mirrors CLAUDE.md. CLAUDE.md stays the always-loaded rule set; these skills are
 the applied decision procedures that load on demand and add the judgment layer
@@ -21,6 +26,7 @@ CLAUDE.md does not carry.
 | `hal-and-abstractions` | touching storage, input, display, settings, i18n, rendering |
 | `scope-discipline` | adding a feature, activity, lib, setting, or dependency |
 | `refactor-for-review` | refactoring, cleaning up, or preparing a change for PR |
+| `rust-screens` | building a screen in Rust and wiring it to the C++ firmware |
 
 Each skill ends with a self-review checklist Claude runs against its own diff
 before handing it back. Reviewing a PR? Those checklists double as a fast rubric.
