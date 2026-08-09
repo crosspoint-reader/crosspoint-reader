@@ -205,8 +205,14 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
     if (isScaled) screenY = std::floor(screenY * scale);
     screenY += placement.y;
 
-    if (screenY >= renderer.getScreenHeight()) break;
-    if (screenY < 0 || bmpY < cropPixY) continue;
+    if (screenY >= pageHeight) {
+      if (info.topDown) break;
+      continue;
+    }
+    if (screenY < 0) {
+      if (!info.topDown) break;
+      continue;
+    }
 
     for (int bmpX = cropPixX; bmpX < info.width - cropPixX; bmpX++) {
       int screenX = bmpX - cropPixX;
