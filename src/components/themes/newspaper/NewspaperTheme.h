@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "components/themes/BaseTheme.h"
+#include "components/themes/shared/ThemeShared.h"
 
 class GfxRenderer;
 struct RecentBook;
@@ -22,7 +23,7 @@ constexpr ThemeMetrics values = [] {
   v.homeMenuTopOffset = 8;
   v.menuRowHeight = 38;
   v.menuSpacing = 0;
-  v.buttonHintsHeight = 26;
+  v.buttonHintsHeight = ThemeShared::kFooterBandHeight;  // 26px visible + 10px padding below
   return v;
 }();
 }  // namespace NewspaperMetrics

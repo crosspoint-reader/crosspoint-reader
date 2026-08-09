@@ -13,7 +13,7 @@
 namespace ThemeShared {
 
 void drawFlatButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3, const char* btn4,
-                         int footerHeight) {
+                         int bandHeight, int bottomPadding) {
   if (gpio.hasTouch()) {
     return;
   }
@@ -23,7 +23,11 @@ void drawFlatButtonHints(GfxRenderer& renderer, const char* btn1, const char* bt
 
   const int pageHeight = renderer.getScreenHeight();
   const int pageWidth = renderer.getScreenWidth();
-  const int footerY = pageHeight - footerHeight;
+  // Top of the reserved band. The rule and labels live in the upper
+  // `bandHeight - bottomPadding` pixels; the remainder is left blank so the footer
+  // floats above the screen edge.
+  const int bandY = pageHeight - bandHeight;
+  const int visualHeight = bandHeight - bottomPadding;
 
   // Stock slot geometry -- X3 is 528px wide in portrait against the X4's 480.
   constexpr int slotWidth = 106;
@@ -32,11 +36,11 @@ void drawFlatButtonHints(GfxRenderer& renderer, const char* btn1, const char* bt
   const int* slots = gpio.deviceIsX3() ? x3Slots : x4Slots;
   const char* labels[] = {btn1, btn2, btn3, btn4};
 
-  renderer.fillRect(0, footerY, pageWidth, footerHeight, false);
-  renderer.drawLine(0, footerY, pageWidth - 1, footerY, true);
+  renderer.fillRect(0, bandY, pageWidth, bandHeight, false);
+  renderer.drawLine(0, bandY, pageWidth - 1, bandY, true);
 
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int textY = footerY + (footerHeight - lineHeight) / 2 + 1;
+  const int textY = bandY + (visualHeight - lineHeight) / 2 + 1;
 
   for (int i = 0; i < 4; ++i) {
     if (labels[i] == nullptr || labels[i][0] == '\0') {

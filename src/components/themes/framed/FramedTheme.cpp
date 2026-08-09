@@ -30,7 +30,11 @@ void FramedTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char*
   const int frameX = kFrameInset;
   const int frameY = kFrameInset;
   const int frameW = renderer.getScreenWidth() - kFrameInset * 2;
-  const int frameH = renderer.getScreenHeight() - m.buttonHintsHeight - kFrameInset * 2;
+  // Close the frame exactly on the footer's hairline rule rather than a few pixels
+  // short of it -- an 8px gap between the two just reads as a mistake. Subtracting a
+  // single inset (not two) puts the bottom edge at pageHeight - buttonHintsHeight,
+  // which is precisely where drawFlatButtonHints draws its rule, so they coincide.
+  const int frameH = renderer.getScreenHeight() - m.buttonHintsHeight - kFrameInset;
   if (frameW > 0 && frameH > 0) {
     renderer.drawRect(frameX, frameY, frameW, frameH, 1, true);
   }
@@ -179,5 +183,5 @@ void FramedTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCou
 
 void FramedTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                   const char* btn4) const {
-  ThemeShared::drawFlatButtonHints(renderer, btn1, btn2, btn3, btn4, FramedMetrics::values.buttonHintsHeight);
+  ThemeShared::drawFlatButtonHints(renderer, btn1, btn2, btn3, btn4);
 }

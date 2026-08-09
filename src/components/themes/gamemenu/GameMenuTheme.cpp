@@ -185,5 +185,5 @@ void GameMenuTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonC
 
 void GameMenuTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                     const char* btn4) const {
-  ThemeShared::drawFlatButtonHints(renderer, btn1, btn2, btn3, btn4, GameMenuMetrics::values.buttonHintsHeight);
+  ThemeShared::drawFlatButtonHints(renderer, btn1, btn2, btn3, btn4);
 }
