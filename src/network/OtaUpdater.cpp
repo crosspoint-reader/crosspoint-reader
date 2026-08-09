@@ -65,7 +65,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
 }
 
 bool OtaUpdater::isUpdateNewer() const {
-  if (!updateAvailable || otaTag.empty()) {
+  if (!updateAvailable || otaTag.empty() || otaTag == CROSSPOINT_VERSION) {
     return false;
   }
 
