@@ -123,9 +123,9 @@ constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
 // plain boot shows the splash. See setup() for the resolution.
 enum class BootResume : uint8_t {
-  Splash,       // cold boot, flash, panic, or plain reboot
-  Silent,       // heap-defrag ESP.restart() (RTC flag; lost on power loss)
-  QuickResume,  // wake from a quick-resume deep sleep (SD flag; survives power loss)
+  Splash,          // cold boot, flash, panic, or plain reboot
+  Silent,          // heap-defrag ESP.restart() (RTC flag; lost on power loss)
+  SplashlessWake,  // wake from deep sleep with the splash suppressed by the SD flag
 };
 
 // Latched true once enterDeepSleep() commits to sleeping, before it tears down
@@ -200,7 +200,10 @@ void enterDeepSleep(bool fromTimeout = false) {
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
       (fromTimeout &&
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
-  APP_STATE.showBootScreen = !isQuickResumeSleep;
+  // A custom sleep image already provides retained boot-time content. Keep it
+  // on-panel until the first useful reader or home paint replaces it.
+  APP_STATE.showBootScreen =
+      !(isQuickResumeSleep || SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM);
 
   APP_STATE.saveToFile();
 
@@ -211,6 +214,10 @@ void enterDeepSleep(bool fromTimeout = false) {
 
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
+  } else if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM &&
+             Storage.exists(SLEEP_FRAME_FILE)) {
+    // A stale Quick Resume frame must not turn a custom wake into the loading-icon path.
+    Storage.remove(SLEEP_FRAME_FILE);
   }
 
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
@@ -363,7 +370,7 @@ void setup() {
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
   const BootResume resume = isSilentReboot              ? BootResume::Silent
-                            : !APP_STATE.showBootScreen ? BootResume::QuickResume
+                            : !APP_STATE.showBootScreen ? BootResume::SplashlessWake
                                                         : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
 
@@ -374,10 +381,10 @@ void setup() {
       // Splash skipped: the routing block below picks the target activity; the
       // panel keeps showing the pre-reboot popup until that first paint lands.
       break;
-    case BootResume::QuickResume:
-      // One-shot flag: re-arm the splash for the next non-quick-resume boot. Save
+    case BootResume::SplashlessWake:
+      // One-shot flag: re-arm the splash for the next ordinary boot. Save
       // before any painting so a hang in the blocking paint path can't strand
-      // us in a quick-resume-with-no-frame loop on the next boot.
+      // us in a splashless-with-no-frame loop on the next boot.
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
       if (loadSleepFrameBuffer()) {
@@ -396,7 +403,7 @@ void setup() {
         } else {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
-      } else {
+      } else if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
       }
       break;
