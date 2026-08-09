@@ -34,4 +34,5 @@ bool parse(const std::string& str, Version& version) {
   version.prerelease = true;
 
   return true;
-}~
+}
+~
