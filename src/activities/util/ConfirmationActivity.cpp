@@ -18,8 +18,11 @@ void ConfirmationActivity::onEnter() {
   if (!heading.empty()) {
     safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::BOLD);
   }
+  // The body wraps rather than truncating: a prompt explaining what is about to
+  // happen is routinely longer than one line, and truncating it cut off the part
+  // that mattered. The heading stays single-line — it's a title, not prose.
   if (!body.empty()) {
-    safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
+    bodyLines = renderer.wrappedText(fontId, body.c_str(), maxWidth, maxBodyLines, EpdFontFamily::REGULAR);
   }
 
   // Text sits in the upper part of the screen so the confirmation popup
@@ -49,8 +52,9 @@ void ConfirmationActivity::render(RenderLock&& lock) {
   }
 
   // Draw Body
-  if (!safeBody.empty()) {
-    renderer.drawCenteredText(fontId, currentY, safeBody.c_str(), true, EpdFontFamily::REGULAR);
+  for (const auto& line : bodyLines) {
+    renderer.drawCenteredText(fontId, currentY, line.c_str(), true, EpdFontFamily::REGULAR);
+    currentY += lineHeight;
   }
 
   if (confirmPopup.processRender(renderer, mappedInput)) return;
