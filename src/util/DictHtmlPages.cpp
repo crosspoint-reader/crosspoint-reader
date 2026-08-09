@@ -1,5 +1,6 @@
 #include "DictHtmlPages.h"
 
+#include <Arduino.h>
 #include <Epub/parsers/ChapterHtmlSlimParser.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -16,6 +17,52 @@ namespace {
 // Normalized XHTML staged here for the file-driven parser; truncated on each
 // use, removed after the parse.
 constexpr const char* TMP_HTML_PATH = "/.crosspoint/dicthtml.tmp";
+
+// Keep enough contiguous heap for the parser's 16KB SD-font advance scratch
+// plus page/layout allocations. Falling back to plain text is cheaper than
+// entering a throwing allocation path under pressure.
+constexpr size_t MIN_STYLED_FREE_HEAP = 40 * 1024;
+constexpr size_t MIN_STYLED_MAX_ALLOC = 20 * 1024;
+
+// Bound retained layout independently of input bytes: compact markup can emit
+// far more objects than its source size suggests.
+constexpr size_t MAX_STYLED_PAGES = 64;
+constexpr size_t MAX_STYLED_PAGE_ELEMENTS = 512;
+
+class BufferedFileWriter {
+ public:
+  explicit BufferedFileWriter(HalFile& file) : file(file) {}
+
+  bool append(const char c) { return append(&c, 1); }
+
+  bool append(const char* data, size_t len) {
+    while (len > 0) {
+      const size_t available = sizeof(buffer) - used;
+      const size_t chunk = std::min(available, len);
+      memcpy(buffer + used, data, chunk);
+      used += chunk;
+      data += chunk;
+      len -= chunk;
+      if (used == sizeof(buffer) && !flush()) return false;
+    }
+    return true;
+  }
+
+  bool append(const char* text) { return append(text, strlen(text)); }
+
+  bool flush() {
+    if (used == 0) return true;
+    if (file.write(buffer, used) != used) return false;
+    used = 0;
+    return true;
+  }
+
+ private:
+  HalFile& file;
+  // Fixed stack staging avoids an expansion-sized XHTML heap allocation.
+  char buffer[128] = {};
+  size_t used = 0;
+};
 
 // HTML void elements: legal without a closing tag in HTML, but must be
 // self-closed to be well-formed XML.
@@ -55,10 +102,9 @@ bool isEntityRef(const std::string& html, const size_t pos, size_t* end) {
 // that are not part of markup. Structural damage this cannot repair
 // (mismatched tags, unquoted attribute values) surfaces as a parse error and
 // the caller falls back to the plain-text path.
-std::string normalizeToXhtml(const std::string& html) {
-  std::string out;
-  out.reserve(html.size() + html.size() / 8 + 32);
-  out += "<html><body>";
+bool writeNormalizedXhtml(const std::string& html, HalFile& file) {
+  BufferedFileWriter out(file);
+  if (!out.append("<html><body>")) return false;
 
   const size_t n = html.size();
   size_t i = 0;
@@ -87,7 +133,7 @@ std::string normalizeToXhtml(const std::string& html) {
         j++;
       }
       if (j == n) {  // unterminated tag: treat the '<' as literal text
-        out += "&lt;";
+        if (!out.append("&lt;")) return false;
         i++;
         continue;
       }
@@ -108,44 +154,47 @@ std::string normalizeToXhtml(const std::string& html) {
         i = j + 1;
         continue;
       }
-      out += '<';
-      if (closing) out += '/';
-      out.append(nameBuf, nameLen);
-      out.append(html, nameEnd, j - nameEnd);  // attributes verbatim
-      if (!closing && isVoid && html[j - 1] != '/') out += '/';
-      out += '>';
+      if (!out.append('<')) return false;
+      if (closing && !out.append('/')) return false;
+      if (!out.append(nameBuf, nameLen)) return false;
+      if (!out.append(html.data() + nameEnd, j - nameEnd)) return false;  // attributes verbatim
+      if (!closing && isVoid && html[j - 1] != '/' && !out.append('/')) return false;
+      if (!out.append('>')) return false;
       i = j + 1;
       continue;
     }
     if (c == '<') {  // stray '<' in text ("x < y")
-      out += "&lt;";
+      if (!out.append("&lt;")) return false;
       i++;
       continue;
     }
     if (c == '&') {
       size_t entityEnd = 0;
       if (isEntityRef(html, i, &entityEnd)) {
-        out.append(html, i, entityEnd - i + 1);
+        if (!out.append(html.data() + i, entityEnd - i + 1)) return false;
         i = entityEnd + 1;
       } else {  // bare ampersand ("Tom & Jerry")
-        out += "&amp;";
+        if (!out.append("&amp;")) return false;
         i++;
       }
       continue;
     }
-    out += c;
+    if (!out.append(c)) return false;
     i++;
   }
 
-  out += "</body></html>";
-  return out;
+  return out.append("</body></html>") && out.flush();
 }
 
 }  // namespace
 
 bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const uint16_t viewportWidth,
                               const uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut) {
-  const std::string xhtml = normalizeToXhtml(definition);
+  if (ESP.getFreeHeap() < MIN_STYLED_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_MAX_ALLOC) {
+    LOG_ERR("DHTML", "Low heap for styled definition (%u free, %u max block)", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+    return false;
+  }
 
   {
     HalFile tmp = Storage.open(TMP_HTML_PATH, O_WRITE | O_CREAT | O_TRUNC);
@@ -153,16 +202,19 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
       LOG_ERR("DHTML", "Cannot create %s", TMP_HTML_PATH);
       return false;
     }
-    if (tmp.write(xhtml.data(), xhtml.size()) != static_cast<int>(xhtml.size())) {
+    if (!writeNormalizedXhtml(definition, tmp)) {
       LOG_ERR("DHTML", "Short write to %s", TMP_HTML_PATH);
       return false;
     }
   }  // destructor closes the file before the parser reopens the same path
 
   pagesOut.clear();
-  pagesOut.reserve(definition.size() / 800 + 4);  // ~a screenful of body text per page
+  // One fixed allocation (256 bytes on C3); pages must outlive the parser.
+  pagesOut.reserve(MAX_STYLED_PAGES);
 
   bool ok = false;
+  bool resourceLimitHit = false;
+  size_t retainedElements = 0;
   {
     const std::string tmpPath = TMP_HTML_PATH;  // the parser stores a reference
     // Heap-allocated as Section does — the parser object is far too large for
@@ -172,7 +224,18 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
         nullptr, tmpPath, renderer, SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
         SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
         SETTINGS.hyphenationEnabled, SETTINGS.focusReadingEnabled,
-        [&pagesOut](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) { pagesOut.push_back(std::move(page)); },
+        [&pagesOut, &resourceLimitHit, &retainedElements](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
+          if (resourceLimitHit) return;
+          const size_t pageElements = page->elements.size();
+          if (pagesOut.size() >= MAX_STYLED_PAGES || pageElements > MAX_STYLED_PAGE_ELEMENTS - retainedElements ||
+              ESP.getFreeHeap() < MIN_STYLED_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_MAX_ALLOC) {
+            resourceLimitHit = true;
+            pagesOut.clear();
+            return;
+          }
+          retainedElements += pageElements;
+          pagesOut.push_back(std::move(page));
+        },
         /*embeddedStyle=*/false, /*contentBase=*/"", /*imageBasePath=*/"", /*imageRendering=*/2);
     if (!parser) {
       LOG_ERR("DHTML", "OOM: ChapterHtmlSlimParser");
@@ -182,7 +245,10 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
   }
   Storage.remove(TMP_HTML_PATH);
 
-  if (!ok || pagesOut.empty()) {
+  if (resourceLimitHit) {
+    LOG_ERR("DHTML", "Styled definition exceeded page heap budget");
+  }
+  if (!ok || resourceLimitHit || pagesOut.empty()) {
     pagesOut.clear();
     return false;
   }
