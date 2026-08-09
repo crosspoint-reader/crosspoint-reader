@@ -34,6 +34,28 @@ void I18n::setLanguage(Language lang) {
   _language = lang;
 }
 
+const char* I18n::getByKey(const char* key) const {
+  if (key == nullptr) return "";
+
+  // Binary search over the generated, name-sorted table.
+  size_t low = 0;
+  size_t high = STRING_KEY_COUNT;
+  while (low < high) {
+    const size_t mid = low + (high - low) / 2;
+    const int cmp = strcmp(key, STRING_KEY_NAMES[mid]);
+    if (cmp == 0) return get(static_cast<StrId>(STRING_KEY_IDS[mid]));
+    if (cmp < 0) {
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
+
+  // Echo the key back: an untranslated STR_* on screen names the missing key
+  // directly, which beats a blank label or a log line nobody reads.
+  return key;
+}
+
 const char* I18n::getLanguageName(Language lang) const {
   const auto index = static_cast<size_t>(lang);
   if (index >= static_cast<size_t>(Language::_COUNT)) {

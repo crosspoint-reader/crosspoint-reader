@@ -20,6 +20,10 @@ class I18n {
 
   const char* operator[](StrId id) const { return get(id); }
 
+  // Lookup by STR_* key name, for callers that cannot see the StrId enum
+  // (those values are positional). Returns the key itself when unknown.
+  const char* getByKey(const char* key) const;
+
   Language getLanguage() const { return _language; }
   void setLanguage(Language lang);
   const char* getLanguageName(Language lang) const;
