@@ -90,7 +90,7 @@ bool OtaUpdater::isUpdateNewer() const {
     return latestVersion.patch > currentVersion.patch;
   }
 
-  // We intentionally do not compare prerelease tags. Updates between prereleases 
+  // We intentionally do not compare prerelease tags. Updates between prereleases
   // (e.g., 1.0.0-rc-1 to 1.0.0-rc-2) are out of scope at this point in time. Instead,
   // we only allow updates from prerelease to release (e.g., 1.0.0-rc-1 to 1.0.0).
   return !latestVersion.prerelease && currentVersion.prerelease;

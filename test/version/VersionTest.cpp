@@ -33,12 +33,10 @@ TEST(Version, ParseableVersionsWithPrereleaseTag) {
 }
 
 TEST(Version, UnparseableVersions) {
-  Version ignored;
-  EXPECT_FALSE(parse("foo", ignored));
-  EXPECT_FALSE(parse("1", ignored));
-  EXPECT_FALSE(parse("1.2", ignored));
-  EXPECT_FALSE(parse("1.2.3.4", ignored));
-  EXPECT_FALSE(parse("-1.2.3", ignored));
-  EXPECT_FALSE(parse("1.-2.3", ignored));
-  EXPECT_FALSE(parse("1.2.-3", ignored));
+  std::string versionStrings[] = {"foo", "1", "1.2", "1.2.3.4", "-1.2.3", "1.-2.3", "1.2.-3", " 1.2.3"};
+
+  for (const auto& versionString : versionStrings) {
+    Version ignored;
+    EXPECT_FALSE(parse(versionString, ignored));
+  }
 }
