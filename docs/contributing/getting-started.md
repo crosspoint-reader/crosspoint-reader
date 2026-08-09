@@ -66,6 +66,12 @@ chmod +x .githooks/pre-commit
 pio run
 ```
 
+> On macOS, Homebrew's `pio` may lack the `littlefs` module the espressif32
+> builder needs. If a build fails with `ModuleNotFoundError: No module named
+> 'littlefs'`, use `~/.platformio/penv/bin/pio` instead — PlatformIO's own
+> virtualenv has it. `./build-and-test.sh` picks that one automatically when it
+> is present.
+
 ## Flash
 
 ```sh
@@ -75,10 +81,20 @@ pio run --target upload
 ## First checks before opening a PR
 
 ```sh
+./build-and-test.sh all
+```
+
+One command for every gate and every environment CI builds — including the Rust
+workspace, which `pio run` on its own does not cover. By hand:
+
+```sh
 ./bin/clang-format-fix
 pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
-pio run
+pio run -e default
 ```
+
+CI builds more environments than `default`; `.github/workflows/ci.yml` is the
+authoritative list, and `./build-and-test.sh all` builds them in one invocation.
 
 ## What to read next
 

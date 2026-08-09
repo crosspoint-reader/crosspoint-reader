@@ -8,10 +8,22 @@ Make sure `clang-format` 21+ is installed and available in `PATH` before running
 If needed, see [Getting Started](./getting-started.md).
 
 ```sh
+./build-and-test.sh all
+```
+
+Or by hand:
+
+```sh
 ./bin/clang-format-fix
 pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
-pio run
+pio run -e default
 ```
+
+CI builds more environments than `default`; `.github/workflows/ci.yml` is the
+authoritative list, and `./build-and-test.sh all` covers them in one invocation.
+
+`./build-and-test.sh check` is the faster inner-loop version: every gate, no
+build. Both cover the Rust workspace, which `pio` alone does not.
 
 ## Flash and monitor
 

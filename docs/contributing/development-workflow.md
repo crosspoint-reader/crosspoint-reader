@@ -19,10 +19,19 @@ This page defines the expected local workflow before opening a pull request.
 ## 3) Run local checks
 
 ```sh
+./build-and-test.sh all
+```
+
+Or by hand:
+
+```sh
 ./bin/clang-format-fix
 pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
-pio run
+pio run -e default
 ```
+
+CI builds more environments than `default` — `.github/workflows/ci.yml` is the
+authoritative list, and the script above covers them in one invocation.
 
 CI enforces formatting, static analysis, and build checks.
 Use clang-format 21+ locally to match CI.

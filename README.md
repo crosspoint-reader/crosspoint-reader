@@ -186,10 +186,30 @@ pio run --target upload
 ### Contributor pre-PR checks
 
 ```bash
+./build-and-test.sh all
+```
+
+That runs every gate CI runs and builds every environment CI builds. The
+equivalent by hand:
+
+```bash
 ./bin/clang-format-fix
-pio check -e default
+cargo fmt --check
+cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
+cargo test --workspace --features cpui-rs/testing
+pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run -e default
 ```
+
+CI builds more than `default` — see `.github/workflows/ci.yml` for the full
+list. `./build-and-test.sh all` covers them in a single `pio run`, which matters:
+a second invocation can wipe `.pio/build` on a checksum mismatch and undo the
+first.
+
+> On macOS, Homebrew's `pio` may lack the `littlefs` module the espressif32
+> builder needs. If a build fails with `ModuleNotFoundError: No module named
+> 'littlefs'`, use `~/.platformio/penv/bin/pio` — `build-and-test.sh` prefers it
+> automatically when present.
 
 ### Debugging
 
