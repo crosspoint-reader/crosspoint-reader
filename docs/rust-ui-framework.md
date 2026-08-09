@@ -354,6 +354,7 @@ VStack::new(4).extend(rows)
 | `Modal::new(title, options)` | A centred option dialog. |
 | `Image::new(data, w, h)` | A 1-bpp bitmap you supply. |
 | `Icon::new(IconRole::Sun)` | A host asset by **role**. `.filled(bool)`, `.size(px)`. |
+| `IconToggle::new(role, on)` | An icon that shows and flips a boolean. `.on_change(Msg::V)` gets the **next** state. |
 
 **A toggle is a row, not a switch.** No C++ screen in this firmware draws a
 switch graphic, so `Toggle` renders through the theme's list and looks identical
@@ -393,7 +394,7 @@ enum Msg {
 
 fn body(&self) -> impl View<Msg> {
     vstack![gap;
-        Icon::new(IconRole::Sun).filled(self.on).on_tap(Msg::ToggleLight),
+        IconToggle::new(IconRole::Sun, self.on).on_change(Msg::Light),
         Stepper::new(self.brightness)
             .on_change(Msg::Brightness)   // dragged or tapped on the track
             .on_step(Msg::Step),          // -1 / +1 from the end glyphs

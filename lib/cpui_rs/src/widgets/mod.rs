@@ -5,6 +5,7 @@
 //! switch graphic.
 
 mod divider;
+mod icon_toggle;
 mod image;
 mod list;
 mod modal;
@@ -16,6 +17,7 @@ mod text;
 mod toggle;
 
 pub use divider::Divider;
+pub use icon_toggle::IconToggle;
 pub use image::{Icon, Image};
 pub use list::{List, ListRow};
 pub use modal::Modal;

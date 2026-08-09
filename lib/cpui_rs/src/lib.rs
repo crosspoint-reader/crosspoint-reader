@@ -55,5 +55,6 @@ pub use layout::{
 pub use screen::{NavigationScreen, OverlayPanel, Screen, Scrim};
 pub use view::{value_at, InputMask, Interaction, Interactions, Trigger, View, ViewExt};
 pub use widgets::{
-    Divider, Icon, Image, List, ListRow, Modal, ProgressBar, Section, Slider, Stepper, Text, Toggle,
+    Divider, Icon, IconToggle, Image, List, ListRow, Modal, ProgressBar, Section, Slider, Stepper,
+    Text, Toggle,
 };

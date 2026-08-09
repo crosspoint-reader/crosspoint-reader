@@ -4,8 +4,10 @@
 //! eyeball: where a slider knob sits, which word a toggle shows, and whether a
 //! modal's hit rects line up with the rows it drew.
 
-use cpui::testing::{self, RectKind, SCREEN_HEIGHT, SCREEN_WIDTH};
-use cpui::{value_at, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
+use cpui::host::IconRef;
+use cpui::testing::{self, RectKind, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
+use cpui::view::{Interactions, Trigger};
+use cpui::{value_at, IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
 
 fn available() -> Size {
     testing::install();
@@ -189,4 +191,52 @@ fn image_measures_to_its_own_size_and_rejects_a_short_buffer() {
     testing::reset();
     View::<()>::render(&bad, Point::ORIGIN);
     assert!(testing::drawn_text().is_empty());
+}
+
+/// A 32px glyph is a legitimate control but a poor finger target, and two of
+/// them side by side used to need the screen to reserve space by hand. The
+/// widget must do it: each reserves the theme minimum on both axes, so laying
+/// two in a row cannot leave them competing for the same tap.
+#[test]
+fn icon_toggle_reserves_a_full_touch_target() {
+    let mut toggle: IconToggle<()> = IconToggle::new(IconRef::new(0), true);
+    toggle.measure(available());
+
+    let size = View::<()>::size(&toggle);
+    assert!(
+        size.width >= MIN_TOUCH_SIZE && size.height >= MIN_TOUCH_SIZE,
+        "control is {size:?}, under the {MIN_TOUCH_SIZE}px minimum touch target"
+    );
+}
+
+/// The reported state is the one a tap moves *to*, so a screen never has to
+/// write `!self.something`. The hit rect must cover the whole reserved control
+/// rather than only the glyph drawn inside it.
+#[test]
+fn icon_toggle_reports_the_state_it_moves_to() {
+    for was_on in [false, true] {
+        let mut toggle = IconToggle::new(IconRef::new(0), was_on).on_change(|next| next);
+        toggle.measure(available());
+
+        let mut out = Interactions::new(0);
+        toggle.interactions(Point::ORIGIN, &mut out);
+
+        let declared = out
+            .items()
+            .first()
+            .expect("a tappable icon declares a rect");
+        match &declared.trigger {
+            Trigger::Message(reported) => assert_eq!(
+                *reported, !was_on,
+                "tapping an icon showing {was_on} should report {}",
+                !was_on
+            ),
+            _ => panic!("an icon toggle sends a plain message, not a value trigger"),
+        }
+        assert_eq!(
+            declared.rect.size,
+            View::<bool>::size(&toggle),
+            "the hit rect must cover the whole control"
+        );
+    }
 }
