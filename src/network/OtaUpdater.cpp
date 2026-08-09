@@ -90,7 +90,7 @@ bool OtaUpdater::isUpdateNewer() const {
     return latest.patch > current.patch;
   }
 
-  return current.prerelease;
+  return !latest.prerelease && current.prerelease;
 }
 
 const std::string& OtaUpdater::grtLatestVersion() const { return latestVersion; }
