@@ -1,0 +1,92 @@
+//! A screen inside the navigation stack.
+
+use alloc::boxed::Box;
+use alloc::string::String;
+
+use crate::geometry::{Point, Size};
+use crate::host::{Hint, ScreenChrome, Theme};
+use crate::view::{Interactions, View};
+
+/// The root view for a screen pushed onto the activity stack.
+///
+/// The firmware theme draws the title band and the button hints; the content
+/// is laid out in the region between them. Using this rather than painting a
+/// whole screen by hand is what keeps a Rust screen looking identical to the
+/// C++ ones and following the user's theme and button remapping.
+///
+/// By default the header shows the activity's own localized title and the only
+/// hint is Back.
+///
+/// ```rust,ignore
+/// NavigationScreen::new(vstack![20; Text::new(name), Text::new(value)])
+///     .title("Storage")                       // else the screen's own title
+///     .hints(Hint::Standard, Hint::text("Save"), Hint::None, Hint::None)
+/// ```
+pub struct NavigationScreen<M> {
+    content: Box<dyn View<M>>,
+    /// `None` defers to the activity's localized title.
+    title: Option<String>,
+    hints: [Hint; 4],
+    measured: Size,
+}
+
+impl<M: 'static> NavigationScreen<M> {
+    pub fn new(content: impl View<M> + 'static) -> Self {
+        NavigationScreen {
+            content: Box::new(content),
+            title: None,
+            hints: [Hint::Standard, Hint::None, Hint::None, Hint::None],
+            measured: Size::ZERO,
+        }
+    }
+
+    /// Overrides the header title.
+    ///
+    /// Prefer the activity's own title, which is already translated; this is
+    /// for titles computed at run time, such as a file name.
+    pub fn title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+
+    /// Sets the four hints, given by meaning rather than by screen position.
+    pub fn hints(mut self, back: Hint, confirm: Hint, previous: Hint, next: Hint) -> Self {
+        self.hints = [back, confirm, previous, next];
+        self
+    }
+}
+
+impl<M> View<M> for NavigationScreen<M> {
+    fn measure(&mut self, available: Size) {
+        self.content.measure(Theme::content_area().size);
+        self.measured = available;
+    }
+
+    fn size(&self) -> Size {
+        self.measured
+    }
+
+    fn render(&self, origin: Point) {
+        match &self.title {
+            Some(title) => ScreenChrome::draw_header(title),
+            None => ScreenChrome::draw_screen_header(),
+        }
+
+        let content = Theme::content_area();
+        self.content.render(origin.offset(content.x(), content.y()));
+
+        ScreenChrome::draw_button_hints(
+            &self.hints[0],
+            &self.hints[1],
+            &self.hints[2],
+            &self.hints[3],
+        );
+    }
+
+    fn interactions(&mut self, origin: Point, out: &mut Interactions<M>) {
+        // Same inset render uses; the chrome itself is not interactive.
+        let content = Theme::content_area();
+        let at = origin.offset(content.x(), content.y());
+        self.content.interactions(at, out);
+    }
+}
