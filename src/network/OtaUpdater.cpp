@@ -16,6 +16,7 @@
 #include <string>
 
 #include "FirmwareFlasher.h"
+#include "util/VersionUtils.h"
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
