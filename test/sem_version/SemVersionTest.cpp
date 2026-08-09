@@ -9,7 +9,7 @@ static SemVersion parseOrFail(const std::string& versionString) {
 }
 
 TEST(SemVersion, ParseableVersionsWithoutPrereleaseTag) {
-  SemVersion version = parseOrFail(versionString);
+  SemVersion version = parseOrFail("1.2.3");
   EXPECT_EQ(version.major, 1);
   EXPECT_EQ(version.minor, 2);
   EXPECT_EQ(version.patch, 3);
