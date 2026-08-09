@@ -33,6 +33,44 @@ jobs:
           PATH="/usr/lib/llvm-21/bin:$PATH" ./bin/clang-format-fix
           git diff --exit-code || (echo "Please run 'bin/clang-format-fix' to fix formatting issues" && exit 1)
 
+  rust:
+    name: Rust (format, lint, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install Rust
+        run: rustup component add rustfmt clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Format
+        run: cargo fmt --check
+
+      # The framework must stay device-generic: no product-specific code.
+      - name: Check framework has no CrossPoint code
+        run: |
+          if grep -rniE "crosspoint|xteink" lib/cpui_rs/src/; then
+            echo "cpui must not reference CrossPoint or Xteink" >&2
+            exit 1
+          fi
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --features cpui-rs/testing
+
   cppcheck:
     runs-on: ubuntu-latest
     steps:
@@ -91,24 +129,65 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
+      # The firmware links a Rust staticlib, so the device targets must be
+      # available or every environment below fails at the cargo step.
+      # `default` is ESP32-C3 (RISC-V, stable); `sticky` is
+      # ESP32-S3 (Xtensa), which needs the esp-rs fork and rust-src.
+      - name: Cache Rust toolchains
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.rustup/toolchains
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: rust-esp-${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: rust-esp-${{ runner.os }}-
+
+      - name: Install Rust device targets
+        run: |
+          set -euo pipefail
+          rustup target add riscv32imc-unknown-none-elf
+          if [ ! -d "$HOME/.rustup/toolchains/esp" ]; then
+            cargo install espup --locked
+            espup install
+          fi
+
       - name: Build default firmware
         run: |
           set -euo pipefail
           pio run -e default | tee pio.log
 
+      # scripts/report_memory.py already fails the build on a budget breach; this
+      # only surfaces the figures. It reads the memory.json each environment
+      # writes rather than scraping the log: the ESP32 build links twice, so the
+      # log holds two different figures per environment and the first is a
+      # partial image.
       - name: Extract firmware stats
-
+        if: always()
         run: |
           set -euo pipefail
-          ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
-          flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
-          echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
-          echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
-          {
-            echo "## Firmware build stats"
-            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
-            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
-          } >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+
+          print("## Firmware size\n")
+          print("| Environment | Flash | Static RAM | of which Rust |")
+          print("|---|---|---|---|")
+
+          for env_name in ("default", "sticky"):
+              path = pathlib.Path(".pio/build") / env_name / "memory.json"
+              if not path.exists():
+                  print(f"| {env_name} | n/a | n/a | n/a |")
+                  continue
+              d = json.loads(path.read_text())
+              fmt = lambda v: f"{v:,} B" if isinstance(v, int) else "n/a"
+              print(
+                  f"| {env_name} | {fmt(d['flash'])} | {fmt(d['static_ram'])} "
+                  f"| {fmt(d['rust_flash'])} |"
+              )
+
+          print("\nStatic RAM is `.data/.bss/.noinit` only, not the heap.")
+          print("Budgets live in `memory-budget.json`.")
+          PY
 
       - name: Upload firmware.bin artifact
         uses: actions/upload-artifact@v6
@@ -116,6 +195,16 @@ jobs:
           name: firmware.bin
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
+
+      # Needed to attribute a size regression to a library; CI previously kept
+      # no map, so a PR had nothing to diff against.
+      - name: Upload link maps
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: firmware-maps
+          path: .pio/build/*/firmware.map
+          if-no-files-found: warn
 
   build-sticky:
     name: Build sticky
@@ -199,6 +288,7 @@ jobs:
       - build-sticky
       - clang-format
       - cppcheck
+      - rust
       - unit-tests
     if: always()
     runs-on: ubuntu-latest
