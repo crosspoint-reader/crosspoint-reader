@@ -318,27 +318,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   return AlphaOverlayResult::Rendered;
 }
 
-using SleepFileValidator = bool (*)(HalFile& file, const char* name);
-
 enum class SleepRecentKind : uint8_t { Standard, Overlay };
-
-bool validateCustomSleepBmp(HalFile& file, const char* name) {
-  Bitmap bitmap(file);
-  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-    LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-    return false;
-  }
-  return true;
-}
-
-bool validateSleepOverlayBmp(HalFile& file, const char* name) {
-  Bitmap bitmap(file);
-  if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-    LOG_DBG("SLP", "Skipping invalid sleep overlay BMP: %s", name);
-    return false;
-  }
-  return true;
-}
 
 bool isRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx, const uint8_t window) {
   return recentKind == SleepRecentKind::Overlay ? APP_STATE.isRecentOverlaySleep(idx, window)
@@ -353,8 +333,7 @@ void pushRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx) 
   }
 }
 
-bool selectRandomSleepFile(const char* dirPath, const SleepFileValidator validator, const SleepRecentKind recentKind,
-                           std::string& selectedPath) {
+bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind, std::string& selectedPath) {
   auto dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return false;
 
@@ -387,7 +366,9 @@ bool selectRandomSleepFile(const char* dirPath, const SleepFileValidator validat
       continue;
     }
 
-    if (!validator(dirFile, name.get())) {
+    Bitmap bitmap(dirFile);
+    if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+      LOG_DBG("SLP", "Skipping invalid BMP file: %s", name.get());
       dirFile.close();
       continue;
     }
@@ -488,8 +469,8 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   std::string selectedPath;
-  if (!selectRandomSleepFile("/.sleep", validateCustomSleepBmp, SleepRecentKind::Standard, selectedPath)) {
-    selectRandomSleepFile("/sleep", validateCustomSleepBmp, SleepRecentKind::Standard, selectedPath);
+  if (!selectRandomSleepFile("/.sleep", SleepRecentKind::Standard, selectedPath)) {
+    selectRandomSleepFile("/sleep", SleepRecentKind::Standard, selectedPath);
   }
 
   if (!selectedPath.empty()) {
@@ -611,9 +592,8 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   }
 
   std::string selectedPath;
-  if (!selectRandomSleepFile(TRANSPARENT_SLEEP_DIR, validateSleepOverlayBmp, SleepRecentKind::Overlay, selectedPath)) {
-    selectRandomSleepFile(TRANSPARENT_SLEEP_LEGACY_DIR, validateSleepOverlayBmp, SleepRecentKind::Overlay,
-                          selectedPath);
+  if (!selectRandomSleepFile(TRANSPARENT_SLEEP_DIR, SleepRecentKind::Overlay, selectedPath)) {
+    selectRandomSleepFile(TRANSPARENT_SLEEP_LEGACY_DIR, SleepRecentKind::Overlay, selectedPath);
   }
 
   if (!selectedPath.empty()) {
