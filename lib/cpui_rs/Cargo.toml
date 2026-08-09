@@ -1,0 +1,24 @@
+# The package is `cpui-rs` so the name reads correctly outside the workspace
+# (crates.io convention, and it says which language it is). Rust code says
+# `cpui` — the `-rs` suffix is noise once you are already inside Rust.
+#
+# Consequence: dependency entries and `--features` selectors use the *package*
+# name (`cpui-rs/testing`), while `use` statements use the *lib* name (`cpui`).
+[package]
+name = "cpui-rs"
+version = "0.1.0"
+edition = "2021"
+
+# rlib only: this crate is consumed by crosspoint_rs, which produces the
+# staticlib that actually gets linked. Emitting a staticlib here as well
+# produced a 17 MB archive that contributed zero objects to the final link.
+[lib]
+name = "cpui"
+crate-type = ["rlib"]
+
+[features]
+# Exposes the deterministic test doubles in `testing` to downstream crates
+# so they can unit-test layouts without a renderer.
+testing = []
+
+[dependencies]
