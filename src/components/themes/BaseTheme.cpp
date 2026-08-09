@@ -296,7 +296,9 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   constexpr int minValueGap = 10;
 
   // Draw all items
-  const auto pageStartIndex = selectedIndex / pageItems * pageItems;
+  // Clamp: -1 means "nothing selected", and signed division would then skip
+  // row 0 entirely on a single-row page. RoundedRaffTheme already clamps.
+  const auto pageStartIndex = std::max(0, selectedIndex / pageItems) * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
 
