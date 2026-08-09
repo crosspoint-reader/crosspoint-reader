@@ -9,4 +9,4 @@ struct Version {
   bool prerelease = false;
 };
 
-bool parse(const std::string& str, Version& version);
+bool parse(const std::string& str, struct Version& version);

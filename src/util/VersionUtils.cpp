@@ -4,7 +4,7 @@
 
 constexpr char RC_TAG_PREFIX[] = "-rc";
 
-bool parse(const std::string& str, Version& version) {
+bool parse(const std::string& str, struct Version& version) {
   const char* p = str.c_str();
 
   // Around version 1.5.0, we switched to using a "v" prefix for the version string. Ideally,
