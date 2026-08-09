@@ -8,6 +8,7 @@ namespace {
 
 using DictionaryMatch::isAsciiCasePrefix;
 using DictionaryMatch::turkishIFold;
+using DictionaryMatch::utf8Length;
 
 // U+0130 İ and U+0131 ı as UTF-8, spelled out so the expectations stay
 // readable in editors that render the codepoints themselves.
@@ -47,6 +48,16 @@ TEST(TurkishIFold, LeavesOtherMultibyteSequencesAlone) {
 TEST(TurkishIFold, TruncatedLeadByteAtEndPassesThrough) {
   // A dangling 0xC4 with no continuation byte must not read past the end.
   EXPECT_EQ(turkishIFold("I\xC4"), std::string(SMALL_DOTLESS_I) + "\xC4");
+}
+
+TEST(Utf8Length, CountsCodepointsNotBytes) {
+  EXPECT_EQ(utf8Length(""), 0u);
+  EXPECT_EQ(utf8Length("kitap"), 5u);
+  // ık: two letters, three bytes — the prefix-stem threshold must see 2.
+  EXPECT_EQ(utf8Length((std::string(SMALL_DOTLESS_I) + "k").c_str()), 2u);
+  // ışık: four letters, six bytes.
+  const std::string isik = std::string(SMALL_DOTLESS_I) + "\xC5\x9F" + SMALL_DOTLESS_I + "k";
+  EXPECT_EQ(utf8Length(isik.c_str()), 4u);
 }
 
 TEST(IsAsciiCasePrefix, AcceptsProperPrefix) {

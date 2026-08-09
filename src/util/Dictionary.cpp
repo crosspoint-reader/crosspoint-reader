@@ -310,7 +310,8 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
     // Remember the longest headword passed on the way to the target's
     // insertion point that is a proper prefix of the target. Prefixes of one
     // word are nested, so each new one seen is longer — overwrite is enough.
-    if (prefixOut && strlen(wordBuf) >= MIN_PREFIX_STEM_BYTES && DictionaryMatch::isAsciiCasePrefix(wordBuf, target)) {
+    if (prefixOut && DictionaryMatch::utf8Length(wordBuf) >= MIN_PREFIX_STEM_CHARS &&
+        DictionaryMatch::isAsciiCasePrefix(wordBuf, target)) {
       prefixOut->loc.offset = readBe32(suffix);
       prefixOut->loc.size = readBe32(suffix + 4);
       prefixOut->loc.found = true;

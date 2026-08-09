@@ -67,7 +67,7 @@ class Dictionary {
   // Clean the word, look it up, and on a miss retry: the Turkish I-fold
   // reading (when the word contains I/İ), mini stem variants
   // (-'s/-s/-es/-ies/-ed/-ing), then the longest indexed headword that is a
-  // proper prefix of the word (>= MIN_PREFIX_STEM_BYTES, remembered during the
+  // proper prefix of the word (>= MIN_PREFIX_STEM_CHARS, remembered during the
   // exact-match scans — Turkish "kitaplarımdan" finds "kitap"). On a hit fills
   // the definition text (capped at MAX_DEFINITION_BYTES) and the headword as
   // stored in the index. Returns true on a hit. *outResult (if provided)
@@ -84,8 +84,9 @@ class Dictionary {
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
   // Shortest headword the longest-prefix fallback may match, so "kedilerimden"
-  // can fall back to "kedi" but never to a stray one-letter entry.
-  static constexpr size_t MIN_PREFIX_STEM_BYTES = 3;
+  // can fall back to "kedi" but never to a stray one- or two-letter entry.
+  // Counted in codepoints, not bytes, so "aş" and "at" are rejected alike.
+  static constexpr size_t MIN_PREFIX_STEM_CHARS = 3;
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
   // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
@@ -122,7 +123,7 @@ class Dictionary {
   bool openSession(LookupSession& session);
 
   // Longest indexed headword seen during a locate() scan that is a proper
-  // prefix (>= MIN_PREFIX_STEM_BYTES) of the target — the stem candidate for
+  // prefix (>= MIN_PREFIX_STEM_CHARS) of the target — the stem candidate for
   // agglutinative languages. Tracking rides the existing exact-match scan, so
   // it costs no extra SD reads; a stem lying before the scan window (more than
   // SAMPLE_INTERVAL entries behind the target) is not seen, which in practice

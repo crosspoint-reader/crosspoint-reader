@@ -44,8 +44,22 @@ inline std::string turkishIFold(const char* word) {
  * passed on the way to the target's insertion point.
  *
  * An empty `head` counts as a prefix of any non-empty target; callers enforce
- * their own minimum stem length (see Dictionary::MIN_PREFIX_STEM_BYTES).
+ * their own minimum stem length (see Dictionary::MIN_PREFIX_STEM_CHARS).
  */
+/**
+ * Number of UTF-8 codepoints in `s`, counted as non-continuation bytes, so
+ * length thresholds mean letters rather than bytes ("ış" is two letters even
+ * though it is four bytes). Malformed input degrades gracefully: every
+ * lead-like byte counts once.
+ */
+inline size_t utf8Length(const char* s) {
+  size_t count = 0;
+  for (const auto* b = reinterpret_cast<const unsigned char*>(s); *b; b++) {
+    if ((*b & 0xC0) != 0x80) count++;
+  }
+  return count;
+}
+
 inline bool isAsciiCasePrefix(const char* head, const char* target) {
   size_t i = 0;
   for (; head[i]; i++) {
