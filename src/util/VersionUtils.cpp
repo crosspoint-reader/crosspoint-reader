@@ -13,6 +13,9 @@ bool parse(const std::string& str, Version& version) {
     if (sscanf(p, "%d.%d.%d%n", &version.major, &version.minor, &version.patch, &offset) != 3) {
         return false;
     }
+    if (version.major < 0 || version.minor < 0 || version.patch < 0) {
+        return false;
+    }
 
     p += offset;
 

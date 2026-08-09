@@ -44,5 +44,6 @@ TEST(Version, UnparseableVersions) {
 	EXPECT_FALSE(parse("1", ignored));
 	EXPECT_FALSE(parse("1.2", ignored));
 	EXPECT_FALSE(parse("1.2.3.4", ignored));
+	EXPECT_FALSE(parse("v-1.2.3", ignored));
 }
 
