@@ -68,8 +68,7 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  // If we fail to parse the current or latest version strings, assume the update is
-  // newer to avoid blocking updates.
+  // If we cannot parse a version, we err on the side of caution and assume the update is newer.
   Version currentVersion;
   if (!parse(CROSSPOINT_VERSION, currentVersion)) {
     LOG_ERR("OTA", "Failed to parse current version as a semantic version");
@@ -91,9 +90,9 @@ bool OtaUpdater::isUpdateNewer() const {
     return latestVersion.patch > currentVersion.patch;
   }
 
-  // If we reach here, it means all segments are equal.
-  // One final check, if we're on an RC build, we should consider the latest version
-  // as newer even if the segments are equal, since RC builds are pre-release versions.
+  // We intentionally do not compare prerelease tags. Updates between prereleases 
+  // (e.g., 1.0.0-rc-1 to 1.0.0-rc-2) are out of scope at this point in time. Instead,
+  // we only allow updates from prerelease to release (e.g., 1.0.0-rc-1 to 1.0.0).
   return !latestVersion.prerelease && currentVersion.prerelease;
 }
 

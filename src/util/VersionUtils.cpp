@@ -10,6 +10,10 @@ bool parse(const std::string& str, Version& version) {
   // In version 1.5.0, we switched to using a "v" prefix for the version string.
   if (*p == 'v' || *p == 'V') p++;
 
+  if (!isdigit(*p) == 0) {
+    return false;
+  }
+
   // The %n specified stores how many characters sscanf read.
   int offset = 0;
   if (sscanf(p, "%d.%d.%d%n", &version.major, &version.minor, &version.patch, &offset) != 3) {
