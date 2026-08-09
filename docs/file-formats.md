@@ -90,15 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 37
+### Version 38
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 37 keeps the version 36 serialized layout unchanged. It was bumped
+Version 38 keeps the version 37 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
 than flattened paragraphs with synthetic row/cell labels.
+
+Version 37 increases the fixed-size footnote href field from 96 to 256 bytes.
+This changes each serialized footnote record from 128 to 288 bytes, so older
+section caches must be discarded and rebuilt.
 
 Version 36 keeps the version 35 serialized layout unchanged. It was bumped
 because ruby and justified text positioning and CJK line breaking now use
@@ -143,10 +147,10 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 37
+#define EXPECTED_VERSION 38
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
-#define FOOTNOTE_HREF_LEN 96
+#define FOOTNOTE_HREF_LEN 256
 
 struct String {
     u32 length [[hidden, comment("String byte length")]];
