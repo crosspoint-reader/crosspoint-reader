@@ -80,17 +80,10 @@ bool OtaUpdater::isUpdateNewer() const {
     return true;
   }
 
-  if (latest.major != current.major) {
-    return latest.major > current.major;
-  }
-  if (latest.minor != current.minor) {
-    return latest.minor > current.minor;
-  }
-  if (latest.patch != current.patch) {
-    return latest.patch > current.patch;
-  }
-
-  return !latest.prerelease && current.prerelease;
+  return latest.major != current.major ? latest.major > current.major :
+         latest.minor != current.minor ? latest.minor > current.minor :
+         latest.patch != current.patch ? latest.patch > current.patch : 
+         !latest.prerelease && current.prerelease;
 }
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
