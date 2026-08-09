@@ -68,7 +68,7 @@ bool OtaUpdater::isUpdateNewer() const {
     return false;
   }
 
-  // If we fail to parse the current or latest version strings, assume the update is 
+  // If we fail to parse the current or latest version strings, assume the update is
   // newer to avoid blocking updates.
   Version currentVersion;
   if (!parse(CROSSPOINT_VERSION, currentVersion)) {
@@ -92,7 +92,7 @@ bool OtaUpdater::isUpdateNewer() const {
   }
 
   // If we reach here, it means all segments are equal.
-  // One final check, if we're on an RC build, we should consider the latest version 
+  // One final check, if we're on an RC build, we should consider the latest version
   // as newer even if the segments are equal, since RC builds are pre-release versions.
   return !latestVersion.prerelease && currentVersion.prerelease;
 }

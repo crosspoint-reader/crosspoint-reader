@@ -5,30 +5,30 @@
 constexpr char RC_TAG_PREFIX[] = "-rc";
 
 bool parse(const std::string& str, Version& version) {
-    const char* p = str.c_str();
+  const char* p = str.c_str();
 
-    // In version 1.5.0, we switched to using a "v" prefix for the version string.
-    if (*p == 'v' || *p == 'V') p++;
+  // In version 1.5.0, we switched to using a "v" prefix for the version string.
+  if (*p == 'v' || *p == 'V') p++;
 
-    // The %n specified stores how many characters sscanf read.
-    int offset = 0;
-    if (sscanf(p, "%d.%d.%d%n", &version.major, &version.minor, &version.patch, &offset) != 3) {
-        return false;
-    }
-    if (version.major < 0 || version.minor < 0 || version.patch < 0) {
-        return false;
-    }
+  // The %n specified stores how many characters sscanf read.
+  int offset = 0;
+  if (sscanf(p, "%d.%d.%d%n", &version.major, &version.minor, &version.patch, &offset) != 3) {
+    return false;
+  }
+  if (version.major < 0 || version.minor < 0 || version.patch < 0) {
+    return false;
+  }
 
-    p += offset;
+  p += offset;
 
-    if (*p == '\0') {
-        return true;
-    }
-    if (strncmp(p, RC_TAG_PREFIX, sizeof(RC_TAG_PREFIX) - 1) != 0) {
-        return false;
-    }
-    
-    version.prerelease = true;
-    
+  if (*p == '\0') {
     return true;
+  }
+  if (strncmp(p, RC_TAG_PREFIX, sizeof(RC_TAG_PREFIX) - 1) != 0) {
+    return false;
+  }
+
+  version.prerelease = true;
+
+  return true;
 }
