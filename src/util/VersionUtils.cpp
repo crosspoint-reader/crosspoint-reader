@@ -1,5 +1,7 @@
 #include "VersionUtils.h"
 
+#include <string.h>
+
 constexpr char RC_TAG_PREFIX[] = "-rc";
 
 bool parse(const std::string& str, Version& version) {
