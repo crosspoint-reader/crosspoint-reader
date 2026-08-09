@@ -1,4 +1,4 @@
-add_executable(VersionTest
+add_executable(SemVersionTest
   SemVersionTest.cpp
   ${REPO_ROOT}/src/util/SemVersionUtils.cpp
 )
