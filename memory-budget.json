@@ -1,0 +1,60 @@
+{
+  "_comment": [
+    "Per-environment memory budgets, enforced by scripts/report_memory.py.",
+    "",
+    "flash_max        total bytes in flash-resident sections. The app partition",
+    "                 is 6,553,600 B (partitions.csv, app0); these limits sit",
+    "                 below it so growth is caught before the partition fills.",
+    "static_ram_max   .data + .bss + .noinit only. NOT the heap - the heap is",
+    "                 what Rust actually consumes, and no static measurement",
+    "                 can see it. See the ActivityRs heap log for that.",
+    "rust_*           the contribution of libcrosspoint_rs.a, which statically",
+    "                 contains cpui_rs.",
+    "",
+    "`_like` inherits every field from another entry, so environments sharing an",
+    "MCU share one set of numbers instead of drifting copies. An entry may",
+    "override any single field after inheriting.",
+    "",
+    "`_measured_*` is a snapshot from when the limit was last reviewed, kept for",
+    "the headroom it shows. It is NOT live: the current figures are written to",
+    ".pio/build/<env>/memory.json on every link.",
+    "",
+    "Raising a limit is a decision, not a formality: record why in the commit."
+  ],
+
+  "esp32c3": {
+    "_targets": "default, gh_release, gh_release_rc, slim - board from [base]",
+    "flash_max": 6100000,
+    "static_ram_max": 65536,
+    "rust_flash_max": 98304,
+    "rust_static_ram_max": 4096
+  },
+
+  "esp32s3": {
+    "_targets": "sticky, x4pro, papermono - esp32-s3-devkitc1-n16r8",
+    "flash_max": 6100000,
+    "static_ram_max": 75776,
+    "rust_flash_max": 98304,
+    "rust_static_ram_max": 4096
+  },
+
+  "default": {
+    "_like": "esp32c3",
+    "_measured_2026_08_09": "flash 5,713,395 / static RAM 50,796 / rust flash 37,856 / rust RAM 8"
+  },
+
+  "gh_release": { "_like": "esp32c3" },
+
+  "gh_release_rc": { "_like": "esp32c3" },
+
+  "slim": { "_like": "esp32c3" },
+
+  "x4pro": {
+    "_like": "esp32s3",
+    "_measured_2026_08_08": "flash 5,588,694 / static RAM 60,924 / rust flash 21,553 / rust RAM 0"
+  },
+
+  "sticky": { "_like": "esp32s3" },
+
+  "papermono": { "_like": "esp32s3" }
+}
