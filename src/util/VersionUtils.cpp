@@ -35,4 +35,3 @@ bool parse(const std::string& str, Version& version) {
 
   return true;
 }
-~
