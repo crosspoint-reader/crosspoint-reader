@@ -22,7 +22,7 @@ bool parse(const std::string& str, Version& version) {
     if (*p == '\0') {
         return true;
     }
-    if (std::strncmp(p, RC_TAG_PREFIX, sizeof(RC_TAG_PREFIX) - 1) != 0) {
+    if (strncmp(p, RC_TAG_PREFIX, sizeof(RC_TAG_PREFIX) - 1) != 0) {
         return false;
     }
     
