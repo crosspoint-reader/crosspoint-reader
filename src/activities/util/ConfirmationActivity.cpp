@@ -29,12 +29,14 @@ void ConfirmationActivity::onEnter() {
     size_t start = 0;
     while (start <= body.size() && static_cast<int>(bodyLines.size()) < maxBodyLines) {
       const size_t newline = body.find('\n', start);
-      const std::string paragraph = body.substr(start, newline == std::string::npos ? std::string::npos : newline - start);
+      const std::string paragraph =
+          body.substr(start, newline == std::string::npos ? std::string::npos : newline - start);
       if (paragraph.empty()) {
         bodyLines.emplace_back();  // blank line between paragraphs
       } else {
         const int remaining = maxBodyLines - static_cast<int>(bodyLines.size());
-        const auto wrapped = renderer.wrappedText(fontId, paragraph.c_str(), maxWidth, remaining, EpdFontFamily::REGULAR);
+        const auto wrapped =
+            renderer.wrappedText(fontId, paragraph.c_str(), maxWidth, remaining, EpdFontFamily::REGULAR);
         bodyLines.insert(bodyLines.end(), wrapped.begin(), wrapped.end());
       }
       if (newline == std::string::npos) break;
