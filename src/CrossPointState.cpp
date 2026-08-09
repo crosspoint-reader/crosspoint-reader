@@ -70,21 +70,18 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
 
   memset(recentOverlaySleepImages, 0, sizeof(recentOverlaySleepImages));
   JsonArrayConst recentOverlayArr = doc["recentOverlaySleepImages"];
-  const int actualOverlayCount = recentOverlayArr.isNull()
-                                     ? 0
-                                     : std::min(static_cast<int>(recentOverlayArr.size()),
-                                                static_cast<int>(SLEEP_RECENT_COUNT));
+  const int actualOverlayCount = recentOverlayArr.isNull() ? 0
+                                                           : std::min(static_cast<int>(recentOverlayArr.size()),
+                                                                      static_cast<int>(SLEEP_RECENT_COUNT));
   for (int i = 0; i < actualOverlayCount; i++) {
     recentOverlaySleepImages[i] = recentOverlayArr[i] | static_cast<uint16_t>(0);
   }
   recentOverlaySleepPos = doc["recentOverlaySleepPos"] | static_cast<uint8_t>(0);
   if (recentOverlaySleepPos >= SLEEP_RECENT_COUNT) {
-    recentOverlaySleepPos =
-        actualOverlayCount > 0 ? recentOverlaySleepPos % CrossPointState::SLEEP_RECENT_COUNT : 0;
+    recentOverlaySleepPos = actualOverlayCount > 0 ? recentOverlaySleepPos % CrossPointState::SLEEP_RECENT_COUNT : 0;
   }
   recentOverlaySleepFill = doc["recentOverlaySleepFill"] | static_cast<uint8_t>(0);
-  recentOverlaySleepFill =
-      static_cast<uint8_t>(std::min(static_cast<int>(recentOverlaySleepFill), actualOverlayCount));
+  recentOverlaySleepFill = static_cast<uint8_t>(std::min(static_cast<int>(recentOverlaySleepFill), actualOverlayCount));
 
   if (recentSleepFill == 0 && !doc["lastSleepImage"].isNull()) {
     const uint8_t legacy = doc["lastSleepImage"] | static_cast<uint8_t>(UINT8_MAX);
