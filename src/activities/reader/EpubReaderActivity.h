@@ -37,11 +37,6 @@ class EpubReaderActivity final : public Activity {
   std::optional<uint32_t> pendingOffsetJump;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
-  // A turn that arrived while a render was in flight (or inside the debounce
-  // gap), latched instead of dropped: -1 back, +1 forward, 0 none. Holds at
-  // most one turn — mashing collapses to the latest direction — and is
-  // executed by loop() once the render task is idle again.
-  int8_t pendingManualTurn = 0;
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;

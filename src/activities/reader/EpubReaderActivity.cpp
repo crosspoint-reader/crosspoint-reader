@@ -251,9 +251,6 @@ void EpubReaderActivity::onExit() {
 }
 
 void EpubReaderActivity::openReaderMenu() {
-  // A turn latched during a render must not fire after the menu round-trip:
-  // the user has moved on to a different interaction.
-  pendingManualTurn = 0;
   const int currentPage = section ? section->currentPage + 1 : 0;
   const int totalPages = section ? section->estimatedTotalPages() : 0;
   float bookProgress = 0.0f;
@@ -654,19 +651,6 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Manual turns can't outrun the panel, so the guard below refuses to start a
-  // turn while a render is in flight or inside a short post-turn gap. But the
-  // press itself shouldn't be lost: it's latched into pendingManualTurn and
-  // executed here, on the first idle tick after the guard clears.
-  constexpr unsigned long kMinManualTurnGapMs = 200;
-  const bool turnGuardActive = RenderLock::peek() || (millis() - lastPageTurnTime) < kMinManualTurnGapMs;
-  if (pendingManualTurn != 0 && !turnGuardActive) {
-    const bool forward = pendingManualTurn > 0;
-    pendingManualTurn = 0;
-    pageTurn(forward);
-    return;
-  }
-
   auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
@@ -735,25 +719,6 @@ void EpubReaderActivity::loop() {
   // No current section, attempt to rerender the book
   if (!section) {
     requestUpdate();
-    return;
-  }
-
-  // Refuse to START a turn while a render is in flight, OR within a short window
-  // of the last turn. render() runs on its own task (renderTaskLoop) concurrently
-  // with input; a slow AA/image page display lags behind fast taps, and a second
-  // turn firing before the first commits its differential baseline writes the
-  // panel twice -> two overlapping page segments. RenderLock::peek() catches a
-  // render that has already taken the lock (mirrors the automatic-turn guard),
-  // but there is a brief window between requesting a turn and the render task
-  // acquiring the lock where peek() is still false — a mashed second tap slips
-  // through there, which is what still triggered after slow image pages. The
-  // lastPageTurnTime gap bridges that startup latency; after it, peek() takes
-  // over for the rest of the (variable-length) render. The press is latched, not
-  // dropped: the consume block above runs it on the first idle tick, so one
-  // eager tap during a slow render still turns the page. Latching (assign, not
-  // increment) means mashing collapses to a single queued turn.
-  if (turnGuardActive) {
-    pendingManualTurn = prevTriggered ? -1 : 1;
     return;
   }
 
