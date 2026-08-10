@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <esp_mac.h>
 
 #include <algorithm>
 
@@ -43,12 +44,19 @@ void WifiSelectionActivity::onEnter() {
   const size_t savedCredentialCount = WIFI_STORE.getCredentialCount();
   autoAttemptedSsids.reserve(savedCredentialCount);
 
-  // Cache MAC address for display
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
+  // Read the hardware-derived station MAC directly. WiFi.macAddress() depends
+  // on the STA netif already existing, but this screen is entered while WiFi
+  // is often still off (notably after an X4 Pro WiFi session).
+  uint8_t mac[6] = {};
   char macStr[64];
-  snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
-           mac[3], mac[4], mac[5]);
+  const esp_err_t macResult = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  if (macResult == ESP_OK) {
+    snprintf(macStr, sizeof(macStr), "%s %02x-%02x-%02x-%02x-%02x-%02x", tr(STR_MAC_ADDRESS), mac[0], mac[1], mac[2],
+             mac[3], mac[4], mac[5]);
+  } else {
+    LOG_ERR("WIFI", "Failed to read station MAC (err=%d)", static_cast<int>(macResult));
+    snprintf(macStr, sizeof(macStr), "%s --", tr(STR_MAC_ADDRESS));
+  }
   cachedMacAddress = std::string(macStr);
 
   // Trigger first update to show scanning message
@@ -361,10 +369,16 @@ void WifiSelectionActivity::attemptConnection() {
   WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
 
   // Set hostname so routers show "CrossPoint-Reader-AABBCCDDEEFF" instead of "esp32-XXXXXXXXXXXX"
-  String mac = WiFi.macAddress();
-  mac.replace(":", "");
-  String hostname = "CrossPoint-Reader-" + mac;
-  WiFi.setHostname(hostname.c_str());
+  uint8_t mac[6] = {};
+  const esp_err_t macResult = esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  if (macResult == ESP_OK) {
+    char hostname[sizeof("CrossPoint-Reader-") + 12];
+    snprintf(hostname, sizeof(hostname), "CrossPoint-Reader-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3],
+             mac[4], mac[5]);
+    WiFi.setHostname(hostname);
+  } else {
+    LOG_ERR("WIFI", "Failed to read station MAC for hostname (err=%d)", static_cast<int>(macResult));
+  }
 
   if (selectedRequiresPassword && !enteredPassword.empty()) {
     WiFi.begin(selectedSSID.c_str(), enteredPassword.c_str());
