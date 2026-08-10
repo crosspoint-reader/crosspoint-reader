@@ -35,7 +35,16 @@ impl<M: 'static> NavigationScreen<M> {
         NavigationScreen {
             content: Box::new(content),
             title: None,
-            hints: [Hint::Standard, Hint::None, Hint::None, Hint::None],
+            // All four by default: the host resolves Standard per slot to its
+            // own translated Back / Select / Up / Down, which is what the C++
+            // screens show. Blanking three of them left the X3 with only Back,
+            // and no sign that the other buttons did anything.
+            hints: [
+                Hint::Standard,
+                Hint::Standard,
+                Hint::Standard,
+                Hint::Standard,
+            ],
             measured: Size::ZERO,
         }
     }

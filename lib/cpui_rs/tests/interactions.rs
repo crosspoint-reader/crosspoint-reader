@@ -9,8 +9,8 @@ use cpui::screen::{Driver, Runtime};
 use cpui::testing::{self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
 use cpui::{
     hstack, value_at, vstack, Alignment, Button, HStack, InputMask, Interactions, List, ListRow,
-    Modal, Modifiers, Point, Rect, Size, Slider, Spacer, Stepper, SwipeDir, Text, Toggle,
-    Trigger, VStack, View,
+    Modal, Modifiers, NavigationScreen, Point, Rect, Size, Slider, Spacer, Stepper, SwipeDir, Text,
+    Toggle, Trigger, VStack, View,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -740,4 +740,23 @@ fn swipe_direction_is_a_preference() {
             "swipe up with swipe_moves_selection={moves_selection}"
         );
     }
+}
+
+/// A screen with buttons must say what they do. Only Back was labelled, so the
+/// X3 showed a single hint and no sign that Select, Up or Down did anything.
+#[test]
+fn a_screen_labels_all_four_buttons_by_default() {
+    testing::install();
+    testing::reset();
+
+    let mut root: NavigationScreen<()> = NavigationScreen::new(Text::new("content"));
+    root.measure(screen());
+    root.render(Point::ORIGIN);
+
+    let hints = testing::drawn_hints();
+    assert_eq!(hints.len(), 1, "the chrome should draw its hints once");
+    assert_eq!(
+        hints[0], [true; 4],
+        "every button slot should carry a label by default"
+    );
 }
