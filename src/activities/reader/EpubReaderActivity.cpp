@@ -789,6 +789,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   // Reset state so render() reloads and repositions on the target spine.
   {
     RenderLock lock(*this);
+    clearDeferredReposition();
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
     pendingPercentJump = true;
@@ -814,6 +815,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // possibly-different settings.
       if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
         RenderLock lock(*this);
+        clearDeferredReposition();
         if (section && currentSpineIndex == sync.spineIndex) {
           // Already in this chapter and laid out: resolve straight away, no reload.
           const auto page = section->getPageForVisibleTextOffset(sync.visibleTextOffset);
@@ -845,14 +847,18 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
       if (currentSpineIndex != targetSpineIndex) {
         RenderLock lock(*this);
+        clearDeferredReposition();
         currentSpineIndex = targetSpineIndex;
         nextPageNumber = targetPage;
         section.reset();
       } else if (section && section->currentPage != targetPage) {
         RenderLock lock(*this);
+        clearDeferredReposition();
         const int clampedTargetPage = std::max(0, targetPage);
         section->currentPage = clampedTargetPage;
       } else if (!section) {
+        RenderLock lock(*this);
+        clearDeferredReposition();
         nextPageNumber = targetPage;
       }
     }
@@ -871,6 +877,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             const auto& chapterResult = std::get<ChapterResult>(result.data);
             RenderLock lock(*this);
 
+            clearDeferredReposition();
             currentSpineIndex = chapterResult.spineIndex;
 
             // If anchor is not empty, it will be used later to calculate the page number.
@@ -1108,6 +1115,12 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  // A page turn is authoritative: do not let a resume/reflow position captured
+  // at session start snap the reader back after the incremental build completes.
+  {
+    RenderLock lock(*this);
+    clearDeferredReposition();
+  }
   if (isForwardTurn) {
     // Advance within the section while there are (or may still be) more pages: either a built
     // page ahead, or the section is still building (windowed), in which case more pages exist
@@ -1252,8 +1265,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Otherwise fall back to the settings-change reposition: read after the cache-hit reset above,
     // a spec match means the saved page number still names the same content so there is nothing to
     // reposition, while a page jump or fragment anchor is a deliberate navigation that outranks it.
+    const bool explicitOffsetJump = pendingOffsetJump.has_value();
     const std::optional<uint32_t> offsetJump =
-        pendingOffsetJump.has_value() ? pendingOffsetJump
+        explicitOffsetJump ? pendingOffsetJump
         : (pendingPageJump.has_value() || !pendingAnchor.empty() || currentSpineIndex != cachedSpineIndex)
             ? std::nullopt
             : cachedVisibleTextOffset;
@@ -1411,7 +1425,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (offsetJump.has_value()) {
       if (const auto offsetPage = section->getPageForVisibleTextOffset(*offsetJump)) {
         section->currentPage = *offsetPage;
+        // This anchor has now established the landing page. It must not be
+        // applied again by applyDeferredReposition() after a background build
+        // finishes, or it would undo page turns made during that build.
+        clearDeferredReposition();
       }
+    }
+    if (explicitOffsetJump) {
+      // An explicit bookmark/sync target supersedes any stale session-start
+      // resume anchor even when its offset cannot be resolved (for example an
+      // empty chapter).
+      clearDeferredReposition();
     }
     pendingOffsetJump.reset();  // one-shot explicit jump: consumed on this render
 
@@ -1618,9 +1642,13 @@ bool EpubReaderActivity::applyDeferredReposition() {
       changed = true;
     }
   }
-  cachedChapterTotalPageCount = 0;  // consumed; don't read cached progress again
-  cachedVisibleTextOffset.reset();
+  clearDeferredReposition();
   return changed;
+}
+
+void EpubReaderActivity::clearDeferredReposition() {
+  cachedChapterTotalPageCount = 0;
+  cachedVisibleTextOffset.reset();
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
@@ -2002,6 +2030,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   {
     RenderLock lock(*this);
+    clearDeferredReposition();
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
@@ -2019,6 +2048,7 @@ void EpubReaderActivity::restoreSavedPosition() {
 
   {
     RenderLock lock(*this);
+    clearDeferredReposition();
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
     section.reset();
