@@ -64,6 +64,20 @@ pub trait InputSource {
 
     fn was_back_gesture(&self) -> bool;
     fn was_home_gesture(&self) -> bool;
+
+    /// Which way a vertical swipe moves focus.
+    ///
+    /// `false` — the default, and what the C++ screens do today — means the
+    /// swipe moves the *content*: swiping up walks **down** the list, as though
+    /// dragging the page upwards. `true` reverses it, so a swipe up moves focus
+    /// up, which is what someone expects if they read the gesture as moving the
+    /// selection rather than the page.
+    ///
+    /// Defaulted so a host need not implement it until there is a setting
+    /// behind it.
+    fn swipe_moves_selection(&self) -> bool {
+        false
+    }
 }
 
 /// One frame of input, as screens reach for it.
@@ -108,5 +122,10 @@ impl Input {
 
     pub fn was_home_gesture() -> bool {
         super::current().was_home_gesture()
+    }
+
+    /// See [`InputSource::swipe_moves_selection`].
+    pub fn swipe_moves_selection() -> bool {
+        super::current().swipe_moves_selection()
     }
 }

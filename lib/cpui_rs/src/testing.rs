@@ -101,6 +101,7 @@ thread_local! {
     static NOW: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
     static SWIPE: core::cell::Cell<SwipeDir> = const { core::cell::Cell::new(SwipeDir::None) };
     static PRESSED: core::cell::Cell<Option<Button>> = const { core::cell::Cell::new(None) };
+    static SWIPE_MOVES_SELECTION: core::cell::Cell<bool> = const { core::cell::Cell::new(false) };
 }
 
 /// Forgets every recorded draw. Call at the start of each test.
@@ -113,6 +114,7 @@ pub fn reset() {
     DRAWN_HINTS.with(|drawn| drawn.borrow_mut().clear());
     SWIPE.with(|swipe| swipe.set(SwipeDir::None));
     PRESSED.with(|pressed| pressed.set(None));
+    SWIPE_MOVES_SELECTION.with(|flag| flag.set(false));
 }
 
 /// Every `draw_text` recorded since the last [`reset`].
@@ -162,6 +164,12 @@ pub fn set_swipe(direction: SwipeDir) {
 /// Cleared by [`reset`], and consumed when read, so it fires exactly once.
 pub fn press(button: Button) {
     PRESSED.with(|pressed| pressed.set(Some(button)));
+}
+
+/// Chooses which way a swipe moves focus, so both readings can be tested.
+/// See [`InputSource::swipe_moves_selection`](crate::host::InputSource::swipe_moves_selection).
+pub fn set_swipe_moves_selection(enabled: bool) {
+    SWIPE_MOVES_SELECTION.with(|flag| flag.set(enabled));
 }
 
 /// Moves the fake clock, so repeat timing is deterministic.
@@ -399,6 +407,10 @@ impl InputSource for TestHost {
 
     fn was_back_gesture(&self) -> bool {
         false
+    }
+
+    fn swipe_moves_selection(&self) -> bool {
+        SWIPE_MOVES_SELECTION.with(|flag| flag.get())
     }
 
     fn was_home_gesture(&self) -> bool {

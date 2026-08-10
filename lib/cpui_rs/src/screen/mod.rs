@@ -8,7 +8,7 @@ pub use navigation::NavigationScreen;
 pub use overlay::{OverlayPanel, Scrim};
 
 use crate::geometry::Point;
-use crate::host::{finish_screen, millis, request_update, Button, Input, Renderer};
+use crate::host::{finish_screen, millis, request_update, Button, Input, Renderer, SwipeDir};
 use crate::view::{InputMask, Interactions, View};
 
 mod driver;
@@ -83,6 +83,15 @@ pub trait Screen {
     /// claimed here.
     fn on_key(&self, key: Button) -> Option<Self::Message> {
         let _ = key;
+        None
+    }
+
+    /// A swipe, offered before the runtime gives it its own meaning.
+    /// Return a message to consume it.
+    ///
+    /// Consulted **first**, so a screen that pages on a swipe — a reader, say —
+    /// simply claims it and the runtime does not move focus.
+    fn on_swipe(&self, _direction: SwipeDir) -> Option<Self::Message> {
         None
     }
 
@@ -289,6 +298,42 @@ impl<S: Screen> Runtime<S> {
                 }
                 if let Some(message) = self.screen.on_background_tap(point) {
                     self.dispatch(message);
+                    return;
+                }
+            }
+        }
+
+        // -- swipe ----------------------------------------------------------
+        // A vertical swipe anywhere moves focus, which is what the C++ screens
+        // do (HomeActivity). Which way is a preference, because both readings
+        // are defensible: by default the swipe drags the *content*, so swiping
+        // up walks down the list; with `swipe_moves_selection` it drags the
+        // *selection*, so swiping up moves focus up like Button::Up.
+        if self.painted {
+            let direction = Input::swipe();
+            if direction != SwipeDir::None {
+                if let Some(message) = self.screen.on_swipe(direction) {
+                    self.dispatch(message);
+                    return;
+                }
+
+                // Left/Right are left alone: the back and home gestures own
+                // that axis, and claiming it here would break navigation.
+                let forward = if Input::swipe_moves_selection() {
+                    -1
+                } else {
+                    1
+                };
+                let delta = match direction {
+                    SwipeDir::Up => forward,
+                    SwipeDir::Down => -forward,
+                    _ => 0,
+                };
+                if delta != 0 {
+                    let count = self.collect_settled().focusable_count();
+                    if self.move_focus(delta, count) {
+                        request_update();
+                    }
                     return;
                 }
             }

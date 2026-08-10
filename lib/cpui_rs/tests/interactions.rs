@@ -5,10 +5,11 @@
 //! catch a container whose implementations have drifted apart — the failure
 //! mode being touches that land on the control next door.
 
-use cpui::testing::{MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
+use cpui::screen::{Driver, Runtime};
+use cpui::testing::{self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
 use cpui::{
-    hstack, value_at, vstack, Alignment, HStack, InputMask, Interactions, List, ListRow, Modifiers,
-    Point, Size, Slider, Spacer, Stepper, Text, Toggle, VStack, View,
+    hstack, value_at, vstack, Alignment, HStack, InputMask, Interactions, List, ListRow,
+    Modifiers, Point, Size, Slider, Spacer, Stepper, SwipeDir, Text, Toggle, VStack, View,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -384,4 +385,150 @@ fn a_touch_only_control_is_not_focusable() {
 
     assert_eq!(interactions.focusable_count(), 1, "only the tappable row");
     assert_eq!(interactions.items().len(), 2, "but both still take a touch");
+}
+
+// -- swipe navigation ---------------------------------------------------------
+//
+// These drive the real `Runtime` rather than the routing functions, because the
+// behaviour under test is the runtime's: a swipe with no control under it still
+// has to move focus, exactly as the C++ home screen does.
+
+/// A screen with three focusable rows, optionally claiming swipes itself.
+struct Nav {
+    claims_swipe: bool,
+    claimed: Option<SwipeDir>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum NavMsg {
+    Row(u8),
+    Swiped(SwipeDir),
+}
+
+impl cpui::Screen for Nav {
+    type Message = NavMsg;
+
+    fn body(&self) -> impl View<NavMsg> {
+        vstack![4;
+            Text::new("one").on_tap(NavMsg::Row(0)),
+            Text::new("two").on_tap(NavMsg::Row(1)),
+            Text::new("three").on_tap(NavMsg::Row(2)),
+        ]
+    }
+
+    fn on_swipe(&self, direction: SwipeDir) -> Option<NavMsg> {
+        self.claims_swipe.then_some(NavMsg::Swiped(direction))
+    }
+
+    fn update(&mut self, message: NavMsg) {
+        if let NavMsg::Swiped(direction) = message {
+            self.claimed = Some(direction);
+        }
+    }
+}
+
+fn runtime(claims_swipe: bool) -> Runtime<Nav> {
+    testing::install();
+    testing::reset();
+    let mut runtime = Runtime::new(Nav {
+        claims_swipe,
+        claimed: None,
+    });
+    // Nothing routes before the first paint, so paint once.
+    runtime.render();
+    runtime
+}
+
+/// Swiping up walks *down* the list — the direction the content moves under the
+/// finger, and the inverse of what `Button::Up` does. `HomeActivity` maps swipe
+/// Up to `nextIndex`; a Rust screen must feel identical.
+#[test]
+fn a_swipe_moves_focus_the_way_the_firmware_does() {
+    let mut runtime = runtime(false);
+    assert_eq!(runtime.focused_index(), 0);
+
+    testing::set_swipe(SwipeDir::Up);
+    runtime.loop_();
+    assert_eq!(runtime.focused_index(), 1, "swipe up should advance");
+
+    testing::set_swipe(SwipeDir::Down);
+    runtime.loop_();
+    assert_eq!(runtime.focused_index(), 0, "swipe down should go back");
+}
+
+/// Focus wraps at both ends, so a swipe never dead-ends.
+#[test]
+fn swipe_focus_wraps_at_both_ends() {
+    let mut runtime = runtime(false);
+
+    testing::set_swipe(SwipeDir::Down);
+    runtime.loop_();
+    assert_eq!(runtime.focused_index(), 2, "back from the first row wraps");
+
+    testing::set_swipe(SwipeDir::Up);
+    runtime.loop_();
+    assert_eq!(runtime.focused_index(), 0, "forward from the last wraps");
+}
+
+/// A screen that wants swipes for itself — a reader paging, say — claims them
+/// and the runtime leaves focus alone.
+#[test]
+fn a_screen_can_claim_the_swipe_instead() {
+    let mut runtime = runtime(true);
+
+    testing::set_swipe(SwipeDir::Up);
+    runtime.loop_();
+
+    assert_eq!(
+        runtime.focused_index(),
+        0,
+        "a claimed swipe must not also move focus"
+    );
+}
+
+/// Horizontal swipes belong to the back and home gestures; claiming them here
+/// would break navigation.
+#[test]
+fn horizontal_swipes_do_not_move_focus() {
+    let mut runtime = runtime(false);
+
+    for direction in [SwipeDir::Left, SwipeDir::Right] {
+        testing::set_swipe(direction);
+        runtime.loop_();
+        assert_eq!(
+            runtime.focused_index(),
+            0,
+            "{direction:?} must not navigate"
+        );
+    }
+}
+
+/// Both readings of a vertical swipe are supported, because both are
+/// defensible: by default the gesture drags the content (swipe up walks down
+/// the list, matching the C++ home screen), and the preference reverses it so
+/// the gesture drags the selection instead.
+#[test]
+fn swipe_direction_is_a_preference() {
+    for moves_selection in [false, true] {
+        testing::install();
+        testing::reset();
+        testing::set_swipe_moves_selection(moves_selection);
+
+        let mut runtime = Runtime::new(Nav {
+            claims_swipe: false,
+            claimed: None,
+        });
+        runtime.render();
+        assert_eq!(runtime.focused_index(), 0);
+
+        testing::set_swipe(SwipeDir::Up);
+        runtime.loop_();
+
+        let expected = if moves_selection { 2 } else { 1 };
+        assert_eq!(
+            runtime.focused_index(),
+            expected,
+            "swipe up with swipe_moves_selection={moves_selection}"
+        );
+    }
 }
