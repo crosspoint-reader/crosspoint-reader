@@ -166,14 +166,13 @@ bool Dictionary::buildIndex(void (*yieldFn)(void*), void* ctx, IndexResult* outR
 
   // The synonym sidecar is best-effort: a failure here (e.g. transient OOM)
   // leaves synonym lookups disabled but the dictionary otherwise usable, so it
-  // does not fail the build or overwrite *outResult. Clear hasSyn so this
-  // session's lookups skip locateSynonym() rather than falling back to a full
-  // linear .syn scan on every miss; needsIndex() still reports it stale, so the
-  // next open() retries the build.
+  // does not fail the build or overwrite *outResult. hasSyn is left alone — it
+  // means "a .syn file exists", so needsIndex() keeps reporting the sidecar
+  // stale and a later build retries. openSynonyms() is what declines the
+  // synonym path while the sidecar is unusable.
   if (hasSyn && sidecarIsStale(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC) &&
       !buildSidecar(basePath + ".syn", basePath + ".sidx", SIDX_MAGIC, 4, yieldFn, ctx, nullptr)) {
     LOG_ERR("DICT", "Synonym index build failed; synonyms disabled for %s", basePath.c_str());
-    hasSyn = false;
   }
   return true;
 }
@@ -309,16 +308,32 @@ bool Dictionary::openSynonyms(LookupSession& session) {
   if (!hasSyn) return false;
 
   char path[PATH_BUF_BYTES];
-  if (!buildPath(path, sizeof(path), ".syn")) return false;
-  if (!Storage.openFileForRead("DICT", path, session.syn)) return false;
+  if (!buildPath(path, sizeof(path), ".syn") || !Storage.openFileForRead("DICT", path, session.syn)) {
+    // A .syn exists but won't open: the synonym probe never reached a verdict, so
+    // flag it the way openSession() flags an unopenable .idx rather than let
+    // lookup() report a genuine miss for a word the .syn does carry.
+    session.synFailed = true;
+    return false;
+  }
   session.synSize = static_cast<uint32_t>(session.syn.fileSize());
 
-  // As with .qidx, the sidecar is optional — without a usable one locateSynonym()
-  // scans .syn from byte 0.
-  if (!buildPath(path, sizeof(path), ".sidx")) return true;
-  if (Storage.openFileForRead("DICT", path, session.sidx)) {
+  if (buildPath(path, sizeof(path), ".sidx") && Storage.openFileForRead("DICT", path, session.sidx)) {
     const SidecarHeader header = readSidecarHeader(session.sidx, SIDX_MAGIC, SAMPLE_INTERVAL);
     if (header.valid && header.sourceFileSize == session.synSize) session.synSampleCount = header.sampleCount;
+  }
+
+  // Unlike .qidx, whose absence only costs locate() a bounded-cost scan of an
+  // already-open file, an unusable .sidx would make every miss read the whole
+  // .syn a byte at a time under the storage mutex. Decline the synonym path
+  // instead and release both handles; needsIndex() still reports .sidx stale, so
+  // the next index pass rebuilds it.
+  if (session.synSampleCount == 0) {
+    LOG_ERR("DICT", "Synonym index unusable for %s; synonyms skipped", basePath.c_str());
+    session.synFailed = true;
+    session.synSize = 0;
+    session.sidx.close();
+    session.syn.close();
+    return false;
   }
   return true;
 }
@@ -430,7 +445,10 @@ DictLocation Dictionary::locateByOrdinal(LookupSession& session, uint32_t ordina
 
 DictLocation Dictionary::locateSynonym(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
   DictLocation result;
-  if (!openSynonyms(session)) return result;
+  if (!openSynonyms(session)) {
+    result.readError = session.synFailed;  // false when there is simply no .syn
+    return result;
+  }
 
   // Bisect the sampled offsets to the last synonym <= target, same descent
   // locate() runs over .qidx/.idx.

@@ -122,6 +122,10 @@ class Dictionary {
     uint32_t synSize = 0;
     uint32_t synSampleCount = 0;
     bool synOpened = false;  // openSynonyms() has run (success or failure)
+    // A .syn exists but couldn't be searched (open failure, or no usable .sidx),
+    // so a miss is an unfinished search rather than a verdict. Distinct from
+    // "this dictionary has no .syn", which is a legitimate miss.
+    bool synFailed = false;
   };
 
   // Open .idx (required) and .qidx (optional — locate() falls back to a full
@@ -129,7 +133,10 @@ class Dictionary {
   bool openSession(LookupSession& session);
 
   // Open .syn / .sidx into the session on first use. Idempotent; returns false
-  // when there is no usable synonym index.
+  // when there is no usable synonym index — either because no .syn exists, or
+  // because it couldn't be opened / its .sidx is unusable, which sets
+  // session.synFailed and releases both handles (an unindexed .syn is never
+  // scanned linearly).
   bool openSynonyms(LookupSession& session);
 
   // Bisect a sampled-offset sidecar (.qidx over .idx, .sidx over .syn) to the
