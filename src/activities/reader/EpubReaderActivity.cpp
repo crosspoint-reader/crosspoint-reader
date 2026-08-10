@@ -501,12 +501,16 @@ void EpubReaderActivity::loop() {
       case EndOfBookOptions::Action::GoHome:
         onGoHome();
         return;
-      case EndOfBookOptions::Action::LastPage:
-        currentSpineIndex = std::max(epub->getSpineItemsCount() - 1, 0);
-        nextPageNumber = 0;
-        pendingPageJump = std::numeric_limits<uint16_t>::max();
+      case EndOfBookOptions::Action::LastPage: {
+        {
+          RenderLock lock(*this);
+          currentSpineIndex = std::max(epub->getSpineItemsCount() - 1, 0);
+          nextPageNumber = 0;
+          pendingPageJump = std::numeric_limits<uint16_t>::max();
+        }
         requestUpdate();
         return;
+      }
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
         return;
@@ -610,20 +614,32 @@ void EpubReaderActivity::loop() {
 
   // At end of the book with no suggestion menu, forward button goes home and back
   // button returns to last page
-  if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
-    if (endOfBookOptions.menuActive()) {
-      // Selection movement was handled above; absorb leftover page-turn triggers so
-      // e.g. "previous" at the top of the list doesn't jump back into the book
-      return;
+  bool returnHomeFromEndOfBook = false;
+  bool redrawFromEndOfBook = false;
+  {
+    RenderLock lock(*this);
+    if (currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount()) {
+      if (endOfBookOptions.menuActive()) {
+        // Selection movement was handled above; absorb leftover page-turn triggers so
+        // e.g. "previous" at the top of the list doesn't jump back into the book
+        return;
+      }
+      if (nextTriggered) {
+        returnHomeFromEndOfBook = true;
+      } else {
+        currentSpineIndex = epub->getSpineItemsCount() - 1;
+        nextPageNumber = 0;
+        pendingPageJump = std::numeric_limits<uint16_t>::max();
+        redrawFromEndOfBook = true;
+      }
     }
-    if (nextTriggered) {
-      onGoHome();
-    } else {
-      currentSpineIndex = epub->getSpineItemsCount() - 1;
-      nextPageNumber = 0;
-      pendingPageJump = std::numeric_limits<uint16_t>::max();
-      requestUpdate();
-    }
+  }
+  if (returnHomeFromEndOfBook) {
+    onGoHome();
+    return;
+  }
+  if (redrawFromEndOfBook) {
+    requestUpdate();
     return;
   }
 
@@ -636,22 +652,20 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    if (!nextTriggered && section && section->currentPage > 0) {
-      section->currentPage = 0;
-      requestUpdate();
-      return;
-    }
-
     // We don't want to delete the section mid-render, so grab the semaphore
     {
       RenderLock lock(*this);
-      nextPageNumber = 0;
-      if (nextTriggered) {
-        currentSpineIndex++;
-      } else if (currentSpineIndex > 0) {
-        currentSpineIndex--;
+      if (!nextTriggered && section && section->currentPage > 0) {
+        section->currentPage = 0;
+      } else {
+        nextPageNumber = 0;
+        if (nextTriggered) {
+          currentSpineIndex++;
+        } else if (currentSpineIndex > 0) {
+          currentSpineIndex--;
+        }
+        section.reset();
       }
-      section.reset();
     }
     requestUpdate();
     return;
@@ -1038,6 +1052,14 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  // render() initializes section->currentPage from nextPageNumber. Taking this
+  // lock before reading section makes a page turn received during initialization
+  // apply after that initialization, instead of being overwritten by it.
+  RenderLock lock(*this);
+  if (!section) {
+    return;
+  }
+
   if (isForwardTurn) {
     // Advance within the section while there are (or may still be) more pages: either a built
     // page ahead, or the section is still building (windowed), in which case more pages exist
@@ -1047,28 +1069,23 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
     if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
     } else {
-      // We don't want to delete the section mid-render, so grab the semaphore
-      {
-        RenderLock lock(*this);
-        nextPageNumber = 0;
-        currentSpineIndex++;
-        section.reset();
-      }
+      nextPageNumber = 0;
+      currentSpineIndex++;
+      section.reset();
     }
   } else {
     if (section->currentPage > 0) {
       section->currentPage--;
     } else if (currentSpineIndex > 0) {
-      // We don't want to delete the section mid-render, so grab the semaphore
-      {
-        RenderLock lock(*this);
-        nextPageNumber = 0;
-        pendingPageJump = std::numeric_limits<uint16_t>::max();
-        currentSpineIndex--;
-        section.reset();
-      }
+      nextPageNumber = 0;
+      pendingPageJump = std::numeric_limits<uint16_t>::max();
+      currentSpineIndex--;
+      section.reset();
     }
   }
+
+  // requestUpdate() schedules render(), which needs this mutex.
+  lock.unlock();
   lastPageTurnTime = millis();
   requestUpdate();
 }
