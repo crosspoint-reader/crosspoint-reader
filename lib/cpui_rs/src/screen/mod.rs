@@ -149,6 +149,13 @@ impl<S: Screen> Runtime<S> {
         }
     }
 
+    /// Which interaction holds focus. Exposed only for tests that drive the
+    /// runtime directly; screens never see focus at all.
+    #[cfg(any(test, feature = "testing"))]
+    pub fn focused_index(&self) -> usize {
+        self.focus
+    }
+
     /// Builds, measures and collects the tree's interactions.
     fn collect(&self) -> Interactions<S::Message> {
         let mut view = self.screen.body();

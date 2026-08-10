@@ -95,7 +95,12 @@ thread_local! {
     static DRAWN_TEXT: RefCell<Vec<TextDraw>> = const { RefCell::new(Vec::new()) };
     static DRAWN_RECTS: RefCell<Vec<RectDraw>> = const { RefCell::new(Vec::new()) };
     static DRAWN_HEADERS: RefCell<Vec<Option<String>>> = const { RefCell::new(Vec::new()) };
+    static DRAWN_LISTS: RefCell<Vec<(usize, i32)>> = const { RefCell::new(Vec::new()) };
+    static DRAWN_POPUPS: RefCell<Vec<(String, usize, i32)>> = const { RefCell::new(Vec::new()) };
+    static DRAWN_HINTS: RefCell<Vec<[bool; 4]>> = const { RefCell::new(Vec::new()) };
     static NOW: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+    static SWIPE: core::cell::Cell<SwipeDir> = const { core::cell::Cell::new(SwipeDir::None) };
+    static PRESSED: core::cell::Cell<Option<Button>> = const { core::cell::Cell::new(None) };
 }
 
 /// Forgets every recorded draw. Call at the start of each test.
@@ -103,6 +108,11 @@ pub fn reset() {
     DRAWN_TEXT.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_RECTS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_HEADERS.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN_LISTS.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN_POPUPS.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN_HINTS.with(|drawn| drawn.borrow_mut().clear());
+    SWIPE.with(|swipe| swipe.set(SwipeDir::None));
+    PRESSED.with(|pressed| pressed.set(None));
 }
 
 /// Every `draw_text` recorded since the last [`reset`].
@@ -120,6 +130,38 @@ pub fn drawn_rects() -> Vec<RectDraw> {
 /// band - the failure this records exists to catch.
 pub fn drawn_headers() -> Vec<Option<String>> {
     DRAWN_HEADERS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Every list drawn since the last [`reset`], as `(rows, selected)`. `selected`
+/// is `-1` when the theme was asked to highlight nothing — which is what a list
+/// behind a dialog must report.
+pub fn drawn_lists() -> Vec<(usize, i32)> {
+    DRAWN_LISTS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Every option dialog drawn since the last [`reset`], as
+/// `(title, options, highlighted)`. The highlight is what the arrows move, so
+/// this is how a test proves they are alive.
+pub fn drawn_popups() -> Vec<(String, usize, i32)> {
+    DRAWN_POPUPS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Which of the four button hints were asked for, per draw: `true` where the
+/// slot carries a label, `false` where it was left blank.
+pub fn drawn_hints() -> Vec<[bool; 4]> {
+    DRAWN_HINTS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Reports one swipe to the next frame the runtime reads input, so navigation
+/// can be tested without a finger. Cleared by [`reset`].
+pub fn set_swipe(direction: SwipeDir) {
+    SWIPE.with(|swipe| swipe.set(direction));
+}
+
+/// Reports one button press to the next frame the runtime reads input.
+/// Cleared by [`reset`], and consumed when read, so it fires exactly once.
+pub fn press(button: Button) {
+    PRESSED.with(|pressed| pressed.set(Some(button)));
 }
 
 /// Moves the fake clock, so repeat timing is deterministic.
@@ -241,26 +283,39 @@ impl Chrome for TestHost {
 
     fn draw_sub_header(&self, _rect: Rect, _label: &str, _right: Option<&str>) {}
 
-    fn draw_button_hints(&self, _back: &Hint, _confirm: &Hint, _prev: &Hint, _next: &Hint) {}
+    fn draw_button_hints(&self, back: &Hint, confirm: &Hint, prev: &Hint, next: &Hint) {
+        let shown = |hint: &Hint| !matches!(hint, Hint::None);
+        DRAWN_HINTS.with(|drawn| {
+            drawn
+                .borrow_mut()
+                .push([shown(back), shown(confirm), shown(prev), shown(next)])
+        });
+    }
 
     fn draw_progress_bar(&self, _rect: Rect, _current: u32, _total: u32) {}
 
     fn draw_list<'a>(
         &self,
         _rect: Rect,
-        _rows: usize,
-        _selected: i32,
+        rows: usize,
+        selected: i32,
         _row: &dyn Fn(usize, RowField) -> Option<&'a str>,
     ) {
+        DRAWN_LISTS.with(|drawn| drawn.borrow_mut().push((rows, selected)));
     }
 
     fn draw_option_popup<'a>(
         &self,
-        _title: &str,
+        title: &str,
         _options: &dyn Fn(usize) -> Option<&'a str>,
-        _count: usize,
-        _selected: i32,
+        count: usize,
+        selected: i32,
     ) {
+        DRAWN_POPUPS.with(|drawn| {
+            drawn
+                .borrow_mut()
+                .push((String::from(title), count, selected))
+        });
     }
 
     /// Rows stacked from the middle of the screen, so hit-testing a modal is
@@ -295,8 +350,16 @@ impl Chrome for TestHost {
 
 /// No input by default. A test that needs a touch drives the view directly.
 impl InputSource for TestHost {
-    fn was_pressed(&self, _button: Button) -> bool {
-        false
+    fn was_pressed(&self, button: Button) -> bool {
+        // Consumed on read, so an injected press fires for exactly one frame —
+        // the same edge behaviour the real input manager has.
+        PRESSED.with(|pressed| {
+            let matched = pressed.get() == Some(button);
+            if matched {
+                pressed.set(None);
+            }
+            matched
+        })
     }
 
     fn is_pressed(&self, _button: Button) -> bool {
@@ -324,7 +387,14 @@ impl InputSource for TestHost {
     }
 
     fn swipe(&self) -> SwipeDir {
-        SwipeDir::None
+        // Consumed on read: a swipe is an edge event the real input manager
+        // reports for one frame, and leaving it set makes it fire again on the
+        // next.
+        SWIPE.with(|swipe| {
+            let direction = swipe.get();
+            swipe.set(SwipeDir::None);
+            direction
+        })
     }
 
     fn was_back_gesture(&self) -> bool {
