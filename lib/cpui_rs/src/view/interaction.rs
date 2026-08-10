@@ -150,6 +150,14 @@ pub struct Interactions<M> {
     items: Vec<Interaction<M>>,
     focus: usize,
     focusable: usize,
+    /// Set when a view captured input, carrying the focus index it would like
+    /// while it is up. `None` means nothing captured this frame.
+    captured: Option<usize>,
+    /// While true, declarations are ignored entirely. Set on the second pass of
+    /// a frame that captures, so views behind a dialog neither take focus nor
+    /// paint themselves focused — clearing them afterwards is too late, since a
+    /// widget has already been told it holds focus by then.
+    ignoring: bool,
 }
 
 impl<M> Interactions<M> {
@@ -159,11 +167,32 @@ impl<M> Interactions<M> {
             items: Vec::new(),
             focus,
             focusable: 0,
+            captured: None,
+            ignoring: false,
+        }
+    }
+
+    /// A pass that ignores everything until a view calls
+    /// [`capture`](Interactions::capture).
+    ///
+    /// The runtime uses this once it knows the frame contains a capturing view:
+    /// a first pass finds out, a second collects only what is reachable.
+    pub fn capturing(focus: usize) -> Self {
+        Interactions {
+            items: Vec::new(),
+            focus,
+            focusable: 0,
+            captured: None,
+            ignoring: true,
         }
     }
 
     /// Registers an interaction, returning whether it currently holds focus.
     pub fn declare(&mut self, rect: Rect, mask: InputMask, trigger: Trigger<M>) -> bool {
+        if self.ignoring {
+            return false;
+        }
+
         let focused = mask.contains(InputMask::FOCUS) && {
             let mine = self.focusable;
             self.focusable += 1;
@@ -180,6 +209,29 @@ impl<M> Interactions<M> {
 
     /// How many interactions can hold focus. The runtime wraps its cursor on
     /// this.
+    /// Discards everything declared so far: this view is the only thing
+    /// reachable while it is present.
+    ///
+    /// A dialog drawn over a list shares the list's tree, so without this the
+    /// side buttons would walk out of the dialog and into the rows behind it —
+    /// invisible on screen, and wrong. Called by a capturing view *before* it
+    /// declares its own regions, since the tree is walked in draw order and
+    /// everything behind has therefore already been collected.
+    ///
+    /// `preferred_focus` is where focus should sit while the view is up: a
+    /// picker opens on the value already chosen.
+    pub fn capture(&mut self, preferred_focus: usize) {
+        self.items.clear();
+        self.focusable = 0;
+        self.captured = Some(preferred_focus);
+        self.ignoring = false;
+    }
+
+    /// The focus index a capturing view asked for, or `None` if none captured.
+    pub fn captured_focus(&self) -> Option<usize> {
+        self.captured
+    }
+
     pub fn focusable_count(&self) -> usize {
         self.focusable
     }

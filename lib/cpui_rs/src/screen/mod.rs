@@ -131,6 +131,9 @@ pub struct Runtime<S: Screen> {
     painted: bool,
     /// Swallows the release that ends a drag, so it cannot also read as a tap.
     dragging: bool,
+    /// Where focus sat before a view captured input, so dismissing a dialog
+    /// returns to the row that opened it rather than wherever its index landed.
+    focus_before_capture: Option<usize>,
     repeat: Repeat,
 }
 
@@ -141,6 +144,7 @@ impl<S: Screen> Runtime<S> {
             focus: 0,
             painted: false,
             dragging: false,
+            focus_before_capture: None,
             repeat: Repeat {
                 button: None,
                 pressed_at: 0,
@@ -156,7 +160,46 @@ impl<S: Screen> Runtime<S> {
         self.focus
     }
 
+    /// Moves focus in or out of a capturing view. Returns whether it moved.
+    ///
+    /// Entering capture parks the outer focus and adopts the view's preference —
+    /// a picker opens on the value already chosen. Leaving puts the old focus
+    /// back, so dismissing a dialog returns to the row that opened it rather
+    /// than wherever its index happened to land.
+    fn adopt_capture(&mut self, interactions: &Interactions<S::Message>) -> bool {
+        match interactions.captured_focus() {
+            Some(preferred) if self.focus_before_capture.is_none() => {
+                self.focus_before_capture = Some(self.focus);
+                self.focus = preferred.min(interactions.focusable_count().saturating_sub(1));
+                true
+            }
+            None => match self.focus_before_capture.take() {
+                Some(previous) => {
+                    self.focus = previous;
+                    true
+                }
+                None => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Collects, then settles focus against whatever captured input this frame,
+    /// so every caller — Confirm, Up/Down, taps — reads the same table.
+    fn collect_settled(&mut self) -> Interactions<S::Message> {
+        let interactions = self.collect();
+        if self.adopt_capture(&interactions) {
+            return self.collect();
+        }
+        interactions
+    }
+
     /// Builds, measures and collects the tree's interactions.
+    ///
+    /// One pass is enough for routing: [`Interactions::capture`] discards
+    /// whatever was declared before it, so the table already holds only what a
+    /// dialog left reachable. Painting is the case that needs more — see
+    /// [`render`](Driver::render).
     fn collect(&self) -> Interactions<S::Message> {
         let mut view = self.screen.body();
         view.measure(Renderer::screen_size());
@@ -223,7 +266,7 @@ impl<S: Screen> Runtime<S> {
         // -- touch ----------------------------------------------------------
         if self.painted && Input::has_touch() {
             if let Some(point) = Input::touch_held() {
-                let interactions = self.collect();
+                let interactions = self.collect_settled();
                 if let Some(message) = resolve(&interactions, point, InputMask::DRAG) {
                     self.dragging = true;
                     self.dispatch(message);
@@ -239,7 +282,7 @@ impl<S: Screen> Runtime<S> {
             }
 
             if let Some(point) = Input::tap() {
-                let interactions = self.collect();
+                let interactions = self.collect_settled();
                 if let Some(message) = resolve(&interactions, point, InputMask::TAP) {
                     self.dispatch(message);
                     return;
@@ -263,13 +306,13 @@ impl<S: Screen> Runtime<S> {
 
         match key {
             Button::Confirm => {
-                let interactions = self.collect();
+                let interactions = self.collect_settled();
                 if let Some(message) = focused_message(&interactions, self.focus) {
                     self.dispatch(message);
                 }
             }
             Button::Up | Button::Down => {
-                let count = self.collect().focusable_count();
+                let count = self.collect_settled().focusable_count();
                 let delta = if key == Button::Up { -1 } else { 1 };
                 if self.move_focus(delta, count) {
                     request_update();
@@ -278,7 +321,7 @@ impl<S: Screen> Runtime<S> {
             Button::Left | Button::Right => {
                 // Nudge whatever holds focus, so one pair of keys drives every
                 // adjustable control instead of the screen wiring them to one.
-                let interactions = self.collect();
+                let interactions = self.collect_settled();
                 let delta = if key == Button::Left { -1 } else { 1 };
                 if let Some(message) = focused_step(&interactions, self.focus, delta) {
                     self.dispatch(message);
@@ -294,11 +337,23 @@ impl<S: Screen> Runtime<S> {
             Renderer::clear();
         }
 
+        // Settle focus before painting: a dialog appearing moves focus into it,
+        // and the frame it opens on must highlight the right option.
+        let capturing = self.collect_settled().captured_focus().is_some();
+
         let mut view = self.screen.body();
         view.measure(Renderer::screen_size());
         // Interactions run before painting so each widget learns whether it
-        // holds focus and can draw itself selected.
-        let mut out = Interactions::new(self.focus);
+        // holds focus and can draw itself selected. Behind a dialog it must
+        // learn the opposite: a widget is told it holds focus *as it declares*,
+        // so a list behind would record a focused row and keep painting the
+        // highlight. Clearing the table afterwards is too late — this pass
+        // ignores those declarations outright.
+        let mut out = if capturing {
+            Interactions::capturing(self.focus)
+        } else {
+            Interactions::new(self.focus)
+        };
         view.interactions(Point::ORIGIN, &mut out);
         view.render(Point::ORIGIN);
 
