@@ -860,6 +860,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         RenderLock lock(*this);
         clearDeferredReposition();
         nextPageNumber = targetPage;
+      } else {
+        RenderLock lock(*this);
+        clearDeferredReposition();
       }
     }
   };
