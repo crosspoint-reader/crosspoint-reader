@@ -579,10 +579,8 @@ void setup() {
       break;
   }
 
-  // Boot and retained sleep frames always use normal polarity. Restore the
-  // persisted UI preference only after that presentation, before the first
-  // Home/Reader activity paints.
-  display.setInverted(SETTINGS.screenInverted != 0);
+  // Output polarity is resolved per render by ActivityManager (night mode
+  // inverts only the reading surfaces), so nothing to restore here.
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.

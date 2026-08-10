@@ -176,13 +176,6 @@ void SettingsActivity::onExit() {
 }
 
 void SettingsActivity::applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr) {
-  // Night mode flips the output polarity immediately (same live behavior as
-  // the frontlight quick panel's invert toggle) so the very next repaint —
-  // this screen included — shows the new mode.
-  if (valuePtr == &CrossPointSettings::screenInverted) {
-    display.setInverted(SETTINGS.screenInverted != 0);
-    return;
-  }
   // Theme changes take effect immediately, on this screen — reload the theme
   // and re-derive the app's tokens so the very next repaint is in the new look.
   if (valuePtr != &CrossPointSettings::uiTheme) {

@@ -46,7 +46,10 @@ void FrontlightPanelActivity::onEnter() {
   brightness = Frontlight.brightness();
   warmth = Frontlight.warmth();
   lightOn = Frontlight.isOn();
-  inverted = display.isInverted();
+  // Night mode is a reader preference now (ActivityManager applies it per
+  // render, reading surfaces only), so the setting is the source of truth —
+  // the display flag just reflects whatever screen rendered last.
+  inverted = SETTINGS.screenInverted != 0;
 
   uiReady = false;
   applySharedUiTheme(app, uiTarget);
@@ -140,9 +143,11 @@ void FrontlightPanelActivity::toggleLight() {
 }
 
 void FrontlightPanelActivity::toggleInversion() {
-  inverted = display.toggleInverted();
+  inverted = SETTINGS.screenInverted == 0;
   SETTINGS.screenInverted = inverted ? 1 : 0;
   SETTINGS.saveToFile();
+  // No direct display flip: the reader repaints inverted when this overlay
+  // closes (ActivityManager resolves polarity per render).
   requestUpdate();
 }
 

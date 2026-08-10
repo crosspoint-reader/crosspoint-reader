@@ -232,11 +232,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "uiTheme", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
-        // Night mode = inverted output polarity. Same persisted flag the
-        // frontlight quick panel toggles; SettingsActivity applies it live via
-        // display.setInverted() (see applyUiSettingChange).
+        // Night mode = inverted output polarity on the READING surfaces only
+        // (EPUB/TXT; ActivityManager resolves the polarity per render). Same
+        // persisted flag the frontlight quick panel toggles. Reader category,
+        // since it no longer affects the rest of the UI.
         SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
-                            StrId::STR_CAT_DISPLAY),
+                            StrId::STR_CAT_READER),
 #if FREEINK_CAP_FRONTLIGHT
         // Only meaningful on boards with a frontlight; hidden elsewhere.
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
