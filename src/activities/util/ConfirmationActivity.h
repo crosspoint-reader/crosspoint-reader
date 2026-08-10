@@ -16,7 +16,11 @@ class ConfirmationActivity : public Activity {
   const int margin = 20;
   const int spacing = 30;
   const int fontId = UI_10_FONT_ID;
-  static constexpr int maxBodyLines = 6;
+  // Five, not six: the text starts at screenHeight / 6 to stay clear of the
+  // centred confirmation popup, and the block grows downward from there. On an
+  // X4 a heading plus six lines reaches the popup's top edge; five clears it by
+  // roughly 20px.
+  static constexpr int maxBodyLines = 5;
 
   std::string safeHeading;
   std::vector<std::string> bodyLines;
