@@ -6,7 +6,7 @@ screens coexist — nothing about the C++ UI changed to accommodate this — and
 Rust code compiles into the firmware for every device, not just the simulator.
 
 - [Crates](#crates)
-- [Adding a screen, end to end](#adding-a-screen-end-to-end)
+- [Adding a screen](#adding-a-screen)
 - [API reference](#api-reference)
 - [Rules](#rules)
 - [Building and running](#building-and-running)
@@ -17,272 +17,62 @@ Rust code compiles into the firmware for every device, not just the simulator.
 
 | Crate | Contains | Output |
 |---|---|---|
-| `lib/cpui` | Generic framework: views, layout, widgets, FFI. **No product-specific code** — CI enforces this. | `rlib` |
+| `lib/cpui_rs` | The framework: views, layout, widgets, screen roots, and the `Host` traits it needs from a firmware. **No product-specific code** — CI enforces this. | `rlib` |
+| `lib/backend_rs` | The C++ bridge: the `Host` implementation, every `extern "C"` declaration, `tr!`, and the activity lifecycle. Effectively all the `unsafe`. | `rlib` |
 | `lib/crosspoint_rs` | CrossPoint's screens, mirroring `src/activities/`. | `staticlib` + `rlib` |
 
-`crosspoint_rs` statically contains `cpui`, so one archive is linked.
-Both are members of the Cargo workspace at the repository root.
+The dependency points **inward** — `crosspoint_rs` → `backend` → `cpui` — so the
+framework never names a firmware symbol and the compiler enforces the boundary.
+`crosspoint_rs` statically contains the other two, so the firmware links one
+archive. All three are members of the Cargo workspace at the repository root.
+
+Each has its own README: [`cpui`](../lib/cpui_rs/README.md) ·
+[`backend`](../lib/backend_rs/README.md) ·
+[`crosspoint_rs`](../lib/crosspoint_rs/README.md).
 
 ```
-lib/cpui_rs/src/        lib/crosspoint_rs/src/
-├── lib.rs      re-exports      ├── lib.rs        tr! macro
-├── runtime.rs  heap, panic     ├── strings.rs    GENERATED keys
-├── geometry.rs Point/Size/Rect └── activities/   mirrors src/activities/
-├── view.rs     the View trait      └── settings/about.rs
-├── activity.rs lifecycle
-├── testing.rs  test doubles
-├── ffi/        raw + renderer, font, input, theme, device, i18n, activity
-├── layout/     stack, spacer, padding, macros
-├── widgets/    text, divider, list, progress
-└── screen/     navigation
-```
-
----
-
-## Adding a screen, end to end
-
-We'll add a fictional **Storage** screen under Settings. Seven steps; the
-existing About screen is a working copy of every one of them.
-
-### 1. Add the translation keys
-
-Edit `lib/I18n/translations/english.yaml` only:
-
-```yaml
-STR_STORAGE: "Storage"
-STR_CARD_CAPACITY: "Card Capacity"
-```
-
-Other languages need no edit — a missing key falls back to English
-automatically. See [i18n.md](./i18n.md).
-
-Regenerate (the build does this too, but doing it now gives you the Rust
-constants immediately):
-
-```bash
-python3 scripts/gen_i18n.py lib/I18n/translations lib/I18n/
-```
-
-This writes `lib/crosspoint_rs/src/strings.rs` with a constant per key. Never
-edit that file.
-
-### 2. Write the screen in Rust
-
-`lib/crosspoint_rs/src/activities/settings/storage.rs`:
-
-```rust
-use alloc::format;
-
-use cpui::{register_screen, vstack, Font, List, ListRow, NavigationScreen, Screen, Text, View};
-
-use crate::tr;
-
-/// Everything this screen can be told. One enum per screen, matched
-/// exhaustively in `update` — so a control that sends something the screen
-/// forgot to handle is a compile error, not a silent no-op.
-#[derive(Clone, Copy)]
-pub enum Msg {
-    Refresh,
-}
-
-#[derive(Default)]
-pub struct StorageScreen {
-    capacity_gb: u32,
-}
-
-impl StorageScreen {
-    pub fn new() -> Self {
-        StorageScreen::default()
-    }
-}
-
-impl Screen for StorageScreen {
-    type Message = Msg;
-
-    fn body(&self) -> impl View<Msg> {
-        NavigationScreen::new(vstack![20;
-            Text::new(tr!(STR_CARD_CAPACITY)).font(Font::ui_small()),
-            Text::new(format!("{} GB", self.capacity_gb)).bold(),
-            List::new().push(ListRow::new(tr!(STR_REFRESH)).on_tap(Msg::Refresh)),
-        ])
-    }
-
-    fn update(&mut self, message: Msg) {
-        match message {
-            Msg::Refresh => self.capacity_gb = read_capacity(),
-        }
-    }
-}
-
-register_screen!(StorageScreen, create_storage_activity);
-```
-
-That is the whole screen. There is no hit-testing, no selected index, no button
-polling, and no `request_update()` — the runtime does all of it.
-
-**`body` is a pure function of the screen's state**, called once per paint and
-once per frame carrying input. Built fresh rather than stored, because `loop`
-and `render` run on different FreeRTOS tasks with no lock between them: a stored
-tree is one task walking what the other is replacing. Two screens froze that way
-before this rule existed.
-
-**`update` is the only place state changes.** The runtime repaints afterwards,
-so a screen can never forget to.
-
-Override only what you need:
-
-```rust
-impl Screen for StorageScreen {
-    // ...
-
-    /// A key the runtime has not claimed, offered *before* it applies its own
-    /// meaning — so a screen wanting Up/Down for something other than moving
-    /// focus simply says so. Auto-repeat applies to whatever you claim.
-    fn on_key(&self, key: Button) -> Option<Msg> {
-        match key {
-            Button::Left => Some(Msg::Previous),
-            _ => None,
-        }
-    }
-
-    fn is_overlay(&self) -> bool { true }   // paint over what is already there
-    fn on_enter(&mut self) { /* acquire */ }
-    fn on_exit(&mut self) { /* release */ }
-}
-```
-
-`register_screen!` exports the C factory. Use it once per screen; the shared
-lifecycle entry points live in the framework.
-
-### 3. Declare the module
-
-`lib/crosspoint_rs/src/activities/settings/mod.rs`:
-
-```rust
-pub mod about;
-pub mod storage;
-
-pub use about::AboutActivity;
-pub use storage::StorageActivity;
-```
-
-### 4. Add the C++ wrapper
-
-`src/activities/settings/StorageActivityRs.h`:
-
-```cpp
-#pragma once
-
-#include "activities/ActivityRs.h"
-
-extern "C" {
-void* create_storage_activity();   // must match register_screen!
-}
-
-class StorageActivityRs final : public ActivityRs {
- public:
-  explicit StorageActivityRs(GfxRenderer& renderer, MappedInputManager& mappedInput);
-
-  const char* getTitle() const override;
-};
-```
-
-`src/activities/settings/StorageActivityRs.cpp`:
-
-```cpp
-#include "StorageActivityRs.h"
-
-#include <I18n.h>
-
-#include "I18nKeys.h"
-
-StorageActivityRs::StorageActivityRs(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : ActivityRs("StorageActivityRs", renderer, mappedInput, create_storage_activity) {}
-
-// Read fresh on every render, so a language change is picked up immediately.
-const char* StorageActivityRs::getTitle() const { return tr(STR_STORAGE); }
-```
-
-The title lives on the C++ side so it goes through `tr()` without the Rust
-screen having to know about it. `NavigationScreen` draws it in the header band.
-
-### 5. Wire it into the menu
-
-In `src/activities/settings/SettingsActivity.h`, add to the `SettingAction`
-enum:
-
-```cpp
-Storage,
-```
-
-In `src/activities/settings/SettingsActivity.cpp`, include the header and
-handle the action the same way `About` is handled:
-
-```cpp
-#include "StorageActivityRs.h"
-...
-case SettingAction::Storage:
-  startActivityForResult(std::make_unique<StorageActivityRs>(renderer, mappedInput),
-                         resultHandler);
-  break;
-```
-
-Then add the row to the settings list (see how `STR_ABOUT` is registered in
-`src/SettingsList.h`).
-
-### 6. Add a test
-
-`lib/crosspoint_rs/tests/storage_screen.rs`:
-
-```rust
-use crosspoint_rs::activities::settings::StorageScreen;
-use cpui::testing::{self, CONTENT_BOTTOM, CONTENT_TOP, SCREEN_HEIGHT, SCREEN_WIDTH};
-use cpui::{Interactions, Point, Screen, Size, View};
-
-#[test]
-fn storage_draws_inside_the_content_band() {
-    let screen = StorageScreen::new();
-    let mut root = screen.body();
-
-    testing::reset();
-    root.measure(Size::new(SCREEN_WIDTH, SCREEN_HEIGHT));
-    root.render(Point::ORIGIN);
-
-    for (_, y, text, font_id, _) in testing::drawn_text() {
-        assert!(y >= CONTENT_TOP, "{text:?} overlaps the header");
-        assert!(y + testing::line_height(font_id) <= CONTENT_BOTTOM,
-                "{text:?} runs under the button hints");
-    }
-}
-
-/// Controls can be tested without touching the runtime: collect the
-/// interactions and ask what each would send.
-#[test]
-fn the_refresh_row_sends_refresh() {
-    let screen = StorageScreen::new();
-    let mut root = screen.body();
-    root.measure(Size::new(SCREEN_WIDTH, SCREEN_HEIGHT));
-
-    let mut found = Interactions::new(0);
-    root.interactions(Point::ORIGIN, &mut found);
-
-    let item = &found.items()[0];
-    assert!(matches!(item.trigger.resolve(item.rect, 0), Msg::Refresh));
-}
-```
-
-No firmware and no simulator needed — the framework's test doubles stand in for
-every `cpp_*` symbol.
-
-### 7. Build and check
-
-```bash
-./build-and-test.sh check     # gates: fmt, clippy, tests, cpui_rs grep, C++ format
-./build-and-test.sh           # then build and run the simulator
-./build-and-test.sh all       # and before you push: every gate, every CI target
+lib/cpui_rs/src/                      the framework
+├── host/          the five traits it needs, and the façades widgets call
+├── view/          the View trait and the interaction model
+├── layout/        stacks, spacer, padding, chainable modifiers
+├── widgets/       text, list, slider, stepper, icons, modal, toggles
+├── screen/        the Screen contract, its runtime, and the root views
+├── geometry.rs    Point, Size, Rect, Insets
+└── testing.rs     a fake host, so tests need neither device nor simulator
+
+lib/backend_rs/src/                   the C++ bridge
+├── raw.rs         every extern "C" declaration
+├── firmware.rs    the type implementing cpui's Host
+├── renderer.rs · font.rs · theme.rs · input.rs    the trait impls
+├── device.rs · frontlight.rs · icon.rs · i18n.rs  firmware capabilities
+├── lifecycle.rs   the rust_activity_* entry points, and register_screen!
+├── runtime.rs     global allocator and panic handler
+└── testing.rs     host doubles for the C symbols, so test binaries link
+
+lib/crosspoint_rs/src/                the screens
+├── lib.rs         anchors backend, so the linker keeps its entry points
+└── activities/    mirrors src/activities/ on the C++ side
 ```
 
 ---
+
+## Adding a screen
+
+The step-by-step walkthrough now lives in
+**[Your first Rust screen](your-first-rust-screen.md)** — it goes from an empty file to a
+screen running on real hardware, including the simulator and flashing, which
+this document never covered.
+
+Each crate's README explains its own layer, and they read in order:
+
+| | |
+|---|---|
+| [`cpui`](../lib/cpui_rs/README.md) | the UI: views, layout, widgets |
+| [`backend`](../lib/backend_rs/README.md) | the bridge to C++ |
+| [`crosspoint_rs`](../lib/crosspoint_rs/README.md) | where screens live |
+
+The rest of this document is the reference behind them: the full API, the rules
+that keep the firmware within its memory budget, and how to extend the FFI.
 
 ## API reference
 
@@ -677,7 +467,7 @@ product-specific code.
 Adding a C++ capability means three edits, in this order:
 
 1. **`lib/backend_rs/src/raw.rs`** — the `extern "C"` declaration.
-2. **`src/activities/RustActivityStubs.cpp`** — the implementation.
+2. **`src/rust_ffi/*.cpp`** — the implementation, one file per concern.
 3. **`lib/cpui_rs/src/testing.rs`** — a double, or the test binary will
    not link.
 
