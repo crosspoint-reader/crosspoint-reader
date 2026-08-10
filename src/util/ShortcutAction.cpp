@@ -32,6 +32,8 @@ ShortcutAction shortcutActionFromRawValue(const uint8_t value) {
       return ShortcutAction::FileTransfer;
     case shortcutActionRawValue(ShortcutAction::ToggleTiltPageTurn):
       return ShortcutAction::ToggleTiltPageTurn;
+    case shortcutActionRawValue(ShortcutAction::Select):
+      return ShortcutAction::Select;
     case shortcutActionRawValue(ShortcutAction::None):
     default:
       return ShortcutAction::None;
@@ -53,6 +55,7 @@ bool isShortcutAvailableOutsideReader(const ShortcutAction action) {
     case ShortcutAction::ToggleBookmark:
     case ShortcutAction::SyncProgress:
     case ShortcutAction::LookUpWord:
+    case ShortcutAction::Select:
       return false;
   }
   return false;
@@ -92,6 +95,7 @@ bool runGlobalShortcut(const ShortcutAction action, GfxRenderer& renderer) {
     case ShortcutAction::ToggleBookmark:
     case ShortcutAction::SyncProgress:
     case ShortcutAction::LookUpWord:
+    case ShortcutAction::Select:
       return false;
   }
   return false;

@@ -7,6 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
+#include "util/ShortcutAction.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
@@ -361,13 +362,21 @@ bool MappedInputManager::wasHomeGesture() const {
   return false;
 }
 
+bool MappedInputManager::wasShortPowerSelectClick() const {
+  return SETTINGS.shortPwrBtn == shortcutActionRawValue(ShortcutAction::Select) &&
+         mapButton(Button::Power, &HalGPIO::wasReleased) &&
+         gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
+}
+
 bool MappedInputManager::wasPressed(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
+  if (button == Button::Confirm && wasShortPowerSelectClick()) return true;
   return mapButton(button, &HalGPIO::wasPressed);
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
+  if (button == Button::Confirm && wasShortPowerSelectClick()) return true;
   return mapButton(button, &HalGPIO::wasReleased);
 }
 

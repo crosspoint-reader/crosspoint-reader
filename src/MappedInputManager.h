@@ -108,6 +108,12 @@ class MappedInputManager {
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   bool wasBackGesture() const;
+  // True exactly once, on the frame Power is released, when shortPwrBtn == ShortcutAction::Select
+  // and the completed press was short enough to not have triggered a long-hold action (same
+  // threshold as CrossPointSettings::getPowerButtonDuration(), the power-management path's own
+  // classification). Long holds never report true here, even mid-press, since press/release
+  // duration is only known for certain once the button comes back up.
+  bool wasShortPowerSelectClick() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords
   bool decodeSwipe(int& sx, int& sy, int& ex, int& ey) const;
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
