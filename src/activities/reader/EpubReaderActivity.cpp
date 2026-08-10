@@ -847,22 +847,17 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
 
       // Any explicit selection supersedes the session-start resume/reflow anchor,
       // including a selection that is already active.
-      {
-        RenderLock lock(*this);
-        clearDeferredReposition();
-      }
+      RenderLock lock(*this);
+      clearDeferredReposition();
 
       if (currentSpineIndex != targetSpineIndex) {
-        RenderLock lock(*this);
         currentSpineIndex = targetSpineIndex;
         nextPageNumber = targetPage;
         section.reset();
       } else if (section && section->currentPage != targetPage) {
-        RenderLock lock(*this);
         const int clampedTargetPage = std::max(0, targetPage);
         section->currentPage = clampedTargetPage;
       } else if (!section) {
-        RenderLock lock(*this);
         nextPageNumber = targetPage;
       }
     }
