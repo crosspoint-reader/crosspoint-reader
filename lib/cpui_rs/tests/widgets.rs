@@ -6,7 +6,7 @@
 
 use cpui::host::IconRef;
 use cpui::testing::{self, RectKind, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
-use cpui::view::{Interactions, Trigger};
+use cpui::view::{InputMask, Interactions, Trigger};
 use cpui::{value_at, IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
 
 fn available() -> Size {
@@ -115,19 +115,21 @@ fn toggle_row_shows_the_state_as_its_value() {
     assert_eq!(sized(true), sized(false), "state must not alter layout");
 }
 
-/// Hit rects must come back for every option and be disjoint, or a tap would
-/// select the wrong row.
+/// One interaction per option, disjoint, or a tap would choose the wrong row.
+/// The rects come from the C++ popup's own layout, so this also pins that the
+/// Rust side is reading that geometry correctly.
 #[test]
-fn modal_row_rects_cover_each_option_without_overlapping() {
-    let mut modal: Modal =
-        Modal::new("Orientation", ["Portrait", "Landscape CW", "Inverted"]).selected(1);
-    View::<()>::measure(&mut modal, available());
+fn modal_declares_one_interaction_per_option() {
+    let mut modal = Modal::new("Orientation", ["Portrait", "Landscape CW", "Inverted"])
+        .selected(1)
+        .on_select(|index| index);
+    View::<usize>::measure(&mut modal, available());
 
-    let rects: Vec<_> = (0..modal.len())
-        .map(|i| modal.row_rect(i).expect("every option needs a hit rect"))
-        .collect();
+    let mut out = Interactions::new(0);
+    modal.interactions(Point::ORIGIN, &mut out);
 
-    assert_eq!(rects.len(), 3);
+    let rects: Vec<_> = out.items().iter().map(|i| i.rect).collect();
+    assert_eq!(rects.len(), 3, "one per option");
     for pair in rects.windows(2) {
         assert!(
             pair[0].bottom() <= pair[1].y(),
@@ -136,37 +138,77 @@ fn modal_row_rects_cover_each_option_without_overlapping() {
             pair[1]
         );
     }
+}
 
-    assert!(
-        modal.row_rect(99).is_none(),
-        "out-of-range index must be None"
+/// A tap resolves to the option it landed on, and the reported index matches.
+#[test]
+fn modal_maps_a_tap_to_its_option() {
+    let mut modal = Modal::new("Orientation", ["Portrait", "Landscape CW", "Inverted"])
+        .on_select(|index| index);
+    View::<usize>::measure(&mut modal, available());
+
+    let mut out = Interactions::new(0);
+    modal.interactions(Point::ORIGIN, &mut out);
+
+    for (index, item) in out.items().iter().enumerate() {
+        let centre = Point::new(
+            item.rect.x() + item.rect.width() / 2,
+            item.rect.y() + item.rect.height() / 2,
+        );
+        assert!(item.rect.contains(centre));
+        match &item.trigger {
+            Trigger::Message(reported) => assert_eq!(*reported, index),
+            _ => panic!("an option sends a plain message"),
+        }
+    }
+}
+
+/// A dialog captures input even before anything is chosen, so the list behind
+/// it is unreachable the moment it appears.
+#[test]
+fn modal_captures_input() {
+    let mut modal = Modal::new("Orientation", ["Portrait", "Landscape CW"])
+        .selected(1)
+        .on_select(|index| index);
+    View::<usize>::measure(&mut modal, available());
+
+    let mut out = Interactions::new(0);
+    out.declare(
+        Rect::new(0, 0, 10, 10),
+        InputMask::DEFAULT,
+        Trigger::Message(99),
+    );
+    modal.interactions(Point::ORIGIN, &mut out);
+
+    assert_eq!(
+        out.focusable_count(),
+        2,
+        "only the dialog's own options remain"
+    );
+    assert_eq!(
+        out.captured_focus(),
+        Some(1),
+        "focus opens on the value already chosen"
     );
 }
 
-/// A tap resolves to the row that contains it, and to nothing outside.
-#[test]
-fn modal_maps_a_tap_to_its_option() {
-    let mut modal: Modal = Modal::new("Orientation", ["Portrait", "Landscape CW", "Inverted"]);
-    View::<()>::measure(&mut modal, available());
-
-    for index in 0..modal.len() {
-        let rect = modal.row_rect(index).unwrap();
-        let centre = Point::new(rect.x() + rect.width() / 2, rect.y() + rect.height() / 2);
-        assert_eq!(modal.option_at(centre), Some(index));
-    }
-
-    assert_eq!(modal.option_at(Point::new(0, 0)), None);
-}
-
-/// An empty modal draws nothing rather than asking the theme for a zero-row
-/// dialog.
+/// An empty dialog draws nothing and captures nothing, rather than asking the
+/// theme for a zero-row popup or trapping input in something invisible.
 #[test]
 fn empty_modal_is_inert() {
-    let mut modal: Modal = Modal::new("Nothing", Vec::<String>::new());
-    View::<()>::measure(&mut modal, available());
+    let mut modal = Modal::new("Nothing", Vec::<String>::new()).on_select(|index: usize| index);
+    View::<usize>::measure(&mut modal, available());
+
+    let mut out = Interactions::new(0);
+    modal.interactions(Point::ORIGIN, &mut out);
 
     assert!(modal.is_empty());
-    assert!(modal.row_rect(0).is_none());
+    assert!(out.is_empty());
+    assert_eq!(
+        out.captured_focus(),
+        None,
+        "an empty dialog must not capture"
+    );
 }
 
 /// A bitmap occupies exactly its own size, and a buffer too short for its

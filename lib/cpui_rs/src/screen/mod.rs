@@ -5,7 +5,7 @@ mod navigation;
 mod overlay;
 
 pub use navigation::NavigationScreen;
-pub use overlay::{OverlayPanel, Scrim};
+pub use overlay::OverlayPanel;
 
 use crate::geometry::Point;
 use crate::host::{finish_screen, millis, request_update, Button, Input, Renderer, SwipeDir};

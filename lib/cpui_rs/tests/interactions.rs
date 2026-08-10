@@ -8,8 +8,9 @@
 use cpui::screen::{Driver, Runtime};
 use cpui::testing::{self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
 use cpui::{
-    hstack, value_at, vstack, Alignment, HStack, InputMask, Interactions, List, ListRow,
-    Modifiers, Point, Size, Slider, Spacer, Stepper, SwipeDir, Text, Toggle, VStack, View,
+    hstack, value_at, vstack, Alignment, Button, HStack, InputMask, Interactions, List, ListRow,
+    Modal, Modifiers, Point, Rect, Size, Slider, Spacer, Stepper, SwipeDir, Text, Toggle,
+    Trigger, VStack, View,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -501,6 +502,214 @@ fn horizontal_swipes_do_not_move_focus() {
             "{direction:?} must not navigate"
         );
     }
+}
+
+// -- dialogs capture input ----------------------------------------------------
+//
+// A dialog shares the screen's tree with the list behind it. Without capture the
+// side buttons walk straight out of the dialog and into those rows — invisible
+// on screen, and the wrong thing entirely.
+
+/// Three rows; tapping one opens a dialog, as the C++ Settings screen does.
+struct WithDialog {
+    open_row: Option<usize>,
+    chose: Option<usize>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum DlgMsg {
+    OpenRow(usize),
+    Chose(usize),
+}
+
+impl cpui::Screen for WithDialog {
+    type Message = DlgMsg;
+
+    fn body(&self) -> impl View<DlgMsg> {
+        vstack![4;
+            List::new()
+                .push(ListRow::new("one").on_tap(DlgMsg::OpenRow(0)))
+                .push(ListRow::new("two").on_tap(DlgMsg::OpenRow(1)))
+                .push(ListRow::new("three").on_tap(DlgMsg::OpenRow(2))),
+        ]
+        .push_if(
+            self.open_row.is_some(),
+            Modal::picker("Pick", ["alpha", "beta"])
+                .selected(1)
+                .on_select(DlgMsg::Chose),
+        )
+    }
+
+    fn update(&mut self, message: DlgMsg) {
+        match message {
+            DlgMsg::OpenRow(row) => self.open_row = Some(row),
+            DlgMsg::Chose(index) => {
+                self.chose = Some(index);
+                self.open_row = None;
+            }
+        }
+    }
+}
+
+fn dialog_runtime() -> Runtime<WithDialog> {
+    testing::install();
+    testing::reset();
+    let mut runtime = Runtime::new(WithDialog {
+        open_row: None,
+        chose: None,
+    });
+    runtime.render();
+    runtime
+}
+
+/// The whole round trip: walk to a row, open its dialog, walk inside the
+/// dialog, choose — and land back on the row you came from.
+#[test]
+fn a_dialog_captures_focus_and_gives_it_back() {
+    let mut runtime = dialog_runtime();
+
+    // Move to the second row and open its dialog.
+    testing::set_swipe(SwipeDir::Up);
+    runtime.loop_();
+    assert_eq!(runtime.focused_index(), 1);
+
+    testing::press(Button::Confirm);
+    runtime.loop_();
+    // update() asked for a repaint; that is where focus settles into the dialog.
+    runtime.render();
+    assert_eq!(
+        runtime.focused_index(),
+        1,
+        "the dialog opens on its selected option"
+    );
+
+    // Up/Down now walk the dialog's two options, never the three rows behind.
+    testing::set_swipe(SwipeDir::Up);
+    runtime.loop_();
+    assert_eq!(runtime.focused_index(), 0, "wraps within the dialog");
+
+    // Choosing closes it and returns focus to the row that opened it.
+    testing::press(Button::Confirm);
+    runtime.loop_();
+    runtime.render();
+    assert_eq!(
+        runtime.focused_index(),
+        1,
+        "focus returns to the opening row"
+    );
+}
+
+/// The point of capture: with a dialog up, the rows behind are unreachable.
+#[test]
+fn rows_behind_a_dialog_are_unreachable() {
+    let mut runtime = dialog_runtime();
+
+    testing::press(Button::Confirm);
+    runtime.loop_(); // opens row 0's dialog
+
+    // Two options in the dialog, three rows behind. Walking six times must
+    // never land outside the dialog's range.
+    for _ in 0..6 {
+        testing::set_swipe(SwipeDir::Up);
+        runtime.loop_();
+        assert!(
+            runtime.focused_index() < 2,
+            "focus escaped the dialog to index {}",
+            runtime.focused_index()
+        );
+    }
+}
+
+/// The bug this exists to prevent: a widget is told it holds focus *as it
+/// declares*, so a list behind a dialog would record a focused row and keep
+/// painting the highlight — which then appeared to move as the dialog was
+/// navigated. Clearing the table afterwards is too late; the declaration itself
+/// has to be ignored.
+#[test]
+fn views_behind_a_dialog_are_told_they_are_not_focused() {
+    let mut out: Interactions<u8> = Interactions::capturing(0);
+
+    let focused = out.declare(
+        Rect::new(0, 0, 100, 40),
+        InputMask::DEFAULT,
+        Trigger::Message(1),
+    );
+    assert!(
+        !focused,
+        "a row behind the dialog must not paint as focused"
+    );
+    assert_eq!(out.focusable_count(), 0, "nor join the focus order");
+
+    out.capture(0);
+
+    let focused = out.declare(
+        Rect::new(0, 0, 100, 40),
+        InputMask::DEFAULT,
+        Trigger::Message(2),
+    );
+    assert!(focused, "the dialog's own first option does hold focus");
+    assert_eq!(out.focusable_count(), 1);
+}
+
+/// End to end, and the test that would have caught this on the device: with the
+/// dialog open, the list behind must be told to highlight **nothing** (-1), no
+/// matter how far focus travels inside the dialog. Asserting the focus index
+/// alone does not catch it — the index stays in range either way, while the
+/// list keeps painting a highlight that appears to move.
+#[test]
+fn the_list_behind_never_paints_a_focused_row() {
+    let mut runtime = dialog_runtime();
+
+    testing::press(Button::Confirm);
+    runtime.loop_();
+
+    for _ in 0..4 {
+        testing::reset();
+        runtime.render();
+
+        let lists = testing::drawn_lists();
+        assert!(!lists.is_empty(), "the list behind should still be drawn");
+        for (rows, selected) in lists {
+            assert_eq!(
+                selected, -1,
+                "a {rows}-row list behind the dialog was told to highlight row {selected}"
+            );
+        }
+
+        testing::set_swipe(SwipeDir::Up);
+        runtime.loop_();
+    }
+}
+
+/// The arrows must actually move the highlight *inside* the dialog. Focus can
+/// be moving perfectly while the dialog keeps painting whichever value the
+/// screen passed to `selected` — which looks, from the device, exactly like the
+/// arrows doing nothing.
+#[test]
+fn the_arrows_move_the_highlight_inside_the_dialog() {
+    let mut runtime = dialog_runtime();
+
+    testing::press(Button::Confirm);
+    runtime.loop_();
+
+    let highlight = |runtime: &mut Runtime<WithDialog>| {
+        testing::reset();
+        runtime.render();
+        let popups = testing::drawn_popups();
+        assert_eq!(popups.len(), 1, "the dialog should be drawn");
+        popups[0].2
+    };
+
+    // Opens on the option the screen said was current.
+    assert_eq!(highlight(&mut runtime), 1, "opens on the selected option");
+
+    testing::press(Button::Up);
+    runtime.loop_();
+    assert_eq!(highlight(&mut runtime), 0, "Up moves the highlight");
+
+    testing::press(Button::Down);
+    runtime.loop_();
+    assert_eq!(highlight(&mut runtime), 1, "Down moves it back");
 }
 
 /// Both readings of a vertical swipe are supported, because both are

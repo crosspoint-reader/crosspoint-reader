@@ -160,3 +160,17 @@ pub trait ViewExt<M>: View<M> + Sized {
 }
 
 impl<M, V: View<M> + Sized> ViewExt<M> for V {}
+
+/// How a view treats whatever is already on the panel behind it.
+///
+/// Used by anything that paints over existing content — an overlay panel, a
+/// dialog — so the choice reads the same wherever it appears.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum Scrim {
+    /// Left exactly as it was.
+    #[default]
+    None,
+    /// Darkened, so the panel reads as the foreground. What is behind stays
+    /// legible — roughly half its pixels survive.
+    Dim,
+}

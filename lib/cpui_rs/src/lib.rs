@@ -53,8 +53,8 @@ pub use host::{
 pub use layout::{
     Alignment, Flexible, Frame, HStack, Modifiers, Padding, Spacer, Tappable, VStack,
 };
-pub use screen::{NavigationScreen, OverlayPanel, Screen, Scrim};
-pub use view::{value_at, InputMask, Interaction, Interactions, Trigger, View, ViewExt};
+pub use screen::{NavigationScreen, OverlayPanel, Screen};
+pub use view::{value_at, InputMask, Interaction, Interactions, Scrim, Trigger, View, ViewExt};
 pub use widgets::{
     Divider, Icon, IconToggle, Image, List, ListRow, Modal, ProgressBar, Section, Slider, Stepper,
     Text, Toggle,

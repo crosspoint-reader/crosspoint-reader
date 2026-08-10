@@ -5,21 +5,10 @@ use alloc::string::String;
 
 use crate::geometry::{Point, Rect, Size};
 use crate::host::{Renderer, ScreenChrome, Theme, ThemeMetric};
-use crate::view::{InputMask, Interactions, Trigger, View};
+use crate::view::{InputMask, Interactions, Scrim, Trigger, View};
 
 /// Thickness of the rule marking the panel's bottom edge.
 const EDGE_THICKNESS: i32 = 2;
-
-/// How the screen showing below an [`OverlayPanel`] is treated.
-#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub enum Scrim {
-    /// Left exactly as it was.
-    #[default]
-    None,
-    /// Darkened, so the panel reads as the foreground. What is behind stays
-    /// legible — roughly half its pixels survive.
-    Dim,
-}
 
 /// The root view for a panel that drops over whatever is already on screen.
 ///
