@@ -405,9 +405,8 @@ void setup() {
       break;
   }
 
-  // Boot and retained sleep frames are intentionally shown in normal
-  // polarity. Restore the user's mode before the first interactive screen.
-  display.setInverted(SETTINGS.displayMode == CrossPointSettings::DISPLAY_MODE_DARK);
+  // Output polarity is resolved per render by ActivityManager (night mode
+  // inverts only the reading surfaces), so nothing to restore here.
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.

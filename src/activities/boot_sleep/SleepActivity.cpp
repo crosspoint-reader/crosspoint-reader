@@ -21,8 +21,9 @@
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
-  // Sleep screens always use normal polarity. The persisted display mode is
-  // restored on boot after the retained sleep frame has been presented.
+  // Sleep screens always use normal polarity. This activity draws directly
+  // from onEnter (outside ActivityManager's per-render polarity resolution),
+  // so clear any inversion left over from a night-mode reader render.
   display.setInverted(false);
 
   const bool renderQuickResume =

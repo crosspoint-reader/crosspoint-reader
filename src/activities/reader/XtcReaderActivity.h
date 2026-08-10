@@ -49,5 +49,6 @@ class XtcReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  bool appliesNightMode() const override { return true; }
   ScreenshotInfo getScreenshotInfo() const override;
 };
