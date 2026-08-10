@@ -19,6 +19,11 @@ enum class ShortcutAction : uint8_t {
   LookUpWord = 9,
   FileTransfer = 10,
   ToggleTiltPageTurn = 11,
+  // Aliases the button to whatever Confirm currently means on screen. Unlike every other
+  // action, this has no fixed effect to run — it is handled entirely at the input layer
+  // (MappedInputManager::wasShortPowerSelectClick), so it is deliberately excluded from
+  // isShortcutAvailableOutsideReader()/runGlobalShortcut()/runReaderShortcut().
+  Select = 12,
 };
 
 constexpr uint8_t shortcutActionRawValue(const ShortcutAction action) { return static_cast<uint8_t>(action); }
