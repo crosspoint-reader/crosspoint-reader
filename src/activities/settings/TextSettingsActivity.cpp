@@ -38,6 +38,16 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
 constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
+constexpr StrId TEXT_AA_IDS[] = {StrId::STR_STATE_OFF, StrId::STR_TEXT_AA_FAST, StrId::STR_TEXT_AA_FULL};
+constexpr uint8_t TEXT_AA_VALUES[] = {CrossPointSettings::TEXT_AA_OFF, CrossPointSettings::TEXT_AA_FAST,
+                                      CrossPointSettings::TEXT_AA_FULL};
+
+int textAaOptionIndex(const uint8_t value) {
+  for (int i = 0; i < static_cast<int>(std::size(TEXT_AA_VALUES)); ++i) {
+    if (TEXT_AA_VALUES[i] == value) return i;
+  }
+  return static_cast<int>(std::size(TEXT_AA_VALUES)) - 1;
+}
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
 constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
 constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
@@ -282,7 +292,9 @@ void TextSettingsActivity::render(RenderLock&&) {
           renderer, listRect, STYLE_ROWS, selectedItem,
           [](int index) { return std::string(I18N.get(ROW_NAME_IDS[index])); }, nullptr, nullptr,
           [this](int index) { return styleValueText(index); }, true);
-      confirmLabel = onTabBar ? tr(STR_FONT) : tr(STR_TOGGLE);
+      confirmLabel = onTabBar
+                         ? tr(STR_FONT)
+                         : (selectedItem == static_cast<int>(StyleRow::AntiAliasing) ? tr(STR_SELECT) : tr(STR_TOGGLE));
       break;
     }
 
@@ -451,8 +463,13 @@ void TextSettingsActivity::confirmStyleRow(int row) {
       SETTINGS.embeddedStyle = !SETTINGS.embeddedStyle;
       break;
     case StyleRow::AntiAliasing:
-      SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
-      break;
+      optionPopup_.show(StrId::STR_TEXT_AA, TEXT_AA_IDS, static_cast<int>(std::size(TEXT_AA_IDS)),
+                        textAaOptionIndex(SETTINGS.textAntiAliasing), [](int idx) {
+                          SETTINGS.textAntiAliasing = TEXT_AA_VALUES[idx];
+                          SETTINGS.saveToFile();
+                        });
+      requestUpdate();
+      return;
 
     default:
       return;
@@ -470,7 +487,7 @@ std::string TextSettingsActivity::styleValueText(int row) const {
     case StyleRow::EmbeddedStyle:
       return SETTINGS.embeddedStyle ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::AntiAliasing:
-      return SETTINGS.textAntiAliasing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return I18N.get(TEXT_AA_IDS[textAaOptionIndex(SETTINGS.textAntiAliasing)]);
 
     default:
       return "";

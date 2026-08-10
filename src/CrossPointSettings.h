@@ -161,6 +161,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // Keep FULL at 1 so existing enabled settings retain the original grayscale
+  // behavior after this former on/off setting became an enum.
+  enum TEXT_ANTIALIASING { TEXT_AA_OFF = 0, TEXT_AA_FULL = 1, TEXT_AA_FAST = 2, TEXT_ANTIALIASING_COUNT };
+
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
   enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };
@@ -198,7 +202,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
-  uint8_t textAntiAliasing = 1;
+  uint8_t textAntiAliasing = TEXT_AA_FULL;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings
