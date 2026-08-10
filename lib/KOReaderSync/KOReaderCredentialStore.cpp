@@ -72,8 +72,8 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
   }
 
   if (needsResave) {
-    LOG_DBG("KRS", "Resaved KOReader credentials to update format");
-    saveToFile();
+    LOG_DBG("KRS", "Resaving KOReader credentials to update format");
+    requestResave();
   }
 
   return true;
@@ -131,6 +131,8 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
 
   return url;
 }
+
+bool KOReaderCredentialStore::usesCrossPointSyncServer() const { return getBaseUrl() == DEFAULT_SERVER_URL; }
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
   matchMethod = method;

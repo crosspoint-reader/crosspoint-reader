@@ -84,7 +84,11 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
   // epub is guaranteed non-null here: ensureEpubLoaded() was called in performSync() before
   // SHOWING_RESULT state is entered, and this method is only called from that state.
   assert(epub);
-  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, page, 0)) {
+  std::optional<uint32_t> offset;
+  if (remotePosition.hasVisibleTextOffset && remotePosition.spineIndex == spineIndex) {
+    offset = remotePosition.visibleTextOffset;
+  }
+  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, page, 0, offset)) {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -232,18 +236,17 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  // Prefer the exact spine/page from a crosspoint-sync rich position (lossless
-  // CrossPoint<->CrossPoint sync); fall back to the approximate XPath mapping
-  // for plain kosync servers or when the rich position cannot be applied.
-  std::optional<CrossPointPosition> richMapped;
-  if (remoteProgress.position.has_value()) {
-    richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
-  }
-  if (richMapped.has_value()) {
-    remotePosition = *richMapped;
-  } else {
-    SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-    remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  // The standard KOReader progress XPath is the authoritative content anchor.
+  // The CrossPoint server's existing rich page hints remain a legacy fallback.
+  SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
+  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  if (!remotePosition.hasVisibleTextOffset && remoteProgress.position.has_value()) {
+    // toCrossPoint above already tried koPos.xpath; if the rich position carries the same XPath,
+    // tell fromRichPosition to skip re-resolving it and use its page hints directly.
+    const bool sameXPath = remoteProgress.position->xpath == remoteProgress.progress;
+    if (const auto richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer, sameXPath)) {
+      remotePosition = *richMapped;
+    }
   }
 
   if (smartSyncEnabled()) {
@@ -298,9 +301,10 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
 
-  // Rich CrossPoint position for crosspoint-sync servers (lossless
-  // CrossPoint<->CrossPoint sync); plain kosync servers ignore the extra field.
-  {
+  // Rich CrossPoint position for the default CrossPoint sync server (lossless
+  // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
+  // before serializing the extension.
+  if (KOREADER_STORE.usesCrossPointSyncServer()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f
@@ -536,6 +540,35 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == SHOWING_RESULT) {
+    auto chooseSelected = [this] {
+      if (selectedOption == 0) {
+        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+      } else if (selectedOption == 1) {
+        performUpload();
+      }
+    };
+
+    {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+      const int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+      constexpr int optionHeight = 30;
+      int touchedOption = -1;
+      const auto touch = mappedInput.rowTouch(touchedOption, top + 230 - 2, optionHeight, 2);
+      if (touch == MappedInputManager::RowTouch::Down) {
+        if (selectedOption != touchedOption) {
+          selectedOption = touchedOption;
+          requestUpdate();
+        }
+        return;
+      }
+      if (touch == MappedInputManager::RowTouch::Tap) {
+        selectedOption = touchedOption;
+        chooseSelected();
+        return;
+      }
+    }
+
     // Navigate options
     if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
         mappedInput.wasReleased(MappedInputManager::Button::Left)) {
@@ -548,12 +581,7 @@ void KOReaderSyncActivity::loop() {
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      if (selectedOption == 0) {
-        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
-      } else if (selectedOption == 1) {
-        // Upload local progress
-        performUpload();
-      }
+      chooseSelected();
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -563,6 +591,21 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTapped(tx, ty) && ty > renderer.getScreenHeight() / 3 &&
+        ty < renderer.getScreenHeight() * 2 / 3) {
+      if (documentHash.empty()) {
+        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
+          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
+        } else {
+          documentHash = KOReaderDocumentId::calculate(epubPath);
+        }
+      }
+      performUpload();
+      return;
+    }
+
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {

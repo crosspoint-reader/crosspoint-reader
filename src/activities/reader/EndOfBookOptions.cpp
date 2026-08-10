@@ -6,6 +6,10 @@
 
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
+// ReaderUtils.h pulls in ActivityManager.h, which only forward-declares Activity while holding
+// std::unique_ptr<Activity> members. Destroying that unique_ptr needs the complete type, so the
+// definition must be visible here.
+#include "activities/Activity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"

@@ -29,6 +29,10 @@ String obfuscateToBase64(const std::string& plaintext);
 // Returns empty string on invalid base64 input; sets *ok to false if decode fails.
 std::string deobfuscateFromBase64(const char* encoded, bool* ok = nullptr);
 
+// Bounded variant. Rejects decoded output larger than maxDecodedLength before
+// allocating its result buffer and reports that case through tooLong.
+std::string deobfuscateFromBase64(const char* encoded, size_t maxDecodedLength, bool* ok, bool* tooLong);
+
 // Self-test: verifies round-trip obfuscation with hardware key. Logs PASS/FAIL.
 void selfTest();
 
