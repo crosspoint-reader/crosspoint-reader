@@ -16,7 +16,9 @@ struct DictLocation {
   bool readError = false;
 };
 
-// Slim StarDict reader: exact-match lookup with a mini stemming fallback.
+// Slim StarDict reader: exact-match lookup with a mini stemming fallback, a
+// longest-prefix stem fallback for agglutinative languages, and a Turkish
+// dotted/dotless-I second reading.
 //
 // Expects /dictionaries/<folder>/<stem>.idx (uncompressed) plus <stem>.dict or
 // <stem>.dict.dz. Lookups binary-search a lazily built sampled-offset sidecar
@@ -62,11 +64,15 @@ class Dictionary {
   // *outResult (if provided) reports why a failed build failed.
   bool buildIndex(void (*yieldFn)(void*) = nullptr, void* ctx = nullptr, IndexResult* outResult = nullptr);
 
-  // Clean the word, look it up, and on a miss retry mini stem variants
-  // (-'s/-s/-es/-ies/-ed/-ing). On a hit fills the definition text (capped at
-  // MAX_DEFINITION_BYTES) and the headword as stored in the index. Returns true
-  // on a hit. *outResult (if provided) reports the precise outcome so the UI can
-  // distinguish a genuine miss from a decompression / low-memory / read failure.
+  // Clean the word, look it up, and on a miss retry: the Turkish I-fold
+  // reading (when the word contains I/İ), mini stem variants
+  // (-'s/-s/-es/-ies/-ed/-ing), then the longest indexed headword that is a
+  // proper prefix of the word (>= MIN_PREFIX_STEM_CHARS, remembered during the
+  // exact-match scans — Turkish "kitaplarımdan" finds "kitap"). On a hit fills
+  // the definition text (capped at MAX_DEFINITION_BYTES) and the headword as
+  // stored in the index. Returns true on a hit. *outResult (if provided)
+  // reports the precise outcome so the UI can distinguish a genuine miss from
+  // a decompression / low-memory / read failure.
   bool lookup(const char* word, std::string& definitionOut, std::string& matchedHeadwordOut,
               LookupResult* outResult = nullptr);
 
@@ -76,6 +82,11 @@ class Dictionary {
 
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
+
+  // Shortest headword the longest-prefix fallback may match, so "kedilerimden"
+  // can fall back to "kedi" but never to a stray one- or two-letter entry.
+  // Counted in codepoints, not bytes, so "aş" and "at" are rejected alike.
+  static constexpr size_t MIN_PREFIX_STEM_CHARS = 3;
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
   // "/dictionaries/<folder>/<stem>" (14 fixed chars) and the longest suffix is
@@ -111,7 +122,19 @@ class Dictionary {
   // scan without it). False when the dictionary is closed or .idx won't open.
   bool openSession(LookupSession& session);
 
-  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
+  // Longest indexed headword seen during a locate() scan that is a proper
+  // prefix (>= MIN_PREFIX_STEM_CHARS) of the target — the stem candidate for
+  // agglutinative languages. Tracking rides the existing exact-match scan, so
+  // it costs no extra SD reads; a stem lying before the scan window (more than
+  // SAMPLE_INTERVAL entries behind the target) is not seen, which in practice
+  // does not happen — a stem sorts directly among its own derived forms.
+  struct PrefixMatch {
+    DictLocation loc;
+    std::string headword;
+  };
+
+  DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut,
+                      PrefixMatch* prefixOut = nullptr);
   // Read the definition at location. On failure returns false and, if outResult
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).
   bool readDefinition(const DictLocation& location, std::string& out, LookupResult* outResult = nullptr);

@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "DictZip.h"
+#include "DictionaryMatch.h"
 #include "DictionaryRegistry.h"
 #include "StringUtils.h"
 
@@ -253,7 +254,8 @@ bool Dictionary::openSession(LookupSession& session) {
 
 // Both files stay open across the stem-variant probes; every read below seeks
 // absolutely first, so a shared handle carries no position state between calls.
-DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
+DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut,
+                                PrefixMatch* prefixOut) {
   DictLocation result;
 
   // Bisect the sampled offsets to the last sample whose headword <= target.
@@ -304,6 +306,17 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
       return result;
     }
     if (cmp > 0) break;
+
+    // Remember the longest headword passed on the way to the target's
+    // insertion point that is a proper prefix of the target. Prefixes of one
+    // word are nested, so each new one seen is longer — overwrite is enough.
+    if (prefixOut && DictionaryMatch::utf8Length(wordBuf) >= MIN_PREFIX_STEM_CHARS &&
+        DictionaryMatch::isAsciiCasePrefix(wordBuf, target)) {
+      prefixOut->loc.offset = readBe32(suffix);
+      prefixOut->loc.size = readBe32(suffix + 4);
+      prefixOut->loc.found = true;
+      prefixOut->headword = wordBuf;
+    }
   }
   return result;
 }
@@ -454,7 +467,19 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
 
-  // One set of open handles for the exact-match probe and every stem variant,
+  // Second reading for words containing I/İ: the Turkish fold must start from
+  // the raw word, because cleanWord's ASCII tolower has already collapsed 'I'
+  // to 'i' in `cleaned`. Empty when the fold changes nothing.
+  std::string cleanedTr;
+  {
+    const std::string folded = DictionaryMatch::turkishIFold(word);
+    if (!folded.empty()) {
+      cleanedTr = cleanWord(folded.c_str());
+      if (cleanedTr == cleaned) cleanedTr.clear();
+    }
+  }
+
+  // One set of open handles for the exact-match probes and every stem variant,
   // scoped so .idx/.qidx close before readDefinition() opens the data file.
   DictLocation location;
   bool searchFailed = false;
@@ -467,8 +492,17 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
       return false;
     }
 
-    location = locate(session, cleaned.c_str(), &matchedHeadwordOut);
+    PrefixMatch prefix;
+    location = locate(session, cleaned.c_str(), &matchedHeadwordOut, &prefix);
     searchFailed = location.readError;
+
+    if (!location.found && !cleanedTr.empty()) {
+      PrefixMatch trPrefix;
+      location = locate(session, cleanedTr.c_str(), &matchedHeadwordOut, &trPrefix);
+      searchFailed = searchFailed || location.readError;
+      if (trPrefix.headword.size() > prefix.headword.size()) prefix = std::move(trPrefix);
+    }
+
     if (!location.found) {
       std::vector<std::string> variants;
       stemVariants(cleaned, variants);
@@ -477,6 +511,14 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
         searchFailed = searchFailed || location.readError;
         if (location.found) break;
       }
+    }
+
+    // Last resort: the longest indexed headword that prefixes either reading —
+    // suffix-stripping rules can't reach agglutinative forms like Turkish
+    // "kitaplarımızdan" → "kitap".
+    if (!location.found && prefix.loc.found) {
+      location = prefix.loc;
+      matchedHeadwordOut = std::move(prefix.headword);
     }
   }
   if (!location.found) {

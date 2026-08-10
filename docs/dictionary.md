@@ -40,8 +40,10 @@ On the very first lookup with a dictionary (and again if the dictionary file cha
 ### How Lookup Works
 
 1. **Direct match** — the word is found as-is (case-insensitive) in the dictionary index. Surrounding punctuation is ignored.
-2. **Stemming** — on a miss, common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
-3. **Not found** — a short popup appears and you return to word selection.
+2. **Turkish I** — for words containing `I` or `İ`, the Turkish reading (`I` → `ı`, `İ` → `i`) is retried, so `İstanbul` finds `istanbul` and `ILIK` finds `ılık`.
+3. **Stemming** — on a miss, common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
+4. **Longest prefix** — as a last resort, the longest dictionary headword (at least 3 letters) that the word begins with is shown. This is what makes inflected forms in agglutinative and heavily suffixing languages land on their stem: Turkish `kitaplarımızdan` → `kitap`, German `Verhandlungen` → `Verhandlung`.
+5. **Not found** — a short popup appears and you return to word selection.
 
 ## The Definition Screen
 
