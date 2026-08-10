@@ -6,6 +6,8 @@
 
 #include <cassert>
 
+#include "HalSpiBus.h"
+
 #define SDCard SDCardManager::getInstance()
 
 HalStorage HalStorage::instance;
@@ -23,7 +25,10 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+bool HalStorage::begin() {
+  HalSpiBus::Lock spiLock;
+  return SDCard.begin();
+}
 
 bool HalStorage::ready() const { return SDCard.ready(); }
 
@@ -31,8 +36,14 @@ bool HalStorage::ready() const { return SDCard.ready(); }
 
 class HalStorage::StorageLock {
  public:
-  StorageLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }
+  // spiLock is a member so it is acquired first (SPI-outer, storage-inner) and
+  // released last, keeping the bus locked for the whole SD operation and giving
+  // a consistent lock order with display code, which takes only the SPI lock.
+  StorageLock() : spiLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }
   ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }
+
+ private:
+  HalSpiBus::Lock spiLock;
 };
 
 #define HAL_STORAGE_WRAPPED_CALL(method, ...) \
