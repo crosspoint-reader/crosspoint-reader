@@ -72,6 +72,12 @@ Latin text around them. For this to work the family must contain `.cpfont`
 files at sizes **8, 10 and 12** (in addition to the reader sizes 12–18); any UI
 size missing from the family simply keeps showing boxes for CJK at that size.
 
+Note that **Settings > Reader > Font Size** lists every size the family ships,
+so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
+sizes are not hidden from the list. Reading at 8 pt is your call; if you would
+rather not see the small sizes there, convert two families (one with the UI
+sizes for fallback, one with only the reading sizes you want).
+
 When converting your own font, include the UI sizes:
 
     python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
@@ -147,6 +153,7 @@ To convert your own TrueType/OpenType fonts:
 | `armenian` | Armenian |
 | `ethiopic` | Ethiopic + Extended |
 | `vietnamese` | Vietnamese subset (ơ/ư and combining marks) |
+| `ipa-chars` | IPA Extensions + Spacing Modifier Letters (phonetic transcription) |
 | `punctuation` | General punctuation (U+2000–U+206F) |
 | `cjk` | CJK Unified Ideographs + Hiragana + Katakana + Fullwidth |
 | `hangul` | Korean Hangul syllables + Jamo + Compatibility Jamo |

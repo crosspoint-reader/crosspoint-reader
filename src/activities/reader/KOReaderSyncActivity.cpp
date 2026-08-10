@@ -84,7 +84,11 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
   // epub is guaranteed non-null here: ensureEpubLoaded() was called in performSync() before
   // SHOWING_RESULT state is entered, and this method is only called from that state.
   assert(epub);
-  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, page, 0)) {
+  std::optional<uint32_t> offset;
+  if (remotePosition.hasVisibleTextOffset && remotePosition.spineIndex == spineIndex) {
+    offset = remotePosition.visibleTextOffset;
+  }
+  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, page, 0, offset)) {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
@@ -232,18 +236,17 @@ void KOReaderSyncActivity::performSync() {
     return;
   }
 
-  // Prefer the exact spine/page from a crosspoint-sync rich position (lossless
-  // CrossPoint<->CrossPoint sync); fall back to the approximate XPath mapping
-  // for plain kosync servers or when the rich position cannot be applied.
-  std::optional<CrossPointPosition> richMapped;
-  if (remoteProgress.position.has_value()) {
-    richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer);
-  }
-  if (richMapped.has_value()) {
-    remotePosition = *richMapped;
-  } else {
-    SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
-    remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  // The standard KOReader progress XPath is the authoritative content anchor.
+  // The CrossPoint server's existing rich page hints remain a legacy fallback.
+  SavedProgressPosition koPos = {remoteProgress.progress, remoteProgress.percentage};
+  remotePosition = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  if (!remotePosition.hasVisibleTextOffset && remoteProgress.position.has_value()) {
+    // toCrossPoint above already tried koPos.xpath; if the rich position carries the same XPath,
+    // tell fromRichPosition to skip re-resolving it and use its page hints directly.
+    const bool sameXPath = remoteProgress.position->xpath == remoteProgress.progress;
+    if (const auto richMapped = ProgressMapper::fromRichPosition(epub, *remoteProgress.position, renderer, sameXPath)) {
+      remotePosition = *richMapped;
+    }
   }
 
   if (smartSyncEnabled()) {
@@ -298,9 +301,10 @@ void KOReaderSyncActivity::performUpload() {
   progress.progress = localProgress.xpath;
   progress.percentage = localProgress.percentage;
 
-  // Rich CrossPoint position for crosspoint-sync servers (lossless
-  // CrossPoint<->CrossPoint sync); plain kosync servers ignore the extra field.
-  {
+  // Rich CrossPoint position for the default CrossPoint sync server (lossless
+  // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
+  // before serializing the extension.
+  if (KOREADER_STORE.usesCrossPointSyncServer()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f

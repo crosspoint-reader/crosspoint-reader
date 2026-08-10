@@ -17,6 +17,38 @@ bool MappedInputManager::isNavDirectionSwapped() const {
          (orientation == GfxRenderer::PortraitInverted || orientation == GfxRenderer::LandscapeCounterClockwise);
 }
 
+MappedInputManager::Button MappedInputManager::mapScreenDirection(const Button button) const {
+  // Rows follow GfxRenderer::Orientation's declared order.
+  static constexpr Button directions[][4] = {
+      {Button::Left, Button::Right, Button::Up, Button::Down},
+      {Button::Down, Button::Up, Button::Left, Button::Right},
+      {Button::Right, Button::Left, Button::Down, Button::Up},
+      {Button::Up, Button::Down, Button::Right, Button::Left},
+  };
+
+  uint8_t direction = 0;
+  switch (button) {
+    case Button::ScreenLeft:
+      direction = 0;
+      break;
+    case Button::ScreenRight:
+      direction = 1;
+      break;
+    case Button::ScreenUp:
+      direction = 2;
+      break;
+    case Button::ScreenDown:
+      direction = 3;
+      break;
+    default:
+      return button;
+  }
+
+  const uint8_t orientation =
+      SETTINGS.frontButtonFollowOrientation ? static_cast<uint8_t>(renderer.getOrientation()) : 0;
+  return directions[orientation][direction];
+}
+
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = SETTINGS.sideButtonLayout;
 
@@ -73,6 +105,11 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       // Logical "previous item" navigation: side Up + front Left, axis-flipped in the same orientations.
       return isNavDirectionSwapped() ? (mapButton(Button::Down, fn) || mapButton(Button::Right, fn))
                                      : (mapButton(Button::Up, fn) || mapButton(Button::Left, fn));
+    case Button::ScreenLeft:
+    case Button::ScreenRight:
+    case Button::ScreenUp:
+    case Button::ScreenDown:
+      return mapButton(mapScreenDirection(button), fn);
   }
 
   return false;
@@ -304,6 +341,24 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
   const char* leftLabel = swapLabels ? next : previous;
   const char* rightLabel = swapLabels ? previous : next;
 
+  return mapFrontLabels(back, confirm, leftLabel, rightLabel);
+}
+
+MappedInputManager::Labels MappedInputManager::mapDirectionalLabels(const char* back, const char* confirm,
+                                                                    const char* left, const char* right, const char* up,
+                                                                    const char* down) const {
+  const auto labelForButton = [&](const Button rawButton) {
+    if (mapScreenDirection(Button::ScreenLeft) == rawButton) return left;
+    if (mapScreenDirection(Button::ScreenRight) == rawButton) return right;
+    if (mapScreenDirection(Button::ScreenUp) == rawButton) return up;
+    if (mapScreenDirection(Button::ScreenDown) == rawButton) return down;
+    return "";
+  };
+  return mapFrontLabels(back, confirm, labelForButton(Button::Left), labelForButton(Button::Right));
+}
+
+MappedInputManager::Labels MappedInputManager::mapFrontLabels(const char* back, const char* confirm, const char* left,
+                                                              const char* right) const {
   // Build the label order based on the configured hardware mapping.
   auto labelForHardware = [&](uint8_t hw) -> const char* {
     // Compare against configured logical roles and return the matching label.
@@ -314,10 +369,10 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
       return confirm;
     }
     if (hw == SETTINGS.frontButtonLeft) {
-      return leftLabel;
+      return left;
     }
     if (hw == SETTINGS.frontButtonRight) {
-      return rightLabel;
+      return right;
     }
     return "";
   };

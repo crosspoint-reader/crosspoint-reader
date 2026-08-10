@@ -367,7 +367,7 @@ It also interoperates with KOReader apps/devices when they use the same server a
 
 ##### Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)
 
-When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too) and additionally stores an exact spine/page position for lossless CrossPoint-to-CrossPoint sync.
+When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too). CrossPoint records page starts as chapter-content offsets and sends the corresponding standard KOReader XPath, so devices with different fonts or layouts can return to the same text.
 
 1. On each CrossPoint device:
 

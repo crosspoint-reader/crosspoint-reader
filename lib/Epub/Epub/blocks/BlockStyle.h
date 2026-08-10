@@ -52,6 +52,14 @@ struct BlockStyle {
     return result;
   }
 
+  // Return a copy with top margins/padding zeroed out.
+  [[nodiscard]] BlockStyle withoutTop() const {
+    BlockStyle result = *this;
+    result.marginTop = 0;
+    result.paddingTop = 0;
+    return result;
+  }
+
   // Return a copy with bottom margins/padding collapsed (max) with the source's.
   // Uses CSS margin collapsing: adjacent parent-child margins resolve to the larger value.
   [[nodiscard]] BlockStyle addBottom(const BlockStyle& source) const {

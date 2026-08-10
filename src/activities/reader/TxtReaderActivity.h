@@ -53,5 +53,13 @@ class TxtReaderActivity final : public Activity {
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
   bool appliesNightMode() const override { return true; }
+  bool handleForcedRefresh() override {
+    {
+      RenderLock lock(*this);
+      pagesUntilFullRefresh = 1;
+    }
+    requestUpdate();
+    return true;
+  }
   ScreenshotInfo getScreenshotInfo() const override;
 };
