@@ -1590,7 +1590,8 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // retained frame after a silent restart (for example, when returning from
   // KOReader sync), leaving the old UI mixed with the image.
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing == CrossPointSettings::TEXT_AA_FULL;
+  const bool fastTextAA = SETTINGS.textAntiAliasing == CrossPointSettings::TEXT_AA_FAST;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   // Whole-plane buffering only pays when the BW refresh genuinely runs async
@@ -1614,7 +1615,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
+  renderer.setFastAntiAliasing(fastTextAA);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  renderer.setFastAntiAliasing(false);
   renderStatusBar();
   const auto tBwRender = millis();
 
@@ -1636,7 +1639,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
+      renderer.setFastAntiAliasing(fastTextAA);
       page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      renderer.setFastAntiAliasing(false);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);

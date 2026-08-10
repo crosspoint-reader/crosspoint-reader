@@ -395,13 +395,15 @@ void TxtReaderActivity::renderPage() {
   renderLines();  // scan pass — text accumulated, no drawing
   scope.endScanAndPrewarm();
 
-  // BW rendering
+  // Fast AA approximates 2-bit edges in this single BW pass.
+  renderer.setFastAntiAliasing(SETTINGS.textAntiAliasing == CrossPointSettings::TEXT_AA_FAST);
   renderLines();
+  renderer.setFastAntiAliasing(false);
   renderStatusBar();
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
-  if (SETTINGS.textAntiAliasing) {
+  if (SETTINGS.textAntiAliasing == CrossPointSettings::TEXT_AA_FULL) {
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   }
   // scope destructor clears font cache via FontCacheManager

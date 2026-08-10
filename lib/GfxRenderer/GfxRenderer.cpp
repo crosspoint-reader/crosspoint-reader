@@ -446,8 +446,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
           const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
 
           if (renderMode == GfxRenderer::BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            renderer.drawPixel(screenX, screenY, pixelState);
+            // Full AA keeps gray pixels solid black for its grayscale LSB/MSB
+            // passes. Fast AA thresholds the 2-bit coverage: black and dark
+            // gray ink, while light gray stays white for sharp, stable edges.
+            if (!renderer.isFastAntiAliasing() || bmpVal <= 1) {
+              renderer.drawPixel(screenX, screenY, pixelState);
+            }
           } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
             // Light gray (also mark the MSB if it's going to be a dark gray too)
             // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
