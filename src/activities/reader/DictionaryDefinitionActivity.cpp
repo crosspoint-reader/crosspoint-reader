@@ -3,24 +3,29 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <sys/types.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "DictionaryWordSelectActivity.h"
+#include "EpdFontFamily.h"
+#include "ReaderUtils.h"
+#include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/Dictionary.h"
 #include "util/HtmlToPlainText.h"
 
 namespace {
 
-// Longest measurable/drawable span. Wrapped lines stay under the screen width
-// (far below this); only pathological unbreakable tokens are split at this cap.
-constexpr size_t MAX_LINE_BYTES = 191;
-
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
+
+constexpr int MAX_DEFINITION_DEPTH = 3;
 
 }  // namespace
 
@@ -28,9 +33,11 @@ void DictionaryDefinitionActivity::onEnter() {
   Activity::onEnter();
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
+  if (activityManager.getStackSize() >= MAX_DEFINITION_DEPTH) reachedMaxDepth = true;
   std::replace(definition.begin(), definition.end(), '\0', '\n');
   definition = htmlToPlainText(definition);
   wrapText();
+  saveWordsFromPage();
   requestUpdate();
 }
 
@@ -158,6 +165,33 @@ void DictionaryDefinitionActivity::wrapText() {
   currentPage = 0;
 }
 
+void DictionaryDefinitionActivity::openDictionaryWordSelect() {
+  // Word geometry must match render(): viewable-area margins plus screen margin.
+  if (words->empty()) return;
+
+  if (SETTINGS.dictionaryName[0] == '\0' || reachedMaxDepth) {
+    showDictionaryMessage = true;
+    dictionaryMessageTime = millis();
+    requestUpdate();
+    return;
+  }
+
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += SETTINGS.screenMargin;
+  orientedMarginLeft += SETTINGS.screenMargin;
+
+  startActivityForResult(
+      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(words), &definition, &metadata,
+                                                     nonBlankLineCount, orientedMarginLeft, orientedMarginTop),
+      [this](const ActivityResult&) {
+        words = std::make_unique<std::vector<WordBox>>();
+        saveWordsFromPage();
+        requestUpdate();
+      });
+}
+
 void DictionaryDefinitionActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     finish();
@@ -184,6 +218,8 @@ void DictionaryDefinitionActivity::loop() {
   buttonNavigator.onNext([this] {
     if (currentPage + 1 < totalPages) {
       currentPage++;
+      words->clear();
+      saveWordsFromPage();
       requestUpdate();
     }
   });
@@ -191,25 +227,115 @@ void DictionaryDefinitionActivity::loop() {
   buttonNavigator.onPrevious([this] {
     if (currentPage > 0) {
       currentPage--;
+      words->clear();
+      saveWordsFromPage();
       requestUpdate();
     }
   });
+
+  if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showDictionaryMessage = false;
+    requestUpdate();
+  }
+
+  if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
+      openDictionaryWordSelect();
+      return;
+    }
+  }
+}
+
+void DictionaryDefinitionActivity::saveWordsFromLine(const int fontId, const int startX, const int y, char* line,
+                                                     int& lineCount, int lineIdx) {
+  int x = startX;
+  char* wordStart = line;
+  bool lineHasWords = false;
+  const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
+  char* c = line;
+  while (true) {
+    if (std::isspace(*c) || *c == '\0') {
+      int wordLen = c - wordStart;
+      if (wordLen > 0) {
+        int wordWidth = measureSpan(fontId, wordStart, wordLen);
+        WordBox box;
+        box.fontId = fontId;
+        box.x = x;
+        x += wordWidth + spaceWidth;
+        box.y = y;
+        box.width = wordWidth;
+        box.row = lineCount;
+        box.text = nullptr;
+        box.defView = {lines[lineIdx].start + (wordStart - line), wordLen};
+        box.style = EpdFontFamily::REGULAR;
+        words->push_back(box);
+      }
+      wordStart += wordLen + 1;
+    } else {
+      lineHasWords = true;
+    }
+    if (*c == '\0') break;
+    c++;
+  }
+  if (lineHasWords) lineCount++;
+}
+
+void DictionaryDefinitionActivity::saveWordsFromPage() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
+  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? metrics.sideButtonHintsWidth : 0;
+  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
+  const int fontId = SETTINGS.getReaderFontId();
+  const int lineHeight = renderer.getLineHeight(fontId);
+  const int contentY = isInverted ? metrics.buttonHintsHeight : 0;
+  const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
+
+  const int x = contentX + SIDE_PADDING;
+  const int bodyStartY = contentY + metrics.topPadding + metrics.headerHeight;
+
+  const int headerY = contentY + metrics.topPadding + 10;
+  metadata.headword = MetadataString{headword, UI_12_FONT_ID, static_cast<int16_t>(contentX + SIDE_PADDING),
+                                     static_cast<int16_t>(headerY), EpdFontFamily::BOLD};
+
+  if (totalPages > 1) {
+    char counter[16];
+    snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
+    const int counterWidth = renderer.getTextWidth(UI_10_FONT_ID, counter);
+    metadata.pageNums = MetadataString{counter, UI_10_FONT_ID,
+                                       static_cast<int16_t>(contentX + contentWidth - SIDE_PADDING - counterWidth),
+                                       static_cast<int16_t>(headerY), EpdFontFamily::REGULAR};
+  }
+
+  char lineBuf[MAX_LINE_BYTES + 1];
+  const int firstLine = currentPage * linesPerPage;
+  const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
+  nonBlankLineCount = 0;
+  for (int i = firstLine; i < lastLine; i++) {
+    if (lines[i].len == 0) continue;
+    const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
+    memcpy(lineBuf, definition.c_str() + lines[i].start, len);
+    lineBuf[len] = '\0';
+    saveWordsFromLine(fontId, x, bodyStartY + (i - firstLine) * lineHeight, lineBuf, nonBlankLineCount, i);
+  }
 }
 
 // Draws the current page's line spans (copied into a stack buffer for NUL
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
-void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) const {
+void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) {
   const int lineHeight = renderer.getLineHeight(fontId);
-  char buf[MAX_LINE_BYTES + 1];
+  char lineBuf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;
   const int lastLine = std::min(firstLine + linesPerPage, static_cast<int>(lines.size()));
   for (int i = firstLine; i < lastLine; i++) {
     if (lines[i].len == 0) continue;
     const size_t len = std::min(static_cast<size_t>(lines[i].len), MAX_LINE_BYTES);
-    memcpy(buf, definition.c_str() + lines[i].start, len);
-    buf[len] = '\0';
-    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, buf);
+    memcpy(lineBuf, definition.c_str() + lines[i].start, len);
+    lineBuf[len] = '\0';
+    renderer.drawText(fontId, x, startY + (i - firstLine) * lineHeight, lineBuf);
   }
 }
 
@@ -229,6 +355,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // Header: matched headword left, page counter right.
   const int headerY = contentY + metrics.topPadding + 10;
   renderer.drawText(UI_12_FONT_ID, contentX + SIDE_PADDING, headerY, headword.c_str(), true, EpdFontFamily::BOLD);
+
   if (totalPages > 1) {
     char counter[16];
     snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
@@ -251,4 +378,12 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       mappedInput.mapLabels(tr(STR_BACK), "", (currentPage > 0 ? "<" : ""), (currentPage + 1 < totalPages ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
+
+  if (showDictionaryMessage) {
+    if (reachedMaxDepth) {
+      GUI.drawPopup(renderer, tr(STR_DICT_MAX_DEPTH));
+    } else {
+      GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
+    }
+  }
 }

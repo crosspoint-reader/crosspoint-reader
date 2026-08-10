@@ -1,10 +1,17 @@
 #pragma once
 
+#include <EpdFontFamily.h>
 #include <HalStorage.h>
 
 #include <cstdint>
 #include <string>
 #include <vector>
+
+namespace {
+// Longest measurable/drawable span. Wrapped lines stay under the screen width
+// (far below this); only pathological unbreakable tokens are split at this cap.
+constexpr size_t MAX_LINE_BYTES = 191;
+}  // namespace
 
 // Result of an index search — file location of a definition without reading it.
 struct DictLocation {
@@ -14,6 +21,36 @@ struct DictLocation {
   // Set when the search was cut short by an .idx open or seek failure rather than
   // reaching a verdict, so a failed search isn't reported as a genuine miss.
   bool readError = false;
+};
+
+struct MetadataString {
+  std::string word;
+  int fontId;
+  int16_t x;
+  int16_t y;
+  EpdFontFamily::Style style;
+};
+
+struct DictionaryPageMetadata {
+  MetadataString headword;
+  MetadataString pageNums;
+};
+
+struct DefView {
+  u_int32_t offset = 0;
+  int len = 0;
+};
+
+struct WordBox {
+  int fontId;
+  int16_t x;
+  int16_t y;
+  int16_t width;
+  uint16_t row;
+  const char* text;
+  DefView defView;
+  EpdFontFamily::Style style;
+  bool selectable = true;
 };
 
 // Slim StarDict reader: exact-match lookup with a mini stemming fallback.

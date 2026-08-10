@@ -19,6 +19,10 @@ void Activity::startActivityForResult(std::unique_ptr<Activity>&& activity, Acti
   activityManager.pushActivity(std::move(activity));
 }
 
+void Activity::replaceActivityKeepingStack(std::unique_ptr<Activity>&& activity) {
+  activityManager.replaceCurrentActivity(std::move(activity));
+}
+
 void Activity::setResult(ActivityResult&& result) { this->result = std::move(result); }
 
 void Activity::finish() { activityManager.popActivity(); }

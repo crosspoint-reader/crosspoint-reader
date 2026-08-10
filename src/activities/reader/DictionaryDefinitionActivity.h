@@ -4,8 +4,11 @@
 #include <string>
 #include <vector>
 
+#include "EpdFontFamily.h"
 #include "activities/Activity.h"
+#include "fontIds.h"
 #include "util/ButtonNavigator.h"
+#include "util/Dictionary.h"
 
 // Paged plain-text viewer for one dictionary definition. The definition is
 // word-wrapped once on entry; each page renders spans of the original string,
@@ -16,7 +19,10 @@ class DictionaryDefinitionActivity final : public Activity {
                                         std::string definition)
       : Activity("DictionaryDefinition", renderer, mappedInput),
         headword(std::move(headword)),
-        definition(std::move(definition)) {}
+        definition(std::move(definition)),
+        words(std::make_unique<std::vector<WordBox>>()),
+        metadata(DictionaryPageMetadata(MetadataString{"", UI_12_FONT_ID, 0, 0, EpdFontFamily::REGULAR},
+                                        MetadataString{"", UI_10_FONT_ID, 0, 0, EpdFontFamily::REGULAR})) {}
 
   void onEnter() override;
   void loop() override;
@@ -32,15 +38,24 @@ class DictionaryDefinitionActivity final : public Activity {
 
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
-  void drawBody(int fontId, int x, int startY) const;
+  void drawBody(int fontId, int x, int startY);
+  void openDictionaryWordSelect();
+  void saveWordsFromLine(const int fontId, const int startX, const int y, char* line, int& lineRow, int lineIdx);
+  void saveWordsFromPage();
 
   const std::string headword;
   // Not const: onEnter() normalizes embedded NULs (StarDict multi-type
   // separators) to newlines so C-string APIs see the whole text.
+  DictionaryPageMetadata metadata;
+  std::unique_ptr<std::vector<WordBox>> words;
   std::string definition;
   std::vector<Line> lines;
   int currentPage = 0;
   int totalPages = 1;
   int linesPerPage = 1;
+  int nonBlankLineCount = 0;
   ButtonNavigator buttonNavigator;
+  bool showDictionaryMessage = false;
+  bool reachedMaxDepth = false;
+  unsigned long dictionaryMessageTime = 0UL;
 };

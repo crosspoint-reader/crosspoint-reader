@@ -46,7 +46,7 @@ class ActivityManager {
 
   // Pending activity to be launched on next loop iteration
   std::unique_ptr<Activity> pendingActivity;
-  enum class PendingAction { None, Push, Pop, Replace };
+  enum class PendingAction { None, Push, Pop, Replace, ReplaceCurrent };
   PendingAction pendingAction = PendingAction::None;
 
   // Task to render and display the activity
@@ -95,7 +95,10 @@ class ActivityManager {
 
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);
-
+  // Replace the current activity without modifying the existing stack.
+  // Used for one-way transitions where the current activity should not be
+  // retained as a resumable parent.
+  void replaceCurrentActivity(std::unique_ptr<Activity>&& activity);
   // Remove the currentActivity, returning the last one on stack
   // Note: if popActivity() on last activity on the stack, we will goHome()
   void popActivity();
@@ -113,6 +116,8 @@ class ActivityManager {
   // Trigger a render and block until it completes.
   // Must NOT be called from the render task or while holding a RenderLock.
   void requestUpdateAndWait();
+
+  int getStackSize();
 };
 
 extern ActivityManager activityManager;  // singleton, to be defined in main.cpp
