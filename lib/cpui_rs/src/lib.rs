@@ -1,27 +1,28 @@
 //! A declarative UI framework for e-ink firmware screens.
 //!
-//! Screens are described as a tree of [`View`]s and rendered through the host
-//! firmware's C++ renderer over FFI. The API is deliberately SwiftUI-shaped:
+//! Screens are described as a tree of [`View`]s and painted through whatever
+//! host the firmware installs. The API is deliberately SwiftUI-shaped:
 //!
 //! ```rust,ignore
-//! NavigationScreen::new(
-//!     VStack::new(20)
-//!         .push(Text::new("Firmware").font(Font::ui_label()))
-//!         .push(Text::new(version).font(Font::ui_value()))
-//!         .push(Spacer::new())
-//!         .boxed(),
-//! )
+//! NavigationScreen::new(vstack![20;
+//!     Text::new("Firmware"),
+//!     Text::new(version).bold(),
+//!     Spacer::new(),
+//! ])
 //! ```
+//!
+//! See this crate's `README.md` for a walkthrough, and `docs/architecture.md`
+//! for how a frame runs.
 //!
 //! # Layers
 //!
-//! - [`ffi`] — the only `unsafe` in the crate; safe wrappers over the C++
-//!   renderer, fonts, input, theme, device info and translations.
+//! - [`host`] — the traits a firmware implements, and the façades widgets call.
+//!   The crate's only `unsafe` is here, around the installed-host global.
 //! - [`geometry`] — [`Point`], [`Size`], [`Rect`], [`Insets`].
-//! - [`layout`] — containers that position children: stacks, spacer, padding.
-//! - [`widgets`] — leaves that draw: text, divider.
-//! - [`screen`] — roots that own a whole screen's chrome.
-//! - [`activity`] — the screen lifecycle and its C++ bridge.
+//! - [`view`] — the [`View`] trait and the interaction model.
+//! - [`layout`] — containers that position children: stacks, spacer, modifiers.
+//! - [`widgets`] — leaves that draw: text, lists, sliders, icons.
+//! - [`screen`] — the [`Screen`] contract, its runtime, and the root views.
 //!
 //! # Portability
 //!
