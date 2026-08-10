@@ -132,6 +132,13 @@ class Dictionary {
   // when there is no usable synonym index.
   bool openSynonyms(LookupSession& session);
 
+  // Bisect a sampled-offset sidecar (.qidx over .idx, .sidx over .syn) to the
+  // byte offset of the last sampled entry whose word is <= target, so the caller
+  // only has to linear-scan at most SAMPLE_INTERVAL entries from there. Returns
+  // 0 — scan source from the start — when sampleCount is 0 or a sample is
+  // unreadable. Clobbers wordBuf.
+  uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
+
   DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via

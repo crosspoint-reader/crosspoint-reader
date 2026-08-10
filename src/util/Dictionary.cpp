@@ -323,33 +323,40 @@ bool Dictionary::openSynonyms(LookupSession& session) {
   return true;
 }
 
+// Shared by locate() (.qidx over .idx) and locateSynonym() (.sidx over .syn):
+// both sidecars have the same layout and both sources are sorted word-first, so
+// the descent is identical and only the file pair differs.
+uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target) {
+  uint32_t startByte = 0;
+  if (sampleCount == 0) return startByte;  // no usable sidecar: scan from the start
+
+  uint32_t lo = 0;
+  uint32_t hi = sampleCount - 1;
+  while (lo < hi) {
+    const uint32_t mid = (lo + hi + 1) / 2;
+    uint32_t offset = 0;
+    if (!readSampleOffset(sidecar, mid, &offset) || !source.seekSet(offset) ||
+        readWordInto(source, wordBuf, sizeof(wordBuf)) < 0) {
+      lo = 0;  // unreadable sample: abandon the descent and scan from the start
+      break;
+    }
+    if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  readSampleOffset(sidecar, lo, &startByte);
+  return startByte;
+}
+
 // Both files stay open across the stem-variant probes; every read below seeks
 // absolutely first, so a shared handle carries no position state between calls.
 DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
   DictLocation result;
 
   // Bisect the sampled offsets to the last sample whose headword <= target.
-  // Falls back to a full scan from byte 0 when the sidecar is unusable.
-  uint32_t startByte = 0;
-  if (session.sampleCount > 0) {
-    uint32_t lo = 0;
-    uint32_t hi = session.sampleCount - 1;
-    while (lo < hi) {
-      const uint32_t mid = (lo + hi + 1) / 2;
-      uint32_t offset = 0;
-      if (!readSampleOffset(session.qidx, mid, &offset) || !session.idx.seekSet(offset) ||
-          readWordInto(session.idx, wordBuf, sizeof(wordBuf)) < 0) {
-        lo = 0;
-        break;
-      }
-      if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
-        lo = mid;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    readSampleOffset(session.qidx, lo, &startByte);
-  }
+  const uint32_t startByte = bisectSamples(session.qidx, session.idx, session.sampleCount, target);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
@@ -425,28 +432,9 @@ DictLocation Dictionary::locateSynonym(LookupSession& session, const char* targe
   DictLocation result;
   if (!openSynonyms(session)) return result;
 
-  // Bisect the sampled offsets to the last synonym <= target, mirroring
-  // locate(). Falls back to a full scan from byte 0 when the sidecar is unusable.
-  uint32_t startByte = 0;
-  if (session.synSampleCount > 0) {
-    uint32_t lo = 0;
-    uint32_t hi = session.synSampleCount - 1;
-    while (lo < hi) {
-      const uint32_t mid = (lo + hi + 1) / 2;
-      uint32_t offset = 0;
-      if (!readSampleOffset(session.sidx, mid, &offset) || !session.syn.seekSet(offset) ||
-          readWordInto(session.syn, wordBuf, sizeof(wordBuf)) < 0) {
-        lo = 0;
-        break;
-      }
-      if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
-        lo = mid;
-      } else {
-        hi = mid - 1;
-      }
-    }
-    readSampleOffset(session.sidx, lo, &startByte);
-  }
+  // Bisect the sampled offsets to the last synonym <= target, same descent
+  // locate() runs over .qidx/.idx.
+  const uint32_t startByte = bisectSamples(session.sidx, session.syn, session.synSampleCount, target);
 
   // Linear scan of at most SAMPLE_INTERVAL entries: synonym NUL, BE32 ordinal.
   // Sorted, so stop at the first synonym > target. Reading the ordinal before
