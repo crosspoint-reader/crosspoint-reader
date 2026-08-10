@@ -1,14 +1,26 @@
 #include "ImageToFramebufferDecoder.h"
 
+#include <Arduino.h>
 #include <Logging.h>
 
 bool ImageToFramebufferDecoder::validateImageDimensions(int width, int height, const std::string& format) {
-  if (width * height > MAX_SOURCE_PIXELS) {
-    LOG_ERR("IMG", "Image too large (%dx%d = %d pixels %s), max supported: %d pixels", width, height, width * height,
-            format.c_str(), MAX_SOURCE_PIXELS);
+  // 64-bit multiply: a malformed header (e.g. 40000x60000) overflows a plain
+  // int product before the comparison can reject it.
+  const int64_t pixels = static_cast<int64_t>(width) * static_cast<int64_t>(height);
+  if (pixels > MAX_SOURCE_PIXELS) {
+    LOG_ERR("IMG", "Image too large (%dx%d = %lld pixels %s), max supported: %lld pixels", width, height,
+            static_cast<long long>(pixels), format.c_str(), static_cast<long long>(MAX_SOURCE_PIXELS));
     return false;
   }
   return true;
+}
+
+void ImageToFramebufferDecoder::yieldDuringDecode(uint32_t& lastYieldMs) {
+  const uint32_t now = millis();
+  if (now - lastYieldMs >= 250) {
+    lastYieldMs = now;
+    vTaskDelay(1);
+  }
 }
 
 void ImageToFramebufferDecoder::warnUnsupportedFeature(const std::string& feature, const std::string& imagePath) {
