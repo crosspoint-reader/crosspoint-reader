@@ -196,29 +196,21 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
   // board: the bottom-edge up-swipe already exits, and in swipe page-turn
   // mode a right swipe must page back instead. Back swipes stay available in menus and other activities; only
   // this reader-surface handler ignores them. Physical Back buttons are
-  // unaffected: isPressed() is button-only, and this guard skips just the
+  // unaffected: this guard skips just the
   // gesture's own release frame.
   if (mappedInput.wasBackGesture()) {
     return false;
   }
 
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS) {
-    if (SETTINGS.backShortToFileBrowser) {
-      goHome.fn(goHome.ctx);
-    } else {
-      activityManager.goToFileBrowser(filePath);
-    }
-    return true;
+  if (!mappedInput.wasReleased(MappedInputManager::Button::Back)) return false;
+
+  const bool longPress = mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS;
+  if (longPress != SETTINGS.backShortToFileBrowser) {
+    activityManager.goToFileBrowser(filePath);
+  } else {
+    goHome.fn(goHome.ctx);
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < GO_BACK_OR_HOME_MS) {
-    if (SETTINGS.backShortToFileBrowser) {
-      activityManager.goToFileBrowser(filePath);
-    } else {
-      goHome.fn(goHome.ctx);
-    }
-    return true;
-  }
-  return false;
+  return true;
 }
 
 }  // namespace ReaderUtils

@@ -37,8 +37,6 @@ class OpdsBookBrowserActivity final : public Activity, private UiAppHost {
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   std::string searchTemplate;
-  bool consumeConfirm = false;
-  bool consumeBack = false;
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;

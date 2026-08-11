@@ -26,7 +26,6 @@ IntervalSelectionActivity::IntervalSelectionActivity(GfxRenderer& renderer, Mapp
                                                      const int initialValue, const int minValue, const int maxValue,
                                                      const int smallStep, const int largeStep,
                                                      const StrId valueFormatId, const bool readerActivity,
-                                                     const bool ignoreInitialConfirmRelease,
                                                      const StrId maxBoundaryLabelId)
     : Activity(activityName, renderer, mappedInput),
       UiAppHost(renderer),
@@ -38,8 +37,7 @@ IntervalSelectionActivity::IntervalSelectionActivity(GfxRenderer& renderer, Mapp
       maxValue(maxValue),
       smallStep(smallStep),
       largeStep(largeStep),
-      readerActivity(readerActivity),
-      ignoreConfirmRelease(ignoreInitialConfirmRelease) {}
+      readerActivity(readerActivity) {}
 
 int IntervalSelectionActivity::clampedValue(const int candidate) const {
   return std::clamp(candidate, minValue, maxValue);
@@ -106,16 +104,6 @@ void IntervalSelectionActivity::onOkEvent(const fui::ActionEvent&, void* user) {
 }
 
 void IntervalSelectionActivity::loop() {
-  if (ignoreConfirmRelease) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      ignoreConfirmRelease = false;
-      return;
-    }
-    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      ignoreConfirmRelease = false;
-    }
-  }
-
   // Touch goes through the FreeInkApp: render() registered the slider, -/+ zones,
   // and Cancel/OK hit rects; the slider follows the finger via InputDrag. Runs
   // before the Back handler because the release of a drag can also register as a
