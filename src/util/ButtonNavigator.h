@@ -44,6 +44,11 @@ class ButtonNavigator final {
   [[nodiscard]] static int nextPageIndex(int currentIndex, int totalItems, int itemsPerPage);
   [[nodiscard]] static int previousPageIndex(int currentIndex, int totalItems, int itemsPerPage);
 
+  // Jumps by a fixed delta, clamped to [0, totalItems - 1] rather than wrapped: a jump of a few
+  // items is a deliberate skip, not a full cycle, so landing on the opposite end would disorient
+  // more than it helps. Pass a negative delta to jump backward.
+  [[nodiscard]] static int clampedJumpIndex(int currentIndex, int totalItems, int delta);
+
   // Navigation uses the logical NavNext / NavPrevious buttons; MappedInputManager::mapButton resolves
   // them to physical buttons and applies any orientation-based direction swap, so this stays settings-free.
   [[nodiscard]] static Buttons getNextButtons() { return {MappedInputManager::Button::NavNext}; }

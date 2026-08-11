@@ -89,6 +89,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Default: Up = Previous, Down = Next
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
 
+  // Which button pair does the file browser's 5-item fast-scroll jump; the other pair keeps
+  // single-item stepping (with the existing hold-to-page-jump behaviour).
+  enum FAST_SCROLL_BUTTONS { FAST_SCROLL_FRONT = 0, FAST_SCROLL_SIDE = 1, FAST_SCROLL_BUTTONS_COUNT };
+
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { NOTOSERIF = 0, NOTOSANS = 1, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
@@ -266,6 +270,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char dictionaryName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Which button pair fast-scrolls the file browser (FAST_SCROLL_BUTTONS)
+  uint8_t fastScrollButtons = FAST_SCROLL_FRONT;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)

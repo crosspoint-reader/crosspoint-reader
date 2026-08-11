@@ -1,5 +1,7 @@
 #include "ButtonNavigator.h"
 
+#include <algorithm>
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 void ButtonNavigator::onNext(const Callback& callback) {
@@ -121,4 +123,9 @@ int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalIt
   }
 
   return lastPageIndex * itemsPerPage;
+}
+
+int ButtonNavigator::clampedJumpIndex(const int currentIndex, const int totalItems, const int delta) {
+  if (totalItems <= 0) return 0;
+  return std::clamp(currentIndex + delta, 0, totalItems - 1);
 }
