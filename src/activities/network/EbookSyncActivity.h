@@ -14,6 +14,10 @@
 #define X4_EBOOKS_DOWNLOAD_URL "https://n8n.beckmann-md.de/webhook/x4-ebooks-download"
 #endif
 
+#ifndef X4_NOTES_UPLOAD_URL
+#define X4_NOTES_UPLOAD_URL "https://n8n.beckmann-md.de/webhook/x4-notes-upload"
+#endif
+
 class EbookSyncActivity : public Activity {
  public:
   explicit EbookSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
@@ -22,7 +26,9 @@ class EbookSyncActivity : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return state_ == LOADING_LIST || state_ == SYNCING || state_ == COMPLETE || state_ == ERROR; }
+  bool preventAutoSleep() override {
+    return state_ == LOADING_LIST || state_ == SYNCING || state_ == COMPLETE || state_ == ERROR;
+  }
   bool skipLoopDelay() override { return true; }
 
  private:
@@ -51,6 +57,8 @@ class EbookSyncActivity : public Activity {
   size_t skippedExisting_ = 0;
   size_t fileProgress_ = 0;
   size_t fileTotal_ = 0;
+  size_t uploadedNotes_ = 0;
+  size_t deletedNotes_ = 0;
   std::string statusMessage_;
   std::string errorMessage_;
   bool cancelRequested_ = false;
@@ -59,6 +67,8 @@ class EbookSyncActivity : public Activity {
   bool fetchAndParseList();
   void syncAllNew();
   bool downloadEntry(EbookEntry& entry);
+  bool uploadPendingNotes();
+  bool uploadNoteFile(const std::string& path, const std::string& filename);
   int listItemCount() const;
   static std::string urlEncode(const std::string& value);
   static std::string ensureExtensionPreserved(const std::string& filename, const std::string& originalPath);

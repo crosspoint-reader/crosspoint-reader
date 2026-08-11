@@ -2,9 +2,11 @@
 
 #include <ArduinoJson.h>
 #include <GfxRenderer.h>
+#include <HTTPClient.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <NetworkClientSecure.h>
 #include <WiFi.h>
 
 #include <cctype>
@@ -21,6 +23,7 @@ namespace {
 constexpr const char* TAG = "EBOOK";
 constexpr const char* LIST_TMP = "/x4_ebooks_list.tmp";
 constexpr const char* DOWNLOAD_DIR = "/Download";
+constexpr const char* NOTES_DIR = "/Notes";
 constexpr size_t MAX_LOCAL_NAME_BYTES = 100;
 constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
 constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
@@ -163,6 +166,7 @@ bool EbookSyncActivity::fetchAndParseList() {
   }
 
   LOG_DBG(TAG, "Loaded %zu eBook entries", entries_.size());
+  uploadPendingNotes();
   return true;
 }
 
@@ -194,7 +198,8 @@ bool EbookSyncActivity::downloadEntry(EbookEntry& entry) {
         }
         const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
         const unsigned long now = millis();
-        if (percent >= 100 || lastRenderedPercent < 0 || percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
+        if (percent >= 100 || lastRenderedPercent < 0 ||
+            percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
             now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
           lastRenderedPercent = percent;
           lastProgressUpdateMs = now;
@@ -214,6 +219,59 @@ bool EbookSyncActivity::downloadEntry(EbookEntry& entry) {
 
   entry.exists = true;
   return true;
+}
+
+bool EbookSyncActivity::uploadNoteFile(const std::string& path, const std::string& filename) {
+  HalFile f;
+  if (!Storage.openFileForRead(TAG, path, f)) return false;
+  std::string body;
+  body.reserve(std::min<size_t>(f.size(), 32 * 1024));
+  while (f.available()) body.push_back(static_cast<char>(f.read()));
+  f.close();
+
+  NetworkClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  const std::string url =
+      std::string(X4_NOTES_UPLOAD_URL) + "?folder=" + urlEncode("01_X4") + "&filename=" + urlEncode(filename);
+  if (!http.begin(client, url.c_str())) return false;
+  http.addHeader("Content-Type", "text/markdown; charset=utf-8");
+  http.addHeader("X-X4-Note-Filename", filename.c_str());
+  const int code = http.POST(reinterpret_cast<uint8_t*>(body.data()), body.size());
+  http.end();
+  return code >= 200 && code < 300;
+}
+
+bool EbookSyncActivity::uploadPendingNotes() {
+  uploadedNotes_ = 0;
+  deletedNotes_ = 0;
+  if (!Storage.exists(NOTES_DIR)) return true;
+  auto dir = Storage.open(NOTES_DIR);
+  if (!dir || !dir.isDirectory()) return false;
+  char name[160];
+  bool ok = true;
+  for (auto f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    f.getName(name, sizeof(name));
+    const bool isDir = f.isDirectory();
+    f.close();
+    if (isDir) continue;
+    std::string filename{name};
+    if (filename.size() < 3 || filename.substr(filename.size() - 3) != ".md") continue;
+    const std::string path = std::string(NOTES_DIR) + "/" + filename;
+    statusMessage_ = std::string(tr(STR_NOTE_SYNC_UPLOADING)) + " " + filename;
+    requestUpdate(true);
+    if (uploadNoteFile(path, filename)) {
+      uploadedNotes_++;
+      if (Storage.remove(path.c_str()))
+        deletedNotes_++;
+      else
+        ok = false;
+    } else {
+      ok = false;
+    }
+  }
+  dir.close();
+  return ok;
 }
 
 void EbookSyncActivity::syncAllNew() {
@@ -317,8 +375,8 @@ void EbookSyncActivity::loop() {
   } else if (state_ == COMPLETE || state_ == ERROR) {
     int x = 0;
     int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
-        mappedInput.wasScreenTapped(x, y)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
       finish();
     }
   }
@@ -336,11 +394,13 @@ void EbookSyncActivity::render(RenderLock&&) {
   const auto centerY = (pageHeight - lineHeight) / 2;
 
   if (state_ == LOADING_LIST || state_ == WIFI_SELECTION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY, statusMessage_.empty() ? tr(STR_EBOOK_SYNC_LOADING) : statusMessage_.c_str());
+    renderer.drawCenteredText(UI_10_FONT_ID, centerY,
+                              statusMessage_.empty() ? tr(STR_EBOOK_SYNC_LOADING) : statusMessage_.c_str());
     GUI.drawButtonHints(renderer, tr(STR_BACK), "", "", "");
   } else if (state_ == READY) {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing},
+        renderer,
+        Rect{0, contentTop, pageWidth, pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing},
         listItemCount(), selectedIndex_,
         [this](int index) -> std::string {
           if (index == 0) return tr(STR_EBOOK_SYNC_ALL_NEW);
@@ -373,7 +433,8 @@ void EbookSyncActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, done.c_str(), true, EpdFontFamily::BOLD);
     GUI.drawButtonHints(renderer, tr(STR_BACK), "", "", "");
   } else if (state_ == ERROR) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, tr(STR_EBOOK_SYNC_FAILED), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, tr(STR_EBOOK_SYNC_FAILED), true,
+                              EpdFontFamily::BOLD);
     renderer.drawCenteredText(UI_10_FONT_ID, centerY + metrics.verticalSpacing, errorMessage_.c_str());
     GUI.drawButtonHints(renderer, tr(STR_BACK), "", "", "");
   }
