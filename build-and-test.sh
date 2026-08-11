@@ -1,32 +1,45 @@
 #!/bin/bash
 #
-# CrossPoint Reader - build and test helper.
+# CrossPoint Reader - the checks PlatformIO does not run.
 #
-#   ./build-and-test.sh            gates, build the simulator, run it   (inner loop)
-#   ./build-and-test.sh check      the fast gates, no build             (seconds)
-#   ./build-and-test.sh all        everything CI does                   (before you push)
-#   ./build-and-test.sh run        run the existing simulator binary
-#   ./build-and-test.sh device     gates, then build the x4pro firmware
-#   ./build-and-test.sh clean      wipe every build artefact, then the inner loop
+#   ./build-and-test.sh                rustfmt, clippy, cargo test, C++ format  (seconds)
+#   ./build-and-test.sh all            the same, then build everything CI builds
+#   ./build-and-test.sh sim            build and run the simulator
+#                                    (one-time setup in docs/simulator.md)
+#   ./build-and-test.sh memory-report  flash/RAM vs budget + Rust's share
+#                                    (builds only if there are no figures yet;
+#                                     --rebuild forces fresh ones)
+#   ./build-and-test.sh clean          wipe BOTH build trees - see below
 #
-# Nothing here needs generating by hand. The i18n tables, HTML headers and Rust
-# string constants are produced by the build itself: cargo through
-# lib/backend_rs/build.rs, PlatformIO through scripts/. Add a key to
-# lib/I18n/translations/english.yaml, use it, and build.
+# BUILDING AND FLASHING IS PLAIN PIO. Nothing here is required for it:
 #
-# Rust is compiled by PlatformIO through scripts/build_rust.py, so cargo is
-# never invoked here for the firmware itself - only for the quality gates.
+#   pio run                       build the default firmware
+#   pio run -e sticky             build another environment
+#   pio run -t upload             flash it
+#
+# There is no separate Rust step, and no order to remember. platformio.ini
+# runs scripts/build_rust.py before every compile, so `pio run` compiles the
+# Rust crates along with the C++. Same for the generated files: the i18n
+# tables, HTML headers and Rust string constants are produced by the build.
+# Add a key to lib/I18n/translations/english.yaml, use it, and build.
+#
+# cargo appears below only for the checks - never to produce firmware.
+#
+# `pio run` never deletes anything, and `pio run -t clean` only empties the
+# PlatformIO tree for one environment - it knows nothing about cargo, so
+# target/ survives. That is why `clean` exists here: two build systems, one
+# command. Dropping target/ costs minutes on the next build (Xtensa has no
+# prebuilt core/alloc), so reach for it only when a build makes no sense.
 
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="/tmp/crosspoint-logs"
-SIM_ENV="simulator_x4_pro"
-DEVICE_ENV="x4pro"
+SIM_ENV="simulator_x3"
 SIM_BINARY="$PROJECT_DIR/.pio/build/$SIM_ENV/program"
 
 # The environments .github/workflows/ci.yml builds. Keep in step with it.
-CI_ENVS=(default sticky x4pro)
+CI_ENVS=(default sticky)
 
 # Homebrew's pio ships without the littlefs module the espressif32 builder
 # needs, so prefer PlatformIO's own virtualenv when it is present.
@@ -36,10 +49,7 @@ else
   PIO="pio"
 fi
 
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/test_$(date +%Y%m%d_%H%M%S).log"
-
-# --- gates -------------------------------------------------------------------
+# --- the checks --------------------------------------------------------------
 
 rust_gates() {
   echo "==> Rust: format, lint, test"
@@ -47,6 +57,22 @@ rust_gates() {
   cargo fmt --check
   cargo clippy --workspace --all-targets --features xpui-rs/testing -- -D warnings
   cargo test --workspace --features xpui-rs/testing
+}
+
+# Everything above compiles for the HOST. Code behind `cfg(target_os = "none")`
+# — the global allocator and the panic handler among it — is invisible there, so
+# a lint or warning in it survives every check above and first shows up in a
+# firmware build. That is exactly how an edition-2024 migration bug reached both
+# device targets once already.
+#
+# ESP32-C3 stands in for both devices: the S3 compiles the same
+# `target_os = "none"` code, and linting it too would need the Xtensa fork and a
+# build-std of core and alloc for very little extra coverage.
+device_lint() {
+  echo "==> Rust: lint the device target (the host build cannot see this code)"
+  cd "$PROJECT_DIR"
+  cargo clippy --release --package crosspoint_rs \
+    --target riscv32imc-unknown-none-elf -- -D warnings
 }
 
 # xpui_rs is the generic framework: it must not name the product. CI fails on
@@ -98,39 +124,24 @@ cpp_format_check() {
   fi
 }
 
-fast_gates() {
+checks() {
   rust_gates
+  device_lint
   framework_is_generic
   cpp_format_check
 }
 
-# --- actions -----------------------------------------------------------------
+usage() { sed -n '3,32p' "$0"; }
 
-run_simulator() {
-  echo
-  echo "Simulator starting. Navigate to Settings > About to exercise the Rust screen."
-  echo "Log: $LOG_FILE"
-  echo "Ctrl+C to stop."
-  echo
-  "$SIM_BINARY" 2>&1 | tee "$LOG_FILE"
-}
-
-case "${1:-default}" in
-  default)
-    fast_gates
-    echo "==> Building $SIM_ENV"
-    "$PIO" run -e "$SIM_ENV"
-    run_simulator
-    ;;
-
-  check)
-    fast_gates
+case "${1:-}" in
+  "" | check)
+    checks
     echo
-    echo "All gates passed. './build-and-test.sh all' also builds every target."
+    echo "Checks passed. './build-and-test.sh all' also builds every target."
     ;;
 
   all)
-    fast_gates
+    checks
     # One pio invocation for every environment: a second `pio run` can wipe
     # .pio/build on a checksum mismatch and undo the first. See ci.yml.
     echo "==> Building the simulator and every environment CI builds"
@@ -141,39 +152,54 @@ case "${1:-default}" in
     echo "Everything CI checks has passed locally."
     ;;
 
-  run)
-    if [ ! -x "$SIM_BINARY" ]; then
-      echo "ERROR: no simulator binary. Run './build-and-test.sh' first." >&2
-      exit 1
+  memory-report)
+    # Figures come from a link. Build only when there are none to read - a
+    # report should not cost a build every time you want to look at it. Pass
+    # --rebuild to force fresh figures after changing code.
+    shift || true
+    REPORT_ENV="${MEMORY_REPORT_ENV:-default}"
+    FORCE=""
+    for arg in "$@"; do [ "$arg" = "--rebuild" ] && FORCE=1; done
+    set -- "${@/--rebuild/}"
+    if [ -n "$FORCE" ] || [ ! -f "$PROJECT_DIR/.pio/build/$REPORT_ENV/memory.json" ]; then
+      echo "==> Building $REPORT_ENV for its figures"
+      "$PIO" run -e "$REPORT_ENV"
     fi
-    run_simulator
-    ;;
-
-  device)
-    fast_gates
-    echo "==> Building $DEVICE_ENV firmware"
-    "$PIO" run -e "$DEVICE_ENV"
-    echo "Firmware built. Flash with: $PIO run -e $DEVICE_ENV -t upload"
+    python3 "$PROJECT_DIR/scripts/report_memory.py" "$@"
     ;;
 
   clean)
-    fast_gates
-    # target/ holds the Rust build cache, including build-std for Xtensa;
-    # dropping it costs minutes and is only needed when cargo itself misbehaves.
-    echo "==> Cleaning build tree"
+    echo "==> Removing .pio/build and target/"
     rm -rf "$PROJECT_DIR/.pio/build" "$PROJECT_DIR/target"
-    echo "==> Building $SIM_ENV"
+    echo "Both build trees are gone. The next 'pio run' rebuilds from scratch."
+    ;;
+
+  sim)
+    # The simulator is a second checkout, so its environments live in the
+    # gitignored platformio.local.ini rather than in the shared config.
+    if ! grep -qs "\[env:$SIM_ENV\]" "$PROJECT_DIR"/platformio*.ini; then
+      echo "No '$SIM_ENV' environment is defined." >&2
+      echo "The simulator needs a one-time platformio.local.ini - see docs/simulator.md." >&2
+      exit 1
+    fi
     "$PIO" run -e "$SIM_ENV"
-    run_simulator
+    mkdir -p "$LOG_DIR"
+    local_log="$LOG_DIR/sim_$(date +%Y%m%d_%H%M%S).log"
+    echo
+    echo "Simulator starting. Settings > System > Developers exercises the Rust screen."
+    echo "Log: $local_log"
+    echo "Ctrl+C to stop."
+    echo
+    "$SIM_BINARY" 2>&1 | tee "$local_log"
     ;;
 
   help | --help | -h)
-    sed -n '3,10p' "$0"
+    usage
     ;;
 
   *)
     echo "Unknown mode: $1" >&2
-    sed -n '3,10p' "$0"
+    usage
     exit 1
     ;;
 esac

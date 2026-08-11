@@ -66,6 +66,39 @@ def target_for_env(env):
     )
 
 
+def setup_help(toolchain):
+    """What to actually type when the toolchain is missing.
+
+    Worth the lines: this script runs on every environment, so somebody cloning
+    the firmware without Rust hits it on their first `pio run`. A bare Python
+    traceback there reads as "the project is broken" rather than "install this".
+    """
+    steps = [
+        "",
+        "This firmware links a Rust static library, so the build needs a Rust",
+        "toolchain. To install it:",
+        "",
+        "    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh",
+        "",
+    ]
+    if toolchain == "esp":
+        steps += [
+            "ESP32-S3 is Xtensa, which no stable Rust targets, so it also needs",
+            "the esp-rs fork:",
+            "",
+            "    cargo install espup --locked && espup install",
+            "",
+        ]
+    else:
+        steps += [
+            "rust-toolchain.toml pins the version and the target, so cargo",
+            "installs both on the first build. Nothing else to do.",
+            "",
+        ]
+    steps += ["See docs/rust-ui-framework.md for how the Rust build fits in.", ""]
+    return "\n".join(steps)
+
+
 def build(project_dir, triple, toolchain, build_std):
     """Run cargo and return the directory holding the built archive."""
     command = ["cargo"]
@@ -77,17 +110,26 @@ def build(project_dir, triple, toolchain, build_std):
 
     print("[rust] {}".format(" ".join(command)))
 
-    result = subprocess.run(
-        command,
-        cwd=project_dir,
-        timeout=BUILD_TIMEOUT_SECONDS,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            command,
+            cwd=project_dir,
+            timeout=BUILD_TIMEOUT_SECONDS,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        # cargo is not on PATH at all.
+        sys.stderr.write(setup_help(toolchain))
+        raise RuntimeError("cargo was not found on PATH")
 
     if result.returncode != 0:
         # cargo writes diagnostics to stderr; surface them or the failure is opaque.
         sys.stderr.write(result.stderr)
+        # cargo is present but the toolchain it was asked for is not, which is a
+        # setup problem wearing a compiler error's clothes.
+        if toolchain and "not installed" in result.stderr:
+            sys.stderr.write(setup_help(toolchain))
         raise RuntimeError("cargo build failed for target {}".format(triple))
 
     # Warnings still matter even on success.

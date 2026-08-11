@@ -41,17 +41,20 @@ jobs:
         with:
           submodules: recursive
 
+      # rust-toolchain.toml pins the version and lists rustfmt, clippy and the
+      # RISC-V target, so rustup installs exactly that on the first cargo call.
       - name: Install Rust
-        run: rustup component add rustfmt clippy
+        run: rustup show active-toolchain
 
       - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
+            ~/.rustup/toolchains
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.toml', 'rust-toolchain.toml') }}
           restore-keys: cargo-${{ runner.os }}-
 
       - name: Format
@@ -65,8 +68,21 @@ jobs:
             exit 1
           fi
 
-      - name: Lint
+      # -D warnings covers clippy's lints and rustc's alike, so an unused import
+      # fails the job exactly as a correctness lint does. There are no external
+      # crates, so this can never be tripped by somebody else's code.
+      - name: Lint (host)
         run: cargo clippy --workspace --all-targets --features xpui-rs/testing -- -D warnings
+
+      # The step above compiles for the host, where `cfg(target_os = "none")` is
+      # false — the global allocator and the panic handler are never even parsed.
+      # Linting the device target is the only way those reach CI before a
+      # firmware build does. ESP32-C3 stands in for the S3 too: same cfg, and no
+      # build-std needed.
+      - name: Lint (ESP32-C3, the firmware target)
+        run: |
+          cargo clippy --release --package crosspoint_rs \
+            --target riscv32imc-unknown-none-elf -- -D warnings
 
       - name: Test
         run: cargo test --workspace --features xpui-rs/testing
@@ -140,13 +156,14 @@ jobs:
             ~/.rustup/toolchains
             ~/.cargo/registry
             ~/.cargo/git
-          key: rust-esp-${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
+          key: rust-esp-${{ runner.os }}-${{ hashFiles('**/Cargo.toml', 'rust-toolchain.toml') }}
           restore-keys: rust-esp-${{ runner.os }}-
 
+      # The RISC-V target comes from rust-toolchain.toml. Xtensa does not: no
+      # stable Rust targets it, so ESP32-S3 needs the esp-rs fork installed here.
       - name: Install Rust device targets
         run: |
           set -euo pipefail
-          rustup target add riscv32imc-unknown-none-elf
           if [ ! -d "$HOME/.rustup/toolchains/esp" ]; then
             cargo install espup --locked
             espup install
