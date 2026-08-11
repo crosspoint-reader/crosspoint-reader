@@ -55,6 +55,11 @@ pub trait Canvas {
     /// back behind an overlay without repainting it.
     fn scrim(&self, rect: Rect);
 
+    /// Confines drawing to `rect` until cleared with `None`. A view taller than
+    /// the space it was given - a scrolling one - relies on this to keep its
+    /// overflow off the chrome around it.
+    fn set_clip(&self, rect: Option<Rect>);
+
     /// Draws a 1-bpp bitmap. Row-major, MSB first, `(w + 7) / 8` bytes per row,
     /// and **bit 0 is ink** — inverted from the usual convention.
     fn draw_image(&self, origin: Point, data: &[u8], size: Size);
@@ -91,6 +96,16 @@ impl Renderer {
 
     pub fn draw_text(origin: Point, text: &str, font: FontId, style: FontStyle) {
         super::current().draw_text(origin, text, font, style)
+    }
+
+    /// Confines drawing to `rect`. Pair every call with [`clear_clip`].
+    pub fn clip(rect: Rect) {
+        super::current().set_clip(Some(rect))
+    }
+
+    /// Lifts the clip set by [`clip`].
+    pub fn clear_clip() {
+        super::current().set_clip(None)
     }
 
     pub fn fill_rect(rect: Rect, black: bool) {

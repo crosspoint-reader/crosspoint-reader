@@ -26,6 +26,8 @@ pub struct NavigationScreen<M> {
     content: Box<dyn View<M>>,
     /// `None` defers to the activity's localized title.
     title: Option<String>,
+    /// Drawn over the content, outside any scrolling it does.
+    overlay: Option<Box<dyn View<M>>>,
     hints: [Hint; 4],
     measured: Size,
 }
@@ -45,6 +47,7 @@ impl<M: 'static> NavigationScreen<M> {
                 Hint::Standard,
                 Hint::Standard,
             ],
+            overlay: None,
             measured: Size::ZERO,
         }
     }
@@ -58,6 +61,25 @@ impl<M: 'static> NavigationScreen<M> {
         self
     }
 
+    /// A view drawn over the content: a dialog, typically.
+    ///
+    /// It sits outside the content, so a scrolling view cannot clip it and it
+    /// does not scroll away. Declared last, so a dialog that captures input
+    /// discards everything the content declared.
+    pub fn overlay(mut self, overlay: impl View<M> + 'static) -> Self {
+        self.overlay = Some(Box::new(overlay));
+        self
+    }
+
+    /// The overlay, only when `when` holds. Saves a screen an `if` in `body`.
+    pub fn overlay_if(self, when: bool, overlay: impl View<M> + 'static) -> Self {
+        if when {
+            self.overlay(overlay)
+        } else {
+            self
+        }
+    }
+
     /// Sets the four hints, given by meaning rather than by screen position.
     pub fn hints(mut self, back: Hint, confirm: Hint, previous: Hint, next: Hint) -> Self {
         self.hints = [back, confirm, previous, next];
@@ -68,6 +90,11 @@ impl<M: 'static> NavigationScreen<M> {
 impl<M> View<M> for NavigationScreen<M> {
     fn measure(&mut self, available: Size) {
         self.content.measure(Theme::content_area().size);
+        if let Some(overlay) = self.overlay.as_mut() {
+            // The whole screen: a dialog centres itself on the panel, not on
+            // the content band.
+            overlay.measure(available);
+        }
         self.measured = available;
     }
 
@@ -90,6 +117,11 @@ impl<M> View<M> for NavigationScreen<M> {
             &self.hints[2],
             &self.hints[3],
         );
+
+        // Last, so it covers the content and the hints alike.
+        if let Some(overlay) = &self.overlay {
+            overlay.render(origin);
+        }
     }
 
     fn interactions(&mut self, origin: Point, out: &mut Interactions<M>) {
@@ -97,5 +129,10 @@ impl<M> View<M> for NavigationScreen<M> {
         let content = Theme::content_area();
         let at = origin.offset(content.x(), content.y());
         self.content.interactions(at, out);
+
+        // After the content: a capturing overlay discards what came before it.
+        if let Some(overlay) = self.overlay.as_mut() {
+            overlay.interactions(origin, out);
+        }
     }
 }

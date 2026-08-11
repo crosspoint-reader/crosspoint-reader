@@ -25,6 +25,8 @@ extern "C" {
     /// only, so roughly half of what was behind survives and the whole reads as
     /// grey. Distinct from `cpp_fill_rect_dither`, which clears first.
     pub fn cpp_scrim(x: i32, y: i32, width: i32, height: i32);
+    /// Confines drawing to a rect. A zero width or height lifts the clip.
+    pub fn cpp_set_clip(x: i32, y: i32, width: i32, height: i32);
     /// Draws a 1-bpp bitmap. Format: row-major, MSB first, `(w + 7) / 8` bytes
     /// per row, and **bit 0 is ink** - inverted from the usual convention.
     pub fn cpp_draw_image(bitmap: *const u8, x: i32, y: i32, width: i32, height: i32);
@@ -88,6 +90,16 @@ extern "C" {
     );
     /// Draws the themed slider. The firmware owns the track, fill and knob.
     pub fn cpp_theme_draw_slider(x: i32, y: i32, width: i32, height: i32, value: i32, max: i32);
+    /// The scroll indicator for a scrolling region, in pixels.
+    pub fn cpp_theme_draw_scroll_indicator(
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        content: i32,
+        visible: i32,
+        offset: i32,
+    );
     /// Draws the themed modal. `option_text` is called back per row.
     pub fn cpp_theme_draw_option_popup(
         title: *const c_char,

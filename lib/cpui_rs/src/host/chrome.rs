@@ -76,6 +76,11 @@ pub trait Chrome {
     /// goes and how far along it is.
     fn draw_slider(&self, rect: Rect, value: i32, max: i32);
 
+    /// The scroll indicator beside a scrolling region: how much of `content`
+    /// the `rect`-sized window shows, and how far down it sits. The host draws
+    /// nothing when everything already fits.
+    fn draw_scroll_indicator(&self, rect: Rect, content: i32, visible: i32, offset: i32);
+
     /// The themed list. `row` is called back per visible row and field;
     /// returning `None` omits that field, which is how the host decides between
     /// a one- and two-line row.
@@ -172,6 +177,10 @@ impl Theme {
 
     pub fn draw_slider(rect: Rect, value: i32, max: i32) {
         super::current().draw_slider(rect, value, max)
+    }
+
+    pub fn draw_scroll_indicator(rect: Rect, content: i32, visible: i32, offset: i32) {
+        super::current().draw_scroll_indicator(rect, content, visible, offset)
     }
 
     /// The themed list. `row` is asked for each field of each visible row;

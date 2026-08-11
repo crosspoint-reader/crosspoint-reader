@@ -51,7 +51,7 @@ pub use host::{
     IconRef, Input, Renderer, ScreenChrome, SwipeDir, Theme, ThemeMetric,
 };
 pub use layout::{
-    Alignment, Flexible, Frame, HStack, Modifiers, Padding, Spacer, Tappable, VStack,
+    Alignment, Flexible, Frame, HStack, Modifiers, Padding, ScrollView, Spacer, Tappable, VStack,
 };
 pub use screen::{NavigationScreen, OverlayPanel, Screen};
 pub use view::{value_at, InputMask, Interaction, Interactions, Scrim, Trigger, View, ViewExt};

@@ -143,6 +143,10 @@ pub struct Runtime<S: Screen> {
     /// Where focus sat before a view captured input, so dismissing a dialog
     /// returns to the row that opened it rather than wherever its index landed.
     focus_before_capture: Option<usize>,
+    /// How far the screen's scrolling view is scrolled. Owned here because the
+    /// view tree is rebuilt every frame and could not remember it, and because
+    /// keeping focus visible is the runtime's job — a screen never sees it.
+    scroll: i32,
     repeat: Repeat,
 }
 
@@ -154,6 +158,7 @@ impl<S: Screen> Runtime<S> {
             painted: false,
             dragging: false,
             focus_before_capture: None,
+            scroll: 0,
             repeat: Repeat {
                 button: None,
                 pressed_at: 0,
@@ -193,11 +198,43 @@ impl<S: Screen> Runtime<S> {
         }
     }
 
+    /// Scrolls the minimum needed to bring the focused interaction fully into
+    /// view. Returns whether the offset moved.
+    ///
+    /// Minimum rather than centring: on a panel that repaints whole and takes a
+    /// second or more, the less that shifts under the eye the better.
+    fn settle_scroll(&mut self, interactions: &Interactions<S::Message>) -> bool {
+        let Some((viewport, content_height)) = interactions.viewport() else {
+            return false;
+        };
+        let Some(focused) = interactions.focused_rect(self.focus) else {
+            return false;
+        };
+
+        let mut next = self.scroll;
+        if focused.bottom() > viewport.bottom() {
+            next += focused.bottom() - viewport.bottom();
+        }
+        if focused.origin.y < viewport.origin.y {
+            next -= viewport.origin.y - focused.origin.y;
+        }
+
+        let next = next.clamp(0, (content_height - viewport.size.height).max(0));
+        if next == self.scroll {
+            return false;
+        }
+        self.scroll = next;
+        true
+    }
+
     /// Collects, then settles focus against whatever captured input this frame,
     /// so every caller — Confirm, Up/Down, taps — reads the same table.
     fn collect_settled(&mut self) -> Interactions<S::Message> {
         let interactions = self.collect();
         if self.adopt_capture(&interactions) {
+            return self.collect();
+        }
+        if self.settle_scroll(&interactions) {
             return self.collect();
         }
         interactions
@@ -213,7 +250,7 @@ impl<S: Screen> Runtime<S> {
         let mut view = self.screen.body();
         view.measure(Renderer::screen_size());
 
-        let mut out = Interactions::new(self.focus);
+        let mut out = Interactions::new(self.focus).scrolled(self.scroll);
         view.interactions(Point::ORIGIN, &mut out);
         out
     }
@@ -398,7 +435,8 @@ impl<S: Screen> Runtime<S> {
             Interactions::capturing(self.focus)
         } else {
             Interactions::new(self.focus)
-        };
+        }
+        .scrolled(self.scroll);
         view.interactions(Point::ORIGIN, &mut out);
         view.render(Point::ORIGIN);
 

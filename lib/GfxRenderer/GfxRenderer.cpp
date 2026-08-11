@@ -489,6 +489,10 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  // Logical clip first: cheaper than rotating, and it is the space the caller
+  // reasons in.
+  if (_clipActive && (x < _clipX0 || x >= _clipX1 || y < _clipY0 || y >= _clipY1)) return;
+
   int phyX = 0;
   int phyY = 0;
 
@@ -907,12 +911,20 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
   const int ly1 = std::min(screenH, y + height);
   if (lx0 >= lx1 || ly0 >= ly1) return;
 
+  // Same clamp again against the clip, so the fast path honours it without
+  // falling back to per-pixel drawing.
+  const int cx0 = _clipActive ? std::max(lx0, _clipX0) : lx0;
+  const int cy0 = _clipActive ? std::max(ly0, _clipY0) : ly0;
+  const int cx1 = _clipActive ? std::min(lx1, _clipX1) : lx1;
+  const int cy1 = _clipActive ? std::min(ly1, _clipY1) : ly1;
+  if (cx0 >= cx1 || cy0 >= cy1) return;
+
   // Rotate the two opposing logical corners into physical-framebuffer space.
   // The bounding rect in physical space is the rect we need to fill — rotation
   // is rigid (no shear/stretch) so the bbox of the two corners IS the rect.
   int paX, paY, pbX, pbY;
-  rotateCoordinates(orientation, lx0, ly0, &paX, &paY, panelWidth, panelHeight);
-  rotateCoordinates(orientation, lx1 - 1, ly1 - 1, &pbX, &pbY, panelWidth, panelHeight);
+  rotateCoordinates(orientation, cx0, cy0, &paX, &paY, panelWidth, panelHeight);
+  rotateCoordinates(orientation, cx1 - 1, cy1 - 1, &pbX, &pbY, panelWidth, panelHeight);
 
   const int phyX0 = std::min(paX, pbX);
   const int phyX1 = std::max(paX, pbX);  // inclusive
@@ -1512,6 +1524,16 @@ void GfxRenderer::beginStripTarget(uint8_t* scratch, int stripY0, int stripRows)
   _stripRows = stripRows;
   _stripActive = true;
 }
+
+void GfxRenderer::setClip(const int x, const int y, const int width, const int height) const {
+  _clipX0 = x;
+  _clipY0 = y;
+  _clipX1 = x + width;
+  _clipY1 = y + height;
+  _clipActive = true;
+}
+
+void GfxRenderer::clearClip() const { _clipActive = false; }
 
 void GfxRenderer::endStripTarget() const {
   _stripActive = false;

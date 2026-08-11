@@ -154,4 +154,14 @@ impl Rect {
             && point.x < self.right()
             && point.y < self.bottom()
     }
+
+    /// Whether the two overlap at all. Touching edges do not count, matching
+    /// [`contains`](Rect::contains), which treats the right and bottom edges as
+    /// outside.
+    pub fn intersects(&self, other: Rect) -> bool {
+        self.origin.x < other.right()
+            && other.origin.x < self.right()
+            && self.origin.y < other.bottom()
+            && other.origin.y < self.bottom()
+    }
 }

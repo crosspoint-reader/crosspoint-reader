@@ -39,6 +39,11 @@ impl InputMask {
         InputMask(self.0 | other.0)
     }
 
+    /// This mask with `other`'s bits removed.
+    pub const fn without(self, other: InputMask) -> InputMask {
+        InputMask(self.0 & !other.0)
+    }
+
     pub const fn contains(self, other: InputMask) -> bool {
         self.0 & other.0 == other.0
     }
@@ -160,6 +165,14 @@ pub struct Interactions<M> {
     /// paint themselves focused — clearing them afterwards is too late, since a
     /// widget has already been told it holds focus by then.
     ignoring: bool,
+    /// How far the scrolling view has been scrolled, handed down by the
+    /// runtime. The view tree is rebuilt every frame, so a scroll view cannot
+    /// remember this itself - it reads it here, exactly as a widget reads
+    /// whether it holds focus.
+    scroll: i32,
+    /// The scrolling viewport and the height of what it holds, published by the
+    /// scroll view during the walk so the runtime can keep focus visible.
+    viewport: Option<(Rect, i32)>,
 }
 
 impl<M> Interactions<M> {
@@ -170,6 +183,8 @@ impl<M> Interactions<M> {
             focus,
             focusable: 0,
             captured: None,
+            scroll: 0,
+            viewport: None,
             ignoring: false,
         }
     }
@@ -185,6 +200,8 @@ impl<M> Interactions<M> {
             focus,
             focusable: 0,
             captured: None,
+            scroll: 0,
+            viewport: None,
             ignoring: true,
         }
     }
@@ -229,9 +246,58 @@ impl<M> Interactions<M> {
         self.ignoring = false;
     }
 
+    /// Starts the walk with a scroll offset the scroll view should apply.
+    pub fn scrolled(mut self, offset: i32) -> Self {
+        self.scroll = offset;
+        self
+    }
+
+    /// The offset a scroll view should apply to its content.
+    pub fn scroll(&self) -> i32 {
+        self.scroll
+    }
+
+    /// Published by a scroll view: the visible band, and how tall its content
+    /// is. `None` means nothing on this screen scrolls.
+    pub fn set_viewport(&mut self, viewport: Rect, content_height: i32) {
+        self.viewport = Some((viewport, content_height));
+    }
+
+    pub fn viewport(&self) -> Option<(Rect, i32)> {
+        self.viewport
+    }
+
+    /// How many interactions have been declared so far. A container uses this
+    /// to find the ones its own child added.
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
+    /// Withdraws `mask` from every interaction declared since `from` that falls
+    /// outside `visible`. A scrolled-away control keeps its focus stop, so it
+    /// can still be reached, but stops accepting touches aimed at whatever now
+    /// occupies that part of the screen.
+    pub fn restrict_outside(&mut self, from: usize, visible: Rect, mask: InputMask) {
+        for item in self.items.iter_mut().skip(from) {
+            if !item.rect.intersects(visible) {
+                item.mask = item.mask.without(mask);
+            }
+        }
+    }
+
     /// The focus index a capturing view asked for, or `None` if none captured.
     pub fn captured_focus(&self) -> Option<usize> {
         self.captured
+    }
+
+    /// Rect of the focusable interaction at `focus`, in tree order. The
+    /// runtime scrolls to bring this into view.
+    pub fn focused_rect(&self, focus: usize) -> Option<Rect> {
+        self.items
+            .iter()
+            .filter(|item| item.mask.contains(InputMask::FOCUS))
+            .nth(focus)
+            .map(|item| item.rect)
     }
 
     pub fn focusable_count(&self) -> usize {

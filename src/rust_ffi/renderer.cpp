@@ -47,6 +47,16 @@ void cpp_fill_rect_dither(const int32_t x, const int32_t y, const int32_t width,
 // one checkerboard parity only leaves the other half of the pixels untouched,
 // which reads as grey and keeps roughly half of whatever was behind it.
 // BaseTheme.cpp does the same thing in the lightening direction for dimmed rows.
+void cpp_set_clip(const int32_t x, const int32_t y, const int32_t width, const int32_t height) {
+  if (!g_rustRendererPtr) return;
+  // Zero-sized means "no clip", so the boundary needs one function, not two.
+  if (width <= 0 || height <= 0) {
+    g_rustRendererPtr->clearClip();
+    return;
+  }
+  g_rustRendererPtr->setClip(x, y, width, height);
+}
+
 void cpp_scrim(const int32_t x, const int32_t y, const int32_t width, const int32_t height) {
   if (!g_rustRendererPtr || width <= 0 || height <= 0) return;
 

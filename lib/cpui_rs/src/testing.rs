@@ -107,6 +107,8 @@ thread_local! {
     static DRAWN_POPUPS: RefCell<Vec<(String, usize, i32)>> = const { RefCell::new(Vec::new()) };
     static DRAWN_HINTS: RefCell<Vec<[bool; 4]>> = const { RefCell::new(Vec::new()) };
     static DRAWN_SLIDERS: RefCell<Vec<(Rect, i32, i32)>> = const { RefCell::new(Vec::new()) };
+    static CLIPS: RefCell<Vec<Option<Rect>>> = const { RefCell::new(Vec::new()) };
+    static INDICATORS: RefCell<Vec<(i32, i32, i32)>> = const { RefCell::new(Vec::new()) };
     static NOW: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
     static SWIPE: core::cell::Cell<SwipeDir> = const { core::cell::Cell::new(SwipeDir::None) };
     static PRESSED: core::cell::Cell<Option<Button>> = const { core::cell::Cell::new(None) };
@@ -122,6 +124,8 @@ pub fn reset() {
     DRAWN_POPUPS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_HINTS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_SLIDERS.with(|drawn| drawn.borrow_mut().clear());
+    CLIPS.with(|clips| clips.borrow_mut().clear());
+    INDICATORS.with(|drawn| drawn.borrow_mut().clear());
     SWIPE.with(|swipe| swipe.set(SwipeDir::None));
     PRESSED.with(|pressed| pressed.set(None));
     SWIPE_MOVES_SELECTION.with(|flag| flag.set(false));
@@ -168,6 +172,19 @@ pub fn drawn_hints() -> Vec<[bool; 4]> {
 /// host owns the knob and track, so this is what a test can hold the widget to.
 pub fn drawn_sliders() -> Vec<(Rect, i32, i32)> {
     DRAWN_SLIDERS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Every scroll indicator asked for since the last [`reset`], as
+/// `(content, visible, offset)`.
+pub fn drawn_indicators() -> Vec<(i32, i32, i32)> {
+    INDICATORS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Every clip set or lifted since the last [`reset`], in order. `None` is a
+/// lift - a scroll view must leave one behind, or the chrome drawn after it
+/// would stay clipped away.
+pub fn clips() -> Vec<Option<Rect>> {
+    CLIPS.with(|clips| clips.borrow().clone())
 }
 
 /// Reports one swipe to the next frame the runtime reads input, so navigation
@@ -236,6 +253,10 @@ impl Canvas for TestHost {
 
     fn fill_rect_dither(&self, rect: Rect, _light: bool) {
         record(rect, RectKind::Dither);
+    }
+
+    fn set_clip(&self, rect: Option<Rect>) {
+        CLIPS.with(|clips| clips.borrow_mut().push(rect));
     }
 
     fn scrim(&self, rect: Rect) {
@@ -321,6 +342,10 @@ impl Chrome for TestHost {
     }
 
     fn draw_progress_bar(&self, _rect: Rect, _current: u32, _total: u32) {}
+
+    fn draw_scroll_indicator(&self, _rect: Rect, content: i32, visible: i32, offset: i32) {
+        INDICATORS.with(|drawn| drawn.borrow_mut().push((content, visible, offset)));
+    }
 
     fn draw_slider(&self, rect: Rect, value: i32, max: i32) {
         DRAWN_SLIDERS.with(|drawn| drawn.borrow_mut().push((rect, value, max)));

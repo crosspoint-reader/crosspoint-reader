@@ -66,6 +66,13 @@ impl Canvas for Firmware {
         }
     }
 
+    fn set_clip(&self, rect: Option<Rect>) {
+        // A zero-sized rect is the "no clip" signal, so the boundary stays one
+        // function instead of two.
+        let rect = rect.unwrap_or(Rect::new(0, 0, 0, 0));
+        unsafe { raw::cpp_set_clip(rect.x(), rect.y(), rect.width(), rect.height()) }
+    }
+
     fn scrim(&self, rect: Rect) {
         unsafe { raw::cpp_scrim(rect.x(), rect.y(), rect.width(), rect.height()) }
     }

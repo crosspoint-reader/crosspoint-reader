@@ -58,6 +58,23 @@ uint8_t cpp_option_popup_row_rect(const uint8_t* title, const char* (*optionText
   return 1;
 }
 
+void cpp_theme_draw_scroll_indicator(const int32_t x, const int32_t y, const int32_t width, const int32_t height,
+                                     const int32_t content, const int32_t visible, const int32_t offset) {
+  if (!g_rustRendererPtr || content <= 0 || visible <= 0) return;
+
+  // FreeInkUI's own indicator, the one the C++ list screens show. It takes
+  // counts, but they are only ever used as proportions, so pixels work as well
+  // as rows - and it draws nothing when everything already fits.
+  namespace fui = freeink::ui;
+  const auto spec = uiScaleSpec();
+  fui::GfxRendererFrame<1> ui(*g_rustRendererPtr, spec.smallFontId, spec.bodyFontId, spec.titleFontId);
+  const fui::ThemeTokens tokens = uiThemeTokens(ui.target);
+
+  fui::drawListScrollIndicator(ui.target, asUiRect(x, y, width, height), static_cast<uint32_t>(content),
+                               static_cast<uint32_t>(visible), static_cast<uint32_t>(offset < 0 ? 0 : offset),
+                               tokens.listScrollWidth, tokens.listScrollSide, tokens.listScrollInset);
+}
+
 void cpp_theme_draw_list(const int32_t x, const int32_t y, const int32_t width, const int32_t height,
                          const int32_t itemCount, const int32_t selectedIndex,
                          const char* (*rowText)(void*, int32_t, int32_t), void* ctx) {

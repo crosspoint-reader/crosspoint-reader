@@ -73,6 +73,20 @@ impl Chrome for Firmware {
         }
     }
 
+    fn draw_scroll_indicator(&self, rect: Rect, content: i32, visible: i32, offset: i32) {
+        unsafe {
+            raw::cpp_theme_draw_scroll_indicator(
+                rect.x(),
+                rect.y(),
+                rect.width(),
+                rect.height(),
+                content,
+                visible,
+                offset,
+            );
+        }
+    }
+
     fn draw_list<'a>(
         &self,
         rect: Rect,

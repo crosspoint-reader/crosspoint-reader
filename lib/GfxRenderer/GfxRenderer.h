@@ -76,6 +76,17 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
+  // Clip rect, in LOGICAL screen coordinates. While active, pixels outside it
+  // are discarded. Logical rather than physical so it needs no orientation
+  // handling of its own: callers give the same coordinates they draw with, and
+  // the test happens before the rotate. Inactive by default, so nothing that
+  // does not ask for it is affected. See setClip()/clearClip().
+  mutable int _clipX0 = 0;
+  mutable int _clipY0 = 0;
+  mutable int _clipX1 = 0;
+  mutable int _clipY1 = 0;
+  mutable bool _clipActive = false;
+
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
   // or measured with a mapped primary font contains a CJK codepoint the primary
@@ -186,6 +197,15 @@ class GfxRenderer {
   // grayscale planes band-by-band without a full second buffer.
   void beginStripTarget(uint8_t* scratch, int stripY0, int stripRows) const;
   void endStripTarget() const;
+
+  // Confines drawing to a logical rect until clearClip(). Pixels outside are
+  // discarded, so a caller can draw content taller than the space it has - a
+  // scrolling view - without painting over the chrome around it. Coordinates
+  // are the same logical ones every draw call takes; the test runs before the
+  // orientation rotate, so it holds in all four orientations.
+  void setClip(int x, int y, int width, int height) const;
+  void clearClip() const;
+  bool isClipActive() const { return _clipActive; }
 
   // Band culling for tiled grayscale. Takes a glyph bounding box in logical
   // screen coords and returns false only when a strip is active AND the box's
