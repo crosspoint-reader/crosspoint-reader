@@ -1,14 +1,17 @@
 // Lists and option popups: the two widgets the theme paints end to end.
 
-#include <functional>
+#include <algorithm>
 #include <string>
 #include <vector>
 
 #include "components/OptionPopup.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
+#include "components/UiAppHelpers.h"
 #include "internal.h"
 
 using rust_ffi::asText;
+using rust_ffi::asUiRect;
 
 namespace {
 
@@ -58,38 +61,66 @@ uint8_t cpp_option_popup_row_rect(const uint8_t* title, const char* (*optionText
 void cpp_theme_draw_list(const int32_t x, const int32_t y, const int32_t width, const int32_t height,
                          const int32_t itemCount, const int32_t selectedIndex,
                          const char* (*rowText)(void*, int32_t, int32_t), void* ctx) {
-  if (!g_rustRendererPtr || !rowText) return;
+  if (!g_rustRendererPtr || !rowText || itemCount <= 0) return;
 
-  // The theme picks row height and text placement from whether the subtitle
-  // accessor is null, not from what it returns, so probe first and pass nullptr
-  // when no row has the field.
-  const auto anyRowHas = [rowText, ctx, itemCount](const int32_t field) {
-    for (int32_t i = 0; i < itemCount; i++) {
-      if (rowText(ctx, i, field) != nullptr) return true;
-    }
-    return false;
-  };
+  namespace fui = freeink::ui;
+  const auto spec = uiScaleSpec();
+  fui::GfxRendererFrame<1> ui(*g_rustRendererPtr, spec.smallFontId, spec.bodyFontId, spec.titleFontId);
+  const fui::ThemeTokens tokens = uiThemeTokens(ui.target);
 
-  const auto title = [rowText, ctx](const int index) -> std::string {
-    const char* text = rowText(ctx, index, 0);
-    return text ? std::string(text) : std::string();
-  };
-  const auto subtitle = [rowText, ctx](const int index) -> std::string {
-    const char* text = rowText(ctx, index, 1);
-    return text ? std::string(text) : std::string();
-  };
-  const auto value = [rowText, ctx](const int index) -> std::string {
-    const char* text = rowText(ctx, index, 2);
-    return text ? std::string(text) : std::string();
-  };
+  // The row strings live in the Rust caller's own buffers for the whole call,
+  // so the items point straight at them - no copy per row.
+  std::vector<fui::ListItem> items;
+  items.reserve(static_cast<size_t>(itemCount));
+  for (int32_t i = 0; i < itemCount; i++) {
+    fui::ListItem item;
+    item.label = rowText(ctx, i, 0);
+    item.subtitle = rowText(ctx, i, 1);
+    item.value = rowText(ctx, i, 2);
+    item.actionValue = static_cast<int16_t>(i);
+    items.push_back(item);
+  }
 
-  using RowAccessor = std::function<std::string(int)>;
-  const RowAccessor subtitleFn = anyRowHas(1) ? RowAccessor(subtitle) : nullptr;
-  const RowAccessor valueFn = anyRowHas(2) ? RowAccessor(value) : nullptr;
+  fui::ListProps props;
+  props.items = items.data();
+  props.count = static_cast<uint16_t>(items.size());
+  props.selectedIndex = static_cast<int16_t>(selectedIndex);
+  // Say the row geometry outright rather than letting Screen::list substitute
+  // its own. cpui measured this band with these very numbers, and the component
+  // draws only rows that fully fit - so a taller row here silently drops the
+  // last one, and a one-row list (a Toggle) disappears entirely.
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const bool anySubtitle =
+      std::any_of(items.begin(), items.end(), [](const fui::ListItem& item) { return item.subtitle != nullptr; });
+  props.rowHeight = static_cast<int16_t>(anySubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
+  props.rowGap = static_cast<int16_t>(metrics.listRowGap);
+  // cpui declared each row's touch region before rendering and routes taps
+  // itself, so the component draws only and registers no competing hits.
+  props.action = fui::NO_ACTION;
+  props.valueInset = 8;  // air between the value and the row edge
+  // Titles at the value's size so both sides of a row read as one unit, and
+  // maxLines marks the style as set - an all-default smallText fails
+  // textStyleUnset and Screen::list would substitute bodyText back.
+  props.labelText = tokens.smallText;
+  props.labelText.maxLines = 2;
 
-  // highlightValue stays false: no settings screen features a changeable value,
-  // and a Rust screen that did would look foreign beside them.
-  GUI.drawList(*g_rustRendererPtr, Rect{x, y, width, height}, itemCount, selectedIndex, title, subtitleFn, nullptr,
-               valueFn, false);
+  // Keep the selection on screen. There is no remembered scroll position here:
+  // a draw is stateless, which is what BaseTheme::drawList did too.
+  fui::Screen<1> screen(ui.frame, tokens);
+  const fui::Rect safe = ui.frame.safeRect();
+  const fui::Rect band = asUiRect(x, y, width, height);
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(band.y - safe.y), static_cast<int16_t>(safe.right() - band.right()),
+                  static_cast<int16_t>(safe.bottom() - band.bottom()), static_cast<int16_t>(band.x - safe.x)});
+  if (selectedIndex >= 0) {
+    const uint16_t visible = fui::listVisibleRows(screen.contentRect(), props.rowHeight, props.rowGap);
+    props.topIndex = fui::listTopIndexFor(static_cast<int16_t>(selectedIndex), 0, visible ? visible : 1,
+                                          static_cast<uint16_t>(itemCount));
+  }
+
+  // Screen::list() substitutes the theme's row height, gap, padding, selection
+  // style and scroll indicator. Going through it rather than ui::list() keeps
+  // that recipe in one place - the same one the C++ list screens use.
+  screen.list(props);
 }
 }

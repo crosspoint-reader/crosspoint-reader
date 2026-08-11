@@ -5,7 +5,9 @@
 //! modal's hit rects line up with the rows it drew.
 
 use cpui::host::IconRef;
-use cpui::testing::{self, RectKind, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
+use cpui::testing::{
+    self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, SLIDER_KNOB_WIDTH, SLIDER_SIDE_INSET,
+};
 use cpui::view::{InputMask, Interactions, Trigger};
 use cpui::{value_at, IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
 
@@ -14,73 +16,56 @@ fn available() -> Size {
     Size::new(SCREEN_WIDTH, SCREEN_HEIGHT)
 }
 
-/// The knob's *left edge* travels `width - knob_width`, so at 0% it sits flush
-/// with the track start and at 100% its right edge meets the end — its centre
-/// never reaches either extreme. Matching the C++ slider here is the point.
+/// The host draws the slider, so the widget must hand it over rather than paint
+/// anything itself. A widget that drew its own rectangles would sit beside a
+/// C++ panel's slider looking nothing like it.
 #[test]
-fn slider_knob_travels_the_track_without_overhanging() {
-    const WIDTH: i32 = 200;
-    const SIDE_INSET: i32 = 8;
-    const KNOB_WIDTH: i32 = 14;
-
-    // Last recorded rect is the knob outline; the one before it is the knob fill.
-    let knob_x = |value: i32| {
-        let mut slider = Slider::<()>::new(value, 100);
-        slider.measure(Size::new(WIDTH, 60));
-        testing::reset();
-        slider.render(Point::ORIGIN);
-
-        let rects = testing::drawn_rects();
-        let stroked = rects
-            .iter()
-            .rfind(|r| r.4 == RectKind::Stroked)
-            .expect("knob outline");
-        assert_eq!(stroked.2, KNOB_WIDTH, "knob width is fixed");
-        stroked.0
-    };
-
-    let travel = WIDTH - SIDE_INSET * 2 - KNOB_WIDTH;
-
-    assert_eq!(
-        knob_x(0),
-        SIDE_INSET,
-        "at 0% the knob sits at the track start"
-    );
-    assert_eq!(
-        knob_x(100),
-        SIDE_INSET + travel,
-        "at 100% the knob's right edge meets the track end"
-    );
-    assert_eq!(knob_x(50), SIDE_INSET + travel / 2, "50% is halfway along");
-
-    // Monotonic: a larger value never moves the knob backwards.
-    let mut previous = i32::MIN;
-    for value in [0, 10, 25, 50, 75, 90, 100] {
-        let x = knob_x(value);
-        assert!(x >= previous, "knob went backwards at {value}%");
-        previous = x;
-    }
-}
-
-/// The track is dithered and the filled portion is solid, so the two are
-/// distinguishable on a 1-bit panel.
-#[test]
-fn slider_draws_a_dithered_track_under_a_solid_fill() {
+fn a_slider_is_drawn_by_the_host() {
+    testing::install();
     let mut slider = Slider::<()>::new(50, 100);
     slider.measure(Size::new(200, 60));
     testing::reset();
     slider.render(Point::ORIGIN);
 
-    let rects = testing::drawn_rects();
-    assert_eq!(
-        rects.first().map(|r| r.4),
-        Some(RectKind::Dither),
-        "the track must be drawn first, and dithered"
-    );
+    let drawn = testing::drawn_sliders();
+    assert_eq!(drawn.len(), 1, "exactly one slider, drawn by the theme");
+
+    let (rect, value, max) = drawn[0];
+    assert_eq!((value, max), (50, 100), "the value goes through untouched");
+    assert_eq!(rect.width(), 200, "the host gets the widget's own bounds");
     assert!(
-        rects.iter().any(|r| r.4 == RectKind::Filled),
-        "the value portion must be a solid fill"
+        testing::drawn_rects().is_empty(),
+        "and the widget paints nothing of its own"
     );
+}
+
+/// The knob belongs to the host now; the conversion from a touch to a value is
+/// what the framework still owns. The property that mattered when it drew the
+/// knob itself survives: both ends are reachable, and dragging right never
+/// walks the value backwards.
+#[test]
+fn a_touch_spans_the_whole_range_without_dead_ends() {
+    testing::install();
+    let track = Rect::new(0, 0, 200, 60);
+    let reachable = |x: i32| value_at(track, x, 100);
+
+    assert_eq!(
+        reachable(track.x() + SLIDER_SIDE_INSET + SLIDER_KNOB_WIDTH / 2),
+        0,
+        "the left end of the travel reads 0"
+    );
+    assert_eq!(
+        reachable(track.x() + track.width() - SLIDER_SIDE_INSET - SLIDER_KNOB_WIDTH / 2),
+        100,
+        "the right end reads max"
+    );
+
+    let mut previous = i32::MIN;
+    for x in (0..=track.width()).step_by(5) {
+        let value = reachable(x);
+        assert!(value >= previous, "the value went backwards at x={x}");
+        previous = value;
+    }
 }
 
 /// A tap outside the track clamps rather than producing an out-of-range value.

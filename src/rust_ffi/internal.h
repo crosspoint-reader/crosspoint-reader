@@ -6,6 +6,7 @@
 // declares them in lib/backend_rs/src/raw.rs. Only what more than one file
 // needs lives here.
 
+#include <FreeInkUI.h>
 #include <GfxRenderer.h>
 
 #include <cstdint>
@@ -24,6 +25,12 @@ namespace rust_ffi {
 // Rust hands text over as uint8_t* to keep the declarations free of char
 // signedness; the bytes are always UTF-8 and null-terminated.
 inline const char* asText(const uint8_t* text) { return reinterpret_cast<const char*>(text); }
+
+// Rust works in 32-bit screen coordinates; FreeInkUI rects are 16-bit.
+inline freeink::ui::Rect asUiRect(const int32_t x, const int32_t y, const int32_t width, const int32_t height) {
+  return freeink::ui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(width),
+                           static_cast<int16_t>(height)};
+}
 
 // Mirrors FontStyle in the Rust font module.
 inline EpdFontFamily::Style resolveStyle(const uint8_t style) {

@@ -8,6 +8,7 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use crate::geometry::Rect;
+use crate::host::{Theme, ThemeMetric};
 
 /// Which kinds of input an interaction accepts.
 ///
@@ -116,19 +117,20 @@ impl<M: Clone> Trigger<M> {
     }
 }
 
-/// Horizontal inset a value control reserves at each end of its track, and its
-/// knob width. They live here because the framework resolves a value trigger
-/// without knowing which widget produced it; [`crate::Slider`] draws to match.
-pub(crate) const TRACK_INSET: i32 = 8;
-pub(crate) const KNOB_WIDTH: i32 = 14;
-
 /// The value a touch at `x` represents within `track`.
 ///
 /// Rounds to nearest, matching the `(permille * range + 500) / 1000` the C++
 /// slider screens use, so dragging feels identical in both.
+///
+/// The inset and knob width come from the theme rather than from constants
+/// here: the host draws the knob, and a copy of its dimensions would keep
+/// converting touches against the old geometry the day the theme changed it.
 pub fn value_at(track: Rect, x: i32, max: i32) -> i32 {
-    let usable = (track.width() - TRACK_INSET * 2 - KNOB_WIDTH).max(1);
-    let offset = (x - track.x() - TRACK_INSET - KNOB_WIDTH / 2).clamp(0, usable);
+    let inset = Theme::metric(ThemeMetric::SliderSideInset);
+    let knob = Theme::metric(ThemeMetric::SliderKnobWidth);
+
+    let usable = (track.width() - inset * 2 - knob).max(1);
+    let offset = (x - track.x() - inset - knob / 2).clamp(0, usable);
     (offset * max + usable / 2) / usable
 }
 

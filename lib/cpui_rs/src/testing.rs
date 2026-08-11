@@ -58,7 +58,15 @@ pub const SIDE_PADDING: i32 = 16;
 pub const MIN_TOUCH_SIZE: i32 = 44;
 pub const LIST_ROW_HEIGHT: i32 = 40;
 pub const LIST_ROW_HEIGHT_WITH_SUBTITLE: i32 = 56;
+/// Gap between list rows, as the firmware's theme leaves one.
+pub const LIST_ROW_GAP: i32 = 4;
 pub const PROGRESS_BAR_HEIGHT: i32 = 6;
+/// Slider geometry the fake reports. These are FreeInkUI's own `SliderProps`
+/// defaults, which is what the firmware answers with, so a test measuring a
+/// touch here measures what the device would do.
+pub const SLIDER_KNOB_WIDTH: i32 = 14;
+pub const SLIDER_KNOB_HEIGHT: i32 = 22;
+pub const SLIDER_SIDE_INSET: i32 = 8;
 pub const CONTENT_TOP: i32 = TOP_PADDING + HEADER_HEIGHT + VERTICAL_SPACING;
 pub const CONTENT_BOTTOM: i32 = SCREEN_HEIGHT - BUTTON_HINTS_HEIGHT;
 
@@ -98,6 +106,7 @@ thread_local! {
     static DRAWN_LISTS: RefCell<Vec<(usize, i32)>> = const { RefCell::new(Vec::new()) };
     static DRAWN_POPUPS: RefCell<Vec<(String, usize, i32)>> = const { RefCell::new(Vec::new()) };
     static DRAWN_HINTS: RefCell<Vec<[bool; 4]>> = const { RefCell::new(Vec::new()) };
+    static DRAWN_SLIDERS: RefCell<Vec<(Rect, i32, i32)>> = const { RefCell::new(Vec::new()) };
     static NOW: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
     static SWIPE: core::cell::Cell<SwipeDir> = const { core::cell::Cell::new(SwipeDir::None) };
     static PRESSED: core::cell::Cell<Option<Button>> = const { core::cell::Cell::new(None) };
@@ -112,6 +121,7 @@ pub fn reset() {
     DRAWN_LISTS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_POPUPS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_HINTS.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN_SLIDERS.with(|drawn| drawn.borrow_mut().clear());
     SWIPE.with(|swipe| swipe.set(SwipeDir::None));
     PRESSED.with(|pressed| pressed.set(None));
     SWIPE_MOVES_SELECTION.with(|flag| flag.set(false));
@@ -152,6 +162,12 @@ pub fn drawn_popups() -> Vec<(String, usize, i32)> {
 /// slot carries a label, `false` where it was left blank.
 pub fn drawn_hints() -> Vec<[bool; 4]> {
     DRAWN_HINTS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Every slider drawn since the last [`reset`], as `(rect, value, max)`. The
+/// host owns the knob and track, so this is what a test can hold the widget to.
+pub fn drawn_sliders() -> Vec<(Rect, i32, i32)> {
+    DRAWN_SLIDERS.with(|drawn| drawn.borrow().clone())
 }
 
 /// Reports one swipe to the next frame the runtime reads input, so navigation
@@ -280,8 +296,12 @@ impl Chrome for TestHost {
             ThemeMetric::ContentBottom => CONTENT_BOTTOM,
             ThemeMetric::ListRowHeight => LIST_ROW_HEIGHT,
             ThemeMetric::ListRowHeightWithSubtitle => LIST_ROW_HEIGHT_WITH_SUBTITLE,
+            ThemeMetric::ListRowGap => LIST_ROW_GAP,
             ThemeMetric::ProgressBarHeight => PROGRESS_BAR_HEIGHT,
             ThemeMetric::MinTouchSize => MIN_TOUCH_SIZE,
+            ThemeMetric::SliderKnobWidth => SLIDER_KNOB_WIDTH,
+            ThemeMetric::SliderKnobHeight => SLIDER_KNOB_HEIGHT,
+            ThemeMetric::SliderSideInset => SLIDER_SIDE_INSET,
         }
     }
 
@@ -301,6 +321,10 @@ impl Chrome for TestHost {
     }
 
     fn draw_progress_bar(&self, _rect: Rect, _current: u32, _total: u32) {}
+
+    fn draw_slider(&self, rect: Rect, value: i32, max: i32) {
+        DRAWN_SLIDERS.with(|drawn| drawn.borrow_mut().push((rect, value, max)));
+    }
 
     fn draw_list<'a>(
         &self,

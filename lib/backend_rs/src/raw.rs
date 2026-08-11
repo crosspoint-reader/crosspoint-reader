@@ -86,6 +86,8 @@ extern "C" {
         current: u32,
         total: u32,
     );
+    /// Draws the themed slider. The firmware owns the track, fill and knob.
+    pub fn cpp_theme_draw_slider(x: i32, y: i32, width: i32, height: i32, value: i32, max: i32);
     /// Draws the themed modal. `option_text` is called back per row.
     pub fn cpp_theme_draw_option_popup(
         title: *const c_char,

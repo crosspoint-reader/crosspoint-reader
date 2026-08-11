@@ -3,7 +3,6 @@
 mod interaction;
 
 pub use interaction::{value_at, InputMask, Interaction, Interactions, Trigger};
-pub(crate) use interaction::{KNOB_WIDTH, TRACK_INSET};
 
 use alloc::boxed::Box;
 

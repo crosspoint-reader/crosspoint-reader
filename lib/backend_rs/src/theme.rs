@@ -67,6 +67,12 @@ impl Chrome for Firmware {
         }
     }
 
+    fn draw_slider(&self, rect: Rect, value: i32, max: i32) {
+        unsafe {
+            raw::cpp_theme_draw_slider(rect.x(), rect.y(), rect.width(), rect.height(), value, max);
+        }
+    }
+
     fn draw_list<'a>(
         &self,
         rect: Rect,

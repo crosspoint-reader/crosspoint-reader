@@ -31,9 +31,20 @@ pub enum ThemeMetric {
     ContentBottom = 6,
     ListRowHeight = 7,
     ListRowHeightWithSubtitle = 8,
+    /// Space the theme leaves between one row and the next. A list that
+    /// measured without it asks for less height than the host needs, and the
+    /// host draws only rows that fully fit — so the last one silently vanishes.
+    ListRowGap = 14,
     ProgressBarHeight = 9,
     /// Smallest comfortably tappable dimension.
     MinTouchSize = 10,
+    /// A slider knob's width, and the padding its track is inset by at each
+    /// end. The framework converts a touch to a value with these, so they have
+    /// to be the numbers the host actually draws with — asking keeps the two
+    /// from drifting when the theme changes them.
+    SliderKnobWidth = 11,
+    SliderKnobHeight = 12,
+    SliderSideInset = 13,
 }
 
 /// Which piece of a list row is being asked for.
@@ -59,6 +70,11 @@ pub trait Chrome {
     fn draw_button_hints(&self, back: &Hint, confirm: &Hint, previous: &Hint, next: &Hint);
 
     fn draw_progress_bar(&self, rect: Rect, current: u32, total: u32);
+
+    /// The themed slider: a track, a fill up to `value`, and a knob over both.
+    /// The host owns every dimension of it; the framework says only where it
+    /// goes and how far along it is.
+    fn draw_slider(&self, rect: Rect, value: i32, max: i32);
 
     /// The themed list. `row` is called back per visible row and field;
     /// returning `None` omits that field, which is how the host decides between
@@ -152,6 +168,10 @@ impl Theme {
 
     pub fn draw_progress_bar(rect: Rect, current: u32, total: u32) {
         super::current().draw_progress_bar(rect, current, total)
+    }
+
+    pub fn draw_slider(rect: Rect, value: i32, max: i32) {
+        super::current().draw_slider(rect, value, max)
     }
 
     /// The themed list. `row` is asked for each field of each visible row;

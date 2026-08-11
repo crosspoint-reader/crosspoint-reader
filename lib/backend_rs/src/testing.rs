@@ -56,6 +56,7 @@ stub! {
     cpp_theme_draw_sub_header(x: i32, y: i32, w: i32, h: i32, l: *const c_char, r: *const c_char);
     cpp_theme_draw_button_hints(a: *const c_char, b: *const c_char, c: *const c_char, d: *const c_char);
     cpp_theme_draw_progress_bar(x: i32, y: i32, w: i32, h: i32, c: u32, t: u32);
+    cpp_theme_draw_slider(x: i32, y: i32, w: i32, h: i32, v: i32, m: i32);
     cpp_activity_finish();
     cpp_activity_request_update();
     cpp_frontlight_present() -> u8;

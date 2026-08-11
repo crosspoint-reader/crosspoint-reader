@@ -90,6 +90,11 @@ impl<M> List<M> {
             ThemeMetric::ListRowHeight
         })
     }
+
+    /// Distance from the top of one row to the top of the next, gap included.
+    fn row_pitch(&self) -> i32 {
+        self.row_height() + Theme::metric(ThemeMetric::ListRowGap)
+    }
 }
 
 impl<M> List<M> {
@@ -108,7 +113,10 @@ impl<M: Clone> View<M> for List<M> {
         // Only as tall as the rows need, capped by what is offered. Claiming
         // the whole band would stop several lists sharing one screen, which is
         // what a sectioned screen is made of.
-        let needed = self.row_height() * self.rows.len() as i32;
+        let rows = self.rows.len() as i32;
+        let needed = (self.row_height() * rows
+            + Theme::metric(ThemeMetric::ListRowGap) * (rows - 1).max(0))
+        .max(0);
         self.measured = Size::new(available.width, needed.min(available.height));
     }
 
@@ -122,13 +130,14 @@ impl<M: Clone> View<M> for List<M> {
     fn interactions(&mut self, origin: Point, out: &mut Interactions<M>) {
         self.focused_row = None;
         let height = self.row_height().max(1);
+        let pitch = self.row_pitch().max(1);
         let width = self.measured.width;
 
         for (index, row) in self.rows.iter().enumerate() {
             let Some(message) = row.message.clone() else {
                 continue;
             };
-            let rect = Rect::new(origin.x, origin.y + index as i32 * height, width, height);
+            let rect = Rect::new(origin.x, origin.y + index as i32 * pitch, width, height);
             if out.declare(rect, InputMask::DEFAULT, Trigger::Message(message)) {
                 self.focused_row = Some(index);
             }

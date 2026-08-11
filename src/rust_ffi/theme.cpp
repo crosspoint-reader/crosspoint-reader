@@ -8,6 +8,7 @@
 #include "internal.h"
 
 using rust_ffi::asText;
+using rust_ffi::asUiRect;
 
 namespace {
 
@@ -24,6 +25,10 @@ enum class Metric : uint8_t {
   ListRowHeightWithSubtitle = 8,
   ProgressBarHeight = 9,
   MinTouchSize = 10,
+  SliderKnobWidth = 11,
+  SliderKnobHeight = 12,
+  SliderSideInset = 13,
+  ListRowGap = 14,
 };
 
 // A hint slot: null means "the firmware's standard label", empty means unused.
@@ -55,6 +60,8 @@ int32_t cpp_theme_metric(const uint8_t metric) {
       return metrics.listRowHeight;
     case Metric::ListRowHeightWithSubtitle:
       return metrics.listWithSubtitleRowHeight;
+    case Metric::ListRowGap:
+      return metrics.listRowGap;
     case Metric::ProgressBarHeight:
       return metrics.progressBarHeight;
     case Metric::MinTouchSize:
@@ -62,6 +69,14 @@ int32_t cpp_theme_metric(const uint8_t metric) {
       // knows. Reached on touch frames only.
       if (!g_rustRendererPtr) return 0;
       return uiThemeTokens(makeUiTarget(*g_rustRendererPtr)).minTouchSize;
+    // Read off FreeInkUI's own defaults rather than repeated here, so the
+    // slider Rust converts a touch against is the slider the component draws.
+    case Metric::SliderKnobWidth:
+      return freeink::ui::SliderProps{}.knobWidth;
+    case Metric::SliderKnobHeight:
+      return freeink::ui::SliderProps{}.knobHeight;
+    case Metric::SliderSideInset:
+      return freeink::ui::SliderProps{}.horizontalPadding;
   }
   return 0;
 }
@@ -98,5 +113,27 @@ void cpp_theme_draw_progress_bar(const int32_t x, const int32_t y, const int32_t
                                  const uint32_t current, const uint32_t total) {
   if (!g_rustRendererPtr) return;
   GUI.drawProgressBar(*g_rustRendererPtr, Rect{x, y, width, height}, current, total);
+}
+
+void cpp_theme_draw_slider(const int32_t x, const int32_t y, const int32_t width, const int32_t height,
+                           const int32_t value, const int32_t max) {
+  if (!g_rustRendererPtr) return;
+
+  // Straight to the FreeInkUI slider, styled by this theme's tokens — the same
+  // component FrontlightPanelActivity draws, so a Rust slider and a C++ one are
+  // the same pixels rather than two implementations kept in step by hand.
+  namespace fui = freeink::ui;
+  const auto spec = uiScaleSpec();
+  fui::GfxRendererFrame<1> ui(*g_rustRendererPtr, spec.smallFontId, spec.bodyFontId, spec.titleFontId);
+
+  fui::SliderProps props;
+  props.value = value;
+  props.max = max;
+  // cpui declared this slider's touch region before rendering and routes the
+  // drag itself, so the component must draw only: NO_ACTION keeps it from
+  // registering a competing hit rect in this throwaway frame.
+  props.action = fui::NO_ACTION;
+
+  fui::slider(ui.frame, asUiRect(x, y, width, height), props);
 }
 }
