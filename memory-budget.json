@@ -31,7 +31,7 @@
   },
 
   "esp32s3": {
-    "_targets": "sticky, x4pro, papermono - esp32-s3-devkitc1-n16r8",
+    "_targets": "sticky and its release variants - esp32-s3-devkitc1-n16r8",
     "flash_max": 6100000,
     "static_ram_max": 75776,
     "rust_flash_max": 98304,
@@ -49,12 +49,9 @@
 
   "slim": { "_like": "esp32c3" },
 
-  "x4pro": {
-    "_like": "esp32s3",
-    "_measured_2026_08_08": "flash 5,588,694 / static RAM 60,924 / rust flash 21,553 / rust RAM 0"
-  },
-
   "sticky": { "_like": "esp32s3" },
 
-  "papermono": { "_like": "esp32s3" }
+  "sticky-gh_release": { "_like": "esp32s3" },
+
+  "sticky-gh_release_rc": { "_like": "esp32s3" }
 }
