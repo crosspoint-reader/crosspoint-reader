@@ -61,17 +61,6 @@ stub! {
     cpp_theme_draw_scroll_indicator(x: i32, y: i32, w: i32, h: i32, c: i32, v: i32, o: i32);
     cpp_activity_finish();
     cpp_activity_request_update();
-    cpp_frontlight_present() -> u8;
-    cpp_frontlight_has_color_temperature() -> u8;
-    cpp_frontlight_brightness() -> i32;
-    cpp_frontlight_warmth() -> i32;
-    cpp_frontlight_is_on() -> u8;
-    cpp_frontlight_set_brightness(p: i32);
-    cpp_frontlight_set_warmth(p: i32);
-    cpp_frontlight_set_on(o: u8);
-    cpp_frontlight_save();
-    cpp_display_is_inverted() -> u8;
-    cpp_display_toggle_inverted() -> u8;
     cpp_heap_free() -> i32;
     cpp_heap_largest_block() -> i32;
     cpp_heap_min_free() -> i32;

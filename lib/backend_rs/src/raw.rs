@@ -139,30 +139,6 @@ extern "C" {
     pub fn cpp_device_name() -> *const c_char;
     pub fn cpp_device_battery_percent() -> i32;
 
-    // -- frontlight ---------------------------------------------------------
-    pub fn cpp_frontlight_present() -> u8;
-    pub fn cpp_frontlight_has_color_temperature() -> u8;
-    pub fn cpp_frontlight_brightness() -> i32;
-    pub fn cpp_frontlight_warmth() -> i32;
-    pub fn cpp_frontlight_is_on() -> u8;
-    pub fn cpp_frontlight_set_brightness(percent: i32);
-    pub fn cpp_frontlight_set_warmth(percent: i32);
-    pub fn cpp_frontlight_set_on(on: u8);
-    /// Persists brightness, warmth and on-state in one write, and only when a
-    /// value actually changed. Throttled on the C++ side so a caller cannot
-    /// wear out the flash by saving per interaction.
-    pub fn cpp_frontlight_save();
-
-    // -- developer settings -------------------------------------------------
-    // Narrow on purpose: a general settings writer would hand every screen the
-    // ability to write flash, and the write-throttling rule would then have to
-    // be respected by each caller instead of enforced once.
-
-    // -- display ------------------------------------------------------------
-    pub fn cpp_display_is_inverted() -> u8;
-    /// Flips inversion, persists it, and returns the new state.
-    pub fn cpp_display_toggle_inverted() -> u8;
-
     // -- heap ---------------------------------------------------------------
     // Rust allocates through the firmware heap, so its cost is invisible to any
     // static measurement. These are the only way to see it.

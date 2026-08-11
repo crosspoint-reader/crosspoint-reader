@@ -41,11 +41,9 @@ mod renderer;
 mod theme;
 
 pub mod device;
-pub mod frontlight;
 pub mod i18n;
 pub mod lifecycle;
 
-pub use frontlight::{Display, Frontlight};
 pub use icon::{IconRole, IconSpec};
 
 /// Borrows a C string the firmware owns.
@@ -85,10 +83,10 @@ pub fn millis() -> u32 {
 /// Translates a key from `lib/I18n/translations/english.yaml`.
 ///
 /// ```rust,ignore
-/// Text::new(tr!(STR_FRONTLIGHT))
+/// Text::new(tr!(STR_LOADING))
 /// ```
 ///
-/// Reads like the C++ `tr(STR_FRONTLIGHT)` on purpose. An unknown key is a compile
+/// Reads like the C++ `tr(STR_LOADING)` on purpose. An unknown key is a compile
 /// error because the constants are generated from the YAML, and a key used in
 /// source but absent from the YAML fails `scripts/gen_i18n.py`.
 ///
