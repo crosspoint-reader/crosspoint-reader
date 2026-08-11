@@ -1,10 +1,10 @@
 # The host contract
 
-`cpui` draws nothing by itself. It describes what it needs through five traits in
+`xpui` draws nothing by itself. It describes what it needs through five traits in
 [`src/host/`](../src/host/); you implement them and install the result once.
 
 [`backend`](../../backend_rs/) implements these against CrossPoint's C++
-firmware. This page describes what each trait owes `cpui` — worth reading if you
+firmware. This page describes what each trait owes `xpui` — worth reading if you
 are changing that implementation, or standing up a new CrossPoint-based one.
 
 ## The five traits
@@ -32,7 +32,7 @@ static FIRMWARE: MyFirmware = MyFirmware;
 
 // `install` is unsafe: it must run before the first measure, render or
 // interactions pass, and never alongside one.
-unsafe { cpui::host::install(&FIRMWARE) };
+unsafe { xpui::host::install(&FIRMWARE) };
 ```
 
 A compile-time assertion is worth adding so a missing trait is caught at the
@@ -40,7 +40,7 @@ definition rather than at the install site:
 
 ```rust
 const _: fn() = || {
-    fn assert_host<T: cpui::host::Host>() {}
+    fn assert_host<T: xpui::host::Host>() {}
     assert_host::<MyFirmware>();
 };
 ```
@@ -51,7 +51,7 @@ const _: fn() = || {
 a style note. Rendering and input run on different tasks on the device, so the
 lifecycle installs from both entry points rather than assuming which wakes first.
 
-**`Chrome` is your theme, not a default one.** `cpui` deliberately has no opinion
+**`Chrome` is your theme, not a default one.** `xpui` deliberately has no opinion
 about what a list row looks like. It asks for one and you draw it however the
 firmware's own C++ screens draw one, so Rust and native screens match.
 
@@ -64,20 +64,20 @@ meaning "the thing you use for *sun*", and you choose the asset. That keeps
 asset names out of the framework.
 
 **Report zero rather than guessing.** If a font or icon is missing from a build,
-return `0` for its size. `cpui` then draws nothing, rather than painting garbage
+return `0` for its size. `xpui` then draws nothing, rather than painting garbage
 at an arbitrary size.
 
 ## Testing without hardware
 
-`cpui` ships a fake host behind the `testing` feature:
+`xpui` ships a fake host behind the `testing` feature:
 
 ```toml
 [dev-dependencies]
-cpui = { path = "../cpui_rs", features = ["testing"] }
+xpui = { path = "../xpui_rs", features = ["testing"] }
 ```
 
 ```rust
-cpui::testing::install();
+xpui::testing::install();
 ```
 
 It reports fixed screen and theme dimensions and records everything drawn, so
@@ -88,5 +88,5 @@ framework's own 58 tests use nothing else.
 
 [`backend`](../../backend_rs/) implements all five over a C++ firmware, across
 an FFI boundary. It is about 1,200 lines including the C declarations, and it
-holds every unsafe call across that boundary — `cpui`'s own `unsafe` is confined
+holds every unsafe call across that boundary — `xpui`'s own `unsafe` is confined
 to the four lines that read the installed host.

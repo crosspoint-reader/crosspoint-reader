@@ -129,7 +129,7 @@ void cpp_theme_draw_slider(const int32_t x, const int32_t y, const int32_t width
   fui::SliderProps props;
   props.value = value;
   props.max = max;
-  // cpui declared this slider's touch region before rendering and routes the
+  // xpui declared this slider's touch region before rendering and routes the
   // drag itself, so the component must draw only: NO_ACTION keeps it from
   // registering a competing hit rect in this throwaway frame.
   props.action = fui::NO_ACTION;

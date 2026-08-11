@@ -1,11 +1,11 @@
-# The package is `cpui-rs` so the name reads correctly outside the workspace
+# The package is `xpui-rs` so the name reads correctly outside the workspace
 # (crates.io convention, and it says which language it is). Rust code says
-# `cpui` — the `-rs` suffix is noise once you are already inside Rust.
+# `xpui` — the `-rs` suffix is noise once you are already inside Rust.
 #
 # Consequence: dependency entries and `--features` selectors use the *package*
-# name (`cpui-rs/testing`), while `use` statements use the *lib* name (`cpui`).
+# name (`xpui-rs/testing`), while `use` statements use the *lib* name (`xpui`).
 [package]
-name = "cpui-rs"
+name = "xpui-rs"
 version = "0.1.0"
 edition = "2021"
 
@@ -13,7 +13,7 @@ edition = "2021"
 # staticlib that actually gets linked. Emitting a staticlib here as well
 # produced a 17 MB archive that contributed zero objects to the final link.
 [lib]
-name = "cpui"
+name = "xpui"
 crate-type = ["rlib"]
 
 [features]

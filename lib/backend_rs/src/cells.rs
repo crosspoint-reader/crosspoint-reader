@@ -9,7 +9,7 @@ use alloc::ffi::CString;
 use alloc::vec::Vec;
 use core::ffi::{c_char, c_void};
 
-use cpui::host::RowField;
+use xpui::host::RowField;
 
 use crate::firmware::c;
 

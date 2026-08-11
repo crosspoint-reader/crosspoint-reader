@@ -4,12 +4,12 @@
 //! eyeball: where a slider knob sits, which word a toggle shows, and whether a
 //! modal's hit rects line up with the rows it drew.
 
-use cpui::host::IconRef;
-use cpui::testing::{
+use xpui::host::IconRef;
+use xpui::testing::{
     self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, SLIDER_KNOB_WIDTH, SLIDER_SIDE_INSET,
 };
-use cpui::view::{InputMask, Interactions, Trigger};
-use cpui::{value_at, IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
+use xpui::view::{InputMask, Interactions, Trigger};
+use xpui::{value_at, IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
 
 fn available() -> Size {
     testing::install();

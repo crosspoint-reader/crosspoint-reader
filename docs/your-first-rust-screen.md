@@ -1,11 +1,11 @@
-# Your first Rust screen with `cpui`
+# Your first Rust screen with `xpui`
 
 A complete walkthrough: from an empty file to a Rust screen running on a real
 device. Every file you need is here in full — copy each block into the path
 above it and it will work.
 
 CrossPoint's screens are C++. This tutorial builds one in **Rust**, using the
-[`cpui`](../lib/cpui_rs/README.md) framework, running side by side with the C++
+[`xpui`](../lib/xpui_rs/README.md) framework, running side by side with the C++
 ones in the same firmware.
 
 You do not need to know Rust well. You do need the project building already —
@@ -155,7 +155,7 @@ Create `lib/crosspoint_rs/src/activities/settings/brightness_demo.rs`:
 //! A demo screen: change the frontlight, and show how long we have been awake.
 
 use backend::{device, tr, Frontlight};
-use cpui::{vstack, List, ListRow, NavigationScreen, Screen, Stepper, Text, View};
+use xpui::{vstack, List, ListRow, NavigationScreen, Screen, Stepper, Text, View};
 
 pub struct BrightnessDemo {
     level: i32,
@@ -225,7 +225,7 @@ Four things worth pausing on:
   every repaint, which is why `uptime_seconds()` is read there and stays current.
 - **`update()` is the only place state changes.** Everything arrives as a
   message: one way in, one way out.
-- **`Frontlight` and `device` come from `backend`**, never `cpui`. The framework
+- **`Frontlight` and `device` come from `backend`**, never `xpui`. The framework
   has no idea a frontlight exists — you gave it that ability in step 2.
 - **`register_screen!`** generates the C function the C++ side calls to build
   this screen. Remember the second argument; the next steps use it.
@@ -420,7 +420,7 @@ hold **BOOT**, tap **RESET**, flash again. For a restore point first:
 
 ## Where to go next
 
-- [`cpui`](../lib/cpui_rs/README.md) — every widget and layout you can build with
+- [`xpui`](../lib/xpui_rs/README.md) — every widget and layout you can build with
 - [`backend`](../lib/backend_rs/README.md) — more on the C++ boundary
 - [`crosspoint_rs`](../lib/crosspoint_rs/README.md) — where screens live
 - [rust-ui-framework.md](rust-ui-framework.md) — the full reference

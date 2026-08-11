@@ -5,9 +5,9 @@
 //! catch a container whose implementations have drifted apart — the failure
 //! mode being touches that land on the control next door.
 
-use cpui::screen::{Driver, Runtime};
-use cpui::testing::{self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
-use cpui::{
+use xpui::screen::{Driver, Runtime};
+use xpui::testing::{self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
+use xpui::{
     hstack, value_at, vstack, Alignment, Button, HStack, InputMask, Interactions, List, ListRow,
     Modal, Modifiers, NavigationScreen, Point, Rect, Size, Slider, Spacer, Stepper, SwipeDir, Text,
     Toggle, Trigger, VStack, View,
@@ -29,7 +29,7 @@ fn screen() -> Size {
 
 /// Lays a tree out and collects its interactions, as the runtime does.
 fn collect(view: &mut dyn View<Msg>, focus: usize) -> Interactions<Msg> {
-    cpui::testing::install();
+    xpui::testing::install();
     view.measure(screen());
     let mut out = Interactions::new(focus);
     view.interactions(Point::ORIGIN, &mut out);
@@ -406,7 +406,7 @@ enum NavMsg {
     Swiped(SwipeDir),
 }
 
-impl cpui::Screen for Nav {
+impl xpui::Screen for Nav {
     type Message = NavMsg;
 
     fn body(&self) -> impl View<NavMsg> {
@@ -522,7 +522,7 @@ enum DlgMsg {
     Chose(usize),
 }
 
-impl cpui::Screen for WithDialog {
+impl xpui::Screen for WithDialog {
     type Message = DlgMsg;
 
     fn body(&self) -> impl View<DlgMsg> {

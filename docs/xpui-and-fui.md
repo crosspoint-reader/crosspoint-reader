@@ -1,10 +1,10 @@
-# `cpui` and FreeInkUI
+# `xpui` and FreeInkUI
 
-Notes toward a decision: should `cpui`'s components be built on the SDK's own UI
+Notes toward a decision: should `xpui`'s components be built on the SDK's own UI
 library, and where would SD-card theming attach?
 
 **Short answer: yes, and it is a smaller job than it looks — because it is a
-change to `backend`, not to `cpui`.** The rest of this explains why.
+change to `backend`, not to `xpui`.** The rest of this explains why.
 
 ---
 
@@ -15,7 +15,7 @@ question.
 
 **FreeInkUI is already here.** `platformio.ini` symlinks
 `freeink-sdk/libs/ui/FreeInkUI` as a library, the current SDK pin ships **33
-components**, and **44 files in our firmware already use it**. `cpui` and FUI
+components**, and **44 files in our firmware already use it**. `xpui` and FUI
 have been compiled into the same binary this whole time.
 
 **`feat-fui` is not where to work.** It is 82 commits behind `feat-touch-ui`, a
@@ -26,7 +26,7 @@ reach a library we already have.
 **The two are near-siblings.** They were designed against the same constraints
 and arrived at strikingly similar shapes.
 
-| Concept | `cpui` | FreeInkUI |
+| Concept | `xpui` | FreeInkUI |
 |---|---|---|
 | Geometry | `Point`, `Size`, `Rect`, `Insets` | `Point`, `Size`, `Rect`, `Insets` |
 | What input an element accepts | `InputMask` (TAP, FOCUS, DRAG, LONG_PRESS, ADJUST) | `InputMask` (+ `SwipeLeft/Right`, `Prev/Next`, `Back`, `Confirm`) |
@@ -50,30 +50,30 @@ They are not competing, which is the important thing to say out loud.
 component, read back an `ActionId`. It owns *how things look* — `StyleSet`,
 `Paint`, `State`, and per-component style tokens.
 
-**`cpui` is a declarative layer.** A screen describes a tree and receives typed
+**`xpui` is a declarative layer.** A screen describes a tree and receives typed
 messages; the framework owns measurement, focus, input routing and repaint.
 It owns *how a screen is written*.
 
-FUI has no equivalent of `body()`/`update()`. `cpui` has no equivalent of 33
+FUI has no equivalent of `body()`/`update()`. `xpui` has no equivalent of 33
 styled components. Each is the other's missing half.
 
 ---
 
-## What "cpui on FUI" actually means
+## What "xpui on FUI" actually means
 
-`cpui` reaches the firmware only through five `Host` traits. `Chrome` is already
+`xpui` reaches the firmware only through five `Host` traits. `Chrome` is already
 the seam where lists, headers, dialogs and button hints are drawn **by the
-firmware, not by `cpui`**. Today `backend` implements that against `UITheme`.
+firmware, not by `xpui`**. Today `backend` implements that against `UITheme`.
 Pointing it at FUI instead changes:
 
 - `lib/backend_rs/src/theme.rs` and the C++ in `src/rust_ffi/`
-- **nothing in `cpui`**
+- **nothing in `xpui`**
 - **nothing in any screen**
 
 That is the dependency inversion paying for itself. It was built for exactly
 this.
 
-### How much drawing does `cpui` actually do?
+### How much drawing does `xpui` actually do?
 
 Measured, not guessed — host-delegated calls versus raw primitives:
 
@@ -82,7 +82,7 @@ Measured, not guessed — host-delegated calls versus raw primitives:
 | `Section` (4), `Stepper` (2), `Modal` (2), `ProgressBar` (2), `IconToggle` (1), `Toggle` | `Slider` (4), `Image` (3), `Text` (1), `Divider` (1) |
 
 `Text`, `Divider` and `Image` are irreducible — draw a string, a line, blit a
-bitmap — under any framework. So the geometry `cpui` genuinely owns and could
+bitmap — under any framework. So the geometry `xpui` genuinely owns and could
 hand to FUI is, in practice, **one widget: `Slider`**.
 
 The work is therefore not "rewrite the widgets". It is "re-point `Chrome` at
@@ -91,7 +91,7 @@ FUI, and let `Slider` use FUI's slider".
 > **Correction, from doing it.** "Re-point `Chrome` at FUI in `backend`" does not
 > describe real work: `Chrome` already lands on `BaseTheme`, and it is
 > `BaseTheme` that migrates. What actually decides each widget is what the
-> **C++ equivalent** draws through — already-FUI means `cpui` is the odd one out
+> **C++ equivalent** draws through — already-FUI means `xpui` is the odd one out
 > and we convert it in `src/rust_ffi/`; still hand-drawn means converting only
 > Rust would split the look. `Slider` and `List` moved on that basis.
 > [fui-component-coverage.md](fui-component-coverage.md) tracks the rest.
@@ -107,17 +107,17 @@ An XML file is a way to populate a `ThemeDocument`.
 
 The layering that follows:
 
-- **Parsing belongs in the firmware.** Not in `cpui`: a `no_std` UI framework
+- **Parsing belongs in the firmware.** Not in `xpui`: a `no_std` UI framework
   should not know what XML is, and it must not name a file format. Not in FUI
   either, most likely — FUI consumes a `ThemeDocument`; something else fills it.
-- **`cpui` already has the right seam.** `ThemeMetric` and `Chrome` are exactly
+- **`xpui` already has the right seam.** `ThemeMetric` and `Chrome` are exactly
   "ask the host what things look like". A theme change is the host answering
-  differently. No `cpui` change is needed for themes to work.
+  differently. No `xpui` change is needed for themes to work.
 - **If `backend` draws via FUI, Rust screens inherit themes for free.** This is
   the strongest argument for the section above: the theming work happens once,
   in FUI, and both C++ and Rust screens get it.
 - **The open question is invalidation.** When a theme loads, something must
-  rebuild the screen. `cpui` has `request_update()`, but nothing currently calls
+  rebuild the screen. `xpui` has `request_update()`, but nothing currently calls
   it on a theme change, and cached measurements would go stale. Worth settling
   before the XML lands rather than after.
 
@@ -128,11 +128,11 @@ The layering that follows:
 1. **Do not move to `feat-fui`.** The library is already on our branch; that
    branch costs the device and the simulator to reach it.
 2. **Re-point `Chrome` at FUI in `backend`**, incrementally, starting with
-   whichever component has the clearest match. No `cpui` or screen changes, so
+   whichever component has the clearest match. No `xpui` or screen changes, so
    each step is independently verifiable in the simulator.
 3. **Move `Slider` onto FUI's slider** — the only widget doing real geometry
    of its own.
-4. **Keep `cpui`'s declarative layer as it is.** It is what FUI lacks, it is
+4. **Keep `xpui`'s declarative layer as it is.** It is what FUI lacks, it is
    why screens are testable on a laptop, and it is the part worth pitching.
 5. **Settle theme invalidation** before the XML format arrives.
 
@@ -143,5 +143,5 @@ already sits on top of yours".
 ---
 
 *Every figure here was read from the tree: component and file counts from the
-SDK pin and `src/`, delegation counts from `lib/cpui_rs/src/widgets/`, branch
+SDK pin and `src/`, delegation counts from `lib/xpui_rs/src/widgets/`, branch
 distances from `git rev-list`.*

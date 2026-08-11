@@ -239,7 +239,7 @@ pio run -e simulator_x4_pro
 
 - **Binary**: `.pio/build/simulator_x4_pro/program`
 - **Simulated SD card**: `fs_/` (local directory)
-- **Rust framework**: `lib/cpui/`
+- **Rust framework**: `lib/xpui/`
 - **Rust screens**: `lib/crosspoint_rs/src/activities/`
 - **About screen**: `lib/crosspoint_rs/src/activities/settings/about.rs`
 - **C++ bridge**: `src/activities/ActivityRs.cpp`, `src/activities/RustActivityStubs.cpp`

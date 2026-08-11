@@ -1,33 +1,33 @@
 # FreeInkUI coverage
 
-What `cpui` draws through, what FreeInkUI ships, and what is left to do.
+What `xpui` draws through, what FreeInkUI ships, and what is left to do.
 
 **The intent is reuse.** Where FUI has a component and CrossPoint's C++ already
-draws with it, `cpui` renders through the same component rather than keeping its
+draws with it, `xpui` renders through the same component rather than keeping its
 own version — that is what makes a Rust screen and a C++ screen the same pixels
 by construction, and what will let SD/XML themes reach Rust screens for free.
-Where FUI has nothing, we build it in `cpui`, and those may later be worth
+Where FUI has nothing, we build it in `xpui`, and those may later be worth
 contributing upstream.
 
 ## The rule
 
 Decide per widget by what the **C++ equivalent** draws through:
 
-| C++ equivalent uses… | Converting `cpui`… | Whose change |
+| C++ equivalent uses… | Converting `xpui`… | Whose change |
 |---|---|---|
-| the FUI component already | *removes* a divergence — `cpui` is the odd one out | ours, in `src/rust_ffi/` |
+| the FUI component already | *removes* a divergence — `xpui` is the odd one out | ours, in `src/rust_ffi/` |
 | a hand-drawn `BaseTheme` method | *creates* one — Rust would stop matching C++ | `BaseTheme`, upstream |
 | nothing (irreducible primitive) | nothing to convert | — |
 
 Converting in `src/rust_ffi/` touches only our own files: no `BaseTheme` edit,
 no effect on any C++ activity.
 
-## Where `cpui` stands
+## Where `xpui` stands
 
-| `cpui` widget | Draws through | FUI component | Status |
+| `xpui` widget | Draws through | FUI component | Status |
 |---|---|---|---|
 | `NavigationScreen` header | `BaseTheme::drawHeader` | `header` + `batteryIndicator` | **on FUI** — inherited free; the one method already converted |
-| `Slider` | `cpp_theme_draw_slider` | `slider` | **on FUI** — C++ used it in 3 activities; `cpui` held the last hand-drawn one |
+| `Slider` | `cpp_theme_draw_slider` | `slider` | **on FUI** — C++ used it in 3 activities; `xpui` held the last hand-drawn one |
 | `List` | `cpp_theme_draw_list` | `list` (via `Screen::list`) | **on FUI** — the same path 36 files under `src/activities/` use |
 | `Modal` | `BaseTheme::drawOptionPopup` | `option-dialog` | **blocked** — the C++ `OptionPopup` is hand-drawn too; converting only Rust splits the look |
 | `ProgressBar` | `BaseTheme::drawProgressBar` | `progress-bar` | **mixed** — one C++ activity uses the component, the theme method is hand-drawn |
@@ -50,7 +50,7 @@ have no separate drawing of their own.
 ## FUI components nothing uses yet
 
 Neither C++ nor Rust draws these. Adopting one means a screen wants it — they
-are not work in themselves, but they are what `cpui` would gain by sitting on
+are not work in themselves, but they are what `xpui` would gain by sitting on
 FUI rather than beside it.
 
 - **Overlays**: `option-dialog`, `context-menu`, `popup`, `message-panel`, `toast`
@@ -63,12 +63,12 @@ FUI rather than beside it.
 (`dimBackground` matches our `Scrim`, `verticalOptions` matches our row layout),
 and it is called from nowhere in the firmware.
 
-## What `cpui` has that FUI does not
+## What `xpui` has that FUI does not
 
 `Text`, `Divider` and `Image`/`Icon` are irreducible primitives, but the
 declarative layer around them is not: the `View` trait, the layout containers,
 `Interactions`/`Trigger` routing, focus and the screen runtime have no FUI
-counterpart. FUI has no `body()`/`update()`; `cpui` has no styled component
+counterpart. FUI has no `body()`/`update()`; `xpui` has no styled component
 library. Each is the other's missing half.
 
 ---

@@ -3,7 +3,7 @@
 The bridge between Rust and the C++ firmware. Everything that crosses that line
 crosses it here.
 
-[`cpui`](../cpui_rs/) is a generic UI framework that cannot draw a pixel.
+[`xpui`](../xpui_rs/) is a generic UI framework that cannot draw a pixel.
 CrossPoint is a C++ firmware that can. This crate connects them, and it holds
 very nearly all the `unsafe` in the three crates — every call across the C
 boundary is here.
@@ -13,35 +13,35 @@ boundary is here.
 The dependency points **inward**:
 
 ```
-   crosspoint_rs  ──▶  backend  ──▶  cpui
+   crosspoint_rs  ──▶  backend  ──▶  xpui
      screens            bridge       framework
 ```
 
-`cpui` declares what it needs — paint this, measure that — and `backend`
-implements it against the real firmware. `cpui` never names a CrossPoint symbol,
+`xpui` declares what it needs — paint this, measure that — and `backend`
+implements it against the real firmware. `xpui` never names a CrossPoint symbol,
 so the compiler enforces the boundary rather than a review comment. That is what
-lets `cpui` have zero dependencies, and what keeps product detail from leaking
+lets `xpui` have zero dependencies, and what keeps product detail from leaking
 into layout code.
 
-Practically: if you find yourself wanting to `use backend::` from inside `cpui`,
+Practically: if you find yourself wanting to `use backend::` from inside `xpui`,
 something is in the wrong crate.
 
 ## Following a value across the boundary
 
-Take the brightness screen from [`cpui`'s README](../cpui_rs/README.md). A
+Take the brightness screen from [`xpui`'s README](../xpui_rs/README.md). A
 finger lands on the track, and 60% becomes 72%. This is the whole journey:
 
 ```
   1. finger on the glass
   2. InputSource::touch_held()      backend  ->  the firmware's input manager
-  3. the Stepper's declared track   cpui     ->  a position becomes a value
-  4. Msg::Set(72)                   cpui     ->  your screen's update()
+  3. the Stepper's declared track   xpui     ->  a position becomes a value
+  4. Msg::Set(72)                   xpui     ->  your screen's update()
   5. Frontlight::set_brightness(72) backend  ->  a safe wrapper
   6. cpp_frontlight_set_brightness  the C boundary
   7. the light actually changes     firmware
 ```
 
-Steps 2 and 6 are this crate. Everything between them is `cpui`, which never
+Steps 2 and 6 are this crate. Everything between them is `xpui`, which never
 learns that a frontlight exists — it only knows a control reported a number.
 
 Reading goes the other way, and is simpler. The screen asks once when it opens:
@@ -117,8 +117,8 @@ supplies its own panic machinery.
 
 ## Where next
 
-- [`cpui/README.md`](../cpui_rs/README.md) — the framework this serves
-- [`cpui/docs/host.md`](../cpui_rs/docs/host.md) — the contract implemented here
+- [`xpui/README.md`](../xpui_rs/README.md) — the framework this serves
+- [`xpui/docs/host.md`](../xpui_rs/docs/host.md) — the contract implemented here
 - [**Your first Rust screen**](../../docs/your-first-rust-screen.md) — the end-to-end tutorial
 - [`crosspoint_rs`](../crosspoint_rs/) — where the screens themselves live
 - [`docs/rust-ui-framework.md`](../../docs/rust-ui-framework.md) — the full reference

@@ -1,15 +1,15 @@
 //! Layout regression tests.
 //!
-//! These run against the deterministic doubles in `cpui::testing`,
+//! These run against the deterministic doubles in `xpui::testing`,
 //! so they need neither hardware nor the simulator. The property they defend is
 //! the one that kept breaking by hand: everything a screen draws has to land
 //! inside the region the theme reserved for it.
 
-use cpui::testing::{
+use xpui::testing::{
     self, RectKind, CONTENT_BOTTOM, CONTENT_TOP, SCREEN_HEIGHT, SCREEN_WIDTH, SIDE_PADDING,
 };
-use cpui::view::Interactions;
-use cpui::{
+use xpui::view::Interactions;
+use xpui::{
     hstack, vstack, Font, HStack, NavigationScreen, OverlayPanel, Padding, Point, Scrim, Size,
     Spacer, Text, VStack, View,
 };
@@ -251,7 +251,7 @@ fn an_overlay_panel_is_sized_by_its_content() {
 /// which is the one thing an overlay exists to preserve.
 #[test]
 fn a_dimmed_overlay_scrims_exactly_the_area_below_it() {
-    cpui::testing::reset();
+    xpui::testing::reset();
 
     let mut panel: OverlayPanel<()> = OverlayPanel::new(vstack![10;
         Text::new("Brightness"),
@@ -262,7 +262,7 @@ fn a_dimmed_overlay_scrims_exactly_the_area_below_it() {
     panel.render(Point::ORIGIN);
 
     let panel_height = panel.size().height;
-    let scrims: Vec<_> = cpui::testing::drawn_rects()
+    let scrims: Vec<_> = xpui::testing::drawn_rects()
         .into_iter()
         .filter(|(_, _, _, _, kind)| *kind == RectKind::Scrim)
         .collect();
@@ -307,7 +307,7 @@ fn a_root_without_an_explicit_title_draws_the_screens_own() {
 
         assert_eq!(
             testing::drawn_headers(),
-            vec![Some(cpui::host::ScreenChrome::screen_title().to_string())],
+            vec![Some(xpui::host::ScreenChrome::screen_title().to_string())],
             "{label} should draw the screen's own title, not an empty header"
         );
     }
@@ -316,14 +316,14 @@ fn a_root_without_an_explicit_title_draws_the_screens_own() {
 /// Dimming is opt-in: without it an overlay leaves the screen below untouched.
 #[test]
 fn an_overlay_does_not_dim_unless_asked() {
-    cpui::testing::reset();
+    xpui::testing::reset();
 
     let mut panel: OverlayPanel<()> = OverlayPanel::new(Text::new("Brightness"));
     panel.measure(screen_size());
     panel.render(Point::ORIGIN);
 
     assert!(
-        !cpui::testing::drawn_rects()
+        !xpui::testing::drawn_rects()
             .iter()
             .any(|(_, _, _, _, kind)| *kind == RectKind::Scrim),
         "no scrim should be drawn by default"
@@ -334,7 +334,7 @@ fn an_overlay_does_not_dim_unless_asked() {
 /// are derived from one another, and this pins that they stay so.
 #[test]
 fn the_dimmed_area_is_the_area_that_dismisses() {
-    cpui::testing::reset();
+    xpui::testing::reset();
 
     let mut panel = OverlayPanel::new(Text::new("Brightness"))
         .scrim(Scrim::Dim)
@@ -342,7 +342,7 @@ fn the_dimmed_area_is_the_area_that_dismisses() {
     panel.measure(screen_size());
     panel.render(Point::ORIGIN);
 
-    let scrim = cpui::testing::drawn_rects()
+    let scrim = xpui::testing::drawn_rects()
         .into_iter()
         .find(|(_, _, _, _, kind)| *kind == RectKind::Scrim)
         .expect("a dimmed panel draws a scrim");

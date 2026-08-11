@@ -1,11 +1,11 @@
-//! Themed chrome: `cpui`'s [`Chrome`] over the firmware's `UITheme`.
+//! Themed chrome: `xpui`'s [`Chrome`] over the firmware's `UITheme`.
 //!
 //! Lists and modals are painted by the theme rather than by the framework, so a
 //! Rust screen looks identical to a native one and follows the user's theme
-//! without `cpui` knowing what a theme is.
+//! without `xpui` knowing what a theme is.
 
-use cpui::geometry::Rect;
-use cpui::host::{Chrome, Hint, RowField, ThemeMetric};
+use xpui::geometry::Rect;
+use xpui::host::{Chrome, Hint, RowField, ThemeMetric};
 
 use crate::cells::{option_cell, row_cell, Cells};
 use crate::firmware::{c, Firmware};

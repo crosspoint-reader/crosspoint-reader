@@ -1,12 +1,12 @@
 //! What the UI needs from whatever hosts it.
 //!
-//! `cpui` never talks to the firmware. It declares this contract and a host
+//! `xpui` never talks to the firmware. It declares this contract and a host
 //! installs an implementation once at startup, so the framework can be built,
 //! tested and reasoned about without a device — and so nothing in the UI can
 //! reach for the C boundary by accident.
 //!
 //! ```rust,ignore
-//! cpui::host::install(&FIRMWARE);   // once, as the screen is entered
+//! xpui::host::install(&FIRMWARE);   // once, as the screen is entered
 //! ```
 
 mod canvas;
@@ -70,7 +70,7 @@ pub(crate) fn current() -> &'static dyn Host {
         }
     }
 
-    panic!("cpui::host::install was never called")
+    panic!("xpui::host::install was never called")
 }
 
 /// Whether a host has been installed, so tests can assert wiring.

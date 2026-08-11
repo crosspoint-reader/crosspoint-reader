@@ -4,7 +4,7 @@ PlatformIO runs this as a `pre:` script. It compiles the `crosspoint_rs`
 staticlib for the target matching the current environment and appends the
 resulting archive to the link line.
 
-`crosspoint_rs` statically contains `cpui`, so only one archive is
+`crosspoint_rs` statically contains `xpui`, so only one archive is
 built and linked.
 
 Targets, keyed off the environment's MCU:

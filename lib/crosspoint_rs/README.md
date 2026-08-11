@@ -2,7 +2,7 @@
 
 CrossPoint's screens, written in Rust.
 
-This is the product layer. [`cpui`](../cpui_rs/) is the framework and knows
+This is the product layer. [`xpui`](../xpui_rs/) is the framework and knows
 nothing about CrossPoint; [`backend`](../backend_rs/) is the bridge to the C++
 firmware; everything CrossPoint-specific lives here.
 
@@ -14,7 +14,7 @@ archive to the linker. Whatever the other crates contribute arrives inside it.
 
 ```rust
 use backend::tr;
-use cpui::{vstack, NavigationScreen, Screen, Text, View};
+use xpui::{vstack, NavigationScreen, Screen, Text, View};
 
 pub struct ExampleScreen {
     count: i32,
@@ -102,7 +102,7 @@ A file is named after the type inside it: `about_screen.rs` holds `AboutScreen`.
 | You are adding | It goes in |
 |---|---|
 | A screen, or something only CrossPoint needs | **here** |
-| A widget, a layout container, anything about drawing | [`cpui`](../cpui_rs/) |
+| A widget, a layout container, anything about drawing | [`xpui`](../xpui_rs/) |
 | Access to a firmware capability, or a new C++ call | [`backend`](../backend_rs/) |
 
 The test is whether it has to know what CrossPoint is. A stack that centres its
@@ -110,7 +110,7 @@ children does not; a panel that drives the frontlight does.
 
 ## Where next
 
-- [`cpui/README.md`](../cpui_rs/README.md) — the framework and its widgets
+- [`xpui/README.md`](../xpui_rs/README.md) — the framework and its widgets
 - [`backend/README.md`](../backend_rs/README.md) — the C++ bridge
 - [**Your first Rust screen**](../../docs/your-first-rust-screen.md) — the tutorial, start to finish
 - [docs/rust-ui-framework.md](../../docs/rust-ui-framework.md) — the full reference

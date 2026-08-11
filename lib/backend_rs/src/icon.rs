@@ -58,11 +58,11 @@ impl IconSpec {
     }
 }
 
-impl From<IconRole> for cpui::host::IconRef {
+impl From<IconRole> for xpui::host::IconRef {
     /// Roles are the product's vocabulary; the framework only ever sees an
-    /// opaque handle, which is what keeps asset names out of `cpui`.
+    /// opaque handle, which is what keeps asset names out of `xpui`.
     fn from(role: IconRole) -> Self {
-        cpui::host::IconRef {
+        xpui::host::IconRef {
             kind: role as u16,
             variant: 0,
             size: IconSpec::DEFAULT_SIZE,

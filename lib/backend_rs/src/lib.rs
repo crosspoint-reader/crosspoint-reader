@@ -4,7 +4,7 @@
 //! declarations, the screen lifecycle the firmware calls into, the allocator
 //! and panic handler, translations, and the icon roles the product ships.
 //!
-//! `cpui` depends on none of it. It declares the ports it needs and this crate
+//! `xpui` depends on none of it. It declares the ports it needs and this crate
 //! implements them, so the UI never learns where its data comes from.
 //!
 //! This is the only crate containing `unsafe`.
@@ -34,7 +34,7 @@ mod firmware;
 mod icon;
 mod raw;
 
-// The five `cpui::host` traits, each implemented beside the concern it serves.
+// The five `xpui::host` traits, each implemented beside the concern it serves.
 mod font;
 mod input;
 mod renderer;

@@ -4,7 +4,7 @@
 //! that has to satisfy it when there is no firmware to link against. Enabled by
 //! the `testing` feature; a device build never sees this.
 //!
-//! Layout is not exercised here — `cpui::testing` covers that with a fake host.
+//! Layout is not exercised here — `xpui::testing` covers that with a fake host.
 //! These exist purely so a test binary links, and to give the device-info
 //! screens something recognisable to assert on.
 

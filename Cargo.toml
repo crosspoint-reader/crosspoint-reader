@@ -1,6 +1,6 @@
 # Rust workspace for the CrossPoint UI framework and its screens.
 #
-# cpui is device-generic and must contain no CrossPoint-specific
+# xpui is device-generic and must contain no CrossPoint-specific
 # code; crosspoint_rs holds the CrossPoint screens built on top of it.
 #
 # Built by scripts/build_rust.py during the PlatformIO build — see
@@ -8,7 +8,7 @@
 
 [workspace]
 resolver = "2"
-members = ["lib/backend_rs", "lib/cpui_rs", "lib/crosspoint_rs"]
+members = ["lib/backend_rs", "lib/xpui_rs", "lib/crosspoint_rs"]
 
 # Shared across both crates so host, RISC-V and Xtensa builds agree.
 [profile.release]

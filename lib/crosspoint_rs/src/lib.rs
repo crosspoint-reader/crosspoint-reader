@@ -1,6 +1,6 @@
 //! CrossPoint screens written in Rust.
 //!
-//! Built on [`cpui`], which stays free of anything CrossPoint
+//! Built on [`xpui`], which stays free of anything CrossPoint
 //! specific. The module tree mirrors `src/activities/` on the C++ side so the
 //! two read the same way: a screen in `activities/settings/` here corresponds
 //! to one in `src/activities/settings/` there.

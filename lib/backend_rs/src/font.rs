@@ -1,6 +1,6 @@
-//! Text measurement: `cpui`'s [`TextMetrics`] over the firmware's font engine.
+//! Text measurement: `xpui`'s [`TextMetrics`] over the firmware's font engine.
 
-use cpui::host::{FontId, FontRole, FontStyle, TextMetrics};
+use xpui::host::{FontId, FontRole, FontStyle, TextMetrics};
 
 use crate::firmware::{c, Firmware};
 use crate::raw;

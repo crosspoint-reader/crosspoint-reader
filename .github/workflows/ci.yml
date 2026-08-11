@@ -60,16 +60,16 @@ jobs:
       # The framework must stay device-generic: no product-specific code.
       - name: Check framework has no CrossPoint code
         run: |
-          if grep -rniE "crosspoint|xteink" lib/cpui_rs/src/; then
-            echo "cpui must not reference CrossPoint or Xteink" >&2
+          if grep -rniE "crosspoint|xteink" lib/xpui_rs/src/; then
+            echo "xpui must not reference CrossPoint or Xteink" >&2
             exit 1
           fi
 
       - name: Lint
-        run: cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
+        run: cargo clippy --workspace --all-targets --features xpui-rs/testing -- -D warnings
 
       - name: Test
-        run: cargo test --workspace --features cpui-rs/testing
+        run: cargo test --workspace --features xpui-rs/testing
 
   cppcheck:
     runs-on: ubuntu-latest

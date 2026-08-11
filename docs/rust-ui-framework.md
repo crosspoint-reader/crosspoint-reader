@@ -17,21 +17,21 @@ Rust code compiles into the firmware for every device, not just the simulator.
 
 | Crate | Contains | Output |
 |---|---|---|
-| `lib/cpui_rs` | The framework: views, layout, widgets, screen roots, and the `Host` traits it needs from a firmware. **No product-specific code** — CI enforces this. | `rlib` |
+| `lib/xpui_rs` | The framework: views, layout, widgets, screen roots, and the `Host` traits it needs from a firmware. **No product-specific code** — CI enforces this. | `rlib` |
 | `lib/backend_rs` | The C++ bridge: the `Host` implementation, every `extern "C"` declaration, `tr!`, and the activity lifecycle. Effectively all the `unsafe`. | `rlib` |
 | `lib/crosspoint_rs` | CrossPoint's screens, mirroring `src/activities/`. | `staticlib` + `rlib` |
 
-The dependency points **inward** — `crosspoint_rs` → `backend` → `cpui` — so the
+The dependency points **inward** — `crosspoint_rs` → `backend` → `xpui` — so the
 framework never names a firmware symbol and the compiler enforces the boundary.
 `crosspoint_rs` statically contains the other two, so the firmware links one
 archive. All three are members of the Cargo workspace at the repository root.
 
-Each has its own README: [`cpui`](../lib/cpui_rs/README.md) ·
+Each has its own README: [`xpui`](../lib/xpui_rs/README.md) ·
 [`backend`](../lib/backend_rs/README.md) ·
 [`crosspoint_rs`](../lib/crosspoint_rs/README.md).
 
 ```
-lib/cpui_rs/src/                      the framework
+lib/xpui_rs/src/                      the framework
 ├── host/          the five traits it needs, and the façades widgets call
 ├── view/          the View trait and the interaction model
 ├── layout/        stacks, spacer, padding, scroll view, chainable modifiers
@@ -42,7 +42,7 @@ lib/cpui_rs/src/                      the framework
 
 lib/backend_rs/src/                   the C++ bridge
 ├── raw.rs         every extern "C" declaration
-├── firmware.rs    the type implementing cpui's Host
+├── firmware.rs    the type implementing xpui's Host
 ├── renderer.rs · font.rs · theme.rs · input.rs    the trait impls
 ├── device.rs · frontlight.rs · icon.rs · i18n.rs  firmware capabilities
 ├── lifecycle.rs   the rust_activity_* entry points, and register_screen!
@@ -67,7 +67,7 @@ Each crate's README explains its own layer, and they read in order:
 
 | | |
 |---|---|
-| [`cpui`](../lib/cpui_rs/README.md) | the UI: views, layout, widgets |
+| [`xpui`](../lib/xpui_rs/README.md) | the UI: views, layout, widgets |
 | [`backend`](../lib/backend_rs/README.md) | the bridge to C++ |
 | [`crosspoint_rs`](../lib/crosspoint_rs/README.md) | where screens live |
 
@@ -454,11 +454,11 @@ quits. See [SIMULATOR.md](../SIMULATOR.md).
 
 ```bash
 cargo fmt --check
-cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
-cargo test --workspace --features cpui-rs/testing
+cargo clippy --workspace --all-targets --features xpui-rs/testing -- -D warnings
+cargo test --workspace --features xpui-rs/testing
 ```
 
-`cpui::testing` implements every `cpp_*` symbol with deterministic
+`xpui::testing` implements every `cpp_*` symbol with deterministic
 stand-ins and records draw calls, so layout is verified on a desktop. It reports
 a 480x800 portrait panel with a header band and button hints, exposed as
 `SCREEN_WIDTH`, `CONTENT_TOP`, `CONTENT_BOTTOM`, `SIDE_PADDING` and friends.
@@ -485,7 +485,7 @@ Adding a C++ capability means three edits, in this order:
 
 1. **`lib/backend_rs/src/raw.rs`** — the `extern "C"` declaration.
 2. **`src/rust_ffi/*.cpp`** — the implementation, one file per concern.
-3. **`lib/cpui_rs/src/testing.rs`** — a double, or the test binary will
+3. **`lib/xpui_rs/src/testing.rs`** — a double, or the test binary will
    not link.
 
 Then wrap the raw call in the matching `ffi/` module. Nothing outside `ffi`

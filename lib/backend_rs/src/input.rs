@@ -1,16 +1,16 @@
-//! Input: `cpui`'s [`InputSource`] over `MappedInputManager`.
+//! Input: `xpui`'s [`InputSource`] over `MappedInputManager`.
 //!
 //! Buttons are named by meaning, not position. The firmware remaps them to
 //! hardware for the user's front-button layout and the live orientation, so a
 //! screen asking for `Back` keeps working however the device is held.
 //!
-//! The `Button` and `SwipeDir` enums are `cpui`'s — their discriminants are the
+//! The `Button` and `SwipeDir` enums are `xpui`'s — their discriminants are the
 //! wire format for these calls, so a second copy here could drift and silently
 //! fire the wrong control.
 
-use cpui::geometry::Point;
-use cpui::host::InputSource;
-use cpui::{Button, SwipeDir};
+use xpui::geometry::Point;
+use xpui::host::InputSource;
+use xpui::{Button, SwipeDir};
 
 use crate::firmware::Firmware;
 use crate::raw;

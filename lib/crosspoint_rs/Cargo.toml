@@ -4,18 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 # staticlib is the archive PlatformIO links into the firmware; it statically
-# contains cpui, so that crate needs no staticlib of its own.
+# contains xpui, so that crate needs no staticlib of its own.
 # rlib is additionally emitted so `cargo test` can link the screens against the
 # framework's test doubles.
 [lib]
 crate-type = ["staticlib", "rlib"]
 
-# The package is `cpui-rs`; the lib it exposes is `cpui`, which is the name
+# The package is `xpui-rs`; the lib it exposes is `xpui`, which is the name
 # `use` statements and the `tr!` macro refer to.
 [dependencies]
 backend-rs = { path = "../backend_rs" }
-cpui-rs = { path = "../cpui_rs" }
+xpui-rs = { path = "../xpui_rs" }
 
 [dev-dependencies]
 backend-rs = { path = "../backend_rs", features = ["testing"] }
-cpui-rs = { path = "../cpui_rs", features = ["testing"] }
+xpui-rs = { path = "../xpui_rs", features = ["testing"] }

@@ -1,6 +1,6 @@
 ---
 name: rust-screens
-description: Building a screen or feature in Rust and wiring it to the C++ firmware. Use when adding or editing a Rust activity, working in lib/crosspoint_rs or lib/cpui, adding a UI widget or layout container, exposing a new C++ capability to Rust over FFI, or touching scripts/build_rust.py, RustActivityStubs.cpp, or ActivityRs. Covers the exact files a new screen needs, the traps that produce silent breakage (dead input, stripped translations, device-only link failures), and the gates a Rust change must pass.
+description: Building a screen or feature in Rust and wiring it to the C++ firmware. Use when adding or editing a Rust activity, working in lib/crosspoint_rs or lib/xpui_rs, adding a UI widget or layout container, exposing a new C++ capability to Rust over FFI, or touching scripts/build_rust.py, RustActivityStubs.cpp, or ActivityRs. Covers the exact files a new screen needs, the traps that produce silent breakage (dead input, stripped translations, device-only link failures), and the gates a Rust change must pass.
 ---
 
 # Rust Screens
@@ -26,7 +26,7 @@ constants.
 ```rust
 use alloc::format;
 
-use cpui::{register_screen, vstack, Font, NavigationScreen, Screen, Text, View};
+use xpui::{register_screen, vstack, Font, NavigationScreen, Screen, Text, View};
 use crate::tr;
 
 /// One enum per screen. `update` matches it exhaustively, so a control that
@@ -81,7 +81,7 @@ and the row in `src/SettingsList.h`.
 
 **6. A test** in `lib/crosspoint_rs/tests/` asserting every draw lands between
 `CONTENT_TOP` and `CONTENT_BOTTOM`. Runs on the desktop against
-`cpui::testing`; no simulator, no hardware.
+`xpui::testing`; no simulator, no hardware.
 
 ## Traps
 
@@ -131,7 +131,7 @@ point at the cause.
   converts a touch position into a value, so geometry never reaches a screen.
 - **A container's `interactions` must walk exactly as its `render` does.** They
   are separate code paths with nothing enforcing agreement; if they drift,
-  touches land on the neighbouring control. `lib/cpui_rs/tests/interactions.rs`
+  touches land on the neighbouring control. `lib/xpui_rs/tests/interactions.rs`
   catches that — extend it when adding a container.
 - **`register_screen!`, not `register_activity!`.** Once per screen; the shared
   lifecycle symbols live in the framework.
@@ -142,7 +142,7 @@ Three edits, or the build breaks in a confusing place:
 
 1. `lib/backend_rs/src/raw.rs` — the `extern "C"` declaration.
 2. `src/activities/RustActivityStubs.cpp` — the implementation.
-3. `lib/cpui_rs/src/testing.rs` — a double, or the **test binary will
+3. `lib/xpui_rs/src/testing.rs` — a double, or the **test binary will
    not link** even though the firmware does.
 
 Wrap the raw call in the matching `ffi/` module. Nothing outside `ffi` touches
@@ -150,7 +150,7 @@ Wrap the raw call in the matching `ffi/` module. Nothing outside `ffi` touches
 
 ## Keep the framework generic
 
-`lib/cpui` must contain no product name, screen, or feature — CI
+`lib/xpui_rs` must contain no product name, screen, or feature — CI
 greps for it. A screen belongs in `lib/crosspoint_rs`; a reusable widget or
 container belongs in the framework. If a "generic" addition only makes sense for
 one screen, it is not generic.
@@ -160,7 +160,7 @@ several hundred lines of dead code this crate was already carrying.
 
 ## Self-review before handing back
 
-- [ ] `./build-and-test.sh check` clean — fmt, clippy, tests, the `cpui_rs`
+- [ ] `./build-and-test.sh check` clean — fmt, clippy, tests, the `xpui_rs`
       product-name grep, and C++ formatting.
 - [ ] **Device environments build, not just the simulator.** Rust links into
       every firmware target, so a Rust error breaks real hardware builds, not
@@ -170,7 +170,7 @@ several hundred lines of dead code this crate was already carrying.
 - [ ] No `Box::new` in the view tree — containers take views by value.
 - [ ] Every user-visible string goes through `tr!`; none hardcoded.
 - [ ] New FFI function has all three edits, including the test double.
-- [ ] Nothing product-specific landed in `lib/cpui`.
+- [ ] Nothing product-specific landed in `lib/xpui_rs`.
 - [ ] `lib/crosspoint_rs/src/strings.rs` was not hand-edited — it is generated.
 - [ ] Layout is asserted by a test, not by eyeballing the simulator. The
       doubles record text *and* rectangles, so widget geometry is testable.

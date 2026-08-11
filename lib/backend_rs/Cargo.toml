@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 # The C++ firmware's services, as Rust sees them. Everything that crosses the
-# language boundary lives here: cpui depends on none of it.
+# language boundary lives here: xpui depends on none of it.
 [lib]
 name = "backend"
 crate-type = ["rlib"]
@@ -14,4 +14,4 @@ crate-type = ["rlib"]
 testing = []
 
 [dependencies]
-cpui-rs = { path = "../cpui_rs" }
+xpui-rs = { path = "../xpui_rs" }

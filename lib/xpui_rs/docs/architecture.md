@@ -85,7 +85,7 @@ The runtime never calls the firmware directly. It goes through five traits in
 
 Two consequences worth stating:
 
-- `cpui` compiles with **no dependencies** and cannot name a firmware symbol.
+- `xpui` compiles with **no dependencies** and cannot name a firmware symbol.
 - Tests install a fake host, so layout, input routing and widget behaviour are
   all testable on a laptop. That is how there are 58 tests and no simulator.
 

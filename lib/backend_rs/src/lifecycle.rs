@@ -1,13 +1,13 @@
 //! The lifecycle the firmware calls into.
 //!
 //! `ActivityRs` owns a screen as an opaque handle and drives it through these
-//! entry points. They live here rather than in `cpui` because they are the C
+//! entry points. They live here rather than in `xpui` because they are the C
 //! boundary, and because entering a screen is where the host gets installed.
 
 use alloc::boxed::Box;
 use core::ffi::c_void;
 
-use cpui::screen::{Driver, Runtime, Screen};
+use xpui::screen::{Driver, Runtime, Screen};
 
 use crate::FIRMWARE;
 
@@ -18,10 +18,10 @@ use crate::FIRMWARE;
 /// rather than at static-init time means it cannot race the render task, which
 /// does not exist yet.
 fn ensure_host_installed() {
-    if !cpui::host::is_installed() {
+    if !xpui::host::is_installed() {
         // Safety: called from onEnter on the main task, before the screen is
         // measured or drawn, and never concurrently with a reader.
-        unsafe { cpui::host::install(&FIRMWARE) };
+        unsafe { xpui::host::install(&FIRMWARE) };
     }
 }
 

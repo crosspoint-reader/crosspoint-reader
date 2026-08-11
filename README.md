@@ -195,8 +195,8 @@ equivalent by hand:
 ```bash
 ./bin/clang-format-fix
 cargo fmt --check
-cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
-cargo test --workspace --features cpui-rs/testing
+cargo clippy --workspace --all-targets --features xpui-rs/testing -- -D warnings
+cargo test --workspace --features xpui-rs/testing
 pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 pio run -e default
 ```

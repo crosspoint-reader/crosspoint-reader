@@ -45,17 +45,17 @@ rust_gates() {
   echo "==> Rust: format, lint, test"
   cd "$PROJECT_DIR"
   cargo fmt --check
-  cargo clippy --workspace --all-targets --features cpui-rs/testing -- -D warnings
-  cargo test --workspace --features cpui-rs/testing
+  cargo clippy --workspace --all-targets --features xpui-rs/testing -- -D warnings
+  cargo test --workspace --features xpui-rs/testing
 }
 
-# cpui_rs is the generic framework: it must not name the product. CI fails on
+# xpui_rs is the generic framework: it must not name the product. CI fails on
 # this, so failing here too keeps local and CI in agreement.
 framework_is_generic() {
-  echo "==> cpui_rs carries no product vocabulary"
+  echo "==> xpui_rs carries no product vocabulary"
   cd "$PROJECT_DIR"
-  if grep -rniE "crosspoint|xteink" lib/cpui_rs/src/; then
-    echo "ERROR: cpui_rs must stay generic - move the above into crosspoint_rs." >&2
+  if grep -rniE "crosspoint|xteink" lib/xpui_rs/src/; then
+    echo "ERROR: xpui_rs must stay generic - move the above into crosspoint_rs." >&2
     return 1
   fi
 }

@@ -1,7 +1,7 @@
-//! The framebuffer: `cpui`'s [`Canvas`] over the firmware's `GfxRenderer`.
+//! The framebuffer: `xpui`'s [`Canvas`] over the firmware's `GfxRenderer`.
 
-use cpui::geometry::{Point, Rect, Size};
-use cpui::host::{Canvas, FontId, FontStyle, IconRef};
+use xpui::geometry::{Point, Rect, Size};
+use xpui::host::{Canvas, FontId, FontStyle, IconRef};
 
 use crate::firmware::{c, Firmware};
 use crate::raw;

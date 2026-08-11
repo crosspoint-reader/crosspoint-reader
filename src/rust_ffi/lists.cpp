@@ -103,7 +103,7 @@ void cpp_theme_draw_list(const int32_t x, const int32_t y, const int32_t width, 
   props.count = static_cast<uint16_t>(items.size());
   props.selectedIndex = static_cast<int16_t>(selectedIndex);
   // Say the row geometry outright rather than letting Screen::list substitute
-  // its own. cpui measured this band with these very numbers, and the component
+  // its own. xpui measured this band with these very numbers, and the component
   // draws only rows that fully fit - so a taller row here silently drops the
   // last one, and a one-row list (a Toggle) disappears entirely.
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -111,7 +111,7 @@ void cpp_theme_draw_list(const int32_t x, const int32_t y, const int32_t width, 
       std::any_of(items.begin(), items.end(), [](const fui::ListItem& item) { return item.subtitle != nullptr; });
   props.rowHeight = static_cast<int16_t>(anySubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
   props.rowGap = static_cast<int16_t>(metrics.listRowGap);
-  // cpui declared each row's touch region before rendering and routes taps
+  // xpui declared each row's touch region before rendering and routes taps
   // itself, so the component draws only and registers no competing hits.
   props.action = fui::NO_ACTION;
   props.valueInset = 8;  // air between the value and the row edge

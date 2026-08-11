@@ -9,7 +9,7 @@
     "                 what Rust actually consumes, and no static measurement",
     "                 can see it. See the ActivityRs heap log for that.",
     "rust_*           the contribution of libcrosspoint_rs.a, which statically",
-    "                 contains cpui_rs.",
+    "                 contains xpui_rs.",
     "",
     "`_like` inherits every field from another entry, so environments sharing an",
     "MCU share one set of numbers instead of drifting copies. An entry may",

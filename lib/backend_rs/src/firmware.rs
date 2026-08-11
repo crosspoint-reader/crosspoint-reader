@@ -1,13 +1,13 @@
-//! The value the firmware installs as `cpui`'s host.
+//! The value the firmware installs as `xpui`'s host.
 //!
 //! The trait implementations live beside the concern they serve —
-//! [`Canvas`](cpui::host::Canvas) in `renderer`, [`TextMetrics`] in `font`,
+//! [`Canvas`](xpui::host::Canvas) in `renderer`, [`TextMetrics`] in `font`,
 //! [`InputSource`] in `input`, [`Chrome`] in `theme` — so each file stays one
 //! job. Only the shared pieces are here.
 
 use alloc::ffi::CString;
 
-use cpui::host::Clock;
+use xpui::host::Clock;
 
 use crate::raw;
 
@@ -33,9 +33,9 @@ impl Clock for Firmware {
     }
 }
 
-// The blanket impl in cpui makes `Firmware` a `Host` once all five are in
+// The blanket impl in xpui makes `Firmware` a `Host` once all five are in
 // place; this asserts it here rather than at the install site.
 const _: fn() = || {
-    fn assert_host<T: cpui::host::Host>() {}
+    fn assert_host<T: xpui::host::Host>() {}
     assert_host::<Firmware>();
 };
