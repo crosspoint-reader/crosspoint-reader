@@ -23,6 +23,7 @@ class OptionPopup {
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    awaitingClosingRelease = false;
     active = true;
   }
 
@@ -36,6 +37,7 @@ class OptionPopup {
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    awaitingClosingRelease = false;
     active = true;
   }
 
@@ -46,11 +48,12 @@ class OptionPopup {
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    awaitingClosingRelease = false;
     active = true;
   }
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
-    if (!active) return false;
+    if (!active) return swallowClosingRelease(input);
 
     const int count = static_cast<int>(ownedStrings.size());
     int tx = 0;
@@ -95,12 +98,12 @@ class OptionPopup {
       requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Confirm)) {
-      active = false;
+      closeOn(MappedInputManager::Button::Confirm);
       if (onSelectCallback) onSelectCallback(selectedIndex);
       requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Back)) {
-      active = false;
+      closeOn(MappedInputManager::Button::Back);
       requestUpdate();
       return true;
     }
@@ -182,7 +185,27 @@ class OptionPopup {
     return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
   }
 
+  // The popup closes on a button *press*, while the activities hosting it act on the
+  // release edge. Without this, the release that dismissed the popup falls through to
+  // the host: Back would leave the screen (from Settings, straight out to the library)
+  // and Confirm would re-open the popup it just closed. Keep owning the input until
+  // the closing button comes back up. Closing by tap arms nothing.
+  void closeOn(const MappedInputManager::Button button) {
+    active = false;
+    closingButton = button;
+    awaitingClosingRelease = true;
+  }
+
+  bool swallowClosingRelease(const MappedInputManager& input) {
+    if (!awaitingClosingRelease) return false;
+    if (input.isPressed(closingButton)) return true;  // still held down
+    awaitingClosingRelease = false;
+    return input.wasReleased(closingButton);
+  }
+
   bool active = false;
+  bool awaitingClosingRelease = false;
+  MappedInputManager::Button closingButton = MappedInputManager::Button::Back;
   std::string title;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
