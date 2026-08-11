@@ -40,7 +40,7 @@
 
   "default": {
     "_like": "esp32c3",
-    "_measured_2026_08_09": "flash 5,713,395 / static RAM 50,796 / rust flash 37,856 / rust RAM 8"
+    "_measured_2026_08_11": "flash 5,709,749 / static RAM 52,756 / rust flash 40,980 / rust RAM 8"
   },
 
   "gh_release": { "_like": "esp32c3" },
