@@ -83,9 +83,8 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 namespace HalSystem {
 
 void begin() {
-  // This is mostly for the first boot, we need to initialize the panic info and logs to empty state
-  // If we reboot from a panic state, we want to keep the panic info until we successfully dump it to the SD card, use
-  // `clearPanic()` to clear it after dumping
+  // On a panic reboot, preserve diagnostics until checkPanic() has tried to write them to the SD card.
+  // Ordinary boots clear any stale retained diagnostics.
   if (!isRebootFromPanic()) {
     clearPanic();
   } else {
@@ -104,9 +103,16 @@ void checkPanic() {
     auto panicInfo = getPanicInfo(true);
     auto file = Storage.open("/crash_report.txt", O_WRITE | O_CREAT | O_TRUNC);
     if (file) {
-      file.write(panicInfo.c_str(), panicInfo.size());
+      const size_t written = file.write(panicInfo.c_str(), panicInfo.size());
       file.close();
-      LOG_INF("SYS", "Dumped panic info to SD card");
+      if (written == panicInfo.size()) {
+        // Keep the crash data for CrashActivity, but mark it consumed so a
+        // later watchdog reset cannot be mistaken for this panic.
+        panicCaptureMarker = 0;
+        LOG_INF("SYS", "Dumped panic info to SD card");
+      } else {
+        LOG_ERR("SYS", "Failed to write complete crash report (%zu of %zu bytes)", written, panicInfo.size());
+      }
     } else {
       LOG_ERR("SYS", "Failed to open crash_report.txt for writing");
     }

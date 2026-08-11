@@ -281,6 +281,9 @@ void setup() {
 #endif
 
   HalSystem::begin();
+  // checkPanic() clears the watchdog capture marker after a successful SD
+  // dump, so retain the boot classification for the later activity route.
+  const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
@@ -415,7 +418,7 @@ void setup() {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
-  } else if (HalSystem::isRebootFromPanic()) {
+  } else if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
