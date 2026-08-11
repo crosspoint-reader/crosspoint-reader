@@ -7,11 +7,12 @@
 
 #include "OpdsServerStore.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
- * Supports navigation through catalog hierarchy and downloading EPUBs.
+ * Supports navigation through catalog hierarchy and downloading books.
  */
 class OpdsBookBrowserActivity final : public Activity {
  public:
@@ -27,13 +28,15 @@ class OpdsBookBrowserActivity final : public Activity {
 
  private:
   ButtonNavigator buttonNavigator;
+  OptionPopup formatPopup;
   BrowserState state = BrowserState::LOADING;
   std::vector<OpdsEntry> entries;
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   std::string searchTemplate;
   bool consumeConfirm = false;
-  bool consumeBack = false;  // Added missing member
+  bool consumeBack = false;
+  bool downloadCancelRequested = false;
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
@@ -49,7 +52,8 @@ class OpdsBookBrowserActivity final : public Activity {
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
-  void downloadBook(const OpdsEntry& book);
+  void chooseBookFormat(const OpdsEntry& book);
+  void downloadBook(const OpdsEntry& book, const OpdsAcquisitionLink& acquisition);
   void launchSearch();
   void performSearch(const std::string& query);
   bool preventAutoSleep() override { return true; }

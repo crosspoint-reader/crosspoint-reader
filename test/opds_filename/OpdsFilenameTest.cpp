@@ -18,6 +18,12 @@ TEST(OpdsFilename, TitleOnlyIgnoresAuthor) {
   EXPECT_EQ(opdsBookFilename("J. Doe", "My Book", OpdsFilenameFormat::TitleOnly), "My Book.epub");
 }
 
+TEST(OpdsFilename, UsesRequestedAcquisitionExtension) {
+  EXPECT_EQ(opdsBookFilename("J. Doe", "My Book", OpdsFilenameFormat::AuthorTitle, ".xtc"), "J. Doe - My Book.xtc");
+  EXPECT_EQ(opdsBookFilename("J. Doe", "My Book", OpdsFilenameFormat::TitleAuthor, ".xtch"), "My Book - J. Doe.xtch");
+  EXPECT_EQ(opdsBookFilename("J. Doe", "My Book", OpdsFilenameFormat::TitleOnly, ".xtc"), "My Book.xtc");
+}
+
 TEST(OpdsFilename, EmptyAuthorCollapsesToTitleForEveryFormat) {
   EXPECT_EQ(opdsBookFilename("", "My Book", OpdsFilenameFormat::AuthorTitle), "My Book.epub");
   EXPECT_EQ(opdsBookFilename("", "My Book", OpdsFilenameFormat::TitleAuthor), "My Book.epub");
@@ -41,6 +47,10 @@ TEST(OpdsFilename, LongNameIsTruncatedToByteBudgetBeforeExtension) {
   const std::string result = opdsBookFilename("", longTitle, OpdsFilenameFormat::TitleOnly);
   EXPECT_EQ(result, std::string(100, 'a') + ".epub");
   EXPECT_EQ(result.size(), 105u);
+
+  const std::string xtchResult = opdsBookFilename("", longTitle, OpdsFilenameFormat::TitleOnly, ".xtch");
+  EXPECT_EQ(xtchResult, std::string(100, 'a') + ".xtch");
+  EXPECT_EQ(xtchResult.size(), 105u);
 }
 
 TEST(OpdsFilename, UnknownFormatValueFallsBackToAuthorTitle) {

@@ -2,6 +2,7 @@
 #include <Print.h>
 #include <expat.h>
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -13,6 +14,16 @@ enum class OpdsEntryType {
   BOOK         // Downloadable book
 };
 
+enum class OpdsAcquisitionFormat : uint8_t { UNKNOWN, EPUB, XTC, XTCH };
+
+struct OpdsAcquisitionLink {
+  std::string href;
+  OpdsAcquisitionFormat format = OpdsAcquisitionFormat::UNKNOWN;
+};
+
+const char* opdsAcquisitionExtension(OpdsAcquisitionFormat format);
+const char* opdsAcquisitionLabel(OpdsAcquisitionFormat format);
+
 /**
  * Represents an entry from an OPDS feed (either a navigation link or a book).
  */
@@ -20,8 +31,9 @@ struct OpdsEntry {
   OpdsEntryType type = OpdsEntryType::NAVIGATION;
   std::string title;
   std::string author;  // Only for books
-  std::string href;    // Navigation URL or epub download URL
+  std::string href;    // Navigation URL; books use acquisitionLinks
   std::string id;
+  std::vector<OpdsAcquisitionLink> acquisitionLinks;
 };
 
 // Legacy alias for backward compatibility
@@ -101,6 +113,7 @@ class OpdsParser final : public Print {
   std::vector<OpdsEntry> entries;
   OpdsEntry currentEntry;
   std::string currentText;
+  size_t acquisitionHrefChars = 0;
 
   // Parser state
   bool inEntry = false;

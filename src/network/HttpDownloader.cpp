@@ -75,7 +75,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
           if (sink.total == 0 && http.hasContentLength()) sink.total = http.getContentLength();
           if (!sink.write(data, len)) return false;
           sink.downloaded += len;
-          if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+          if (sink.progress) sink.progress(sink.downloaded, sink.total);
           return true;
         },
         [&sink]() { return sink.cancelFlag && *sink.cancelFlag; });
@@ -176,7 +176,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
 
   // fetch_headers returns 0 for a chunked response (no Content-Length); leave
-  // total at 0 so progress stays silent and the size check is skipped.
+  // total at 0 so callers can show indeterminate progress and skip a size check.
   sink.total = contentLength > 0 ? static_cast<size_t>(contentLength) : 0;
 
   auto buf = makeUniqueNoThrow<char[]>(READ_CHUNK);
@@ -203,7 +203,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
       return HttpDownloader::FILE_ERROR;
     }
     sink.downloaded += read;
-    if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+    if (sink.progress) sink.progress(sink.downloaded, sink.total);
   }
 
   const bool complete = esp_http_client_is_complete_data_received(client);
@@ -277,7 +277,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
 
-  const DownloadError result = runGetSecure(url, username, password, sink);
+  DownloadError result = runGetSecure(url, username, password, sink);
+  if (result == OK && cancelFlag && *cancelFlag) result = ABORTED;
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();
