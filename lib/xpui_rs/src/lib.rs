@@ -47,14 +47,14 @@ pub mod testing;
 
 pub use geometry::{Insets, Point, Rect, Size};
 pub use host::{
-    finish_screen, millis, request_update, Button, Font, FontId, FontRole, FontStyle, Hint,
-    IconRef, Input, Renderer, ScreenChrome, SwipeDir, Theme, ThemeMetric,
+    Button, Font, FontId, FontRole, FontStyle, Hint, IconRef, Input, Renderer, ScreenChrome,
+    SwipeDir, Theme, ThemeMetric, finish_screen, millis, request_update,
 };
 pub use layout::{
     Alignment, Flexible, Frame, HStack, Modifiers, Padding, ScrollView, Spacer, Tappable, VStack,
 };
 pub use screen::{NavigationScreen, OverlayPanel, Screen};
-pub use view::{value_at, InputMask, Interaction, Interactions, Scrim, Trigger, View, ViewExt};
+pub use view::{InputMask, Interaction, Interactions, Scrim, Trigger, View, ViewExt, value_at};
 pub use widgets::{
     Divider, Icon, IconToggle, Image, List, ListRow, Modal, ProgressBar, Section, Slider, Stepper,
     Text, Toggle,

@@ -165,10 +165,10 @@ impl<M: Clone> View<M> for Modal<M> {
         };
 
         for index in 0..self.options.len() {
-            if let Some(rect) = self.row_rect(index) {
-                if out.declare(rect, InputMask::DEFAULT, Trigger::Message(make(index))) {
-                    self.focused_option = Some(index);
-                }
+            if let Some(rect) = self.row_rect(index)
+                && out.declare(rect, InputMask::DEFAULT, Trigger::Message(make(index)))
+            {
+                self.focused_option = Some(index);
             }
         }
     }

@@ -18,10 +18,10 @@
 /// Equivalent to `VStack::new(20).push(..).push(..).push(..)`.
 #[macro_export]
 macro_rules! vstack {
-    ($spacing:expr $(,)?) => {
+    ($spacing:expr_2021 $(,)?) => {
         $crate::VStack::new($spacing)
     };
-    ($spacing:expr; $($child:expr),+ $(,)?) => {
+    ($spacing:expr_2021; $($child:expr_2021),+ $(,)?) => {
         $crate::VStack::new($spacing)$(.push($child))+
     };
 }
@@ -33,10 +33,10 @@ macro_rules! vstack {
 /// ```
 #[macro_export]
 macro_rules! hstack {
-    ($spacing:expr $(,)?) => {
+    ($spacing:expr_2021 $(,)?) => {
         $crate::HStack::new($spacing)
     };
-    ($spacing:expr; $($child:expr),+ $(,)?) => {
+    ($spacing:expr_2021; $($child:expr_2021),+ $(,)?) => {
         $crate::HStack::new($spacing)$(.push($child))+
     };
 }
@@ -51,10 +51,10 @@ macro_rules! hstack {
 /// ```
 #[macro_export]
 macro_rules! list {
-    ($selected:expr $(,)?) => {
+    ($selected:expr_2021 $(,)?) => {
         $crate::List::new().selected($selected)
     };
-    ($selected:expr; $($row:expr),+ $(,)?) => {
+    ($selected:expr_2021; $($row:expr_2021),+ $(,)?) => {
         $crate::List::new().selected($selected)$(.push($row))+
     };
 }

@@ -8,9 +8,9 @@
 use xpui::screen::{Driver, Runtime};
 use xpui::testing::{self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH};
 use xpui::{
-    hstack, value_at, vstack, Alignment, Button, HStack, InputMask, Interactions, List, ListRow,
-    Modal, Modifiers, NavigationScreen, Point, Rect, Size, Slider, Spacer, Stepper, SwipeDir, Text,
-    Toggle, Trigger, VStack, View,
+    Alignment, Button, HStack, InputMask, Interactions, List, ListRow, Modal, Modifiers,
+    NavigationScreen, Point, Rect, ScrollView, Section, Size, Slider, Spacer, Stepper, SwipeDir,
+    Text, Toggle, Trigger, VStack, View, hstack, value_at, vstack,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -758,5 +758,198 @@ fn a_screen_labels_all_four_buttons_by_default() {
     assert_eq!(
         hints[0], [true; 4],
         "every button slot should carry a label by default"
+    );
+}
+
+// -- scrolling -----------------------------------------------------------------
+//
+// A section title is not focusable, so nothing up there can pull the view back
+// to it. Scrolling the bare minimum to reveal the first row therefore stranded
+// the title just off the top edge, unreachable.
+
+/// A screen taller than the panel: a titled section, then enough rows to scroll.
+struct Tall;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TallMsg {
+    Row(usize),
+}
+
+impl xpui::Screen for Tall {
+    type Message = TallMsg;
+
+    fn body(&self) -> impl View<TallMsg> {
+        let mut rows = List::new();
+        for index in 0..20 {
+            rows = rows.push(ListRow::new("row").on_tap(TallMsg::Row(index)));
+        }
+        NavigationScreen::new(ScrollView::new(Section::new("A title", rows)))
+    }
+
+    fn update(&mut self, _message: TallMsg) {}
+}
+
+fn tall_runtime() -> Runtime<Tall> {
+    testing::install();
+    testing::reset();
+    let mut runtime = Runtime::new(Tall);
+    runtime.render();
+    runtime
+}
+
+/// Walking to the bottom and back must land on the very top, title included -
+/// not on the first row with the title clipped above it.
+#[test]
+fn returning_to_the_first_row_scrolls_to_the_very_top() {
+    let mut runtime = tall_runtime();
+
+    for _ in 0..19 {
+        testing::press(Button::Down);
+        runtime.loop_();
+    }
+    assert!(
+        runtime.focused_index() > 0,
+        "should have walked down the list"
+    );
+
+    for _ in 0..19 {
+        testing::press(Button::Up);
+        runtime.loop_();
+    }
+    assert_eq!(runtime.focused_index(), 0, "back at the first row");
+
+    // The title sits above the first row, so any leftover scroll pushes it off
+    // the top of the content band - where nothing focusable can bring it back.
+    testing::reset();
+    runtime.render();
+    let titles = testing::drawn_sub_headers();
+    let (rect, _) = titles
+        .iter()
+        .find(|(_, label)| label == "A title")
+        .expect("the section title should have been drawn");
+    assert!(
+        rect.origin.y >= xpui::testing::CONTENT_TOP,
+        "title drawn at y={}, above the content band at {} - it is clipped and unreachable",
+        rect.origin.y,
+        xpui::testing::CONTENT_TOP
+    );
+}
+
+// -- a dialog must not scroll the screen behind it ----------------------------
+
+/// A list long enough to scroll, with a dialog that opens over it.
+struct TallWithDialog {
+    open: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TallDlgMsg {
+    Open,
+    Chose(usize),
+}
+
+impl xpui::Screen for TallWithDialog {
+    type Message = TallDlgMsg;
+
+    fn body(&self) -> impl View<TallDlgMsg> {
+        let mut rows = List::new();
+        for _ in 0..20 {
+            rows = rows.push(ListRow::new("row").on_tap(TallDlgMsg::Open));
+        }
+        NavigationScreen::new(ScrollView::new(rows)).overlay_if(
+            self.open,
+            Modal::picker("Units", ["B", "KB"])
+                .selected(0)
+                .on_select(TallDlgMsg::Chose),
+        )
+    }
+
+    fn update(&mut self, message: TallDlgMsg) {
+        match message {
+            TallDlgMsg::Open => self.open = true,
+            TallDlgMsg::Chose(_) => self.open = false,
+        }
+    }
+}
+
+/// Walking a dialog's options moved the list behind it.
+///
+/// While a view captures input, `self.focus` indexes the dialog's rows, not the
+/// screen's - so settling scroll against it read "option 0" as "the top of the
+/// content" and yanked the list up. The content behind an overlay is frozen; its
+/// offset must not move until the dialog is gone.
+#[test]
+fn a_dialog_does_not_scroll_the_list_behind_it() {
+    testing::install();
+    testing::reset();
+    let mut runtime = Runtime::new(TallWithDialog { open: false });
+    runtime.render();
+
+    // Walk far enough down that the list is genuinely scrolled.
+    for _ in 0..19 {
+        testing::press(Button::Down);
+        runtime.loop_();
+    }
+    testing::reset();
+    runtime.render();
+    let scrolled = testing::drawn_indicators()
+        .last()
+        .copied()
+        .expect("a scrolled list draws an indicator");
+    assert!(
+        scrolled.2 > 0,
+        "the list should be scrolled away from the top"
+    );
+
+    // Open the dialog over it.
+    testing::press(Button::Confirm);
+    runtime.loop_();
+    runtime.render();
+
+    // Now walk the dialog's options. Nothing behind may move.
+    for step in 0..4 {
+        testing::press(Button::Down);
+        runtime.loop_();
+        testing::reset();
+        runtime.render();
+
+        let now = testing::drawn_indicators()
+            .last()
+            .copied()
+            .expect("the list behind is still drawn");
+        assert_eq!(
+            now.2, scrolled.2,
+            "step {step}: the list scrolled to {} while the dialog was open (was {})",
+            now.2, scrolled.2
+        );
+    }
+}
+
+/// Space *within* a group must stay smaller than the space *between* groups, or
+/// a heading reads as belonging to whatever sits above it. Both are constants,
+/// so the relationship is enforced where it is decided: at compile time.
+const _: () = assert!(xpui::testing::SPACING_SMALL < xpui::testing::VERTICAL_SPACING);
+
+/// A heading is one line of its own, not a list row. Reserving a row's worth
+/// left a hole beneath every heading, and made the next heading look like a
+/// member of the list above it.
+#[test]
+fn a_section_heading_occupies_its_own_line_not_a_row() {
+    testing::install();
+    testing::reset();
+
+    let mut section: Section<()> = Section::new("Heading", Text::new("content"));
+    section.measure(screen());
+    section.render(Point::ORIGIN);
+
+    let (rect, _) = testing::drawn_sub_headers()
+        .into_iter()
+        .next()
+        .expect("the heading should have been drawn");
+    assert_eq!(
+        rect.size.height,
+        testing::SUB_HEADER_HEIGHT,
+        "a heading band should be its own line, not {} px of list row",
+        testing::LIST_ROW_HEIGHT
     );
 }

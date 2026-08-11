@@ -73,11 +73,7 @@ impl<M: 'static> NavigationScreen<M> {
 
     /// The overlay, only when `when` holds. Saves a screen an `if` in `body`.
     pub fn overlay_if(self, when: bool, overlay: impl View<M> + 'static) -> Self {
-        if when {
-            self.overlay(overlay)
-        } else {
-            self
-        }
+        if when { self.overlay(overlay) } else { self }
     }
 
     /// Sets the four hints, given by meaning rather than by screen position.

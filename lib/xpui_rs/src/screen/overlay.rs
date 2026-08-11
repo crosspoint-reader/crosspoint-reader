@@ -122,10 +122,10 @@ impl<M: Clone> View<M> for OverlayPanel<M> {
     fn render(&self, origin: Point) {
         // The screen below is left as it was, so dim it before anything else:
         // the panel then reads as foreground without repainting its context.
-        if self.scrim == Scrim::Dim {
-            if let Some(below) = self.below_panel() {
-                Renderer::scrim(below);
-            }
+        if self.scrim == Scrim::Dim
+            && let Some(below) = self.below_panel()
+        {
+            Renderer::scrim(below);
         }
 
         // Clears only the band, so the screen underneath survives as a scrim.

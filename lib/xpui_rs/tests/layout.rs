@@ -6,12 +6,12 @@
 //! inside the region the theme reserved for it.
 
 use xpui::testing::{
-    self, RectKind, CONTENT_BOTTOM, CONTENT_TOP, SCREEN_HEIGHT, SCREEN_WIDTH, SIDE_PADDING,
+    self, CONTENT_BOTTOM, CONTENT_TOP, RectKind, SCREEN_HEIGHT, SCREEN_WIDTH, SIDE_PADDING,
 };
 use xpui::view::Interactions;
 use xpui::{
-    hstack, vstack, Font, HStack, NavigationScreen, OverlayPanel, Padding, Point, Scrim, Size,
-    Spacer, Text, VStack, View,
+    Font, HStack, NavigationScreen, OverlayPanel, Padding, Point, Scrim, Size, Spacer, Text,
+    VStack, View, hstack, vstack,
 };
 
 fn screen_size() -> Size {

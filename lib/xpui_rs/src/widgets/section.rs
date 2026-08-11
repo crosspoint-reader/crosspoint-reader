@@ -38,16 +38,25 @@ impl<M> Section<M> {
     /// Where the content sits, below the heading. Shared so `render` and
     /// `interactions` cannot drift.
     fn content_origin(&self, origin: Point) -> Point {
-        let gap = Theme::metric(ThemeMetric::VerticalSpacing);
-        origin.offset(0, self.header_height + gap)
+        origin.offset(0, self.header_height + Section::<M>::gap())
+    }
+
+    /// The step between a heading and what it heads. Deliberately the theme's
+    /// *small* one: the space separating a section from the previous group is
+    /// the stack's own spacing, and a heading that sits nearer the group above
+    /// than the rows below reads as part of the wrong one.
+    fn gap() -> i32 {
+        Theme::metric(ThemeMetric::SpacingSmall)
     }
 }
 
 impl<M> View<M> for Section<M> {
     fn measure(&mut self, available: Size) {
-        // The theme's sub-header occupies one standard row.
-        self.header_height = Theme::metric(ThemeMetric::ListRowHeight);
-        let gap = Theme::metric(ThemeMetric::VerticalSpacing);
+        // A heading's own line, not a list row: the theme draws the label
+        // top-aligned and ignores the rest of the band, so a row's worth of
+        // height leaves a hole between the heading and its content.
+        self.header_height = Theme::metric(ThemeMetric::SubHeaderHeight);
+        let gap = Section::<M>::gap();
 
         let remaining = (available.height - self.header_height - gap).max(0);
         self.content.measure(Size::new(available.width, remaining));

@@ -67,6 +67,9 @@ pub const PROGRESS_BAR_HEIGHT: i32 = 6;
 pub const SLIDER_KNOB_WIDTH: i32 = 14;
 pub const SLIDER_KNOB_HEIGHT: i32 = 22;
 pub const SLIDER_SIDE_INSET: i32 = 8;
+/// A heading's own line, and the theme's small step within a group.
+pub const SUB_HEADER_HEIGHT: i32 = 17;
+pub const SPACING_SMALL: i32 = 4;
 pub const CONTENT_TOP: i32 = TOP_PADDING + HEADER_HEIGHT + VERTICAL_SPACING;
 pub const CONTENT_BOTTOM: i32 = SCREEN_HEIGHT - BUTTON_HINTS_HEIGHT;
 
@@ -107,6 +110,7 @@ thread_local! {
     static DRAWN_POPUPS: RefCell<Vec<(String, usize, i32)>> = const { RefCell::new(Vec::new()) };
     static DRAWN_HINTS: RefCell<Vec<[bool; 4]>> = const { RefCell::new(Vec::new()) };
     static DRAWN_SLIDERS: RefCell<Vec<(Rect, i32, i32)>> = const { RefCell::new(Vec::new()) };
+    static DRAWN_SUB_HEADERS: RefCell<Vec<(Rect, String)>> = const { RefCell::new(Vec::new()) };
     static CLIPS: RefCell<Vec<Option<Rect>>> = const { RefCell::new(Vec::new()) };
     static INDICATORS: RefCell<Vec<(i32, i32, i32)>> = const { RefCell::new(Vec::new()) };
     static NOW: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
@@ -124,6 +128,7 @@ pub fn reset() {
     DRAWN_POPUPS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_HINTS.with(|drawn| drawn.borrow_mut().clear());
     DRAWN_SLIDERS.with(|drawn| drawn.borrow_mut().clear());
+    DRAWN_SUB_HEADERS.with(|drawn| drawn.borrow_mut().clear());
     CLIPS.with(|clips| clips.borrow_mut().clear());
     INDICATORS.with(|drawn| drawn.borrow_mut().clear());
     SWIPE.with(|swipe| swipe.set(SwipeDir::None));
@@ -166,6 +171,13 @@ pub fn drawn_popups() -> Vec<(String, usize, i32)> {
 /// slot carries a label, `false` where it was left blank.
 pub fn drawn_hints() -> Vec<[bool; 4]> {
     DRAWN_HINTS.with(|drawn| drawn.borrow().clone())
+}
+
+/// Every sub-header (a `Section` title) drawn since the last [`reset`], with
+/// the rect it was given. A section title is not focusable, so where it lands
+/// is the only evidence that scrolling left it on screen.
+pub fn drawn_sub_headers() -> Vec<(Rect, String)> {
+    DRAWN_SUB_HEADERS.with(|drawn| drawn.borrow().clone())
 }
 
 /// Every slider drawn since the last [`reset`], as `(rect, value, max)`. The
@@ -323,6 +335,8 @@ impl Chrome for TestHost {
             ThemeMetric::SliderKnobWidth => SLIDER_KNOB_WIDTH,
             ThemeMetric::SliderKnobHeight => SLIDER_KNOB_HEIGHT,
             ThemeMetric::SliderSideInset => SLIDER_SIDE_INSET,
+            ThemeMetric::SubHeaderHeight => SUB_HEADER_HEIGHT,
+            ThemeMetric::SpacingSmall => SPACING_SMALL,
         }
     }
 
@@ -330,7 +344,9 @@ impl Chrome for TestHost {
         DRAWN_HEADERS.with(|drawn| drawn.borrow_mut().push(title.map(String::from)));
     }
 
-    fn draw_sub_header(&self, _rect: Rect, _label: &str, _right: Option<&str>) {}
+    fn draw_sub_header(&self, rect: Rect, label: &str, _right: Option<&str>) {
+        DRAWN_SUB_HEADERS.with(|drawn| drawn.borrow_mut().push((rect, String::from(label))));
+    }
 
     fn draw_button_hints(&self, back: &Hint, confirm: &Hint, prev: &Hint, next: &Hint) {
         let shown = |hint: &Hint| !matches!(hint, Hint::None);

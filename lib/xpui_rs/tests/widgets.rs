@@ -9,7 +9,7 @@ use xpui::testing::{
     self, MIN_TOUCH_SIZE, SCREEN_HEIGHT, SCREEN_WIDTH, SLIDER_KNOB_WIDTH, SLIDER_SIDE_INSET,
 };
 use xpui::view::{InputMask, Interactions, Trigger};
-use xpui::{value_at, IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View};
+use xpui::{IconToggle, Image, List, ListRow, Modal, Point, Rect, Size, Slider, View, value_at};
 
 fn available() -> Size {
     testing::install();

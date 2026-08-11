@@ -158,7 +158,7 @@ pub struct VStack<M>(Stack<M>);
 pub struct HStack<M>(Stack<M>);
 
 macro_rules! stack_impl {
-    ($name:ident, $axis:expr, $doc:literal) => {
+    ($name:ident, $axis:expr_2021, $doc:literal) => {
         impl<M: 'static> $name<M> {
             #[doc = $doc]
             pub fn new(spacing: i32) -> Self {
@@ -185,11 +185,7 @@ macro_rules! stack_impl {
             /// build conditional trees without wrapping the whole chain in an
             /// `if`.
             pub fn push_if(self, condition: bool, child: impl View<M> + 'static) -> Self {
-                if condition {
-                    self.push(child)
-                } else {
-                    self
-                }
+                if condition { self.push(child) } else { self }
             }
 
             /// Appends a child when there is one.

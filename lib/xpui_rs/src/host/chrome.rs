@@ -45,6 +45,14 @@ pub enum ThemeMetric {
     SliderKnobWidth = 11,
     SliderKnobHeight = 12,
     SliderSideInset = 13,
+    /// Height of the band a sub-header needs: the heading's own line, not a
+    /// list row. The theme draws the label top-aligned and ignores the rest,
+    /// so reserving a row's worth leaves a hole under every heading.
+    SubHeaderHeight = 15,
+    /// The theme's small step, for space *within* a group. Separation between
+    /// groups is the caller's stack spacing, which must stay the larger of the
+    /// two or a heading reads as belonging to whatever sits above it.
+    SpacingSmall = 16,
 }
 
 /// Which piece of a list row is being asked for.

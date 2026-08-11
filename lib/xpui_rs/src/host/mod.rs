@@ -17,9 +17,9 @@ mod metrics;
 
 pub use canvas::{Canvas, IconRef, Renderer};
 pub use chrome::{
-    finish_screen, request_update, Chrome, Hint, RowField, ScreenChrome, Theme, ThemeMetric,
+    Chrome, Hint, RowField, ScreenChrome, Theme, ThemeMetric, finish_screen, request_update,
 };
-pub use clock::{millis, Clock};
+pub use clock::{Clock, millis};
 pub use input::{Button, Input, InputSource, SwipeDir};
 pub use metrics::{Font, FontId, FontRole, FontStyle, TextMetrics};
 
@@ -44,7 +44,9 @@ static mut HOST: Option<&'static dyn Host> = None;
 /// concurrently with them. In practice that means from the activity's entry
 /// point, on the main task, before the render task is started.
 pub unsafe fn install(host: &'static dyn Host) {
-    HOST = Some(host);
+    unsafe {
+        HOST = Some(host);
+    }
 }
 
 /// The installed host, for the framework's own use.

@@ -8,7 +8,7 @@ pub use navigation::NavigationScreen;
 pub use overlay::OverlayPanel;
 
 use crate::geometry::Point;
-use crate::host::{finish_screen, millis, request_update, Button, Input, Renderer, SwipeDir};
+use crate::host::{Button, Input, Renderer, SwipeDir, finish_screen, millis, request_update};
 use crate::view::{InputMask, Interactions, View};
 
 mod driver;
@@ -211,12 +211,25 @@ impl<S: Screen> Runtime<S> {
             return false;
         };
 
+        let last = interactions.focusable_count().saturating_sub(1);
         let mut next = self.scroll;
+
         if focused.bottom() > viewport.bottom() {
             next += focused.bottom() - viewport.bottom();
         }
         if focused.origin.y < viewport.origin.y {
             next -= viewport.origin.y - focused.origin.y;
+        }
+
+        // Scrolling the bare minimum leaves whatever sits above the first
+        // control — a section title, typically — stranded off the top edge,
+        // with nothing focusable up there to scroll back to. The ends are
+        // special: reaching the first control means the top of the content,
+        // and the last means the bottom.
+        if self.focus == 0 {
+            next = 0;
+        } else if self.focus == last {
+            next = content_height - viewport.size.height;
         }
 
         let next = next.clamp(0, (content_height - viewport.size.height).max(0));
@@ -234,7 +247,11 @@ impl<S: Screen> Runtime<S> {
         if self.adopt_capture(&interactions) {
             return self.collect();
         }
-        if self.settle_scroll(&interactions) {
+        // Not while something has captured input. `self.focus` then indexes the
+        // dialog's rows, not the screen's, so settling against it reads "option
+        // 0" as "the top of the content" and drags the list out from under the
+        // dialog. Content behind an overlay is frozen until the overlay goes.
+        if interactions.captured_focus().is_none() && self.settle_scroll(&interactions) {
             return self.collect();
         }
         interactions

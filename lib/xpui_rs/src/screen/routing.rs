@@ -5,8 +5,8 @@
 //! fires, which control Left/Right nudge — can be read and tested without the
 //! lifecycle around it.
 
-use crate::view::{InputMask, Interactions, Trigger};
 use crate::Point;
+use crate::view::{InputMask, Interactions, Trigger};
 
 /// The message from the first interaction under `point` that accepts `kind`.
 ///

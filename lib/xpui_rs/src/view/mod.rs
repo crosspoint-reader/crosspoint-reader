@@ -2,7 +2,7 @@
 
 mod interaction;
 
-pub use interaction::{value_at, InputMask, Interaction, Interactions, Trigger};
+pub use interaction::{InputMask, Interaction, Interactions, Trigger, value_at};
 
 use alloc::boxed::Box;
 
