@@ -27,4 +27,6 @@ class EpubReaderPercentSelectionActivity final : public Activity {
 
   // Change the current percent by a delta and clamp within bounds.
   void adjustPercent(int delta);
+  // Like adjustPercent but snaps to the nearest multiple of kLargeStep in the direction of delta.
+  void adjustPercentSnapped(int delta);
 };
