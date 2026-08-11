@@ -1,7 +1,11 @@
 [package]
 name = "backend-rs"
-version = "0.1.0"
-edition = "2021"
+description = "CrossPoint's firmware services, as Rust sees them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 # The C++ firmware's services, as Rust sees them. Everything that crosses the
 # language boundary lives here: xpui depends on none of it.

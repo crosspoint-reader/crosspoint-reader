@@ -7,8 +7,19 @@
 # docs/rust-ui-framework.md for the per-environment target triples.
 
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["lib/backend_rs", "lib/xpui_rs", "lib/crosspoint_rs"]
+
+# Shared by all three crates, so the manifests cannot drift apart. Each one
+# opts in per field with `field.workspace = true`.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+# CrossPoint is a community project: the LICENSE file names the copyright
+# holder, and this credits the people who build it.
+authors = ["The CrossPoint Reader contributors"]
+repository = "https://github.com/crosspoint-reader/crosspoint-reader"
 
 # Shared across both crates so host, RISC-V and Xtensa builds agree.
 [profile.release]

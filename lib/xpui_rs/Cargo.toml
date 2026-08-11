@@ -6,8 +6,12 @@
 # name (`xpui-rs/testing`), while `use` statements use the *lib* name (`xpui`).
 [package]
 name = "xpui-rs"
-version = "0.1.0"
-edition = "2021"
+description = "A device-generic UI framework for CrossPoint firmware"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 # rlib only: this crate is consumed by crosspoint_rs, which produces the
 # staticlib that actually gets linked. Emitting a staticlib here as well
