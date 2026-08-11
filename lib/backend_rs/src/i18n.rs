@@ -14,7 +14,7 @@ use core::ffi::CStr;
 /// instead of blank or crashing. Pass the key as a C string literal:
 ///
 /// ```rust,ignore
-/// Text::new(tr(c"STR_FRONTLIGHT"))
+/// Text::new(tr(c"STR_LOADING"))
 /// ```
 pub fn tr(key: &CStr) -> &'static str {
     unsafe { borrow_cstr(raw::cpp_tr(key.as_ptr())) }

@@ -5,7 +5,7 @@
 //! two read the same way: a screen in `activities/settings/` here corresponds
 //! to one in `src/activities/settings/` there.
 //!
-//! Translations come from [`backend`]: `use backend::tr;` then `tr!(STR_FRONTLIGHT)`.
+//! Translations come from [`backend`]: `use backend::tr;` then `tr!(STR_LOADING)`.
 //!
 //! See `docs/rust-ui-framework.md` for a walkthrough of adding a screen.
 
