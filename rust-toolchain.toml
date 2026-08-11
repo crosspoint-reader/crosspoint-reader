@@ -1,0 +1,22 @@
+# Pins the Rust toolchain for everyone, including CI.
+#
+# Without a pin, `cargo clippy -- -D warnings` breaks the moment a new stable
+# release adds a lint — on somebody else's unrelated pull request. Bumping this
+# file is then a deliberate change, reviewed like any other, rather than a
+# surprise.
+#
+# To bump: raise `channel`, run `./build-and-test.sh`, fix whatever the new
+# clippy found, and commit the two together.
+#
+# ESP32-S3 (the `sticky` environments) is Xtensa, which stable Rust does not
+# target. scripts/build_rust.py runs `cargo +esp` there, and that explicit
+# override wins over this file — so the pin below is the RISC-V and host
+# toolchain only. Install the other with `espup install`.
+
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
+
+# ESP32-C3. Listing it here means rustup installs it on first use, so a new
+# contributor does not need to know the triple.
+targets = ["riscv32imc-unknown-none-elf"]

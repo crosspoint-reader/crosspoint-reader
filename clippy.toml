@@ -1,0 +1,26 @@
+# Clippy configuration for the whole workspace.
+#
+# CI runs `cargo clippy --workspace --all-targets -- -D warnings`, so anything
+# clippy reports is a build failure. These keys tune what it reports.
+
+# The OLDEST toolchain that has to compile this code, which is not the one in
+# rust-toolchain.toml: ESP32-S3 builds with the esp-rs Xtensa fork, currently
+# 1.95. Clippy runs on the host toolchain, so without this it would happily
+# suggest constructs the Xtensa build cannot compile.
+msrv = "1.95"
+
+# These crates have no downstream users outside this repository, so a lint that
+# would change a public signature is worth acting on rather than suppressing.
+# Left at the default `true`, clippy stays quiet about anything `pub`, which is
+# most of a UI framework.
+avoid-breaking-exported-api = false
+
+# The firmware has 380 KB of RAM and no allocator worth stressing. A large value
+# passed or returned by move is a memcpy the compiler may not elide, so flag
+# types that outgrow a couple of pointers-worth of stack.
+pass-by-value-size-limit = 16
+
+# Widget builders are deliberately fluent (`Stepper::new(v).on_change(..)`),
+# which produces long `impl View` chains. The default of 250 fires on ordinary
+# layout code; this still catches genuinely unreadable types.
+type-complexity-threshold = 500
