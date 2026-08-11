@@ -664,7 +664,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!converter.decodeToFramebuffer(path, renderer, config)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    return false;
+    return true;
   }
   renderer.copyGrayscaleLsbBuffers();
 
@@ -672,7 +672,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!converter.decodeToFramebuffer(path, renderer, config)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    return false;
+    return true;
   }
   renderer.copyGrayscaleMsbBuffers();
 
