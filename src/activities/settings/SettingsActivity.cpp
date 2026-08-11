@@ -2,6 +2,8 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
+#include <LibraryBuilder.h>
+#include <LibraryIndexFile.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -74,6 +76,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_LIBRARY_REBUILD, SettingAction::RebuildLibraryIndex));
   // TODO: Touch devices need their own firmware update path/artifacts before OTA is exposed.
   if (!BoardConfig::hasTouch()) {
     systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -385,6 +388,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::RebuildLibraryIndex:
+        rebuildLibraryIndex();
+        break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -445,6 +451,54 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
     SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_NEVER;
     quickResumeTimeoutAutoEnabled = false;
   }
+}
+
+// Blocking, with a popup. On a 69-book card the walk is well under a second, but
+// with book metadata on it opens every book — several seconds across a couple of
+// thousand — and it used to run with nothing on screen, so the device read as
+// frozen. Deliberately a static popup and not a live count: this panel has no
+// partial refresh, so repainting a counter once per folder would add ~185 ms per
+// folder and spend more time drawing progress than making it.
+void SettingsActivity::rebuildLibraryIndex() {
+  // Held for the whole job. The render task may still be repainting the
+  // settings list, and its SD-loaded fonts read glyph data at draw time — a
+  // second open reader while the walk holds EPUBs open, which the storage
+  // layer does not allow. The popup below is flushed to the panel first, so
+  // blocking the render task costs nothing visible.
+  RenderLock lock(*this);
+  GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+
+  // Carry the monotonic counter forward so "recently added" ordering survives the
+  // rebuild: a book that was already on the card must not jump to the top. The
+  // reader is closed at the end of this scope, before the build reopens the file.
+  uint16_t carried = 0;
+  {
+    library::LibraryIndexFile previous;
+    if (previous.open(library::libraryIndexPath())) carried = previous.header().nextFirstSeen;
+  }
+
+  library::BuildStats stats;
+  const bool ok = library::buildLibraryIndex(
+      "/", carried, stats, SETTINGS.libraryUseMetadata != 0,
+      [](const uint16_t booksSoFar, const char*, void*) {
+        // Let the idle task run so the task watchdog stays fed: its panic
+        // timeout is 5 s and a metadata walk can run longer than that.
+        if ((booksSoFar & 31u) == 0) delay(1);
+        return true;
+      },
+      nullptr);
+  if (ok) {
+    LOG_INF("LIB", "rebuild: %u books (%u new, %u renamed, %u removed, %u enriched) in %ums",
+            static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.added),
+            static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
+            static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.walkMs));
+  } else {
+    LOG_ERR("LIB", "index rebuild failed");
+  }
+
+  GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
+  delay(1200);
+  requestUpdate(true);
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {
