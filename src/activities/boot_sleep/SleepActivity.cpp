@@ -402,6 +402,8 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
+  const bool frameWasInverted = display.isInverted();
+
   // Sleep screens always use normal polarity. This activity draws directly
   // from onEnter (outside ActivityManager's per-render polarity resolution),
   // so clear any inversion left over from a night-mode reader render.
@@ -417,6 +419,10 @@ void SleepActivity::onEnter() {
   }
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
+    // Transparent mode retains the current framebuffer. Materialize any
+    // output-level inversion first so the retained content keeps its visible
+    // polarity after the display driver returns to normal.
+    if (frameWasInverted) renderer.invertScreen();
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
@@ -445,8 +451,6 @@ void SleepActivity::onEnter() {
       } else {
         return renderCustomSleepScreen();
       }
-    case (CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM):
-      return renderTransparentCustomSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
