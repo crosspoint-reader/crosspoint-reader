@@ -10,6 +10,11 @@
 
 extern "C" {
 
+// The whole heap, so a figure can be shown as used-of-available rather than a
+// bare byte count. This is DRAM the allocator owns, which is already smaller
+// than the chip's SRAM: the static image comes off first.
+int32_t cpp_heap_total() { return static_cast<int32_t>(ESP.getHeapSize()); }
+
 int32_t cpp_heap_free() { return static_cast<int32_t>(ESP.getFreeHeap()); }
 
 int32_t cpp_heap_largest_block() { return static_cast<int32_t>(ESP.getMaxAllocHeap()); }

@@ -1,7 +1,6 @@
 // Lists and option popups: the two widgets the theme paints end to end.
 
 #include <algorithm>
-#include <string>
 #include <vector>
 
 #include "components/UITheme.h"
@@ -28,19 +27,6 @@ constexpr fui::ActionId ACTION_OPTION = 1;
 // buffer the source of truth. Filled by the draw below, read by row_rect.
 fui::InteractionBuffer<DIALOG_CAPACITY> g_dialogHits;
 
-// Collects the Rust-side option strings once, for the popup calls below.
-std::vector<std::string> collectOptions(const char* (*optionText)(void*, int32_t), void* ctx, const int32_t count) {
-  std::vector<std::string> options;
-  if (!optionText || count <= 0) return options;
-
-  options.reserve(static_cast<size_t>(count));
-  for (int32_t i = 0; i < count; i++) {
-    const char* text = optionText(ctx, i);
-    options.emplace_back(text ? text : "");
-  }
-  return options;
-}
-
 }  // namespace
 
 extern "C" {
@@ -51,9 +37,7 @@ extern "C" {
 // different, and would leave us the last caller of a path nothing else uses.
 void cpp_theme_draw_option_popup(const uint8_t* title, const char* (*optionText)(void*, int32_t), void* ctx,
                                  const int32_t count, const int32_t selected) {
-  if (!g_rustRendererPtr || !optionText) return;
-  const auto options = collectOptions(optionText, ctx, count);
-  if (options.empty()) return;
+  if (!g_rustRendererPtr || !optionText || count <= 0) return;
 
   fui::GfxRendererTarget target = makeUiTarget(*g_rustRendererPtr);
   // Frame holds a const DeviceContext&, so it must outlive the frame.
@@ -64,11 +48,16 @@ void cpp_theme_draw_option_popup(const uint8_t* title, const char* (*optionText)
   fui::Frame<DIALOG_CAPACITY> frame(target, device, noInput, g_dialogHits);
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const uint8_t shown = static_cast<uint8_t>(options.size() > MAX_DIALOG_OPTIONS ? MAX_DIALOG_OPTIONS : options.size());
+  const uint8_t shown = static_cast<uint8_t>(count > MAX_DIALOG_OPTIONS ? MAX_DIALOG_OPTIONS : count);
 
+  // The labels live in the Rust caller's own buffers for the whole call — the
+  // same guarantee draw_list relies on below — so the entries point straight at
+  // them. Copying each into a std::string was a heap allocation per option on
+  // every repaint of an open dialog.
   fui::DialogOption entries[MAX_DIALOG_OPTIONS];
   for (uint8_t i = 0; i < shown; ++i) {
-    entries[i].label = options[i].c_str();
+    const char* label = optionText(ctx, i);
+    entries[i].label = label ? label : "";
     entries[i].action = ACTION_OPTION;
     entries[i].value = static_cast<int16_t>(i);
     entries[i].state = (static_cast<int32_t>(i) == selected) ? fui::StateFocused : fui::StateNormal;
@@ -168,15 +157,19 @@ void cpp_theme_draw_list(const int32_t x, const int32_t y, const int32_t width, 
   props.items = items.data();
   props.count = static_cast<uint16_t>(items.size());
   props.selectedIndex = static_cast<int16_t>(selectedIndex);
-  // Say the row geometry outright rather than letting Screen::list substitute
-  // its own. xpui measured this band with these very numbers, and the component
-  // draws only rows that fully fit - so a taller row here silently drops the
-  // last one, and a one-row list (a Toggle) disappears entirely.
-  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Leave rowHeight and rowGap unset: Screen::list substitutes the theme's own,
+  // which is what every C++ screen gets. Overriding them here is what made a
+  // Rust list shorter than the Settings list beside it. xpui measures with the
+  // same values through ThemeMetric, so the two still agree on how many rows
+  // fit - and they will keep agreeing when a theme changes them.
+  //
+  // A subtitled row is the exception: it needs a second line, so the caller
+  // asks for the taller row explicitly, exactly as a C++ caller would.
   const bool anySubtitle =
       std::any_of(items.begin(), items.end(), [](const fui::ListItem& item) { return item.subtitle != nullptr; });
-  props.rowHeight = static_cast<int16_t>(anySubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
-  props.rowGap = static_cast<int16_t>(metrics.listRowGap);
+  if (anySubtitle) {
+    props.rowHeight = fui::clampI16(tokens.rowHeight + ui.target.lineHeight(tokens.smallText.font));
+  }
   // xpui declared each row's touch region before rendering and routes taps
   // itself, so the component draws only and registers no competing hits.
   props.action = fui::NO_ACTION;
@@ -196,7 +189,11 @@ void cpp_theme_draw_list(const int32_t x, const int32_t y, const int32_t width, 
       fui::Insets{static_cast<int16_t>(band.y - safe.y), static_cast<int16_t>(safe.right() - band.right()),
                   static_cast<int16_t>(safe.bottom() - band.bottom()), static_cast<int16_t>(band.x - safe.x)});
   if (selectedIndex >= 0) {
-    const uint16_t visible = fui::listVisibleRows(screen.contentRect(), props.rowHeight, props.rowGap);
+    // Unset props inherit from the theme inside Screen::list, so resolve them
+    // the same way before asking how many rows fit.
+    const int16_t rowHeight = props.rowHeight > 0 ? props.rowHeight : tokens.rowHeight;
+    const int16_t rowGap = props.rowGap >= 0 ? props.rowGap : tokens.listRowGap;
+    const uint16_t visible = fui::listVisibleRows(screen.contentRect(), rowHeight, rowGap);
     props.topIndex = fui::listTopIndexFor(static_cast<int16_t>(selectedIndex), 0, visible ? visible : 1,
                                           static_cast<uint16_t>(itemCount));
   }

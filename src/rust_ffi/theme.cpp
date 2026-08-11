@@ -28,6 +28,8 @@ enum class Metric : uint8_t {
   SliderKnobWidth = 11,
   SliderKnobHeight = 12,
   SliderSideInset = 13,
+  SubHeaderHeight = 15,
+  SpacingSmall = 16,
   ListRowGap = 14,
 };
 
@@ -55,13 +57,44 @@ int32_t cpp_theme_metric(const uint8_t metric) {
     case Metric::ContentTop:
       return metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
     case Metric::ContentBottom:
-      return g_rustRendererPtr ? g_rustRendererPtr->getScreenHeight() - metrics.buttonHintsHeight : 0;
+      // The same spacing ContentTop leaves below the header, so content never
+      // touches the button hints. A C++ list gets this gap for free by
+      // refusing to draw a partial row; a scrolling view has no such remainder
+      // and would otherwise end flush against them.
+      return g_rustRendererPtr
+                 ? g_rustRendererPtr->getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing
+                 : 0;
+    // The theme's own row height, which is what FreeInkUI lays a list out with
+    // when a caller leaves ListProps::rowHeight unset - as every C++ screen
+    // does. Reporting UITheme's listRowHeight here instead made Rust lists
+    // shorter than the C++ ones beside them.
     case Metric::ListRowHeight:
-      return metrics.listRowHeight;
-    case Metric::ListRowHeightWithSubtitle:
-      return metrics.listWithSubtitleRowHeight;
+      if (!g_rustRendererPtr) return 0;
+      return uiThemeTokens(makeUiTarget(*g_rustRendererPtr)).rowHeight;
+    case Metric::ListRowHeightWithSubtitle: {
+      // A second line needs the room for it. The caller asks for this
+      // explicitly, the way a C++ caller would; the theme still sets the base.
+      if (!g_rustRendererPtr) return 0;
+      const auto target = makeUiTarget(*g_rustRendererPtr);
+      const auto tokens = uiThemeTokens(target);
+      // The theme's own subtitle font, not a slot named here: Screen::list
+      // substitutes smallText for an unset subtitleText, so this measures what
+      // is actually drawn, and follows a theme that changes it.
+      return tokens.rowHeight + target.lineHeight(tokens.smallText.font);
+    }
+    // BaseTheme::drawSubHeader draws its label top-aligned in the rect and
+    // ignores the height, so the band is exactly one line of its own font.
+    case Metric::SubHeaderHeight: {
+      if (!g_rustRendererPtr) return 0;
+      const auto target = makeUiTarget(*g_rustRendererPtr);
+      return target.lineHeight(uiThemeTokens(target).bodyText.font);
+    }
+    case Metric::SpacingSmall:
+      if (!g_rustRendererPtr) return 0;
+      return uiThemeTokens(makeUiTarget(*g_rustRendererPtr)).spaceSm;
     case Metric::ListRowGap:
-      return metrics.listRowGap;
+      if (!g_rustRendererPtr) return 0;
+      return uiThemeTokens(makeUiTarget(*g_rustRendererPtr)).listRowGap;
     case Metric::ProgressBarHeight:
       return metrics.progressBarHeight;
     case Metric::MinTouchSize:
