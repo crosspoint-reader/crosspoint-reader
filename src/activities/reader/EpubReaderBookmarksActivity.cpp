@@ -71,7 +71,24 @@ void EpubReaderBookmarksActivity::loop() {
   };
 
   // Delete confirmation popup
-  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
+    // The popup acts on button press; if that input closed it, the trailing
+    // release must be swallowed below (Confirm would open the bookmark, Back
+    // would exit the activity).
+    popupClosing = !confirmPopup.isActive();
+    return;
+  }
+  if (popupClosing) {
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      return;  // closing press still held
+    }
+    popupClosing = false;
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      return;  // swallow the release that closed the popup
+    }
+  }
   if (confirmingDelete) {
     // Popup dismissed without a selection (Back button or tap outside): cancel delete
     confirmingDelete = false;
