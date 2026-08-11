@@ -11,16 +11,16 @@ What it deliberately holds *no* trace of is CrossPoint itself: no screen, no
 asset name, no setting, no string. It reaches the firmware through a handful of
 traits that [`backend`](../backend_rs/) implements. That separation is not a
 promise it will drop into some unrelated project — it is what keeps product
-detail out of layout code, and what lets all 41 tests run on a laptop instead of
+detail out of layout code, and what lets all 58 tests run on a laptop instead of
 a device.
 
 ## At a glance
 
-- **No dependencies.** Not one. ~4,300 lines of Rust, and that is the whole of it.
+- **No dependencies.** Not one. ~5,000 lines of Rust, and that is the whole of it.
 - **`no_std`.** Runs on bare metal; runs on your laptop for tests.
 - **Nothing to draw with.** `cpui` cannot paint a pixel by itself — the firmware
   supplies that, through five small traits.
-- **41 tests**, none of which need hardware or a simulator.
+- **58 tests**, none of which need hardware or a simulator.
 
 ## Getting started
 
@@ -141,7 +141,7 @@ do, and [`backend`](../backend_rs/) for the real one, which talks to C++.
 | [`Stepper`](src/widgets/stepper.rs) | `−`, track and `+` as one control |
 | [`ProgressBar`](src/widgets/progress.rs) | Determinate progress |
 | [`Divider`](src/widgets/divider.rs) | A one-pixel rule |
-| [`Modal`](src/widgets/modal.rs) | A centred option dialog |
+| [`Modal`](src/widgets/modal.rs) | A centred option dialog that captures input while open |
 
 **Layout** — [`src/layout/`](src/layout/)
 
@@ -149,11 +149,16 @@ do, and [`backend`](../backend_rs/) for the real one, which talks to C++.
 left, so a footer sits at the bottom without arithmetic. `Padding`, `Frame`,
 `Flexible` and `Tappable` are chainable modifiers: `Text::new("−").frame(44, 44)`.
 
+`ScrollView` wraps content taller than the screen. It clips what overflows and
+the runtime scrolls to keep the focused control visible — by swipe on a touch
+panel, by Up/Down on a button one — so a screen never tracks a scroll position.
+
 **Screen roots** — [`src/screen/`](src/screen/)
 
-`NavigationScreen` is an ordinary page with a header and button hints.
-`OverlayPanel` is a drop-down that leaves the screen beneath it intact, and can
-dim it with `Scrim::Dim`.
+`NavigationScreen` is an ordinary page with a header and button hints, and takes
+an `.overlay()` drawn above its content for dialogs. `OverlayPanel` is a
+drop-down that leaves the screen beneath it intact, and can dim it with
+`Scrim::Dim`.
 
 ## Worth knowing before you start
 
@@ -161,8 +166,10 @@ dim it with `Scrim::Dim`.
   and it changes to suit CrossPoint.
 - **`body()` runs often** — on every repaint and while a finger is dragging. It
   allocates, so keep heavy work out of it. This is a real cost, not a hypothetical.
-- **Text is a single line.** There is no wrapping widget yet.
-- **Nothing scrolls.** Lists draw what fits; paging is the screen's business.
+- **Text is a single line.** There is no wrapping widget yet, and list rows that
+  carry a subtitle are single-line by the theme's own rule.
+- **One `ScrollView` per screen.** The scroll offset lives in the runtime beside
+  focus, so a second one would share the first one's position.
 - **One thing is global**: the installed host. It is set once at startup and
   only read afterwards.
 

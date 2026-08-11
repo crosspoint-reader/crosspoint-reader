@@ -34,7 +34,7 @@ Each has its own README: [`cpui`](../lib/cpui_rs/README.md) ·
 lib/cpui_rs/src/                      the framework
 ├── host/          the five traits it needs, and the façades widgets call
 ├── view/          the View trait and the interaction model
-├── layout/        stacks, spacer, padding, chainable modifiers
+├── layout/        stacks, spacer, padding, scroll view, chainable modifiers
 ├── widgets/       text, list, slider, stepper, icons, modal, toggles
 ├── screen/        the Screen contract, its runtime, and the root views
 ├── geometry.rs    Point, Size, Rect, Insets
@@ -105,6 +105,7 @@ hstack![8; Text::new("Battery"), Spacer::new(), Text::new("72%")]
 | `VStack` / `HStack` | Stack children along one axis. Two-pass: fixed children measure first, flexible ones split what is left. |
 | `Spacer` | Absorbs leftover space, pushing what follows to the far end. |
 | `Padding::all(child, 12)` | Insets a child. Also `symmetric(child, h, v)` and `new(child, Insets)`. |
+| `ScrollView::new(child)` | Shows a window onto content taller than itself. The runtime scrolls to keep focus visible; content is clipped, so overflow never reaches the chrome. One per screen. |
 
 Stacks align children at the leading cross edge by default. A row mixing a 32px
 icon with a line of text wants `.align(Alignment::Center)`, or the text hangs off
@@ -135,13 +136,14 @@ VStack::new(4).extend(rows)
 |---|---|
 | `Text::new(s)` | `.font(f)`, `.bold()`, `.italic()`. Measured with real font metrics. |
 | `Divider::new()` | A one-pixel rule across the available width. |
+| `Section::new(title, content)` | A titled group of anything, ruled beneath the title. |
 | `List` / `ListRow` | Themed, selectable list. `ListRow::new(t).subtitle(s).value(v)`. |
 | `ListRow::toggle(t, on, on_label, off_label)` | A boolean setting. See below. |
 | `ProgressBar::new(cur, total)` | Or `ProgressBar::percent(72)`. |
 | `Slider::new(value, max)` | A bare track. `.on_change(Msg::V)` to report drags. |
 | `Stepper::new(value)` | `-` / slider / `+` as one control. `.on_change`, `.on_step`. |
 | `Toggle::new(label, on, on_label, off_label)` | A boolean row. `.on_change(Msg::V)` gets the **next** state. |
-| `Modal::new(title, options)` | A centred option dialog. |
+| `Modal::picker(title, options)` | A centred option dialog. `.selected(i)`, `.on_select(Msg::V)`, `.scrim(Scrim::Dim)`. Captures input while present. Also `Modal::confirm`. |
 | `Image::new(data, w, h)` | A 1-bpp bitmap you supply. |
 | `Icon::new(IconRole::Sun)` | A host asset by **role**. `.filled(bool)`, `.size(px)`. |
 | `IconToggle::new(role, on)` | An icon that shows and flips a boolean. `.on_change(Msg::V)` gets the **next** state. |
@@ -158,16 +160,20 @@ Toggle::new(tr!(STR_HYPHENATION), self.on, tr!(STR_STATE_ON), tr!(STR_STATE_OFF)
 
 **Interactive widgets are stateless.** `Slider` and `Modal` draw the value they
 are given and never change it; the screen owns the state and adjusts it in
-`loop_`, exactly as `IntervalSelectionActivity` does in C++. Helpers turn input
-into values without duplicating geometry:
+`update`. Neither hit-tests: they declare their regions and the runtime converts
+a touch into a value or an index, so no screen ever sees geometry.
 
 ```rust
-// Drag: same rounding the C++ slider screens use. The rect comes from the hit.
-let value = Slider::value_at(hit.rect, touch.x, max);
-
-// Tap: hit rects come from C++, which already owns the dialog math.
-if let Some(index) = modal.option_at(touch) { ... }
+Slider::new(self.level, 100).on_change(Msg::Level)   // drag or tap -> a value
+Modal::picker(title, LABELS)
+    .selected(self.current)
+    .on_select(Msg::Chose)                           // touch or Confirm -> an index
 ```
+
+A dialog **captures input**: while one is in the tree nothing behind it can be
+reached, focus opens on the value already chosen, and the side buttons walk its
+options rather than the list underneath. Dismissing returns focus to the row
+that opened it. A screen decides only whether the dialog is in `body()`.
 
 ### Interaction
 
@@ -243,6 +249,12 @@ button re-fires it every tick — a bug this framework shipped once.
 minimum touch target, centred on what was drawn. The message still reports the
 drawn control, not the widened area.
 
+**A vertical swipe moves focus**, which is what the C++ home screen does, so a
+touch panel and a button one navigate the same list the same way. A screen that
+wants the gesture for itself claims it with `fn on_swipe(&self, dir)`. Which way
+it walks is the host's preference (`InputSource::swipe_moves_selection`): by
+default the swipe drags the *content*, so swiping up moves focus down.
+
 **Auto-repeat is free.** A key claimed by `on_key` fires on press, then repeats
 after 500ms at 500ms intervals — matching `ButtonNavigator` in C++.
 
@@ -289,6 +301,11 @@ NavigationScreen::new(content)
 `Hint::Standard` uses the firmware's own translated label for that slot;
 `Hint::None` leaves it blank. Labels are given by meaning — the firmware
 reorders them for the user's front-button layout.
+
+`.overlay(view)` / `.overlay_if(cond, view)` puts a view over the content —
+a dialog, typically. It is measured against the whole screen rather than the
+content band, drawn last, and sits outside any `ScrollView`, so it is neither
+clipped nor scrolled away.
 
 `OverlayPanel::new(content)` is the root for a drop-down over whatever is
 already on screen. It sizes itself to its content, paints only its own band, and

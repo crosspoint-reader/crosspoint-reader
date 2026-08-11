@@ -82,7 +82,7 @@ cpui::testing::install();
 
 It reports fixed screen and theme dimensions and records everything drawn, so
 you can assert on layout and touch behaviour in an ordinary `cargo test`. The
-framework's own 41 tests use nothing else.
+framework's own 58 tests use nothing else.
 
 ## A worked example
 
