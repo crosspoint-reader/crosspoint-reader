@@ -19,9 +19,8 @@ components**, and **44 files in our firmware already use it**. `xpui` and FUI
 have been compiled into the same binary this whole time.
 
 **`feat-fui` is not where to work.** It is 82 commits behind `feat-touch-ui`, a
-clean spike of just the FUI conversion. It has no `x4pro` environment and no
-simulator at all — so working there costs both the device and the simulator, to
-reach a library we already have.
+clean spike of just the FUI conversion, with no `x4pro` environment and no
+simulator of its own.
 
 **The two are near-siblings.** They were designed against the same constraints
 and arrived at strikingly similar shapes.
@@ -125,13 +124,19 @@ The layering that follows:
 
 ## Recommendation
 
-1. **Do not move to `feat-fui`.** The library is already on our branch; that
-   branch costs the device and the simulator to reach it.
-2. **Re-point `Chrome` at FUI in `backend`**, incrementally, starting with
-   whichever component has the clearest match. No `xpui` or screen changes, so
-   each step is independently verifiable in the simulator.
-3. **Move `Slider` onto FUI's slider** — the only widget doing real geometry
-   of its own.
+> **Overtaken by events.** This branch *is* `feat-fui` now — the work was
+> transplanted onto it, which cost far less than feared (the framework is new
+> files almost throughout) and brought its own simulator along. Points 1 and 2
+> below were wrong: there was nothing to "re-point", because `Chrome` already
+> lands on `BaseTheme`, and it is `BaseTheme` that migrates. What survived is
+> the rule the conversions actually follow — see
+> [fui-component-coverage.md](fui-component-coverage.md).
+
+1. ~~**Do not move to `feat-fui`.**~~ Done, and it worked.
+2. ~~**Re-point `Chrome` at FUI in `backend`.**~~ Not a real task. Convert per
+   widget instead, deciding by what the C++ equivalent draws through.
+3. **Move `Slider` onto FUI's slider** — done, along with `List` and the
+   option dialog.
 4. **Keep `xpui`'s declarative layer as it is.** It is what FUI lacks, it is
    why screens are testable on a laptop, and it is the part worth pitching.
 5. **Settle theme invalidation** before the XML format arrives.

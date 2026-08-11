@@ -412,14 +412,24 @@ and let `render` only read it.
 
 ## Building and running
 
-PlatformIO compiles Rust through `scripts/build_rust.py`, which picks the target
-from the environment's MCU. There is no separate cargo step.
+**Building is plain `pio`, unchanged by any of this.** `platformio.ini` runs
+`scripts/build_rust.py` before every compile, so `pio run` compiles the Rust
+crates along with the C++, picking the target from the environment's MCU. There
+is no separate Rust step and no order to remember.
+
+```bash
+pio run                  # the default firmware, Rust included
+pio run -e sticky        # another environment
+pio run -t upload        # flash it
+```
+
+`cargo` is for the checks only — it never produces firmware.
 
 | Environment | MCU | Triple | Toolchain |
 |---|---|---|---|
 | `simulator*` | host | host triple | stable, `std` |
 | `default`, `gh_release*`, `slim` | ESP32-C3 | `riscv32imc-unknown-none-elf` | stable, `no_std` |
-| `x4pro`, `sticky` | ESP32-S3 | `xtensa-esp32s3-none-elf` | `esp`, `no_std`, `build-std` |
+| `sticky*` | ESP32-S3 | `xtensa-esp32s3-none-elf` | `esp`, `no_std`, `build-std` |
 
 One-time setup for the Xtensa targets (tier 3, no prebuilt `core`/`alloc`):
 
@@ -429,19 +439,16 @@ espup install                       # installs the `esp` toolchain + rust-src
 rustup target add riscv32imc-unknown-none-elf
 ```
 
-Then:
+The helper script runs only what `pio` does not:
 
 ```bash
-./build-and-test.sh               # gates, build, run simulator   (inner loop)
-./build-and-test.sh check         # the gates only, no build      (seconds)
-./build-and-test.sh all           # every gate + every CI target  (before you push)
-./build-and-test.sh run           # run the existing simulator binary
-./build-and-test.sh device        # build the x4pro firmware
-pio run -e x4pro -t upload        # flash it
+./build-and-test.sh               # rustfmt, clippy, cargo test, C++ format
+./build-and-test.sh all           # the same, then build everything CI builds
+./build-and-test.sh sim           # build and run the simulator
 ```
 
 **Simulator controls:** arrows navigate, Enter confirms, Escape is Back, Q
-quits. See [SIMULATOR.md](../SIMULATOR.md).
+quits. See [simulator.md](simulator.md).
 
 > Homebrew's `pio` may lack the `littlefs` module the espressif32 builder
 > imports. If a device build dies with `ModuleNotFoundError: No module named

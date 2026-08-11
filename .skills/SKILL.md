@@ -838,9 +838,9 @@ Then build what the change affects. PlatformIO compiles Rust itself via
 `scripts/build_rust.py`, so there is no separate cargo step for the firmware:
 
 ```bash
-pio run -e simulator_x4_pro   # host, std
+pio run -e simulator_x3   # host, std
 pio run -e default            # ESP32-C3, no_std, riscv32imc
-pio run -e x4pro              # ESP32-S3, no_std, xtensa (esp toolchain)
+pio run -e sticky             # ESP32-S3, no_std, xtensa (esp toolchain)
 ```
 
 **A Rust change is not done until the device environments build.** Rust links

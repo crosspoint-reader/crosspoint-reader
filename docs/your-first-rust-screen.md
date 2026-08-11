@@ -14,10 +14,12 @@ not.
 
 ## What you'll build
 
-A screen showing the frontlight brightness, letting you change it, and showing
-how long the device has been awake. Small, but it covers everything: drawing,
-touch, hardware buttons, translations, calling _into_ C++ and **teaching C++
-something new to say**.
+A screen with a level you can change, and a reading of how long the device has
+been awake. Small, but it covers everything: drawing, touch, hardware buttons,
+translations, calling _into_ C++ and **teaching C++ something new to say**.
+
+The level belongs to the screen itself. Driving real hardware with it is the
+same four edits as step 2, with a setter instead of a getter.
 
 ```
 ┌──────────────────────────────────┐
@@ -115,11 +117,15 @@ would be missing and the test binary would not link. In
 `lib/backend_rs/src/testing.rs`, next to the other device doubles:
 
 ```rust
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_device_uptime_seconds() -> i32 {
     UPTIME_SECONDS
 }
 ```
+
+`unsafe(no_mangle)` is not a typo. Exporting a symbol under a fixed name is
+unsafe — nothing checks that the C++ side declares it the same way — and Rust
+2024 makes you say so.
 
 and a value for it near the top, beside `BATTERY_PERCENT`:
 
@@ -152,9 +158,9 @@ boundary is wrapped once, so no screen ever writes `unsafe` itself.
 Create `lib/crosspoint_rs/src/activities/settings/brightness_demo.rs`:
 
 ```rust
-//! A demo screen: change the frontlight, and show how long we have been awake.
+//! A demo screen: move a level, and show how long we have been awake.
 
-use backend::{device, tr, Frontlight};
+use backend::{device, tr};
 use xpui::{vstack, List, ListRow, NavigationScreen, Screen, Stepper, Text, View};
 
 pub struct BrightnessDemo {
@@ -178,10 +184,7 @@ impl Default for BrightnessDemo {
 
 impl BrightnessDemo {
     pub fn new() -> Self {
-        // Read the real value once, so the screen opens showing the truth.
-        BrightnessDemo {
-            level: Frontlight::brightness(),
-        }
+        BrightnessDemo { level: 60 }
     }
 }
 
@@ -190,7 +193,7 @@ impl Screen for BrightnessDemo {
 
     fn body(&self) -> impl View<Msg> {
         NavigationScreen::new(vstack![12;
-            Text::new(format!("{}  {}%", tr!(STR_BRIGHTNESS), self.level)),
+            Text::new(format!("{}  {}%", tr!(STR_BRIGHTNESS_DEMO), self.level)),
             Stepper::new(self.level)
                 .on_change(Msg::Set)
                 .on_step(Msg::Step),
@@ -201,17 +204,11 @@ impl Screen for BrightnessDemo {
     }
 
     fn update(&mut self, message: Msg) {
-        let next = match message {
+        self.level = match message {
             Msg::Set(level) => level,
             Msg::Step(delta) => self.level + delta,
         }
         .clamp(0, 100);
-
-        // Tell the firmware only when the value really changed.
-        if next != self.level {
-            self.level = next;
-            Frontlight::set_brightness(next);
-        }
     }
 }
 
@@ -224,9 +221,11 @@ Four things worth pausing on:
   framework measures and paints it. No coordinates anywhere. It runs again on
   every repaint, which is why `uptime_seconds()` is read there and stays current.
 - **`update()` is the only place state changes.** Everything arrives as a
-  message: one way in, one way out.
-- **`Frontlight` and `device` come from `backend`**, never `xpui`. The framework
-  has no idea a frontlight exists — you gave it that ability in step 2.
+  message: one way in, one way out. When it writes to the firmware rather than
+  to a local field, guard the write with a changed-check — SPIFFS sectors have a
+  finite erase budget, and a stepper sends a message per nudge.
+- **`device` comes from `backend`**, never `xpui`. The framework has no idea what
+  a CrossPoint is — you gave it the ability to ask in step 2.
 - **`register_screen!`** generates the C function the C++ side calls to build
   this screen. Remember the second argument; the next steps use it.
 
@@ -335,11 +334,12 @@ case SettingAction::BrightnessDemo:
 ## 7. Run it
 
 ```bash
-./build-and-test.sh
+./build-and-test.sh      # formatting, lints and tests — seconds, no build
+./build-and-test.sh sim  # then build the simulator and launch it
 ```
 
-That checks formatting, lints, runs the tests, builds the simulator and launches
-it. Navigate to **Settings → System → Brightness Demo**.
+Navigate to **Settings → System → Brightness Demo**. The simulator needs a
+one-time setup; see [simulator.md](simulator.md).
 
 Try all of it: drag the track, tap `−` and `+`, use the side buttons. Every one
 works because `Stepper` declared what it responds to — you wrote no input
@@ -353,29 +353,36 @@ cascade.
 ## 8. Write a test
 
 `update()` is an ordinary function, so the screen is testable with no hardware.
-Create `lib/crosspoint_rs/tests/brightness_demo.rs`:
+Add this at the bottom of `brightness_demo.rs`, the file you wrote in step 3:
 
 ```rust
-use backend::device;
-use crosspoint_rs::activities::settings::brightness_demo::{BrightnessDemo, Msg};
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[test]
-fn brightness_clamps_to_range() {
-    let mut screen = BrightnessDemo { level: 40 };
+    #[test]
+    fn level_clamps_to_range() {
+        let mut screen = BrightnessDemo::new();
 
-    screen.update(Msg::Step(5));
-    assert_eq!(screen.level, 45);
+        screen.update(Msg::Set(40));
+        screen.update(Msg::Step(5));
+        assert_eq!(screen.level, 45);
 
-    screen.update(Msg::Set(200));
-    assert_eq!(screen.level, 100, "values clamp");
-}
+        screen.update(Msg::Set(200));
+        assert_eq!(screen.level, 100, "values clamp");
+    }
 
-#[test]
-fn uptime_reaches_the_screen() {
-    // Proves step 2 is wired through: declaration, double and wrapper.
-    assert_eq!(device::uptime_seconds(), 4_321);
+    #[test]
+    fn uptime_reaches_the_screen() {
+        // Proves step 2 is wired through: declaration, double and wrapper.
+        assert_eq!(device::uptime_seconds(), 4_321);
+    }
 }
 ```
+
+It lives beside the code rather than in `tests/` because `level` is private, and
+a file in `tests/` is a separate crate that cannot see it. The doubles from step
+2c are what let this link without a device attached.
 
 ```bash
 ./build-and-test.sh check
@@ -402,13 +409,13 @@ Read the `Chip type` line and match it:
 | Chip     | Environment                        |
 | -------- | ---------------------------------- |
 | ESP32-C3 | `default`                          |
-| ESP32-S3 | `x4pro` (or `sticky`, `papermono`) |
+| ESP32-S3 | `sticky` |
 
 Then build, flash and watch it boot:
 
 ```bash
-~/.platformio/penv/bin/pio run -e x4pro -t upload
-~/.platformio/penv/bin/pio device monitor -e x4pro
+~/.platformio/penv/bin/pio run -t upload
+~/.platformio/penv/bin/pio device monitor
 ```
 
 **You cannot brick it this way.** The first-stage bootloader lives in mask ROM
