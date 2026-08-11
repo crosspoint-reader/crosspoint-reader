@@ -301,7 +301,9 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    return AlphaOverlayResult::Error;
+    // The BW composite is already on the panel. Keep it instead of falling
+    // through to another overlay with this grayscale work buffer cleared.
+    return AlphaOverlayResult::Rendered;
   }
   renderer.copyGrayscaleLsbBuffers();
 
@@ -309,7 +311,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleMsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    return AlphaOverlayResult::Error;
+    return AlphaOverlayResult::Rendered;
   }
   renderer.copyGrayscaleMsbBuffers();
 
