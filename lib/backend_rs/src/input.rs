@@ -17,19 +17,19 @@ use crate::raw;
 
 impl InputSource for Firmware {
     fn was_pressed(&self, button: Button) -> bool {
-        unsafe { raw::cpp_input_was_pressed(button as u8) != 0 }
+        raw::cpp_input_was_pressed(button as u8) != 0
     }
 
     fn is_pressed(&self, button: Button) -> bool {
-        unsafe { raw::cpp_input_is_pressed(button as u8) != 0 }
+        raw::cpp_input_is_pressed(button as u8) != 0
     }
 
     fn was_released(&self, button: Button) -> bool {
-        unsafe { raw::cpp_input_was_released(button as u8) != 0 }
+        raw::cpp_input_was_released(button as u8) != 0
     }
 
     fn has_touch(&self) -> bool {
-        unsafe { raw::cpp_input_has_touch() != 0 }
+        raw::cpp_input_has_touch() != 0
     }
 
     fn tap(&self) -> Option<Point> {
@@ -45,11 +45,11 @@ impl InputSource for Firmware {
     }
 
     fn touch_released(&self) -> bool {
-        unsafe { raw::cpp_input_touch_released() != 0 }
+        raw::cpp_input_touch_released() != 0
     }
 
     fn swipe(&self) -> SwipeDir {
-        match unsafe { raw::cpp_input_swipe() } {
+        match raw::cpp_input_swipe() {
             1 => SwipeDir::Left,
             2 => SwipeDir::Right,
             3 => SwipeDir::Up,
@@ -59,10 +59,10 @@ impl InputSource for Firmware {
     }
 
     fn was_back_gesture(&self) -> bool {
-        unsafe { raw::cpp_input_was_back_gesture() != 0 }
+        raw::cpp_input_was_back_gesture() != 0
     }
 
     fn was_home_gesture(&self) -> bool {
-        unsafe { raw::cpp_input_was_home_gesture() != 0 }
+        raw::cpp_input_was_home_gesture() != 0
     }
 }

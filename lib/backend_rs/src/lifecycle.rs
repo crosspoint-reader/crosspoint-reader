@@ -40,29 +40,31 @@ unsafe fn with(handle: *mut c_void, body: impl FnOnce(&mut dyn Driver)) {
     if handle.is_null() {
         return;
     }
-    body((*(handle as *mut Box<dyn Driver>)).as_mut());
+    // The deref is the whole of the unsafety; running `body` is ordinary Rust.
+    let driver = unsafe { (*(handle as *mut Box<dyn Driver>)).as_mut() };
+    body(driver);
 }
 
 /// # Safety
 /// `handle` must be null or a live handle from the screen's factory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_activity_on_enter(handle: *mut c_void) {
     ensure_host_installed();
-    with(handle, |driver| driver.on_enter())
+    unsafe { with(handle, |driver| driver.on_enter()) }
 }
 
 /// # Safety
 /// `handle` must be null or a live handle from the screen's factory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_activity_loop(handle: *mut c_void) {
-    with(handle, |driver| driver.loop_())
+    unsafe { with(handle, |driver| driver.loop_()) }
 }
 
 /// # Safety
 /// `handle` must be null or a live handle from the screen's factory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_activity_on_exit(handle: *mut c_void) {
-    with(handle, |driver| driver.on_exit())
+    unsafe { with(handle, |driver| driver.on_exit()) }
 }
 
 /// The renderer is reached through the globals `ActivityRs` binds, so the
@@ -70,33 +72,33 @@ pub unsafe extern "C" fn rust_activity_on_exit(handle: *mut c_void) {
 ///
 /// # Safety
 /// `handle` must be null or a live handle from the screen's factory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_activity_render(handle: *mut c_void, _renderer: *const u8) {
     // Also installed here: a screen can be rendered before its onEnter has run
     // if the render task wakes first.
     ensure_host_installed();
-    with(handle, |driver| driver.render())
+    unsafe { with(handle, |driver| driver.render()) }
 }
 
 /// # Safety
 /// `handle` must be null or a live handle from the screen's factory.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_activity_home_gesture(handle: *mut c_void) -> u8 {
     if handle.is_null() {
         return 0;
     }
-    let driver = &mut *(handle as *mut Box<dyn Driver>);
+    let driver = unsafe { &mut *(handle as *mut Box<dyn Driver>) };
     u8::from(driver.handle_home_gesture())
 }
 
 /// # Safety
 /// `handle` must be null, or a handle from the factory not already destroyed.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn destroy_rust_activity(handle: *mut c_void) {
     if handle.is_null() {
         return;
     }
-    drop(Box::from_raw(handle as *mut Box<dyn Driver>))
+    drop(unsafe { Box::from_raw(handle as *mut Box<dyn Driver>) })
 }
 
 /// Exports a C factory for a screen.
@@ -107,7 +109,7 @@ pub unsafe extern "C" fn destroy_rust_activity(handle: *mut c_void) {
 #[macro_export]
 macro_rules! register_screen {
     ($screen:ty, $factory:ident) => {
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub extern "C" fn $factory() -> *mut core::ffi::c_void {
             $crate::lifecycle::into_handle(<$screen>::new())
         }

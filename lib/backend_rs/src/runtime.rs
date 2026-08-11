@@ -6,7 +6,7 @@
 use core::alloc::{GlobalAlloc, Layout};
 use core::ffi::{c_char, c_void};
 
-extern "C" {
+unsafe extern "C" {
     fn malloc(size: usize) -> *mut c_void;
     fn free(ptr: *mut c_void);
     fn cpp_panic(message: *const c_char) -> !;
@@ -25,11 +25,11 @@ unsafe impl GlobalAlloc for FirmwareAlloc {
         if layout.align() > core::mem::size_of::<usize>() * 2 {
             return core::ptr::null_mut();
         }
-        malloc(layout.size()) as *mut u8
+        unsafe { malloc(layout.size()) as *mut u8 }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
-        free(ptr as *mut c_void);
+        unsafe { free(ptr as *mut c_void) }
     }
 }
 

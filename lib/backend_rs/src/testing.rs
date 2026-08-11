@@ -19,7 +19,7 @@ const BATTERY_PERCENT: i32 = 72;
 macro_rules! stub {
     ($($name:ident($($arg:ident: $ty:ty),*) $(-> $ret:ty)?;)*) => {
         $(
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             extern "C" fn $name($(_: $ty),*) $(-> $ret)? { Default::default() }
         )*
     };
@@ -61,6 +61,7 @@ stub! {
     cpp_theme_draw_scroll_indicator(x: i32, y: i32, w: i32, h: i32, c: i32, v: i32, o: i32);
     cpp_activity_finish();
     cpp_activity_request_update();
+    cpp_heap_total() -> i32;
     cpp_heap_free() -> i32;
     cpp_heap_largest_block() -> i32;
     cpp_heap_min_free() -> i32;
@@ -68,24 +69,24 @@ stub! {
 
 // The rest return something a test can recognise.
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_device_firmware_version() -> *const u8 {
     VERSION.as_ptr().cast()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_device_name() -> *const u8 {
     DEVICE.as_ptr().cast()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_device_battery_percent() -> i32 {
     BATTERY_PERCENT
 }
 
 /// Echoes the key back, which is what the firmware does for an unknown one —
 /// so a missing translation is visible rather than blank.
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_tr(key: *const u8) -> *const u8 {
     if key.is_null() {
         return c"".as_ptr().cast();
@@ -93,12 +94,12 @@ extern "C" fn cpp_tr(key: *const u8) -> *const u8 {
     key
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_activity_title() -> *const u8 {
     c"Test".as_ptr().cast()
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_theme_draw_list(
     _x: i32,
     _y: i32,
@@ -111,7 +112,7 @@ extern "C" fn cpp_theme_draw_list(
 ) {
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_theme_draw_option_popup(
     _title: *const c_char,
     _option: extern "C" fn(*mut c_void, i32) -> *const c_char,
@@ -121,7 +122,7 @@ extern "C" fn cpp_theme_draw_option_popup(
 ) {
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn cpp_option_popup_row_rect(
     _title: *const c_char,
     _option: extern "C" fn(*mut c_void, i32) -> *const c_char,

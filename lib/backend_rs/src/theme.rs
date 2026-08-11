@@ -7,13 +7,13 @@
 use xpui::geometry::Rect;
 use xpui::host::{Chrome, Hint, RowField, ThemeMetric};
 
-use crate::cells::{option_cell, row_cell, Cells};
-use crate::firmware::{c, Firmware};
+use crate::cells::{Cells, option_cell, row_cell};
+use crate::firmware::{Firmware, c};
 use crate::raw;
 
 impl Chrome for Firmware {
     fn metric(&self, metric: ThemeMetric) -> i32 {
-        unsafe { raw::cpp_theme_metric(metric as u8) }
+        raw::cpp_theme_metric(metric as u8)
     }
 
     fn draw_header(&self, title: Option<&str>, subtitle: Option<&str>) {
@@ -55,36 +55,30 @@ impl Chrome for Firmware {
     }
 
     fn draw_progress_bar(&self, rect: Rect, current: u32, total: u32) {
-        unsafe {
-            raw::cpp_theme_draw_progress_bar(
-                rect.x(),
-                rect.y(),
-                rect.width(),
-                rect.height(),
-                current,
-                total,
-            );
-        }
+        raw::cpp_theme_draw_progress_bar(
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            current,
+            total,
+        );
     }
 
     fn draw_slider(&self, rect: Rect, value: i32, max: i32) {
-        unsafe {
-            raw::cpp_theme_draw_slider(rect.x(), rect.y(), rect.width(), rect.height(), value, max);
-        }
+        raw::cpp_theme_draw_slider(rect.x(), rect.y(), rect.width(), rect.height(), value, max);
     }
 
     fn draw_scroll_indicator(&self, rect: Rect, content: i32, visible: i32, offset: i32) {
-        unsafe {
-            raw::cpp_theme_draw_scroll_indicator(
-                rect.x(),
-                rect.y(),
-                rect.width(),
-                rect.height(),
-                content,
-                visible,
-                offset,
-            );
-        }
+        raw::cpp_theme_draw_scroll_indicator(
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            content,
+            visible,
+            offset,
+        );
     }
 
     fn draw_list<'a>(
@@ -157,10 +151,10 @@ impl Chrome for Firmware {
     }
 
     fn finish(&self) {
-        unsafe { raw::cpp_activity_finish() }
+        raw::cpp_activity_finish()
     }
 
     fn request_update(&self) {
-        unsafe { raw::cpp_activity_request_update() }
+        raw::cpp_activity_request_update()
     }
 }

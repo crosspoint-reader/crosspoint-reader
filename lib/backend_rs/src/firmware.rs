@@ -29,7 +29,7 @@ pub(crate) fn c(text: &str) -> CString {
 
 impl Clock for Firmware {
     fn millis(&self) -> u32 {
-        unsafe { raw::cpp_millis() }
+        raw::cpp_millis()
     }
 }
 

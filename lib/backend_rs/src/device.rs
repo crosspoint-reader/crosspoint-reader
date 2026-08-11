@@ -19,7 +19,7 @@ pub fn name() -> &'static str {
 /// Battery charge, 0-100. The firmware caches this and repolls at most every
 /// 1.5 s, so calling it per frame is cheap.
 pub fn battery_percent() -> i32 {
-    unsafe { raw::cpp_device_battery_percent() }.clamp(0, 100)
+    raw::cpp_device_battery_percent().clamp(0, 100)
 }
 
 /// A snapshot of the firmware heap.
@@ -29,6 +29,9 @@ pub fn battery_percent() -> i32 {
 /// report measures static sections, which Rust barely uses.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Heap {
+    /// Every byte the allocator owns. Already less than the chip's SRAM: the
+    /// static image is placed first, and what is left becomes the heap.
+    pub total: i32,
     /// Bytes currently free across the heap.
     pub free: i32,
     /// Largest single allocation that would currently succeed.
@@ -43,11 +46,10 @@ pub struct Heap {
 
 /// Read the current heap state.
 pub fn heap() -> Heap {
-    unsafe {
-        Heap {
-            free: raw::cpp_heap_free(),
-            largest_block: raw::cpp_heap_largest_block(),
-            min_free: raw::cpp_heap_min_free(),
-        }
+    Heap {
+        total: raw::cpp_heap_total(),
+        free: raw::cpp_heap_free(),
+        largest_block: raw::cpp_heap_largest_block(),
+        min_free: raw::cpp_heap_min_free(),
     }
 }

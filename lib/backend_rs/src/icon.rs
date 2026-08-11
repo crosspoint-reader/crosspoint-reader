@@ -54,7 +54,7 @@ impl IconSpec {
     /// The size the host will actually draw, or zero when it ships nothing for
     /// this role — the same "compiled out" signal a missing font gives.
     pub fn resolved_size(&self) -> i32 {
-        unsafe { raw::cpp_icon_size(self.role as u8, u8::from(self.filled), self.size) }
+        raw::cpp_icon_size(self.role as u8, u8::from(self.filled), self.size)
     }
 }
 

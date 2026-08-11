@@ -2,7 +2,7 @@
 
 use xpui::host::{FontId, FontRole, FontStyle, TextMetrics};
 
-use crate::firmware::{c, Firmware};
+use crate::firmware::{Firmware, c};
 use crate::raw;
 
 /// Families as `resolveFont` in the C++ numbers them.
@@ -14,9 +14,9 @@ impl TextMetrics for Firmware {
         // them out, in which case this is 0 and the text is skipped rather than
         // drawn with an unregistered id.
         FontId(match role {
-            FontRole::Ui => unsafe { raw::cpp_resolve_font(FAMILY_UI, 12) },
-            FontRole::UiSmall => unsafe { raw::cpp_resolve_font(FAMILY_UI, 10) },
-            FontRole::Reader => unsafe { raw::cpp_reader_font() },
+            FontRole::Ui => raw::cpp_resolve_font(FAMILY_UI, 12),
+            FontRole::UiSmall => raw::cpp_resolve_font(FAMILY_UI, 10),
+            FontRole::Reader => raw::cpp_reader_font(),
         })
     }
 
@@ -32,6 +32,6 @@ impl TextMetrics for Firmware {
         if !font.is_available() {
             return 0;
         }
-        unsafe { raw::cpp_line_height(font.0) }.max(0)
+        raw::cpp_line_height(font.0).max(0)
     }
 }

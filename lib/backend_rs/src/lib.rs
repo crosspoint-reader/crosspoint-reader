@@ -13,10 +13,9 @@
 
 extern crate alloc;
 
-use alloc::string::String;
-use core::ffi::{c_char, CStr};
+use core::ffi::{CStr, c_char};
 
-pub use firmware::{Firmware, FIRMWARE};
+pub use firmware::{FIRMWARE, Firmware};
 
 #[cfg(any(test, feature = "testing"))]
 pub mod testing;
@@ -60,16 +59,8 @@ pub(crate) unsafe fn borrow_cstr(ptr: *const c_char) -> &'static str {
     if ptr.is_null() {
         return "";
     }
-    CStr::from_ptr(ptr).to_str().unwrap_or("")
-}
-
-/// Copies a C string the firmware owns into an allocation Rust controls.
-///
-/// # Safety
-/// `ptr` must be null or a valid NUL-terminated C string.
-#[allow(dead_code)]
-pub(crate) unsafe fn copy_cstr(ptr: *const c_char) -> String {
-    String::from(borrow_cstr(ptr))
+    // Only the read is unsafe; the null check and the UTF-8 decode are not.
+    unsafe { CStr::from_ptr(ptr) }.to_str().unwrap_or("")
 }
 
 /// Milliseconds since boot.
@@ -77,7 +68,7 @@ pub(crate) unsafe fn copy_cstr(ptr: *const c_char) -> String {
 /// The only clock Rust has. The runtime needs it for key auto-repeat, which
 /// `ButtonNavigator` does with `millis()` on the C++ side.
 pub fn millis() -> u32 {
-    unsafe { raw::cpp_millis() }
+    raw::cpp_millis()
 }
 
 /// Translates a key from `lib/I18n/translations/english.yaml`.

@@ -3,18 +3,16 @@
 use xpui::geometry::{Point, Rect, Size};
 use xpui::host::{Canvas, FontId, FontStyle, IconRef};
 
-use crate::firmware::{c, Firmware};
+use crate::firmware::{Firmware, c};
 use crate::raw;
 
 impl Canvas for Firmware {
     fn screen_size(&self) -> Size {
-        Size::new(unsafe { raw::cpp_screen_width() }, unsafe {
-            raw::cpp_screen_height()
-        })
+        Size::new(raw::cpp_screen_width(), raw::cpp_screen_height())
     }
 
     fn clear(&self) {
-        unsafe { raw::cpp_clear_screen() }
+        raw::cpp_clear_screen()
     }
 
     fn draw_text(&self, origin: Point, text: &str, font: FontId, style: FontStyle) {
@@ -34,47 +32,43 @@ impl Canvas for Firmware {
     }
 
     fn fill_rect(&self, rect: Rect, black: bool) {
-        unsafe {
-            raw::cpp_draw_rect(
-                rect.x(),
-                rect.y(),
-                rect.width(),
-                rect.height(),
-                1,
-                u8::from(black),
-            )
-        }
+        raw::cpp_draw_rect(
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            1,
+            u8::from(black),
+        )
     }
 
     fn stroke_rect(&self, rect: Rect) {
-        unsafe { raw::cpp_draw_rect(rect.x(), rect.y(), rect.width(), rect.height(), 0, 1) }
+        raw::cpp_draw_rect(rect.x(), rect.y(), rect.width(), rect.height(), 0, 1)
     }
 
     fn draw_line(&self, from: Point, to: Point) {
-        unsafe { raw::cpp_draw_line(from.x, from.y, to.x, to.y) }
+        raw::cpp_draw_line(from.x, from.y, to.x, to.y)
     }
 
     fn fill_rect_dither(&self, rect: Rect, light: bool) {
-        unsafe {
-            raw::cpp_fill_rect_dither(
-                rect.x(),
-                rect.y(),
-                rect.width(),
-                rect.height(),
-                u8::from(light),
-            )
-        }
+        raw::cpp_fill_rect_dither(
+            rect.x(),
+            rect.y(),
+            rect.width(),
+            rect.height(),
+            u8::from(light),
+        )
     }
 
     fn set_clip(&self, rect: Option<Rect>) {
         // A zero-sized rect is the "no clip" signal, so the boundary stays one
         // function instead of two.
         let rect = rect.unwrap_or(Rect::new(0, 0, 0, 0));
-        unsafe { raw::cpp_set_clip(rect.x(), rect.y(), rect.width(), rect.height()) }
+        raw::cpp_set_clip(rect.x(), rect.y(), rect.width(), rect.height())
     }
 
     fn scrim(&self, rect: Rect) {
-        unsafe { raw::cpp_scrim(rect.x(), rect.y(), rect.width(), rect.height()) }
+        raw::cpp_scrim(rect.x(), rect.y(), rect.width(), rect.height())
     }
 
     fn draw_image(&self, origin: Point, data: &[u8], size: Size) {
@@ -90,10 +84,10 @@ impl Canvas for Firmware {
     }
 
     fn draw_icon(&self, origin: Point, icon: IconRef) {
-        unsafe { raw::cpp_draw_icon(icon.kind as u8, icon.variant, icon.size, origin.x, origin.y) }
+        raw::cpp_draw_icon(icon.kind as u8, icon.variant, icon.size, origin.x, origin.y)
     }
 
     fn icon_size(&self, icon: IconRef) -> i32 {
-        unsafe { raw::cpp_icon_size(icon.kind as u8, icon.variant, icon.size) }
+        raw::cpp_icon_size(icon.kind as u8, icon.variant, icon.size)
     }
 }
