@@ -13,9 +13,12 @@
 #include "fontIds.h"
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
+// Editable fields: Name, URL, Username, Password, Download folder.
 // Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+constexpr int BASE_ITEMS = 5;
+// Index of the download folder row, which is the one field that is allowed to
+// stay empty: empty means "fall back to the global default".
+constexpr int FOLDER_ITEM = 4;
 }  // namespace
 
 int OpdsSettingsActivity::getMenuItemCount() const {
@@ -169,7 +172,21 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (selectedIndex == 4 && !isNewServer) {
+  } else if (selectedIndex == FOLDER_ITEM) {
+    // Per-server download folder. Left empty it defers to the global default,
+    // so nothing has to be filled in here for the old single-folder behaviour.
+    auto handler = [this](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        editServer.downloadFolder = normalizeOpdsFolder(kb.text);
+        saveServer();
+        requestUpdate();
+      }
+    };
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
+                                                                   editServer.downloadFolder, 63, InputType::Text),
+                           handler);
+  } else if (selectedIndex == BASE_ITEMS && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -199,7 +216,8 @@ void OpdsSettingsActivity::render(RenderLock&&) {
   const int menuItems = getMenuItemCount();
 
   const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                              StrId::STR_PASSWORD};
+                              StrId::STR_PASSWORD, StrId::STR_OPDS_DOWNLOAD_FOLDER};
+  static_assert(sizeof(fieldNames) / sizeof(fieldNames[0]) == BASE_ITEMS, "one label per editable field");
 
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
@@ -219,6 +237,10 @@ void OpdsSettingsActivity::render(RenderLock&&) {
           return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
         } else if (index == 3) {
           return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
+        } else if (index == FOLDER_ITEM) {
+          // "Default", not "Not Set": an empty folder is a working configuration
+          // that follows the global setting, not a field waiting to be filled.
+          return editServer.downloadFolder.empty() ? std::string(tr(STR_DEFAULT_VALUE)) : editServer.downloadFolder;
         }
         return std::string("");
       },

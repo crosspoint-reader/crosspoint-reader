@@ -17,17 +17,12 @@
 #include "util/OpdsFilename.h"
 
 namespace {
-// Normalizes a user-typed folder: trims spaces, "" => SD root, otherwise a
-// single leading '/' and no trailing '/'. Cold path (runs once per edit).
-std::string normalizeFolder(std::string v) {
-  while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
-  while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
-  if (v.empty()) return "";
-  if (v.front() != '/') v.insert(v.begin(), '/');
-  while (v.size() > 1 && v.back() == '/') v.pop_back();
-  if (v == "/") return "";  // a bare slash is SD root, same as empty
-  return v;
-}
+// Longest folder the keyboard may return for the global default. Two below the
+// field's capacity, not one: normalization can PREPEND a '/', so a value typed
+// right up to the limit must still have room for it. Without the slack, a
+// 63-character entry normalizes to 64 and loses its last character to the
+// strncpy — silently, which is the worst way for a path to be wrong.
+constexpr size_t MAX_DEFAULT_FOLDER_INPUT = sizeof(CrossPointSettings::opdsDownloadFolder) - 2;
 
 // Label shown for the current OPDS filename format in the list subtitle.
 StrId opdsFormatLabel(uint8_t format) {
@@ -44,8 +39,8 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends three virtual items: "Add Server", "Download folder"
-  // and "Filename format".
+  // Settings mode appends three virtual items: "Add Server", "Default download
+  // folder" and "Filename format".
   if (!pickerMode) {
     count += 3;
   }
@@ -135,22 +130,26 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Default download folder], [Filename format].
+  // The folder here is the fallback for servers that do not set one of their
+  // own; the per-server field lives in OpdsSettingsActivity.
   if (selectedIndex == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
         const auto& kb = std::get<KeyboardResult>(result.data);
-        const std::string norm = normalizeFolder(kb.text);
+        // Fits by construction: the keyboard is capped at MAX_DEFAULT_FOLDER_INPUT
+        // and normalization only ever adds the one leading '/'.
+        const std::string norm = normalizeOpdsFolder(kb.text);
         strncpy(SETTINGS.opdsDownloadFolder, norm.c_str(), sizeof(SETTINGS.opdsDownloadFolder) - 1);
         SETTINGS.opdsDownloadFolder[sizeof(SETTINGS.opdsDownloadFolder) - 1] = '\0';
         SETTINGS.saveToFile();
         requestUpdate();
       }
     };
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
-                                                std::string(SETTINGS.opdsDownloadFolder), 63, InputType::Text),
-        folderHandler);
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DEFAULT_FOLDER),
+                                                                   std::string(SETTINGS.opdsDownloadFolder),
+                                                                   MAX_DEFAULT_FOLDER_INPUT, InputType::Text),
+                           folderHandler);
     return;
   }
 
@@ -209,7 +208,7 @@ void OpdsServerListActivity::render(RenderLock&&) {
             return std::string(I18n::getInstance().get(StrId::STR_ADD_SERVER));
           }
           if (index == serverCount + 1) {
-            return std::string(I18n::getInstance().get(StrId::STR_OPDS_DOWNLOAD_FOLDER));
+            return std::string(I18n::getInstance().get(StrId::STR_OPDS_DEFAULT_FOLDER));
           }
           return std::string(I18n::getInstance().get(StrId::STR_OPDS_FILENAME_FORMAT));
         },
