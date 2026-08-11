@@ -51,6 +51,10 @@ class SdCardFontRegistry {
   int getFamilyIndex(const std::string& name) const;
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
+  // Release all discovered family metadata, freeing its heap. Call discover()
+  // again to repopulate. Used to reclaim memory before heavy network work.
+  void clear() { std::vector<SdCardFontFamilyInfo>().swap(families_); }
+
  private:
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 

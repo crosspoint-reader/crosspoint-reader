@@ -24,6 +24,11 @@ FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputMan
 
 void FontDownloadActivity::onEnter() {
   Activity::onEnter();
+  // Free the active reader font and the SD font registry before the network +
+  // manifest work. With an SD font active and many families installed, both stay
+  // resident and, together with the parsed manifest, exhaust the heap and abort
+  // during parse on low-heap devices. Restored in onExit()/on reboot.
+  sdFontSystem.releaseForNetwork(renderer);
   WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
@@ -37,6 +42,10 @@ void FontDownloadActivity::onExit() {
     delay(30);
     silentRestart();
   }
+
+  // Reached only when WiFi selection was cancelled (no reboot above): restore the
+  // reader font and registry that releaseForNetwork() freed in onEnter().
+  sdFontSystem.ensureLoaded(renderer);
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
@@ -90,57 +99,71 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     return false;
   }
 
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, manifestFile);
-  manifestFile.close();
-  Storage.remove(MANIFEST_TMP);
+  // The parsed manifest and the installed-font registry are each large when many
+  // families are installed. Keep the JsonDocument in its own scope and defer
+  // loading the registry until after it is freed (second pass below), so the two
+  // are never resident at once. That coexistence aborts during parse on low-heap
+  // devices with many SD fonts installed (bare new is fatal with -fno-exceptions).
+  {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, manifestFile);
+    manifestFile.close();
+    Storage.remove(MANIFEST_TMP);
 
-  if (err) {
-    LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
-    errorMessage_ = "Invalid font manifest";
-    return false;
-  }
-
-  int version = doc["version"] | 0;
-  if (version != FONTS_MANIFEST_VERSION) {
-    LOG_ERR("FONT", "Unsupported manifest version: %d", version);
-    errorMessage_ = "Unsupported manifest version";
-    return false;
-  }
-
-  baseUrl_ = doc["baseUrl"] | "";
-  families_.clear();
-  fontInstaller_.refreshRegistry();
-
-  JsonArray familiesArr = doc["families"].as<JsonArray>();
-  families_.reserve(familiesArr.size());
-
-  for (JsonObject fObj : familiesArr) {
-    ManifestFamily family;
-    family.name = fObj["name"] | "";
-    family.description = fObj["description"] | "";
-
-    for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
-      family.styles.push_back(s.as<std::string>());
+    if (err) {
+      LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
+      errorMessage_ = "Invalid font manifest";
+      return false;
     }
 
-    family.totalSize = 0;
-    for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
-      ManifestFile file;
-      file.name = fileObj["name"] | "";
-      file.size = fileObj["size"] | 0;
+    int version = doc["version"] | 0;
+    if (version != FONTS_MANIFEST_VERSION) {
+      LOG_ERR("FONT", "Unsupported manifest version: %d", version);
+      errorMessage_ = "Unsupported manifest version";
+      return false;
+    }
 
-      if (!fileObj["crc32"].is<uint32_t>()) {
-        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
-        errorMessage_ = "Invalid font manifest";
-        return false;
+    baseUrl_ = doc["baseUrl"] | "";
+    families_.clear();
+
+    JsonArray familiesArr = doc["families"].as<JsonArray>();
+    families_.reserve(familiesArr.size());
+
+    for (JsonObject fObj : familiesArr) {
+      ManifestFamily family;
+      family.name = fObj["name"] | "";
+      family.description = fObj["description"] | "";
+
+      for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
+        family.styles.push_back(s.as<std::string>());
       }
-      file.crc32 = fileObj["crc32"].as<uint32_t>();
 
-      family.totalSize += file.size;
-      family.files.push_back(std::move(file));
+      family.totalSize = 0;
+      for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
+        ManifestFile file;
+        file.name = fileObj["name"] | "";
+        file.size = fileObj["size"] | 0;
+
+        if (!fileObj["crc32"].is<uint32_t>()) {
+          LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
+          errorMessage_ = "Invalid font manifest";
+          return false;
+        }
+        file.crc32 = fileObj["crc32"].as<uint32_t>();
+
+        family.totalSize += file.size;
+        family.files.push_back(std::move(file));
+      }
+
+      families_.push_back(std::move(family));
     }
+  }  // JsonDocument freed here, before the registry is loaded below.
 
+  // Second pass: load the installed-font registry and resolve installed/update
+  // state now that the manifest JsonDocument has been released, keeping peak heap
+  // usage down on devices with many SD fonts installed.
+  fontInstaller_.refreshRegistry();
+  for (auto& family : families_) {
     family.installed = fontInstaller_.isFamilyInstalled(family.name.c_str());
 
     // Detect updates by comparing manifest file sizes with files on disk.
@@ -164,8 +187,6 @@ bool FontDownloadActivity::fetchAndParseManifest() {
         }
       }
     }
-
-    families_.push_back(std::move(family));
   }
 
   LOG_DBG("FONT", "Manifest loaded: %zu families", families_.size());
