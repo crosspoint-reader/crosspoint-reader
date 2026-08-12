@@ -14,9 +14,9 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
-#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -335,6 +335,28 @@ void pushRecentSleepIndex(const SleepRecentKind recentKind, const uint16_t idx) 
   }
 }
 
+bool findNextValidSleepBmp(HalFile& dir, char* name) {
+  for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+    if (dirFile.isDirectory()) continue;
+
+    dirFile.getName(name, MAX_SLEEP_FILE_NAME_LEN);
+    if (name[0] == '\0' || name[0] == '.') continue;
+
+    if (!FsHelpers::hasBmpExtension(name)) {
+      LOG_DBG("SLP", "Skipping unsupported sleep image: %s", name);
+      continue;
+    }
+
+    Bitmap bitmap(dirFile);
+    if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+      LOG_DBG("SLP", "Skipping invalid sleep image: %s", name);
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
 bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind, std::string& selectedPath) {
   auto dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return false;
@@ -345,57 +367,31 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
     return false;
   }
 
-  std::vector<std::string> files;
-  files.reserve(CrossPointState::SLEEP_RECENT_COUNT);
-
-  // Collect all valid files first, matching the existing custom sleep image selection flow.
-  for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
-    if (dirFile.isDirectory()) {
-      dirFile.close();
-      continue;
-    }
-
-    dirFile.getName(name.get(), MAX_SLEEP_FILE_NAME_LEN);
-    const auto filename = std::string(name.get());
-    if (filename.empty() || filename[0] == '.') {
-      dirFile.close();
-      continue;
-    }
-
-    if (!FsHelpers::hasBmpExtension(filename)) {
-      LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name.get());
-      dirFile.close();
-      continue;
-    }
-
-    Bitmap bitmap(dirFile);
-    if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-      LOG_DBG("SLP", "Skipping invalid BMP file: %s", name.get());
-      dirFile.close();
-      continue;
-    }
-
-    files.emplace_back(filename);
-    dirFile.close();
-  }
-
-  const auto numFiles = files.size();
-  if (numFiles == 0) return false;
+  uint16_t fileCount = 0;
+  while (fileCount < UINT16_MAX && findNextValidSleepBmp(dir, name.get())) ++fileCount;
+  if (fileCount == 0) return false;
 
   // Pick a random wallpaper, excluding recently shown ones.
-  // Window: up to SLEEP_RECENT_COUNT entries, capped at numFiles-1.
-  const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
+  // Window: up to SLEEP_RECENT_COUNT entries, capped at fileCount-1.
   const uint8_t recentFill =
       recentKind == SleepRecentKind::Overlay ? APP_STATE.recentOverlaySleepFill : APP_STATE.recentSleepFill;
-  const uint8_t window = static_cast<uint8_t>(std::min(static_cast<size_t>(recentFill), numFiles - 1));
+  const uint8_t window = static_cast<uint8_t>(std::min<uint16_t>(recentFill, fileCount - 1));
   auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
   for (uint8_t attempt = 0; attempt < 20 && isRecentSleepIndex(recentKind, randomFileIndex, window); attempt++) {
     randomFileIndex = static_cast<uint16_t>(random(fileCount));
   }
 
+  dir.rewindDirectory();
+  for (uint16_t index = 0; index <= randomFileIndex; ++index) {
+    if (!findNextValidSleepBmp(dir, name.get())) return false;
+  }
+
+  selectedPath.reserve(strlen(dirPath) + 1 + strlen(name.get()));
+  selectedPath = dirPath;
+  selectedPath += "/";
+  selectedPath += name.get();
   pushRecentSleepIndex(recentKind, randomFileIndex);
   APP_STATE.saveToFile();
-  selectedPath = std::string(dirPath) + "/" + files[randomFileIndex];
   return true;
 }
 
