@@ -452,6 +452,7 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
   // silently; the only heap allocation per kept selector is the std::string
   // map key, which is unavoidable since the map owns its keys.
   bool limitReached = false;
+  bool heapGrowthStopped = false;
   const auto hasHeapForRuleGrowth = [&]() {
     const size_t freeHeap = ESP.getFreeHeap();
     const size_t largestBlock = ESP.getMaxAllocHeap();
@@ -500,8 +501,8 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
         if (it != rulesBySelector_.end()) {
           it->second.applyOver(style);
         } else {
-          if (!hasHeapForRuleGrowth()) {
-            limitReached = true;
+          if (heapGrowthStopped || !hasHeapForRuleGrowth()) {
+            heapGrowthStopped = true;
             return;
           }
           rulesBySelector_.emplace(std::string(sel), style);
