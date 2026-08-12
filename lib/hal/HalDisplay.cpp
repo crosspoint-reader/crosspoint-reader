@@ -85,6 +85,12 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
+void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted); }
+
+bool HalDisplay::toggleInverted() { return einkDisplay.toggleInverted(); }
+
+bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
+
 void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }

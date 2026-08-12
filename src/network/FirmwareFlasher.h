@@ -23,6 +23,7 @@ enum class Result {
   BAD_SEGMENTS,  // segment table malformed or runs past EOF
   BAD_CHECKSUM,  // ESP image XOR checksum mismatch
   BAD_SHA,       // SHA256 trailer mismatch (hash_appended images)
+  BAD_CHIP,      // image chip_id doesn't match the running MCU family
   BAD_SIZE,      // body+pad+sha length doesn't match file size
   NO_PARTITION,
   OOM,
@@ -59,5 +60,11 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
 Result validateImageFile(const char* sdPath, size_t partitionSize);
 
 const char* resultName(Result r);
+
+// Returns the chip_id (esp_image_header_t offset 12) of the currently-running
+// image, or 0xFFFF if it cannot be read. Because the running slot booted
+// successfully, its chip_id is authoritative for the current CPU, so a
+// candidate image must match it to be safe to flash.
+uint16_t runningPartitionChipId();
 
 }  // namespace firmware_flash
