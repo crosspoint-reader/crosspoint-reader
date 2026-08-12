@@ -21,7 +21,9 @@
 // (beginPublishCycle()) and publishes it only once every hit() call for the
 // frame is done (publish()), so handleInput()'s routePublished()/
 // publishedData() reads on the loop task always see a complete table, never
-// one render is mid-rebuilding.
+// one render is mid-rebuilding. uiReady closes when show() replaces the
+// popup's data, then stays open across ordinary repaints after the first
+// publication so a release cannot be dropped during a highlight repaint.
 class OptionPopup {
  public:
   void show(StrId titleId, const StrId* optionIds, int optionCount, int currentIndex,
@@ -151,7 +153,6 @@ class OptionPopup {
     // itself never dispatches, so it gets an empty snapshot.
     const fui::InputSnapshot noInput{};
 
-    uiReady = false;
     // Builds into the generation handleInput()'s routePublished()/
     // publishedData() aren't currently reading, so the loop task never sees
     // this table mid-rebuild — see publish() below and

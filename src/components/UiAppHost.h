@@ -10,8 +10,11 @@ class MappedInputManager;
 // Owns the FreeInkApp hosting protocol every FUI screen shares, list-shaped or
 // not: the font-bound render target, the app, and the uiReady handshake that
 // lets the loop task route touch snapshots against the interaction table the
-// render task rebuilds. The handshake is a cross-task protocol — it lives here
-// exactly once so no screen re-implements (and mis-orders) it.
+// render task rebuilds. FreeInkApp keeps the last complete interaction table
+// published while it builds the next one, so the gate closes only when the
+// old table is semantically invalid (screen reset/explicit close), not around
+// an ordinary repaint. The handshake lives here exactly once so no screen
+// re-implements (and mis-orders) it.
 //
 // UiListActivity layers list navigation on top of this; screens that are not a
 // single list (sliders, prompts, state machines) inherit or hold this directly
@@ -33,9 +36,11 @@ class UiAppHost {
   // onEnter/loadOnce before registering actions and the screen fn.
   void resetUi();
 
-  // The uiReady flip around app.render(). Re-derives the device context first
-  // so a runtime rotation (reader menus) is picked up. Call from the render
-  // task wherever the app should paint; chrome before, hints after.
+  // Re-derives the device context, renders into FreeInkApp's non-published
+  // interaction-table generation, then opens uiReady after the first publish.
+  // Once open, routing stays available during later renders through the last
+  // complete published generation. Call from the render task wherever the app
+  // should paint; chrome before, hints after.
   void renderUi();
 
   // What loop-task routing saw this pass. `routed` is true when the gate was
@@ -67,6 +72,7 @@ class UiAppHost {
   UiApp app;
 
  private:
-  // Written by the render task (renderUi), read by the loop task (route*).
+  // Opened by the render task after publication and closed on lifecycle/state
+  // resets; read by the loop task (route*).
   std::atomic<bool> uiReady{false};
 };

@@ -914,7 +914,6 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // (routePublished()/publishedData()) — beginPublishCycle() here makes this
   // render build into the OTHER generation, so loop() never sees a
   // half-rebuilt table no matter when it runs relative to this.
-  interactionsReady = false;
   interactions.beginPublishCycle();
   fui::GfxRendererTarget target(renderer);
   target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);

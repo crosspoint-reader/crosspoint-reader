@@ -13,7 +13,6 @@ void UiAppHost::resetUi() {
 }
 
 void UiAppHost::renderUi() {
-  uiReady = false;
   app.setDevice(uiTarget.deviceContext());
   app.render();
   uiReady = true;
