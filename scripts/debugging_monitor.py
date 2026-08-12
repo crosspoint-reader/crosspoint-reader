@@ -32,6 +32,7 @@ import re
 import signal
 import sys
 import threading
+import time
 from collections import deque
 from datetime import datetime
 
@@ -259,10 +260,25 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
     expecting_screenshot = False
     screenshot_size = 0
     screenshot_data = b""
+    screenshot_started_at = 0.0
+    # Slightly longer than the device's own 30s chunked-write give-up (see
+    # CMD:SCREENSHOT in main.cpp) — if the device abandons a dump early (e.g. we
+    # stopped draining mid-transfer), it never sends the remaining bytes, and this
+    # loop would otherwise block forever waiting for a byte count that will never
+    # arrive, freezing this thread (and all other log output with it).
+    screenshot_timeout_s = 35.0
 
     try:
         while not shutdown_event.is_set():
             if expecting_screenshot:
+                if time.monotonic() - screenshot_started_at > screenshot_timeout_s:
+                    print(
+                        f"{Fore.RED}Screenshot timed out: only received {len(screenshot_data)}/{screenshot_size} "
+                        f"bytes{Style.RESET_ALL}"
+                    )
+                    expecting_screenshot = False
+                    screenshot_data = b""
+                    continue
                 data = ser.read(screenshot_size - len(screenshot_data))
                 if not data:
                     continue
@@ -298,6 +314,7 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                     if clean_line.startswith("SCREENSHOT_START:"):
                         screenshot_size = int(clean_line.split(":")[1])
                         expecting_screenshot = True
+                        screenshot_started_at = time.monotonic()
                         continue
                     elif clean_line == "SCREENSHOT_END":
                         continue  # ignore

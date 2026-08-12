@@ -16,6 +16,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <driver/usb_serial_jtag.h>
 
 #include <cstring>
 
@@ -491,7 +492,33 @@ void loop() {
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
         uint8_t* buf = display.getFrameBuffer();
-        logSerial.write(buf, bufferSize);
+        // logSerial's TX timeout is 1ms (see the load-bearing setTxTimeoutMs()
+        // call above) so it never hangs the device when no host is attached —
+        // but that means a single write() call for a large buffer only sends
+        // whatever fits in the HWCDC ring buffer before giving up, silently
+        // dropping the rest. Retry the remainder instead of relying on one
+        // blocking call, bounded so a host that stops draining mid-dump (e.g.
+        // disconnects) can't hang the device either.
+        constexpr size_t kChunkSize = 256;  // small enough to fit the HWCDC TX ring buffer per attempt
+        size_t written = 0;
+        // Elapsed-since-start (unsigned subtraction), not an absolute deadline —
+        // `millis() + 30000` can overflow near the uint32_t wraparound and make
+        // the comparison misbehave right at that boundary.
+        const uint32_t startMs = millis();
+        while (written < bufferSize && millis() - startMs < 30000) {
+          const size_t remaining = bufferSize - written;
+          const size_t toSend = remaining < kChunkSize ? remaining : kChunkSize;
+          const size_t sent = logSerial.write(buf + written, toSend);
+          written += sent;
+          // Always yield after a write attempt (success or not) — a tight loop that
+          // only delays on sent==0 can starve the underlying USB task (TinyUSB) of
+          // scheduling time it needs to actually drain the ring buffer and refill it.
+          delay(5);
+        }
+        if (written < bufferSize) {
+          LOG_ERR("MAIN", "SCREENSHOT: only sent %u of %u bytes before timeout", static_cast<unsigned>(written),
+                  bufferSize);
+        }
         logSerial.printf("SCREENSHOT_END\n");
       }
     }
@@ -538,7 +565,26 @@ void loop() {
   }
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
-  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
+  // Only auto-sleep on inactivity while running on battery — a device sitting on USB
+  // power (charging, or plugged in for serial debugging) has no battery-life reason
+  // to sleep, and deep-sleeping drops the USB CDC connection entirely.
+  //
+  // gpio.isUsbConnected() only detects net-positive charge current (X3: BQ27220
+  // fuel-gauge Current() > 0) — confirmed against the BQ25616 datasheet that the
+  // charge IC's STAT pin (what a GPIO-based alternative would read) is HIGH for
+  // BOTH "charging complete" and "no input at all," so it can't distinguish "USB
+  // plugged in, battery just full" from "nothing plugged in" either.
+  //
+  // usb_serial_jtag_is_connected() catches the case both of those miss: a debug/
+  // data cable to a dev machine, with no net charging current, and no serial
+  // terminal app actively holding the port open (unlike `Serial`'s bool operator,
+  // which needs a host application to assert DTR — merely being plugged into a
+  // computer already means the USB Serial/JTAG peripheral is receiving SOF
+  // packets, independent of any application-level connection). It reads false for
+  // a plain power source with no USB host controller (e.g. a power bank), which is
+  // fine — isUsbConnected() already covers genuine charging.
+  if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs && !gpio.isUsbConnected() &&
+      !usb_serial_jtag_is_connected()) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);
     enterDeepSleep(true);
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
