@@ -363,8 +363,11 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
 
   if (spec.embeddedStyle) {
     ctx->cssParser = epub->getCssParser();
-    if (ctx->cssParser && !ctx->cssParser->loadFromCache()) {
-      LOG_ERR("SCT", "Failed to load CSS from cache");
+    if (ctx->cssParser) {
+      const auto cacheLoadResult = ctx->cssParser->loadFromCache();
+      if (cacheLoadResult != CssParser::CacheLoadResult::Complete) {
+        LOG_ERR("SCT", "Failed to load CSS from cache");
+      }
     }
   }
 

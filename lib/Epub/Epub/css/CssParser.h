@@ -32,6 +32,18 @@
  */
 class CssParser {
  public:
+  enum class ParseResult : uint8_t {
+    Complete,
+    DegradedLowHeap,
+    Error,
+  };
+
+  enum class CacheLoadResult : uint8_t {
+    Complete,
+    LowMemory,
+    Invalid,
+  };
+
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
   static constexpr uint8_t CSS_CACHE_VERSION = 8;
 
@@ -46,9 +58,9 @@ class CssParser {
    * Load and parse CSS from a file stream.
    * Can be called multiple times to accumulate rules from multiple stylesheets.
    * @param source Open file handle to read from
-   * @return true if parsing completed (even if no rules found)
+   * @return Complete unless low heap stopped rule growth or the source was invalid
    */
-  bool loadFromStream(HalFile& source);
+  ParseResult loadFromStream(HalFile& source);
 
   /**
    * Look up the style for an HTML element, considering tag name and class attributes.
@@ -101,9 +113,8 @@ class CssParser {
   /**
    * Load CSS rules from a cache file.
    * Clears any existing rules before loading.
-   * @return true if cache was loaded successfully
    */
-  bool loadFromCache();
+  CacheLoadResult loadFromCache();
 
  private:
   // Lookup key for a multi-piece selector. The pieces are hashed and compared
@@ -143,7 +154,7 @@ class CssParser {
   std::string cachePath;
 
   // Internal parsing helpers
-  void processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style);
+  bool processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style);
   static CssStyle parseDeclarations(std::string_view declBlock);
   static void parseDeclarationIntoStyle(std::string_view decl, CssStyle& style);
 
