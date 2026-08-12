@@ -150,6 +150,17 @@ void DictionaryWordSelectActivity::moveVertical(const int direction) {
   }
 }
 
+void DictionaryWordSelectActivity::moveWord(const int direction) {
+  const int target = selected + direction;
+  if (target < 0 || target >= static_cast<int>(words.size())) return;
+  selected = target;
+  requestUpdate();
+}
+
+uint16_t DictionaryWordSelectActivity::dictWordNavIntervalMs() {
+  return static_cast<uint16_t>(SETTINGS.getDictWordNavIntervalMs());
+}
+
 void DictionaryWordSelectActivity::performLookup() {
   popup = Popup::Busy;
   if (!dictOpenAttempted) {
@@ -269,13 +280,37 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
-  if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) && selected > 0) {
-    selected--;
-    requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) && hasNextWord) {
-    selected++;
-    requestUpdate();
+  // Two-button mode (one-handed use): Up+Left both step to the previous word,
+  // Down+Right both step to the next on a tap. Holding either pair repeats as
+  // row jumps instead of word steps. Four-button mode keeps Left/Right for word
+  // stepping and Up/Down for row jumps.
+  //
+  // The word step fires on release rather than on press (same short-vs-long
+  // idiom as ReaderUtils::handleBackNavigation): deciding on press would
+  // always take one word step before a hold has a chance to become a row
+  // jump. A release still short enough that onContinuous never fired treats
+  // it as a tap; a release at/after the continuous threshold means row jumps
+  // already handled the move, so it takes no further action.
+  if (SETTINGS.dictWordNavMode == CrossPointSettings::DICT_NAV_TWO_BUTTON) {
+    const bool prevReleased = mappedInput.wasReleased(MappedInputManager::Button::ScreenUp) ||
+                              mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft);
+    const bool nextReleased = mappedInput.wasReleased(MappedInputManager::Button::ScreenDown) ||
+                              mappedInput.wasReleased(MappedInputManager::Button::ScreenRight);
+    const bool wasTap = mappedInput.getHeldTime() < WORD_STEP_MAX_HOLD_MS;
+    if (prevReleased && wasTap) {
+      moveWord(-1);
+    } else if (nextReleased && wasTap) {
+      moveWord(1);
+    }
+    // prevRowJumpButtons/nextRowJumpButtons are members (allocated once at
+    // construction) rather than brace-init lists here, so this doesn't
+    // materialize a temporary heap-backed vector every tick.
+    wordNavigator.onContinuous(prevRowJumpButtons, [this] { moveVertical(-1); });
+    wordNavigator.onContinuous(nextRowJumpButtons, [this] { moveVertical(1); });
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft)) {
+    moveWord(-1);
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenRight)) {
+    moveWord(1);
   } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
     moveVertical(-1);
   } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {

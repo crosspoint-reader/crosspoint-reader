@@ -59,6 +59,15 @@ void SettingsActivity::rebuildSettingsLists() {
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
       }
+      if (setting.valuePtr == &CrossPointSettings::dictWordNavMode &&
+          SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DICTIONARY) {
+        continue;
+      }
+      if (setting.valuePtr == &CrossPointSettings::dictWordNavSpeed &&
+          (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DICTIONARY ||
+           SETTINGS.dictWordNavMode != CrossPointSettings::DICT_NAV_TWO_BUTTON)) {
+        continue;
+      }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);

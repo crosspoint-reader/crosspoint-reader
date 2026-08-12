@@ -170,6 +170,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     QUICK_RESUME_SLEEP_SCREEN_COUNT
   };
 
+  // Dictionary word-select navigation:
+  // four discrete buttons (Left/Right step words, Up/Down jump rows)
+  // two merged buttons (Up+Left = previous word, Down+Right = next word) for
+  // one-handed use — a tap steps one word; holding either pair instead jumps
+  // rows, repeating at dictWordNavSpeed's interval
+  enum DICT_WORD_NAV_MODE { DICT_NAV_FOUR_BUTTON = 0, DICT_NAV_TWO_BUTTON = 1, DICT_WORD_NAV_MODE_COUNT };
+  enum DICT_WORD_NAV_SPEED { DICT_NAV_SPEED_NORMAL = 0, DICT_NAV_SPEED_FAST = 1, DICT_WORD_NAV_SPEED_COUNT };
+
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
   // Night mode: inverted output polarity on the reading surfaces only
@@ -282,6 +290,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+  // Dictionary word-select navigation mode and hold-to-repeat speed (two-button mode only).
+  uint8_t dictWordNavMode = DICT_NAV_FOUR_BUTTON;
+  uint8_t dictWordNavSpeed = DICT_NAV_SPEED_NORMAL;
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
@@ -354,6 +365,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+  unsigned long getDictWordNavIntervalMs() const;
 };
 
 // Helper macro to access settings

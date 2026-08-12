@@ -310,6 +310,16 @@ unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
 }
 
+unsigned long CrossPointSettings::getDictWordNavIntervalMs() const {
+  switch (dictWordNavSpeed) {
+    case DICT_NAV_SPEED_FAST:
+      return 250;
+    case DICT_NAV_SPEED_NORMAL:
+    default:
+      return 500;
+  }
+}
+
 int CrossPointSettings::getRefreshFrequency() const {
   switch (refreshFrequency) {
     case REFRESH_1:
