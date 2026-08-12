@@ -4,6 +4,8 @@
 #include <FreeInkUIIcon.h>
 #include <I18n.h>
 
+#include <atomic>
+
 #include "MappedInputManager.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -15,22 +17,47 @@
 // target and the touch snapshot FreeInkApp routing consumes.
 
 // One app-wide ThemeTokens instance shared by every FreeInkApp via
-// setThemeRef: the tokens are identical on every screen, so per-app copies
-// (~1.5KB each, and one per stacked activity) were pure heap waste. Refreshed
-// on every screen entry, so theme or font changes between activities
-// re-derive it; live theme changes (Settings) refresh it in place and every
-// referencing app repaints in the new look.
-inline freeink::ui::ThemeTokens& sharedUiThemeTokens() {
-  static freeink::ui::ThemeTokens tokens;
-  return tokens;
+// setThemeRef, so per-app copies (~1.5KB each, and one per stacked activity)
+// aren't pure heap waste. Refreshed on every screen entry, so theme or font
+// changes between activities re-derive it; live theme changes (Settings)
+// refresh it and every referencing app repaints in the new look.
+//
+// Backed by a small pool + an atomic cell (FreeInkApp::setThemeRef() takes a
+// pointer to the cell, not to a ThemeTokens instance directly) rather than a
+// single instance overwritten in place: refreshSharedUiThemeTokens() below
+// always builds the new tokens into whichever pool slot the cell does NOT
+// currently reference, then does one atomic store. Every app sharing the
+// cell picks up the change on its next theme() call, and nothing ever
+// dereferences an instance mid-overwrite — unlike a plain
+// `sharedTokens = uiThemeTokens(target);` in-place assignment, which a
+// render task reading theme().rowHeight/etc. field-by-field on another task
+// could observe as a torn mix of old and new fields.
+inline std::atomic<const freeink::ui::ThemeTokens*>& sharedUiThemeCell() {
+  static std::atomic<const freeink::ui::ThemeTokens*> cell{nullptr};
+  return cell;
+}
+
+// Rebuilds the shared tokens for `target` and atomically publishes them via
+// sharedUiThemeCell(). Returns the freshly-published instance for callers
+// that also want to read it back immediately (e.g. BaseTheme::drawHeader(),
+// which derives the same tokens as a render-path scratch value instead of
+// stack-allocating its own copy).
+inline const freeink::ui::ThemeTokens& refreshSharedUiThemeTokens(const freeink::ui::GfxRendererTarget& target) {
+  static freeink::ui::ThemeTokens pool[2];
+  auto& cell = sharedUiThemeCell();
+  const auto* current = cell.load(std::memory_order_relaxed);
+  freeink::ui::ThemeTokens* next = (current == &pool[0]) ? &pool[1] : &pool[0];
+  *next = uiThemeTokens(target);
+  cell.store(next, std::memory_order_release);
+  return *next;
 }
 
 // Refresh the shared tokens from the active UITheme + this target's fonts and
 // point the app at them. Replaces the old per-app `app.setTheme(...)` copies.
 template <typename App>
 inline void applySharedUiTheme(App& app, const freeink::ui::GfxRendererTarget& target) {
-  sharedUiThemeTokens() = uiThemeTokens(target);
-  app.setThemeRef(&sharedUiThemeTokens());
+  refreshSharedUiThemeTokens(target);
+  app.setThemeRef(&sharedUiThemeCell());
 }
 
 // Bind the uiScale fonts before FreeInkApp's constructor derives its theme

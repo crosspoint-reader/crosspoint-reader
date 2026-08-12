@@ -357,9 +357,11 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   fui::GfxRendererFrame<1> ui(renderer, spec.smallFontId, spec.bodyFontId, spec.titleFontId);
   // Refresh the app-wide shared tokens instead of copying ~1.5KB of
   // ThemeTokens onto this render-path stack frame; the values derived here
-  // are identical to what every FreeInkApp screen derives.
-  fui::ThemeTokens& tokens = sharedUiThemeTokens();
-  tokens = uiThemeTokens(ui.target);
+  // are identical to what every FreeInkApp screen derives. Goes through the
+  // same publish-a-fresh-slot path applySharedUiTheme() uses (see
+  // UiAppHelpers.h) rather than overwriting the previously-published
+  // instance in place, since some other FreeInkApp could be mid-read of it.
+  const fui::ThemeTokens& tokens = refreshSharedUiThemeTokens(ui.target);
   // Header status text (battery percent, right label) stays at the fixed
   // small font like the legacy headers; the uiScale small font is for list
   // subtitles.

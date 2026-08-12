@@ -17,6 +17,11 @@
 // render registers the option buttons (plus a chrome guard rect) on the render
 // task, and handleInput routes touch snapshots against that table on the loop
 // task, gated by the uiReady handshake (same pattern as UiListActivity).
+// render() builds into InteractionBuffer's non-published generation
+// (beginPublishCycle()) and publishes it only once every hit() call for the
+// frame is done (publish()), so handleInput()'s routePublished()/
+// publishedData() reads on the loop task always see a complete table, never
+// one render is mid-rebuilding.
 class OptionPopup {
  public:
   void show(StrId titleId, const StrId* optionIds, int optionCount, int currentIndex,
@@ -64,7 +69,7 @@ class OptionPopup {
       // Interactions are registered on the render task; only route once the
       // first render after show() has populated the table (uiReady handshake).
       if (uiReady) {
-        const freeink::ui::ActionEvent event = interactions.route(snap);
+        const freeink::ui::ActionEvent event = interactions.routePublished(snap);
         if (event && event.action == ACTION_OPTION) {
           // Tap released on an option: select it, fire, dismiss.
           selectedIndex = event.value;
@@ -89,7 +94,7 @@ class OptionPopup {
           // hit as the active interaction; read it back, no re-hit-testing).
           const int16_t idx = interactions.activeIndex();
           if (idx >= 0) {
-            const freeink::ui::Interaction& hit = interactions.data()[idx];
+            const freeink::ui::Interaction& hit = interactions.publishedData()[idx];
             if (hit.action == ACTION_OPTION && selectedIndex != hit.value) {
               selectedIndex = hit.value;
               requestUpdate();
@@ -147,6 +152,11 @@ class OptionPopup {
     const fui::InputSnapshot noInput{};
 
     uiReady = false;
+    // Builds into the generation handleInput()'s routePublished()/
+    // publishedData() aren't currently reading, so the loop task never sees
+    // this table mid-rebuild — see publish() below and
+    // InteractionBuffer::beginPublishCycle().
+    interactions.beginPublishCycle();
     fui::Frame<INTERACTION_CAPACITY> frame(target, device, noInput, interactions);
 
     const auto& metrics = UITheme::getInstance().getMetrics();
@@ -203,6 +213,9 @@ class OptionPopup {
     // option buttons win inside the dialog and the guard absorbs the rest.
     frame.hit(dialogRect, ACTION_CHROME, 0, fui::InputTouch);
     fui::optionDialog(frame, dialogRect, props);
+    // Atomically make this generation the one handleInput() reads, now that
+    // every hit() call for this frame is done.
+    interactions.publish();
     uiReady = true;
   }
 

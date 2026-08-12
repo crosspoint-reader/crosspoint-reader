@@ -909,8 +909,13 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   }
 
   // The FreeInkUI keyboard draws the keys and registers their hit rects into
-  // `interactions`; loop() routes touch snapshots against that table.
+  // `interactions`; loop() (the main task) routes touch snapshots against
+  // that table via TouchHoldRouter, which reads the published generation
+  // (routePublished()/publishedData()) — beginPublishCycle() here makes this
+  // render build into the OTHER generation, so loop() never sees a
+  // half-rebuilt table no matter when it runs relative to this.
   interactionsReady = false;
+  interactions.beginPublishCycle();
   fui::GfxRendererTarget target(renderer);
   target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
   target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
@@ -939,6 +944,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int hintsTop = renderer.getScreenHeight() - metrics.buttonHintsHeight;
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, hintsTop - (kbRect.y + kbRect.height)));
   fui::keyboard(frame, kbRect, props);
+  interactions.publish();
   interactionsReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
