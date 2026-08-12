@@ -52,6 +52,12 @@ class HalDisplay {
   bool supportsAsyncRefresh() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
+  // Output polarity. The framebuffer remains in normal polarity; inversion is
+  // applied by the display driver while sending it to the panel.
+  void setInverted(bool inverted);
+  bool toggleInverted();
+  bool isInverted() const;
+
   // Power management
   void deepSleep();
 

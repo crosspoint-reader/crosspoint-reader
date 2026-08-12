@@ -25,6 +25,9 @@ class DictionaryWordSelectActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  // Redraws the reader's page (word boxes over it), so it follows the reading
+  // surface's night-mode polarity; a normal-polarity flash mid-lookup jars.
+  bool appliesNightMode() const override { return true; }
 
  private:
   // Screen box of one selectable word. `text` points into the owned Page's
@@ -61,6 +64,7 @@ class DictionaryWordSelectActivity final : public Activity {
   Dictionary dict;
   bool dictOpenAttempted = false;
   bool dictOpenOk = false;
+  bool dictNeedsIndex = false;
 
   Popup popup = Popup::None;
   StrId popupMsg = StrId::STR_DICT_NOT_FOUND;

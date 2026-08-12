@@ -3,32 +3,31 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
-#include <functional>
-
-#include "activities/Activity.h"
-#include "components/UITheme.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiListActivity.h"
 
 class MappedInputManager;
 
 /**
  * Activity for selecting UI language
  */
-class LanguageSelectActivity final : public Activity {
+class LanguageSelectActivity final : public UiListActivity {
  public:
-  explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("LanguageSelect", renderer, mappedInput) {}
+  explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
   void onEnter() override;
-  void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
 
  private:
-  void handleSelection();
+  int listCount() const override { return totalItems; }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  const char* headerTitle() const override;
 
-  void onBack() { finish(); }
-  ButtonNavigator buttonNavigator;
-  int selectedIndex = 0;
   constexpr static uint8_t totalItems = getLanguageCount();
+
+  // Row storage: totalItems is a compile-time constant, so a fixed-capacity
+  // array avoids any heap allocation for the row list. Built once in
+  // onEnter() — activateIndex() finishes the activity immediately on
+  // selection, so buildScreen() never needs to see a different "Selected"
+  // row within one visit.
+  freeink::ui::ListItem rowItems[totalItems]{};
 };

@@ -7,7 +7,11 @@ class GfxRenderer;
 namespace RoundedRaffMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryHeight = 12,
-                                 .topPadding = 0,
+                                 // Legacy value was 0 (the old header drew its content 5px into the
+                                 // band, so it never showed). 15 drops the band clear of the X4 Pro
+                                 // bezel and centers the battery strip on the same line as Lyra's
+                                 // (5 + 40/2 == 15 + 20/2), so the header doesn't hug the top edge.
+                                 .topPadding = 15,
                                  .batteryBarHeight = 20,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
@@ -16,10 +20,24 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 42,
                                  .listWithSubtitleRowHeight = 69,
-                                 .menuRowHeight = 42,
+                                 .listRowGap = 6,
+                                 .listRowRadius = 20,
+                                 .listInset = 20,
+                                 .listSidePadding = 20,
+                                 .listSelectionStyle = 0,  // invert fill (black card)
+                                 .listScrollWidth = 4,
+                                 .listScrollSide = 0,
+                                 .listTitleBold = true,
+                                 .headerSidePadding = 18,
+                                 .headerUnderlineSize = 0,
+                                 .headerTitleAlign = 0,  // left
+                                 .headerBatterySide = 0,
+                                 .headerBatteryDetached = false,
+                                 .menuRowHeight = 42,  // not authoritative: getMenuRowHeight() derives the drawn height
                                  .menuSpacing = 6,
                                  .tabSpacing = 10,
                                  .tabBarHeight = 50,
+                                 .tabPillFullSlot = true,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
                                  .homeTopPadding = 55,
@@ -83,6 +101,7 @@ class RoundedRaffTheme : public BaseTheme {
   void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                            int selectorIndex, bool& coverRendered, bool& coverBufferStored, bool& bufferRestored,
                            std::function<bool()> storeCoverBuffer) const override;
+  int getMenuRowHeight(const GfxRenderer& renderer) const override;
   void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                       const std::function<std::string(int index)>& buttonLabel,
                       const std::function<UIIcon(int index)>& rowIcon) const override;

@@ -1,0 +1,23 @@
+# Manifest for src/components/icons/listIcons.h — regenerate with:
+#   python3 <freeink-sdk>/libs/assets/Icons/tools/gen_icons.py \
+#     --manifest src/components/icons/listIcons.manifest \
+#     --svgdir <freeink-sdk>/libs/assets/Icons/lucide/icons \
+#     --sizes 24,32 --out src/components/icons/listIcons.h
+# then clang-format -i the output.
+#
+# Stock Lucide icons ONLY. Hand-modified icons (sun-filled, moon-filled) live in
+# customListIcons.h, which is not generated — a full regeneration of listIcons.h
+# is safe and must not touch that file.
+folder = folder
+file-text = file-text
+image = image
+book = book
+file = file
+wifi = wifi
+library = library
+radio-tower = radio-tower
+sun = sun
+moon = moon
+upload = upload
+download = download
+bookmark = bookmark

@@ -3,6 +3,8 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <atomic>
+#include <memory>
 #include <optional>
 
 #include "BookmarkEntry.h"
@@ -26,8 +28,21 @@ class EpubReaderActivity final : public Activity {
   bool forcedRefreshPending = false;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;
+  std::optional<uint32_t> cachedVisibleTextOffset;
+  // Visible-codepoint offset of the page currently on screen, captured when the page is loaded
+  // (Page::visibleTextOffset). Lets saveProgress persist the offset without reopening section.bin.
+  std::optional<uint32_t> currentPageVisibleOffset;
+  // Explicit "land at this visible-codepoint offset in the target spine" request (bookmark open).
+  // Resolved in render() once the section is loaded/built far enough, then cleared. Unlike a
+  // settings-change reposition it always resolves by content, so it survives any re-pagination.
+  std::optional<uint32_t> pendingOffsetJump;
   unsigned long lastPageTurnTime = 0UL;
   unsigned long pageTurnDuration = 0UL;
+  // A turn that arrived while a render was in flight (or inside the debounce
+  // gap), latched instead of dropped: -1 back, +1 forward, 0 none. Holds at
+  // most one turn — mashing collapses to the latest direction — and is
+  // executed by loop() once the render task is idle again.
+  int8_t pendingManualTurn = 0;
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;
@@ -63,8 +78,16 @@ class EpubReaderActivity final : public Activity {
   // Set when the reader is left at end-of-book and SETTINGS.moveFinishedToReadFolder is on.
   // Consumed in onExit() to relocate the finished book into /Read/.
   bool pendingReadFolderMove = false;
-  // Next-book suggestion menu for the End-of-Book screen
-  EndOfBookOptions endOfBookOptions;
+  // Next-book suggestion menu for the End-of-Book screen. Lazy: it embeds a
+  // GfxRendererTarget + FreeInkApp (theme tokens by value, ~2KB), so it only
+  // exists while the end screen is actually showing — created at the render
+  // path's sole load site, dropped by loop() when the user pages back in.
+  std::unique_ptr<EndOfBookOptions> endOfBookOptions;
+  // Publication flag for the pointer above: the render task creates the object
+  // and release-stores true; the main task acquire-loads before dereferencing,
+  // so it never sees a partially constructed object. Cleared (main task, under
+  // RenderLock) before reset.
+  std::atomic<bool> endOfBookOptionsReady{false};
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -159,10 +182,11 @@ class EpubReaderActivity final : public Activity {
   bool buildPopupPending = false;
   // Draw the indexing popup mid-build (parser image-probe callback and deadline backstop).
   void showBuildPopup();
-  // Remap the cached relative reading position once the section's real page count is known
-  // (used after a settings change re-paginates a chapter). Returns true if currentPage moved.
+  // Map the cached content position into the rebuilt section (used after a
+  // settings change re-paginates a chapter). Returns true if currentPage moved.
   // No-op while the section is still building or when the pagination is unchanged (plain resume).
   bool applyDeferredReposition();
+  void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
@@ -202,6 +226,7 @@ class EpubReaderActivity final : public Activity {
   // speed would only burn battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
+  bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

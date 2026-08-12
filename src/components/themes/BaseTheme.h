@@ -38,11 +38,35 @@ struct ThemeMetrics {
   int contentSidePadding;
   int listRowHeight;
   int listWithSubtitleRowHeight;
+  // FreeInkUI list shape, consumed by uiThemeTokens() for screens rendered
+  // through FreeInkApp: the theme supplies geometry and selection style, the
+  // uiScale fonts supply the sizes. Plain data by design — the eventual
+  // SD-card theme files will provide exactly these values.
+  int listRowGap;          // vertical gap between rows
+  int listRowRadius;       // row corner radius (RoundedRaff cards, Lyra pill)
+  int listInset;           // horizontal inset of the whole list band
+  int listSidePadding;     // text inset within a row
+  int listSelectionStyle;  // 0=invert fill, 1=light pill, 2=underline, 3=triangle (fui::SelectionStyle order)
+  int listScrollWidth;     // scroll indicator thickness
+  int listScrollSide;      // 0 = right edge, 1 = left edge
+  bool listTitleBold;      // bold row titles (RoundedRaff)
+  // FreeInkUI header shape, same contract as the list fields above.
+  int headerSidePadding;    // title text inset
+  int headerUnderlineSize;  // bottom rule thickness (Lyra), 0 = none
+  int headerTitleAlign;     // 0 = left, 1 = center, 2 = right (fui::TextAlign order)
+  int headerBatterySide;    // 0 = right edge, 1 = left edge
+  // Battery in its own corner strip (batteryBarHeight tall) with the title on
+  // the lower sub-band spanning the full width (Lyra), vs sharing the title
+  // line with a width reserve (Classic, RoundedRaff).
+  bool headerBatteryDetached;
   int menuRowHeight;
   int menuSpacing;
 
   int tabSpacing;
   int tabBarHeight;
+  // Selected-tab pill fills its equal-width slot (legacy RoundedRaff tabs)
+  // instead of shrinking to hug the label (legacy Lyra tabs).
+  bool tabPillFullSlot = false;
 
   int scrollBarWidth;
   int scrollBarRightOffset;
@@ -118,6 +142,19 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 50,
+                                 .listRowGap = 0,
+                                 .listRowRadius = 0,
+                                 .listInset = 0,
+                                 .listSidePadding = 20,
+                                 .listSelectionStyle = 0,  // invert fill
+                                 .listScrollWidth = 4,
+                                 .listScrollSide = 0,
+                                 .listTitleBold = false,
+                                 .headerSidePadding = 18,
+                                 .headerUnderlineSize = 0,
+                                 .headerTitleAlign = 1,  // centered
+                                 .headerBatterySide = 0,
+                                 .headerBatteryDetached = false,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,
                                  .tabSpacing = 10,
@@ -181,12 +218,18 @@ class BaseTheme {
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                        bool showPercentage = true) const;  // Left aligned (reader mode)
-  void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
-                        bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
+  // Shared by every theme's drawButtonHints(): centres a hint label in its box,
+  // wrapping to two lines rather than overflowing when it's too wide to fit.
+  static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
+                            int boxHeight, int singleLineYOffset);
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  // Menu row height as DRAWN by drawButtonMenu. HomeActivity builds its touch
+  // grid from this, so hit bands always match the visuals (RoundedRaff derives
+  // its row height from the font, not the metrics table).
+  virtual int getMenuRowHeight(const GfxRenderer& renderer) const;
   virtual int getListRowStep(bool hasSubtitle) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,

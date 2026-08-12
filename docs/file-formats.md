@@ -90,11 +90,21 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 30
+### Version 37
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 37 increases the fixed-size footnote href field from 96 to 256 bytes.
+This changes each serialized footnote record from 128 to 288 bytes, so older
+section caches must be discarded and rebuilt.
+
+Version 36 invalidates cached word positions after ruby and CJK justification
+layout changes.
+
+Version 35 adds a header offset and a `uint32_t` entry per page for the
+visible-text offset LUT. The other section LUTs remain unchanged.
 
 Version 34 is binary-identical to version 33. The version was bumped because
 word-gap suppression was narrowed to tokens glued together in the source: v33
@@ -113,8 +123,9 @@ superscript, and subscript. The format also includes:
 - cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
   image rendering mode, and Focus Reading
 - page offset LUT
+- per-page visible-text offset LUT (zero-based Unicode codepoints in `<body>`)
 - anchor-to-page map for fragment and footnote navigation
-- paragraph and list-item LUTs used by KOReader sync page refinement
+- paragraph and list-item LUTs retained for navigation and legacy sync fallback
 - optional per-word Focus Reading split metadata
 - per-page footnote entries
 - serialized word style bits for underline, strikethrough, superscript, and
@@ -131,10 +142,10 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 30
+#define EXPECTED_VERSION 37
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
-#define FOOTNOTE_HREF_LEN 96
+#define FOOTNOTE_HREF_LEN 256
 
 struct String {
     u32 length [[hidden, comment("String byte length")]];
@@ -299,6 +310,7 @@ struct SectionBin {
     u32 anchorMapOffset;
     u32 paragraphLutOffset;
     u32 listItemLutOffset;
+    u32 visibleTextLutOffset;
 
     Page pages[pageCount];
 
@@ -319,6 +331,10 @@ struct SectionBin {
 
     if (listItemLutOffset != 0 && paragraphLutOffset != 0) {
         u16 listItemIndex[paragraphLut.count] @ listItemLutOffset;
+    }
+
+    if (visibleTextLutOffset != 0) {
+	u32 visibleTextOffset[pageCount] @ visibleTextLutOffset;
     }
 };
 

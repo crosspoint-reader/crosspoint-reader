@@ -15,6 +15,7 @@ class FontCacheManager;
 class SdCardFont;
 
 #include <cstring>
+#include <deque>
 #include <map>
 #include <string>
 #include <vector>
@@ -108,11 +109,6 @@ class GfxRenderer {
       : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
-  static constexpr int VIEWABLE_MARGIN_TOP = 9;
-  static constexpr int VIEWABLE_MARGIN_RIGHT = 3;
-  static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
-  static constexpr int VIEWABLE_MARGIN_LEFT = 3;
-
   // Setup
   void begin();  // must be called right after display.begin()
   void insertFont(int fontId, EpdFontFamily font);
@@ -150,7 +146,7 @@ class GfxRenderer {
   // (which holds a const GfxRenderer&) before measuring word widths. Safe to call on non-SD fonts (no-op).
   // styleMask: bitmask of styles to prepare (bit 0=regular, 1=bold, 2=italic, 3=bold-italic).
   void ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F) const;
-  void ensureSdCardFontReady(int fontId, const std::vector<std::string>& words, bool includeHyphen,
+  void ensureSdCardFontReady(int fontId, const std::deque<std::string>& words, bool includeHyphen,
                              uint8_t styleMask = 0x0F) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
@@ -228,6 +224,9 @@ class GfxRenderer {
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
   void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
+  // Counter-invert content images in the logical framebuffer so output-level
+  // dark mode leaves their original polarity unchanged.
+  void preserveImagePolarity(int x, int y, int width, int height) const;
   void fillPolygon(const int* xPoints, const int* yPoints, int numPoints, bool state = true) const;
 
   // Snapshot / restore a screen-coordinate framebuffer region (byte-aligned in

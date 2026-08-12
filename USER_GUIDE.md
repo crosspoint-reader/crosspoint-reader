@@ -186,7 +186,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
   - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
-
+  - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#37-sleep-screen) below for more information
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
@@ -367,7 +367,7 @@ It also interoperates with KOReader apps/devices when they use the same server a
 
 ##### Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)
 
-When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too) and additionally stores an exact spine/page position for lossless CrossPoint-to-CrossPoint sync.
+When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too). CrossPoint records page starts as chapter-content offsets and sends the corresponding standard KOReader XPath, so devices with different fonts or layouts can return to the same text.
 
 1. On each CrossPoint device:
 
@@ -501,6 +501,7 @@ The **Sleep Screen** setting controls what is displayed when the device goes to 
 | **Custom**         | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found.                             |
 | **Cover**          | The cover of the currently open book. Falls back to **Dark** if no book is open.                                             |
 | **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
+| **Transparent**    | A BMP overlay drawn over the current screen. Supports alpha transparency in 32-bit BGRA images and treats white as transparent in regular BMPs. Falls back to **Dark** if no valid overlay image is found. |
 | **None**           | A blank screen.                                                                                                              |
 
 #### Cover settings
@@ -515,12 +516,21 @@ When using **Cover** or **Cover + Custom**, two additional settings apply:
 To use custom sleep images, set the sleep screen mode to **Custom** or **Cover + Custom**, then place images on the SD card:
 
 - **Multiple Images (recommended):** Create a `.sleep` directory in the root of the SD card and place any number of `.bmp` images inside. One will be randomly selected each time the device sleeps. (A directory named `sleep` is also accepted as a fallback.)
-- **Single Image:** Place a file named `sleep.bmp` in the root directory. This is used as a fallback if no valid images are found in the `.sleep`/`sleep` directory.
+- **Single Image:** Place a file named `sleep.bmp` in the root directory. This takes priority over the `.sleep`/`sleep` directories.
+
+#### Transparent overlay images
+
+To use transparent sleep overlays, set the sleep screen mode to **Transparent**, then place BMP files on the SD card:
+
+- **Multiple Images (recommended):** Create a `.sleep-overlay` directory in the root of the SD card and place any number of valid overlay `.bmp` images inside. One will be randomly selected each time the device sleeps. A directory named `sleep-overlay` is also accepted as a fallback.
+- **Single Image:** Place a file named `sleep-overlay.bmp` in the root directory. This takes priority over the `.sleep-overlay`/`sleep-overlay` directories.
+
+Transparent overlay files are intentionally separate from normal sleep images. Regular BMP formats supported by CrossPoint are accepted; white pixels leave the existing screen unchanged. For per-pixel alpha transparency, use a 32-bit BGRA BMP with both visible and non-opaque pixels. Opaque white pixels in these alpha images erase the content behind them.
 
 > [!TIP]
 > For best results:
-> 
-> - Use uncompressed BMP files with 24-bit color depth
+> - For non-transparent **Custom** mode, use uncompressed BMP files with 24-bit color depth.
+> - For **Transparent** mode, use a regular BMP for white-as-transparent artwork or an uncompressed 32-bit BGRA BMP for per-pixel alpha.
 > - X4: Use a resolution of 480x800 pixels to match the device's screen resolution.
 > - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
 
