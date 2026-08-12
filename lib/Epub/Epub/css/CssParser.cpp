@@ -41,6 +41,11 @@ constexpr size_t READ_BUFFER_SIZE = 512;
 // Prevents unbounded memory growth from pathological CSS files
 constexpr size_t MAX_RULES = 1500;
 
+// Rule insertion uses throwing STL allocators. With firmware exceptions
+// disabled, leave enough total and contiguous heap before growing the map.
+constexpr size_t MIN_FREE_HEAP_FOR_RULE_GROWTH = 64 * 1024;
+constexpr size_t MIN_LARGEST_BLOCK_FOR_RULE_GROWTH = 8 * 1024;
+
 // Minimum free heap required to apply CSS during rendering
 // If below this threshold, we skip CSS to avoid display artifacts.
 constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
@@ -447,6 +452,16 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
   // silently; the only heap allocation per kept selector is the std::string
   // map key, which is unavoidable since the map owns its keys.
   bool limitReached = false;
+  const auto hasHeapForRuleGrowth = [&]() {
+    const size_t freeHeap = ESP.getFreeHeap();
+    const size_t largestBlock = ESP.getMaxAllocHeap();
+    if (freeHeap >= MIN_FREE_HEAP_FOR_RULE_GROWTH && largestBlock >= MIN_LARGEST_BLOCK_FOR_RULE_GROWTH) {
+      return true;
+    }
+    LOG_ERR("CSS", "Stopping CSS rule growth (free=%u maxAlloc=%u rules=%u)", static_cast<unsigned>(freeHeap),
+            static_cast<unsigned>(largestBlock), static_cast<unsigned>(rulesBySelector_.size()));
+    return false;
+  };
   forEachDelimitedToken(
       selectorGroup, [](char c) { return c == ','; },
       [&](std::string_view sel) {
@@ -485,6 +500,10 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
         if (it != rulesBySelector_.end()) {
           it->second.applyOver(style);
         } else {
+          if (!hasHeapForRuleGrowth()) {
+            limitReached = true;
+            return;
+          }
           rulesBySelector_.emplace(std::string(sel), style);
         }
       });
