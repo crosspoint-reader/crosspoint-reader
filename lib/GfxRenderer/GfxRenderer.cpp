@@ -1,6 +1,7 @@
 #include "GfxRenderer.h"
 
 #include <BidiUtils.h>
+#include <BoardConfig.h>
 #include <BuildScratch.h>
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
@@ -750,11 +751,14 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
 // Border is inside the rectangle
 void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
                            const bool state) const {
+  // Keep the border inside [x, x+width) like the thin overload: the previous
+  // right/bottom edges at x+width / y+height sat one pixel outside the rect,
+  // so stroked boxes looked shifted against fills computed from the rect.
   for (int i = 0; i < lineWidth; i++) {
-    drawLine(x + i, y + i, x + width - i, y + i, state);
-    drawLine(x + width - i, y + i, x + width - i, y + height - i, state);
-    drawLine(x + width - i, y + height - i, x + i, y + height - i, state);
-    drawLine(x + i, y + height - i, x + i, y + i, state);
+    drawLine(x + i, y + i, x + width - 1 - i, y + i, state);
+    drawLine(x + width - 1 - i, y + i, x + width - 1 - i, y + height - 1 - i, state);
+    drawLine(x + width - 1 - i, y + height - 1 - i, x + i, y + height - 1 - i, state);
+    drawLine(x + i, y + height - 1 - i, x + i, y + i, state);
   }
 }
 
@@ -2249,30 +2253,33 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
+  // Board truth: the bezel insets live in the active profile (panel-native
+  // portrait frame); this only rotates them into the current orientation.
+  const BoardConfig::ViewableInsets& vi = BoardConfig::ACTIVE.viewableInsets;
   switch (orientation) {
     case Portrait:
-      *outTop = VIEWABLE_MARGIN_TOP;
-      *outRight = VIEWABLE_MARGIN_RIGHT;
-      *outBottom = VIEWABLE_MARGIN_BOTTOM;
-      *outLeft = VIEWABLE_MARGIN_LEFT;
+      *outTop = vi.top;
+      *outRight = vi.right;
+      *outBottom = vi.bottom;
+      *outLeft = vi.left;
       break;
     case LandscapeClockwise:
-      *outTop = VIEWABLE_MARGIN_LEFT;
-      *outRight = VIEWABLE_MARGIN_TOP;
-      *outBottom = VIEWABLE_MARGIN_RIGHT;
-      *outLeft = VIEWABLE_MARGIN_BOTTOM;
+      *outTop = vi.left;
+      *outRight = vi.top;
+      *outBottom = vi.right;
+      *outLeft = vi.bottom;
       break;
     case PortraitInverted:
-      *outTop = VIEWABLE_MARGIN_BOTTOM;
-      *outRight = VIEWABLE_MARGIN_LEFT;
-      *outBottom = VIEWABLE_MARGIN_TOP;
-      *outLeft = VIEWABLE_MARGIN_RIGHT;
+      *outTop = vi.bottom;
+      *outRight = vi.left;
+      *outBottom = vi.top;
+      *outLeft = vi.right;
       break;
     case LandscapeCounterClockwise:
-      *outTop = VIEWABLE_MARGIN_RIGHT;
-      *outRight = VIEWABLE_MARGIN_BOTTOM;
-      *outBottom = VIEWABLE_MARGIN_LEFT;
-      *outLeft = VIEWABLE_MARGIN_TOP;
+      *outTop = vi.right;
+      *outRight = vi.bottom;
+      *outBottom = vi.left;
+      *outLeft = vi.top;
       break;
   }
 }

@@ -60,6 +60,12 @@ class HalGPIO {
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
   bool isXteinkDevice() const;
 
+  // True when the board's page buttons sit on the left/right screen edges
+  // (X3, X4 Pro) rather than an off-screen vertical rocker. Drives side-hint
+  // placement and the flipped large-step direction in selection activities.
+  // Keyed off the active BoardConfig profile, not the X3/X4 runtime detection.
+  bool hasEdgeSideButtons() const;
+
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
 
@@ -75,8 +81,20 @@ class HalGPIO {
   bool hasTouch() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
+  // Raw release edge, reported even when the contact was not a tap (swipe end,
+  // drag-off). Snapshot builders forward it so interaction routing can clear
+  // pressed state.
+  bool wasTouchReleased() const;
   bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
   bool isTouchHeldAt(float& nx, float& ny) const;
+  // One-shot long-press, fired by the SDK classifier while the finger is still
+  // down (stationary contact held past its threshold). Position = touch-down
+  // point. Callers that act on it should suppressTouchContact() so the lift
+  // cannot also tap.
+  bool wasTouchLongPress(float& nx, float& ny) const;
+  // Ignore the remainder of the current contact (its continued hold and its
+  // release edge). Self-clears once the contact ends.
+  void suppressTouchContact();
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
   bool wasTouchActivity() const;

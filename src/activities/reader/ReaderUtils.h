@@ -88,11 +88,12 @@ inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInpu
 
   const int16_t width = static_cast<int16_t>(renderer.getScreenWidth());
   const int16_t height = static_cast<int16_t>(renderer.getScreenHeight());
-  const int16_t previousZoneWidth = width / 3;
+  // Outer thirds only: the middle third is the reader-menu tap
+  // (isTouchMenuTap below), so it must not double as a page turn.
+  const int16_t zoneWidth = width / 3;
   const freeink::ui::TapZone zones[] = {
-      {freeink::ui::Rect{0, 0, previousZoneWidth, height}, READER_TOUCH_PREV},
-      {freeink::ui::Rect{previousZoneWidth, 0, static_cast<int16_t>(width - previousZoneWidth), height},
-       READER_TOUCH_NEXT},
+      {freeink::ui::Rect{0, 0, zoneWidth, height}, READER_TOUCH_PREV},
+      {freeink::ui::Rect{static_cast<int16_t>(width - zoneWidth), 0, zoneWidth, height}, READER_TOUCH_NEXT},
   };
 
   for (const auto& zone : zones) {
@@ -105,9 +106,30 @@ inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInpu
   return result;
 }
 
-// Reader menu opens on a downward swipe from the top edge (replaces the old center tap-and-hold).
-inline bool isTouchMenuGesture(const MappedInputManager& input) {
-  return SETTINGS.touchReaderControls && input.hasTouch() && input.wasMenuGesture();
+// Tap in the middle third of the screen: the tap path into the reader menu on
+// every touch board. The page-turn tap zones are the outer thirds, so the
+// middle is free in tap mode.
+inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager& input) {
+  if (!input.hasTouch()) return false;
+  int x = 0;
+  int y = 0;
+  if (!input.wasScreenTapped(x, y)) return false;
+  const int width = renderer.getScreenWidth();
+  // Same boundary math as detectTouchPageTurn's outer zones, so the middle
+  // band meets them with no dead column when width % 3 != 0.
+  const int zoneWidth = width / 3;
+  return x >= zoneWidth && x < width - zoneWidth;
+}
+
+// Reader menu opens on the menu edge-swipe or a middle-third tap. On home-key
+// boards a long press of the capacitive key runs the user-selected long-press
+// function instead (SETTINGS.longPressMenuFunction), not the menu.
+// With touch reader controls Off the reading surface ignores touch entirely,
+// menu included, so a stray brush of the screen can't open it; the menu stays
+// reachable via the Confirm button.
+inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input) {
+  if (!SETTINGS.touchReaderControls) return false;
+  return (input.hasTouch() && input.wasMenuGesture()) || isTouchMenuTap(renderer, input);
 }
 
 // One helper, blocking or deferred: the async form starts the refresh and
@@ -170,6 +192,16 @@ struct BackNavCallback {
 // - with backShortToFileBrowser: go to file browser.
 inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
                                  const char* filePath, BackNavCallback goHome) {
+  // The reading surface deliberately has no swipe-to-exit path on any touch
+  // board: the bottom-edge up-swipe already exits, and in swipe page-turn
+  // mode a right swipe must page back instead. Back swipes stay available in menus and other activities; only
+  // this reader-surface handler ignores them. Physical Back buttons are
+  // unaffected: isPressed() is button-only, and this guard skips just the
+  // gesture's own release frame.
+  if (mappedInput.wasBackGesture()) {
+    return false;
+  }
+
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS) {
     if (SETTINGS.backShortToFileBrowser) {
       goHome.fn(goHome.ctx);
