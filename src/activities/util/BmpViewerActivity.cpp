@@ -1,13 +1,12 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
+#include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
-
-#include <Epub/converters/PngToFramebufferConverter.h>
 
 #include <algorithm>
 
@@ -81,7 +80,8 @@ bool BmpViewerActivity::renderPng() {
                                static_cast<float>(renderer.getScreenHeight()) / dimensions.height);
   const int width = std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * std::min(scale, 1.0f)));
   const int height = std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * std::min(scale, 1.0f)));
-  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width, height};
+  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
+                      height};
 
   PngToFramebufferConverter converter;
   return converter.decodeToFramebuffer(filePath, renderer, config);
@@ -197,10 +197,9 @@ void BmpViewerActivity::doSetSleepCover() {
   const bool transparentMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
   if (!canSetSleepCover()) return;
 
-  const char* destination = transparentMode
-                                ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG
-                                                                       : TRANSPARENT_SLEEP_ROOT_BMP)
-                                : CUSTOM_SLEEP_ROOT_BMP;
+  const char* destination =
+      transparentMode ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
+                      : CUSTOM_SLEEP_ROOT_BMP;
   bool success = filePath == destination;
 
   if (!success) {
