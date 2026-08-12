@@ -2,7 +2,7 @@ _language_name: "Français"
 _language_code: "FR"
 _order: "2"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "Skaldify"
 STR_BOOTING: "DÉMARRAGE EN COURS"
 STR_SLEEPING: "VEILLE"
 STR_ENTERING_SLEEP: "Mise en veille"

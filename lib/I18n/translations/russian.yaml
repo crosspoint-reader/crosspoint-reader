@@ -2,7 +2,7 @@ _language_name: "Русский"
 _language_code: "RU"
 _order: "6"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "Skaldify"
 STR_BOOTING: "Загрузка"
 STR_SLEEPING: "Спящий режим"
 STR_ENTERING_SLEEP: "Переход в сон"

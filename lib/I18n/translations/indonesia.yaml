@@ -2,7 +2,7 @@ _language_name: "Bahasa Indonesia"
 _language_code: "ID"
 _order: "30"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "Skaldify"
 STR_BOOTING: "MEMULAI"
 STR_SLEEPING: "MODE TIDUR"
 STR_ENTERING_SLEEP: "Memasuki mode tidur"

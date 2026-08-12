@@ -2,7 +2,7 @@ _language_name: "Tiếng Việt"
 _language_code: "VI"
 _order: "25"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "Skaldify"
 STR_BOOTING: "ĐANG KHỞI ĐỘNG"
 STR_SLEEPING: "ĐANG NGỦ"
 STR_ENTERING_SLEEP: "Đang vào chế độ ngủ"

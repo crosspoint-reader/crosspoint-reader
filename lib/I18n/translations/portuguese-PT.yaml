@@ -2,7 +2,7 @@ _language_name: "Português (Portugal)"
 _language_code: "P2"
 _order: "27"
 
-STR_CROSSPOINT: "CrossPoint"
+STR_CROSSPOINT: "Skaldify"
 STR_BOOTING: "A INICIAR"
 STR_SLEEPING: "EM REPOUSO"
 STR_ENTERING_SLEEP: "A entrar em repouso"

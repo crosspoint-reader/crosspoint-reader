@@ -1,0 +1,19 @@
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <rect width="120" height="120" fill="white"/>
+  <polygon points="18,38 56,25 56,92 18,104" fill="none" stroke="black" stroke-width="4"/>
+  <polygon points="64,25 102,38 102,104 64,92" fill="none" stroke="black" stroke-width="4"/>
+  <line x1="60" y1="28" x2="60" y2="94" stroke="black" stroke-width="4"/>
+  <line x1="26" y1="48" x2="50" y2="40" stroke="black" stroke-width="2"/>
+  <line x1="26" y1="60" x2="50" y2="52" stroke="black" stroke-width="2"/>
+  <line x1="26" y1="72" x2="50" y2="64" stroke="black" stroke-width="2"/>
+  <line x1="70" y1="40" x2="94" y2="48" stroke="black" stroke-width="2"/>
+  <line x1="70" y1="52" x2="94" y2="60" stroke="black" stroke-width="2"/>
+  <line x1="70" y1="64" x2="94" y2="72" stroke="black" stroke-width="2"/>
+  <line x1="60" y1="5" x2="60" y2="31" stroke="black" stroke-width="3"/>
+  <line x1="47" y1="18" x2="73" y2="18" stroke="black" stroke-width="3"/>
+  <line x1="51" y1="9" x2="69" y2="27" stroke="black" stroke-width="2"/>
+  <line x1="69" y1="9" x2="51" y2="27" stroke="black" stroke-width="2"/>
+  <circle cx="60" cy="107" r="6" fill="none" stroke="black" stroke-width="3"/>
+  <line x1="60" y1="101" x2="48" y2="92" stroke="black" stroke-width="2"/>
+  <line x1="60" y1="101" x2="72" y2="92" stroke="black" stroke-width="2"/>
+</svg>
