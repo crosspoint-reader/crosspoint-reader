@@ -52,12 +52,13 @@ void FileBrowserActivity::loadFiles() {
 
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
+    const bool isDirectory = file.isDirectory();
     if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
         strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {
       continue;
     }
 
-    if (file.isDirectory()) {
+    if (isDirectory) {
       files.emplace_back(std::string(fileNameBuffer.get()) + "/");
     } else {
       std::string_view filename{fileNameBuffer.get()};
