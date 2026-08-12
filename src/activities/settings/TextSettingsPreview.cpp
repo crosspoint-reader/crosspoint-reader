@@ -52,8 +52,9 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
     }
   }
 
-  parsed.layoutAndExtractLines(renderer, fontId, static_cast<uint16_t>(textWidth),
-                               [&layout](std::shared_ptr<TextBlock> line) { layout.lines.push_back(std::move(line)); });
+  parsed.layoutAndExtractLines(
+      renderer, fontId, static_cast<uint16_t>(textWidth),
+      [&layout](std::shared_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); });
 }
 
 }  // namespace
@@ -93,7 +94,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
   // glyph cache while this activity is up — true today: the only evictor is
   // FontCacheManager::PrewarmScope, used solely by the reader/dictionary activities.
   const PreviewKey key{.fontId = fontId,
-                       .fontSize = SETTINGS.fontSize,
+                       .fontPointSize = SETTINGS.fontPointSize,
                        .screenMargin = SETTINGS.screenMargin,
                        .textWidth = textWidth,
                        .lineCompression = compression,

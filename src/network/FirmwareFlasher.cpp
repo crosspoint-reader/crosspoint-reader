@@ -46,6 +46,8 @@ const char* resultName(Result r) {
       return "BAD_CHECKSUM";
     case Result::BAD_SHA:
       return "BAD_SHA";
+    case Result::BAD_CHIP:
+      return "BAD_CHIP";
     case Result::BAD_SIZE:
       return "BAD_SIZE";
     case Result::NO_PARTITION:
@@ -62,6 +64,22 @@ const char* resultName(Result r) {
       return "OTADATA_FAIL";
   }
   return "?";
+}
+
+uint16_t runningPartitionChipId() {
+  // esp_partition_read hits SPI flash; cache the running slot's chip_id so we
+  // only pay that cost once per boot. The running image is immutable at
+  // runtime, so a function-local static is safe here.
+  static uint16_t cached = [] {
+    const esp_partition_t* run = esp_ota_get_running_partition();
+    if (!run) return static_cast<uint16_t>(0xFFFF);
+    uint16_t id = 0xFFFF;
+    // chip_id sits at offset 12 of esp_image_header_t. memcpy target is a
+    // uint16_t local, so RISC-V alignment is guaranteed.
+    if (esp_partition_read(run, 12, &id, sizeof(id)) != ESP_OK) return static_cast<uint16_t>(0xFFFF);
+    return id;
+  }();
+  return cached;
 }
 
 namespace {
@@ -116,6 +134,17 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
     LOG_ERR("FLASH", "validate: bad magic 0x%02X", header[0]);
     file.close();
     return Result::BAD_MAGIC;
+  }
+  // Reject an image built for a different MCU family before it can brick the
+  // device. chip_id lives at esp_image_header_t offset 12; compare it against
+  // the running slot's own chip_id (self-describing, no chip enumeration).
+  uint16_t imageChip;
+  std::memcpy(&imageChip, header + 12, sizeof(imageChip));
+  const uint16_t deviceChip = runningPartitionChipId();
+  if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+    LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+    file.close();
+    return Result::BAD_CHIP;
   }
   const uint8_t segCount = header[1];
   const bool hashAppended = header[23] != 0;

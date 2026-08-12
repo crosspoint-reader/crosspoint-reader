@@ -56,9 +56,13 @@ void EpubReaderBookmarksActivity::loop() {
     result.xpath = bookmark.xpath;
     result.percentage = bookmark.percentage;
     result.hasSavedProgress = true;
+    result.hasVisibleTextOffset = bookmark.hasVisibleTextOffset;
+    result.visibleTextOffset = bookmark.visibleTextOffset;
+    // The offset is spine-relative, so carry its spine even when the legacy page hints below
+    // are stale. The reader validates the index.
+    result.spineIndex = bookmark.computedSpineIndex;
     if (bookmark.computedChapterPageCount > 0 && bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
         bookmark.computedSpineIndex < epub->getSpineItemsCount()) {
-      result.spineIndex = bookmark.computedSpineIndex;
       result.page = bookmark.computedChapterProgress;
       result.totalPages = bookmark.computedChapterPageCount;
     }

@@ -1248,6 +1248,8 @@ void CrossPointWebServer::handleGetSettings() const {
       seenFirst = true;
     }
     server->sendContent(output);
+    yield();                          // Yield to allow WiFi and other tasks to process during a slow send
+    resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
 
   server->sendContent("]");
@@ -1360,6 +1362,8 @@ void CrossPointWebServer::handleGetOpdsServers() const {
 
     if (i > 0) server->sendContent(",");
     server->sendContent(output);
+    yield();                          // Yield to allow WiFi and other tasks to process during a slow send
+    resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
 
   server->sendContent("]");
@@ -1451,8 +1455,7 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
 // ---- Wi-Fi Credentials API ----
 
 void CrossPointWebServer::handleGetWifiNetworks() const {
-  const auto& credentials = WIFI_STORE.getCredentials();
-  const std::string& lastConnectedSsid = WIFI_STORE.getLastConnectedSsid();
+  const auto credentials = WIFI_STORE.getCredentialSummaries();
 
   // Stream JSON array incrementally to avoid allocating the full response in memory
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -1468,14 +1471,16 @@ void CrossPointWebServer::handleGetWifiNetworks() const {
     doc["index"] = i;
     doc["ssid"] = credentials[i].ssid;
     // Never expose Wi-Fi passwords over the API — only indicate whether one is set
-    doc["hasPassword"] = !credentials[i].password.empty();
-    doc["isLastConnected"] = credentials[i].ssid == lastConnectedSsid;
+    doc["hasPassword"] = credentials[i].hasPassword;
+    doc["isLastConnected"] = credentials[i].isLastConnected;
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
 
     if (i > 0) server->sendContent(",");
     server->sendContent(output);
+    yield();                          // Yield to allow WiFi and other tasks to process during a slow send
+    resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
 
   server->sendContent("]");
@@ -1510,15 +1515,19 @@ void CrossPointWebServer::handlePostWifiNetwork() {
 
   if (doc["index"].is<int>()) {
     int idx = doc["index"].as<int>();
-    const auto& credentials = WIFI_STORE.getCredentials();
-    if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+    if (idx < 0) {
+      server->send(400, "text/plain", "Invalid network index");
+      return;
+    }
+    const auto credential = WIFI_STORE.getCredentialAt(static_cast<size_t>(idx));
+    if (!credential) {
       server->send(400, "text/plain", "Invalid network index");
       return;
     }
 
-    const std::string oldSsid = credentials[static_cast<size_t>(idx)].ssid;
+    const std::string oldSsid = credential->ssid;
     if (!hasPasswordField) {
-      password = credentials[static_cast<size_t>(idx)].password;
+      password = credential->password;
     }
 
     bool ok = true;
@@ -1566,19 +1575,22 @@ void CrossPointWebServer::handleDeleteWifiNetwork() {
   }
 
   int idx = doc["index"].as<int>();
-  const auto& credentials = WIFI_STORE.getCredentials();
-  if (idx < 0 || idx >= static_cast<int>(credentials.size())) {
+  if (idx < 0) {
+    server->send(400, "text/plain", "Invalid network index");
+    return;
+  }
+  const auto ssid = WIFI_STORE.getSsidAt(static_cast<size_t>(idx));
+  if (!ssid) {
     server->send(400, "text/plain", "Invalid network index");
     return;
   }
 
-  const std::string ssid = credentials[static_cast<size_t>(idx)].ssid;
-  if (!WIFI_STORE.removeCredential(ssid)) {
+  if (!WIFI_STORE.removeCredential(*ssid)) {
     server->send(400, "text/plain", "Failed to delete Wi-Fi network");
     return;
   }
 
-  LOG_DBG("WEB", "Deleted Wi-Fi network at index %d (SSID: %s)", idx, ssid.c_str());
+  LOG_DBG("WEB", "Deleted Wi-Fi network at index %d (SSID: %s)", idx, ssid->c_str());
   server->send(200, "text/plain", "OK");
 }
 

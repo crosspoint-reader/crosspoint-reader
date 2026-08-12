@@ -63,7 +63,8 @@ jobs:
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 
-  build:
+  build-default:
+    name: Build default
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -90,14 +91,10 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
-      - name: Build CrossPoint
-        # Both envs in ONE pio invocation: a second `pio run` can wipe the whole
-        # .pio/build tree (project-checksum mismatch after the S3 toolchain
-        # installs into the restored cache), deleting the default firmware.bin
-        # before the artifact upload.
+      - name: Build default firmware
         run: |
           set -euo pipefail
-          pio run -e default -e sticky | tee pio.log
+          pio run -e default | tee pio.log
 
       - name: Extract firmware stats
 
@@ -119,6 +116,52 @@ jobs:
           name: firmware.bin
           path: .pio/build/default/firmware.bin
           if-no-files-found: error
+
+  build-sticky:
+    name: Build sticky
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+          enable-cache: false
+
+      - name: Install PlatformIO Core
+        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Build sticky firmware
+        run: |
+          set -euo pipefail
+          pio run -e sticky | tee pio.log
+
+      - name: Extract firmware stats
+        run: |
+          set -euo pipefail
+          ram_line="$(grep -E "RAM:\\s" -m1 pio.log || true)"
+          flash_line="$(grep -E "Flash:\\s" -m1 pio.log || true)"
+          echo "ram_line=${ram_line}" >> "$GITHUB_OUTPUT"
+          echo "flash_line=${flash_line}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Sticky firmware build stats"
+            if [ -n "$ram_line" ]; then echo "- ${ram_line}"; else echo "- RAM: not found"; fi
+            if [ -n "$flash_line" ]; then echo "- ${flash_line}"; else echo "- Flash: not found"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
   unit-tests:
     runs-on: ubuntu-latest
@@ -152,7 +195,8 @@ jobs:
   test-status:
     name: Test Status
     needs:
-      - build
+      - build-default
+      - build-sticky
       - clang-format
       - cppcheck
       - unit-tests

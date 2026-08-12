@@ -10,9 +10,10 @@ A dictionary folder must contain:
 
 - `.idx` — word index (required, **must be uncompressed** — a `.idx.gz` will not work; decompress it on your computer with `gzip -d` first)
 - `.dict` or `.dict.dz` — definition data (`.dict.dz` is supported as-is; entries are decompressed on the fly during lookup)
+- `.syn` — synonym index (optional; maps alternate spellings and irregular forms to their headword)
 - `.ifo` — metadata (optional)
 
-Not supported: `.syn` synonym files (ignored), dictionaries with 64-bit index offsets (`idxoffsetbits=64` in the `.ifo` — rare, and rejected with an error), and HTML-formatted definitions render as raw markup rather than styled text.
+Not supported: dictionaries with 64-bit index offsets (`idxoffsetbits=64` in the `.ifo` — rare, and rejected with an error), and HTML-formatted definitions render as raw markup rather than styled text.
 
 ## Setting Up a Dictionary
 
@@ -35,13 +36,14 @@ One word on the page becomes highlighted:
 2. Press **Confirm** to look up the highlighted word.
 3. Press **Back** to return to the reader.
 
-On the very first lookup with a dictionary (and again if the dictionary file changes), the reader shows *"Indexing dictionary…"* while it builds a small `.qidx` sidecar file next to the `.idx`. This takes a few seconds for large dictionaries and makes all subsequent lookups fast. The sidecar can be deleted safely at any time — it will simply be rebuilt.
+On the very first lookup with a dictionary (and again whenever the `.idx` or `.syn` source file changes), the reader shows *"Indexing dictionary…"* while it builds small sidecar files next to them — a `.qidx` for the word index, and a `.sidx` when a `.syn` synonym file is present. Each sidecar is rebuilt independently, only when its own source changes. This takes a few seconds for large dictionaries and makes all subsequent lookups fast. The sidecars can be deleted safely at any time — they will simply be rebuilt.
 
 ### How Lookup Works
 
 1. **Direct match** — the word is found as-is (case-insensitive) in the dictionary index. Surrounding punctuation is ignored.
-2. **Stemming** — on a miss, common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
-3. **Not found** — a short popup appears and you return to word selection.
+2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
+3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
+4. **Not found** — a short popup appears and you return to word selection.
 
 ## The Definition Screen
 
@@ -49,3 +51,19 @@ When a word is found, the definition screen shows the matched headword at the to
 
 - **Left/Right** or side **Up/Down** — previous / next page
 - **Back** — return to word selection
+
+
+
+## Where to find dictionaries
+
+> credit to https://github.com/koreader/koreader/wiki/Dictionary-support for the list.
+
+- The [reader.dict](https://www.reader-dict.com) (ex "BoboTiG/ebook-reader-dict") project provides StarDict version of daily dumps of [Wiktionary](https://www.wiktionary.org/) monolingual dictionaries for a variety of languages. It also provides [non-free multilingual](https://www.reader-dict.com) dictionaries.
+- The [WikDict](https://www.wikdict.com) project provides free bilingual dictionaries based on [Wiktionary](https://www.wiktionary.org/) for a lot of language pairs. StarDict versions can be [downloaded from here](https://download.wikdict.com/dictionaries/stardict/).
+- The [`Vuizur/Wiktionary-Dictionaries`](https://github.com/Vuizur/Wiktionary-Dictionaries) repository contains dictionaries based on [Wiktionary](https://www.wiktionary.org/) from many languages to English, including English-English.
+- The [DictInfo](https://www.dictinfo.com/) website provides outdated monolingual dictionaries based on [Wiktionary](https://www.wiktionary.org/).
+- The [Firedict site](https://tuxor1337.frama.io/firedict/dictionaries.html) contains a list of freely available dictionaries.
+- [wiktionary_stardict](https://xxyzz.github.io/wiktionary_stardict/): update monthly.
+- [Fictionaries](https://fictionary.gumroad.com/) provides dictionaries for various speculative fiction books and series.
+- [World Factbooks Archive](https://github.com/MilkMp/CIA-World-Factbooks-Archive-1990-2025) provides 36 years of CIA's World Factbook dictionaries in StarDict format.
+- [StarDict-Hebrew](https://github.com/Uri-Tauber/StarDict-Hebrew) Hebrew-English StarDict versions of Babylon dictionaries.

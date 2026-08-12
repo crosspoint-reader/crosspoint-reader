@@ -61,6 +61,7 @@ class PersistableStoreBase {
    * If the decoded password requires a resave (e.g. from plaintext fallback), `needsResave` is set to true.
    */
   static std::string extractPassword(JsonVariantConst doc, bool& needsResave);
+  static std::string extractPassword(JsonVariantConst doc, bool& needsResave, size_t maxLength, bool& valid);
 };
 
 /**
