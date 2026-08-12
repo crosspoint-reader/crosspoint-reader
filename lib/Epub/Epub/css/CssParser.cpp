@@ -41,22 +41,6 @@ constexpr size_t READ_BUFFER_SIZE = 512;
 // Prevents unbounded memory growth from pathological CSS files
 constexpr size_t MAX_RULES = 1500;
 
-// Rule insertion uses throwing STL allocators. With firmware exceptions
-// disabled, leave enough total and contiguous heap before growing the map.
-constexpr size_t MIN_FREE_HEAP_FOR_RULE_GROWTH = 64 * 1024;
-constexpr size_t MIN_LARGEST_BLOCK_FOR_RULE_GROWTH = 8 * 1024;
-
-bool hasHeapForRuleGrowth(const size_t ruleCount, const char* operation) {
-  const size_t freeHeap = ESP.getFreeHeap();
-  const size_t largestBlock = ESP.getMaxAllocHeap();
-  if (freeHeap >= MIN_FREE_HEAP_FOR_RULE_GROWTH && largestBlock >= MIN_LARGEST_BLOCK_FOR_RULE_GROWTH) {
-    return true;
-  }
-  LOG_ERR("CSS", "Stopping %s (free=%u maxAlloc=%u rules=%u)", operation, static_cast<unsigned>(freeHeap),
-          static_cast<unsigned>(largestBlock), static_cast<unsigned>(ruleCount));
-  return false;
-}
-
 // Minimum free heap required to apply CSS during rendering
 // If below this threshold, we skip CSS to avoid display artifacts.
 constexpr size_t MIN_FREE_HEAP_FOR_CSS = 48 * 1024;
@@ -446,16 +430,16 @@ CssStyle CssParser::parseDeclarations(std::string_view declBlock) {
 
 // Rule processing
 
-bool CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style) {
+void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style) {
   // Skip rules that don't define any supported properties to save RAM.
   if (!style.defined.anySet()) {
-    return true;
+    return;
   }
 
   // Check if we've reached the rule limit before processing
   if (rulesBySelector_.size() >= MAX_RULES) {
     LOG_DBG("CSS", "Reached max rules limit (%zu), stopping CSS parsing", MAX_RULES);
-    return true;
+    return;
   }
 
   // Walk comma-separated selectors in place — no vector allocation. Selectors
@@ -463,7 +447,6 @@ bool CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
   // silently; the only heap allocation per kept selector is the std::string
   // map key, which is unavoidable since the map owns its keys.
   bool limitReached = false;
-  bool heapGrowthStopped = false;
   forEachDelimitedToken(
       selectorGroup, [](char c) { return c == ','; },
       [&](std::string_view sel) {
@@ -502,22 +485,17 @@ bool CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
         if (it != rulesBySelector_.end()) {
           it->second.applyOver(style);
         } else {
-          if (heapGrowthStopped || !hasHeapForRuleGrowth(rulesBySelector_.size(), "CSS rule growth")) {
-            heapGrowthStopped = true;
-            return;
-          }
           rulesBySelector_.emplace(std::string(sel), style);
         }
       });
-  return !heapGrowthStopped;
 }
 
 // Main parsing entry point
 
-CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
+bool CssParser::loadFromStream(HalFile& source) {
   if (!source) {
     LOG_ERR("CSS", "Cannot read from invalid file");
-    return ParseResult::Error;
+    return false;
   }
 
   size_t totalRead = 0;
@@ -535,7 +513,6 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
 
   int bodyDepth = 0;
   bool skippingRule = false;
-  ParseResult parseResult = ParseResult::Complete;
   CssStyle currentStyle;
 
   auto handleChar = [&](const char c) {
@@ -585,9 +562,7 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
           parseDeclarationIntoStyle(declBuffer, currentStyle);
         }
         if (!skippingRule) {
-          if (!processRuleBlockWithStyle(selector, currentStyle)) {
-            parseResult = ParseResult::DegradedLowHeap;
-          }
+          processRuleBlockWithStyle(selector, currentStyle);
         }
         selector.clear();
         declBuffer.clear();
@@ -657,7 +632,7 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
   }
 
   LOG_DBG("CSS", "Parsed %zu rules from %zu bytes", rulesBySelector_.size(), totalRead);
-  return parseResult;
+  return true;
 }
 
 // Style resolution
@@ -797,14 +772,14 @@ bool CssParser::saveToCache() const {
   return true;
 }
 
-CssParser::CacheLoadResult CssParser::loadFromCache() {
+bool CssParser::loadFromCache() {
   if (cachePath.empty()) {
-    return CacheLoadResult::Invalid;
+    return false;
   }
 
   HalFile file;
   if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
-    return CacheLoadResult::Invalid;
+    return false;
   }
 
   // Clear existing rules
@@ -818,28 +793,23 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove((cachePath + rulesCache).c_str());
-    return CacheLoadResult::Invalid;
+    return false;
   }
 
   // Read rule count
   uint16_t ruleCount = 0;
   if (file.read(&ruleCount, sizeof(ruleCount)) != sizeof(ruleCount)) {
-    return CacheLoadResult::Invalid;
+    return false;
   }
 
   if (ruleCount > MAX_RULES) {
     LOG_DBG("CSS", "Invalid cache rule count (%u > %zu)", ruleCount, MAX_RULES);
     rulesBySelector_.clear();
-    return CacheLoadResult::Invalid;
+    return false;
   }
 
   // Size the bucket array up front to avoid incremental rehashes while loading rules.
-  if (ruleCount > 0) {
-    if (!hasHeapForRuleGrowth(ruleCount, "CSS cache loading")) {
-      return CacheLoadResult::LowMemory;
-    }
-    rulesBySelector_.reserve(ruleCount);
-  }
+  rulesBySelector_.reserve(ruleCount);
 
   auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
     return static_cast<size_t>(file.available()) >= neededBytes;
@@ -856,34 +826,30 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     uint16_t selectorLen = 0;
     if (!hasRemainingBytes(sizeof(selectorLen))) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
 
     if (selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH || !hasRemainingBytes(selectorLen)) {
       LOG_DBG("CSS", "Invalid selector length in cache: %u", selectorLen);
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
 
-    if (!hasHeapForRuleGrowth(rulesBySelector_.size(), "CSS cache string allocation")) {
-      rulesBySelector_.clear();
-      return CacheLoadResult::LowMemory;
-    }
     std::string selector;
     selector.resize(selectorLen);
     if (file.read(&selector[0], selectorLen) != selectorLen) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
 
     if (!hasRemainingBytes(CSS_FIXED_STYLE_BYTES)) {
       LOG_DBG("CSS", "Truncated CSS cache while reading style payload");
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
 
     // Read CssStyle fields
@@ -892,31 +858,31 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.textAlign = static_cast<CssTextAlign>(enumVal);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.fontStyle = static_cast<CssFontStyle>(enumVal);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.fontWeight = static_cast<CssFontWeight>(enumVal);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.textDecoration = static_cast<CssTextDecoration>(enumVal & CSS_TEXT_DECORATION_MASK);
 
     if (file.read(&enumVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.direction = static_cast<CssTextDirection>(enumVal);
 
@@ -938,14 +904,14 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
         !readLength(style.paddingBottom) || !readLength(style.paddingLeft) || !readLength(style.paddingRight) ||
         !readLength(style.imageHeight) || !readLength(style.imageWidth)) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
 
     // Read display value
     uint8_t displayVal;
     if (file.read(&displayVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.display = static_cast<CssDisplay>(displayVal);
 
@@ -953,7 +919,7 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     uint8_t verticalAlignVal;
     if (file.read(&verticalAlignVal, 1) != 1) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlignVal);
 
@@ -961,7 +927,7 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
       rulesBySelector_.clear();
-      return CacheLoadResult::Invalid;
+      return false;
     }
     style.defined.textAlign = (definedBits & 1 << 0) != 0;
     style.defined.fontStyle = (definedBits & 1 << 1) != 0;
@@ -982,13 +948,9 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     style.defined.direction = (definedBits & 1 << 16) != 0;
     style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
 
-    if (!hasHeapForRuleGrowth(rulesBySelector_.size(), "CSS cache rule insertion")) {
-      rulesBySelector_.clear();
-      return CacheLoadResult::LowMemory;
-    }
-    rulesBySelector_.emplace(std::move(selector), style);
+    rulesBySelector_[selector] = style;
   }
 
   LOG_DBG("CSS", "Loaded %u rules from cache", ruleCount);
-  return CacheLoadResult::Complete;
+  return true;
 }
