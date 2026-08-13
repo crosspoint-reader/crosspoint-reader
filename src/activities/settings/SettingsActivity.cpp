@@ -60,8 +60,8 @@ void SettingsActivity::rebuildSettingsLists() {
     SleepScreenCollection::discover(SleepScreenCollection::resolveDirectory(), sleepScreenSets);
   }
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries,
-                                       sleepScreenSets.empty() ? nullptr : &sleepScreenSets)) {
+  for (auto& setting :
+       getSettingsList(&sdFontSystem.registry(), &dictionaries, sleepScreenSets.empty() ? nullptr : &sleepScreenSets)) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       // The sunlight fading fix is a grayscale-waveform compensation that does

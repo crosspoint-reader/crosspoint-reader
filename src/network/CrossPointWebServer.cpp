@@ -1158,8 +1158,8 @@ void CrossPointWebServer::handleGetSettings() const {
   // three built-in fonts.
   std::vector<std::string> sleepScreenSets;
   SleepScreenCollection::discover(SleepScreenCollection::resolveDirectory(), sleepScreenSets);
-  const auto& settings = getSettingsList(&sdFontSystem.registry(), nullptr,
-                                         sleepScreenSets.empty() ? nullptr : &sleepScreenSets);
+  const auto& settings =
+      getSettingsList(&sdFontSystem.registry(), nullptr, sleepScreenSets.empty() ? nullptr : &sleepScreenSets);
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
@@ -1265,8 +1265,8 @@ void CrossPointWebServer::handlePostSettings() {
 
   std::vector<std::string> sleepScreenSets;
   SleepScreenCollection::discover(SleepScreenCollection::resolveDirectory(), sleepScreenSets);
-  const auto& settings = getSettingsList(&sdFontSystem.registry(), nullptr,
-                                         sleepScreenSets.empty() ? nullptr : &sleepScreenSets);
+  const auto& settings =
+      getSettingsList(&sdFontSystem.registry(), nullptr, sleepScreenSets.empty() ? nullptr : &sleepScreenSets);
   int applied = 0;
 
   for (const auto& s : settings) {

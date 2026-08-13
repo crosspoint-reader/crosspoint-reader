@@ -11,6 +11,10 @@ namespace SleepScreenCollection {
 // resolve the same directory after reboot.
 static constexpr size_t MAX_SET_NAME_BYTES = 127;
 
+// Bound discovery for predictable embedded RAM/UI use. The 16-option selector
+// keeps the other two slots for Default and an unavailable saved selection.
+static constexpr size_t MAX_NAMED_SET_COUNT = 14;
+
 // Preserve the legacy directory priority. /sleep.bmp remains a separate,
 // higher-priority check in SleepActivity.
 const char* resolveDirectory();

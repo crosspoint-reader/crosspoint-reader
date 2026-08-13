@@ -184,10 +184,8 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 
 // Build the sleep-screen set selector from the already-discovered first-level
 // folders. An empty stored value represents root-level BMPs (Default).
-inline SettingInfo buildSleepScreenSetSetting(
-    const std::vector<std::string>& sleepScreenSets) {
-  static_assert(CrossPointSettings::SLEEP_SCREEN_SET_NAME_CAPACITY ==
-                SleepScreenCollection::MAX_SET_NAME_BYTES + 1);
+inline SettingInfo buildSleepScreenSetSetting(const std::vector<std::string>& sleepScreenSets) {
+  static_assert(CrossPointSettings::SLEEP_SCREEN_SET_NAME_CAPACITY == SleepScreenCollection::MAX_SET_NAME_BYTES + 1);
 
   std::vector<std::string> setNames = sleepScreenSets;
   std::vector<std::string> labels;
@@ -240,9 +238,9 @@ inline SettingInfo buildSleepScreenSetSetting(
 // the font-family entry is replaced in that copy with a registry-aware version.
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
-inline std::vector<SettingInfo> getSettingsList(
-    const SdCardFontRegistry* registry = nullptr, const std::vector<DictionaryEntry>* dictionaries = nullptr,
-    const std::vector<std::string>* sleepScreenSets = nullptr) {
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                const std::vector<std::string>* sleepScreenSets = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -512,8 +510,8 @@ inline std::vector<SettingInfo> getSettingsList(
     v.insert(it, buildDictionarySetting(*dictionaries));
   }
   if (sleepScreenSets && !sleepScreenSets->empty()) {
-    auto it = std::find_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
+    auto it =
+        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
     if (it != v.end()) v.insert(std::next(it), buildSleepScreenSetSetting(*sleepScreenSets));
   }
   return v;

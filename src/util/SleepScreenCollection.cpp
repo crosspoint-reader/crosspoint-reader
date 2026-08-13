@@ -14,7 +14,6 @@ namespace SleepScreenCollection {
 namespace {
 
 constexpr size_t NAME_BUFFER_SIZE = 1024;
-constexpr size_t EXPECTED_SET_COUNT = 8;
 
 struct ScanScratch {
   std::optional<Bitmap> bitmap;
@@ -80,7 +79,7 @@ const char* resolveDirectory() {
 
 void discover(const char* sleepDirectory, std::vector<std::string>& sets) {
   sets.clear();
-  sets.reserve(EXPECTED_SET_COUNT);
+  sets.reserve(MAX_NAMED_SET_COUNT + 1);
   if (!sleepDirectory) return;
 
   auto scratch = makeUniqueNoThrow<ScanScratch>();
@@ -97,7 +96,7 @@ void discover(const char* sleepDirectory, std::vector<std::string>& sets) {
     if (nameLength == 0 || shouldSkipEntry(scratch->name)) continue;
     if (!entry.isDirectory()) {
       if (isValidBitmap(entry, scratch->name, *scratch)) hasDefault = true;
-    } else if (nameLength <= MAX_SET_NAME_BYTES) {
+    } else if (sets.size() < MAX_NAMED_SET_COUNT && nameLength <= MAX_SET_NAME_BYTES) {
       memcpy(scratch->setName, scratch->name, nameLength + 1);
       if (scanDirectory(entry, *scratch)) sets.emplace_back(scratch->setName);
     }

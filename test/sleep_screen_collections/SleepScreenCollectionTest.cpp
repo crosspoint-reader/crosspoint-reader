@@ -30,6 +30,18 @@ TEST_F(SleepScreenCollectionTest, DiscoversDefaultAndFirstLevelSetsInNaturalOrde
   EXPECT_EQ(sets, std::vector<std::string>({"", "Art", "Photos"}));
 }
 
+TEST_F(SleepScreenCollectionTest, BoundsNamedSetsAndKeepsDefault) {
+  Storage.addFile("/sleep/root.bmp");
+  for (size_t i = 0; i < SleepScreenCollection::MAX_NAMED_SET_COUNT + 5; i++) {
+    Storage.addFile("/sleep/Set" + std::to_string(i) + "/image.bmp");
+  }
+
+  std::vector<std::string> sets;
+  SleepScreenCollection::discover("/sleep", sets);
+  ASSERT_EQ(sets.size(), SleepScreenCollection::MAX_NAMED_SET_COUNT + 1);
+  EXPECT_TRUE(sets.front().empty());
+}
+
 TEST_F(SleepScreenCollectionTest, NestedFoldersAndTheirImagesAreIgnored) {
   Storage.addFile("/sleep/Photos/a.bmp");
   Storage.addFile("/sleep/Photos/2025/b.bmp");
