@@ -3,6 +3,7 @@
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
 
+#include <cstddef>
 #include <cstdint>
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
@@ -173,6 +174,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Empty selects root-level BMP files (the Default set). A named value is an
+  // immediate child directory of the resolved custom sleep-screen directory.
+  static constexpr size_t SLEEP_SCREEN_SET_NAME_CAPACITY = 128;
+  char sleepScreenSet[SLEEP_SCREEN_SET_NAME_CAPACITY] = "";
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;

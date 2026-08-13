@@ -7,16 +7,20 @@
 #include <SdCardFontRegistry.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <iterator>
 #include <string>
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
 #include "util/DictionaryRegistry.h"
+#include "util/SleepScreenCollection.h"
+#include "util/StringUtils.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -178,6 +182,52 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return s;
 }
 
+// Build the sleep-screen set selector from the already-discovered first-level
+// folders. An empty stored value represents root-level BMPs (Default).
+inline SettingInfo buildSleepScreenSetSetting(const std::vector<std::string>& sleepScreenSets) {
+  static_assert(CrossPointSettings::SLEEP_SCREEN_SET_NAME_CAPACITY == SleepScreenCollection::MAX_SET_NAME_BYTES + 1);
+
+  std::vector<std::string> setNames = sleepScreenSets;
+  std::vector<std::string> labels;
+  labels.reserve(sleepScreenSets.size() + 1);
+
+  const char* const defaultLabel = I18N.get(StrId::STR_DEFAULT_VALUE);
+  int selectedIndex = -1;
+  for (size_t i = 0; i < setNames.size(); i++) {
+    std::string label = setNames[i].empty() ? defaultLabel : setNames[i];
+    if (!setNames[i].empty() && StringUtils::asciiCaseCmp(label.c_str(), defaultLabel) == 0) label += '/';
+    labels.push_back(std::move(label));
+    if (StringUtils::asciiCaseCmp(setNames[i].c_str(), SETTINGS.sleepScreenSet) == 0) selectedIndex = i;
+  }
+
+  const size_t availableCount = setNames.size();
+  if (selectedIndex < 0) {
+    const char* const selectedName = SETTINGS.sleepScreenSet[0] == '\0' ? defaultLabel : SETTINGS.sleepScreenSet;
+    char unavailableLabel[192];
+    snprintf(unavailableLabel, sizeof(unavailableLabel), I18N.get(StrId::STR_SLEEP_SCREEN_SET_UNAVAILABLE),
+             selectedName);
+    setNames.emplace_back(SETTINGS.sleepScreenSet);
+    labels.emplace_back(unavailableLabel);
+    selectedIndex = static_cast<int>(setNames.size() - 1);
+  }
+
+  SettingInfo setting;
+  setting.nameId = StrId::STR_SLEEP_SCREEN_SET;
+  setting.type = SettingType::ENUM;
+  setting.enumStringValues = std::move(labels);
+  setting.key = "sleepScreenSet";
+  setting.category = StrId::STR_CAT_DISPLAY;
+  setting.valueGetter = [selectedIndex] { return static_cast<uint8_t>(selectedIndex); };
+  setting.valueSetter = [setNames = std::move(setNames), availableCount](const uint8_t value) {
+    if (value >= availableCount || strcmp(SETTINGS.sleepScreenSet, setNames[value].c_str()) == 0) return;
+    strncpy(SETTINGS.sleepScreenSet, setNames[value].c_str(), sizeof(SETTINGS.sleepScreenSet) - 1);
+    SETTINGS.sleepScreenSet[sizeof(SETTINGS.sleepScreenSet) - 1] = '\0';
+    APP_STATE.clearRecentSleep();
+    APP_STATE.saveToFile();
+  };
+  return setting;
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -189,7 +239,8 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                const std::vector<std::string>* sleepScreenSets = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -457,6 +508,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     auto it =
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.category == StrId::STR_CAT_CONTROLS; });
     v.insert(it, buildDictionarySetting(*dictionaries));
+  }
+  if (sleepScreenSets && !sleepScreenSets->empty()) {
+    auto it =
+        std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
+    if (it != v.end()) v.insert(std::next(it), buildSleepScreenSetSetting(*sleepScreenSets));
   }
   return v;
 }

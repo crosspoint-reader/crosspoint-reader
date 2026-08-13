@@ -315,6 +315,7 @@
   let preserveQuickResumeTimeoutOn = false;
   let quickResumeTimeoutAutoEnabled = false;
   const SLEEP_SCREEN_MODE = {
+    CUSTOM: 2,
     QUICK_RESUME: 6
   };
 
@@ -480,6 +481,12 @@
   }
 
   function updateSettingsVisibility() {
+    const sleepScreenVal = getControlValue('sleepScreen');
+    const sleepScreenSetRow = document.getElementById('row-setting-sleepScreenSet');
+    if (sleepScreenSetRow) {
+      sleepScreenSetRow.style.display = sleepScreenVal === SLEEP_SCREEN_MODE.CUSTOM ? '' : 'none';
+    }
+
     const shortPwrBtnVal = getControlValue('shortPwrBtn');
     const pwrBtnFootnoteBackRow = document.getElementById('row-setting-pwrBtnFootnoteBack');
     if (pwrBtnFootnoteBackRow) {
@@ -493,7 +500,7 @@
 
   function handleSettingChanged(key) {
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
-    if (key === 'shortPwrBtn') {
+    if (key === 'shortPwrBtn' || key === 'sleepScreen') {
       updateSettingsVisibility();
     }
     markChanged();

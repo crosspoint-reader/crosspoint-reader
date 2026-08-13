@@ -33,6 +33,7 @@ class CrossPointState : public PersistableStore<CrossPointState> {
 
   void pushRecentSleep(uint16_t idx);
   void pushRecentOverlaySleep(uint16_t idx);
+  void clearRecentSleep();
 };
 
 #define APP_STATE CrossPointState::getInstance()
