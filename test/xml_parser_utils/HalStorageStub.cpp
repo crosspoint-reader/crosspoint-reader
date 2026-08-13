@@ -33,21 +33,18 @@ HalStorage HalStorage::instance;
 
 HalStorage::HalStorage() = default;
 
-bool HalStorage::exists(const char* path) {
-  return fileStore().find(path) != fileStore().end();
-}
+bool HalStorage::exists(const char* path) { return fileStore().find(path) != fileStore().end(); }
 
-bool HalStorage::remove(const char* path) {
-  return fileStore().erase(path) > 0;
-}
+bool HalStorage::remove(const char* path) { return fileStore().erase(path) > 0; }
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   (void)moduleName;
-  auto impl = std::make_unique<HalFile::Impl>();
   auto it = fileStore().find(path);
-  if (it != fileStore().end()) {
-    impl->data = it->second;
+  if (it == fileStore().end()) {
+    return false;
   }
+  auto impl = std::make_unique<HalFile::Impl>();
+  impl->data = it->second;
   impl->pos = 0;
   impl->open = true;
   file = HalFile(std::move(impl));
