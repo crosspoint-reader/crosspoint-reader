@@ -247,8 +247,8 @@ struct BmpConvertCtx {
 
   std::unique_ptr<uint8_t[]> bmpRow;
 
-  std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
-  std::unique_ptr<FloydSteinbergDitherer> fsDitherer;
+  std::unique_ptr<AtkinsonDithererOriginal> atkinsonDitherer;
+  std::unique_ptr<FloydSteinbergDithererOriginal> fsDitherer;
   std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
 
   uint8_t rowsSinceYield;
@@ -680,13 +680,13 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
     }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
+      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDithererOriginal>(outWidth);
       if (!ctx.atkinsonDitherer) {
         LOG_ERR("JPG", "OOM: AtkinsonDitherer");
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
-      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
+      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDithererOriginal>(outWidth);
       if (!ctx.fsDitherer) {
         LOG_ERR("JPG", "OOM: FloydSteinbergDitherer");
         return false;
