@@ -40,6 +40,12 @@ void CrossPointState::pushRecentOverlaySleep(uint16_t idx) {
   pushRecentIndex(recentOverlaySleepImages, recentOverlaySleepPos, recentOverlaySleepFill, idx);
 }
 
+void CrossPointState::clearRecentSleep() {
+  memset(recentSleepImages, 0, sizeof(recentSleepImages));
+  recentSleepPos = 0;
+  recentSleepFill = 0;
+}
+
 void CrossPointState::toJson(JsonDocument& doc) const {
   doc["openEpubPath"] = openEpubPath;
   JsonArray recentArr = doc["recentSleepImages"].to<JsonArray>();

@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <utility>
 
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
@@ -29,6 +30,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/SleepScreenCollection.h"
 
 namespace fui = freeink::ui;
 
@@ -53,7 +55,13 @@ void SettingsActivity::rebuildSettingsLists() {
   std::vector<DictionaryEntry> dictionaries;
   DictionaryRegistry::discover(dictionaries);
 
-  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries)) {
+  std::vector<std::string> sleepScreenSets;
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
+    SleepScreenCollection::discover(SleepScreenCollection::resolveDirectory(), sleepScreenSets);
+  }
+
+  for (auto& setting : getSettingsList(&sdFontSystem.registry(), &dictionaries,
+                                       sleepScreenSets.empty() ? nullptr : &sleepScreenSets)) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       // The sunlight fading fix is a grayscale-waveform compensation that does
@@ -286,7 +294,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                     ? static_cast<uint8_t>(setting.enumValues.size())
                                     : static_cast<uint8_t>(setting.enumStringValues.size());
     const uint8_t cur = setting.valueGetter();
-    if (totalValues > 2) {
+    if (totalValues > 2 || setting.nameId == StrId::STR_SLEEP_SCREEN_SET) {
       const auto valueSetter = setting.valueSetter;
       auto onSelect = [this, valueSetter, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
         valueSetter(idx);

@@ -25,6 +25,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/SleepScreenCollection.h"
 
 namespace {
 
@@ -395,6 +396,21 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   return true;
 }
 
+bool selectRandomSleepSet(const char* sleepDir, std::string& selectedPath) {
+  std::string selectedDirectory;
+  const bool usedSelectedSet =
+      SleepScreenCollection::resolveSelectedDirectory(sleepDir, SETTINGS.sleepScreenSet, selectedDirectory);
+
+  if (usedSelectedSet) {
+    if (selectRandomSleepFile(selectedDirectory.c_str(), SleepRecentKind::Standard, selectedPath)) return true;
+    APP_STATE.clearRecentSleep();
+  } else if (SETTINGS.sleepScreenSet[0] != '\0') {
+    APP_STATE.clearRecentSleep();
+  }
+
+  return selectRandomSleepFile(sleepDir, SleepRecentKind::Standard, selectedPath);
+}
+
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -471,8 +487,8 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   std::string selectedPath;
-  if (!selectRandomSleepFile("/.sleep", SleepRecentKind::Standard, selectedPath)) {
-    selectRandomSleepFile("/sleep", SleepRecentKind::Standard, selectedPath);
+  if (!selectRandomSleepSet("/.sleep", selectedPath)) {
+    selectRandomSleepSet("/sleep", selectedPath);
   }
 
   if (!selectedPath.empty()) {
