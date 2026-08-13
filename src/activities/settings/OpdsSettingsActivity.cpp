@@ -12,9 +12,41 @@
 namespace fui = freeink::ui;
 
 namespace {
-// Editable fields: Name, URL, Username, Password.
-// Existing servers also show a Delete option (BASE_ITEMS + 1).
-constexpr int BASE_ITEMS = 4;
+// Editable fields: Name, URL, Username, Password, Custom Header 1, Custom
+// Header 2. Existing servers also show a Delete option (BASE_ITEMS + 1).
+constexpr int BASE_ITEMS = 6;
+constexpr int CUSTOM_HEADER_1_INDEX = 4;
+constexpr int CUSTOM_HEADER_2_INDEX = 5;
+
+std::string trim(const std::string& s) {
+  const size_t start = s.find_first_not_of(" \t");
+  if (start == std::string::npos) return "";
+  const size_t end = s.find_last_not_of(" \t");
+  return s.substr(start, end - start + 1);
+}
+
+// "Name: Value" -> trimmed name/value. A missing colon treats the whole
+// entry as a bare header name with no value.
+void parseCustomHeader(const std::string& line, HttpHeader& header) {
+  const size_t colon = line.find(':');
+  if (colon == std::string::npos) {
+    header.name = trim(line);
+    header.value.clear();
+  } else {
+    header.name = trim(line.substr(0, colon));
+    header.value = trim(line.substr(colon + 1));
+  }
+}
+
+std::string formatCustomHeader(const HttpHeader& header) {
+  if (header.name.empty()) return "";
+  return header.value.empty() ? header.name : header.name + ": " + header.value;
+}
+
+std::string formatCustomHeaderMasked(const HttpHeader& header) {
+  if (header.name.empty()) return "";
+  return header.value.empty() ? header.name : header.name + ": ******";
+}
 }  // namespace
 
 OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -22,8 +54,9 @@ OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputMan
     : UiListActivity("OpdsSettings", renderer, mappedInput), serverIndex(serverIndex) {
   // Labels never change (unlike the values, which track editServer's fields
   // live), so they're set once here rather than every buildScreen() call.
-  static constexpr StrId fieldNames[BASE_ITEMS] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL,
-                                                   StrId::STR_USERNAME, StrId::STR_PASSWORD};
+  static constexpr StrId fieldNames[BASE_ITEMS] = {StrId::STR_SERVER_NAME,     StrId::STR_OPDS_SERVER_URL,
+                                                   StrId::STR_USERNAME,        StrId::STR_PASSWORD,
+                                                   StrId::STR_CUSTOM_HEADER_1, StrId::STR_CUSTOM_HEADER_2};
   for (int i = 0; i < BASE_ITEMS; i++) {
     fieldRowItems[i].label = I18N.get(fieldNames[i]);
     fieldRowItems[i].actionValue = static_cast<int16_t>(i);
@@ -150,7 +183,23 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (nav.selected == 4 && !isNewServer) {
+  } else if (nav.selected == CUSTOM_HEADER_1_INDEX || nav.selected == CUSTOM_HEADER_2_INDEX) {
+    // Custom Header 1 or 2 - single "Name: Value" line, parsed on save.
+    const size_t slot = static_cast<size_t>(nav.selected == CUSTOM_HEADER_1_INDEX ? 0 : 1);
+    const StrId label = nav.selected == CUSTOM_HEADER_1_INDEX ? StrId::STR_CUSTOM_HEADER_1 : StrId::STR_CUSTOM_HEADER_2;
+    const std::string prefill = formatCustomHeader(editServer.customHeaders[slot]);
+    auto handler = [this, slot](const ActivityResult& result) {
+      if (!result.isCancelled) {
+        const auto& kb = std::get<KeyboardResult>(result.data);
+        parseCustomHeader(kb.text, editServer.customHeaders[slot]);
+        saveServer();
+        requestUpdate();
+      }
+    };
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(label), prefill, 160, InputType::Text),
+        handler);
+  } else if (nav.selected == BASE_ITEMS && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -185,6 +234,11 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   fieldRowItems[1].value = editServer.url.empty() ? tr(STR_NOT_SET) : editServer.url.c_str();
   fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
   fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
+  for (size_t i = 0; i < OpdsServer::MAX_CUSTOM_HEADERS; i++) {
+    headerDisplayBuf[i] = formatCustomHeaderMasked(editServer.customHeaders[i]);
+    fieldRowItems[CUSTOM_HEADER_1_INDEX + i].value =
+        headerDisplayBuf[i].empty() ? tr(STR_NOT_SET) : headerDisplayBuf[i].c_str();
+  }
 
   fui::ListProps props;
   props.items = fieldRowItems;

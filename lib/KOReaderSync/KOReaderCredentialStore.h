@@ -2,6 +2,7 @@
 #include <ArduinoJson.h>
 #include <PersistableStore.h>
 
+#include <array>
 #include <cstdint>
 #include <string>
 
@@ -10,6 +11,18 @@ enum class DocumentMatchMethod : uint8_t {
   FILENAME = 0,  // Match by filename (simpler, works across different file sources)
   BINARY = 1,    // Match by partial MD5 of file content (more accurate, but files must be identical)
 };
+
+// A single extra header sent with every sync request (e.g. a Cloudflare
+// Access service token), on top of KOSync's own auth headers.
+struct KOReaderCustomHeader {
+  std::string name;
+  std::string value;
+};
+
+// Namespace-scope (not a class member) so it's usable as the std::array size
+// in KOReaderCredentialStore's own member declaration, which needs it before
+// the class's public section would otherwise declare it.
+constexpr size_t KOREADER_MAX_CUSTOM_HEADERS = 2;
 
 // How manual "Sync Progress" resolves differences after fetching remote progress.
 enum class KOReaderSyncBehavior : uint8_t {
@@ -33,6 +46,10 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   bool sendMetadata = false;                                        // Send document metadata with progress sync
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
 
+  // Fixed-size to avoid vector growth on the settings edit path; an empty
+  // name marks an unused slot.
+  std::array<KOReaderCustomHeader, KOREADER_MAX_CUSTOM_HEADERS> customHeaders;
+
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
   ~KOReaderCredentialStore() = default;
@@ -40,6 +57,8 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   friend class PersistableStore<KOReaderCredentialStore>;
 
  public:
+  static constexpr size_t MAX_CUSTOM_HEADERS = KOREADER_MAX_CUSTOM_HEADERS;
+
   static const char* getFilePath() { return "/.crosspoint/koreader.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
@@ -79,6 +98,10 @@ class KOReaderCredentialStore : public PersistableStore<KOReaderCredentialStore>
   // Sync behavior
   void setSyncBehavior(KOReaderSyncBehavior behavior);
   KOReaderSyncBehavior getSyncBehavior() const { return syncBehavior; }
+
+  // Custom headers sent with every sync request (index must be < MAX_CUSTOM_HEADERS)
+  void setCustomHeader(size_t index, const std::string& name, const std::string& value);
+  const std::array<KOReaderCustomHeader, MAX_CUSTOM_HEADERS>& getCustomHeaders() const { return customHeaders; }
 };
 
 // Helper macro to access credential store
