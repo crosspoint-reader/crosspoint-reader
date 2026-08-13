@@ -224,7 +224,17 @@ class EpubReaderActivity final : public Activity {
   // it from page 0. Reverts to normal power behavior the moment the build finishes,
   // and while the build is heap-paused (no work is happening, so spinning at full
   // speed would only burn battery; the paused gate still retries every loop pass).
-  bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
+  // The watermark window below MUST mirror the background-build gate in loop() (the
+  // isPartial()/BUILD_WINDOW_AHEAD test): once a first-open build has laid out its
+  // look-ahead window it parks (isBuilding() stays true but loop() stops pumping it),
+  // so keying only on isBuilding() would hold the loop at full clock indefinitely while
+  // idle on a page -- doing no build work and defeating loop()'s idle downclock + delay
+  // path. Gate on "a build tick will actually run this pass" instead. Read unlocked like
+  // setPowerSaving(): a stale read costs at most one loop pass either way.
+  bool skipLoopDelay() override {
+    return section && section->isBuilding() && !buildHeapPaused &&
+           (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  }
   bool isReaderActivity() const override { return true; }
   bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
