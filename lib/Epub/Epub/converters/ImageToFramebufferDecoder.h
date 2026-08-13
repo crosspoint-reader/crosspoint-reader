@@ -18,6 +18,9 @@ struct RenderConfig {
   bool useDithering = true;
   bool performanceMode = false;
   bool useExactDimensions = false;  // If true, use maxWidth/maxHeight as exact output size (no recalculation)
+  float sourceCropX = 0.0f;         // Fraction cropped equally from the left and right edges
+  float sourceCropY = 0.0f;         // Fraction cropped equally from the top and bottom edges
+  bool preserveAlpha = false;       // Skip transparent pixels instead of compositing them against white
   std::string cachePath;            // If non-empty, decoder will write pixel cache to this path
 };
 
