@@ -305,6 +305,31 @@ bool CssParser::tryInterpretLength(std::string_view val, CssLength& out) {
   return true;
 }
 
+CssBorderStyle CssParser::interpretBorderVisibility(std::string_view val) {
+  val = trimCssWhitespace(stripTrailingImportant(val));
+
+  bool sawNone = false;
+  bool sawAnyWidthToken = false;
+  bool sawNonZeroWidth = false;
+  forEachDelimitedToken(val, isCssWhitespace, [&](std::string_view token) {
+    if (iequalsAscii(token, "none") || iequalsAscii(token, "hidden")) {
+      sawNone = true;
+      return;
+    }
+    CssLength len;
+    if (tryInterpretLength(token, len)) {
+      sawAnyWidthToken = true;
+      if (len.value != 0.0f) sawNonZeroWidth = true;
+    }
+  });
+
+  if (sawNone) return CssBorderStyle::None;
+  // A width-only declaration (e.g. "border: 0", "border-width: 0 0") with every
+  // token resolving to zero is as invisible as "none".
+  if (sawAnyWidthToken && !sawNonZeroWidth) return CssBorderStyle::None;
+  return CssBorderStyle::Visible;
+}
+
 // Declaration parsing
 
 void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style) {
@@ -401,6 +426,10 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
       style.direction = CssTextDirection::Ltr;
       style.defined.direction = 1;
     }
+  } else if (iequalsAscii(name, "border") || iequalsAscii(name, "border-style") ||
+             iequalsAscii(name, "border-width")) {
+    style.borderStyle = interpretBorderVisibility(value);
+    style.defined.borderStyle = 1;
   } else if (iequalsAscii(name, "vertical-align")) {
     if (iequalsAscii(value, "super")) {
       style.verticalAlign = CssVerticalAlign::Super;
@@ -744,6 +773,7 @@ bool CssParser::saveToCache() const {
     writeLength(style.imageWidth);
     file.write(static_cast<uint8_t>(style.display));
     file.write(static_cast<uint8_t>(style.verticalAlign));
+    file.write(static_cast<uint8_t>(style.borderStyle));
 
     // Write defined flags as uint32_t
     uint32_t definedBits = 0;
@@ -765,6 +795,7 @@ bool CssParser::saveToCache() const {
     if (style.defined.display) definedBits |= 1 << 15;
     if (style.defined.direction) definedBits |= 1 << 16;
     if (style.defined.verticalAlign) definedBits |= 1 << 17;
+    if (style.defined.borderStyle) definedBits |= 1 << 18;
     file.write(reinterpret_cast<const uint8_t*>(&definedBits), sizeof(definedBits));
   }
 
@@ -817,8 +848,10 @@ bool CssParser::loadFromCache() {
 
   constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
   constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
+  // 8 single-byte enums: textAlign, fontStyle, fontWeight, textDecoration, direction,
+  // display, verticalAlign, borderStyle.
   constexpr size_t CSS_FIXED_STYLE_BYTES =
-      5 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint8_t) + sizeof(uint32_t);
+      8 * sizeof(uint8_t) + (CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES) + sizeof(uint32_t);
 
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
@@ -923,6 +956,14 @@ bool CssParser::loadFromCache() {
     }
     style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlignVal);
 
+    // Read borderStyle value
+    uint8_t borderStyleVal;
+    if (file.read(&borderStyleVal, 1) != 1) {
+      rulesBySelector_.clear();
+      return false;
+    }
+    style.borderStyle = static_cast<CssBorderStyle>(borderStyleVal);
+
     // Read defined flags
     uint32_t definedBits = 0;
     if (file.read(&definedBits, sizeof(definedBits)) != sizeof(definedBits)) {
@@ -947,6 +988,7 @@ bool CssParser::loadFromCache() {
     style.defined.display = (definedBits & 1 << 15) != 0;
     style.defined.direction = (definedBits & 1 << 16) != 0;
     style.defined.verticalAlign = (definedBits & 1 << 17) != 0;
+    style.defined.borderStyle = (definedBits & 1 << 18) != 0;
 
     rulesBySelector_[selector] = style;
   }

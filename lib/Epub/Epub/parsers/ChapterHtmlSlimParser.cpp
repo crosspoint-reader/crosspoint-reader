@@ -327,7 +327,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   listItemBulletOnly = false;
 }
 
-void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
+void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle, const bool drawLine) {
   if (partWordBufferIndex > 0) {
     flushPartWordBuffer();
   }
@@ -354,7 +354,8 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   const int16_t bottomSpacing =
       static_cast<int16_t>((blockStyle.marginBottom > 0 ? blockStyle.marginBottom : defaultVerticalSpacing) +
                            (blockStyle.paddingBottom > 0 ? blockStyle.paddingBottom : 0));
-  constexpr uint8_t ruleThickness = 2;
+  // A CSS-hidden border occupies no height, matching browsers — only margin/padding remain.
+  const uint8_t ruleThickness = drawLine ? 2 : 0;
   const int16_t availableWidth =
       std::max<int16_t>(1, static_cast<int16_t>(viewportWidth - blockStyle.totalHorizontalInset()));
   const int16_t width = std::max<int16_t>(1, static_cast<int16_t>(availableWidth / 4));
@@ -376,13 +377,15 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
   currentPageNextY += topSpacing;
 
-  auto pageRule = std::shared_ptr<PageHorizontalRule>(
-      new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
-  if (!pageRule) {
-    LOG_ERR("EHP", "Failed to create PageHorizontalRule");
-    return;
+  if (drawLine) {
+    auto pageRule = std::shared_ptr<PageHorizontalRule>(
+        new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
+    if (!pageRule) {
+      LOG_ERR("EHP", "Failed to create PageHorizontalRule");
+      return;
+    }
+    currentPage->elements.push_back(pageRule);
   }
-  currentPage->elements.push_back(pageRule);
   setCurrentPageVisibleOffset(visibleTextOffset);
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
@@ -969,7 +972,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       hrBlockStyle.textIndentDefined = false;
       hrBlockStyle.textIndent = 0;
     }
-    self->emitHorizontalRule(hrBlockStyle);
+    // A book's own CSS can define <hr> as a purely semantic marker with no visible
+    // line (e.g. "border: none"); only its margin/padding should still occupy space.
+    const bool hrDrawsLine = !(cssStyle.hasBorderStyle() && cssStyle.borderStyle == CssBorderStyle::None);
+    self->emitHorizontalRule(hrBlockStyle, hrDrawsLine);
     self->depth += 1;
     return;
   }
