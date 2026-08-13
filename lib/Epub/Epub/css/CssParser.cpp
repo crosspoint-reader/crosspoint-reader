@@ -309,13 +309,23 @@ void CssParser::applyBorderDeclaration(std::string_view val, const bool touchesS
                                        CssStyle& style) {
   val = trimCssWhitespace(stripTrailingImportant(val));
 
-  bool sawNoneKeyword = false;
+  // The CSS border-style keywords that actually render a line. "none"/"hidden" (and
+  // anything else, including an omitted style in the "border" shorthand) render nothing.
+  constexpr std::string_view kVisibleStyleKeywords[] = {"solid",  "dashed", "dotted", "double",
+                                                        "groove", "ridge",  "inset",  "outset"};
+
+  bool sawVisibleStyleKeyword = false;
   bool sawWidthToken = false;
   bool sawNonZeroWidth = false;
   forEachDelimitedToken(val, isCssWhitespace, [&](std::string_view token) {
     if (iequalsAscii(token, "none") || iequalsAscii(token, "hidden")) {
-      sawNoneKeyword = true;
       return;
+    }
+    for (const std::string_view keyword : kVisibleStyleKeywords) {
+      if (iequalsAscii(token, keyword)) {
+        sawVisibleStyleKeyword = true;
+        return;
+      }
     }
     CssLength len;
     if (tryInterpretLength(token, len)) {
@@ -326,9 +336,11 @@ void CssParser::applyBorderDeclaration(std::string_view val, const bool touchesS
 
   // border-style (and the style slot of the "border" shorthand) is only set when this
   // declaration actually speaks to it, so an earlier explicit style survives a later
-  // border-width-only declaration untouched.
+  // border-width-only declaration untouched. A shorthand with a width but no style
+  // keyword (e.g. "border: 1px;") leaves the style at its CSS-initial value of none, so
+  // require an explicit visible-style keyword rather than merely the absence of "none".
   if (touchesStyle) {
-    style.borderStyle = sawNoneKeyword ? CssBorderStyle::None : CssBorderStyle::Visible;
+    style.borderStyle = sawVisibleStyleKeyword ? CssBorderStyle::Visible : CssBorderStyle::None;
     style.defined.borderStyle = 1;
   }
   // border-width only carries meaning when a length token was actually present — a bare
