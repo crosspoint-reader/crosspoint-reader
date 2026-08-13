@@ -448,6 +448,34 @@ bool selectRandomSleepFile(const char* dirPath, const SleepRecentKind recentKind
   return true;
 }
 
+bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int frameThickness = metrics.popupFrameThickness;
+  const int popupY = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
+  const int popupHeight = renderer.getLineHeight(UI_12_FONT_ID) + metrics.popupMarginY * 2;
+  const int bandTop = std::max(0, popupY - frameThickness);
+  const int bandBottom = std::min(renderer.getScreenHeight(), popupY + popupHeight + frameThickness);
+  const int bandHeight = bandBottom - bandTop;
+  const size_t bandBytes = renderer.getRegionByteSize(0, bandTop, renderer.getScreenWidth(), bandHeight);
+
+  auto savedBand = makeUniqueNoThrow<uint8_t[]>(bandBytes);
+  if (!savedBand) {
+    LOG_ERR("SLP", "OOM: sleep popup background (%u bytes)", static_cast<unsigned>(bandBytes));
+    return false;
+  }
+  if (!renderer.copyRegionToBuffer(0, bandTop, renderer.getScreenWidth(), bandHeight, savedBand.get(), bandBytes)) {
+    LOG_ERR("SLP", "Failed to save sleep popup background");
+    return false;
+  }
+
+  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  if (!renderer.copyBufferToRegion(0, bandTop, renderer.getScreenWidth(), bandHeight, savedBand.get(), bandBytes)) {
+    LOG_ERR("SLP", "Failed to restore sleep popup background");
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -474,6 +502,10 @@ void SleepActivity::onEnter() {
     // output-level inversion first so the retained content keeps its visible
     // polarity after the display driver returns to normal.
     if (frameWasInverted) renderer.invertScreen();
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    }
+    drawSleepPopupPreservingFrame(renderer);
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
