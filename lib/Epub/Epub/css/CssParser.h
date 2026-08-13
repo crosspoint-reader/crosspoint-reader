@@ -32,8 +32,28 @@
  */
 class CssParser {
  public:
+  enum class ParseResult : uint8_t {
+    Complete,
+    DegradedLowHeap,
+    Error,
+  };
+
+  enum class CacheStatus : uint8_t {
+    Missing,
+    Complete,
+    Partial,
+    Invalid,
+  };
+
+  enum class CacheLoadResult : uint8_t {
+    Complete,
+    Partial,
+    LowMemory,
+    Invalid,
+  };
+
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 8;
+  static constexpr uint8_t CSS_CACHE_VERSION = 9;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -46,9 +66,9 @@ class CssParser {
    * Load and parse CSS from a file stream.
    * Can be called multiple times to accumulate rules from multiple stylesheets.
    * @param source Open file handle to read from
-   * @return true if parsing completed (even if no rules found)
+   * @return Complete unless low heap stopped rule growth or the source was invalid
    */
-  bool loadFromStream(HalFile& source);
+  ParseResult loadFromStream(HalFile& source);
 
   /**
    * Look up the style for an HTML element, considering tag name and class attributes.
@@ -80,12 +100,18 @@ class CssParser {
   /**
    * Clear all loaded rules
    */
-  void clear() { rulesBySelector_.clear(); }
+  void clear() {
+    decltype(rulesBySelector_){}.swap(rulesBySelector_);
+    ruleGrowthStopped_ = false;
+  }
 
   /**
    * Check if CSS rules cache file exists
    */
   bool hasCache() const;
+
+  /** Read the cache header without hydrating its rule map. */
+  CacheStatus inspectCache() const;
 
   /**
    * Delete CSS rules cache file exists
@@ -96,14 +122,14 @@ class CssParser {
    * Save parsed CSS rules to a cache file.
    * @return true if cache was written successfully
    */
-  bool saveToCache() const;
+  bool saveToCache(bool complete) const;
 
   /**
    * Load CSS rules from a cache file.
    * Clears any existing rules before loading.
-   * @return true if cache was loaded successfully
+   * @return Complete or Partial when loaded, LowMemory when it should be retried, otherwise Invalid
    */
-  bool loadFromCache();
+  CacheLoadResult loadFromCache();
 
  private:
   // Lookup key for a multi-piece selector. The pieces are hashed and compared
@@ -139,11 +165,14 @@ class CssParser {
 
   // Storage: maps selector -> style properties. Hash/equal are case-insensitive.
   std::unordered_map<std::string, CssStyle, SvHash, SvEqual> rulesBySelector_;
+  bool ruleGrowthStopped_ = false;
 
   std::string cachePath;
 
   // Internal parsing helpers
   void processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style);
+  bool reserveRuleCapacity(size_t ruleCount, const char* operation);
+  bool prepareRuleInsertion(size_t selectorLength, const char* operation);
   static CssStyle parseDeclarations(std::string_view declBlock);
   static void parseDeclarationIntoStyle(std::string_view decl, CssStyle& style);
 
