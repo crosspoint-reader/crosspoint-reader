@@ -13,6 +13,8 @@ class RecentBooksActivity final : public UiListActivity {
   void onEnter() override;
   void onExit() override;
 
+  static constexpr const std::string PINNED_ID = "[P]";
+
  private:
   int listCount() const override { return static_cast<int>(recentBooks.size()); }
   void buildScreen(UiScreen& screen) override;

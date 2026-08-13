@@ -40,6 +40,7 @@ void RecentBooksActivity::rebuildRowItems() {
     if (!book.author.empty()) item.subtitle = book.author.c_str();
     item.icon = listIconFor(UITheme::getFileIcon(book.path), 32);  // subtitle rows carry the larger icon
     item.actionValue = static_cast<int16_t>(rowItems.size());
+    item.value = book.pinned ? PINNED_ID.c_str() : "";
     rowItems.push_back(item);
   }
 }

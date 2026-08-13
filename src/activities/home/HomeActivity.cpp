@@ -21,6 +21,10 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+constexpr unsigned long LONG_PRESS_MS = 1000;
+}
+
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
@@ -168,6 +172,15 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  // After a long-press has fired, swallow input until Confirm is physically released
+  // (so the release doesn't also open the book; re-arm only once the button is up).
+  if (longPressFired) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      longPressFired = false;
+    }
+    return;
+  }
+
   const int menuCount = getMenuItemCount();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
@@ -228,6 +241,14 @@ void HomeActivity::loop() {
   // release of the Back press that closed the previous activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
     onSelectBook(recentBooks[0].path);
+    return;
+  }
+
+  // Pinning Recent Books
+  if (!recentBooks.empty() && selectorIndex < recentBooks.size() &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+    longPressFired = true;
+    promptPinBook(recentBooks[selectorIndex].path, recentBooks[selectorIndex].title, recentBooks[selectorIndex].pinned);
     return;
   }
 
@@ -360,3 +381,29 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::promptPinBook(const std::string& path, const std::string& title, bool pinned) {
+  auto handler = [this, path, pinned](const ActivityResult& res) {
+    if (res.isCancelled) {
+      LOG_DBG("HOM", "Pin cancelled");
+      return;
+    }
+
+    if (pinned) {
+      RECENT_BOOKS.unpinBook(path);
+    } else {
+      RECENT_BOOKS.pinBook(path);
+    }
+    recentsLoaded = false;
+    recentsLoading = false;
+    coverRendered = false;
+    coverBufferStored = false;
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    loadRecentBooks(metrics.homeRecentBooksCount);
+    requestUpdate();
+  };
+
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                                pinned ? tr(STR_UNPIN_BOOK) : tr(STR_PIN_BOOK), title),
+                         std::move(handler));
+}
