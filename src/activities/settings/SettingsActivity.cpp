@@ -355,7 +355,14 @@ void SettingsActivity::toggleCurrentSetting() {
                                });
         break;
       case SettingAction::Language:
-        startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
+        // Row labels are translated once in rebuildRowItems() and don't
+        // re-run on Pop (see ActivityManager::loop()), so a language switch
+        // needs an explicit rebuild here rather than the generic resultHandler.
+        startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput),
+                               [this](const ActivityResult&) {
+                                 SETTINGS.saveToFile();
+                                 rebuildSettingsLists();
+                               });
         break;
       case SettingAction::None:
         // Do nothing
