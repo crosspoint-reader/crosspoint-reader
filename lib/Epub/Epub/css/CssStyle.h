@@ -97,6 +97,7 @@ struct CssPropertyFlags {
   uint16_t direction : 1;
   uint16_t verticalAlign : 1;
   uint16_t borderStyle : 1;
+  uint16_t borderWidthZero : 1;
 
   CssPropertyFlags()
       : textAlign(0),
@@ -117,23 +118,24 @@ struct CssPropertyFlags {
         display(0),
         direction(0),
         verticalAlign(0),
-        borderStyle(0) {}
+        borderStyle(0),
+        borderWidthZero(0) {}
 
   [[nodiscard]] bool anySet() const {
     return textAlign || fontStyle || fontWeight || textDecoration || textIndent || marginTop || marginBottom ||
            marginLeft || marginRight || paddingTop || paddingBottom || paddingLeft || paddingRight || imageHeight ||
-           imageWidth || display || direction || verticalAlign || borderStyle;
+           imageWidth || display || direction || verticalAlign || borderStyle || borderWidthZero;
   }
 
   void clearAll() {
     textAlign = fontStyle = fontWeight = textDecoration = textIndent = 0;
     marginTop = marginBottom = marginLeft = marginRight = 0;
     paddingTop = paddingBottom = paddingLeft = paddingRight = 0;
-    imageHeight = imageWidth = display = direction = verticalAlign = borderStyle = 0;
+    imageHeight = imageWidth = display = direction = verticalAlign = borderStyle = borderWidthZero = 0;
   }
 };
 
-// Cache serializes defined flags as uint32_t with bit indices 0..18.
+// Cache serializes defined flags as uint32_t with bit indices 0..19.
 static_assert(sizeof(CssPropertyFlags) <= sizeof(uint32_t),
               "CssPropertyFlags exceeds 32 bits; update cache read/write in CssParser.cpp");
 
@@ -160,7 +162,12 @@ struct CssStyle {
   CssLength imageWidth;     // Width for img when both or only width set
   CssDisplay display = CssDisplay::Block;                       // display property (Block or None)
   CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align (super/sub positioning)
-  CssBorderStyle borderStyle = CssBorderStyle::Visible;         // border/border-style/border-width (Visible or None)
+  // border-style component (or the style keyword within a "border" shorthand). Tracked
+  // separately from borderWidthZero below since they're independent CSS longhands that
+  // can be set by different declarations — an element is only visibly bordered when
+  // NEITHER says "invisible". Use isBorderHidden() rather than reading these directly.
+  CssBorderStyle borderStyle = CssBorderStyle::Visible;
+  bool borderWidthZero = false;  // true when border-width (or the shorthand's width token) resolved to all zeros
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 
@@ -243,6 +250,10 @@ struct CssStyle {
       borderStyle = base.borderStyle;
       defined.borderStyle = 1;
     }
+    if (base.hasBorderWidthZero()) {
+      borderWidthZero = base.borderWidthZero;
+      defined.borderWidthZero = 1;
+    }
   }
 
   [[nodiscard]] bool hasTextAlign() const { return defined.textAlign; }
@@ -264,6 +275,16 @@ struct CssStyle {
   [[nodiscard]] bool hasDirection() const { return defined.direction; }
   [[nodiscard]] bool hasVerticalAlign() const { return defined.verticalAlign; }
   [[nodiscard]] bool hasBorderStyle() const { return defined.borderStyle; }
+  [[nodiscard]] bool hasBorderWidthZero() const { return defined.borderWidthZero; }
+
+  // An element's border is invisible if either independent longhand says so: an
+  // explicit "none"/"hidden" style, or a width that resolved to all zeros. Either
+  // one alone is enough to hide it, regardless of which was declared more recently.
+  [[nodiscard]] bool isBorderHidden() const {
+    const bool styleHidesIt = hasBorderStyle() && borderStyle == CssBorderStyle::None;
+    const bool widthHidesIt = hasBorderWidthZero() && borderWidthZero;
+    return styleHidesIt || widthHidesIt;
+  }
 
   void reset() {
     textAlign = CssTextAlign::Left;
@@ -278,6 +299,7 @@ struct CssStyle {
     display = CssDisplay::Block;
     verticalAlign = CssVerticalAlign::Baseline;
     borderStyle = CssBorderStyle::Visible;
+    borderWidthZero = false;
     defined.clearAll();
   }
 };
