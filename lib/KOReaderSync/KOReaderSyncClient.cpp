@@ -208,7 +208,12 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   http.end();
   if (httpCode == 401) return AUTH_FAILED;
-  if (httpCode == 404) return NOT_FOUND;
+  // kosync-dotnet (a common self-hosted server, ghcr.io/jberlyn/kosync-dotnet) returns 502
+  // instead of the protocol-standard 404 for "no progress saved for this document" — see
+  // its SyncController.GetProgress, which does `return StatusCode(502, ...)` on a cache miss.
+  // Treat it the same as 404 so a brand-new document offers "upload progress?" instead of
+  // a misleading server-error message.
+  if (httpCode == 404 || httpCode == 502) return NOT_FOUND;
   return SERVER_ERROR;
 }
 
