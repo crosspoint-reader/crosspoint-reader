@@ -160,7 +160,7 @@ struct CssStyle {
   CssLength imageWidth;     // Width for img when both or only width set
   CssDisplay display = CssDisplay::Block;                       // display property (Block or None)
   CssVerticalAlign verticalAlign = CssVerticalAlign::Baseline;  // vertical-align (super/sub positioning)
-  CssBorderStyle borderStyle = CssBorderStyle::Visible;  // border/border-style/border-width (Visible or None)
+  CssBorderStyle borderStyle = CssBorderStyle::Visible;         // border/border-style/border-width (Visible or None)
 
   CssPropertyFlags defined;  // Tracks which properties were explicitly set
 

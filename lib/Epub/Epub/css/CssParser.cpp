@@ -426,8 +426,7 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
       style.direction = CssTextDirection::Ltr;
       style.defined.direction = 1;
     }
-  } else if (iequalsAscii(name, "border") || iequalsAscii(name, "border-style") ||
-             iequalsAscii(name, "border-width")) {
+  } else if (iequalsAscii(name, "border") || iequalsAscii(name, "border-style") || iequalsAscii(name, "border-width")) {
     style.borderStyle = interpretBorderVisibility(value);
     style.defined.borderStyle = 1;
   } else if (iequalsAscii(name, "vertical-align")) {
