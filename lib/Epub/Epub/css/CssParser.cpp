@@ -758,12 +758,36 @@ constexpr char rulesCacheBackup[] = "/css_rules.cache.bak";
 constexpr uint8_t CSS_CACHE_FLAG_PARTIAL = 1 << 0;
 constexpr uint8_t CSS_CACHE_KNOWN_FLAGS = CSS_CACHE_FLAG_PARTIAL;
 constexpr size_t CSS_LENGTH_FIELD_COUNT = 11;
-constexpr size_t CSS_LENGTH_BYTES = sizeof(float) + sizeof(uint8_t);
+constexpr size_t CSS_LENGTH_BYTES = sizeof(decltype(CssLength::value)) + sizeof(uint8_t);
 constexpr size_t CSS_FIXED_STYLE_BYTES =
     5 * sizeof(uint8_t) + CSS_LENGTH_FIELD_COUNT * CSS_LENGTH_BYTES + 2 * sizeof(uint8_t) + sizeof(uint32_t);
 constexpr uint32_t CSS_DEFINED_BITS_MASK = (1u << 18) - 1;
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
+
+bool CssParser::restoreCacheBackupIfNeeded() const {
+  if (cachePath.empty()) {
+    return false;
+  }
+
+  const std::string finalPath = cachePath + rulesCache;
+  if (Storage.exists(finalPath.c_str())) {
+    return true;
+  }
+
+  const std::string backupPath = cachePath + rulesCacheBackup;
+  if (!Storage.exists(backupPath.c_str())) {
+    return false;
+  }
+
+  if (!Storage.rename(backupPath.c_str(), finalPath.c_str())) {
+    LOG_ERR("CSS", "Failed to restore CSS cache backup");
+    return false;
+  }
+
+  LOG_DBG("CSS", "Restored CSS cache backup after interrupted replacement");
+  return true;
+}
 
 void CssParser::deleteCache() const {
   if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
@@ -772,7 +796,7 @@ void CssParser::deleteCache() const {
 }
 
 CssParser::CacheStatus CssParser::inspectCache() const {
-  if (cachePath.empty() || !hasCache()) {
+  if (cachePath.empty() || (!hasCache() && !restoreCacheBackupIfNeeded())) {
     return CacheStatus::Missing;
   }
 
@@ -940,7 +964,9 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
 
   HalFile file;
   if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
-    return CacheLoadResult::Invalid;
+    if (!restoreCacheBackupIfNeeded() || !Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
+      return CacheLoadResult::Invalid;
+    }
   }
 
   // Clear existing rules

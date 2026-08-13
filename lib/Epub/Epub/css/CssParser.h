@@ -170,6 +170,7 @@ class CssParser {
   std::string cachePath;
 
   // Internal parsing helpers
+  bool restoreCacheBackupIfNeeded() const;
   void processRuleBlockWithStyle(std::string_view selectorGroup, const CssStyle& style);
   bool reserveRuleCapacity(size_t ruleCount, const char* operation);
   bool prepareRuleInsertion(size_t selectorLength, const char* operation);
