@@ -64,19 +64,32 @@ uint32_t readBe32(const uint8_t* p) {
 // continuation/lead byte, so accented words keep their edges.
 bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
 
-// True when the .ifo declares 64-bit index offsets, which this reader does not
-// support (only scans the first 2KB — idxoffsetbits always appears early).
-bool ifoDeclares64BitOffsets(const std::string& ifoPath) {
+// Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
+// headers are tiny and both keys always appear early when present.
+struct IfoFacts {
+  bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
+  bool htmlDefinitions = false;  // sametypesequence=h (definitions are HTML)
+};
+
+IfoFacts readIfoFacts(const std::string& ifoPath) {
+  IfoFacts facts;
   HalFile ifo;
-  if (!Storage.openFileForRead("DICT", ifoPath, ifo)) return false;
+  if (!Storage.openFileForRead("DICT", ifoPath, ifo)) return facts;
   char buf[2048];
   const int n = ifo.read(buf, sizeof(buf) - 1);
-  if (n <= 0) return false;
+  if (n <= 0) return facts;
   buf[n] = '\0';
   const char* line = strstr(buf, "idxoffsetbits");
-  if (!line) return false;
-  const char* eq = strchr(line, '=');
-  return eq && strtol(eq + 1, nullptr, 10) == 64;
+  const char* eq = line ? strchr(line, '=') : nullptr;
+  facts.offsets64 = eq && strtol(eq + 1, nullptr, 10) == 64;
+  line = strstr(buf, "sametypesequence");
+  eq = line ? strchr(line, '=') : nullptr;
+  if (eq) {
+    // Only the single-field sequence "h" is treated as HTML; multi-type
+    // entries keep the plain-text viewing path.
+    facts.htmlDefinitions = eq[1] == 'h' && (eq[2] == '\0' || eq[2] == '\r' || eq[2] == '\n');
+  }
+  return facts;
 }
 
 }  // namespace
@@ -84,6 +97,7 @@ bool ifoDeclares64BitOffsets(const std::string& ifoPath) {
 bool Dictionary::open(const char* folderName) {
   basePath.clear();
   hasSyn = false;
+  htmlDefinitions = false;
   std::string resolved;
   if (!DictionaryRegistry::resolveBasePath(folderName, resolved)) {
     LOG_ERR("DICT", "No dictionary found in folder '%s'", folderName ? folderName : "");
@@ -99,7 +113,8 @@ bool Dictionary::open(const char* folderName) {
     LOG_ERR("DICT", "%s has no .dict or .dict.dz", resolved.c_str());
     return false;
   }
-  if (ifoDeclares64BitOffsets(resolved + ".ifo")) {
+  const IfoFacts ifo = readIfoFacts(resolved + ".ifo");
+  if (ifo.offsets64) {
     LOG_ERR("DICT", "%s uses 64-bit index offsets (unsupported)", resolved.c_str());
     return false;
   }
@@ -110,6 +125,7 @@ bool Dictionary::open(const char* folderName) {
     return false;
   }
   hasSyn = Storage.exists((resolved + ".syn").c_str());
+  htmlDefinitions = ifo.htmlDefinitions;
 
   basePath = std::move(resolved);
   return true;
