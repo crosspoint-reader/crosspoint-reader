@@ -337,6 +337,10 @@ void TxtReaderActivity::renderStatusBar() const {
 }
 
 bool TxtReaderActivity::pageTurn(bool isForward) {
+  // Ignore paging until initializeReader has established the page index
+  if (!initialized) {
+    return false;
+  }
   if (isForward) {
     if (currentPage < totalPages) {
       currentPage++;
@@ -352,6 +356,9 @@ bool TxtReaderActivity::pageTurn(bool isForward) {
 }
 
 bool TxtReaderActivity::skipPages(int amount) {
+  if (!initialized) {
+    return false;
+  }
   int newPage = currentPage + amount;
   if (newPage < 0) newPage = 0;
   if (newPage >= totalPages) newPage = totalPages - 1;
@@ -362,7 +369,7 @@ bool TxtReaderActivity::skipPages(int amount) {
   return false;
 }
 
-bool TxtReaderActivity::isAtEndOfBook() const { return currentPage >= totalPages; }
+bool TxtReaderActivity::isAtEndOfBook() const { return initialized && currentPage >= totalPages; }
 
 void TxtReaderActivity::onReturnFromEndOfBook() { currentPage = totalPages > 0 ? totalPages - 1 : 0; }
 
