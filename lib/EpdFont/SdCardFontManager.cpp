@@ -97,7 +97,11 @@ int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, G
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
   // Drop UI CJK fallbacks before the SD fonts they point at are freed.
   renderer.clearFallbackFonts();
-  renderer.clearSdCardFonts();
+  // Remove only THIS manager's fonts. removeFont() erases both the fontMap and
+  // sdCardFonts_ entry for each id. Do NOT call renderer.clearSdCardFonts() here:
+  // that wipes the renderer's entire SD-font registry, which would unregister a
+  // *second* manager's font (e.g. the drop-cap face vs the reading face) and leave
+  // it unable to prewarm/measure glyphs — manifesting as a hang during indexing.
   for (auto& lf : loaded_) {
     renderer.removeFont(lf.fontId);
     delete lf.font;

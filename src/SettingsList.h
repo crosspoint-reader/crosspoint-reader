@@ -178,6 +178,55 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return s;
 }
 
+// Build the drop-cap font picker from the standalone /.dropcap registry. Index 0
+// is "Default" (empty dropCapFontName = integer-scale the body glyph); the
+// remaining entries are the discovered drop-cap families. Device-only (key=null):
+// dropCapFontName is persisted manually in CrossPointSettings::toJson/fromJson,
+// like the dictionary and font-family names above.
+inline SettingInfo buildDropCapFontSetting(const SdCardFontRegistry* registry) {
+  std::vector<std::string> names;
+  if (registry) {
+    const auto& families = registry->getFamilies();
+    names.reserve(families.size());
+    std::transform(families.begin(), families.end(), std::back_inserter(names),
+                   [](const SdCardFontFamilyInfo& f) { return f.name; });
+  }
+
+  std::vector<std::string> labels;
+  labels.reserve(names.size() + 1);
+  labels.push_back(I18N.get(StrId::STR_DROP_CAP_FONT_DEFAULT));
+  labels.insert(labels.end(), names.begin(), names.end());
+
+  SettingInfo s;
+  s.nameId = StrId::STR_DROP_CAP_FONT;
+  s.type = SettingType::ENUM;
+  s.enumStringValues = std::move(labels);
+  s.category = StrId::STR_CAT_READER;
+
+  s.valueGetter = [names]() -> uint8_t {
+    if (SETTINGS.dropCapFontName[0] != '\0') {
+      for (int i = 0; i < static_cast<int>(names.size()); i++) {
+        if (names[i] == SETTINGS.dropCapFontName) return static_cast<uint8_t>(i + 1);
+      }
+    }
+    return 0;  // Default
+  };
+
+  s.valueSetter = [names](uint8_t v) {
+    if (v == 0) {
+      SETTINGS.dropCapFontName[0] = '\0';
+      return;
+    }
+    const int idx = v - 1;
+    if (idx < static_cast<int>(names.size())) {
+      strncpy(SETTINGS.dropCapFontName, names[idx].c_str(), sizeof(SETTINGS.dropCapFontName) - 1);
+      SETTINGS.dropCapFontName[sizeof(SETTINGS.dropCapFontName) - 1] = '\0';
+    }
+  };
+
+  return s;
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -189,7 +238,8 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                const SdCardFontRegistry* dropCapRegistry = nullptr) {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -263,6 +313,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled, "focusReadingEnabled",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Toggle(StrId::STR_DROP_CAPS, &CrossPointSettings::dropCapsEnabled, "dropCapsEnabled",
+                            StrId::STR_CAT_READER),
         SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled, "hyphenationEnabled",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
@@ -457,6 +509,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     auto it =
         std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.category == StrId::STR_CAT_CONTROLS; });
     v.insert(it, buildDictionarySetting(*dictionaries));
+  }
+  // Always offer the drop-cap font picker (device UI only — passes a registry).
+  // With no fonts under /.dropcap it shows just "Default", which keeps the feature
+  // discoverable and tells the user where the picker lives. Insert it right after
+  // the Drop Caps toggle so the two sit together.
+  if (dropCapRegistry) {
+    auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_DROP_CAPS; });
+    if (it != v.end()) {
+      v.insert(it + 1, buildDropCapFontSetting(dropCapRegistry));
+    }
   }
   return v;
 }

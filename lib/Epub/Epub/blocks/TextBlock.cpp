@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <Serialization.h>
+#include <Utf8.h>
 
 #include <cstring>
 
@@ -130,6 +131,38 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   if (!isValid) {
     LOG_ERR("TXB", "Render skipped: invalid block");
     return;
+  }
+
+  if (dropcapScale > 0 && !dropcapText.empty()) {
+    // scale==1 is the sentinel for "draw the prefix natively with the dedicated
+    // drop-cap face" (BookerlyDropcap); scale>=2 integer-scales the body glyph
+    // (the fallback chosen at layout time when no face was loaded). The face is
+    // regular-only by design. Layout measured the inset in this same face, and the
+    // section cache is keyed so the face-present state matches what we render here.
+    int capFontId = fontId;
+    EpdFontFamily::Style capStyle = dropcapStyle;
+    uint8_t capScale = dropcapScale;
+    if (dropcapScale == 1) {
+      capFontId = renderer.getDropCapFontId();
+      capStyle = EpdFontFamily::REGULAR;
+      if (capFontId == 0) {  // 0 = no face loaded; ids are hash-based and may be negative
+        // Face unloaded since layout (rare; cache normally prevents this). Avoid a
+        // tiny native body glyph — coarsely scale the body face instead.
+        capFontId = fontId;
+        capStyle = dropcapStyle;
+        capScale = 3;
+      }
+    }
+    const auto* p = reinterpret_cast<const uint8_t*>(dropcapText.c_str());
+    int penX = x;
+    uint32_t cp;
+    while ((cp = utf8NextCodepoint(&p)) != 0) {
+      renderer.drawScaledGlyph(capFontId, cp, capStyle, capScale, penX, y, true);
+      int gw = 0, gh = 0, gtop = 0, gadv = 0;
+      if (renderer.getGlyphBox(capFontId, cp, capStyle, gw, gh, gtop, gadv)) {
+        penX += gadv * capScale;
+      }
+    }
   }
 
   const bool scanning = renderer.isFontCacheScanning();
@@ -323,6 +356,16 @@ bool TextBlock::serialize(HalFile& file) const {
     serialization::writeString(file, (i < rubyTexts.size()) ? rubyTexts[i] : std::string());
   }
 
+  // Drop cap: one flag byte, then the prefix/style/scale only when present.
+  // Zero cost on the common (non-dropcap) line.
+  const bool hasDropcap = dropcapScale > 0 && !dropcapText.empty();
+  serialization::writePod(file, static_cast<uint8_t>(hasDropcap ? 1 : 0));
+  if (hasDropcap) {
+    serialization::writeString(file, dropcapText);
+    serialization::writePod(file, static_cast<uint8_t>(dropcapStyle));
+    serialization::writePod(file, dropcapScale);
+  }
+
   // Style (alignment + margins/padding/indent)
   serialization::writePod(file, blockStyle.alignment);
   serialization::writePod(file, blockStyle.textAlignDefined);
@@ -418,6 +461,19 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
       block->rubyTexts.resize(wc);
     }
     block->rubyTexts[i] = std::move(scratch);
+  }
+
+  // Drop cap (mirrors serialize(): flag byte, then fields only when present).
+  uint8_t hasDropcap = 0;
+  serialization::readPod(file, hasDropcap);
+  if (hasDropcap) {
+    std::string dropcapText;
+    uint8_t dropcapStyle = 0;
+    uint8_t dropcapScale = 0;
+    serialization::readString(file, dropcapText);
+    serialization::readPod(file, dropcapStyle);
+    serialization::readPod(file, dropcapScale);
+    block->setDropcap(std::move(dropcapText), static_cast<EpdFontFamily::Style>(dropcapStyle), dropcapScale);
   }
 
   // Style (alignment + margins/padding/indent)

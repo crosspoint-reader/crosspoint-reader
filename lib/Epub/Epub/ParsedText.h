@@ -13,6 +13,17 @@
 
 class GfxRenderer;
 
+// Describes a paragraph's drop cap. layoutAndExtractLines() strips the prefix from
+// the leading words, insets the first `lineSpan` lines by `insetWidth`, and attaches
+// the cap to the first emitted line for TextBlock::render to draw enlarged.
+struct DropCapSpec {
+  std::string text;            // enlarged prefix to render, e.g. "W" or "“W" (NFC-composed)
+  EpdFontFamily::Style style;  // style of the cap letter (applied to the whole prefix)
+  uint8_t scale;               // integer upscale of the glyph bitmaps (1 = use dedicated face)
+  uint16_t insetWidth;         // horizontal space reserved to the left of the inset lines
+  uint8_t lineSpan;            // number of leading lines that wrap around the cap
+};
+
 class ParsedText {
   // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
   // of tokens (CJK splits every character), and a vector grows by reallocating its
@@ -63,6 +74,20 @@ class ParsedText {
   int calculateRubyExtraEndOffset(size_t lineStartIdx, size_t lineBreakIdx, const GfxRenderer& renderer,
                                   int fontId) const;
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
+  // Left inset for the line at `lineOrdinal`: the drop-cap wrap inset for the first
+  // `lineSpan` lines when a drop cap is active, else the normal first-line indent.
+  int lineLeftInset(size_t lineOrdinal, const GfxRenderer& renderer, int fontId) const;
+  // Greedy line breaker used only for drop-cap paragraphs: the DP breaker can't take a
+  // per-line-ordinal width (the inset varies by line), so lay out line-by-line here.
+  std::vector<size_t> computeDropCapLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
+                                               std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                               bool allowHyphenation);
+  // Remove `count` leading codepoints (the cap prefix) from the leading words, keeping
+  // every parallel array in sync so the cap glyph isn't also drawn inline.
+  void stripLeadingCodepoints(size_t count);
+  // Drop cap for the current layout pass (borrowed, set by layoutAndExtractLines).
+  const DropCapSpec* dropCap_ = nullptr;
+  bool dropCapCandidate_ = false;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                         std::vector<bool>& noSpaceBeforeVec);
@@ -102,7 +127,19 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  // Marks this paragraph as the chapter's opening candidate for the drop cap (set by
+  // the parser when the first real body paragraph opens).
+  void setDropCapCandidate(bool v) { dropCapCandidate_ = v; }
+  bool isDropCapCandidate() const { return dropCapCandidate_; }
+  // Builds the drop-cap prefix: up to two leading opening-punctuation codepoints (e.g. a
+  // quote) followed by exactly one letter, scanning across continuation-joined leading
+  // words. Returns the prefix (NFC, ready to render), the cap letter, and its style.
+  // False if the leading run has no codepoint to cap.
+  bool buildDropCapPrefix(std::string& outText, uint32_t& letterCp, EpdFontFamily::Style& letterStyle) const;
+  // The block's words joined into plain text (a space before each non-glued word). Used to
+  // match a body paragraph against the chapter heading for the drop-cap title dedup.
+  std::string getPlainText() const;
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
-                             bool includeLastLine = true);
+                             bool includeLastLine = true, const DropCapSpec* dropCap = nullptr);
 };

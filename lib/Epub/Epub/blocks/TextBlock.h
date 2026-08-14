@@ -56,6 +56,14 @@ class TextBlock final : public Block {
   const char* textArr = nullptr;
   std::vector<std::string> rubyTexts;
 
+  // Drop cap: when dropcapScale > 0, this line is the first line of a chapter's
+  // opening paragraph and renders an enlarged initial. dropcapText holds the
+  // drop-cap prefix (UTF-8); the words of the line were already laid out inset to
+  // the right of the cap (see ParsedText::layoutAndExtractLines / DropCapSpec).
+  std::string dropcapText;
+  EpdFontFamily::Style dropcapStyle = EpdFontFamily::REGULAR;
+  uint8_t dropcapScale = 0;
+
   TextBlock() = default;  // deserialize() fills the fields directly
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);
   void bindArenaPointers();
@@ -74,6 +82,12 @@ class TextBlock final : public Block {
 
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
+  void setDropcap(std::string text, const EpdFontFamily::Style style, const uint8_t scale) {
+    dropcapText = std::move(text);
+    dropcapStyle = style;
+    dropcapScale = scale;
+  }
+  uint8_t getDropcapScale() const { return dropcapScale; }
   bool isEmpty() override { return numWords == 0; }
   bool valid() const { return isValid; }
   uint16_t wordCount() const { return numWords; }
