@@ -336,7 +336,7 @@ void XtcReaderActivity::loadProgress() {
     if (f.read(data, 4) == 4) {
       currentPage = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
       if (currentPage >= xtc->getPageCount() && xtc->getPageCount() > 0) {
-        currentPage = 0;
+        currentPage = xtc->getPageCount() - 1;
       }
       LOG_DBG("XTC", "Loaded progress: page %lu/%lu", currentPage + 1, xtc->getPageCount());
     }
