@@ -3,55 +3,56 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "EndOfBookOptions.h"
-#include "ReaderDocument.h"
 #include "activities/Activity.h"
-#include "activities/home/FileBrowserActivity.h"
 
-class ReaderActivity final : public Activity {
-  std::string initialBookPath;
-  std::string currentBookPath;
-  bool allowFastInitialRefresh;
+class ReaderActivity : public Activity {
+ protected:
+  std::string bookPath;
   int pagesUntilFullRefresh = 0;
   bool forcedRefreshPending = false;
-
-  std::unique_ptr<ReaderDocument> document;
 
   std::unique_ptr<EndOfBookOptions> endOfBookOptions;
   std::atomic<bool> endOfBookOptionsReady{false};
 
-  std::unique_ptr<ReaderDocument> createDocument(const std::string& path);
-  static bool isXtcFile(const std::string& path);
-  static bool isTxtFile(const std::string& path);
-  static bool isImageFile(const std::string& path);
+  explicit ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                          std::string bookPath, bool allowFastInitialRefresh);
 
-  void goToLibrary(const std::string& fromBookPath = "");
-  void onGoToBmpViewer(const std::string& path);
-  void onGoBack();
-  int initialRefreshCountdown() const;
+  virtual bool loadBook() = 0;
+  virtual std::string getBookTitle() const = 0;
+  virtual std::string getBookAuthor() const { return ""; }
+  virtual std::string getBookThumbBmpPath() const { return ""; }
+
+  virtual bool handleFormatInput() { return false; }
+  virtual bool pageTurn(bool isForward) = 0;
+  virtual bool skipPages(int amount) { return pageTurn(amount > 0); }
+  virtual bool isAtEndOfBook() const = 0;
+  virtual void onReturnFromEndOfBook() {}
+
+  virtual void renderBook() = 0;
+  virtual void applyInitialOrientation();
+  virtual void onEndOfBookRendered() {}
+
+  bool handleBackNavigation();
+  bool handleEndOfBookMenu(bool suppressConfirmRelease = false);
+  bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
+  void clearEndOfBookOptionsIfNeeded();
+  void disableFastInitialRefresh();
 
  public:
-  explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,
-                          bool allowFastInitialRefresh)
-      : Activity("Reader", renderer, mappedInput),
-        initialBookPath(std::move(initialBookPath)),
-        allowFastInitialRefresh(allowFastInitialRefresh),
-        pagesUntilFullRefresh(initialRefreshCountdown()) {}
   ~ReaderActivity() override = default;
+
+  static std::unique_ptr<Activity> create(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
+                                          bool allowFastInitialRefresh);
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&& lock) override;
 
-  bool isReaderActivity() const override { return true; }
-  bool appliesNightMode() const override;
-  bool skipLoopDelay() override;
-  bool handleForcedRefresh() override;
-  ScreenshotInfo getScreenshotInfo() const override;
-
-  GfxRenderer& getRenderer() { return renderer; }
-  MappedInputManager& getMappedInput() { return mappedInput; }
-  void onGoHome() { Activity::onGoHome(); }
+  bool isReaderActivity() const final { return true; }
+  bool appliesNightMode() const final { return true; }
+  bool handleForcedRefresh() final;
 };

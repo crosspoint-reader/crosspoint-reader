@@ -1,10 +1,9 @@
-#include "TxtReaderDocument.h"
-
 #include <BidiUtils.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Serialization.h>
 #include <Utf8.h>
 
@@ -12,6 +11,7 @@
 #include "ProgressFile.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
+#include "TxtReaderActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -22,16 +22,21 @@ constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
 }  // namespace
 
-bool TxtReaderDocument::load(bool /*allowFastInitialRefresh*/) {
+bool TxtReaderActivity::loadBook() {
+  txt = makeUniqueNoThrow<Txt>(bookPath, "/.crosspoint");
   if (!txt) {
+    LOG_ERR("TRS", "Failed to allocate TXT object");
+    return false;
+  }
+  if (!txt->load()) {
+    LOG_ERR("TRS", "Failed to load TXT");
     return false;
   }
   txt->setupCacheDir();
-  initializeReader(host.getRenderer());
   return true;
 }
 
-void TxtReaderDocument::initializeReader(GfxRenderer& renderer) {
+void TxtReaderActivity::initializeReader(GfxRenderer& renderer) {
   if (initialized) {
     return;
   }
@@ -73,7 +78,7 @@ void TxtReaderDocument::initializeReader(GfxRenderer& renderer) {
   initialized = true;
 }
 
-void TxtReaderDocument::buildPageIndex(GfxRenderer& renderer) {
+void TxtReaderActivity::buildPageIndex(GfxRenderer& renderer) {
   pageOffsets.clear();
   pageOffsets.push_back(0);  // First page starts at offset 0
 
@@ -112,8 +117,8 @@ void TxtReaderDocument::buildPageIndex(GfxRenderer& renderer) {
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
-bool TxtReaderDocument::loadPageAtOffset(GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines,
-                                        size_t& nextOffset) {
+bool TxtReaderActivity::loadPageAtOffset(GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines,
+                                         size_t& nextOffset) {
   outLines.clear();
   const size_t fileSize = txt->getFileSize();
 
@@ -231,12 +236,10 @@ bool TxtReaderDocument::loadPageAtOffset(GfxRenderer& renderer, size_t offset, s
   return !outLines.empty();
 }
 
-void TxtReaderDocument::render(ReaderRenderContext& context) {
+void TxtReaderActivity::renderBook() {
   if (!txt) {
     return;
   }
-
-  auto& renderer = context.renderer;
 
   if (!initialized) {
     initializeReader(renderer);
@@ -245,6 +248,7 @@ void TxtReaderDocument::render(ReaderRenderContext& context) {
   if (pageOffsets.empty()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::BOLD);
+    renderer.displayBuffer();
     return;
   }
 
@@ -265,7 +269,7 @@ void TxtReaderDocument::render(ReaderRenderContext& context) {
   saveProgress();
 }
 
-void TxtReaderDocument::renderPage(GfxRenderer& renderer) {
+void TxtReaderActivity::renderPage(GfxRenderer& renderer) {
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   const int contentWidth = viewportWidth;
 
@@ -314,13 +318,15 @@ void TxtReaderDocument::renderPage(GfxRenderer& renderer) {
 
   // BW rendering
   renderLines();
+  renderStatusBar();
+  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
   if (SETTINGS.textAntiAliasing) {
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   }
 }
 
-void TxtReaderDocument::renderStatusBar(GfxRenderer& renderer) const {
+void TxtReaderActivity::renderStatusBar() const {
   const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
   std::string title;
   if (SETTINGS.statusBarSpec().showsTitle()) {
@@ -329,9 +335,9 @@ void TxtReaderDocument::renderStatusBar(GfxRenderer& renderer) const {
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
 }
 
-bool TxtReaderDocument::pageTurn(bool isForward) {
+bool TxtReaderActivity::pageTurn(bool isForward) {
   if (isForward) {
-    if (currentPage < totalPages - 1) {
+    if (currentPage < totalPages) {
       currentPage++;
       return true;
     }
@@ -344,7 +350,7 @@ bool TxtReaderDocument::pageTurn(bool isForward) {
   return false;
 }
 
-bool TxtReaderDocument::skipPages(int amount) {
+bool TxtReaderActivity::skipPages(int amount) {
   int newPage = currentPage + amount;
   if (newPage < 0) newPage = 0;
   if (newPage >= totalPages) newPage = totalPages - 1;
@@ -355,13 +361,11 @@ bool TxtReaderDocument::skipPages(int amount) {
   return false;
 }
 
-bool TxtReaderDocument::isAtEndOfBook() const { return currentPage >= totalPages; }
+bool TxtReaderActivity::isAtEndOfBook() const { return currentPage >= totalPages; }
 
-void TxtReaderDocument::onReturnFromEndOfBook() {
-  currentPage = totalPages > 0 ? totalPages - 1 : 0;
-}
+void TxtReaderActivity::onReturnFromEndOfBook() { currentPage = totalPages > 0 ? totalPages - 1 : 0; }
 
-void TxtReaderDocument::saveProgress() const {
+void TxtReaderActivity::saveProgress() const {
   uint8_t data[4];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
@@ -372,7 +376,7 @@ void TxtReaderDocument::saveProgress() const {
   }
 }
 
-void TxtReaderDocument::loadProgress() {
+void TxtReaderActivity::loadProgress() {
   HalFile f;
   if (Storage.openFileForRead("TRS", txt->getCachePath() + "/progress.bin", f)) {
     uint8_t data[4];
@@ -389,7 +393,7 @@ void TxtReaderDocument::loadProgress() {
   }
 }
 
-bool TxtReaderDocument::loadPageIndexCache() {
+bool TxtReaderActivity::loadPageIndexCache() {
   std::string cachePath = txt->getCachePath() + "/index.bin";
   HalFile f;
   if (!Storage.openFileForRead("TRS", cachePath, f)) {
@@ -470,7 +474,7 @@ bool TxtReaderDocument::loadPageIndexCache() {
   return true;
 }
 
-void TxtReaderDocument::savePageIndexCache() const {
+void TxtReaderActivity::savePageIndexCache() const {
   std::string cachePath = txt->getCachePath() + "/index.bin";
   HalFile f;
   if (!Storage.openFileForWrite("TRS", cachePath, f)) {
@@ -495,7 +499,7 @@ void TxtReaderDocument::savePageIndexCache() const {
   LOG_DBG("TRS", "Saved page index cache: %d pages", totalPages);
 }
 
-ScreenshotInfo TxtReaderDocument::getScreenshotInfo() const {
+ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
   ScreenshotInfo info;
   info.readerType = ScreenshotInfo::ReaderType::Txt;
   if (txt) {

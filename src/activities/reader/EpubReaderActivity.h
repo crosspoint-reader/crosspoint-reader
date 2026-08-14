@@ -12,9 +12,9 @@
 #include "BookmarkEntry.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
-#include "ReaderDocument.h"
+#include "ReaderActivity.h"
 
-class EpubReaderDocument final : public ReaderDocument {
+class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
   int currentSpineIndex = 0;
@@ -40,7 +40,6 @@ class EpubReaderDocument final : public ReaderDocument {
   bool showBookmarkMessage = false;
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
-  bool ignoreNextConfirmRelease = false;
   bool currentPageBookmarked = false;
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
@@ -100,36 +99,32 @@ class EpubReaderDocument final : public ReaderDocument {
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 
-  void renderContents(ReaderRenderContext& context, std::unique_ptr<Page> page, int orientedMarginTop,
-                      int orientedMarginRight, int orientedMarginBottom, int orientedMarginLeft);
-  void renderStatusBar(GfxRenderer& renderer) const override;
+  void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
+                      int orientedMarginBottom, int orientedMarginLeft);
+  void renderStatusBar() const;
+  void applyOrientation(uint8_t orientation);
+
+  bool loadBook() override;
+  std::string getBookTitle() const override { return epub ? epub->getTitle() : ""; }
+  std::string getBookAuthor() const override { return epub ? epub->getAuthor() : ""; }
+  std::string getBookThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }
+  void renderBook() override;
+  void onEndOfBookRendered() override;
 
  public:
-  explicit EpubReaderDocument(ReaderActivity& host, std::unique_ptr<Epub> epub)
-      : ReaderDocument(host), epub(std::move(epub)) {}
-  ~EpubReaderDocument() override;
+  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
+                              bool allowFastInitialRefresh)
+      : ReaderActivity("EpubReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh) {}
+  ~EpubReaderActivity() override;
 
-  const std::string& getPath() const override {
-    static const std::string empty;
-    return epub ? epub->getPath() : empty;
-  }
-  std::string getTitle() const override { return epub ? epub->getTitle() : ""; }
-  std::string getAuthor() const override { return epub ? epub->getAuthor() : ""; }
-  std::string getThumbBmpPath() const override { return epub ? epub->getThumbBmpPath() : ""; }
-
-  bool load(bool allowFastInitialRefresh) override;
   void loop() override;
-  void render(ReaderRenderContext& context) override;
 
   bool pageTurn(bool isForward) override;
   bool skipPages(int amount) override;
   bool isAtEndOfBook() const override;
   void onReturnFromEndOfBook() override;
 
-  bool skipLoopDelay() const override;
-  bool appliesNightMode() const override { return true; }
-  bool rendersOwnStatusBar() const override { return true; }
-  bool commitsDisplayBuffer() const override { return true; }
+  bool skipLoopDelay() override;
 
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;

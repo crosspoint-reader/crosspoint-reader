@@ -7,9 +7,9 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "ReaderDocument.h"
+#include "ReaderActivity.h"
 
-class TxtReaderDocument final : public ReaderDocument {
+class TxtReaderActivity final : public ReaderActivity {
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
@@ -39,29 +39,22 @@ class TxtReaderDocument final : public ReaderDocument {
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+  void renderStatusBar() const;
+
+  bool loadBook() override;
+  std::string getBookTitle() const override { return txt ? txt->getTitle() : ""; }
+  void renderBook() override;
 
  public:
-  explicit TxtReaderDocument(ReaderActivity& host, std::unique_ptr<Txt> txt)
-      : ReaderDocument(host), txt(std::move(txt)) {}
-  ~TxtReaderDocument() override = default;
-
-  const std::string& getPath() const override {
-    static const std::string empty;
-    return txt ? txt->getPath() : empty;
-  }
-  std::string getTitle() const override { return txt ? txt->getTitle() : ""; }
-
-  bool load(bool allowFastInitialRefresh) override;
-  void render(ReaderRenderContext& context) override;
+  explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
+                             bool allowFastInitialRefresh)
+      : ReaderActivity("TxtReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh) {}
+  ~TxtReaderActivity() override = default;
 
   bool pageTurn(bool isForward) override;
   bool skipPages(int amount) override;
   bool isAtEndOfBook() const override;
   void onReturnFromEndOfBook() override;
-
-  bool rendersOwnStatusBar() const override { return false; }
-  bool commitsDisplayBuffer() const override { return false; }
-  void renderStatusBar(GfxRenderer& renderer) const override;
 
   ScreenshotInfo getScreenshotInfo() const override;
 };
