@@ -1,1 +1,1 @@
-/home/urit/Documents/CrossPoint/crosspoint-reader/.skills/SKILL.md
+.skills/SKILL.md

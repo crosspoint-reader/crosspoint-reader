@@ -1,8 +1,10 @@
 #include "ActivityManager.h"
 
 #include <FontCacheManager.h>
+#include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
+#include <Memory.h>
 
 #include <algorithm>
 
@@ -19,6 +21,7 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#include "util/BmpViewerActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -215,7 +218,25 @@ void ActivityManager::goToBrowser() {
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
-  replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh));
+  if (path.empty()) {
+    goToFileBrowser("/");
+    return;
+  }
+
+  if (FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path)) {
+    auto activity = makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, std::move(path));
+    if (!activity) {
+      LOG_ERR("ACT", "OOM: bitmap viewer activity");
+      return;
+    }
+    replaceActivity(std::move(activity));
+    return;
+  }
+
+  auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
+  if (activity) {
+    replaceActivity(std::move(activity));
+  }
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
@@ -324,7 +345,11 @@ void ActivityManager::requestUpdateAndWait() {
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
   xTaskNotify(renderTaskHandle, 1, eIncrement);
+  // Tell the power manager the loop is parked here: it cannot poll input until the
+  // render finishes, so the BUSY-wait slice hook should not yield to it meanwhile.
+  powerManager.noteRenderWaitBegin();
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  powerManager.noteRenderWaitEnd();
 }
 
 // RenderLock

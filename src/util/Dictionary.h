@@ -51,6 +51,11 @@ class Dictionary {
   // True when the .qidx sidecar (or the .sidx sidecar of a present .syn) is
   // missing or stale — call buildIndex() first so the UI can show an
   // "Indexing…" message for the slow first pass.
+
+  // True when the .ifo declares sametypesequence=h — definitions are HTML and
+  // the viewer may lay them out through the EPUB rendering pipeline.
+  bool definitionsAreHtml() const { return htmlDefinitions; }
+
   bool needsIndex();
 
   // Why an index build failed — the scan buffer is a heap allocation, so the
@@ -181,6 +186,7 @@ class Dictionary {
   std::string basePath;  // "/dictionaries/<folder>/<stem>", empty when not open
   bool hasPlainDict = false;
   bool hasSyn = false;  // a <stem>.syn synonym index exists next to the .idx
+  bool htmlDefinitions = false;
 
   // Shared scan buffer: lookups are single-threaded and this avoids a
   // 256-byte array on the stack of every locate() call.
