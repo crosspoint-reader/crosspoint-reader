@@ -778,7 +778,7 @@ bool SdCardFont::isTextResident(const char* utf8Text, uint8_t styleMask, bool me
       }
       if (!inMini) {
         if (findGlobalGlyphIndex(s, cp) >= 0) return false;  // loadable but not resident
-        missed++;  // outside font coverage: a rebuild couldn't load it either
+        missed++;                                            // outside font coverage: a rebuild couldn't load it either
       }
     }
     return true;
