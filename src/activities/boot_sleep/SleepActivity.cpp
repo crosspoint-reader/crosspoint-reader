@@ -602,7 +602,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground,
+                                            const bool useFactoryLut) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -620,16 +621,19 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
 #if FREEINK_DRIVER_SSD1677
-  const bool useFactoryGrayscale = hasGreyscale;
-  constexpr auto msbMode = GfxRenderer::FACTORY_GRAY_MSB;
-  constexpr auto lsbMode = GfxRenderer::FACTORY_GRAY_LSB;
-  constexpr const unsigned char* lut = freeink::lut_factory_quality;
+  const bool useFactoryGrayscale =
+      useFactoryLut && hasGreyscale && !preserveBackground &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+  const unsigned char* lut = useFactoryGrayscale ? freeink::lut_factory_quality : nullptr;
 #else
   constexpr bool useFactoryGrayscale = false;
-  constexpr auto msbMode = GfxRenderer::GRAYSCALE_MSB;
-  constexpr auto lsbMode = GfxRenderer::GRAYSCALE_LSB;
   constexpr const unsigned char* lut = nullptr;
 #endif
+
+  LOG_DBG("SLP", "Using factory lut: %s", useFactoryGrayscale ? "true" : "false");
+
+  const auto msbMode = useFactoryGrayscale ? GfxRenderer::FACTORY_GRAY_MSB : GfxRenderer::GRAYSCALE_MSB;
+  const auto lsbMode = useFactoryGrayscale ? GfxRenderer::FACTORY_GRAY_LSB : GfxRenderer::GRAYSCALE_LSB;
 
   if (!useFactoryGrayscale) {
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
@@ -810,12 +814,18 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastEpub.generateCoverBmp(cropped)) {
+#if FREEINK_DRIVER_SSD1677
+    const bool originalThresholds =
+        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+#else
+    constexpr bool originalThresholds = false;
+#endif
+
+    if (!lastEpub.generateCoverBmp(cropped, originalThresholds)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
-
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped);
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, originalThresholds);
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }
@@ -825,7 +835,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, false, true);
       return;
     }
   }
