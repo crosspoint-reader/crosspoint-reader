@@ -1,31 +1,33 @@
 #pragma once
-#include <memory>
 
+#include <atomic>
+#include <memory>
+#include <string>
+
+#include "EndOfBookOptions.h"
+#include "ReaderDocument.h"
 #include "activities/Activity.h"
 #include "activities/home/FileBrowserActivity.h"
 
-class Epub;
-class Xtc;
-class Txt;
-
 class ReaderActivity final : public Activity {
   std::string initialBookPath;
-  std::string currentBookPath;  // Track current book path for navigation
+  std::string currentBookPath;
   bool allowFastInitialRefresh;
-  // Non-static (unlike the other loaders): draws the first-open indexing popup, which needs the renderer.
-  std::unique_ptr<Epub> loadEpub(const std::string& path);
-  static std::unique_ptr<Xtc> loadXtc(const std::string& path);
-  static std::unique_ptr<Txt> loadTxt(const std::string& path);
+  int pagesUntilFullRefresh = 0;
+  bool forcedRefreshPending = false;
+
+  std::unique_ptr<ReaderDocument> document;
+
+  std::unique_ptr<EndOfBookOptions> endOfBookOptions;
+  std::atomic<bool> endOfBookOptionsReady{false};
+
+  std::unique_ptr<ReaderDocument> createDocument(const std::string& path);
   static bool isXtcFile(const std::string& path);
   static bool isTxtFile(const std::string& path);
   static bool isImageFile(const std::string& path);
 
   void goToLibrary(const std::string& fromBookPath = "");
-  void onGoToEpubReader(std::unique_ptr<Epub> epub);
-  void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
-  void onGoToTxtReader(std::unique_ptr<Txt> txt);
   void onGoToBmpViewer(const std::string& path);
-
   void onGoBack();
   int initialRefreshCountdown() const;
 
@@ -34,7 +36,22 @@ class ReaderActivity final : public Activity {
                           bool allowFastInitialRefresh)
       : Activity("Reader", renderer, mappedInput),
         initialBookPath(std::move(initialBookPath)),
-        allowFastInitialRefresh(allowFastInitialRefresh) {}
+        allowFastInitialRefresh(allowFastInitialRefresh),
+        pagesUntilFullRefresh(initialRefreshCountdown()) {}
+  ~ReaderActivity() override = default;
+
   void onEnter() override;
+  void onExit() override;
+  void loop() override;
+  void render(RenderLock&& lock) override;
+
   bool isReaderActivity() const override { return true; }
+  bool appliesNightMode() const override;
+  bool skipLoopDelay() override;
+  bool handleForcedRefresh() override;
+  ScreenshotInfo getScreenshotInfo() const override;
+
+  GfxRenderer& getRenderer() { return renderer; }
+  MappedInputManager& getMappedInput() { return mappedInput; }
+  void onGoHome() { Activity::onGoHome(); }
 };
