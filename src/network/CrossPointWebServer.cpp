@@ -1424,8 +1424,14 @@ void CrossPointWebServer::handlePostOpdsServer() {
     for (size_t i = 0; i < OpdsServer::MAX_CUSTOM_HEADERS; i++) {
       if (hasHeadersField) {
         opdsServer.customHeaders[i].name = headerNames[i];
-        opdsServer.customHeaders[i].value =
-            headerValueProvided[i] ? headerValues[i] : (existing ? existing->customHeaders[i].value : std::string());
+        if (headerNames[i].empty()) {
+          // An empty name clears the slot outright — never leave a stale value
+          // paired with no name, even if the payload omitted "value".
+          opdsServer.customHeaders[i].value.clear();
+        } else {
+          opdsServer.customHeaders[i].value =
+              headerValueProvided[i] ? headerValues[i] : (existing ? existing->customHeaders[i].value : std::string());
+        }
       } else if (existing) {
         opdsServer.customHeaders[i] = existing->customHeaders[i];
       }
