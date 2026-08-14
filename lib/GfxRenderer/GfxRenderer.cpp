@@ -553,12 +553,11 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   std::string visual;
   const char* renderedText = resolveVisualText(text, visual, baseDir);
 
-  // Redirected to the SD fallback: batch-load the string's glyphs so the
-  // per-codepoint measurement loop below doesn't fault them in one SD read
-  // at a time (#2725).
-  if (resolvedFontId != fontId) {
-    ensureSdGlyphsResident(resolvedFontId, renderedText, style);
-  }
+  // Batch-load the string's glyphs when the resolved font lives on SD — a
+  // directly selected SD font as much as a CJK redirect to the SD fallback —
+  // so the per-codepoint measurement loop below doesn't fault them in one SD
+  // read at a time (#2725). No-op for built-in fonts.
+  ensureSdGlyphsResident(resolvedFontId, renderedText, style);
 
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
@@ -597,11 +596,11 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
-  // Redirected to the SD fallback: batch-load the string's glyphs so the draw
-  // loop below doesn't fault them in one SD read at a time (#2725).
-  if (resolvedFontId != fontId) {
-    ensureSdGlyphsResident(resolvedFontId, renderedText, style);
-  }
+  // Batch-load the string's glyphs when the resolved font lives on SD — a
+  // directly selected SD font as much as a CJK redirect to the SD fallback —
+  // so the draw loop below doesn't fault them in one SD read at a time
+  // (#2725). No-op for built-in fonts.
+  ensureSdGlyphsResident(resolvedFontId, renderedText, style);
 
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
@@ -2059,11 +2058,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   // Route CJK-bearing strings to the fallback font (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
-  // Redirected to the SD fallback: batch-load the string's glyphs so the draw
-  // loop below doesn't fault them in one SD read at a time (#2725).
-  if (resolvedFontId != fontId) {
-    ensureSdGlyphsResident(resolvedFontId, text, style);
-  }
+  // Batch-load the string's glyphs when the resolved font lives on SD — a
+  // directly selected SD font as much as a CJK redirect to the SD fallback —
+  // so the draw loop below doesn't fault them in one SD read at a time
+  // (#2725). No-op for built-in fonts.
+  ensureSdGlyphsResident(resolvedFontId, text, style);
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);

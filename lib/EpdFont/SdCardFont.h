@@ -296,6 +296,10 @@ class SdCardFont {
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
                              const char* extraText = nullptr);
   int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
+  // Allocation-free streaming check backing prewarm()'s fast path: true when a
+  // prewarm for this text would load nothing new for any requested style.
+  // missedOut = codepoints outside font coverage (repeats not deduped).
+  bool isTextResident(const char* utf8Text, uint8_t styleMask, bool metadataOnly, int& missedOut) const;
 
   // Global helpers
   void freeAll();

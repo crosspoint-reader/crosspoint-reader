@@ -740,12 +740,80 @@ int32_t SdCardFont::findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) 
 
 // --- Prewarm ---
 
+// Streaming residency check backing prewarm()'s fast path: returns true when
+// every requested style already has a resident mini covering every codepoint
+// the text needs, i.e. a rebuild would load nothing new. Decodes the UTF-8 in
+// place — no codepoint buffer, no dedup — so hot per-string callers
+// (GfxRenderer::ensureSdGlyphsResident, reachable per word from the reader's
+// render loop) stay allocation-free once glyphs are resident. Codepoints
+// outside font coverage accumulate into missedOut like prewarmStyle's subset
+// check, except repeats aren't deduped here — the count only feeds debug logs.
+// Ligature outputs need no separate check: a resident mini was built from a
+// codepoint set that covers this text's codepoints, and that build already
+// folded in the outputs of every pair it contained.
+bool SdCardFont::isTextResident(const char* utf8Text, uint8_t styleMask, bool metadataOnly, int& missedOut) const {
+  missedOut = 0;
+  uint8_t active[MAX_STYLES];
+  uint8_t activeCount = 0;
+  for (uint8_t si = 0; si < MAX_STYLES; si++) {
+    if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
+    const PerStyle& s = styles_[si];
+    // A metadata-only mini can't serve a full render request (no bitmaps).
+    if (s.miniGlyphCount == 0 || (s.miniMetadataOnly && !metadataOnly)) return false;
+    active[activeCount++] = si;
+  }
+  if (activeCount == 0) return true;  // nothing to prewarm
+
+  int missed = 0;
+  const auto residentForAll = [&](const uint32_t cp) {
+    for (uint8_t i = 0; i < activeCount; i++) {
+      const PerStyle& s = styles_[active[i]];
+      bool inMini = false;
+      for (uint32_t iv = 0; iv < s.miniIntervalCount; iv++) {
+        if (cp < s.miniIntervals[iv].first) break;  // intervals sorted ascending
+        if (cp <= s.miniIntervals[iv].last) {
+          inMini = true;
+          break;
+        }
+      }
+      if (!inMini) {
+        if (findGlobalGlyphIndex(s, cp) >= 0) return false;  // loadable but not resident
+        missed++;  // outside font coverage: a rebuild couldn't load it either
+      }
+    }
+    return true;
+  };
+
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(&p)) != 0) {
+    if (!residentForAll(cp)) return false;
+  }
+  // prewarm() always folds in the replacement glyph; guarantee it here too (a
+  // cap-hit build may have dropped it from the mini).
+  if (!residentForAll(REPLACEMENT_GLYPH)) return false;
+  missedOut = missed;
+  return true;
+}
+
 int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOnly) {
   if (!loaded_) return -1;
   styleMask = resolveStyleMask(styleMask);
   if (styleMask == 0) return 0;
 
   unsigned long startMs = millis();
+
+  // Resident fast path: per-string callers redraw mostly-resident text, so
+  // answer from RAM before the codepoint-buffer allocation and O(n²) dedup
+  // below ever run — hundreds of 2KB alloc/free per page otherwise when the
+  // reader redirects CJK words to an SD fallback one word at a time.
+  {
+    int residentMissed = 0;
+    if (isTextResident(utf8Text, styleMask, metadataOnly, residentMissed)) {
+      stats_.prewarmTotalMs = millis() - startMs;
+      return residentMissed;
+    }
+  }
 
   // Step 1: Extract unique codepoints from UTF-8 text (shared across all styles).
   // Dedup uses O(n^2) linear scan — worst case is MAX_PAGE_GLYPHS (512) unique codepoints
