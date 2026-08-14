@@ -1320,16 +1320,20 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   const bool pageHasImages = page->hasImages();
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
+  const bool manualRefreshPending = forcedRefreshPending;
   forcedRefreshPending = false;
-  // EPUB images are already dithered into the 1-bit framebuffer. Applying the
-  // differential gray waveform afterward both adds a second visible update
-  // and can wash light-gray detail back toward white (#1011). Keep image pages
-  // on that dithered result; text-only pages can still use grayscale AA.
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing && !pageHasImages;
-  const bool needsAnyGrayscale = needsTextGrayscale;
+  const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
+  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
-  const bool overlapRefresh = tiledGrayscale && renderer.supportsAsyncRefresh();
-  auto renderGrayscalePass = [&]() { page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop); };
+  const bool overlapRefresh = tiledGrayscale && renderer.supportsAsyncRefresh() && !pageHasImages;
+  auto renderGrayscalePass = [&]() {
+    if (needsTextGrayscale) {
+      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    } else {
+      page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    }
+  };
 
   if (pageHasImagesNeedingDecode) {
     page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
@@ -1342,7 +1346,15 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   renderStatusBar();
   const auto tBwRender = millis();
 
-  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, overlapRefresh);
+  if (pageHasImages) {
+    // Image pages use one base refresh before the grayscale pass. FAST leaves
+    // the panel receptive to the gray waveform; pending cleanup still honors
+    // the scheduled/manual HALF refresh.
+    renderer.displayBuffer(cleanImageBasePending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+    pagesUntilFullRefresh = 1;
+  } else {
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, overlapRefresh);
+  }
   const auto tDisplay = millis();
 
   if (tiledGrayscale) {
