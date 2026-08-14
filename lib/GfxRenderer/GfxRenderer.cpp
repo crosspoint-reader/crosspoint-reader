@@ -210,6 +210,17 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
   return fontId;
 }
 
+void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  const auto sdIt = sdCardFonts_.find(fontId);
+  if (sdIt == sdCardFonts_.end()) {
+    return;
+  }
+  // SUP/SUB bits don't select a distinct .cpfont style bitstream — mask to the
+  // base style. resolveStyleMask() inside prewarm folds absent styles.
+  const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
+  sdIt->second->prewarm(text, styleMask);
+}
+
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
 // This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
@@ -542,6 +553,13 @@ int GfxRenderer::getTextWidth(const int fontId, const char* text, const EpdFontF
   std::string visual;
   const char* renderedText = resolveVisualText(text, visual, baseDir);
 
+  // Redirected to the SD fallback: batch-load the string's glyphs so the
+  // per-codepoint measurement loop below doesn't fault them in one SD read
+  // at a time (#2725).
+  if (resolvedFontId != fontId) {
+    ensureSdGlyphsResident(resolvedFontId, renderedText, style);
+  }
+
   int w = 0, h = 0;
   fontIt->second.getTextDimensions(renderedText, &w, &h, style);
   return w;
@@ -577,6 +595,12 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   if (fontCacheManager_ && fontCacheManager_->isScanning()) {
     fontCacheManager_->recordText(renderedText, resolvedFontId, style);
     return;
+  }
+
+  // Redirected to the SD fallback: batch-load the string's glyphs so the draw
+  // loop below doesn't fault them in one SD read at a time (#2725).
+  if (resolvedFontId != fontId) {
+    ensureSdGlyphsResident(resolvedFontId, renderedText, style);
   }
 
   const auto fontIt = fontMap.find(resolvedFontId);
@@ -2035,6 +2059,11 @@ void GfxRenderer::drawTextRotated90CW(const int fontId, const int x, const int y
 
   // Route CJK-bearing strings to the fallback font (see resolveTextFontId).
   const int resolvedFontId = resolveTextFontId(fontId, text, style);
+  // Redirected to the SD fallback: batch-load the string's glyphs so the draw
+  // loop below doesn't fault them in one SD read at a time (#2725).
+  if (resolvedFontId != fontId) {
+    ensureSdGlyphsResident(resolvedFontId, text, style);
+  }
   const auto fontIt = fontMap.find(resolvedFontId);
   if (fontIt == fontMap.end()) {
     LOG_ERR("GFX", "Font %d not found", resolvedFontId);
