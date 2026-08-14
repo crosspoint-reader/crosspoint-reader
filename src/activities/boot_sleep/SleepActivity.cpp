@@ -12,9 +12,7 @@
 #include <PNGdec.h>
 #include <Txt.h>
 #include <Xtc.h>
-#if FREEINK_DRIVER_SSD1677
 #include <lut/Ssd1677Luts.h>
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -620,15 +618,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
       bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
-#if FREEINK_DRIVER_SSD1677
   const bool useFactoryGrayscale =
-      useFactoryLut && hasGreyscale && !preserveBackground &&
+      gpio.deviceIsX4() && useFactoryLut && hasGreyscale && !preserveBackground &&
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
   const unsigned char* lut = useFactoryGrayscale ? freeink::lut_factory_quality : nullptr;
-#else
-  constexpr bool useFactoryGrayscale = false;
-  constexpr const unsigned char* lut = nullptr;
-#endif
 
   LOG_DBG("SLP", "Using factory lut: %s", useFactoryGrayscale ? "true" : "false");
 
@@ -815,9 +808,8 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-#if FREEINK_DRIVER_SSD1677
-    useFactoryLut = SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-#endif
+    useFactoryLut = gpio.deviceIsX4() &&
+                    SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
     if (!lastEpub.generateCoverBmp(cropped, useFactoryLut)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
