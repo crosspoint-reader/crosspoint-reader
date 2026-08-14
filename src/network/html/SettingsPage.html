@@ -819,7 +819,9 @@
       const name = document.getElementById('opds-header' + i + '-name-' + id).value.trim();
       const value = document.getElementById('opds-header' + i + '-value-' + id).value;
       const header = {name: name};
-      if (value) header.value = value;
+      // Also send an explicit (empty) value when the name was cleared, so the
+      // server can tell "delete this header" apart from "leave value unchanged".
+      if (value || !name) header.value = value;
       headers.push(header);
     }
     data.headers = headers;
