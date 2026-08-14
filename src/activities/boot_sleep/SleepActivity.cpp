@@ -551,7 +551,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, false, true);
       file.close();
       return;
     }
@@ -570,7 +570,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       delay(100);
       Bitmap bitmap(randFile, true);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        renderBitmapSleepScreen(bitmap);
+        renderBitmapSleepScreen(bitmap, false, true);
         randFile.close();
         return;
       }
@@ -775,6 +775,7 @@ void SleepActivity::renderCoverSleepScreen() const {
 
   std::string coverBmpPath;
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  bool useFactoryLut = false;
 
   // Check if the current book is XTC, TXT, or EPUB
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
@@ -815,17 +816,14 @@ void SleepActivity::renderCoverSleepScreen() const {
     }
 
 #if FREEINK_DRIVER_SSD1677
-    const bool originalThresholds =
-        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-#else
-    constexpr bool originalThresholds = false;
+    useFactoryLut = SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 #endif
 
-    if (!lastEpub.generateCoverBmp(cropped, originalThresholds)) {
+    if (!lastEpub.generateCoverBmp(cropped, useFactoryLut)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped, originalThresholds);
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, useFactoryLut);
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }
@@ -835,7 +833,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap, false, true);
+      renderBitmapSleepScreen(bitmap, false, useFactoryLut);
       return;
     }
   }
