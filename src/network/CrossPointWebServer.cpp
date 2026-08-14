@@ -10,6 +10,7 @@
 #include <esp_efuse_table.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 
 #include "CrossPointSettings.h"
@@ -1213,6 +1214,7 @@ void CrossPointWebServer::handleGetSettings() const {
       }
       case SettingType::STRING: {
         doc["type"] = "string";
+        doc["sensitive"] = s.sensitive;
         if (s.stringGetter) {
           doc["value"] = s.stringGetter();
         } else if (s.stringMaxLen > 0) {
@@ -1344,6 +1346,13 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     doc["username"] = servers[i].username;
     // Never expose passwords over the API — only indicate whether one is set
     doc["hasPassword"] = !servers[i].password.empty();
+    // Header values may hold secrets (e.g. an auth proxy token) — same treatment as passwords
+    JsonArray headersArr = doc["headers"].to<JsonArray>();
+    for (const auto& header : servers[i].customHeaders) {
+      JsonObject h = headersArr.add<JsonObject>();
+      h["name"] = header.name;
+      h["hasValue"] = !header.value.empty();
+    }
 
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
@@ -1383,22 +1392,57 @@ void CrossPointWebServer::handlePostOpdsServer() {
   bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
   std::string password = doc["password"] | std::string("");
 
+  // Custom headers: the "headers" array is optional and, when present, is expected to have
+  // one entry per slot. Each entry's "value" key is optional the same way "password" is above
+  // — absent means preserve that slot's existing value on update.
+  bool hasHeadersField = doc["headers"].is<JsonArrayConst>();
+  std::array<std::string, OpdsServer::MAX_CUSTOM_HEADERS> headerNames;
+  std::array<bool, OpdsServer::MAX_CUSTOM_HEADERS> headerValueProvided{};
+  std::array<std::string, OpdsServer::MAX_CUSTOM_HEADERS> headerValues;
+  if (hasHeadersField) {
+    size_t i = 0;
+    for (JsonObjectConst h : doc["headers"].as<JsonArrayConst>()) {
+      if (i >= OpdsServer::MAX_CUSTOM_HEADERS) break;
+      headerNames[i] = h["name"] | std::string("");
+      headerValueProvided[i] = h["value"].is<const char*>() || h["value"].is<std::string>();
+      headerValues[i] = h["value"] | std::string("");
+      i++;
+    }
+  }
+
   if (doc["index"].is<int>()) {
     int idx = doc["index"].as<int>();
     if (idx < 0 || idx >= static_cast<int>(OPDS_STORE.getCount())) {
       server->send(400, "text/plain", "Invalid server index");
       return;
     }
+    const auto* existing = OPDS_STORE.getServer(static_cast<size_t>(idx));
     // Preserve existing password if not explicitly provided
-    if (!hasPasswordField) {
-      const auto* existing = OPDS_STORE.getServer(static_cast<size_t>(idx));
-      if (existing) password = existing->password;
-    }
+    if (!hasPasswordField && existing) password = existing->password;
     opdsServer.password = password;
+
+    for (size_t i = 0; i < OpdsServer::MAX_CUSTOM_HEADERS; i++) {
+      if (hasHeadersField) {
+        opdsServer.customHeaders[i].name = headerNames[i];
+        opdsServer.customHeaders[i].value =
+            headerValueProvided[i] ? headerValues[i] : (existing ? existing->customHeaders[i].value : std::string());
+      } else if (existing) {
+        opdsServer.customHeaders[i] = existing->customHeaders[i];
+      }
+    }
+
     OPDS_STORE.updateServer(static_cast<size_t>(idx), opdsServer);
     LOG_DBG("WEB", "Updated OPDS server at index %d", idx);
   } else {
     opdsServer.password = password;
+
+    if (hasHeadersField) {
+      for (size_t i = 0; i < OpdsServer::MAX_CUSTOM_HEADERS; i++) {
+        opdsServer.customHeaders[i].name = headerNames[i];
+        opdsServer.customHeaders[i].value = headerValues[i];
+      }
+    }
+
     if (!OPDS_STORE.addServer(opdsServer)) {
       server->send(400, "text/plain", "Cannot add server (limit reached)");
       return;
