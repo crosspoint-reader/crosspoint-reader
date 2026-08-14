@@ -4,13 +4,12 @@
 #include <I18n.h>
 #include <Logging.h>
 
-#include <cstring>
-
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 namespace {
 // Editable fields: Name, URL, Username, Password.
@@ -18,14 +17,28 @@ namespace {
 constexpr int BASE_ITEMS = 4;
 }  // namespace
 
+OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                           const int serverIndex)
+    : UiListActivity("OpdsSettings", renderer, mappedInput), serverIndex(serverIndex) {
+  // Labels never change (unlike the values, which track editServer's fields
+  // live), so they're set once here rather than every buildScreen() call.
+  static constexpr StrId fieldNames[BASE_ITEMS] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL,
+                                                   StrId::STR_USERNAME, StrId::STR_PASSWORD};
+  for (int i = 0; i < BASE_ITEMS; i++) {
+    fieldRowItems[i].label = I18N.get(fieldNames[i]);
+    fieldRowItems[i].actionValue = static_cast<int16_t>(i);
+  }
+  fieldRowItems[BASE_ITEMS].label = tr(STR_DELETE_SERVER);
+  fieldRowItems[BASE_ITEMS].actionValue = static_cast<int16_t>(BASE_ITEMS);
+}
+
 int OpdsSettingsActivity::getMenuItemCount() const {
   return isNewServer ? BASE_ITEMS : BASE_ITEMS + 1;  // +1 for Delete
 }
 
 void OpdsSettingsActivity::onEnter() {
-  Activity::onEnter();
+  UiListActivity::onEnter();
 
-  selectedIndex = 0;
   isNewServer = (serverIndex < 0);
   showSaveError = false;
 
@@ -41,46 +54,14 @@ void OpdsSettingsActivity::onEnter() {
       serverIndex = -1;
     }
   }
-
-  requestUpdate();
 }
 
-void OpdsSettingsActivity::onExit() { Activity::onExit(); }
-
-void OpdsSettingsActivity::loop() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
-  const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  const int menuItems = getMenuItemCount();
-
-  int touchSel = static_cast<int>(selectedIndex);
-  const auto listTouch = handleListTouch(touchSel, menuItems, contentTop, contentHeight, false);
-  if (listTouch != ListTouchResult::None) {
-    selectedIndex = static_cast<size_t>(touchSel);
-    if (listTouch == ListTouchResult::Activated) handleSelection();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleSelection();
-    return;
-  }
-
-  buttonNavigator.onNext([this, menuItems] {
-    selectedIndex = (selectedIndex + 1) % menuItems;
-    requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this, menuItems] {
-    selectedIndex = (selectedIndex + menuItems - 1) % menuItems;
-    requestUpdate();
-  });
+void OpdsSettingsActivity::activateIndex(const int index) {
+  nav.selected = index;
+  // Activation opens a keyboard or leaves the screen; a lingering flash would
+  // gray an unrelated row.
+  app.clearTapFlash();
+  handleSelection();
 }
 
 bool OpdsSettingsActivity::saveServer() {
@@ -116,7 +97,7 @@ bool OpdsSettingsActivity::saveServer() {
 void OpdsSettingsActivity::handleSelection() {
   // Each field edit is saved immediately so partially configured servers
   // survive navigation and power-loss scenarios.
-  if (selectedIndex == 0) {
+  if (nav.selected == 0) {
     // Server Name
     auto handler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -129,7 +110,7 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SERVER_NAME),
                                                                    editServer.name, 63, InputType::Text),
                            handler);
-  } else if (selectedIndex == 1) {
+  } else if (nav.selected == 1) {
     // Server URL
     const std::string prefillUrl = editServer.url.empty() ? "https://" : editServer.url;
     auto handler = [this](const ActivityResult& result) {
@@ -143,7 +124,7 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL),
                                                                    prefillUrl, 127, InputType::Url),
                            handler);
-  } else if (selectedIndex == 2) {
+  } else if (nav.selected == 2) {
     // Username
     auto handler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -156,7 +137,7 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
                                                                    editServer.username, 63, InputType::Text),
                            handler);
-  } else if (selectedIndex == 3) {
+  } else if (nav.selected == 3) {
     // Password
     auto handler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -169,7 +150,7 @@ void OpdsSettingsActivity::handleSelection() {
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
                                                                    editServer.password, 63, InputType::Password),
                            handler);
-  } else if (selectedIndex == 4 && !isNewServer) {
+  } else if (nav.selected == 4 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
       LOG_ERR("OPS", "Failed to remove OPDS server at index %d", serverIndex);
@@ -181,55 +162,49 @@ void OpdsSettingsActivity::handleSelection() {
   }
 }
 
-void OpdsSettingsActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
+void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  // Content below the GUI.drawHeader band, above the button hints; derived
+  // from the safe area so board bezel insets apply (same as LanguageSelect).
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
+                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
+                                      static_cast<int16_t>(safe.x)});
+
+  // URL hint where the old sub-header band sat.
+  const fui::Rect band = screen.takeTop(static_cast<int16_t>(metrics.tabBarHeight));
+  const int16_t pad = screen.theme().headerSidePadding;
+  screen.target().text(band.inset(fui::Insets{0, pad, 0, pad}), tr(STR_CALIBRE_URL_HINT), screen.theme().smallText);
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  // fieldRowItems' labels/actionValue were set once in the constructor; only
+  // the live value pointers (already pointing at editServer's own fields, no
+  // new strings built) need refreshing here.
+  fieldRowItems[0].value = editServer.name.empty() ? tr(STR_NOT_SET) : editServer.name.c_str();
+  fieldRowItems[1].value = editServer.url.empty() ? tr(STR_NOT_SET) : editServer.url.c_str();
+  fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
+  fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
+
+  fui::ListProps props;
+  props.items = fieldRowItems;
+  props.count = static_cast<uint16_t>(getMenuItemCount());
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  props.valueInset = 8;               // air between the value and the row edge
+  syncListViewport(screen, props);
+  screen.list(props);
+}
+
+const char* OpdsSettingsActivity::headerTitle() const {
   // Reuse STR_OPDS_BROWSER as the "edit existing server" title.
   // New server creation uses STR_ADD_SERVER.
-  const char* header = isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, header);
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                    tr(STR_CALIBRE_URL_HINT));
+  return isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
+}
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + metrics.tabBarHeight;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  const int menuItems = getMenuItemCount();
-
-  const StrId fieldNames[] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME,
-                              StrId::STR_PASSWORD};
-
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, menuItems, static_cast<int>(selectedIndex),
-      [this, &fieldNames](int index) {
-        if (index < BASE_ITEMS) {
-          return std::string(I18N.get(fieldNames[index]));
-        }
-        return std::string(tr(STR_DELETE_SERVER));
-      },
-      nullptr, nullptr,
-      [this](int index) {
-        if (index == 0) {
-          return editServer.name.empty() ? std::string(tr(STR_NOT_SET)) : editServer.name;
-        } else if (index == 1) {
-          return editServer.url.empty() ? std::string(tr(STR_NOT_SET)) : editServer.url;
-        } else if (index == 2) {
-          return editServer.username.empty() ? std::string(tr(STR_NOT_SET)) : editServer.username;
-        } else if (index == 3) {
-          return editServer.password.empty() ? std::string(tr(STR_NOT_SET)) : std::string("******");
-        }
-        return std::string("");
-      },
-      true);
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
+void OpdsSettingsActivity::drawFooter() {
+  UiListActivity::drawFooter();
   if (showSaveError) {
     GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
   }
-
-  renderer.displayBuffer();
 }

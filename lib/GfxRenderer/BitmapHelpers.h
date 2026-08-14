@@ -104,7 +104,8 @@ class Atkinson1BitDitherer {
 // Less error buildup = fewer artifacts than Floyd-Steinberg
 class AtkinsonDitherer {
  public:
-  explicit AtkinsonDitherer(int width) : width(width) {
+  explicit AtkinsonDitherer(int width, bool useOriginalThresholds = false)
+      : width(width), useOriginalThresholds(useOriginalThresholds) {
     errorRow0 = new int16_t[width + 4]();  // Current row
     errorRow1 = new int16_t[width + 4]();  // Next row
     errorRow2 = new int16_t[width + 4]();  // Row after next
@@ -130,7 +131,7 @@ class AtkinsonDitherer {
     // Quantize to 4 levels
     uint8_t quantized;
     int quantizedValue;
-    if (false) {  // original thresholds
+    if (useOriginalThresholds) {  // original thresholds
       if (adjusted < 43) {
         quantized = 0;
         quantizedValue = 0;
@@ -189,10 +190,11 @@ class AtkinsonDitherer {
   }
 
  private:
-  int width;
+  const int width;
   int16_t* errorRow0;
   int16_t* errorRow1;
   int16_t* errorRow2;
+  const bool useOriginalThresholds;
 };
 
 // Floyd-Steinberg error diffusion dithering with serpentine scanning
@@ -205,7 +207,8 @@ class AtkinsonDitherer {
 //      7/16  X
 class FloydSteinbergDitherer {
  public:
-  explicit FloydSteinbergDitherer(int width) : width(width), rowCount(0) {
+  explicit FloydSteinbergDitherer(int width, bool useOriginalThresholds = false)
+      : width(width), rowCount(0), useOriginalThresholds(useOriginalThresholds) {
     errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
     errorNextRow = new int16_t[width + 2]();
   }
@@ -234,7 +237,7 @@ class FloydSteinbergDitherer {
     // Quantize to 4 levels (0, 85, 170, 255)
     uint8_t quantized;
     int quantizedValue;
-    if (false) {  // original thresholds
+    if (useOriginalThresholds) {  // original thresholds
       if (adjusted < 43) {
         quantized = 0;
         quantizedValue = 0;
@@ -315,8 +318,9 @@ class FloydSteinbergDitherer {
   }
 
  private:
-  int width;
+  const int width;
   int rowCount;
   int16_t* errorCurRow;
   int16_t* errorNextRow;
+  const bool useOriginalThresholds;
 };

@@ -17,7 +17,6 @@ namespace {
 // v30: Arabic shaping changed both drawing and measurement (getTextAdvanceX now
 //      measures the shaped visual text); cached word positions from v29 no longer
 //      match what drawText renders.
-// v31: CJK words split at MAX_WORD_SIZE preserve continuation state.
 // v32: ImageBlock serializes the book-internal source href after the cache path
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
@@ -25,18 +24,22 @@ namespace {
 // v34: Word gaps are only suppressed for tokens glued in the source, so spaces between
 //      Hangul words survive again; ruby element boundaries carry the continuation flag
 //      instead. Invalidates v33 caches, whose word positions have the spaces collapsed.
-//      <br> handling also changed layout — a <br> after text is now a margin-stripped
+
+// v34: <br> handling changed layout — a <br> after text is now a margin-stripped
 //      line break (browser-like) and only a <br> whose block stays empty injects
 //      the scene-break gap, so cached pages laid out by older versions no longer
 //      match. Keeps <br>-per-paragraph books (common CJK formatting) from
 //      re-adding container spacing at every paragraph.
 // v35: Persist a uint32_t visible-text start offset for every page.
-// v36: Ruby/justified text and CJK line breaking now use corrected word
-//      measurements and positions.
+// v36: Ruby and CJK justification layout changes invalidate cached word positions.
 // v37: Footnote href records grew from 96 to 256 bytes.
-// v38: Simple HTML table rows are laid out as positioned columns instead of
+// v38: Focus Reading line breaking changed — a visible hyphen/dash inside a word is now a
+//      break opportunity, and hyphenation of a focus-split word considers the whole word
+//      instead of only its regular-weight suffix. Pages cached by older versions were laid
+//      out with the previous, more restrictive break set and no longer match.
+// v39: Simple HTML table rows are laid out as positioned columns instead of
 //      flattened paragraphs with synthetic row/cell labels.
-constexpr uint8_t SECTION_FILE_VERSION = 38;
+constexpr uint8_t SECTION_FILE_VERSION = 39;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

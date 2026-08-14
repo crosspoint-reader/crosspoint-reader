@@ -90,15 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 38
+### Version 39
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 38 keeps the version 37 serialized layout unchanged. It was bumped
+Version 39 keeps the version 38 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
 than flattened paragraphs with synthetic row/cell labels.
+
+Version 38 keeps the version 37 serialized layout unchanged. It was bumped
+because Focus Reading now permits line breaks at visible hyphens and dashes
+and hyphenates focus-split words as a whole, changing cached page layout.
 
 Version 37 increases the fixed-size footnote href field from 96 to 256 bytes.
 This changes each serialized footnote record from 128 to 288 bytes, so older

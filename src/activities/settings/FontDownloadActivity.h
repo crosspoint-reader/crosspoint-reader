@@ -5,8 +5,7 @@
 
 #include "FontInstaller.h"
 #include "SdCardFont.h"
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiListActivity.h"
 
 // JSON schema version of the fonts.json manifest. The canonical version for
 // the build tooling lives in lib/EpdFont/scripts/cpfont_version.py. This
@@ -26,13 +25,12 @@
       FONTS_MANIFEST_VERSION) "-b" FONT_MANIFEST_URL_STRINGIFY(CPFONT_VERSION) "/fonts.json"
 #endif
 
-class FontDownloadActivity : public Activity {
+class FontDownloadActivity final : public UiListActivity {
  public:
   explicit FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override {
     return state_ == LOADING_MANIFEST || state_ == DOWNLOADING ||
@@ -71,12 +69,10 @@ class FontDownloadActivity : public Activity {
 
   State state_ = WIFI_SELECTION;
   FontInstaller fontInstaller_;
-  ButtonNavigator buttonNavigator_;
 
   // Manifest data
   std::string baseUrl_;
   std::vector<ManifestFamily> families_;
-  int selectedIndex_ = 0;
 
   // Download progress
   size_t currentFileIndex_ = 0;
@@ -86,6 +82,29 @@ class FontDownloadActivity : public Activity {
   int downloadingFamilyIndex_ = 0;
   std::string errorMessage_;
   bool cancelRequested_ = false;
+  // Set when the cancel came from the home gesture (consumed by the download
+  // callback's own input pump); exit to home after the abort unwinds.
+  bool goHomeRequested_ = false;
+
+  // Row cache: buildScreen() only runs while state_ == FAMILY_LIST, and
+  // families_ only changes at the handful of state_-transition points back to
+  // FAMILY_LIST (manifest load, download/update/delete completing) — never
+  // mid-stay (cursor move, tap flash). rowsDirty_ marks those transitions so
+  // buildScreen() rebuilds rowItems_ only when it actually needs to, instead
+  // of on every repaint.
+  std::vector<std::string> rowLabels_;
+  std::vector<freeink::ui::ListItem> rowItems_;
+  bool rowsDirty_ = true;
+  void rebuildRowItems();
+
+  int listCount() const override { return listItemCount(); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  // Non-list states (loading, downloading, complete, error) consume the loop
+  // pass here; only FAMILY_LIST falls through to the base list protocol.
+  bool handleCustomInput() override;
+
+  void activateSelected();
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
