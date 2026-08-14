@@ -111,25 +111,7 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
 }
 
 bool EpubReaderMenuActivity::handleCustomInput() {
-  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-    // The popup acts on button press; if that input closed it, the trailing
-    // release must be swallowed below (Back would close the menu, Confirm
-    // would re-activate the selected item).
-    popupClosing = !optionPopup.isActive();
-    return true;
-  }
-  if (popupClosing) {
-    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // closing press still held
-    }
-    popupClosing = false;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      return true;  // swallow the release that closed the popup
-    }
-  }
-  return false;
+  return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
 bool EpubReaderMenuActivity::handleButtons() {

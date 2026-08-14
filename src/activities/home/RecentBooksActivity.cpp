@@ -76,28 +76,13 @@ void RecentBooksActivity::onRowLongPress(const int index) {
 }
 
 bool RecentBooksActivity::handleButtons() {
-  // After a long-press has fired, swallow input until Confirm is physically released
-  // (so the release doesn't also open the book; re-arm only once the button is up).
-  if (longPressFired) {
-    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      longPressFired = false;
-    }
-    return true;
-  }
-
-  // Long-press Confirm on the selected book: prompt to remove it from the list.
-  // Fires when the hold times out while still held (firmware hold-to-act pattern,
-  // cf. FileBrowserActivity BACK long-press).
-  if (!recentBooks.empty() && nav.selected < listCount() &&
-      mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-    longPressFired = true;
-    promptRemoveBook(recentBooks[nav.selected].path, recentBooks[nav.selected].title);
-    return true;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!recentBooks.empty() && nav.selected < listCount()) {
-      activateIndex(nav.selected);
+      if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+        promptRemoveBook(recentBooks[nav.selected].path, recentBooks[nav.selected].title);
+      } else {
+        activateIndex(nav.selected);
+      }
       return true;
     }
   }
