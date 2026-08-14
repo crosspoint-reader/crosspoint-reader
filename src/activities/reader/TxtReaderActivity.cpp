@@ -1,3 +1,5 @@
+#include "TxtReaderActivity.h"
+
 #include <BidiUtils.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
@@ -11,7 +13,6 @@
 #include "ProgressFile.h"
 #include "ReaderActivity.h"
 #include "ReaderUtils.h"
-#include "TxtReaderActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
