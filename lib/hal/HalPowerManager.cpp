@@ -132,9 +132,15 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     return false;
   }
   // Light sleep drops a WiFi association and kills an enumerated USB-CDC link.
+#ifdef FREEINK_FRONTLIGHT_LS
+  // The frontlight PWM runs from RC_FAST with KEEP_ALIVE and survives light
+  // sleep (SDK FREEINK_FRONTLIGHT_LS), so a lit light no longer blocks it.
+  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
+#else
   // It also stops the default LEDC PWM output, visibly flashing ESP-driven
   // frontlights as the idle loop enters repeated sleep slices.
   if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached() || (Frontlight.present() && Frontlight.isOn())) {
+#endif
     return false;
   }
 
@@ -197,9 +203,12 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
 }
 
 bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t busyLevel) {
-  // Same exclusions as lightSleep(): light sleep drops WiFi/USB and suspends
-  // frontlight PWM. No LOG here — this runs ~50x/s mid-refresh.
+  // Same exclusions as lightSleep(). No LOG here — this runs ~50x/s mid-refresh.
+#ifdef FREEINK_FRONTLIGHT_LS
+  if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached()) {
+#else
   if (WiFi.getMode() != WIFI_MODE_NULL || gpio.isUsbConnectedCached() || (Frontlight.present() && Frontlight.isOn())) {
+#endif
     return false;
   }
 
