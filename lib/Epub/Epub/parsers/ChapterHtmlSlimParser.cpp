@@ -222,6 +222,19 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   }
 }
 
+// Move the pending id into the anchor map. A full map (or a failed chunk allocation)
+// only costs precision: links to the dropped anchor land at the start of the section
+// instead of on its page. That is the correct trade against aborting the build.
+void ChapterHtmlSlimParser::recordPendingAnchor() {
+  if (pendingAnchorId.empty()) return;
+  if (!anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)}) &&
+      !anchorMapFullLogged) {
+    anchorMapFullLogged = true;
+    LOG_ERR("EHP", "Anchor map full at %u entries, dropping further anchors", anchorData.size());
+  }
+  pendingAnchorId.clear();
+}
+
 void ChapterHtmlSlimParser::flushPendingAnchor() {
   if (pendingAnchorId.empty()) return;
 
@@ -238,8 +251,7 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   }
 
   // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-  pendingAnchorId.clear();
+  recordPendingAnchor();
 }
 
 void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
@@ -386,10 +398,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   setCurrentPageVisibleOffset(visibleTextOffset);
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
-  }
+  recordPendingAnchor();
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -1629,10 +1638,7 @@ bool ChapterHtmlSlimParser::finishParse() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
-    if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-      pendingAnchorId.clear();
-    }
+    recordPendingAnchor();
     setCurrentPageVisibleOffset(visibleTextOffset);
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
     completedPageCount++;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ChunkedVector.h>
 #include <HalStorage.h>
 #include <expat.h>
 
@@ -21,6 +22,14 @@ class GfxRenderer;
 class Epub;
 
 #define MAX_WORD_SIZE 200
+
+// Anchor id -> page index, accumulated over a whole chapter parse. Chunked rather
+// than a std::vector because it is appended to while the parse holds most of the
+// heap: a contiguous doubling past ~900 entries is the allocation that fails (and,
+// through the throwing operator new, aborts the device). 64 entries per chunk is
+// 1KB; the 20-chunk directory covers MAX_ANCHORS_PER_CHAPTER plus the TOC anchors
+// that bypass that cap.
+using AnchorMap = ChunkedVector<std::pair<std::string, uint16_t>, 64, 20>;
 
 class ChapterHtmlSlimParser {
   std::shared_ptr<Epub> epub;
@@ -90,7 +99,8 @@ class ChapterHtmlSlimParser {
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;
-  std::vector<std::pair<std::string, uint16_t>> anchorData;
+  AnchorMap anchorData;
+  bool anchorMapFullLogged = false;     // one LOG_ERR per parse once the map stops accepting anchors
   std::string pendingAnchorId;          // deferred until after previous text block is flushed
   std::vector<std::string> tocAnchors;  // the list of anchors that are TOC chapter boundaries
   uint16_t xpathParagraphIndex = 0;
@@ -126,6 +136,7 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
+  void recordPendingAnchor();
   void flushPendingAnchor();
   void flushPartWordBuffer();
   void setCurrentPageVisibleOffset(uint32_t offset);
@@ -189,7 +200,7 @@ class ChapterHtmlSlimParser {
   void abortParse();   // tear down without flushing (error / abandon)
 
   void addLineToPage(std::shared_ptr<TextBlock> line, uint32_t visibleOffset);
-  const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+  const AnchorMap& getAnchors() const { return anchorData; }
 
   // Byte progress of the in-flight parse, used to estimate a still-building section's total page
   // count (a giant single-spine book never fully lays out, so its real count is unknown). Valid
