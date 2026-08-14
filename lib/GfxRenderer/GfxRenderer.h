@@ -99,7 +99,7 @@ class GfxRenderer {
   // (#2725). One prewarm per string costs a single file open; re-measuring or
   // re-drawing resident glyphs is a RAM-only subset check. No-op for built-in
   // fonts.
-  void ensureSdGlyphsResident(int fontId, const char* text, EpdFontFamily::Style style) const;
+  void ensureSdGlyphsResident(int fontId, const char* text, EpdFontFamily::Style style, bool metadataOnly) const;
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
