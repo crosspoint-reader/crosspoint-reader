@@ -14,8 +14,6 @@
 #include "SdCardFontSystem.h"
 #include "TxtReaderActivity.h"
 #include "XtcReaderActivity.h"
-#include "activities/home/FileBrowserActivity.h"
-#include "activities/util/BmpViewerActivity.h"
 
 ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                                std::string bookPath, const bool allowFastInitialRefresh)
@@ -26,15 +24,11 @@ ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedIn
   }
 }
 
-std::unique_ptr<Activity> ReaderActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                 std::string path, const bool allowFastInitialRefresh) {
+std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                                       std::string path, const bool allowFastInitialRefresh) {
   // ActivityManager requires heap ownership; each branch allocates exactly one screen-lifetime object.
-  std::unique_ptr<Activity> activity;
-  if (path.empty()) {
-    activity = makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, "/");
-  } else if (FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path)) {
-    activity = makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, path);
-  } else if (FsHelpers::hasXtcExtension(path)) {
+  std::unique_ptr<ReaderActivity> activity;
+  if (FsHelpers::hasXtcExtension(path)) {
     activity = makeUniqueNoThrow<XtcReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
   } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     activity = makeUniqueNoThrow<TxtReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
