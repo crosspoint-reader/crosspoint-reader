@@ -51,8 +51,6 @@ void OpdsBookBrowserActivity::onEnter() {
   searchTemplate = "";
   currentPath = "";
   selectorIndex = 0;
-  consumeConfirm = false;
-  consumeBack = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
 
@@ -112,15 +110,6 @@ void OpdsBookBrowserActivity::onCancelEvent(const fui::ActionEvent&, void* user)
 
 void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
-    return;
-  }
-
-  if (consumeConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
-    return;
-  }
-  if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    consumeBack = false;
     return;
   }
 
@@ -555,10 +544,6 @@ void OpdsBookBrowserActivity::launchSearch() {
 
   auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-    // Swallow the release of the Confirm press that closed the keyboard only
-    // when that button is actually still held on resume — a blanket flag set
-    // at launch went stale on touch flows and ate the next genuine Confirm.
-    consumeConfirm = mappedInput.isPressed(MappedInputManager::Button::Confirm);
     state = BrowserState::BROWSING;
     if (!result.isCancelled) {
       performSearch(std::get<KeyboardResult>(result.data).text);

@@ -220,13 +220,10 @@ void HomeActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
-
   // Back is otherwise unused on the home menu: open the most recently read
   // book directly (recentBooks is most-recent-first and already pruned of
-  // files missing from the SD card). backPressSeen guards against the stale
-  // release of the Back press that closed the previous activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
+  // files missing from the SD card).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && !recentBooks.empty()) {
     onSelectBook(recentBooks[0].path);
     return;
   }

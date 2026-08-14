@@ -69,7 +69,7 @@ void FileBrowserActivity::loadFiles() {
         }
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename)) {
+                 FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename)) {
         files.emplace_back(filename);
       }
     }
@@ -110,17 +110,11 @@ void FileBrowserActivity::onEnter() {
     return;
   }
 
-  // If Confirm was held while this activity opened (typical when launched from a menu), ignore
-  // its release — otherwise we'd immediately auto-open whatever is at index 0.
-  lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
-
   auto root = Storage.open(basepath.c_str());
   if (!root) {
     basepath = "/";
     loadFiles();
   } else if (!root.isDirectory()) {
-    lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
-
     const std::string oldPath = basepath;
     basepath = FsHelpers::extractFolderPath(basepath);
     loadFiles();
@@ -240,11 +234,7 @@ void FileBrowserActivity::onRowLongPress(const int index) {
   activateSelected(/*forceDelete=*/true);
 }
 
-void FileBrowserActivity::activateSelected(const bool forceDelete, const bool fromButton) {
-  if (fromButton && lockNextConfirmRelease) {
-    lockNextConfirmRelease = false;
-    return;
-  }
+void FileBrowserActivity::activateSelected(const bool forceDelete) {
   if (files.empty()) return;
 
   const std::string& entry = files[nav.selected];
@@ -268,11 +258,6 @@ void FileBrowserActivity::activateSelected(const bool forceDelete, const bool fr
     const std::string fullPath = cleanBasePath + entry;
 
     auto handler = [this, fullPath](const ActivityResult& res) {
-      // The confirmation popup acts on button press; if that button is still
-      // held when we resume, swallow its release so it doesn't also act here
-      // (Back would go up a directory, Confirm would open the selection).
-      lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
-      lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
       if (!res.isCancelled) {
         LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
         if (removeDirFile(fullPath)) {
@@ -319,8 +304,8 @@ void FileBrowserActivity::activateSelected(const bool forceDelete, const bool fr
 bool FileBrowserActivity::handleCustomInput() {
   // Long press BACK (1s+) goes to root folder (Books mode only).
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
-  if (mode == Mode::Books && mappedInput.isPressed(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/" && !lockLongPressBack) {
+  if (mode == Mode::Books && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/") {
     basepath = "/";
     loadFiles();
     nav.selected = 0;
@@ -329,17 +314,12 @@ bool FileBrowserActivity::handleCustomInput() {
     return true;
   }
 
-  if (lockLongPressBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    lockLongPressBack = false;
-    return true;
-  }
-
   return false;
 }
 
 bool FileBrowserActivity::handleButtons() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    activateSelected(/*forceDelete=*/false, /*fromButton=*/true);
+    activateSelected();
     return true;
   }
 

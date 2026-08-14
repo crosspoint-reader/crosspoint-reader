@@ -28,7 +28,13 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 
 class GfxRenderer {
  public:
-  enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  enum RenderMode {
+    BW,                // 1-bit black/white
+    GRAYSCALE_LSB,     // Differential gray: mark pixels for LSB plane (clearScreen(0x00) + drawPixel(false))
+    GRAYSCALE_MSB,     // Differential gray: mark pixels for MSB plane (clearScreen(0x00) + drawPixel(false))
+    FACTORY_GRAY_LSB,  // Factory absolute gray: encode BW RAM = bit0 (clearScreen(0x00) + drawPixel(false))
+    FACTORY_GRAY_MSB,  // Factory absolute gray: encode RED RAM = bit1 (clearScreen(0x00) + drawPixel(false))
+  };
 
   // Logical screen orientation from the perspective of callers
   enum Orientation {
@@ -37,6 +43,12 @@ class GfxRenderer {
     PortraitInverted,          // 480x800 logical coordinates, inverted
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
+
+  // Display state — tracks whether the physical display was last updated via a factory LUT render.
+  // BW: frameBuffer mirrors the display (menus, EPUB reader).
+  // FactoryLut: display holds a grayscale image; frameBuffer has been reset to white by
+  // cleanupGrayscaleWithFrameBuffer() and no longer represents what is visually shown.
+  enum class DisplayState { BW, FactoryLut };
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
@@ -52,6 +64,7 @@ class GfxRenderer {
   uint32_t frameBufferSize = HalDisplay::BUFFER_SIZE;
   std::vector<uint8_t*> bwBufferChunks;
   std::map<int, EpdFontFamily> fontMap;
+  mutable DisplayState displayState = DisplayState::BW;
   // Mutable because ensureSdCardFontReady() is const (called from layout code
   // that holds a const GfxRenderer&) but triggers SD card reads and heap
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
@@ -89,6 +102,17 @@ class GfxRenderer {
   // fontId unchanged. The whole string is routed as a unit so each draw/measure
   // call stays single-font (consistent bit depth, metrics, wrapping).
   int resolveTextFontId(int fontId, const char* text, EpdFontFamily::Style style) const;
+
+  // Batch-load `text`'s glyphs into an SD-card font's resident mini tables
+  // before a per-glyph measure/draw loop runs. Called when resolveTextFontId
+  // redirected a string to the SD fallback: UI screens (file browser, home)
+  // draw those strings without the reader's PrewarmScope, and every glyph
+  // would otherwise fault through SdCardFont::onGlyphMiss — one .cpfont file
+  // open + seek + read per glyph, per redraw, through an 8-slot overflow ring
+  // (#2725). One prewarm per string costs a single file open; re-measuring or
+  // re-drawing resident glyphs is a RAM-only subset check. No-op for built-in
+  // fonts.
+  void ensureSdGlyphsResident(int fontId, const char* text, EpdFontFamily::Style style, bool metadataOnly) const;
 
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
@@ -271,6 +295,8 @@ class GfxRenderer {
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getTextHeight(int fontId) const;
 
+  DisplayState getDisplayState() const { return displayState; }
+
   // Grayscale functions
   void setRenderMode(const RenderMode mode) { this->renderMode = mode; }
   RenderMode getRenderMode() const { return renderMode; }
@@ -286,7 +312,7 @@ class GfxRenderer {
   void displayGrayscaleBase(HalDisplay::RefreshMode fallback = HalDisplay::HALF_REFRESH) const;
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
-  void displayGrayBuffer() const;
+  void displayGrayBuffer(const unsigned char* lut = nullptr, bool factoryMode = false) const;
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM
   // from `scratch` (panelWidthBytes * numRows, physical rows [yStart, yStart+

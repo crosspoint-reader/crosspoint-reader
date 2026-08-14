@@ -56,7 +56,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   int listCount() const override { return static_cast<int>(menuItems.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  // Popup input/close-swallow runs before any button or touch handling.
+  // Popup input runs before any button or touch handling.
   bool handleCustomInput() override;
   // Back closes on RELEASE and Confirm activates on RELEASE; everything else
   // (row navigation, page jumps) falls through to the base handler.
@@ -70,9 +70,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   const std::vector<MenuItem> menuItems;
 
   OptionPopup optionPopup;
-  // True while the button press that closed the popup is still held; its release
-  // must not fall through to the menu's own Back/Confirm handlers.
-  bool popupClosing = false;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;

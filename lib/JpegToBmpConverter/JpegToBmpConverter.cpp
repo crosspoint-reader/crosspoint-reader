@@ -679,14 +679,19 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
+#if FREEINK_DRIVER_SSD1677
+    constexpr bool useOriginalThresholds = true;
+#else
+    constexpr bool useOriginalThresholds = false;
+#endif
     if (USE_ATKINSON) {
-      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
+      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth, useOriginalThresholds);
       if (!ctx.atkinsonDitherer) {
         LOG_ERR("JPG", "OOM: AtkinsonDitherer");
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
-      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
+      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth, useOriginalThresholds);
       if (!ctx.fsDitherer) {
         LOG_ERR("JPG", "OOM: FloydSteinbergDitherer");
         return false;

@@ -25,9 +25,6 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   void rebuildBookmarkRowItems();
   bool confirmingDelete = false;
   OptionPopup confirmPopup;
-  // True while the button press that closed the popup is still held; its release
-  // must not fall through to the list's own Back/Confirm handlers.
-  bool popupClosing = false;
 
  public:
   explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

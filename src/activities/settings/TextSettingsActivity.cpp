@@ -170,25 +170,7 @@ void TextSettingsActivity::activateIndex(const int index) {
 }
 
 bool TextSettingsActivity::handleCustomInput() {
-  if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) {  // picker owns input while open
-    // The popup acts on button press; if that input closed it, the trailing
-    // release must be swallowed below (Back would close this screen, Confirm
-    // would re-activate the selected row).
-    popupClosing_ = !optionPopup_.isActive();
-    return true;
-  }
-  if (popupClosing_) {
-    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // closing press still held
-    }
-    popupClosing_ = false;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      return true;  // swallow the release that closed the popup
-    }
-  }
-  return false;
+  return optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
 bool TextSettingsActivity::handleButtons() {
@@ -197,7 +179,7 @@ bool TextSettingsActivity::handleButtons() {
     return true;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ringPos() == 0) {
       switchTab();
     } else {

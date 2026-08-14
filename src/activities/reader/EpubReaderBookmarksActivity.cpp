@@ -115,24 +115,7 @@ void EpubReaderBookmarksActivity::onRowLongPress(const int index) {
 
 bool EpubReaderBookmarksActivity::handleCustomInput() {
   // Delete confirmation popup
-  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-    // The popup acts on button press; if that input closed it, the trailing
-    // release must be swallowed below (Back would leave the activity, Confirm
-    // would open the selected bookmark).
-    popupClosing = !confirmPopup.isActive();
-    return true;
-  }
-  if (popupClosing) {
-    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // closing press still held
-    }
-    popupClosing = false;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      return true;  // swallow the release that closed the popup
-    }
-  }
+  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
   if (confirmingDelete) {
     // Popup dismissed without a selection (Back button or tap outside): cancel delete
     confirmingDelete = false;
@@ -151,15 +134,13 @@ bool EpubReaderBookmarksActivity::handleButtons() {
     return true;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
-    openSelectedBookmark();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
+      showDeleteConfirmation();
+    } else {
+      openSelectedBookmark();
+    }
     return true;
-  }
-
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
-    // No pass-consumed return here: the legacy loop fell through to swipe and
-    // button navigation after arming the confirmation.
-    showDeleteConfirmation();
   }
 
   return false;

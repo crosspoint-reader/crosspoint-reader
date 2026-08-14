@@ -85,9 +85,6 @@ class TextSettingsActivity final : public UiTabListActivity {
 
   const SdCardFontRegistry* registry_;
   OptionPopup optionPopup_;
-  // True while the button press that closed the popup is still held; its release
-  // must not fall through to this screen's own Back/Confirm handlers.
-  bool popupClosing_ = false;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;
   textsettings::PreviewLayout previewLayout_;  // cached preview line layout; relaid only on setting/geometry change
