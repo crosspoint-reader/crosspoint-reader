@@ -102,25 +102,25 @@ class Atkinson1BitDitherer {
 // 1/8 1/8 1/8
 //     1/8
 // Less error buildup = fewer artifacts than Floyd-Steinberg
-template <bool useOriginalThresholds>
-class AtkinsonDithererImpl {
+class AtkinsonDitherer {
  public:
-  explicit AtkinsonDithererImpl(int width) : width(width) {
+  explicit AtkinsonDitherer(int width, bool useOriginalThresholds = false)
+      : width(width), useOriginalThresholds(useOriginalThresholds) {
     errorRow0 = new int16_t[width + 4]();  // Current row
     errorRow1 = new int16_t[width + 4]();  // Next row
     errorRow2 = new int16_t[width + 4]();  // Row after next
   }
 
-  ~AtkinsonDithererImpl() {
+  ~AtkinsonDitherer() {
     delete[] errorRow0;
     delete[] errorRow1;
     delete[] errorRow2;
   }
   // **1. EXPLICITLY DELETE THE COPY CONSTRUCTOR**
-  AtkinsonDithererImpl(const AtkinsonDithererImpl& other) = delete;
+  AtkinsonDitherer(const AtkinsonDitherer& other) = delete;
 
   // **2. EXPLICITLY DELETE THE COPY ASSIGNMENT OPERATOR**
-  AtkinsonDithererImpl& operator=(const AtkinsonDithererImpl& other) = delete;
+  AtkinsonDitherer& operator=(const AtkinsonDitherer& other) = delete;
 
   uint8_t processPixel(int gray, int x) {
     // Add accumulated error
@@ -190,14 +190,12 @@ class AtkinsonDithererImpl {
   }
 
  private:
-  int width;
+  const int width;
   int16_t* errorRow0;
   int16_t* errorRow1;
   int16_t* errorRow2;
+  const bool useOriginalThresholds;
 };
-
-using AtkinsonDitherer = AtkinsonDithererImpl<false>;
-using AtkinsonDithererOriginal = AtkinsonDithererImpl<true>;
 
 // Floyd-Steinberg error diffusion dithering with serpentine scanning
 // Serpentine scanning alternates direction each row to reduce "worm" artifacts
@@ -207,24 +205,24 @@ using AtkinsonDithererOriginal = AtkinsonDithererImpl<true>;
 // Error distribution pattern (right-to-left, mirrored):
 // 1/16 5/16 3/16
 //      7/16  X
-template <bool useOriginalThresholds>
-class FloydSteinbergDithererImpl {
+class FloydSteinbergDitherer {
  public:
-  explicit FloydSteinbergDithererImpl(int width) : width(width), rowCount(0) {
+  explicit FloydSteinbergDitherer(int width, bool useOriginalThresholds = false)
+      : width(width), rowCount(0), useOriginalThresholds(useOriginalThresholds) {
     errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
     errorNextRow = new int16_t[width + 2]();
   }
 
-  ~FloydSteinbergDithererImpl() {
+  ~FloydSteinbergDitherer() {
     delete[] errorCurRow;
     delete[] errorNextRow;
   }
 
   // **1. EXPLICITLY DELETE THE COPY CONSTRUCTOR**
-  FloydSteinbergDithererImpl(const FloydSteinbergDithererImpl& other) = delete;
+  FloydSteinbergDitherer(const FloydSteinbergDitherer& other) = delete;
 
   // **2. EXPLICITLY DELETE THE COPY ASSIGNMENT OPERATOR**
-  FloydSteinbergDithererImpl& operator=(const FloydSteinbergDithererImpl& other) = delete;
+  FloydSteinbergDitherer& operator=(const FloydSteinbergDitherer& other) = delete;
 
   // Process a single pixel and return quantized 2-bit value
   // x is the logical x position (0 to width-1), direction handled internally
@@ -320,11 +318,9 @@ class FloydSteinbergDithererImpl {
   }
 
  private:
-  int width;
+  const int width;
   int rowCount;
   int16_t* errorCurRow;
   int16_t* errorNextRow;
+  const bool useOriginalThresholds;
 };
-
-using FloydSteinbergDitherer = FloydSteinbergDithererImpl<false>;
-using FloydSteinbergDithererOriginal = FloydSteinbergDithererImpl<true>;

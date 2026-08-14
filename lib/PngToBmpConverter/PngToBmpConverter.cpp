@@ -624,17 +624,23 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   }
 
   // Create ditherers (same as JpegToBmpConverter)
-  AtkinsonDithererOriginal* atkinsonDitherer = nullptr;
-  FloydSteinbergDithererOriginal* fsDitherer = nullptr;
+  AtkinsonDitherer* atkinsonDitherer = nullptr;
+  FloydSteinbergDitherer* fsDitherer = nullptr;
   Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
+
+#if FREEINK_DRIVER_SSD1677
+  constexpr bool useOriginalThresholds = true;
+#else
+  constexpr bool useOriginalThresholds = false;
+#endif
 
   if (oneBit) {
     atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDithererOriginal(outWidth);
+      atkinsonDitherer = new AtkinsonDitherer(outWidth, useOriginalThresholds);
     } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = new FloydSteinbergDithererOriginal(outWidth);
+      fsDitherer = new FloydSteinbergDitherer(outWidth, useOriginalThresholds);
     }
   }
 
