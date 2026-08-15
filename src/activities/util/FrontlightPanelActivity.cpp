@@ -41,6 +41,12 @@ void FrontlightPanelActivity::onEnter() {
 
   brightness = Frontlight.brightness();
   warmth = Frontlight.warmth();
+  dimStep = SETTINGS.frontlightNightLight != 0 && Frontlight.supportsNightLight() ? Frontlight.dimStep() : 0;
+  // Night Light was toggled off while a dim step was live: return the
+  // hardware to percent mode so the panel and the light agree again.
+  if (dimStep == 0 && Frontlight.dimStep() > 0) {
+    Frontlight.setBrightness(brightness);
+  }
   lightOn = Frontlight.isOn();
   lightOnChanged = false;
 
@@ -62,10 +68,12 @@ void FrontlightPanelActivity::onExit() {
   // no such guarantee (see lightOnChanged's declaration), so it's gated on
   // the user actually having touched it this session instead.
   const bool changed = SETTINGS.frontlightBrightness != brightness || SETTINGS.frontlightWarmth != warmth ||
+                       SETTINGS.frontlightDimStep != dimStep ||
                        (lightOnChanged && SETTINGS.frontlightOn != (lightOn ? 1 : 0));
   if (changed) {
     SETTINGS.frontlightBrightness = brightness;
     SETTINGS.frontlightWarmth = warmth;
+    SETTINGS.frontlightDimStep = dimStep;
     if (lightOnChanged) SETTINGS.frontlightOn = lightOn ? 1 : 0;
     SETTINGS.saveToFile();
   }
@@ -76,6 +84,7 @@ void FrontlightPanelActivity::onBrightnessEvent(const fui::ActionEvent& event, v
   auto* self = static_cast<FrontlightPanelActivity*>(user);
   if (event.dragPermille < 0) return;
   self->brightness = percentFromPermille(event.dragPermille);
+  self->dimStep = 0;  // an absolute slider gesture always returns to percent mode
   Frontlight.setBrightness(self->brightness);
   if (!self->lightOn) {
     self->lightOn = true;
@@ -104,8 +113,39 @@ void FrontlightPanelActivity::onWarmthStepEvent(const fui::ActionEvent& event, v
 }
 
 void FrontlightPanelActivity::adjustBrightness(const int delta) {
+  // Night Light: below the 1% floor the control walks a fixed sub-1% ladder
+  // one step per press (regardless of the button's percent step size), and
+  // the dimmest step is the floor — off stays on the sun toggle.
+  const bool nightLight = SETTINGS.frontlightNightLight != 0 && Frontlight.supportsNightLight();
+  if (nightLight && (dimStep > 0 || (delta < 0 && brightness <= 1))) {
+    int nextStep = dimStep;
+    if (delta < 0) {
+      nextStep = dimStep < HalFrontlight::DIM_STEP_COUNT ? dimStep + 1 : dimStep;
+    } else if (delta > 0) {
+      nextStep = dimStep - 1;  // step 1 exits the ladder back to 1%
+    }
+    if (nextStep == dimStep) return;
+    dimStep = static_cast<uint8_t>(nextStep);
+    if (dimStep == 0) {
+      brightness = 1;
+      Frontlight.setBrightness(brightness);
+    } else {
+      Frontlight.setDimStep(dimStep);
+    }
+    if (!lightOn) {
+      lightOn = true;
+      lightOnChanged = true;
+      Frontlight.setOn(true);
+    }
+    requestUpdate();
+    return;
+  }
+
   int next = static_cast<int>(brightness) + delta;
-  if (next < 0) next = 0;
+  // With Night Light on, stepping down lands on 1% first so the ladder is
+  // always entered from the same place; without it, 0 remains reachable.
+  const int floor = nightLight && delta < 0 ? 1 : 0;
+  if (next < floor) next = floor;
   if (next > 100) next = 100;
   if (next == brightness) return;
   brightness = static_cast<uint8_t>(next);
@@ -213,7 +253,14 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
   screen.spacer(theme.spaceLg);
 
   const fui::Rect headerRow = screen.takeTop(rowHeight, theme.spaceSm).inset(sideInset);
-  snprintf(line, sizeof(line), "%s  %u%%", tr(STR_BRIGHTNESS), static_cast<unsigned>(brightness));
+  if (dimStep > 0) {
+    // Ladder percentages at 10-bit PWM (every in-tree LEDC frontlight profile);
+    // labels track DIM_LEVELS.
+    static const char* const kDimLabels[HalFrontlight::DIM_STEP_COUNT] = {"0.8", "0.6", "0.4", "0.2", "0.1"};
+    snprintf(line, sizeof(line), "%s  %s%%", tr(STR_BRIGHTNESS), kDimLabels[dimStep - 1]);
+  } else {
+    snprintf(line, sizeof(line), "%s  %u%%", tr(STR_BRIGHTNESS), static_cast<unsigned>(brightness));
+  }
   const fui::BitmapRef sunIcon = fui::bitmapFromIcon(lightOn ? icon_sun_filled_32 : icon_sun_32);
   const int16_t iconWidth = static_cast<int16_t>(sunIcon.width);
   const int16_t iconHeight = static_cast<int16_t>(sunIcon.height);
@@ -227,8 +274,8 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
   screen.frame().hit(sunHit, ACTION_TOGGLE);
   screen.target().bitmap(sunRect, sunIcon, fui::BitmapMode::Center);
 
-  addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset), brightness, ACTION_BRIGHTNESS,
-                ACTION_BRIGHTNESS_STEP);
+  addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset),
+                dimStep > 0 ? 0 : brightness, ACTION_BRIGHTNESS, ACTION_BRIGHTNESS_STEP);
 
   if (Frontlight.hasColorTemperature()) {
     snprintf(line, sizeof(line), "%s  %u%%", tr(STR_WARMTH), static_cast<unsigned>(warmth));

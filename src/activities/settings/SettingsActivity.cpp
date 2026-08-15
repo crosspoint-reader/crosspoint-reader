@@ -3,6 +3,7 @@
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <HalFrontlight.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -59,6 +60,11 @@ void SettingsActivity::rebuildSettingsLists() {
       // The sunlight fading fix is a grayscale-waveform compensation that does
       // not apply on the X4 Pro (plain OTP waveform, no custom grayscale LUT).
       if (setting.valuePtr == &CrossPointSettings::fadingFix && BoardConfig::isX4Pro()) {
+        continue;
+      }
+      // Night Light needs an LEDC frontlight (the PM1 PMIC path can't express
+      // the sub-1% ladder); hide the toggle where it could only misbehave.
+      if (setting.valuePtr == &CrossPointSettings::frontlightNightLight && !Frontlight.supportsNightLight()) {
         continue;
       }
       displaySettings.push_back(setting);

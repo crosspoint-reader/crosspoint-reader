@@ -305,6 +305,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Restore the saved on/off state after a normal boot or wake. Brightness and
   // warmth are always remembered even when this is disabled.
   uint8_t frontlightRestoreOnWake = 0;
+  // Night Light: extend the frontlight panel below its 1% floor with sub-1%
+  // dim steps (0.8/0.6/0.4/0.2/0.1%) for dark-room reading.
+  uint8_t frontlightNightLight = 0;
+  // Active sub-1% step, 0 = none (normal percent brightness applies). Persisted
+  // like brightness so restore-on-wake comes back at the same dim level.
+  uint8_t frontlightDimStep = 0;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.

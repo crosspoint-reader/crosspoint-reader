@@ -435,7 +435,11 @@ void setup() {
   // light off unless Restore Light on Wake is enabled; silent maintenance
   // reboots preserve the live state so they do not unexpectedly go dark.
   const bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
-  Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
+  // A persisted Night Light step only survives while the feature is enabled;
+  // toggling the setting off returns the light to plain percent brightness.
+  const uint8_t restoreDimStep =
+      SETTINGS.frontlightNightLight != 0 && Frontlight.supportsNightLight() ? SETTINGS.frontlightDimStep : 0;
+  Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn, restoreDimStep);
 
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
