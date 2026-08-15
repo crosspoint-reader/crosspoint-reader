@@ -10,6 +10,63 @@
 
 #include "FsHelpers.h"
 
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+#include <esp_heap_caps.h>
+
+namespace serialization {
+// Cursor over the whole-file PSRAM mirror of book.bin, shaped like HalFile /
+// BufferedFileReader so the entry decoders below run over it unchanged -- the
+// only seam the mirror needs is the reader type handed to them.
+// Every access is clamped to the mirror: a short/corrupt mirror must degrade to
+// truncated reads (empty strings), never an out-of-bounds walk.
+class BookBinMirrorReader {
+ public:
+  BookBinMirrorReader(const uint8_t* base, const size_t size) : base(base), size(size) {}
+
+  size_t read(void* dst, const size_t len) {
+    const size_t n = std::min(len, remaining());
+    memcpy(dst, base + pos, n);
+    pos += n;
+    return n;
+  }
+  size_t remaining() const { return pos < size ? size - pos : 0; }
+  bool seek(const size_t target) {
+    if (target > size) return false;
+    pos = target;
+    return true;
+  }
+
+ private:
+  const uint8_t* base;
+  size_t size;
+  size_t pos = 0;
+};
+
+// serialization:: overloads mirroring the HalFile ones in Serialization.h. These
+// must precede the entry decoders in the anonymous namespace below:
+// readSpineEntryFrom/readTocEntryFrom call serialization::readString by qualified
+// name, which is not subject to ADL, so the overload set is fixed at the point
+// where those templates are defined rather than where they are instantiated.
+template <typename T>
+void readPod(BookBinMirrorReader& in, T& value) {
+  in.read(&value, sizeof(T));
+}
+
+inline void readString(BookBinMirrorReader& in, std::string& s) {
+  uint32_t len = 0;
+  readPod(in, len);
+  // Clamp before resize(): a garbage length out of a corrupt mirror would
+  // otherwise ask for a multi-MB allocation, where the file path is bounded by
+  // what the file can actually supply.
+  const size_t n = std::min(static_cast<size_t>(len), in.remaining());
+  s.resize(n);
+  if (n > 0) {
+    in.read(&s[0], n);
+  }
+}
+}  // namespace serialization
+#endif  // CROSSPOINT_BOOKBIN_PSRAM
+
 namespace {
 constexpr uint8_t BOOK_CACHE_VERSION = 10;  // v10: ignore ambiguous guide text references
 constexpr char bookBinFile[] = "/book.bin";
@@ -165,6 +222,12 @@ bool BookMetadataCache::endWrite() {
 }
 
 bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMetadata& metadata) {
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+  // book.bin is about to be rewritten, so any mirror of it is stale. (In practice
+  // the build always runs on a freshly constructed cache that was never loaded;
+  // this keeps the invariant local to the one function that invalidates the file.)
+  releaseMirror();
+#endif
   // Open all three files, writing to meta, reading from spine and toc
   if (!Storage.openFileForWrite("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
@@ -458,6 +521,12 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
 /* ============= READING / LOADING FUNCTIONS ================ */
 
 bool BookMetadataCache::load() {
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+  // A second load() on the same object (re-open after a rebuild) must not serve
+  // the previous file's bytes, and must be allowed to mirror the new one.
+  releaseMirror();
+  mirrorLoadAttempted = false;
+#endif
   if (!Storage.openFileForRead("BMC", cachePath + bookBinFile, bookFile)) {
     return false;
   }
@@ -505,6 +574,78 @@ uint32_t BookMetadataCache::getCumulativeSize(const int index) const {
   return cumulativeSizes[index];
 }
 
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+// Mirror the finalized book.bin into PSRAM so spine/TOC lookups become memory
+// reads. Today each getSpineEntry/getTocEntry below costs two SD seeks plus the
+// entry read: the status-bar chapter title pays one on EVERY page render (via
+// Epub::getTocIndexForSpineIndex + getTocItem), and Epub::resolveHrefToSpineIndex
+// (footnote and TOC href resolution) pays an O(n) scan of the whole spine. The
+// file is small -- a few KB to ~200KB on a 1,732-spine omnibus -- and, once
+// written, immutable for the life of the cache: buildBookBin is the only thing
+// that replaces it, and every rewrite is followed by a fresh BookMetadataCache +
+// load().
+//
+// Silent fallback: an oversized file or a failed allocation simply leaves
+// mirror == nullptr, and every read stays on bookFile exactly as before.
+//
+// Filled lazily, on the first spine/TOC lookup, NOT from load(): Epub::load()
+// also runs for cover-thumbnail generation and for metadata probes (title,
+// author, language -- all read straight out of the header), and those never call
+// a getter. Mirroring in load() made every one of them pay a whole-file PSRAM
+// alloc + read + free for a mirror nothing would read.
+void BookMetadataCache::ensureMirror() {
+  if (mirrorLoadAttempted) return;
+  mirrorLoadAttempted = true;  // one attempt per load(), success or not
+  loadMirror();
+}
+
+void BookMetadataCache::loadMirror() {
+  releaseMirror();
+  const size_t size = bookFile.size();
+  if (size == 0) return;
+  if (size > MAX_MIRROR_BYTES) {
+    LOG_DBG("BMC", "book.bin is %u bytes, past the mirror cap; serving from SD", static_cast<unsigned>(size));
+    return;
+  }
+  auto* buf = static_cast<uint8_t*>(heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+  if (!buf) {
+    LOG_DBG("BMC", "No PSRAM for a %u-byte book.bin mirror; serving from SD", static_cast<unsigned>(size));
+    return;
+  }
+
+  // The Epub hands this one bookFile handle to every consumer, so borrow it and
+  // put the cursor back: the fallback path and any future writer must see the
+  // handle exactly as the caller left it.
+  const size_t resume = bookFile.position();
+  size_t got = 0;
+  if (bookFile.seek(0)) {
+    while (got < size) {
+      const int n = bookFile.read(buf + got, size - got);
+      if (n <= 0) break;
+      got += static_cast<size_t>(n);
+    }
+  }
+  bookFile.seek(resume);
+
+  if (got != size) {
+    heap_caps_free(buf);
+    LOG_ERR("BMC", "Short read mirroring book.bin (%u/%u); serving from SD", static_cast<unsigned>(got),
+            static_cast<unsigned>(size));
+    return;
+  }
+  mirror = buf;
+  mirrorSize = static_cast<uint32_t>(size);
+  LOG_DBG("BMC", "Mirrored book.bin (%u bytes) into PSRAM", static_cast<unsigned>(mirrorSize));
+}
+
+void BookMetadataCache::releaseMirror() {
+  if (!mirror) return;
+  heap_caps_free(mirror);
+  mirror = nullptr;
+  mirrorSize = 0;
+}
+#endif  // CROSSPOINT_BOOKBIN_PSRAM
+
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {
   if (!loaded) {
     LOG_ERR("BMC", "getSpineEntry called but cache not loaded");
@@ -515,6 +656,27 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
     LOG_ERR("BMC", "getSpineEntry index %d out of range", index);
     return {};
   }
+
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+  // Same LUT walk, served from the mirror. This getter (with getTocEntry below)
+  // is the only place book.bin is seeked in read mode after load(), so it is the
+  // whole seam -- and the only pair of callers that make a mirror worth filling,
+  // hence the lazy fill here rather than in load(). Both branches decode through
+  // the same readSpineEntryFrom template, so the entry format keeps exactly one
+  // implementation.
+  ensureMirror();
+  if (mirror) {
+    serialization::BookBinMirrorReader in(mirror, mirrorSize);
+    // A refused seek means the target is past the mirror (short or corrupt
+    // file). Decoding from wherever the cursor happens to sit would return a
+    // well-formed entry for the wrong spine item; give up instead.
+    if (!in.seek(lutOffset + sizeof(uint32_t) * index)) return {};
+    uint32_t spineEntryPos = 0;
+    serialization::readPod(in, spineEntryPos);
+    if (!in.seek(spineEntryPos)) return {};
+    return readSpineEntryFrom(in);
+  }
+#endif
 
   // Seek to spine LUT item, read from LUT and get out data
   bookFile.seek(lutOffset + sizeof(uint32_t) * index);
@@ -534,6 +696,19 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
     LOG_ERR("BMC", "getTocEntry index %d out of range", index);
     return {};
   }
+
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+  // Same lazy fill and same out-of-bounds handling as getSpineEntry above.
+  ensureMirror();
+  if (mirror) {
+    serialization::BookBinMirrorReader in(mirror, mirrorSize);
+    if (!in.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index)) return {};
+    uint32_t tocEntryPos = 0;
+    serialization::readPod(in, tocEntryPos);
+    if (!in.seek(tocEntryPos)) return {};
+    return readTocEntryFrom(in);
+  }
+#endif
 
   // Seek to TOC LUT item, read from LUT and get out data
   bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index);

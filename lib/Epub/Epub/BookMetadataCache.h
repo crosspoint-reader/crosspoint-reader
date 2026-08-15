@@ -94,12 +94,45 @@ class BookMetadataCache {
   SpineEntry readSpineEntry(HalFile& file) const;
   TocEntry readTocEntry(HalFile& file) const;
 
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+  // Whole-file PSRAM mirror of the finalized book.bin. nullptr = not mirrored,
+  // which is byte-for-byte the historical file path. See loadMirror().
+  uint8_t* mirror = nullptr;
+  uint32_t mirrorSize = 0;
+  // Set by the first ensureMirror(), whether or not it produced a mirror, so a
+  // book.bin that is too big (or a PSRAM refusal) is not re-probed on every
+  // lookup. Cleared only by load(), which is the one path that can make a
+  // previous verdict stale.
+  bool mirrorLoadAttempted = false;
+  // Sanity cap on what gets mirrored. Real book.bin files run from a few KB to
+  // ~200KB (measured on a 1,732-spine omnibus); anything past this is absurd or
+  // corrupt and stays on SD. Sized just past the worst case observed rather than
+  // "surely enough": the cap's job is to refuse a corrupt length before it turns
+  // into a multi-MB PSRAM allocation.
+  static constexpr uint32_t MAX_MIRROR_BYTES = 512u * 1024;
+  // Fill/free the mirror. Both are no-ops that leave bookFile untouched when the
+  // allocation is refused, so every caller keeps working off the file handle.
+  // ensureMirror() is the lazy one-shot entry point the getters call.
+  void ensureMirror();
+  void loadMirror();
+  void releaseMirror();
+#endif
+
  public:
   BookMetadata coreMetadata;
 
   explicit BookMetadataCache(std::string cachePath)
       : cachePath(std::move(cachePath)), lutOffset(0), spineCount(0), tocCount(0), loaded(false), buildMode(false) {}
+#ifdef CROSSPOINT_BOOKBIN_PSRAM
+  ~BookMetadataCache() { releaseMirror(); }
+  // The mirror is a raw owning pointer; the class was never copied (HalFile
+  // members are already move-only), this makes that a compile error rather than
+  // a double free.
+  BookMetadataCache(const BookMetadataCache&) = delete;
+  BookMetadataCache& operator=(const BookMetadataCache&) = delete;
+#else
   ~BookMetadataCache() = default;
+#endif
 
   // Building phase (stream to disk immediately)
   bool beginWrite();
