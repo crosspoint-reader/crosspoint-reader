@@ -1,14 +1,14 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
+Project: Open-source e-reader firmware for ESP32-class e-ink devices (Xteink X3/X4 C3 binary, Seeed Sticky, and later targets as `platformio.ini` adds them).
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
 ## AI Agent Identity and Cognitive Rules
 
 * Role: Senior Embedded Systems Engineer (ESP-IDF/Arduino-ESP32 specialized).
-* Primary Constraint: 380KB RAM is the hard ceiling. Stability is non-negotiable.
+* Primary Constraint: The C3 `default` binary's ~380KB usable DRAM is the feature-presence floor. Stability is non-negotiable. Device-specific RAM, PSRAM, panel size, and controllers live in the `platform-targets` skill — not in this file.
 * Evidence-Based Reasoning: Before proposing a change, you MUST cite the specific file path and line numbers that justify the modification.
-* Anti-Hallucination: Do not assume the existence of libraries or ESP-IDF functions. If you are unsure of an API's availability for the ESP32-C3 RISC-V target, check the freeink-sdk source or the FreeInk SDK docs (https://freeink.org/llms.txt for an LLM-readable index) first.
+* Anti-Hallucination: Do not assume the existence of libraries or ESP-IDF functions. Prefer in-tree `freeink-sdk/` (especially `BoardConfig.h`) for hardware and SDK APIs. https://freeink.org/llms.txt is a website **index** of docs, not the device matrix.
 * No Unfounded Claims: Do not claim performance gains or memory savings without explaining the technical mechanism (e.g., DRAM vs IRAM usage).
 * Resource Justification: You must justify any new heap allocation (new, malloc, std::vector) or explain why a stack/static alternative was rejected.
 * Verification: After suggesting a fix, instruct the user on how to verify it (e.g., monitoring heap via Serial or checking a specific cache file).
@@ -48,18 +48,18 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 ### Hardware Specs
 
-* MCUs: ESP32-C3 (single-core RISC-V @ 160MHz) and ESP32-S3 (`sticky`, dual-core Xtensa LX7)
-* RAM: ~380KB usable on ESP32-C3 (VERY LIMITED - primary project constraint)
-  * **NO PSRAM on C3**.
-  * **Single Buffer Mode**: Only ONE 48KB framebuffer (not double-buffered)
-* Flash: 16MB (Instruction storage and static data)
-* Display: 800x480 E-Ink (Slow refresh, monochrome, 1-2s full update)
-  * Framebuffer: 48,000 bytes (800 × 480 ÷ 8)
-* Storage: SD Card (Used for books and aggressive caching)
+Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Do not copy 800×480, 48KB, or "no PSRAM" as project-wide facts.
+
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill and its per-device `resources/` files.
+* Today `[env:default]` (and the C3 release aliases) is the shared **X3+X4** C3 binary. `[env:sticky]` is a separate S3 binary. Treat X3 and X4 as two devices in one env until that env is split.
+* Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only — if you find a new env there, ask before researching or adding a skill resource.
+* DRAM discipline as if the C3 `default` env is in the room. PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 does not imply that; Sticky leaves PSRAM off).
+* Never hardcode panel size. Use `renderer.getScreenWidth()` / `getScreenHeight()` and `BoardConfig::MAX_FRAMEBUFFER_BYTES` for the compiled set.
+* Single framebuffer (`EINK_DISPLAY_SINGLE_BUFFER_MODE=1`). Storage is the SD card (books and cache). Partition table in this tree is 16MB flash.
 
 ### The Resource Protocol
 
-1. Stack Safety: Limit local function variables to < 256 bytes. The ESP32-C3 default stack is small; use std::unique_ptr or static pools for larger buffers.
+1. Stack Safety: Limit local function variables to < 256 bytes. Task stacks are small (especially on the C3); use std::unique_ptr or static pools for larger buffers.
 2. Heap Fragmentation: Avoid repeated new/delete in loops. Allocate buffers once during onEnter() and reuse them.
 3. Flash Persistence: Large constant data (UI strings, lookup tables) MUST be marked static const to stay in Flash (Instruction Bus), freeing DRAM.
 4. String Policy: Prohibit std::string and Arduino String in hot paths. Use std::string_view for read-only access and snprintf with fixed char[] buffers for construction.
@@ -108,17 +108,18 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 * **Standard**: C++20 (`-std=c++2a`). No Exceptions, No RTTI.
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
 * **Environments** (in `platformio.ini`):
-  * `default`: Development (LOG_LEVEL=2, serial enabled)
-  * `gh_release`: Production (LOG_LEVEL=0)
-  * `gh_release_rc`: Release candidate (LOG_LEVEL=1)
-  * `slim`: Minimal build (no serial logging)
+  * `default`: C3 X3+X4 development (LOG_LEVEL=2, serial enabled)
+  * `gh_release`: C3 X3+X4 production (LOG_LEVEL=1)
+  * `gh_release_rc`: C3 X3+X4 release candidate (LOG_LEVEL=1)
+  * `slim`: C3 X3+X4 minimal (no serial logging)
+  * `sticky` / `sticky-gh_release` / `sticky-gh_release_rc`: Seeed Sticky (S3). PSRAM left off.
 
 ### Critical Build Flags
 
 These flags in `platformio.ini` fundamentally affect firmware behavior:
 
 ```cpp
--DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (saves 48KB RAM!)
+-DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (not double-buffered)
 -DARDUINO_USB_MODE=1                 // Enable USB CDC
 -DARDUINO_USB_CDC_ON_BOOT=1          // Serial available immediately at boot
 -DXML_CONTEXT_BYTES=1024             // XML parser memory limit (EPUB parsing)
