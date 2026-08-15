@@ -14,6 +14,9 @@ Repo language: **env** is a PlatformIO binary (`pio run -e default`). **device**
 is a `FREEINK_DEVICE_*` flag. **board profile** is the SDK `BoardProfile` in
 `freeink-sdk`. Do not treat those three as the same thing.
 
+If the next step is a judgment call (delete a file, invent INI/CI, promote a
+local env, change the schema, treat a file as leftover), **ask**. Do not guess.
+
 Two lists, both factual — do not collapse them:
 
 - **Compile set** — committed `platformio.ini` ∩ CI `pio run -e`. This is what
@@ -37,9 +40,9 @@ Match the task. Do not assume one of these is the only way in.
    CI, or a reviewer found a wrong number. Re-read the sources, patch the
    file, say what changed. Do not "fix" firmware to match stale prose.
 3. **Remove firmware support.** The task drops a flag from the committed
-   compile set. Update or delete the resource as the task asks: delete it if
-   agent support should go away; keep it as `status: upcoming` if they still
-   want the facts. Do not delete a file because it is "extra."
+   compile set. **Ask** whether to delete the resource or keep it as
+   `status: upcoming`. A file that is not on the compile set is not
+   automatically leftover and is not automatically deleted.
 4. **Change the schema.** Allowed when the current fields cannot state a fact
    (new source, new BoardProfile member, a field that was wrong). Edit
    [SCHEMA.md](SCHEMA.md), then every resource (compiled and upcoming) so
@@ -67,8 +70,8 @@ promotion. Respect a no.
 3. **Load compiled resources.** For each flag on that set, read
    `resources/<device>.md` (slug = flag suffix, lowercased). One env may set
    several flags; load every matching **compiled** file. If the file is missing
-   or marked `upcoming`, that is a gap or a status error — fix it (interaction
-   1 or 2).
+   or marked `upcoming` while the flag is on the compile set, **ask** (create,
+   flip status, or leave it) unless the task already said which.
 4. **Union.** A CrossPoint-wide firmware change must satisfy every **compiled**
    device. Upcoming resources inform design; they do not widen the must-build
    set.
@@ -129,11 +132,12 @@ treat an `upcoming` file as compiled.
 - [ ] Compile-set enumeration listed every INI ∩ CI flag, or said INI and CI
       disagree.
 - [ ] Applied only `status: compiled` resources as must-build constraints.
-- [ ] Did not delete a resource unless the task removed agent support.
+- [ ] Did not delete a resource, or treat one as leftover, without asking.
 - [ ] Corrected or created a file from the field map when sources disagreed
       or a compiled flag had no file.
 - [ ] Schema edits updated SCHEMA.md and every resource, and were the task.
-- [ ] Asked before promoting a local-only env; respected a no.
+- [ ] Asked on judgment calls (local env, leftover file, status mismatch,
+      schema, INI/CI); respected a no.
 - [ ] PSRAM / `MALLOC_CAP_SPIRAM` only if the env being built sets
       `BOARD_HAS_PSRAM`; the tightest compiled DRAM target still builds
       without that allocation.
