@@ -1005,31 +1005,15 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 
 ### Cache File Format Versioning
 
-**Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
-
-**Current Versions** (as of docs/file-formats.md):
-
-- `book.bin`: **Version 7** (metadata structure)
-- `section.bin`: **Version 25** (layout structure)
+Live values are `BOOK_CACHE_VERSION` in `lib/Epub/Epub/BookMetadataCache.cpp` and
+`SECTION_FILE_VERSION` in `lib/Epub/Epub/Section.cpp`. Do not copy those integers
+into this file. Layout notes live in `docs/file-formats.md`.
 
 **Version Increment Rules**:
 
-1. **ALWAYS increment version** BEFORE changing binary structure
+1. **ALWAYS increment** the matching `constexpr` BEFORE changing binary structure
 2. Version mismatch → Cache auto-invalidated and regenerated
 3. Document format changes in `docs/file-formats.md`
-
-**Example** (incrementing section format version):
-
-```cpp
-// lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 26;  // Was 25, now 26
-
-// Add new field to structure
-struct PageLine {
-  // ... existing fields ...
-  uint16_t newField;  // New field added
-};
-```
 
 ---
 
