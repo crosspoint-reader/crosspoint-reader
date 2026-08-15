@@ -3,6 +3,10 @@
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
+#ifdef CROSSPOINT_BG_BUILD_TASK
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#endif
 
 #include <atomic>
 #include <memory>
@@ -74,6 +78,33 @@ class EpubReaderActivity final : public ReaderActivity {
   static constexpr size_t BACKGROUND_BUILD_MIN_MAX_ALLOC = 16 * 1024;
   bool buildTickHeapGate();
   bool buildHeapPaused = false;
+#ifdef CROSSPOINT_BG_BUILD_TASK
+  // X4 Pro (dual-core S3): drive section builds from a dedicated task pinned to
+  // core 0 (the Arduino loopTask and the render task both live on core 1)
+  // instead of 2-page ticks stolen from loop(). Same RenderLock discipline and
+  // tick size as the loop pump — the lock is held per 2-page tick, never across
+  // a chapter — but ticks run back-to-back on an otherwise idle core, so a
+  // chapter finalizes in seconds of background time instead of tracking reading
+  // pace, and the BUILD_WINDOW_AHEAD throttle (which exists to ration loop-task
+  // time on a single core) does not apply. Completion/failure are handed back
+  // to the loop task via atomics so reposition/reset/requestUpdate keep running
+  // in their usual task context. If task creation fails, the loop-tick pump
+  // remains as a runtime fallback (gated on bgBuildTaskHandle == nullptr).
+  //
+  // The idle wait is notification-driven, not a poll: a permanent 25 ms tick
+  // would be 40 wakes/s on core 0 for the whole reading session and would hold
+  // the chip out of automatic light sleep, which nothing else about reading
+  // prevents. See bgBuildTaskLoop() for the two cadences and the arming points.
+  TaskHandle_t bgBuildTaskHandle = nullptr;
+  std::atomic<bool> bgBuildStop{false};
+  std::atomic<bool> bgBuildExited{false};
+  std::atomic<bool> bgBuildCompleteNotify{false};
+  std::atomic<bool> bgBuildFailedNotify{false};
+  static void bgBuildTaskTrampoline(void* param);
+  void bgBuildTaskLoop();
+  void startBgBuildTask();
+  void stopBgBuildTask();
+#endif
   static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
   static constexpr int BUILD_WINDOW_AHEAD = 5;
   static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
@@ -117,6 +148,10 @@ class EpubReaderActivity final : public ReaderActivity {
       : ReaderActivity("EpubReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh) {}
   ~EpubReaderActivity() override;
 
+#ifdef CROSSPOINT_BG_BUILD_TASK
+  void onEnter() override;
+  void onExit() override;
+#endif
   void loop() override;
 
   bool pageTurn(bool isForward) override;

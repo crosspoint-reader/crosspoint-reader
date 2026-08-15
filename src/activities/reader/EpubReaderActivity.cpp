@@ -158,6 +158,23 @@ EpubReaderActivity::~EpubReaderActivity() {
   }
 }
 
+#ifdef CROSSPOINT_BG_BUILD_TASK
+void EpubReaderActivity::onEnter() {
+  ReaderActivity::onEnter();
+  // Only with a book: a failed load has already called finish(), and the task
+  // has nothing to drive.
+  if (epub) startBgBuildTask();
+}
+
+void EpubReaderActivity::onExit() {
+  // Stop the build task before anything else (it dereferences `section` and the
+  // epub, both of which this activity's teardown drops); the join is bounded by
+  // the task's short wait cadence.
+  stopBgBuildTask();
+  ReaderActivity::onExit();
+}
+#endif
+
 bool EpubReaderActivity::loadBook() {
   auto loadedEpub = makeUniqueNoThrow<Epub>(bookPath, "/.crosspoint");
   if (!loadedEpub) {
@@ -288,6 +305,98 @@ void EpubReaderActivity::openDictionaryWordSelect() {
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
+#ifdef CROSSPOINT_BG_BUILD_TASK
+void EpubReaderActivity::bgBuildTaskTrampoline(void* param) {
+  static_cast<EpubReaderActivity*>(param)->bgBuildTaskLoop();
+}
+
+void EpubReaderActivity::startBgBuildTask() {
+  if (bgBuildTaskHandle) return;
+  bgBuildStop.store(false, std::memory_order_relaxed);
+  bgBuildExited.store(false, std::memory_order_relaxed);
+  bgBuildCompleteNotify.store(false, std::memory_order_relaxed);
+  bgBuildFailedNotify.store(false, std::memory_order_relaxed);
+  // Core 0: WiFi's home core, idle while reading (loopTask and the render task
+  // are both pinned to core 1). Priority 1 matches them; the RenderLock is the
+  // ordering authority regardless. Stack: the parse/layout path historically
+  // ran on the 8 KB loop task; 12 KB gives margin for deeper CSS/parser frames.
+  constexpr uint32_t kStack = 12288;
+  if (xTaskCreatePinnedToCore(&bgBuildTaskTrampoline, "ErsBgBuild", kStack, this, 1, &bgBuildTaskHandle, 0) != pdPASS) {
+    bgBuildTaskHandle = nullptr;
+    LOG_ERR("ERS", "Failed to create background build task; falling back to loop ticks");
+  }
+}
+
+void EpubReaderActivity::stopBgBuildTask() {
+  if (!bgBuildTaskHandle) return;
+  // Wake the task out of its (possibly long) idle wait BEFORE raising the stop
+  // flag: at give time the task cannot yet have observed stop=true, so its TCB
+  // is provably alive (give-after-store leaves a theoretical window where the
+  // task polls the flag, self-deletes, and the give hits a freed TCB). Worst
+  // case the woken pass misses the flag and re-sleeps on the short cadence
+  // (this caller holds the RenderLock, so its TryAcquire fails -> ~25 ms),
+  // keeping the join bounded. It cannot start new work either way: everything
+  // it does runs under a TryAcquire this caller's lock defeats.
+  xTaskNotifyGive(bgBuildTaskHandle);
+  bgBuildStop.store(true, std::memory_order_release);
+  while (!bgBuildExited.load(std::memory_order_acquire)) {
+    delay(1);
+  }
+  bgBuildTaskHandle = nullptr;
+}
+
+void EpubReaderActivity::bgBuildTaskLoop() {
+  while (!bgBuildStop.load(std::memory_order_acquire)) {
+    bool didWork = false;
+    // True when this pass could not rule out imminent work (lock contended, or a
+    // build is live but heap-gated this tick) — retry on the short cadence then.
+    bool workPlausible = false;
+    // Active-section build tick: same per-tick RenderLock scope, heap gate, and
+    // page count as the loop pump this replaces — never holds the lock across a
+    // chapter, so pending renders interleave exactly as before. TryAcquire, not
+    // the blocking ctor: parking here would deadlock an exit path that joins
+    // this task while holding the RenderLock (see RenderLock::TryAcquire). All
+    // `section` access happens strictly under the lock: the loop-task idiom of
+    // an unlocked pre-check is a benign stale read there, but this task runs
+    // truly parallel on core 0, where an unlocked deref races ~Section.
+    {
+      RenderLock lock{RenderLock::TryAcquire{}};
+      if (!lock.locked()) {
+        workPlausible = true;
+      } else if (section && section->isBuilding()) {
+        workPlausible = true;
+        if (buildTickHeapGate()) {
+          if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
+            // Reset/redraw belong to the loop task; just report the failure.
+            bgBuildFailedNotify.store(true, std::memory_order_release);
+          } else {
+            didWork = true;
+            if (section->isBuildComplete()) {
+              bgBuildCompleteNotify.store(true, std::memory_order_release);
+            }
+          }
+        }
+      }
+    }
+    if (didWork) {
+      // Back-to-back ticks while there is work; yield one tick so the render
+      // task can take the lock.
+      vTaskDelay(1);
+    } else {
+      // Idle: block on a notification instead of polling, so tickless light
+      // sleep isn't held off by this task all session. renderBook() notifies
+      // after resolving a new render spec (covers build starts, page turns, and
+      // settings changes) and stopBgBuildTask() notifies for exit, so the long
+      // timeout is only a fallback; the short one covers transient lock/heap
+      // declines. Index 0 is this task's own slot — nothing else posts to it.
+      ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(workPlausible ? 25 : 250));
+    }
+  }
+  bgBuildExited.store(true, std::memory_order_release);
+  vTaskDelete(nullptr);
+}
+#endif  // CROSSPOINT_BG_BUILD_TASK
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     finish();
@@ -330,12 +439,40 @@ void EpubReaderActivity::loop() {
     } else {
       LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
               section->pageCount);
+#ifdef CROSSPOINT_BG_BUILD_TASK
+      // The one build start that doesn't flow through a render: wake the build
+      // task directly so pickup isn't left to its long idle-wait fallback.
+      if (bgBuildTaskHandle) xTaskNotifyGive(bgBuildTaskHandle);
+#endif
     }
   }
 
+#ifdef CROSSPOINT_BG_BUILD_TASK
+  // The core-0 build task owns the pump. Consume its completion/failure
+  // notifications here in the loop task, so section reset, reposition, and
+  // redraw run in their usual context; the loop-tick pump below stays only as
+  // a runtime fallback for the (never observed) case that task creation failed.
+  if (bgBuildFailedNotify.exchange(false, std::memory_order_acq_rel)) {
+    RenderLock lock;
+    LOG_ERR("ERS", "Background section build failed");
+    section.reset();
+    requestUpdate();
+  }
+  if (bgBuildCompleteNotify.exchange(false, std::memory_order_acq_rel)) {
+    RenderLock lock;
+    // cppcheck-suppress knownConditionTrueFalse
+    if (section && section->isBuildComplete() && applyDeferredReposition()) {
+      requestUpdate();
+    }
+  }
+  if (bgBuildTaskHandle == nullptr && section && section->isBuilding() && !RenderLock::peek() &&
+      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
+      buildTickHeapGate()) {
+#else
   if (section && section->isBuilding() && !RenderLock::peek() &&
       (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
       buildTickHeapGate()) {
+#endif
     RenderLock lock;
     if (section->isBuilding() && buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
@@ -973,6 +1110,15 @@ void EpubReaderActivity::onReturnFromEndOfBook() {
 }
 
 bool EpubReaderActivity::skipLoopDelay() {
+#ifdef CROSSPOINT_BG_BUILD_TASK
+  // With the core-0 build task, loop() no longer needs fast full-clock ticks to
+  // pump the build (the battery cost the loop-driven design paid); only fall
+  // back to loop pacing if the task failed to start. Builds may then run at the
+  // idle CPU clock — slower per page but still seconds per chapter, off-core.
+  // The short-circuit also keeps buildHeapPaused a single-writer field: with the
+  // task alive, only the task calls buildTickHeapGate().
+  if (bgBuildTaskHandle != nullptr) return false;
+#endif
   return section && section->isBuilding() && !buildHeapPaused &&
          (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
 }
@@ -1023,6 +1169,15 @@ void EpubReaderActivity::renderBook() {
   buildViewportHeight = viewportHeight;
 
   const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
+#ifdef CROSSPOINT_BG_BUILD_TASK
+  // Arm the build task: nearly every state change it cares about (build
+  // started, page turned, spec changed) flows through a render, so one notify
+  // here retires its need to idle-poll — the lazy partial-extension start in
+  // loop() is the exception and notifies directly. The task wakes, fails the
+  // TryAcquire while this render holds the lock, and settles on the short retry
+  // cadence until the lock frees.
+  if (bgBuildTaskHandle) xTaskNotifyGive(bgBuildTaskHandle);
+#endif
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
