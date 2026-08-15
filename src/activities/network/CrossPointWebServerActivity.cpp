@@ -2,6 +2,7 @@
 
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <WiFi.h>
@@ -64,6 +65,16 @@ void CrossPointWebServerActivity::onEnter() {
   Activity::onEnter();
 
   LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
+
+  // Heap-critical transition: WiFi (~45KB) plus the web server have to fit in
+  // what's left of the ~380KB parts. SD-font caches retained for the CJK UI
+  // fallback (mini glyph/kern arenas, kern class tables) are rebuildable on
+  // demand — release them up front instead of aborting in startWebServer()
+  // when the heap comes up short (observed on X3 with a Korean SD font).
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+    LOG_DBG("WEBACT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
+  }
 
   // Reset state
   state = WebServerActivityState::MODE_SELECTION;
