@@ -48,7 +48,7 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 ### Hardware Specs
 
-Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Do not copy 800×480, 48KB, or "no PSRAM" as project-wide facts.
+Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
 * One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill and its per-device `resources/` files.
 * Today `[env:default]` (and the C3 release aliases) is the shared **X3+X4** C3 binary. `[env:sticky]` is a separate S3 binary. Treat X3 and X4 as two devices in one env until that env is split.

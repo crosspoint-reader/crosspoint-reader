@@ -13,10 +13,10 @@ Budget DRAM as if the C3 `default` env is in the room (~380KB usable).
 read fine while the largest free block is too small for the next allocation.
 Optimize for not leaving holes, not just for using fewer bytes.
 
-Panel size and whether PSRAM is in play come from `platform-targets`, not from
-a 48KB / no-PSRAM assumption. `MALLOC_CAP_SPIRAM` / extra planes only if the
-**env being built** sets `BOARD_HAS_PSRAM`, and the C3 `default` path must
-still compile without that allocation.
+Panel size and whether PSRAM is in play come from `platform-targets`.
+`MALLOC_CAP_SPIRAM` / extra planes only if the **env being built** sets
+`BOARD_HAS_PSRAM`, and the C3 `default` path must still compile without that
+allocation.
 
 ## Allocation decision procedure
 
@@ -45,8 +45,9 @@ Bare `new` / `new[]` is never correct here: under `-fno-exceptions` it calls
   Hoist the allocation out of the loop.
 - Large contiguous blocks fragment worst. Full-screen-class buffers use the
   chunked `storeBwBuffer` / `restoreBwBuffer` path in `GfxRenderer` so they
-  never demand one contiguous `MAX_FRAMEBUFFER_BYTES` block (52,272 on the C3
-  X3+X4 binary, not 48,000). Reuse that path. Do not malloc a second
+  never demand one contiguous `MAX_FRAMEBUFFER_BYTES` block (see
+  `platform-targets` for the compiled size). Reuse that path. Do not malloc a
+  second
   full-screen buffer.
 - `std::string` / Arduino `String`: acceptable on cold paths (file I/O, one-shot
   setup). Banned on hot/render paths. Build text with a stack `char[]` +

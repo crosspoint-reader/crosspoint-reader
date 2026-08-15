@@ -104,6 +104,7 @@ resource that is not on the compile set.
 - [ ] Refreshed any stale resource from `BoardConfig.h` / INI / CI using the
       field map, or created/deleted a file when the set changed.
 - [ ] Asked before promoting a local-only env; respected a no.
-- [ ] No hardcoded 800×480 / 48KB / "no PSRAM" as project-wide facts.
+- [ ] Hardware numbers came from the compile-set resources, not from this file's
+      prose.
 - [ ] PSRAM / `MALLOC_CAP_SPIRAM` only if the env being built sets
       `BOARD_HAS_PSRAM`; C3 `default` still compiles without that allocation.

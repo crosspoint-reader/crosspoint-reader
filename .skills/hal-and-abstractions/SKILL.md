@@ -22,7 +22,7 @@ Which extras a device actually has (touch, frontlight, tilt) come from
   `InputManager`. **Clock / power / system / tilt:** `HalClock`,
   `HalPowerManager`, `HalSystem`, `HalTiltSensor` — same rule as storage.
 - **Rendering:** everything through the `GUI` macro (UITheme) and the renderer's
-  oriented metrics. No hardcoded fonts, colors, coordinates, or 800/480
+  oriented metrics. No hardcoded fonts, colors, coordinates, or panel-size
   literals; ask the renderer for width/height and use the oriented viewable
   area.
 - **Input in activities:** `MappedInputManager::Button` logical enums
@@ -56,8 +56,8 @@ it carries one of those contracts or hides a real implementation choice.
 - [ ] File access uses `HalFile`; no `.close()` on a local handle
       (DESTRUCTOR_CLOSES_FILE); members closed in `onExit`.
 - [ ] Input uses `MappedInputManager::Button`, not raw `BTN_*` indices.
-- [ ] Rendering goes through GUI/UITheme and oriented metrics; no 800/480 or
-      hardcoded fonts/coords.
+- [ ] Rendering goes through GUI/UITheme and oriented metrics; no hardcoded
+      panel size, fonts, or coordinates.
 - [ ] User-facing strings use `tr(STR_*)`; new keys added to YAML and
       regenerated.
 - [ ] Any new SDK capability is exposed as a HAL method, not called inline.
