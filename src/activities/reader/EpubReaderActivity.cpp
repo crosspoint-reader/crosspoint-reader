@@ -171,6 +171,12 @@ void EpubReaderActivity::onExit() {
   // epub, both of which this activity's teardown drops); the join is bounded by
   // the task's short wait cadence.
   stopBgBuildTask();
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+  // Task is stopped; safe to discard directly. The parked Section never has a
+  // build context, so its destructor touches no shared build state.
+  prebuiltSection.reset();
+  prebuiltSpineIndex = -1;
+#endif
   ReaderActivity::onExit();
 }
 #endif
@@ -378,6 +384,11 @@ void EpubReaderActivity::bgBuildTaskLoop() {
         }
       }
     }
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+    if (!didWork && !bgBuildStop.load(std::memory_order_acquire)) {
+      didWork = prebuildStep();
+    }
+#endif
     if (didWork) {
       // Back-to-back ticks while there is work; yield one tick so the render
       // task can take the lock.
@@ -396,6 +407,61 @@ void EpubReaderActivity::bgBuildTaskLoop() {
   vTaskDelete(nullptr);
 }
 #endif  // CROSSPOINT_BG_BUILD_TASK
+
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+bool EpubReaderActivity::renderSpecEquals(const ReaderRenderSpec& a, const ReaderRenderSpec& b) {
+  return a.fontId == b.fontId && a.lineCompression == b.lineCompression &&
+         a.extraParagraphSpacing == b.extraParagraphSpacing && a.paragraphAlignment == b.paragraphAlignment &&
+         a.viewportWidth == b.viewportWidth && a.viewportHeight == b.viewportHeight &&
+         a.hyphenationEnabled == b.hyphenationEnabled && a.embeddedStyle == b.embeddedStyle &&
+         a.imageRendering == b.imageRendering && a.focusReadingEnabled == b.focusReadingEnabled;
+}
+
+// One prebuild step, run on the background build task when the active section
+// has nothing to build. CACHED-ONLY by design: the prebuild never calls
+// startBuild(), because a second live build context would share the Epub's
+// single CssParser and the html/.bin.part file paths with any build
+// renderBook() starts synchronously — adversarial review found both to be racy.
+// A cache-miss next spine simply falls back to today's boundary behavior. All
+// work — including Section construction and loadSectionFile, which read the
+// shared book.bin metadata handle — happens under the (try-acquired)
+// RenderLock; a cached load is tens of ms, the same order as a build tick.
+// Returns true if it made progress.
+bool EpubReaderActivity::prebuildStep() {
+  RenderLock lock{RenderLock::TryAcquire{}};
+  if (!lock.locked()) return false;
+  // Drop a stale prebuild (reader jumped/paged back, or settings changed). The
+  // parked Section never has a build context, so its destructor touches no
+  // shared build state (no CssParser, no .part commit).
+  if (prebuiltSection && (prebuiltSpineIndex != currentSpineIndex + 1 || !lastRenderSpecValid ||
+                          !renderSpecEquals(prebuiltSpec, lastRenderSpec))) {
+    prebuiltSection.reset();
+    prebuiltSpineIndex = -1;
+    prebuildDeclinedSpine = -1;
+  }
+  if (prebuiltSection) return false;  // parked and ready
+  // Consider prebuilding: current chapter fully built, reader near its end.
+  if (!section || section->isBuilding() || section->isPartial() || !lastRenderSpecValid) return false;
+  if (section->pageCount == 0 || section->currentPage + PREBUILD_NEAR_END_PAGES < static_cast<int>(section->pageCount))
+    return false;
+  if (currentSpineIndex + 1 >= epub->getSpineItemsCount()) return false;
+  const int buildSpine = currentSpineIndex + 1;
+  if (prebuildDeclinedSpine == buildSpine) return false;  // known cache miss; don't re-probe every idle tick
+
+  auto candidate = std::unique_ptr<Section>(new Section(epub, buildSpine, renderer));
+  if (!candidate->loadSectionFile(lastRenderSpec)) {
+    // No usable cache for the next spine. Remember the miss so idle iterations
+    // don't re-open SD files on every wake; cleared when the reader moves on.
+    prebuildDeclinedSpine = buildSpine;
+    return false;
+  }
+  prebuiltSpineIndex = buildSpine;
+  prebuiltSpec = lastRenderSpec;
+  prebuiltSection = std::move(candidate);
+  LOG_DBG("ERS", "Prebuilt next section %d (%s)", buildSpine, prebuiltSection->isPartial() ? "partial" : "ready");
+  return true;
+}
+#endif  // CROSSPOINT_NEXT_SECTION_PREBUILD
 
 void EpubReaderActivity::loop() {
   if (!epub) {
@@ -982,6 +1048,15 @@ bool EpubReaderActivity::launchKOReaderSync() {
       nextPageNumber = section->currentPage;
     }
     ImageBlock::setExtractor(nullptr, nullptr);
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+    // Freeing RAM for the handshake is the entire point of this block, and a
+    // parked prebuild is both a Section of its own and a shared_ptr keeping the
+    // Epub alive past the reset below. Dropping it here also keeps the "heap
+    // after" log honest.
+    prebuiltSection.reset();
+    prebuiltSpineIndex = -1;
+    prebuildDeclinedSpine = -1;
+#endif
     section.reset();
     epub.reset();
   }
@@ -1050,7 +1125,39 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
       RenderLock lock;
       nextPageNumber = 0;
       currentSpineIndex++;
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+      if (prebuiltSection && prebuiltSpineIndex == currentSpineIndex && lastRenderSpecValid &&
+          renderSpecEquals(prebuiltSpec, lastRenderSpec)) {
+        // Swap the prebuilt Section in: renderBook() sees a loaded section and
+        // skips the synchronous load-or-build entirely. Mirror the cache-hit
+        // side effects of renderBook()'s construction path; a still-building
+        // prebuild continues via the existing incremental machinery.
+        section = std::move(prebuiltSection);
+        prebuiltSpineIndex = -1;
+        prebuildDeclinedSpine = -1;
+        section->currentPage = 0;
+        cachedChapterTotalPageCount = 0;
+        cachedVisibleTextOffset.reset();
+        partialRebuildStartFailed = false;
+#ifdef CROSSPOINT_PAGE_CACHE
+        // Composition hook for PR #3050 (CROSSPOINT_PAGE_CACHE), which keys its
+        // one-entry page cache on sectionGeneration and documents renderBook()
+        // as the only site that installs a `section`. This adoption is the
+        // second such site, and the entry it would leave behind names the
+        // previous chapter's pagination. Undefined on this branch; compiled in
+        // whenever both flags are on, in either merge order.
+        sectionGeneration++;
+        dropCachedPage();
+#endif
+      } else {
+        prebuiltSection.reset();
+        prebuiltSpineIndex = -1;
+        prebuildDeclinedSpine = -1;
+        section.reset();
+      }
+#else
       section.reset();
+#endif
       lastPageTurnTime = millis();
       return true;
     } else {
@@ -1169,6 +1276,13 @@ void EpubReaderActivity::renderBook() {
   buildViewportHeight = viewportHeight;
 
   const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+  // Snapshot for the prebuild task (renderBook runs under the RenderLock here;
+  // the task only reads these under the same lock). Also invalidates stale
+  // prebuilds: the task compares its captured spec against this every pass.
+  lastRenderSpec = renderSpec;
+  lastRenderSpecValid = true;
+#endif
 #ifdef CROSSPOINT_BG_BUILD_TASK
   // Arm the build task: nearly every state change it cares about (build
   // started, page turned, spec changed) flows through a render, so one notify

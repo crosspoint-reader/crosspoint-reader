@@ -3,6 +3,10 @@
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
+#if defined(CROSSPOINT_NEXT_SECTION_PREBUILD) && !defined(CROSSPOINT_BG_BUILD_TASK)
+#error "CROSSPOINT_NEXT_SECTION_PREBUILD requires CROSSPOINT_BG_BUILD_TASK: the prebuild runs on that task."
+#endif
+
 #ifdef CROSSPOINT_BG_BUILD_TASK
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -104,6 +108,30 @@ class EpubReaderActivity final : public ReaderActivity {
   void bgBuildTaskLoop();
   void startBgBuildTask();
   void stopBgBuildTask();
+#endif
+#ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
+  // Prebuild (cache pre-load) of the NEXT spine's Section by the background
+  // build task while the reader sits near the end of a fully-built chapter, so
+  // the forward chapter-boundary turn swaps a ready Section in instead of the
+  // synchronous load. CACHED-ONLY: the prebuild never starts a build — a second
+  // live build context would share the Epub's single CssParser and the
+  // html/.bin.part paths with any build renderBook() starts, both racy.
+  // Everything (construction, loadSectionFile, park, discard, consume) runs
+  // under the try-acquired RenderLock, so the shared book.bin metadata handle
+  // and all reader state are only ever touched serialized. Cache-miss next
+  // spines fall back to today's boundary behavior (remembered in
+  // prebuildDeclinedSpine so idle iterations don't re-probe SD).
+  std::unique_ptr<Section> prebuiltSection;
+  int prebuiltSpineIndex = -1;
+  int prebuildDeclinedSpine = -1;
+  ReaderRenderSpec prebuiltSpec{};
+  // Spec snapshot for the task; written by renderBook() under the RenderLock.
+  ReaderRenderSpec lastRenderSpec{};
+  bool lastRenderSpecValid = false;
+  static bool renderSpecEquals(const ReaderRenderSpec& a, const ReaderRenderSpec& b);
+  bool prebuildStep();
+  // Start prebuilding when the reader is within this many pages of chapter end.
+  static constexpr int PREBUILD_NEAR_END_PAGES = 3;
 #endif
   static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
   static constexpr int BUILD_WINDOW_AHEAD = 5;
