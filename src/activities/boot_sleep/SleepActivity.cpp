@@ -12,7 +12,6 @@
 #include <PNGdec.h>
 #include <Txt.h>
 #include <Xtc.h>
-#include <lut/Ssd1677Luts.h>
 
 #include <algorithm>
 #include <cmath>
@@ -601,7 +600,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground,
-                                            const bool useFactoryLut) const {
+                                            const bool absoluteLut) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -618,17 +617,16 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
       bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
-  const bool useFactoryGrayscale =
-      gpio.deviceIsX4() && useFactoryLut && hasGreyscale && !preserveBackground &&
+  const bool useAbsoluteGrayscale =
+      renderer.supportsAbsoluteGrayscale() && absoluteLut && hasGreyscale && !preserveBackground &&
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-  const unsigned char* lut = useFactoryGrayscale ? freeink::lut_factory_quality : nullptr;
 
-  LOG_DBG("SLP", "Using factory lut: %s", useFactoryGrayscale ? "true" : "false");
+  LOG_DBG("SLP", "Using absolute lut: %s", useAbsoluteGrayscale ? "true" : "false");
 
-  const auto msbMode = useFactoryGrayscale ? GfxRenderer::FACTORY_GRAY_MSB : GfxRenderer::GRAYSCALE_MSB;
-  const auto lsbMode = useFactoryGrayscale ? GfxRenderer::FACTORY_GRAY_LSB : GfxRenderer::GRAYSCALE_LSB;
+  const auto msbMode = useAbsoluteGrayscale ? GfxRenderer::ABSOLUTE_GRAY_MSB : GfxRenderer::GRAYSCALE_MSB;
+  const auto lsbMode = useAbsoluteGrayscale ? GfxRenderer::ABSOLUTE_GRAY_LSB : GfxRenderer::GRAYSCALE_LSB;
 
-  if (!useFactoryGrayscale) {
+  if (!useAbsoluteGrayscale) {
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
   }
 
@@ -660,7 +658,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleMsbBuffers();
 
-    renderer.displayGrayBuffer(lut, useFactoryGrayscale);
+    if (useAbsoluteGrayscale)
+      renderer.displayAbsoluteGrayBuffer();
+    else
+      renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }
@@ -768,7 +769,7 @@ void SleepActivity::renderCoverSleepScreen() const {
 
   std::string coverBmpPath;
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-  bool useFactoryLut = false;
+  bool absoluteLut = false;
 
   // Check if the current book is XTC, TXT, or EPUB
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
@@ -808,14 +809,14 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    useFactoryLut = gpio.deviceIsX4() &&
-                    SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+    absoluteLut = renderer.supportsAbsoluteGrayscale() &&
+                  SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 
-    if (!lastEpub.generateCoverBmp(cropped, useFactoryLut)) {
+    if (!lastEpub.generateCoverBmp(cropped, absoluteLut)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped, useFactoryLut);
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, absoluteLut);
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }
@@ -825,7 +826,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap, false, useFactoryLut);
+      renderBitmapSleepScreen(bitmap, false, absoluteLut);
       return;
     }
   }

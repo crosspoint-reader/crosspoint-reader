@@ -29,11 +29,11 @@ enum Color : uint8_t { Clear = 0x00, White = 0x01, LightGray = 0x05, DarkGray = 
 class GfxRenderer {
  public:
   enum RenderMode {
-    BW,                // 1-bit black/white
-    GRAYSCALE_LSB,     // Differential gray: mark pixels for LSB plane (clearScreen(0x00) + drawPixel(false))
-    GRAYSCALE_MSB,     // Differential gray: mark pixels for MSB plane (clearScreen(0x00) + drawPixel(false))
-    FACTORY_GRAY_LSB,  // Factory absolute gray: encode BW RAM = bit0 (clearScreen(0x00) + drawPixel(false))
-    FACTORY_GRAY_MSB,  // Factory absolute gray: encode RED RAM = bit1 (clearScreen(0x00) + drawPixel(false))
+    BW,                 // 1-bit black/white
+    GRAYSCALE_LSB,      // Differential gray: mark pixels for LSB plane (clearScreen(0x00) + drawPixel(false))
+    GRAYSCALE_MSB,      // Differential gray: mark pixels for MSB plane (clearScreen(0x00) + drawPixel(false))
+    ABSOLUTE_GRAY_LSB,  // Absolute gray: encode BW RAM = bit0 (clearScreen(0x00) + drawPixel(false))
+    ABSOLUTE_GRAY_MSB,  // Absolute gray: encode RED RAM = bit1 (clearScreen(0x00) + drawPixel(false))
   };
 
   // Logical screen orientation from the perspective of callers
@@ -44,11 +44,11 @@ class GfxRenderer {
     LandscapeCounterClockwise  // 800x480 logical coordinates, native panel orientation
   };
 
-  // Display state — tracks whether the physical display was last updated via a factory LUT render.
+  // Display state — tracks whether the physical display was last updated via a absolute LUT render.
   // BW: frameBuffer mirrors the display (menus, EPUB reader).
-  // FactoryLut: display holds a grayscale image; frameBuffer has been reset to white by
+  // AbsoluteLut: display holds a grayscale image; frameBuffer has been reset to white by
   // cleanupGrayscaleWithFrameBuffer() and no longer represents what is visually shown.
-  enum class DisplayState { BW, FactoryLut };
+  enum class DisplayState { BW, AbsoluteLut };
 
  private:
   static constexpr size_t BW_BUFFER_CHUNK_SIZE = 8000;  // 8KB chunks to allow for non-contiguous memory
@@ -312,6 +312,8 @@ class GfxRenderer {
   void displayGrayscaleBase(HalDisplay::RefreshMode fallback = HalDisplay::HALF_REFRESH) const;
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
+  bool supportsAbsoluteGrayscale() const { return display.supportsAbsoluteGrayscale(); };
+  void displayAbsoluteGrayBuffer() const;
   void displayGrayBuffer(const unsigned char* lut = nullptr, bool factoryMode = false) const;
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM

@@ -1377,9 +1377,9 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
         drawPixel(screenX, screenY, false);
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
         drawPixel(screenX, screenY, false);
-      } else if (renderMode == FACTORY_GRAY_LSB && !(val & 1)) {
+      } else if (renderMode == ABSOLUTE_GRAY_LSB && !(val & 1)) {
         drawPixel(screenX, screenY, false);
-      } else if (renderMode == FACTORY_GRAY_MSB && val < 2) {
+      } else if (renderMode == ABSOLUTE_GRAY_MSB && val < 2) {
         drawPixel(screenX, screenY, false);
       }
     }
@@ -1420,8 +1420,8 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     return;
   }
 
-  // Factory grayscale inverts the pixel values
-  const bool full = !(renderMode == FACTORY_GRAY_LSB || renderMode == FACTORY_GRAY_MSB);
+  // Absolute grayscale inverts the pixel values
+  const bool full = !(renderMode == ABSOLUTE_GRAY_LSB || renderMode == ABSOLUTE_GRAY_MSB);
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
@@ -1621,12 +1621,12 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  // After a factory LUT render, RED RAM still contains the grayscale MSB plane.
+  // After an absolute LUT render, RED RAM still contains the grayscale MSB plane.
   // Promote the first normal FAST refresh to HALF so both RAM banks are rebased
   // before differential updates resume.
-  const bool afterFactoryLut = displayState == DisplayState::FactoryLut;
+  const bool afterAbsoluteLut = displayState == DisplayState::AbsoluteLut;
   const auto effectiveRefreshMode =
-      afterFactoryLut && refreshMode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : refreshMode;
+      afterAbsoluteLut && refreshMode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : refreshMode;
   display.displayBuffer(effectiveRefreshMode, fadingFix);
   displayState = DisplayState::BW;
 }
@@ -2175,10 +2175,15 @@ void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuff
 void GfxRenderer::displayGrayBuffer(const unsigned char* lut, bool factoryMode) const {
   display.displayGrayBuffer(fadingFix, lut, factoryMode);
   if (factoryMode) {
-    displayState = DisplayState::FactoryLut;
+    displayState = DisplayState::AbsoluteLut;
   } else {
     displayState = DisplayState::BW;
   }
+}
+
+void GfxRenderer::displayAbsoluteGrayBuffer() const {
+  display.displayAbsoluteGrayBuffer(fadingFix);
+  displayState = DisplayState::AbsoluteLut;
 }
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
