@@ -13,8 +13,7 @@ This is separate from `AGENTS.md`, the always-loaded repository guide (also
 linked as `CLAUDE.md`). These skills are the applied decision procedures that
 load on demand and add the judgment layer `AGENTS.md` does not carry.
 
-Each skill is a directory containing `SKILL.md` whose `name` matches the
-directory, per https://agentskills.io/specification.
+Each skill is a directory containing `SKILL.md` whose `name` matches the directory.
 
 | Skill | Loads when you are... |
 |---|---|
