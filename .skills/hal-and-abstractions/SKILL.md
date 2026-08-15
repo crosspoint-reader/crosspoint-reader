@@ -5,18 +5,23 @@ description: Layering and abstraction discipline for the firmware. Use when touc
 
 # HAL and Abstractions
 
-CLAUDE.md lists the HAL classes and the SdFat-concurrency reason they exist.
-This is when and how to route through them, and where to draw a new boundary.
+`AGENTS.md` states the SdFat-concurrency reason the HAL exists. This is when
+and how to route through it, and where to draw a new boundary.
+
+Which extras a device actually has (touch, frontlight, tilt) come from
+`platform-targets`, not from assuming an X4 button board.
 
 ## Route through the layer, always
 
 - **SD card I/O:** `Storage` (HalStorage) and `HalFile`. Never `SdFat`,
   `FsFile`, `SdSpiCard`, `FsBaseFile`, or `SDCardManager` directly. The HAL
   serializes every SD access through one mutex; bypassing it races the SPI state
-  machine and panics FreeRTOS (CLAUDE.md has the failure mode). This is a
+  machine and panics FreeRTOS (`AGENTS.md` has the failure mode). This is a
   correctness boundary, not a style preference.
 - **Display:** `HalDisplay` over `EInkDisplay`. **Input:** `HalGPIO` over
-  `InputManager`.
+  `InputManager`. Also route clock, power, system, and tilt through `HalClock`,
+  `HalPowerManager`, `HalSystem`, and `HalTiltSensor` when those exist — do not
+  reach the SDK because the always-on HAL table listed only three classes.
 - **Rendering:** everything through the `GUI` macro (UITheme) and the renderer's
   oriented metrics. No hardcoded fonts, colors, coordinates, or 800/480
   literals; ask the renderer for width/height and use the oriented viewable

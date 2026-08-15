@@ -1,17 +1,22 @@
 ---
 name: heap-discipline
-description: "Memory allocation discipline for the ESP32-C3 (~380KB RAM, no PSRAM, single 48KB framebuffer). Use whenever writing or reviewing code that allocates: new / malloc / std::vector / std::string, buffers, caches, or anything held across a loop or an activity lifecycle. Covers makeUniqueNoThrow vs raw new/malloc, fragmentation avoidance, reserve-before-push_back, alloc-once-reuse, stack vs heap sizing, and the chunked grayscale buffer pattern."
+description: "Memory allocation discipline for CrossPoint (C3 DRAM floor; PSRAM only if the env sets BOARD_HAS_PSRAM). Use whenever writing or reviewing code that allocates: new / malloc / std::vector / std::string, buffers, caches, or anything held across a loop or an activity lifecycle. Covers makeUniqueNoThrow vs raw new/malloc, fragmentation avoidance, reserve-before-push_back, alloc-once-reuse, stack vs heap sizing, and the chunked grayscale buffer pattern."
 ---
 
-# Heap Discipline (ESP32-C3)
+# Heap Discipline
 
-CLAUDE.md states the allocation rules. This is the procedure you run while
+`AGENTS.md` states the allocation rules. This is the procedure you run while
 writing the code and the gate you run before handing it back.
 
-The constraint that makes every call matter: ~380KB RAM, no PSRAM, one 48KB
-framebuffer. **Fragmentation, not total usage, is what kills this device.**
-Free-heap can read fine while the largest free block is too small for the next
-allocation. Optimize for not leaving holes, not just for using fewer bytes.
+Budget DRAM as if the C3 `default` env is in the room (~380KB usable).
+**Fragmentation, not total usage, is what kills this firmware.** Free-heap can
+read fine while the largest free block is too small for the next allocation.
+Optimize for not leaving holes, not just for using fewer bytes.
+
+Panel size and whether PSRAM is in play come from `platform-targets`, not from
+a 48KB / no-PSRAM assumption. `MALLOC_CAP_SPIRAM` / extra planes only if the
+**env being built** sets `BOARD_HAS_PSRAM`, and the C3 `default` path must
+still compile without that allocation.
 
 ## Allocation decision procedure
 
@@ -40,17 +45,18 @@ Bare `new` / `new[]` is never correct here: under `-fno-exceptions` it calls
   Hoist the allocation out of the loop.
 - Large contiguous blocks fragment worst. Full-screen-class buffers use the
   chunked `storeBwBuffer` / `restoreBwBuffer` path in `GfxRenderer` so they
-  never demand one contiguous 48KB block. Reuse that path. Do not malloc a
-  second full-screen buffer.
+  never demand one contiguous `MAX_FRAMEBUFFER_BYTES` block (52,272 on the C3
+  X3+X4 binary, not 48,000). Reuse that path. Do not malloc a second
+  full-screen buffer.
 - `std::string` / Arduino `String`: acceptable on cold paths (file I/O, one-shot
   setup). Banned on hot/render paths. Build text with a stack `char[]` +
   `snprintf`; if a `std::string` is unavoidable, `reserve` it first.
 
 ## Justify every allocation
 
-Per CLAUDE.md's evidence rule: when you add a heap allocation, state in one line
-why stack/static/reuse was rejected and the worst-case size. If you cannot name
-the size, you cannot budget it, and you should not allocate it.
+Per `AGENTS.md`'s evidence rule: when you add a heap allocation, state in one
+line why stack/static/reuse was rejected and the worst-case size. If you cannot
+name the size, you cannot budget it, and you should not allocate it.
 
 ## Self-review before handoff
 
@@ -63,3 +69,5 @@ the size, you cannot budget it, and you should not allocate it.
       closed there too.
 - [ ] No second full-screen buffer; grayscale uses store/restoreBwBuffer.
 - [ ] Each new allocation carries a one-line size + why-not-stack/static note.
+- [ ] PSRAM-backed allocs are behind `BOARD_HAS_PSRAM` for that env; C3
+      `default` still builds without them.

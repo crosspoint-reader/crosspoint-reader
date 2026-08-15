@@ -18,10 +18,13 @@ Before adding a feature, activity, lib, setting, or dependency, answer in order:
    playback. If it is out, say so and stop.
 2. **Does it materially improve focused reading?** If the benefit is
    "nice to have" or serves a different use case, it is out. This is not a PDA.
-3. **What does it cost in RAM and in the largest-free-block budget?** A feature
-   that adds steady-state RAM or a large transient allocation needs a reading
-   benefit that clearly outweighs it. Quantify with `firmware_size_history.py`
-   and `script_profile_mem.sh` rather than guessing.
+3. **What does it cost in DRAM (and flash) on every device this tree builds?**
+   A feature that adds steady-state DRAM or a large transient allocation needs
+   a reading benefit that clearly outweighs it. PSRAM cost only if that env
+   sets `BOARD_HAS_PSRAM` — a PSRAM-only feature is not a CrossPoint feature
+   unless `default` still ships without it. Quantify with
+   `firmware_size_history.py` and `script_profile_mem.sh` rather than guessing.
+   Device budgets: `platform-targets`.
 4. **Can it be done with no new code?** Prefer an existing activity, an existing
    setting, or a doc over a new code path. The cheapest feature is the one
    already built.
@@ -48,7 +51,8 @@ choice; otherwise pick a sensible fixed default.
 
 - [ ] Checked against `SCOPE.md`; not on the out-of-scope list.
 - [ ] Stated the concrete reading benefit, not a generic "useful."
-- [ ] Named the RAM/size cost (measured, not guessed) and why the benefit wins.
+- [ ] Named the DRAM/size cost on every present device (measured, not guessed)
+      and why the benefit wins; PSRAM only if that env sets `BOARD_HAS_PSRAM`.
 - [ ] Checked whether an existing activity/setting/doc already covers it.
 - [ ] New setting (if any) is justified by a real user need, not added
       "just in case."
