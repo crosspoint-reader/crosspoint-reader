@@ -137,8 +137,26 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
     PWR_CONFIRM = 5,
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+    // Blacks out the reading lights (frontlight + night mode) and later brings
+    // back exactly the ones that were on. Appended at the END so every stored
+    // value above keeps its meaning; on a build without the flag the option is
+    // absent from the enumValues array in SettingsList.h and the load-time
+    // clamp folds a settings.json carrying 6 back to the field default.
+    //
+    // Unlike SLEEP this leaves getPowerButtonDuration() at its 400 ms default,
+    // so a long hold still sleeps exactly as it does in a stock build.
+    TOGGLE_LIGHT = 6,
+#endif
     SHORT_PWRBTN_COUNT
   };
+
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+  // Bits of the "Toggle Light" remembered set (pwrToggleLightRemembered).
+  static constexpr uint8_t TOGGLE_LIGHT_FRONTLIGHT = 1 << 0;
+  static constexpr uint8_t TOGGLE_LIGHT_NIGHT_MODE = 1 << 1;
+  static constexpr uint8_t TOGGLE_LIGHT_MASK = TOGGLE_LIGHT_FRONTLIGHT | TOGGLE_LIGHT_NIGHT_MODE;
+#endif
 
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
@@ -219,6 +237,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+  // "Toggle Light" remembered set: which of the frontlight (bit0) and night
+  // mode (bit1) were on when the action last switched them off. Lives in
+  // settings.json so the restore survives sleep and reboots; cleared once a
+  // restore consumes it. The frontlight LEVEL is not part of it — the existing
+  // frontlightBrightness persistence already holds that.
+  uint8_t pwrToggleLightRemembered = 0;
+#endif
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;

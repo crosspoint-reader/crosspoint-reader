@@ -314,11 +314,32 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
 #if FREEINK_CAP_TOUCH
+        // "Toggle Light" is compiled in only under CROSSPOINT_PWR_TOGGLE_LIGHT
+        // and is appended at the END, so every other option keeps the stored
+        // index it has always had. On a flag-off build the option is simply
+        // absent and the load-time clamp in CrossPointSettings::fromJson()
+        // (value >= enumValues.size() -> the field's struct default) folds a
+        // settings.json carrying 6 back to Ignore.
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
+                          {
+                              StrId::STR_IGNORE,
+                              StrId::STR_SLEEP,
+                              StrId::STR_PAGE_TURN,
+                              StrId::STR_FORCE_REFRESH,
+                              StrId::STR_FOOTNOTES,
+                              StrId::STR_CONFIRM,
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+                              StrId::STR_TOGGLE_LIGHT,
+#endif
+                          },
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
+        // No Toggle Light option here even under the flag: the stored value IS
+        // the index into this array, and this list omits Confirm (PWR_CONFIRM =
+        // 5), so an appended entry would land on 5 and be read as PWR_CONFIRM by
+        // the dispatch sites. The flag only ships on the X4 Pro, which is a
+        // FREEINK_CAP_TOUCH board and so takes the branch above; enabling it for
+        // a non-touch board leaves the action unreachable rather than wrong.
         SettingInfo::Enum(
             StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
@@ -359,6 +380,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Value(StrId::STR_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5}, "frontlightWarmth"),
 #endif
         SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn"),
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+        // Remembered set of the "Toggle Light" action (bit0 frontlight, bit1
+        // night mode). Persisted + web-exposed, but category-less so it stays
+        // out of the on-device Settings screen: it is state the action writes,
+        // not a preference. The range clamps a corrupt file to the two bits.
+        // Kept here with the other category-less state rather than next to the
+        // shortPwrBtn preference it belongs to: the web page groups settings in
+        // list order, so a category-less entry inside Controls would open the
+        // catch-all "None" card early and split the page.
+        SettingInfo::Value(StrId::STR_TOGGLE_LIGHT, &CrossPointSettings::pwrToggleLightRemembered,
+                           {0, CrossPointSettings::TOGGLE_LIGHT_MASK, 1}, "pwrToggleLightRemembered"),
+#endif
 
         // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
         SettingInfo::DynamicString(

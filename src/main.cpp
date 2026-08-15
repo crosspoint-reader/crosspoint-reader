@@ -54,6 +54,11 @@ constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
 constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
 constexpr unsigned long X4PRO_RECOVERY_SETTLE_MS = 20;
 constexpr unsigned long DEFAULT_RECOVERY_SETTLE_MS = 500;
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+// Brightness the empty-state fallback lights at when the persisted level is 0,
+// so switching the frontlight "on" is never visibly inert.
+constexpr uint8_t TOGGLE_LIGHT_DEFAULT_BRIGHTNESS = 20;
+#endif
 }  // namespace
 
 // A wake hold must never become an in-app power-button action.  Boot may continue
@@ -200,6 +205,15 @@ void silentRestartToReader() {
 }
 
 bool handleX4ProFrontlightDoubleClick() {
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+  // "Short press = Toggle Light" already gives every single click a light
+  // toggle, which makes this shortcut both redundant and wrong: a double-click
+  // would toggle twice and then this handler would flip it a third time.
+  // Suppress it so each press is exactly one clean toggle. Nothing else reads
+  // lastX4ProPowerClickAt under this binding — the matured-click tracker in
+  // loop() only runs for PWR_CONFIRM — so leaving it unset is harmless.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_LIGHT) return false;
+#endif
   if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
     return false;
   }
@@ -223,6 +237,90 @@ bool handleX4ProFrontlightDoubleClick() {
   LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
   return true;
 }
+
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+// "Toggle Light" short-press power action: one gesture that blacks out the
+// reading lights and later brings back exactly the ones that were on.
+//
+//   something on  -> remember that set, then frontlight off + night mode off
+//   nothing on    -> restore the remembered set, then clear it (it is consumed
+//                    by the restore, so the next black-out captures afresh)
+//   nothing on and nothing remembered -> switch the frontlight on at its saved
+//                    settings. Deliberate default for the empty state (first
+//                    use, or the press right after a restore): the action
+//                    behaves like a plain light button rather than doing
+//                    nothing. On a board with no frontlight it falls back to
+//                    night mode, and a level parked at 0% is lifted to a
+//                    visible default, so the gesture is never inert.
+//
+// Levels are not part of the remembered set: the frontlight's own persistence
+// (frontlightBrightness / frontlightWarmth) holds them, and HalFrontlight keeps
+// the selected brightness across an off/on round trip (setOn(false) drives the
+// PWM to 0 without touching lastBrightness), so setOn(true) re-applies it
+// untouched.
+//
+// Set when the gesture flipped night mode, consumed by loop() once the power
+// button is back up (see the consume site for why it is not done inline).
+static bool pendingToggleLightNightRefresh = false;
+
+void handlePowerToggleLight() {
+  const bool hasFrontlight = Frontlight.present();
+
+  uint8_t active = 0;
+  if (hasFrontlight && Frontlight.isOn()) active |= CrossPointSettings::TOGGLE_LIGHT_FRONTLIGHT;
+  if (SETTINGS.screenInverted != 0) active |= CrossPointSettings::TOGGLE_LIGHT_NIGHT_MODE;
+
+  uint8_t target = 0;
+  if (active != 0) {
+    // Snapshot of THIS black-out, deliberately overwriting whatever the last
+    // one stored: the remembered set describes one gesture, not a history.
+    // Consequence to be aware of — black out with night mode on, then turn the
+    // frontlight back on by hand and toggle again, and the capture stores just
+    // the frontlight, dropping the remembered night bit. Restoring "whatever
+    // was on two gestures ago" would be the more surprising behaviour.
+    SETTINGS.pwrToggleLightRemembered = active;
+  } else {
+    target = SETTINGS.pwrToggleLightRemembered & CrossPointSettings::TOGGLE_LIGHT_MASK;
+    if (target == 0) {
+      target =
+          hasFrontlight ? CrossPointSettings::TOGGLE_LIGHT_FRONTLIGHT : CrossPointSettings::TOGGLE_LIGHT_NIGHT_MODE;
+      // Empty-state branch only: a frontlight parked at 0% (the light panel's
+      // floor) would switch "on" and stay dark, making the gesture look
+      // broken. Give it a floor here. The capture/restore branches are left
+      // alone on purpose — restoring a remembered 0% mirrors what the
+      // double-click frontlight toggle does with the same level.
+      if ((target & CrossPointSettings::TOGGLE_LIGHT_FRONTLIGHT) != 0 && Frontlight.brightness() == 0) {
+        if (SETTINGS.frontlightBrightness == 0) SETTINGS.frontlightBrightness = TOGGLE_LIGHT_DEFAULT_BRIGHTNESS;
+        Frontlight.setBrightness(SETTINGS.frontlightBrightness);
+      }
+    }
+    SETTINGS.pwrToggleLightRemembered = 0;
+  }
+
+  const bool wantLight = (target & CrossPointSettings::TOGGLE_LIGHT_FRONTLIGHT) != 0;
+  const bool wantNight = (target & CrossPointSettings::TOGGLE_LIGHT_NIGHT_MODE) != 0;
+  const bool nightChanged = (SETTINGS.screenInverted != 0) != wantNight;
+
+  if (hasFrontlight) {
+    Frontlight.setOn(wantLight);
+    SETTINGS.frontlightOn = wantLight ? 1 : 0;
+  }
+  SETTINGS.screenInverted = wantNight ? 1 : 0;
+  // One write per gesture — a deliberate user action, not a hot path (same
+  // policy as the double-click frontlight toggle above).
+  SETTINGS.saveToFile();
+
+  // Output polarity is resolved per render by ActivityManager, so the flip only
+  // becomes visible when the current activity repaints — but that repaint is
+  // deliberately NOT started here. It is queued for the frame after the button
+  // comes back up; see the consume site in loop(). The frontlight half of the
+  // gesture has already applied above, instantly.
+  if (nightChanged) pendingToggleLightNightRefresh = true;
+
+  LOG_INF("LIGHT", "Toggle Light: frontlight %s, night mode %s (remembered 0x%02X)", wantLight ? "on" : "off",
+          wantNight ? "on" : "off", SETTINGS.pwrToggleLightRemembered);
+}
+#endif
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
 
@@ -662,6 +760,41 @@ void loop() {
     screenshotComboActive = false;
   }
 
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+  // Deferred night-mode repaint for the Toggle Light action, queued by
+  // handlePowerToggleLight() and run only once the power button is up. The
+  // action fires on the release edge, so in the ordinary case this is simply
+  // the next frame.
+  //
+  // Doing it inline from the dispatch site is what this avoids:
+  // handleForcedRefresh() takes a RenderLock, which blocks on the rendering
+  // mutex with portMAX_DELAY, so the loop task can sit there for as long as the
+  // render task holds it — a full e-ink refresh. For that whole stretch loop()
+  // stops calling gpio.update(), so a power button that is still down goes
+  // unread, including a hold meant to sleep the device. The release edge does
+  // not guarantee the button is up either: it comes from
+  // mappedInputManager.wasReleased(Button::Power), a logical edge that on
+  // shared confirm/power boards is not the same signal as the raw BTN_POWER
+  // level tested here. Waiting costs nothing: e-ink cannot show the flip any
+  // sooner than the user can see it, and the frontlight half of the gesture
+  // already applied at the dispatch.
+  //
+  // Sleep discards the pending flip harmlessly: screenInverted is already
+  // persisted, so the next boot renders in the new polarity.
+  if (pendingToggleLightNightRefresh && !gpio.isPressed(HalGPIO::BTN_POWER)) {
+    pendingToggleLightNightRefresh = false;
+    // Reuse the path the FORCE_REFRESH short press uses: the reading surfaces
+    // schedule a FULL refresh and re-render, which is what an inversion needs on
+    // e-ink (a partial refresh over flipped pixels ghosts badly). Screens that
+    // decline it are not inverted by night mode at all, but still get a plain
+    // repaint so an overlay drawn over a reader (dictionary) picks up the new
+    // polarity.
+    if (!activityManager.handleForcedRefresh()) {
+      activityManager.requestUpdate();
+    }
+  }
+#endif
+
   // Consume the second X4 Pro power-button release so it does not also run a
   // configured short-power action after toggling the frontlight.
   if (handleX4ProFrontlightDoubleClick()) {
@@ -725,6 +858,24 @@ void loop() {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
   }
+
+#ifdef CROSSPOINT_PWR_TOGGLE_LIGHT
+  // Toggle the reading lights when the power button is short-pressed with the
+  // TOGGLE_LIGHT setting. Deliberately the same shape as the FORCE_REFRESH
+  // block above: the raw release edge, no held-time gate, and no early return,
+  // so the rest of the frame still runs. A hold long enough to sleep never
+  // reaches here (the held-time block above calls enterDeepSleep(), which does
+  // not return), and TOGGLE_LIGHT leaves getPowerButtonDuration() at 400 ms, so
+  // that hold is the stock one — this binding adds no sleep dead-end. A wake
+  // hold cannot reach here either: the wakePowerReleasePending guard near the
+  // top of loop() returns before this on the frame that ends the wake gesture,
+  // and gpio.update() recomputes edges per frame, so the release is gone by the
+  // next one.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::TOGGLE_LIGHT &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    handlePowerToggleLight();
+  }
+#endif
 
   // Refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
