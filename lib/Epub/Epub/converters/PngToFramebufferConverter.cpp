@@ -44,6 +44,16 @@ struct PngContext {
 
   uint8_t* grayLineBuffer{nullptr};
   uint8_t* alphaLineBuffer{nullptr};
+
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // Cache-only decode: no framebuffer writes and `renderer` deliberately left
+  // null, so a stray renderer access is a null deref instead of a silent
+  // cross-task read.
+  bool cacheOnly{false};
+  bool aborted{false};  // the draw callback saw the abort flag
+#else
+  static constexpr bool cacheOnly = false;
+#endif
 };
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
@@ -213,7 +223,19 @@ void convertLineToGray(const uint8_t* pPixels, uint8_t* grayLine, int width, int
 
 int pngDrawCallback(PNGDRAW* pDraw) {
   PngContext* ctx = reinterpret_cast<PngContext*>(pDraw->pUser);
-  if (!ctx || !ctx->config || !ctx->renderer || !ctx->grayLineBuffer) return 0;
+  if (!ctx || !ctx->config || !ctx->grayLineBuffer) return 0;
+  const bool cacheOnly = ctx->cacheOnly;
+  if (!cacheOnly && !ctx->renderer) return 0;
+
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // PNGdec turns a 0 return into PNG_QUIT_EARLY, which already fails the
+  // decode; the flag makes the reason explicit and covers the callback
+  // contract changing under us.
+  if (ImageToFramebufferDecoder::abortRequested()) {
+    ctx->aborted = true;
+    return 0;
+  }
+#endif
 
   int srcY = pDraw->y;
   int srcWidth = ctx->srcWidth;
@@ -247,16 +269,18 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   int screenWidth = ctx->screenWidth;
   bool useDithering = ctx->config->useDithering;
 
-  // Pre-compute orientation and render-mode state once per callback.
+  // Pre-compute orientation and render-mode state once per callback. A
+  // cacheOnly decode never initializes (or uses) the writer: it holds no
+  // RenderLock, so every one of these reads would race the render task.
   DirectPixelWriter pw;
-  pw.init(*ctx->renderer);
+  if (!cacheOnly) pw.init(*ctx->renderer);
 
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;
     int outY = ctx->config->y + dstY;
     if (outY >= ctx->screenHeight) continue;
 
-    pw.beginRow(outY);
+    if (!cacheOnly) pw.beginRow(outY);
 
     // The cache streams to disk one row at a time. Flushing rows below this one
     // (PNGdec delivers scanlines top to bottom) repositions the single-row band.
@@ -291,7 +315,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
             ditheredGray = gray / 85;
             if (ditheredGray > 3) ditheredGray = 3;
           }
-          pw.writePixel(outX, ditheredGray, ctx->alphaLineBuffer != nullptr);
+          if (!cacheOnly) pw.writePixel(outX, ditheredGray, ctx->alphaLineBuffer != nullptr);
           if (caching) cw.writePixel(outX, ditheredGray);
         }
       }
@@ -357,10 +381,23 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   PngContext ctx;
   ctx.decoder = png.get();
-  ctx.renderer = &renderer;
   ctx.config = &config;
-  ctx.screenWidth = renderer.getScreenWidth();
-  ctx.screenHeight = renderer.getScreenHeight();
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // Lock-free background decode: `renderer` is the render task's, so it is not
+  // read at all -- not even for the screen size, which the caller captured
+  // under the RenderLock and passed in the config. Leaving ctx.renderer null
+  // makes any stray access below a null deref instead of a data race.
+  ctx.cacheOnly = config.cacheOnly;
+  if (ctx.cacheOnly) {
+    ctx.screenWidth = config.screenWidth;
+    ctx.screenHeight = config.screenHeight;
+  }
+#endif
+  if (!ctx.cacheOnly) {
+    ctx.renderer = &renderer;
+    ctx.screenWidth = renderer.getScreenWidth();
+    ctx.screenHeight = renderer.getScreenHeight();
+  }
 
   int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
                      pngDrawCallback);
@@ -461,6 +498,11 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
       ctx.caching = false;
     }
   }
+  if (ctx.cacheOnly && !ctx.caching) {
+    // Nothing would come of this decode: it draws nothing and has nowhere to
+    // write. Don't spend seconds finding that out.
+    return false;
+  }
 
   unsigned long decodeStart = millis();
   rc = png->decode(&ctx, 0);
@@ -474,6 +516,16 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     if (ctx.caching) ctx.cache.abort();
     return false;
   }
+
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // Belt and braces: PNGdec fails the decode itself on an early exit, so this
+  // only fires if that contract ever changes.
+  if (ctx.aborted) {
+    LOG_DBG("PNG", "Decode aborted: %s", imagePath.c_str());
+    if (ctx.caching) ctx.cache.abort();
+    return false;
+  }
+#endif
 
   LOG_DBG("PNG", "PNG decoding complete - render time: %lu ms", decodeTime);
 

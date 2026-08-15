@@ -8,6 +8,10 @@
 #include <cstring>
 #include <string>
 
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+#include "ImageToFramebufferDecoder.h"  // decode abort flag, checked below
+#endif
+
 // Streaming cache writer for 2-bit pixels (4 levels). Packs 4 pixels per byte,
 // MSB first.
 //
@@ -122,6 +126,14 @@ struct PixelCache {
   // in which case the caller must stop caching for the rest of the decode.
   bool advanceTo(int newTopRow) {
     if (!ok) return false;
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+    // A decode being torn down must not keep writing bands to SD. Stopping
+    // caching here leaves the file open, so the destructor drops it.
+    if (ImageToFramebufferDecoder::abortRequested()) {
+      ok = false;
+      return false;
+    }
+#endif
     if (newTopRow <= bandStart) return true;
     if (newTopRow > height) newTopRow = height;
 

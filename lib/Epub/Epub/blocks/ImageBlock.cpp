@@ -13,6 +13,12 @@
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+#include <Arduino.h>  // millis()/delay() for the background-decode handshake
+
+#include <atomic>
+#endif
+
 // Cache file format:
 // - uint16_t width
 // - uint16_t height
@@ -88,6 +94,68 @@ bool imageFailedThisSession(const std::string& path) {
 void rememberImageFailure(const std::string& path) {
   if (failedImageCount == MAX_SESSION_IMAGE_FAILURES || imageFailedThisSession(path)) return;
   failedImageHashes[failedImageCount++] = imagePathHash(path);
+}
+
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+// --- Background pre-decode interlock -----------------------------------------
+// AT MOST ONE image decode runs at a time, and the render task always wins.
+//
+// The reader's background task picks its candidates and sets this flag while it
+// still holds the RenderLock, then decodes with the lock released. That
+// ordering is the whole guarantee: a render can only start after the background
+// task released the lock, so it always observes the flag, and the background
+// task can only pick a new candidate while no render is running. Whenever a
+// render is about to decode it therefore stops the background decode first and
+// waits for the acknowledgement.
+//
+// It matters for two independent reasons. (1) Both would be writing the same
+// .pxc if the reader turned onto a page the background task had queued -- and
+// the loser's abort path would delete the winner's file. (2) The PNG decoder
+// object alone is ~44 KB of internal RAM; two live at once can push an
+// allocation over the edge, and a render-path decode that loses that race marks
+// the image failed for the rest of the session.
+//
+// The flag is cleared by the background task wherever its decode ends. A stale
+// `true` is harmless: it costs a render one bounded wait.
+std::atomic<bool> bgDecodeActive{false};
+
+// Which .pxc that decode is producing (imagePathHash of the cache path), so a
+// render can tell "the background task is busy with some other image" from "the
+// background task holds MY file open for write". Only meaningful while
+// bgDecodeActive is true.
+//
+// Plain, not atomic: unlike the flag (cleared with no lock held, wherever the
+// decode ends) this is written only by the background task while it holds the
+// RenderLock and read only by the render task while IT holds the RenderLock, so
+// the lock already serializes the pair -- and a 64-bit atomic on a 32-bit core
+// would be a libatomic call for nothing.
+uint64_t bgDecodeTarget = 0;
+
+// Cap for that wait. The expected cost is one decoder callback (a JPEG MCU row,
+// sub-millisecond to a few ms) plus at most one band flush. The cap only has to
+// cover the one uninterruptible step in a background decode, the ZIP extract of
+// a single image, which is bounded by the image's stored size (typically well
+// under a second). Reaching the cap means something is wrong, and the caller
+// then declines to decode rather than risk a second writer.
+constexpr uint32_t BG_DECODE_CANCEL_TIMEOUT_MS = 5000;
+#endif
+
+// The decode settings for a page image. Single source of truth: render() and
+// the background pre-decode must produce byte-identical cache files, and both
+// the screen clip and the dither phase depend on the absolute position here.
+RenderConfig pageImageDecodeConfig(const std::string& cachePath, const int x, const int y, const int width,
+                                   const int height) {
+  RenderConfig config;
+  config.x = x;
+  config.y = y;
+  config.maxWidth = width;
+  config.maxHeight = height;
+  config.useGrayscale = true;
+  config.useDithering = true;
+  config.performanceMode = false;
+  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
+  config.cachePath = cachePath;      // Enable caching during decode
+  return config;
 }
 
 // --- Per-page-render RAM slot for the pixel cache ----------------------------
@@ -311,6 +379,84 @@ void ImageBlock::clearSessionRenderFailures() { failedImageCount = 0; }
 
 void ImageBlock::releaseRenderCache() { releasePxcSlot(); }
 
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+ImageToFramebufferDecoder* ImageBlock::backgroundDecoderFor(const std::string& imagePath) {
+  // Called under the RenderLock, which is also what serializes the factory's
+  // lazy singleton creation against the render task and the section build. The
+  // caller keeps the pointer for its unlocked decode rather than calling the
+  // factory again from there, where nothing would serialize that init.
+  return ImageDecoderFactory::getDecoder(imagePath);
+}
+
+void ImageBlock::beginBackgroundDecode(const std::string& imagePath) {
+  // Publish WHICH image before the flag, so a render that observes the flag
+  // observes the matching target with it (both writes happen here, under the
+  // RenderLock; the release store orders them for a reader that somehow sees
+  // the flag first).
+  bgDecodeTarget = imagePathHash(getCachePath(imagePath));
+  bgDecodeActive.store(true, std::memory_order_release);
+}
+
+void ImageBlock::endBackgroundDecode() { bgDecodeActive.store(false, std::memory_order_release); }
+
+bool ImageBlock::backgroundDecodeTargets(const std::string& cachePath) {
+  if (!bgDecodeActive.load(std::memory_order_acquire)) return false;
+  return bgDecodeTarget == imagePathHash(cachePath);
+}
+
+ImageBlock::BgDecodeCancel ImageBlock::cancelBackgroundDecode() {
+  if (!bgDecodeActive.load(std::memory_order_acquire)) return BgDecodeCancel::None;
+
+  ImageToFramebufferDecoder::requestAbort(true);
+  const uint32_t start = millis();
+  while (bgDecodeActive.load(std::memory_order_acquire)) {
+    if (millis() - start >= BG_DECODE_CANCEL_TIMEOUT_MS) {
+      ImageToFramebufferDecoder::requestAbort(false);
+      LOG_ERR("IMG", "Background decode did not stop within %ums", (unsigned)BG_DECODE_CANCEL_TIMEOUT_MS);
+      return BgDecodeCancel::TimedOut;
+    }
+    delay(1);
+  }
+  ImageToFramebufferDecoder::requestAbort(false);
+  LOG_DBG("IMG", "Background decode stopped in %ums", (unsigned)(millis() - start));
+  return BgDecodeCancel::Stopped;
+}
+
+bool ImageBlock::decodeToCacheOnly(GfxRenderer& renderer, ImageToFramebufferDecoder* decoder,
+                                   const std::string& imagePath, const int x, const int y, const int width,
+                                   const int height, const int screenWidth, const int screenHeight) {
+  if (!decoder) return false;
+  // The screen bounds are the ones the caller captured under the RenderLock, and
+  // in cacheOnly mode they are the ONLY ones the converters have: a zero clips
+  // every pixel away, and the all-black .pxc that produces passes every later
+  // header check, so the image would be permanently black until the cache dir is
+  // cleared. Refuse rather than poison the cache.
+  if (screenWidth <= 0 || screenHeight <= 0) {
+    LOG_ERR("IMG", "Pre-decode: bad screen bounds %dx%d for %s", screenWidth, screenHeight, imagePath.c_str());
+    return false;
+  }
+  HalFile file;
+  if (!Storage.openFileForRead("IMG", imagePath, file)) {
+    LOG_DBG("IMG", "Pre-decode: image file not found: %s", imagePath.c_str());
+    return false;
+  }
+  const size_t fileSize = file.size();
+  file.close();
+  if (fileSize == 0) {
+    LOG_DBG("IMG", "Pre-decode: image file is empty: %s", imagePath.c_str());
+    return false;
+  }
+
+  RenderConfig config = pageImageDecodeConfig(getCachePath(imagePath), x, y, width, height);
+  config.cacheOnly = true;
+  config.screenWidth = screenWidth;
+  config.screenHeight = screenHeight;
+  // `renderer` is handed to the decoder interface and never dereferenced in
+  // cacheOnly mode; the converters null out their context pointer up front.
+  return decoder->decodeToFramebuffer(imagePath, renderer, config);
+}
+#endif
+
 void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
   renderer.fillRect(x, y, width, height, true);
   if (width > 2 && height > 2) {
@@ -356,10 +502,46 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   // Try to render from cache first
   std::string cachePath = getCachePath(imagePath);
+
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // Before the file is even opened for read: if the reader's background
+  // pre-decode is producing THIS .pxc right now, it holds the file open for
+  // write and has only written part of it. Take the image over first, so the
+  // read below sees either the finished file or no usable file at all -- never
+  // a second handle on a half-written one. Only for a matching target: for any
+  // other image the background decode is harmless here and the cancel-and-wait
+  // is pure page-turn latency. Timing out means it is still writing, so decline
+  // the read entirely and draw the placeholder; the next render retries.
+  if (backgroundDecodeTargets(cachePath) && cancelBackgroundDecode() == BgDecodeCancel::TimedOut) {
+    renderPlaceholder(renderer, x, y);
+    return;
+  }
+#endif
+
   if (renderFromCache(renderer, cachePath, x, y, width, height)) {
     renderer.preserveImagePolarity(x, y, width, height);
     return;  // Successfully rendered from cache
   }
+
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // No cache, so this render is about to extract and decode. Take the image
+  // over from the reader's background pre-decode first: it holds no RenderLock,
+  // so it may be producing this very .pxc, or holding the decoder heap this
+  // decode needs. If it will not stop, draw the placeholder rather than become
+  // a second writer on the same file; the next render retries. (A decode of
+  // this same image was already stopped above; what this catches is one of
+  // another image, whose decoder allocation this decode would fight.)
+  const BgDecodeCancel cancelled = cancelBackgroundDecode();
+  if (cancelled == BgDecodeCancel::TimedOut) {
+    renderPlaceholder(renderer, x, y);
+    return;
+  }
+  // It may have been decoding this very image and finished it on the way out.
+  if (cancelled == BgDecodeCancel::Stopped && renderFromCache(renderer, cachePath, x, y, width, height)) {
+    renderer.preserveImagePolarity(x, y, width, height);
+    return;
+  }
+#endif
 
   // The build only header-probed the image for dimensions; pull the actual
   // file out of the book now, on first visit to the page.
@@ -391,16 +573,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
 
-  RenderConfig config;
-  config.x = x;
-  config.y = y;
-  config.maxWidth = width;
-  config.maxHeight = height;
-  config.useGrayscale = true;
-  config.useDithering = true;
-  config.performanceMode = false;
-  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
-  config.cachePath = cachePath;      // Enable caching during decode
+  const RenderConfig config = pageImageDecodeConfig(cachePath, x, y, width, height);
 
   ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
   if (!decoder) {

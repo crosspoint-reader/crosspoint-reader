@@ -6,6 +6,9 @@
 #if defined(CROSSPOINT_NEXT_SECTION_PREBUILD) && !defined(CROSSPOINT_BG_BUILD_TASK)
 #error "CROSSPOINT_NEXT_SECTION_PREBUILD requires CROSSPOINT_BG_BUILD_TASK: the prebuild runs on that task."
 #endif
+#if defined(CROSSPOINT_BG_IMAGE_DECODE) && !defined(CROSSPOINT_BG_BUILD_TASK)
+#error "CROSSPOINT_BG_IMAGE_DECODE requires CROSSPOINT_BG_BUILD_TASK: it runs as that task's idle work"
+#endif
 
 #ifdef CROSSPOINT_BG_BUILD_TASK
 #include <freertos/FreeRTOS.h>
@@ -132,6 +135,52 @@ class EpubReaderActivity final : public ReaderActivity {
   bool prebuildStep();
   // Start prebuilding when the reader is within this many pages of chapter end.
   static constexpr int PREBUILD_NEAR_END_PAGES = 3;
+#endif
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // Pre-decode the images on upcoming pages from the background build task's
+  // idle work, so the first view of an image page finds a ready .pxc instead of
+  // paying a 0.5-3 s decode on the page-turn critical path (today that decode
+  // happens inside the render, behind a placeholder pass). One page is examined
+  // and at most one image decoded per idle pass; the decode itself runs with
+  // the RenderLock RELEASED, which is what the ImageBlock interlock and the
+  // cacheOnly decode mode exist to make safe. Returns true when a decode ran.
+  bool imageDecodeStep(bool& workPlausible);
+  // How far ahead to look. Three pages is roughly the runway a decode needs at
+  // reading pace, and keeps the declined mask a byte.
+  static constexpr int IMAGE_DECODE_LOOKAHEAD = 3;
+  // Cursor state, touched only by the background task. The declined mask
+  // records which lookahead offsets have already been examined and have nothing
+  // left to decode, so idle passes stop re-reading their pages; it is reset
+  // whenever the reader moves (which is also what re-arms the window).
+  int imageDecodeSpine = -1;
+  int imageDecodeBasePage = -1;
+  uint8_t imageDecodeDeclined = 0;
+  // Free-heap floor for starting a pre-decode. The PNG decoder object is ~44 KB
+  // (JPEG ~20 KB) and the render task may start its own decode, or a build-time
+  // image header probe, on the other core while this one runs; leave room for
+  // both rather than win a race for the last block. A render-path decode that
+  // loses one marks its image failed for the whole session, so this floor is
+  // deliberately generous -- pre-decoding is pure opportunism.
+  static constexpr size_t IMAGE_DECODE_MIN_FREE_HEAP = 96 * 1024;
+  // The decoder object is a single contiguous allocation.
+  static constexpr size_t IMAGE_DECODE_MIN_MAX_ALLOC = 48 * 1024;
+  // Page origin of the last render, captured under the RenderLock: a
+  // pre-decode must place the image exactly where a render would, because both
+  // the screen clip and the dither phase depend on absolute position.
+  //
+  // Implicit invariant, worth stating because it is load-bearing and unenforced:
+  // these describe the layout the CURRENT `section` was paginated with. It holds
+  // because every path that changes the layout (settings, orientation, margins,
+  // status-bar height, auto-turn indicator) resets `section` in the same lock
+  // scope, so the pre-decode -- which refuses to run without a section -- can
+  // never pair a new page with an old origin. A future re-pagination that
+  // changes the origin WITHOUT resetting the section would break it silently:
+  // the .pxc files written from here would be dithered and clipped for the old
+  // origin, and nothing downstream would notice, because the header check only
+  // compares dimensions. Reset lastRenderMarginsValid in any such path.
+  int16_t lastRenderMarginLeft = 0;
+  int16_t lastRenderMarginTop = 0;
+  bool lastRenderMarginsValid = false;
 #endif
   static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
   static constexpr int BUILD_WINDOW_AHEAD = 5;

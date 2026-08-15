@@ -2,6 +2,9 @@
 
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+#include <Epub/converters/ImageToFramebufferDecoder.h>  // pre-decode abort flag
+#endif
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -322,6 +325,17 @@ void EpubReaderActivity::startBgBuildTask() {
   bgBuildExited.store(false, std::memory_order_relaxed);
   bgBuildCompleteNotify.store(false, std::memory_order_relaxed);
   bgBuildFailedNotify.store(false, std::memory_order_relaxed);
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // The pre-decode interlock is process-global, not per-task, and a previous
+  // stop can leave it dirty: a cancel that timed out returns with bgDecodeActive
+  // still true (the decode it gave up on ends by clearing it, but nothing
+  // guarantees that happened before the join), and any path that raised the
+  // abort flag lowers it in its own scope. Clear both here so a restarted task
+  // does not inherit "a decode is running" (every render would then pay a
+  // cancel-and-wait) or "abort" (the first pre-decode would bail instantly).
+  ImageBlock::endBackgroundDecode();
+  ImageToFramebufferDecoder::requestAbort(false);
+#endif
   // Core 0: WiFi's home core, idle while reading (loopTask and the render task
   // are both pinned to core 1). Priority 1 matches them; the RenderLock is the
   // ordering authority regardless. Stack: the parse/layout path historically
@@ -341,10 +355,22 @@ void EpubReaderActivity::stopBgBuildTask() {
   // task polls the flag, self-deletes, and the give hits a freed TCB). Worst
   // case the woken pass misses the flag and re-sleeps on the short cadence
   // (this caller holds the RenderLock, so its TryAcquire fails -> ~25 ms),
-  // keeping the join bounded. It cannot start new work either way: everything
-  // it does runs under a TryAcquire this caller's lock defeats.
+  // keeping the join bounded. It cannot start new work either way: every step
+  // is picked under a TryAcquire this caller's lock defeats.
   xTaskNotifyGive(bgBuildTaskHandle);
   bgBuildStop.store(true, std::memory_order_release);
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // A pre-decode in flight would otherwise hold the join for its whole
+  // remaining runtime (seconds), so cancel it -- but only AFTER the stop flag
+  // is published. The cancel can time out (its 5 s cap covers the un-abortable
+  // ZIP extract), and it lowers the abort flag on the way out; with the store
+  // after the cancel, a task sitting between the extract and the decode saw
+  // neither flag raised and went on to run a full multi-second decode inside
+  // the join. Reusing the same cancel-and-wait the render path uses also means
+  // the abort flag is raised and lowered inside one RenderLock scope, which is
+  // what keeps that global flag from ever touching a render-task decode.
+  ImageBlock::cancelBackgroundDecode();
+#endif
   while (!bgBuildExited.load(std::memory_order_acquire)) {
     delay(1);
   }
@@ -387,6 +413,14 @@ void EpubReaderActivity::bgBuildTaskLoop() {
 #ifdef CROSSPOINT_NEXT_SECTION_PREBUILD
     if (!didWork && !bgBuildStop.load(std::memory_order_acquire)) {
       didWork = prebuildStep();
+    }
+#endif
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+    // Lowest-priority idle work: it is the only step here that runs for seconds
+    // with the lock released, so it goes after everything the reader is
+    // actually waiting on.
+    if (!didWork && !bgBuildStop.load(std::memory_order_acquire)) {
+      didWork = imageDecodeStep(workPlausible);
     }
 #endif
     if (didWork) {
@@ -463,6 +497,201 @@ bool EpubReaderActivity::prebuildStep() {
 }
 #endif  // CROSSPOINT_NEXT_SECTION_PREBUILD
 
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+// One image pre-decode step, run on the background build task when there is
+// nothing left to build or prebuild. First view of an in-book image costs a
+// 0.5-3 s decode today, taken inside the render behind a placeholder pass; this
+// moves it off the page-turn critical path by decoding the images of upcoming
+// pages into their .pxc files ahead of time.
+//
+// Two phases, and the split is the whole design:
+//
+// UNDER the (try-acquired) RenderLock -- everything that touches reader state:
+// pick the nearest lookahead page not already ruled out, deserialize it,
+// find the first image with no usable cache, and capture its path, source
+// href and geometry AS VALUES. Also captured: a shared_ptr copy of the Epub,
+// the decoder pointer (resolving it touches ImageDecoderFactory's non-
+// thread-safe lazy init, which only the lock serializes), and the "a background
+// decode is running" flag plus the image it is running on (published here,
+// before the lock is released, so no render can start without seeing them).
+//
+// WITHOUT the lock: extract the image out of the book if needed, then decode it
+// in cacheOnly mode. Both steps touch only the SD card through Storage (which
+// is mutex'd per operation), the pixel cache, and the heap -- no Section, no
+// Epub member, no renderer.
+//
+// Why a shared_ptr copy of the Epub rather than ImageBlock's extractor hook:
+// that hook's context is a raw Epub*, and launchKOReaderSync() drops the Epub
+// under the RenderLock WITHOUT joining this task, to free RAM for the TLS
+// handshake. (onExit's clear is safe -- it happens after stopBgBuildTask()
+// joins -- but the sync path's is not.) A shared_ptr copy keeps the object
+// alive for the length of this step no matter which path runs.
+//
+// Staleness is a non-issue: a .pxc is keyed by the image, not by the page it
+// appears on, so re-pagination cannot invalidate one. The only correctness
+// requirement is that two decoders never write the same file, which the
+// ImageBlock interlock handles (see the note there).
+bool EpubReaderActivity::imageDecodeStep(bool& workPlausible) {
+  std::shared_ptr<Epub> epubRef;
+  // Resolved under the lock and carried into the unlocked phase: the factory's
+  // lazy singleton init is not thread-safe, so it must not be reached from
+  // there (see ImageBlock::backgroundDecoderFor).
+  ImageToFramebufferDecoder* decoder = nullptr;
+  std::string imagePath;
+  std::string srcPath;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  int screenWidth = 0;
+  int screenHeight = 0;
+  int offset = 0;
+
+  {
+    RenderLock lock{RenderLock::TryAcquire{}};
+    if (!lock.locked()) {
+      workPlausible = true;
+      return false;
+    }
+    // A building section re-numbers pages under the scan, and the margins
+    // snapshot only exists once a render has happened.
+    if (!epub || !section || section->isBuilding() || !lastRenderMarginsValid) return false;
+
+    // The cursor belongs to one reading position; the reader moving re-arms the
+    // whole window. Only this task touches these three.
+    if (imageDecodeSpine != currentSpineIndex || imageDecodeBasePage != section->currentPage) {
+      imageDecodeSpine = currentSpineIndex;
+      imageDecodeBasePage = section->currentPage;
+      imageDecodeDeclined = 0;
+    }
+    if (ESP.getFreeHeap() < IMAGE_DECODE_MIN_FREE_HEAP || ESP.getMaxAllocHeap() < IMAGE_DECODE_MIN_MAX_ALLOC)
+      return false;
+
+    std::unique_ptr<Page> page;
+    // The page this scan reads: either `page` above, or the resident cache entry
+    // borrowed in place (see below). Valid only inside this locked scope.
+    const Page* scanPage = nullptr;
+    for (int i = 1; i <= IMAGE_DECODE_LOOKAHEAD; i++) {
+      if (imageDecodeDeclined & (1u << i)) continue;
+      const int pageNumber = section->currentPage + i;
+      if (pageNumber >= static_cast<int>(section->pageCount)) {
+        imageDecodeDeclined |= (1u << i);  // past the end of the chapter
+        continue;
+      }
+      offset = i;
+#if defined(CROSSPOINT_PAGE_CACHE) && defined(CROSSPOINT_BG_IMAGE_DECODE)
+      // Composition hook for PR #3050 (CROSSPOINT_PAGE_CACHE), whose one-entry
+      // page cache usually holds exactly this page (currentPage + 1 is the first
+      // lookahead slot); deserializing a second copy of it would cost the SD read
+      // that cache exists to avoid, plus a second live Page. Borrow it instead:
+      // the scan below is read-only (const element access), so nothing here can
+      // disturb the entry the next forward turn is going to consume. Full key
+      // check, same fields and same lock as takeCachedPage -- minus the consume:
+      // the entry is left in place, and any mismatch just falls through to the
+      // deserialize. Undefined on this branch; compiled in whenever both flags
+      // are on, in either merge order.
+      if (cachedPage && cachedPageGeneration == sectionGeneration && cachedPageSpine == currentSpineIndex &&
+          cachedPageNumber == pageNumber && cachedPagePageCount == section->pageCount &&
+          cachedPagePartial == section->isPartial()) {
+        scanPage = cachedPage.get();
+        break;
+      }
+#endif
+      page = section->loadPage(pageNumber);
+      scanPage = page.get();
+      break;
+    }
+    if (offset == 0) return false;  // window exhausted until the reader moves
+    if (!scanPage) {
+      imageDecodeDeclined |= (1u << offset);
+      return false;
+    }
+
+    screenWidth = renderer.getScreenWidth();
+    screenHeight = renderer.getScreenHeight();
+    for (const auto& element : scanPage->elements) {
+      if (element->getTag() != TAG_PageImage) continue;
+      const auto& pageImage = static_cast<const PageImage&>(*element);
+      const ImageBlock& block = pageImage.getImageBlock();
+      if (!block.needsDecode()) continue;
+      // Exactly the geometry ImageBlock::render() would use, including its
+      // bounds check: an image the render would reject is not worth decoding.
+      const int px = pageImage.xPos + lastRenderMarginLeft;
+      const int py = pageImage.yPos + lastRenderMarginTop;
+      if (px < 0 || py < 0 || px + block.getWidth() > screenWidth || py + block.getHeight() > screenHeight) continue;
+      decoder = ImageBlock::backgroundDecoderFor(block.getImagePath());
+      if (!decoder) continue;  // no decoder for this format
+      imagePath = block.getImagePath();
+      srcPath = block.getSourcePath();
+      x = px;
+      y = py;
+      width = block.getWidth();
+      height = block.getHeight();
+      break;
+    }
+    if (imagePath.empty()) {
+      imageDecodeDeclined |= (1u << offset);  // nothing left to decode on this page
+      return false;
+    }
+
+    epubRef = epub;
+    ImageBlock::beginBackgroundDecode(imagePath);
+  }
+
+  // ---- No RenderLock held from here ----------------------------------------
+  if (!srcPath.empty() && !Storage.exists(imagePath.c_str())) {
+    // The one step of this that cannot be aborted; it is bounded by the
+    // image's stored size (see BG_DECODE_CANCEL_TIMEOUT_MS).
+    if (!epubRef->extractItemToFile(srcPath, imagePath)) {
+      LOG_DBG("ERS", "Pre-decode extraction failed: %s", srcPath.c_str());
+    }
+  }
+
+  bool decoded = false;
+  // Whoever wanted this decode stopped raised the abort flag while we were in
+  // the extract above, which is the one step that cannot honor it. Starting the
+  // decode anyway is the bad case: the canceller may give up waiting and lower
+  // the flag (BG_DECODE_CANCEL_TIMEOUT_MS) precisely because the extract took
+  // that long, and the decode would then run to completion -- as a second
+  // writer on the file the render task is about to produce, or for seconds
+  // inside an exit join.
+  bool aborted = ImageToFramebufferDecoder::abortRequested();
+  if (!aborted && !bgBuildStop.load(std::memory_order_acquire)) {
+    const unsigned long t0 = millis();
+    decoded =
+        ImageBlock::decodeToCacheOnly(renderer, decoder, imagePath, x, y, width, height, screenWidth, screenHeight);
+    if (decoded) {
+      LOG_DBG("ERS", "Pre-decoded %s in %lums", imagePath.c_str(), millis() - t0);
+    } else {
+      // Read BEFORE endBackgroundDecode(): a canceller only lowers the flag
+      // once it observes the decode has stopped, so while the "active" flag is
+      // still up the abort flag cannot go back down under this read.
+      aborted = ImageToFramebufferDecoder::abortRequested();
+    }
+  }
+  ImageBlock::endBackgroundDecode();
+
+  if (aborted) {
+    // Not a property of the image: the render task took it over (or the reader
+    // is leaving). Declining here would disarm this lookahead slot until the
+    // reader moves, and on an image-dense chapter the takeover happens on
+    // exactly the pages worth pre-decoding. Leave the cursor alone and retry.
+    LOG_DBG("ERS", "Pre-decode aborted: %s", imagePath.c_str());
+    return false;
+  }
+  if (!decoded) {
+    // Heap, format, or a corrupt file -- a property of this image, so stop
+    // offering this page: the render path still decodes whatever it needs, and
+    // retrying here every 25 ms would not help.
+    imageDecodeDeclined |= (1u << offset);
+    return false;
+  }
+  // Deliberately NOT declined on success: the next pass re-scans the same page
+  // for a second image, and declines it once there is nothing left.
+  return true;
+}
+#endif  // CROSSPOINT_BG_IMAGE_DECODE
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     finish();
@@ -498,6 +727,17 @@ void EpubReaderActivity::loop() {
       !partialRebuildStartFailed &&
       section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
     RenderLock lock;
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+    // Same reason as the renderBook()-site cancel: this build's parse pump (the
+    // buildSomeMore ticks that follow, wherever they run) extracts images out of
+    // the book to probe their dimensions, and a pre-decode in flight extracts
+    // too, with no lock -- both derive the same destination path from the
+    // book-internal href, so the two would be writing the SAME file. Stop it
+    // before the build exists. The wait is bounded by the cancel timeout and
+    // this is deferrable background work, not a page turn; on a timeout the
+    // overlap stays open exactly as it does at the render site.
+    ImageBlock::cancelBackgroundDecode();
+#endif
     const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
     if (!section->startBuild(buildSpec)) {
       partialRebuildStartFailed = true;
@@ -1283,6 +1523,15 @@ void EpubReaderActivity::renderBook() {
   lastRenderSpec = renderSpec;
   lastRenderSpecValid = true;
 #endif
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+  // Snapshot for the image pre-decode (same lock, same reason as above): these
+  // are the offsets renderContents hands to Page::render, so an image's on-page
+  // origin is xPos/yPos plus these. The pre-decode must match them exactly --
+  // the screen clip and the dither phase both key off absolute position.
+  lastRenderMarginLeft = static_cast<int16_t>(orientedMarginLeft);
+  lastRenderMarginTop = static_cast<int16_t>(orientedMarginTop);
+  lastRenderMarginsValid = true;
+#endif
 #ifdef CROSSPOINT_BG_BUILD_TASK
   // Arm the build task: nearly every state change it cares about (build
   // started, page turned, spec changed) flows through a render, so one notify
@@ -1296,6 +1545,18 @@ void EpubReaderActivity::renderBook() {
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
+#ifdef CROSSPOINT_BG_IMAGE_DECODE
+    // Everything below -- the Section, its loadSectionFile, and the build this
+    // may start -- can run the chapter parser, which extracts images out of the
+    // book to probe their dimensions. A pre-decode in flight extracts too, with
+    // no lock, and the two would be writing the SAME file (both derive the path
+    // from the book-internal href). Stop it first; the wait is bounded by the
+    // cancel timeout and this is already the slow path (a chapter load), not a
+    // page turn. On a timeout the overlap stays open exactly as it is today --
+    // there is no useful way for a render to decline loading its chapter -- but
+    // that cap is a liveness backstop, not an expected path.
+    ImageBlock::cancelBackgroundDecode();
+#endif
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
     partialRebuildStartFailed = false;
 
