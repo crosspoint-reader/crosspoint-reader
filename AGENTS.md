@@ -145,7 +145,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
 
 ### Directory Structure
 
@@ -166,7 +166,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 | `HalGPIO`    | `InputManager`  | Button input handling | *(none)*        |
 | `HalStorage` | `SDCardManager` | SD card file I/O      | `Storage`       |
 
-**Location**: [lib/hal/](../lib/hal/)
+**Location**: [lib/hal/](lib/hal/)
 
 **Why HAL?**
 
@@ -307,7 +307,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](../src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](../lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: [src/main.cpp:132-143](src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](lib/GfxRenderer/GfxRenderer.cpp)
 
 **Pattern Hierarchy**:
 
@@ -356,9 +356,9 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 **Examples in codebase**:
 
-- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
-- Cover image buffers: [HomeActivity.cpp:166](../src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](../lib/GfxRenderer/GfxRenderer.cpp)
+- Memory utilities: [Memory.h](lib/Memory/Memory.h) (`makeUniqueNoThrow`)
+- Cover image buffers: [HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp)
+- Bitmap rendering: [GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp)
 
 ### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
@@ -397,7 +397,7 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 
 **Examples in codebase**:
 
-- Memory utilities: [Memory.h](../lib/Memory/Memory.h) (`makeUniqueNoThrow`)
+- Memory utilities: [Memory.h](lib/Memory/Memory.h) (`makeUniqueNoThrow`)
 
 ---
 
@@ -410,7 +410,7 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](../src/MappedInputManager.cpp)
+**Source**: [src/MappedInputManager.cpp:20-55](src/MappedInputManager.cpp)
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -470,7 +470,7 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 ### Activity Lifecycle and Memory Management
 
-**Source**: [src/main.cpp:132-143](../src/main.cpp)
+**Source**: [src/main.cpp:132-143](src/main.cpp)
 
 **CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
 
@@ -509,7 +509,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](../src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](src/activities/util/KeyboardEntryActivity.cpp)
 
 **Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
 
@@ -523,7 +523,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](../src/main.cpp)
+**Source**: [src/main.cpp:40-115](src/main.cpp)
 
 **All fonts are loaded as global static objects** at firmware startup:
 
@@ -546,7 +546,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 - Fonts stored in **Flash** (marked as `static const` in `lib/EpdFont/builtinFonts/`)
 - Font rendering data cached in **DRAM** when first used
 - `OMIT_FONTS` can reduce binary size for minimal builds
-- Font IDs defined in [src/fontIds.h](../src/fontIds.h)
+- Font IDs defined in [src/fontIds.h](src/fontIds.h)
 
 **Usage**:
 
@@ -650,7 +650,7 @@ Do not run raw `clang-format` or probe it with `command -v`; use the wrapper eve
    
    - Forces clean re-parse of all EPUBs
    
-   - Check file format versions in [docs/file-formats.md](../docs/file-formats.md)
+   - Check file format versions in [docs/file-formats.md](docs/file-formats.md)
 
 5. **Watchdog Timeout**:
    
