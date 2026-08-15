@@ -35,11 +35,10 @@ ui_scale: 1.0                  # BoardProfile.uiScale — not DPI
 ppi_note: null                 # comment-only in the SDK; do not invent dpi
 
 caps: []                       # derived in BoardConfig.h unless INI overrides
-present_in_ini: true           # any committed env sets this device flag
 ```
 
 There is no `dpi` field on `BoardProfile`. PPI appears only in SDK comments.
 `caps` are copied from header defaults; do not require them in CrossPoint INI.
 
-`present_in_ini: false` means dormant: keep the file, do not apply it as a
-compile target until a committed env and a CI job exist.
+Only devices on this tree's compile set (committed `platformio.ini` ∩ CI) get a
+file here. The skill's field map says which source to re-read when refreshing.

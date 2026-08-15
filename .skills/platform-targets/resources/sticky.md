@@ -22,7 +22,6 @@ frontlight: none
 ui_scale: 1.2
 ppi_note: ~220-235 PPI comment in BoardConfig; uiScale is hand-tuned
 caps: [TOUCH, MIC, RTC, TEMP_HUMIDITY, IMU, BUZZER]
-present_in_ini: true
 ---
 
 # Seeed Sticky
