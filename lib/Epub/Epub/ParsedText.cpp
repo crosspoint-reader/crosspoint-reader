@@ -912,6 +912,46 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   return wordWidths;
 }
 
+ParsedText::WidthMetrics ParsedText::measureWidths(const GfxRenderer& renderer, const int fontId) {
+  WidthMetrics result;
+  if (words.empty()) return result;
+
+  if (renderer.isSdCardFont(fontId)) {
+    uint8_t styleMask = 0;
+    for (const auto style : wordStyles) {
+      styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
+    }
+    renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask == 0 ? 0x01 : styleMask);
+  }
+
+  const auto wordWidths = calculateWordWidths(renderer, fontId);
+  int currentUnbreakableWidth = 0;
+  int preferredWidth = 0;
+  int minimumWidth = 0;
+  for (size_t i = 0; i < words.size(); ++i) {
+    int gap = 0;
+    if (i > 0 && wordContinues[i]) {
+      gap = renderer.getKerning(fontId, lastCodepoint(words[i - 1]), firstCodepoint(words[i]), wordStyles[i - 1]);
+    } else if (i > 0 && !wordNoSpaceBefore[i]) {
+      gap = renderer.getSpaceAdvance(fontId, lastCodepoint(words[i - 1]), firstCodepoint(words[i]), wordStyles[i - 1]);
+    }
+
+    preferredWidth = std::max(0, preferredWidth + gap + wordWidths[i]);
+    if (i == 0 || TokenBoundary::allowsBreak(wordContinues[i], wordNoSpaceBefore[i])) {
+      currentUnbreakableWidth = wordWidths[i];
+    } else {
+      currentUnbreakableWidth = std::max(0, currentUnbreakableWidth + gap + wordWidths[i]);
+    }
+    minimumWidth = std::max(minimumWidth, currentUnbreakableWidth);
+  }
+
+  const int firstLineIndent = std::max(0, resolveFirstLineIndent(true, renderer, fontId));
+  result.minimum = static_cast<uint16_t>(std::min<int>(UINT16_MAX, minimumWidth + firstLineIndent));
+  result.preferred =
+      static_cast<uint16_t>(std::min<int>(UINT16_MAX, std::max(minimumWidth, preferredWidth + firstLineIndent)));
+  return result;
+}
+
 std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
                                                   std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                                   std::vector<bool>& noSpaceBeforeVec) {

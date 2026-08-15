@@ -37,7 +37,9 @@ namespace {
 //      break opportunity, and hyphenation of a focus-split word considers the whole word
 //      instead of only its regular-weight suffix. Pages cached by older versions were laid
 //      out with the previous, more restrictive break set and no longer match.
-constexpr uint8_t SECTION_FILE_VERSION = 38;
+// v39: Tables preserve rows and columns with adaptive widths instead of flattening cells
+//      with synthetic row/column labels.
+constexpr uint8_t SECTION_FILE_VERSION = 39;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

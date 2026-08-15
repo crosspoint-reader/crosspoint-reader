@@ -4,11 +4,14 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
 #include <expat.h>
 
 #include <algorithm>
+#include <array>
+#include <cstdlib>
 #include <iterator>
 #include <new>
 
@@ -225,6 +228,12 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
 void ChapterHtmlSlimParser::flushPendingAnchor() {
   if (pendingAnchorId.empty()) return;
 
+  if (tableDepth == 1 && tableCellActive && !tableStacked) {
+    currentTableCellAnchors.push_back(std::move(pendingAnchorId));
+    pendingAnchorId.clear();
+    return;
+  }
+
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
@@ -248,6 +257,12 @@ void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
   // contains leading formatting whitespace before its first rendered word.
   currentPageVisibleOffset = completedPageCount == 0 ? 0 : offset;
   currentPageVisibleOffsetSet = true;
+}
+
+void ChapterHtmlSlimParser::failAllocation(const char* resource) {
+  LOG_ERR("EHP", "OOM: %s", resource);
+  parseAllocationFailed_ = true;
+  if (xmlParser_) XML_StopParser(xmlParser_, XML_FALSE);
 }
 
 // flush the contents of partWordBuffer to currentTextBlock
@@ -317,12 +332,21 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       return;
     }
 
+    if (tableDepth == 1 && tableCellActive && !tableStacked) {
+      switchTableToStacked();
+    }
+
     makePages();
   }
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  currentTextBlock =
+      makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle);
+  if (!currentTextBlock) {
+    failAllocation("ParsedText");
+    return;
+  }
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }
@@ -392,8 +416,393 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   }
 }
 
+void ChapterHtmlSlimParser::beginTable() {
+  if (partWordBufferIndex > 0) flushPartWordBuffer();
+  if (currentTextBlock && !currentTextBlock->isEmpty()) makePages();
+  currentTextBlock.reset();
+
+  tableSampleRows.clear();
+  tableSampleRows.reserve(TABLE_SAMPLE_ROW_LIMIT);
+  currentTableRow.cells.clear();
+  currentTableRow.cells.reserve(TableLayout::MAX_COLUMNS);
+  currentTableCellAnchors.clear();
+  tableColumnMetrics.fill({});
+  tableColumnWidths.fill(0);
+  tableColumnCount = 0;
+  tableSampleWordCount = 0;
+  tableRowActive = false;
+  tableCellActive = false;
+  tableStacked = false;
+  tableWidthsLocked = false;
+}
+
+void ChapterHtmlSlimParser::beginTableRow() {
+  if (tableRowActive) finishTableRow();
+  currentTableRow.cells.clear();
+  if (currentTableRow.cells.capacity() < TableLayout::MAX_COLUMNS) {
+    currentTableRow.cells.reserve(TableLayout::MAX_COLUMNS);
+  }
+  tableRowActive = true;
+}
+
+void ChapterHtmlSlimParser::beginTableCell(const CssStyle& cssStyle, const XML_Char** atts, const bool header) {
+  if (!tableRowActive) beginTableRow();
+  if (tableCellActive) finishTableCell();
+
+  currentTableCellColspan = 1;
+  if (const char* colspan = getAttribute(atts, "colspan")) {
+    const unsigned long parsed = strtoul(colspan, nullptr, 10);
+    if (parsed > 0) {
+      currentTableCellColspan = static_cast<uint8_t>(std::min<unsigned long>(parsed, TableLayout::MAX_COLUMNS));
+    }
+  }
+  currentTableCellWidthHint = cssStyle.imageWidth;
+  currentTableCellHasWidthHint = cssStyle.hasImageWidth();
+  currentTableCellAnchors.clear();
+  currentTableCellAnchors.reserve(2);
+  tableCellBlockStackSizeBefore = blockStyleStack.size();
+
+  const float emSize = static_cast<float>(renderer.getFontAscenderSize(fontId));
+  auto cellStyle = BlockStyle::fromCssStyle(cssStyle, emSize, static_cast<CssTextAlign>(paragraphAlignment),
+                                            viewportWidth);
+  const auto accumulated =
+      blockStyleStack.back().getCombinedBlockStyle(cellStyle, BlockStyle::CombineAxis::Horizontal);
+  blockStyleStack.push_back(accumulated);
+  currentCssStyle = cssStyle;
+  tableCellActive = true;
+  startNewTextBlock(accumulated.withoutBottom());
+
+  if (header) {
+    StyleStackEntry entry;
+    entry.depth = depth;
+    entry.hasBold = true;
+    entry.bold = true;
+    applyDirectionToEntry(entry, cssStyle);
+    inlineStyleStack.push_back(entry);
+  }
+  updateEffectiveInlineStyle();
+}
+
+void ChapterHtmlSlimParser::finishTableCell() {
+  if (!tableCellActive) return;
+  if (partWordBufferIndex > 0) flushPartWordBuffer();
+  flushPendingAnchor();
+
+  if (tableStacked) {
+    if (currentTextBlock && !currentTextBlock->isEmpty()) makePages();
+    currentTextBlock.reset();
+  } else {
+    size_t usedColumns = 0;
+    for (const auto& cell : currentTableRow.cells) usedColumns += cell.colspan;
+    if (currentTableRow.cells.size() >= TableLayout::MAX_COLUMNS ||
+        usedColumns + currentTableCellColspan > TableLayout::MAX_COLUMNS) {
+      switchTableToStacked();
+      if (currentTextBlock && !currentTextBlock->isEmpty()) makePages();
+      currentTextBlock.reset();
+    } else {
+      TableCellData cell;
+      cell.wordCount = currentTextBlock ? static_cast<uint16_t>(std::min<size_t>(UINT16_MAX, currentTextBlock->size()))
+                                       : 0;
+      cell.content = std::move(currentTextBlock);
+      cell.footnotes = std::move(pendingFootnotes);
+      cell.anchors = std::move(currentTableCellAnchors);
+      cell.widthHint = currentTableCellWidthHint;
+      cell.hasWidthHint = currentTableCellHasWidthHint;
+      cell.colspan = currentTableCellColspan;
+      currentTableRow.cells.push_back(std::move(cell));
+      pendingFootnotes.clear();
+      currentTableCellAnchors.clear();
+    }
+  }
+
+  while (blockStyleStack.size() > tableCellBlockStackSizeBefore) blockStyleStack.pop_back();
+  currentCssStyle.reset();
+  tableCellActive = false;
+  nextWordContinues = false;
+}
+
+void ChapterHtmlSlimParser::addTableRowSpacing() {
+  if (!currentPage) return;
+  const int spacing = std::max(2, renderer.getLineHeight(fontId, lineCompression) / 3);
+  currentPageNextY = static_cast<int16_t>(std::min<int>(viewportHeight, currentPageNextY + spacing));
+}
+
+void ChapterHtmlSlimParser::renderTableRowStacked(TableRowData& row, const bool addRowSpacing) {
+  for (auto& cell : row.cells) {
+    if (!cell.content || cell.content->isEmpty()) continue;
+    pendingFootnotes = std::move(cell.footnotes);
+    wordsExtractedInBlock = 0;
+    for (auto& anchor : cell.anchors) {
+      anchorData.push_back({std::move(anchor), static_cast<uint16_t>(completedPageCount)});
+    }
+    cell.anchors.clear();
+    currentTextBlock = std::move(cell.content);
+    makePages();
+    currentTextBlock.reset();
+  }
+  row.cells.clear();
+  if (addRowSpacing) addTableRowSpacing();
+}
+
+void ChapterHtmlSlimParser::switchTableToStacked() {
+  if (tableStacked) return;
+  tableStacked = true;
+  tableWidthsLocked = false;
+
+  for (auto& row : tableSampleRows) renderTableRowStacked(row);
+  tableSampleRows.clear();
+  tableSampleWordCount = 0;
+
+  if (!currentTableRow.cells.empty()) renderTableRowStacked(currentTableRow, false);
+}
+
+bool ChapterHtmlSlimParser::lockTableColumnWidths() {
+  tableColumnMetrics.fill({});
+  tableColumnCount = 0;
+  const uint16_t gap = static_cast<uint16_t>(std::max(4, renderer.getSpaceWidth(fontId) / 2));
+  const float emSize = static_cast<float>(renderer.getFontAscenderSize(fontId));
+
+  for (const auto& row : tableSampleRows) {
+    size_t column = 0;
+    for (const auto& cell : row.cells) {
+      if (cell.colspan == 0 || column + cell.colspan > TableLayout::MAX_COLUMNS) return false;
+      tableColumnCount = std::max(tableColumnCount, column + cell.colspan);
+      if (cell.colspan == 1) {
+        ParsedText::WidthMetrics measured;
+        if (cell.content) measured = cell.content->measureWidths(renderer, fontId);
+        const uint16_t insets = cell.content ? cell.content->getBlockStyle().totalHorizontalInset() : 0;
+        uint16_t minimum = static_cast<uint16_t>(std::min<uint32_t>(UINT16_MAX, measured.minimum + insets));
+        uint16_t preferred = static_cast<uint16_t>(std::min<uint32_t>(UINT16_MAX, measured.preferred + insets));
+        if (cell.hasWidthHint) {
+          preferred = std::max<uint16_t>(
+              preferred, static_cast<uint16_t>(std::clamp<int>(
+                             static_cast<int>(cell.widthHint.toPixels(emSize, viewportWidth) + 0.5f), 0, UINT16_MAX)));
+        }
+        tableColumnMetrics[column].minimum = std::max(tableColumnMetrics[column].minimum, minimum);
+        tableColumnMetrics[column].preferred = std::max(tableColumnMetrics[column].preferred, preferred);
+      }
+      column += cell.colspan;
+    }
+  }
+
+  if (tableColumnCount == 0) return false;
+  for (size_t i = 0; i < tableColumnCount; ++i) {
+    tableColumnMetrics[i].minimum = std::max<uint16_t>(1, tableColumnMetrics[i].minimum);
+    tableColumnMetrics[i].preferred = std::max(tableColumnMetrics[i].minimum, tableColumnMetrics[i].preferred);
+  }
+
+  for (const auto& row : tableSampleRows) {
+    size_t column = 0;
+    for (const auto& cell : row.cells) {
+      if (cell.colspan > 1) {
+        ParsedText::WidthMetrics measured;
+        if (cell.content) measured = cell.content->measureWidths(renderer, fontId);
+        const uint16_t insets = cell.content ? cell.content->getBlockStyle().totalHorizontalInset() : 0;
+        uint16_t minimum = static_cast<uint16_t>(std::min<uint32_t>(UINT16_MAX, measured.minimum + insets));
+        uint16_t preferred = static_cast<uint16_t>(std::min<uint32_t>(UINT16_MAX, measured.preferred + insets));
+        if (cell.hasWidthHint) {
+          preferred = std::max<uint16_t>(
+              preferred, static_cast<uint16_t>(std::clamp<int>(
+                             static_cast<int>(cell.widthHint.toPixels(emSize, viewportWidth) + 0.5f), 0, UINT16_MAX)));
+        }
+        TableLayout::applySpanRequirement(tableColumnMetrics, tableColumnCount, column, cell.colspan, minimum,
+                                          preferred, gap);
+      }
+      column += cell.colspan;
+    }
+  }
+
+  tableWidthsLocked = TableLayout::allocateColumnWidths(tableColumnMetrics, tableColumnCount, viewportWidth, gap,
+                                                         tableColumnWidths);
+  return tableWidthsLocked;
+}
+
+void ChapterHtmlSlimParser::renderTableRowColumns(TableRowData& row) {
+  struct LaidOutLine {
+    std::shared_ptr<TextBlock> block;
+    uint32_t visibleOffset;
+    int16_t y;
+    uint16_t height;
+  };
+  struct LaidOutCell {
+    std::vector<LaidOutLine> lines;
+    int16_t x = 0;
+    uint16_t height = 0;
+  };
+
+  size_t rowWords = 0;
+  for (const auto& cell : row.cells) rowWords += cell.wordCount;
+  if (rowWords > TABLE_COLUMN_ROW_WORD_LIMIT) {
+    renderTableRowStacked(row);
+    return;
+  }
+
+  std::array<LaidOutCell, TableLayout::MAX_COLUMNS> laidOutCells;
+  const uint16_t gap = static_cast<uint16_t>(std::max(4, renderer.getSpaceWidth(fontId) / 2));
+  const int baseLineHeight = renderer.getLineHeight(fontId, lineCompression);
+  size_t column = 0;
+  uint16_t rowHeight = 0;
+  for (size_t cellIndex = 0; cellIndex < row.cells.size(); ++cellIndex) {
+    auto& cell = row.cells[cellIndex];
+    auto& laidOut = laidOutCells[cellIndex];
+    uint16_t cellWidth = 0;
+    for (size_t i = 0; i < cell.colspan; ++i) cellWidth += tableColumnWidths[column + i];
+    cellWidth = static_cast<uint16_t>(cellWidth + gap * (cell.colspan - 1));
+    for (size_t i = 0; i < column; ++i) laidOut.x += tableColumnWidths[i] + gap;
+
+    if (cell.content && !cell.content->isEmpty()) {
+      const BlockStyle style = cell.content->getBlockStyle();
+      const int horizontalInset = style.totalHorizontalInset();
+      const uint16_t contentWidth = horizontalInset < cellWidth ? cellWidth - horizontalInset : cellWidth;
+      int16_t nextY = static_cast<int16_t>(std::max(0, style.marginTop + style.paddingTop));
+      laidOut.lines.reserve(std::min<size_t>(cell.wordCount + 1, TABLE_COLUMN_ROW_WORD_LIMIT + 1));
+      cell.content->layoutAndExtractLines(
+          renderer, fontId, std::max<uint16_t>(1, contentWidth),
+          [&](const std::shared_ptr<TextBlock>& line, const uint32_t offset) {
+            const uint16_t height = static_cast<uint16_t>(
+                baseLineHeight + line->getRubyShift(renderer.getFontAscenderSize(fontId)));
+            laidOut.lines.push_back({line, offset, nextY, height});
+            nextY = static_cast<int16_t>(nextY + height);
+          });
+      nextY = static_cast<int16_t>(nextY + std::max(0, style.marginBottom + style.paddingBottom));
+      laidOut.height = static_cast<uint16_t>(std::max<int16_t>(0, nextY));
+      rowHeight = std::max(rowHeight, laidOut.height);
+    }
+    column += cell.colspan;
+  }
+
+  if (rowHeight > viewportHeight) {
+    for (size_t cellIndex = 0; cellIndex < row.cells.size(); ++cellIndex) {
+      auto& cell = row.cells[cellIndex];
+      auto& laidOut = laidOutCells[cellIndex];
+      for (auto& anchor : cell.anchors) {
+        anchorData.push_back({std::move(anchor), static_cast<uint16_t>(completedPageCount)});
+      }
+      for (auto& line : laidOut.lines) addLineToPage(line.block, line.visibleOffset);
+      if (currentPage) {
+        for (const auto& [index, footnote] : cell.footnotes) {
+          (void)index;
+          currentPage->addFootnote(footnote.number, footnote.href);
+        }
+      }
+    }
+    row.cells.clear();
+    addTableRowSpacing();
+    return;
+  }
+
+  if (!currentPage) {
+    currentPage = makeUniqueNoThrow<Page>();
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM: table page");
+      row.cells.clear();
+      return;
+    }
+    currentPageNextY = 0;
+    currentPageVisibleOffsetSet = false;
+  }
+  if (!currentPage->elements.empty() && currentPageNextY + rowHeight > viewportHeight) {
+    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+    completedPageCount++;
+    currentPage = makeUniqueNoThrow<Page>();
+    if (!currentPage) {
+      LOG_ERR("EHP", "OOM: table page after break");
+      row.cells.clear();
+      return;
+    }
+    currentPageNextY = 0;
+    currentPageVisibleOffsetSet = false;
+  }
+
+  bool rowOffsetSet = false;
+  for (size_t cellIndex = 0; cellIndex < row.cells.size(); ++cellIndex) {
+    auto& cell = row.cells[cellIndex];
+    auto& laidOut = laidOutCells[cellIndex];
+    for (auto& anchor : cell.anchors) {
+      anchorData.push_back({std::move(anchor), static_cast<uint16_t>(completedPageCount)});
+    }
+    for (const auto& [index, footnote] : cell.footnotes) {
+      (void)index;
+      currentPage->addFootnote(footnote.number, footnote.href);
+    }
+    for (auto& line : laidOut.lines) {
+      if (!rowOffsetSet) {
+        setCurrentPageVisibleOffset(line.visibleOffset);
+        rowOffsetSet = true;
+      }
+      const int16_t x = static_cast<int16_t>(laidOut.x + line.block->getBlockStyle().leftInset());
+      auto* pageLine = new (std::nothrow) PageLine(line.block, x, currentPageNextY + line.y);
+      if (!pageLine) {
+        LOG_ERR("EHP", "OOM: table PageLine");
+        continue;
+      }
+      currentPage->elements.push_back(std::shared_ptr<PageElement>(pageLine));
+    }
+  }
+  currentPageNextY = static_cast<int16_t>(currentPageNextY + rowHeight);
+  row.cells.clear();
+  addTableRowSpacing();
+}
+
+void ChapterHtmlSlimParser::finishTableRow() {
+  if (!tableRowActive) return;
+  if (tableCellActive) finishTableCell();
+
+  if (tableStacked) {
+    if (!currentTableRow.cells.empty()) {
+      renderTableRowStacked(currentTableRow);
+    } else {
+      addTableRowSpacing();
+    }
+  } else if (tableWidthsLocked) {
+    renderTableRowColumns(currentTableRow);
+  } else if (!currentTableRow.cells.empty()) {
+    size_t rowWords = 0;
+    for (const auto& cell : currentTableRow.cells) rowWords += cell.wordCount;
+    tableSampleWordCount += rowWords;
+    tableSampleRows.push_back(std::move(currentTableRow));
+    currentTableRow.cells.clear();
+    currentTableRow.cells.reserve(TableLayout::MAX_COLUMNS);
+
+    if (tableSampleRows.size() >= TABLE_SAMPLE_ROW_LIMIT || tableSampleWordCount >= TABLE_SAMPLE_WORD_LIMIT) {
+      if (!lockTableColumnWidths()) {
+        switchTableToStacked();
+      } else {
+        for (auto& row : tableSampleRows) renderTableRowColumns(row);
+        tableSampleRows.clear();
+        tableSampleWordCount = 0;
+      }
+    }
+  }
+  tableRowActive = false;
+}
+
+void ChapterHtmlSlimParser::finishTable() {
+  if (tableCellActive) finishTableCell();
+  if (tableRowActive) finishTableRow();
+
+  if (!tableStacked && !tableSampleRows.empty()) {
+    if (!lockTableColumnWidths()) {
+      switchTableToStacked();
+    } else {
+      for (auto& row : tableSampleRows) renderTableRowColumns(row);
+      tableSampleRows.clear();
+    }
+  }
+
+  tableSampleRows.clear();
+  currentTableRow.cells.clear();
+  tableRowActive = false;
+  tableCellActive = false;
+  tableStacked = false;
+  tableWidthsLocked = false;
+  currentTextBlock.reset();
+  startNewTextBlock(blockStyleStack.back());
+}
+
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->parseAllocationFailed_) return;
   if (strcasecmp(name, "body") == 0) {
     // Case-insensitive to match ParagraphStreamer's tag matching (ProgressMapper). A case
     // mismatch here would leave visibleTextOffset at 0 for the whole section, so every page
@@ -406,6 +815,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
+    self->depth += 1;
+    return;
+  }
+
+  if (self->tableDepth > 1 && strcmp(name, "table") != 0) {
     self->depth += 1;
     return;
   }
@@ -495,68 +909,29 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     return;
   }
 
-  // Special handling for tables/cells: flatten into per-cell paragraphs with a prefixed header.
+  // Preserve top-level table cells until their row can be laid out as columns.
   if (strcmp(name, "table") == 0) {
     // skip nested tables
     if (self->tableDepth > 0) {
+      self->switchTableToStacked();
       self->tableDepth += 1;
       return;
     }
 
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
-    }
+    self->beginTable();
     self->tableDepth += 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
     self->depth += 1;
     return;
   }
 
   if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
-    self->tableRowIndex += 1;
-    self->tableColIndex = 0;
+    self->beginTableRow();
     self->depth += 1;
     return;
   }
 
   if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
-    }
-    self->tableColIndex += 1;
-
-    auto tableCellBlockStyle = BlockStyle();
-    tableCellBlockStyle.textAlignDefined = true;
-    const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                           ? CssTextAlign::Justify
-                           : static_cast<CssTextAlign>(self->paragraphAlignment);
-    tableCellBlockStyle.alignment = align;
-    self->startNewTextBlock(tableCellBlockStyle);
-
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
-    StyleStackEntry headerStyle;
-    headerStyle.depth = self->depth;
-    headerStyle.hasBold = true;
-    headerStyle.bold = false;
-    headerStyle.hasItalic = true;
-    headerStyle.italic = true;
-    self->inlineStyleStack.push_back(headerStyle);
-    self->updateEffectiveInlineStyle();
-    const CssTextDecoration savedTextDecoration = self->effectiveTextDecoration;
-    self->effectiveTextDecoration = CssTextDecoration::None;
-    self->syntheticCharacterData = true;
-    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
-    self->syntheticCharacterData = false;
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
-    }
-    self->effectiveTextDecoration = savedTextDecoration;
-    self->nextWordContinues = false;
-    self->inlineStyleStack.pop_back();
-    self->updateEffectiveInlineStyle();
-
+    self->beginTableCell(cssStyle, atts, strcmp(name, "th") == 0);
     self->depth += 1;
     return;
   }
@@ -567,6 +942,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (matches(name, IMAGE_TAGS, std::size(IMAGE_TAGS))) {
+    if (self->tableDepth == 1 && self->tableCellActive && !self->tableStacked) {
+      self->switchTableToStacked();
+    }
     std::string src;
     std::string alt;
     if (atts != nullptr) {
@@ -1135,6 +1513,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
 void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->parseAllocationFailed_) return;
   const bool countVisibleOffsets = self->insideBody && self->nonVisibleTextDepth == 0 && !self->syntheticCharacterData;
   const uint32_t callbackVisibleOffset = self->visibleTextOffset;
   if (countVisibleOffsets) {
@@ -1148,6 +1527,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   // Skip content of nested table
   if (self->tableDepth > 1) {
+    return;
+  }
+
+  if (self->tableDepth == 1 && !self->tableCellActive) {
     return;
   }
 
@@ -1323,10 +1706,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // Keep token growth bounded: CSS-heavy spans can fragment text into many tiny
   // words, so flush earlier when embedded CSS is active. We still keep the
   // "exclude last line" behavior to preserve paragraph flow across chunks.
+  if (!self->currentTextBlock) return;
   const size_t blockWordCount = self->currentTextBlock->size();
   const size_t softFlushThreshold =
       self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
   if (blockWordCount > softFlushThreshold) {
+    if (self->tableDepth == 1 && self->tableCellActive && !self->tableStacked) {
+      self->switchTableToStacked();
+    }
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
     const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
@@ -1359,8 +1746,13 @@ void XMLCALL ChapterHtmlSlimParser::defaultHandlerExpand(void* userData, const X
 
 void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ChapterHtmlSlimParser*>(userData);
+  if (self->parseAllocationFailed_) return;
   if (self->nonVisibleTextDepth > 0) {
     self->nonVisibleTextDepth--;
+  }
+  if (self->tableDepth > 1 && strcmp(name, "table") != 0) {
+    self->depth -= 1;
+    return;
   }
 
   // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state
@@ -1470,17 +1862,18 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    self->finishTableCell();
     self->nextWordContinues = false;
   }
 
   if (self->tableDepth == 1 && (strcmp(name, "tr") == 0)) {
+    self->finishTableRow();
     self->nextWordContinues = false;
   }
 
   if (self->tableDepth == 1 && strcmp(name, "table") == 0) {
+    self->finishTable();
     self->tableDepth -= 1;
-    self->tableRowIndex = 0;
-    self->tableColIndex = 0;
     self->nextWordContinues = false;
   }
 
@@ -1518,7 +1911,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->blockStyleStack.pop_back();
       // Start a new text block with the parent style to prevent subsequent bare text
       // from inheriting the closed block style (e.g. alignment or margins).
-      self->startNewTextBlock(self->blockStyleStack.back());
+      if (!(self->tableDepth == 1 && self->tableCellActive && !self->tableStacked)) {
+        self->startNewTextBlock(self->blockStyleStack.back());
+      }
     }
 
     // </li> closes: if the bullet never got inline text (empty <li> or <li> with only
@@ -1536,6 +1931,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 ChapterHtmlSlimParser::~ChapterHtmlSlimParser() { abortParse(); }
 
 bool ChapterHtmlSlimParser::beginParse() {
+  parseAllocationFailed_ = false;
   // Initialize block style stack with a root entry representing "no ancestor block elements".
   // The user's paragraph alignment is set as the default so child elements without explicit
   // text-align inherit it correctly through getCombinedBlockStyle.
@@ -1552,6 +1948,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   const auto align = rootBlockStyle.alignment;
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
+  if (parseAllocationFailed_) return false;
 
   xmlParser_ = XML_ParserCreate(nullptr);
   if (!xmlParser_) {
@@ -1583,6 +1980,7 @@ bool ChapterHtmlSlimParser::beginParse() {
 }
 
 ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
+  if (parseAllocationFailed_) return ParseStatus::Error;
   void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
   if (!buf) {
     LOG_ERR("EHP", "Couldn't allocate memory for buffer");
@@ -1603,6 +2001,8 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
             XML_ErrorString(XML_GetErrorCode(xmlParser_)));
     return ParseStatus::Error;
   }
+
+  if (parseAllocationFailed_) return ParseStatus::Error;
 
   return done ? ParseStatus::Done : ParseStatus::More;
 }

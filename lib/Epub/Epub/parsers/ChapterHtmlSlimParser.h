@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <expat.h>
 
+#include <array>
 #include <climits>
 #include <functional>
 #include <memory>
@@ -11,6 +12,7 @@
 
 #include "Epub/FootnoteEntry.h"
 #include "Epub/ParsedText.h"
+#include "Epub/TableLayout.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
@@ -84,8 +86,36 @@ class ChapterHtmlSlimParser {
   bool effectiveSup = false;
   bool effectiveSub = false;
   int tableDepth = 0;
-  int tableRowIndex = 0;
-  int tableColIndex = 0;
+  struct TableCellData {
+    std::unique_ptr<ParsedText> content;
+    std::vector<std::pair<int, FootnoteEntry>> footnotes;
+    std::vector<std::string> anchors;
+    CssLength widthHint;
+    uint16_t wordCount = 0;
+    uint8_t colspan = 1;
+    bool hasWidthHint = false;
+  };
+  struct TableRowData {
+    std::vector<TableCellData> cells;
+  };
+  static constexpr size_t TABLE_SAMPLE_ROW_LIMIT = 4;
+  static constexpr size_t TABLE_SAMPLE_WORD_LIMIT = 96;
+  static constexpr size_t TABLE_COLUMN_ROW_WORD_LIMIT = 48;
+  std::vector<TableRowData> tableSampleRows;
+  TableRowData currentTableRow;
+  std::vector<std::string> currentTableCellAnchors;
+  std::array<TableLayout::ColumnMetrics, TableLayout::MAX_COLUMNS> tableColumnMetrics = {};
+  std::array<uint16_t, TableLayout::MAX_COLUMNS> tableColumnWidths = {};
+  size_t tableColumnCount = 0;
+  size_t tableSampleWordCount = 0;
+  CssLength currentTableCellWidthHint;
+  uint8_t currentTableCellColspan = 1;
+  bool currentTableCellHasWidthHint = false;
+  size_t tableCellBlockStackSizeBefore = 0;
+  bool tableRowActive = false;
+  bool tableCellActive = false;
+  bool tableStacked = false;
+  bool tableWidthsLocked = false;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
@@ -123,6 +153,7 @@ class ChapterHtmlSlimParser {
   XML_Parser xmlParser_ = nullptr;
   HalFile parseFile_;
   uint32_t parseStartTime_ = 0;
+  bool parseAllocationFailed_ = false;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
@@ -135,6 +166,18 @@ class ChapterHtmlSlimParser {
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);
+  void beginTable();
+  void beginTableRow();
+  void beginTableCell(const CssStyle& cssStyle, const XML_Char** atts, bool header);
+  void finishTableCell();
+  void finishTableRow();
+  void finishTable();
+  void switchTableToStacked();
+  void renderTableRowStacked(TableRowData& row, bool addRowSpacing = true);
+  void renderTableRowColumns(TableRowData& row);
+  bool lockTableColumnWidths();
+  void addTableRowSpacing();
+  void failAllocation(const char* resource);
   // XML callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void XMLCALL characterData(void* userData, const XML_Char* s, int len);
