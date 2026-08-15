@@ -1,5 +1,6 @@
 #include "FrontlightPanelActivity.h"
 
+#include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
 #include <I18n.h>
@@ -10,7 +11,8 @@
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
-#include "components/UiAppHelpers.h"
+#include "components/icons/customListIcons.h"
+#include "components/icons/listIcons.h"
 
 namespace fui = freeink::ui;
 
@@ -32,9 +34,7 @@ uint8_t percentFromPermille(const int16_t permille) {
 }  // namespace
 
 FrontlightPanelActivity::FrontlightPanelActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("FrontlightPanel", renderer, mappedInput),
-      uiTarget(makeUiTarget(renderer)),
-      app(uiTarget, uiTarget.deviceContext()) {}
+    : Activity("FrontlightPanel", renderer, mappedInput), UiAppHost(renderer) {}
 
 void FrontlightPanelActivity::onEnter() {
   Activity::onEnter();
@@ -44,8 +44,7 @@ void FrontlightPanelActivity::onEnter() {
   lightOn = Frontlight.isOn();
   lightOnChanged = false;
 
-  uiReady = false;
-  applySharedUiTheme(app, uiTarget);
+  resetUi();
   app.on(ACTION_BRIGHTNESS, &FrontlightPanelActivity::onBrightnessEvent, this);
   app.on(ACTION_WARMTH, &FrontlightPanelActivity::onWarmthEvent, this);
   app.on(ACTION_TOGGLE, &FrontlightPanelActivity::onToggleEvent, this);
@@ -143,25 +142,21 @@ bool FrontlightPanelActivity::handleHomeGesture() {
 }
 
 void FrontlightPanelActivity::loop() {
-  fui::InputSnapshot snap{};
-  if (uiReady) {
-    snap = touchSnapshotFrom(mappedInput);
-    if (snap.touchPressed || snap.touchHeld || snap.touchReleased) {
-      const auto event = app.route(snap);
-      if (app.invalidated()) requestUpdate();
-      if (event) {
-        if (event.dragPermille >= 0) draggingSlider = true;
-        return;
-      }
-      if (snap.touchReleased && !draggingSlider && snap.touchY >= panelBottom) {
-        close();
-        return;
-      }
-    }
-    if (draggingSlider) {
-      if (!snap.touchHeld) draggingSlider = false;
+  const auto touch = routeTouch(mappedInput, false, /*routeHeld=*/true);
+  if (touch.routed) {
+    if (app.invalidated()) requestUpdate();
+    if (touch) {
+      if (touch.event.dragPermille >= 0) draggingSlider = true;
       return;
     }
+    if (touch.snap.touchReleased && !draggingSlider && touch.snap.touchY >= panelBottom) {
+      close();
+      return;
+    }
+  }
+  if (draggingSlider) {
+    if (!touch.snap.touchHeld) draggingSlider = false;
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -194,11 +189,11 @@ int FrontlightPanelActivity::computePanelBottom() const {
   return y;
 }
 
-void FrontlightPanelActivity::panelScreen(UiApp::ScreenType& screen, void* user) {
+void FrontlightPanelActivity::panelScreen(UiScreen& screen, void* user) {
   static_cast<FrontlightPanelActivity*>(user)->buildPanelScreen(screen);
 }
 
-void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
+void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& theme = screen.theme();
   const int16_t bottomInset = static_cast<int16_t>(renderer.getScreenHeight() - panelBottom);
@@ -240,7 +235,7 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
   screen.spacer(theme.spaceLg);
 }
 
-void FrontlightPanelActivity::addStepSlider(UiApp::ScreenType& screen, const fui::Rect& row, const uint8_t value,
+void FrontlightPanelActivity::addStepSlider(UiScreen& screen, const fui::Rect& row, const uint8_t value,
                                             const fui::ActionId sliderAction, const fui::ActionId stepAction) {
   const auto& theme = screen.theme();
   const int16_t stepWidth = row.height;
@@ -273,9 +268,7 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FRONTLIGHT));
 
-  uiReady = false;
-  app.render();
-  uiReady = true;
+  renderUi();
 
   renderer.fillRect(0, panelBottom - 2, pageWidth, 2, true);
   renderer.displayBuffer();
