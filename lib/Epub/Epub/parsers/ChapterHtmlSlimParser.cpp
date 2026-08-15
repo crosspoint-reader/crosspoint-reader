@@ -23,7 +23,22 @@
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
-constexpr size_t PARSE_BUFFER_SIZE = 1024;
+// Bytes handed to expat per parseStep(), i.e. one SD read per step. The 1KB default is
+// sized for the 380KB-RAM C3; boards with headroom can raise it (build flag) to cut the
+// per-chapter SD read count proportionally. XML_GetBuffer owns the allocation, so the
+// cost is one buffer of this size for the lifetime of a build's parser.
+// Constraint: the incremental build's page budget is only checked BETWEEN parse steps
+// (Section::buildSomeMore), so a larger step can overshoot a tick by whatever a single
+// buffer lays out. Acceptable on the S3, the only target that raises it -- but it is
+// also why this should not go much above ~16KB: buildSomeMore runs with the RenderLock
+// held, so the overshoot is added directly to the lock hold time, and that lock is on
+// the page-turn critical path (a turn cannot render until the running tick releases it).
+// Bigger steps buy fewer SD reads and cost page-turn latency during a build; 16KB is
+// where that trade still favors the reader.
+#ifndef CROSSPOINT_PARSE_BUFFER_SIZE
+#define CROSSPOINT_PARSE_BUFFER_SIZE 1024
+#endif
+constexpr size_t PARSE_BUFFER_SIZE = CROSSPOINT_PARSE_BUFFER_SIZE;
 
 // This number comes from PR #73
 // If we have > 750 words buffered up, perform the layout and consume out all but the last line
