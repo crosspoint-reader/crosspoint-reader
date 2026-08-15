@@ -50,7 +50,7 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
-* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill and its `resources/` files (one file per device flag on that compile set).
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Compiled devices must have a `resources/` file; that directory may also hold upcoming-device facts that are not compile targets.
 * One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
 * Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only — if you find a new env there, ask before researching or adding a skill resource.
 * DRAM discipline as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env). PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 silicon does not imply that).
@@ -226,7 +226,7 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 
 ### ESP32-C3 Platform Pitfalls
 
-These apply to the C3 `default` binary (the feature-presence floor). Sticky is Xtensa S3 — still avoid unaligned casts and still keep ISR code in IRAM.
+These apply to the C3 `default` binary (the feature-presence floor). Other compiled MCUs may be Xtensa — still avoid unaligned casts and still keep ISR code in IRAM.
 
 #### `std::string_view` and Null Termination
 

@@ -1,61 +1,92 @@
 ---
 name: platform-targets
-description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM / BOARD_HAS_PSRAM, panel size, framebuffer, controller, touch, frontlight, uiScale, bezel insets, or 'does this work on this board'; when adding a board or compile-time cap; or when AGENTS.md defers a hardware number here."
+description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM / BOARD_HAS_PSRAM, panel size, framebuffer, controller, touch, frontlight, uiScale, or bezel insets; when adding, correcting, removing, or pre-emptively documenting a device; when changing this skill's resource schema; or when AGENTS.md defers a hardware number here."
 ---
 
 # Platform Targets
 
-`AGENTS.md` states rules that hold for every device this tree compiles. This
-skill holds the numbers. One resource file per **device** on the compile set,
-not a fixed board list and not one file per PIO env name. Heap, HAL, and scope
-skills stay procedures; they point here for facts.
+`AGENTS.md` states rules that hold for every device this tree **compiles**.
+This skill holds per-device numbers. One resource file per **device**, not per
+PIO env name, and not a closed board list. Heap, HAL, and scope skills stay
+procedures; they point here for facts.
 
 Repo language: **env** is a PlatformIO binary (`pio run -e default`). **device**
 is a `FREEINK_DEVICE_*` flag. **board profile** is the SDK `BoardProfile` in
 `freeink-sdk`. Do not treat those three as the same thing.
 
-## Procedure
+Two lists, both factual — do not collapse them:
+
+- **Compile set** — committed `platformio.ini` ∩ CI `pio run -e`. This is what
+  the firmware must still build. Enumerate every flag on that set; omitting one
+  is a lie.
+- **Skill resources** — every `resources/<device>.md`. This may be a **superset**
+  of the compile set (upcoming agent support with no INI/CI change yet). A
+  resource with `status: upcoming` is not a compile target. A compile-set flag
+  with no file is a gap: create the file.
+
+## Interactions
+
+Match the task. Do not assume one of these is the only way in.
+
+1. **Add firmware support.** The task is adding a committed env and CI job.
+   Create or refresh `resources/<device>.md` from the field map, set
+   `status: compiled`, and keep SCHEMA and the new INI/CI in lockstep. This
+   skill owns the resource; it does not invent INI or CI unless the task
+   includes those edits.
+2. **Correct facts.** A resource disagrees with `BoardConfig.h`, the INI, or
+   CI, or a reviewer found a wrong number. Re-read the sources, patch the
+   file, say what changed. Do not "fix" firmware to match stale prose.
+3. **Remove firmware support.** The task drops a flag from the committed
+   compile set. Update or delete the resource as the task asks: delete it if
+   agent support should go away; keep it as `status: upcoming` if they still
+   want the facts. Do not delete a file because it is "extra."
+4. **Change the schema.** Allowed when the current fields cannot state a fact
+   (new source, new BoardProfile member, a field that was wrong). Edit
+   [SCHEMA.md](SCHEMA.md), then every resource (compiled and upcoming) so
+   none omit the new field. Do not drive-by schema-edit during an unrelated
+   change.
+5. **Pre-emptive agent support.** The task wants a resource for a device that
+   is **not** on the compile set yet, and nothing else (no INI, no CI, no
+   firmware). Create `resources/<device>.md` from `BoardConfig.h` (and SDK
+   sample envs if the CrossPoint INI has no stanza), set `status: upcoming`,
+   `shared_binary_envs: []`. Do not apply it as something this tree builds.
+   Do not add INI/CI unless they ask.
+
+`platformio.local.ini` is still desk-only. A local-only env is a question
+(research / add upcoming resource / add real support), not a silent compile-set
+promotion. Respect a no.
+
+## Procedure (compile-set work)
 
 1. **Can build.** Parse committed `platformio.ini` for `[env:…]` and that env's
    `-DFREEINK_DEVICE_*`, `-DBOARD_HAS_PSRAM`, `-DUSE_BLOCK_DEVICE_INTERFACE`.
-   Treat `*-gh_release*` as aliases of the same env class. Ignore
-   `platformio.local.ini` as a contract (see below).
-2. **Should build.** Intersect with CI `pio run -e` jobs in
+   Treat `*-gh_release*` as aliases of the same env class.
+2. **Should build.** Intersect with CI `pio run -e` in
    `.github/workflows/ci.yml`. If INI and CI disagree, say so; do not invent a
-   third list. `pio check` is not a device gate (it follows the default env's
-   include graph).
-3. **Load resources.** For each `FREEINK_DEVICE_*` on that compile set, read
-   `resources/<device>.md` (slug = flag suffix, lowercased). Do not glob
-   `resources/` and treat every file as live — only those devices. One env may
-   set several flags (one shared binary); load every matching file.
-4. **All devices this tree builds.** Union those resources. A change that
-   cannot satisfy every present device without a new activity or a PSRAM-only
-   heap is not a CrossPoint-wide change.
+   third list. `pio check` is not a device gate.
+3. **Load compiled resources.** For each flag on that set, read
+   `resources/<device>.md` (slug = flag suffix, lowercased). One env may set
+   several flags; load every matching **compiled** file. If the file is missing
+   or marked `upcoming`, that is a gap or a status error — fix it (interaction
+   1 or 2).
+4. **Union.** A CrossPoint-wide firmware change must satisfy every **compiled**
+   device. Upcoming resources inform design; they do not widen the must-build
+   set.
 5. **Conflict.** If a number here disagrees with `AGENTS.md`, this skill and
-   the INI win. Fix the guide; do not "correct" firmware to match stale prose.
+   the INI win. Fix the guide.
 
 Hardware truth is in-tree
 `freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h`.
 `https://freeink.org/llms.txt` is a website index, not `BoardConfig`.
 
-## `platformio.local.ini`
-
-Gitignored, desk-only, merged via `extra_configs`. It is **not** the compile
-contract. Do not silently treat a local env as first-class.
-
-If you see an `[env:…]` or `FREEINK_DEVICE_*` there that is missing from the
-committed compile set, **ask** whether to research the definition
-(`BoardConfig.h`, local flags) and add a resource. If they say no, stop. They
-can ask later.
-
 ## Refreshing resources from sources
 
 Field meanings live in [SCHEMA.md](SCHEMA.md). This skill may edit its own
-`resources/`. Re-read the sources below whenever this skill loads and a source
-is newer than the resource, or when the task changes an env, a device flag, CI
-`pio run -e`, the `freeink-sdk` submodule, or a `BoardProfile`.
+`resources/` and `SCHEMA.md`. Re-read sources when this skill loads and a
+source is newer than the resource, or when the task is one of the interactions
+above.
 
-**Compile set** (which files may exist and be applied):
+**Compile set**
 
 | Ask | Source |
 | --- | --- |
@@ -64,27 +95,23 @@ is newer than the resource, or when the task changes an env, a device flag, CI
 | Which envs CI builds? | `.github/workflows/ci.yml` `pio run -e` |
 | Shared-binary aliases? | same flags on `*-gh_release*`, `*-gh_release_rc`, `slim` siblings |
 
-A `resources/<device>.md` is in play only if that flag is on the compile set.
-If a flag is added: create the file from SCHEMA plus the field map. If a flag
-leaves the set: delete its resource. Extra files in `resources/` are leftover;
-do not apply them.
-
-**Per-device fields** (where each number comes from):
+**Per-device fields**
 
 | Field | Source |
 | --- | --- |
-| `device` / `device_flag` | `FREEINK_DEVICE_*` in the INI (slug = flag suffix, lowercased) |
+| `status` | `compiled` if the flag is on the compile set; `upcoming` if the file exists only for agent support |
+| `device` / `device_flag` | `FREEINK_DEVICE_*` in the INI, or the BoardConfig / requested flag when upcoming |
 | `sdk_profile` / `sdk_header` | `constexpr BoardProfile` in `BoardConfig.h` |
-| `shared_binary_envs` | every committed env that sets this flag |
-| `board_package` | `board =` on those envs |
+| `shared_binary_envs` | every committed env that sets this flag (`[]` if upcoming) |
+| `board_package` | `board =` on those envs, or the SDK sample / profile comments if upcoming |
 | `mcu_family` | that PlatformIO board / `board_build.mcu` |
-| `psram_in_ini` | `-DBOARD_HAS_PSRAM` on those envs (S3 silicon ≠ this) |
-| `psram_on_silicon` | `BoardProfile` comments / chip (e.g. S3 n16r8) |
+| `psram_in_ini` | `-DBOARD_HAS_PSRAM` on those envs (S3 silicon ≠ this; false if no env yet) |
+| `psram_on_silicon` | `BoardProfile` comments / chip |
 | `fb_in_psram` | `FREEINK_FB_PSRAM` default for this device in `BoardConfig.h` |
 | `sdmmc` | `BoardProfile.sdmmc.busWidth != 0` |
-| `block_device_interface` | `-DUSE_BLOCK_DEVICE_INTERFACE` on those envs |
+| `block_device_interface` | `-DUSE_BLOCK_DEVICE_INTERFACE` on those envs (false if no env yet) |
 | `width` / `height` | `BoardProfile.displayWidth` / `displayHeight` |
-| `fb_bytes` | `width/8 * height` for **this** profile. Compiled max is `BoardConfig::MAX_FRAMEBUFFER_BYTES` (union of flags on that env). |
+| `fb_bytes` | `width/8 * height` for **this** profile. Compiled max is `BoardConfig::MAX_FRAMEBUFFER_BYTES` for the flags on that env. |
 | `controllers` | `DisplayController` plus sibling profiles selected at runtime for that device |
 | `grayscale` | driver / profile comments in `BoardConfig.h` |
 | `viewable_insets` | `BoardProfile.viewableInsets` if set; else the `ViewableInsets` member defaults (9/3/3/3, not zeros) |
@@ -92,20 +119,21 @@ do not apply them.
 | `ppi_note` | SDK comments only; do not invent dpi |
 | `caps` | `FREEINK_CAP_*` macros in `BoardConfig.h` that include this device |
 
-Do not take panel size, PSRAM, or caps from `AGENTS.md`, `llms.txt`, or a
-resource that is not on the compile set.
+Do not take panel size, PSRAM, or caps from `AGENTS.md` or `llms.txt`. Do not
+treat an `upcoming` file as compiled.
 
 ## Self-review
 
-- [ ] Used committed `platformio.ini` ∩ CI, not `platformio.local.ini`, as the
-      compile set.
-- [ ] Loaded one resource per device flag on that set (several flags on one
-      env → several files).
-- [ ] Did not apply a `resources/` file whose flag is missing from the set.
-- [ ] Refreshed any stale resource from `BoardConfig.h` / INI / CI using the
-      field map, or created/deleted a file when the set changed.
+- [ ] Named which interaction this was (add / correct / remove / schema /
+      pre-emptive / compile-set lookup).
+- [ ] Compile-set enumeration listed every INI ∩ CI flag, or said INI and CI
+      disagree.
+- [ ] Applied only `status: compiled` resources as must-build constraints.
+- [ ] Did not delete a resource unless the task removed agent support.
+- [ ] Corrected or created a file from the field map when sources disagreed
+      or a compiled flag had no file.
+- [ ] Schema edits updated SCHEMA.md and every resource, and were the task.
 - [ ] Asked before promoting a local-only env; respected a no.
-- [ ] Hardware numbers came from the compile-set resources, not from this file's
-      prose.
 - [ ] PSRAM / `MALLOC_CAP_SPIRAM` only if the env being built sets
-      `BOARD_HAS_PSRAM`; C3 `default` still compiles without that allocation.
+      `BOARD_HAS_PSRAM`; the tightest compiled DRAM target still builds
+      without that allocation.
