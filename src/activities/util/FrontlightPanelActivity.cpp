@@ -44,6 +44,7 @@ void FrontlightPanelActivity::onEnter() {
   dimStep = SETTINGS.frontlightNightLight != 0 && Frontlight.supportsNightLight() ? Frontlight.dimStep() : 0;
   // Night Light was toggled off while a dim step was live: return the
   // hardware to percent mode so the panel and the light agree again.
+  // cppcheck-suppress knownConditionTrueFalse
   if (dimStep == 0 && Frontlight.dimStep() > 0) {
     Frontlight.setBrightness(brightness);
   }
@@ -117,6 +118,7 @@ void FrontlightPanelActivity::adjustBrightness(const int delta) {
   // one step per press (regardless of the button's percent step size), and
   // the dimmest step is the floor — off stays on the sun toggle.
   const bool nightLight = SETTINGS.frontlightNightLight != 0 && Frontlight.supportsNightLight();
+  // cppcheck-suppress knownConditionTrueFalse
   if (nightLight && (dimStep > 0 || (delta < 0 && brightness <= 1))) {
     int nextStep = dimStep;
     if (delta < 0) {
@@ -144,6 +146,7 @@ void FrontlightPanelActivity::adjustBrightness(const int delta) {
   int next = static_cast<int>(brightness) + delta;
   // With Night Light on, stepping down lands on 1% first so the ladder is
   // always entered from the same place; without it, 0 remains reachable.
+  // cppcheck-suppress knownConditionTrueFalse
   const int floor = nightLight && delta < 0 ? 1 : 0;
   if (next < floor) next = floor;
   if (next > 100) next = 100;
@@ -274,8 +277,8 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
   screen.frame().hit(sunHit, ACTION_TOGGLE);
   screen.target().bitmap(sunRect, sunIcon, fui::BitmapMode::Center);
 
-  addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset),
-                dimStep > 0 ? 0 : brightness, ACTION_BRIGHTNESS, ACTION_BRIGHTNESS_STEP);
+  addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset), dimStep > 0 ? 0 : brightness,
+                ACTION_BRIGHTNESS, ACTION_BRIGHTNESS_STEP);
 
   if (Frontlight.hasColorTemperature()) {
     snprintf(line, sizeof(line), "%s  %u%%", tr(STR_WARMTH), static_cast<unsigned>(warmth));
