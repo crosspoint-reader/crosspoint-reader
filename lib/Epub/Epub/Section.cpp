@@ -670,6 +670,11 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
 }
 
 bool Section::finalizeBuild() {
+  // finishParse() closes the parse file before it flushes, and parseBytesConsumed() reads
+  // that file, so the watermark has to be taken now: if the flush below is the write that
+  // exhausts the page index, this build becomes a partial and needs it.
+  build_->bytesConsumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+
   // Flush the trailing page (emits the last page via the completePageFn into the LUT).
   // A false return means layout dropped content (OOM); committing would persist a
   // section cache with holes in the text, so abandon the build instead.
@@ -677,6 +682,17 @@ bool Section::finalizeBuild() {
     LOG_ERR("SCT", "Parse finalize failed; abandoning section build");
     abandonBuild();
     return false;
+  }
+
+  if (build_->lutExhausted) {
+    // The trailing page could not be indexed (see onPageComplete). Committing a full
+    // section here would cache a chapter that is silently short its last page, with an
+    // anchor map naming a page the LUT has no entry for. Persist the indexed pages as a
+    // partial instead -- the same outcome buildSomeMore produces when the index runs out
+    // mid-parse, rather than a "complete" section that quietly lost content.
+    LOG_ERR("SCT", "Page index exhausted on the final page: persisting %u pages as a partial", builtPageCount_);
+    suspendBuild();
+    return true;
   }
 
   if (!build_->reusedHtml) {
@@ -718,7 +734,11 @@ void Section::suspendBuild() {
     // Capture the parse watermark and commit before tearing the parser down (the anchor
     // map is read from it). The incomplete trailing page is intentionally not flushed:
     // only fully laid-out pages are persisted, and the rebuild re-derives the rest.
-    const uint32_t consumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+    // parseBytesConsumed() reports the open parse file's position, so it reads 0 once the
+    // parser has closed it -- the case when finalizeBuild suspends after finishParse().
+    // It records the watermark before flushing, so fall back to that.
+    uint32_t consumed = static_cast<uint32_t>(build_->parser->parseBytesConsumed());
+    if (consumed == 0) consumed = build_->bytesConsumed;
     committed = commitBuildFile(SECTION_FILE_PARTIAL_VERSION, consumed, build_->totalBytes);
     if (committed) {
       partial_ = true;
