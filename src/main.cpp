@@ -568,6 +568,11 @@ void setup() {
     gpio.update();
   }
 
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  // After gpio.begin() has probed the touch controller, so the GT911 INT is
+  // already either configured as a level hold or reported unusable.
+  gpio.beginInputWake();
+#endif
   allowSleepAt = millis() + 2000;
 }
 
@@ -579,6 +584,40 @@ static void delayWallClock(const unsigned long ms) {
   while (static_cast<long>(millis() - deadline) < 0) {
     vTaskDelay(1);
   }
+}
+
+// Upper bound for the next idle light-sleep slice. The stock
+// LIGHT_SLEEP_SLICE_MS gives the 20 Hz poll cadence a plain delay() would have;
+// with CROSSPOINT_TOUCH_INT_WAKE the touch INT and the button GPIOs are armed
+// as level wake sources, so a longer slice still ends the instant the user does
+// something. That only holds while every input the loop must not miss can raise
+// one, which is what the conditions below check — each keeps the stock slice:
+//   * no usable wake source on this board (HalGPIO::inputWakeAvailable);
+//   * tilt page turn armed — the IMU has no interrupt line here and its flick
+//     detector needs its 20 Hz sampling (HalTiltSensor::POLL_INTERVAL_MS);
+//   * a contact is down — the touch long-press and hold timers are evaluated by
+//     the poll, and a motionless finger produces no new GT911 frame to wake on;
+//   * the capacitive home key is down — same reason, and a separate latch from
+//     the contact one: a held key reports no frames either, so its
+//     HOME_KEY_LONG_PRESS_MS threshold is timed purely by the poll.
+// Without the flag this is a compile-time constant and the loop tail below
+// behaves exactly as before.
+static unsigned long idleLightSleepSliceMs() {
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  if (!gpio.inputWakeAvailable()) return HalPowerManager::LIGHT_SLEEP_SLICE_MS;
+  if (SETTINGS.tiltPageTurn != CrossPointTiltPageTurn::TILT_OFF && halTiltSensor.isAvailable()) {
+    return HalPowerManager::LIGHT_SLEEP_SLICE_MS;
+  }
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (gpio.isTouchHeldAt(nx, ny) || gpio.isHomeKeyDown()) return HalPowerManager::LIGHT_SLEEP_SLICE_MS;
+  // Serial CMD: handling is polled from this loop, so stay responsive while a
+  // host is attached. lightSleep() already declines outright whenever USB is
+  // connected, so this is the floor for a link its cached check has not seen.
+  return Serial ? 250 : 1000;
+#else
+  return HalPowerManager::LIGHT_SLEEP_SLICE_MS;
+#endif
 }
 
 void loop() {
@@ -772,7 +811,7 @@ void loop() {
         // a tap shorter than the 50 ms cadence would otherwise land in a single
         // sample and be dropped, and every press would commit a slice late.
         delayWallClock(10);
-      } else if (!powerManager.lightSleep(gpio)) {
+      } else if (!powerManager.lightSleep(gpio, idleLightSleepSliceMs())) {
         // Light sleep declined = a render Lock, USB, or WiFi is active — the
         // chip is at full clock anyway, so poll at 100 Hz. A 50 ms cadence
         // here dropped sub-slice power taps (a press needs two samples >=5 ms

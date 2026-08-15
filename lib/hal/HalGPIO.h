@@ -118,6 +118,11 @@ class HalGPIO {
   bool hasHomeKey() const;
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
+  // Home key currently held, as a level rather than an edge. A motionless hold
+  // produces no new touch frames, so its long-press threshold is timed by
+  // update() against the wall clock: callers that may stop polling have to
+  // check this or they stretch that threshold by however long they stay away.
+  bool isHomeKeyDown() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
   // Raw release edge, reported even when the contact was not a tap (swipe end,
@@ -166,6 +171,43 @@ class HalGPIO {
   enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
 
   WakeupReason getWakeupReason() const;
+
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  // --- Input GPIO light-sleep wake -------------------------------------------
+  // The idle loop light-sleeps in LIGHT_SLEEP_SLICE_MS slices whose only wake
+  // source is the timer, so the chip wakes 20x/s whether or not anything
+  // happened. Arming the touch INT and the button GPIOs as level wake sources
+  // lets one slice run much longer and still end the instant the user touches
+  // the panel or presses a key. Nothing here classifies input: the poll at the
+  // top of the loop still reports every press, gesture and debounce as before.
+
+  // Build the wake-pin table from BoardConfig and the touch driver. Call after
+  // begin() has probed the touch controller. Any task may call it: the pins are
+  // wake sources for esp_light_sleep_start() itself, so — unlike an
+  // interrupt-and-notify wait — there is no ISR to install and no task to latch.
+  void beginInputWake();
+
+  // False when no wake source could be armed, or when this board has inputs no
+  // GPIO level can represent: ADC-ladder nav keys, a button behind an I2C
+  // expander, or a live touch panel whose INT cannot hold a level. Callers then
+  // keep the stock slice, whose timer cadence polls every input.
+  bool inputWakeAvailable() const;
+
+  // Arm every wake pin that is currently RELEASED as a light-sleep GPIO wake
+  // and return how many were armed; `allArmed` reports that none had to be
+  // skipped. A pin already sitting at its wake level (a GT911 INT stuck low
+  // after an I2C fault, a button held down in a bag) would end the sleep the
+  // instant it began, so it is left out — the poll right after the sleep is
+  // what consumes its state anyway — and the caller keeps the slice short.
+  // Pair with disarmInputWake() before returning: esp_sleep's GPIO trigger bits
+  // are shared with deep sleep.
+  uint8_t armInputWake(bool& allArmed) const;
+
+  // Clear the wake enable AND the level interrupt type on every wake pin (the
+  // type survives gpio_wakeup_disable() and would be live ammunition for any
+  // later-installed GPIO ISR service).
+  void disarmInputWake() const;
+#endif
 
   // Button indices
   static constexpr uint8_t BTN_BACK = 0;

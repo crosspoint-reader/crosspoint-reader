@@ -74,12 +74,20 @@ class HalPowerManager {
   // Should be called inside main loop() to handle the currentLockMode
   void startDeepSleep(HalGPIO& gpio) const;
 
-  // Light-sleep the CPU for LIGHT_SLEEP_SLICE_MS (timer wake; buttons are polled on
-  // wake at the same cadence as the delay() this replaces). Returns false WITHOUT
+  // Light-sleep the CPU for one slice (timer wake; buttons are polled on wake at
+  // the same cadence as the delay() this replaces). Returns false WITHOUT
   // sleeping when unsafe: a performance Lock is held (render in flight), WiFi is
   // active, or USB is connected (light sleep kills the CDC link). The caller must
   // fall back to delay() in that case.
-  bool lightSleep(const HalGPIO& gpio) const;
+  //
+  // maxSliceMs is an UPPER bound, honoured only when every input the loop must
+  // not miss is armed as a GPIO wake for this slice (CROSSPOINT_TOUCH_INT_WAKE):
+  // the slice then ends the moment the user touches the panel or presses a key
+  // instead of at the next timer tick, so a longer bound costs no responsiveness
+  // — see HalGPIO::armInputWake. It falls back to LIGHT_SLEEP_SLICE_MS whenever
+  // that is not the case (no wake pins on this board or in this build, or one of
+  // them is currently held), because then only the timer ends the slice.
+  bool lightSleep(const HalGPIO& gpio, unsigned long maxSliceMs = LIGHT_SLEEP_SLICE_MS) const;
 
   // BUSY-wait slice hook (EpdBus::setBusyWaitSliceHook): light-sleep the chip
   // for up to BUSY_SLEEP_SLICE_MS while the panel refreshes autonomously,

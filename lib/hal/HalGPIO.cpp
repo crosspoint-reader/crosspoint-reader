@@ -8,6 +8,10 @@
 #include <esp_sleep.h>
 #include <soc/usb_serial_jtag_struct.h>
 
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+#include <driver/gpio.h>
+#endif
+
 // Global HalGPIO instance
 HalGPIO gpio;
 
@@ -205,6 +209,8 @@ bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
 
 bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
 
+bool HalGPIO::isHomeKeyDown() const { return inputMgr.isHomeKeyDown(); }
+
 bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
 
 bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
@@ -333,3 +339,110 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   }
   return WakeupReason::Other;
 }
+
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+
+namespace {
+
+struct WakePin {
+  gpio_num_t pin;
+  bool activeLow;
+};
+
+constexpr uint8_t MAX_WAKE_PINS = 8;
+WakePin wakePins[MAX_WAKE_PINS];
+uint8_t wakePinCount = 0;
+bool wakePinOverflow = false;
+bool wakeUsable = false;
+
+void addWakePin(const int8_t pin, const bool activeLow) {
+  if (pin < 0) {
+    return;
+  }
+  for (uint8_t i = 0; i < wakePinCount; ++i) {
+    if (wakePins[i].pin == static_cast<gpio_num_t>(pin)) return;  // shared pin (confirm/power)
+  }
+  if (wakePinCount >= MAX_WAKE_PINS) {
+    // Silently dropping a pin would leave a stretched slice deaf to that input
+    // for up to its full length. Fail the whole mechanism closed instead; the
+    // caller then keeps the stock slice, whose poll cadence sees every button.
+    wakePinOverflow = true;
+    return;
+  }
+  wakePins[wakePinCount++] = {static_cast<gpio_num_t>(pin), activeLow};
+}
+
+// True while the pin sits at the level it would wake on.
+bool wakePinAsserted(const WakePin& p) { return digitalRead(p.pin) == (p.activeLow ? LOW : HIGH); }
+
+}  // namespace
+
+void HalGPIO::beginInputWake() {
+  wakePinCount = 0;
+  wakePinOverflow = false;
+  wakeUsable = false;
+
+  // Button pin modes already belong to InputManager::begin() (INPUT_PULLUP for
+  // the nav keys, powerActiveHigh for power) and the touch INT's to the GT911
+  // driver; this only reads their polarity.
+  const auto& in = BoardConfig::ACTIVE.input;
+  if (BoardConfig::ACTIVE.inputStyle != BoardConfig::InputStyle::XteinkAdcLadder) {
+    for (const int8_t pin : {in.back, in.confirm, in.left, in.right, in.up, in.down}) {
+      addWakePin(pin, true);
+    }
+  }
+  // The power pin is in the table even though lightSleep() arms it on its own:
+  // arming is idempotent, and it has to be here for the held-level test — a
+  // power button held down must keep the slice short like any other held input.
+  addWakePin(in.power, !in.powerActiveHigh);
+
+  const int8_t touchIrq = inputMgr.touchWakeIrqPin();
+  addWakePin(touchIrq, inputMgr.touchWakeIrqActiveLow());
+
+  // Every input the loop can act on has to be something this can arm, or a
+  // stretched slice would be deaf to the rest of them for up to its full
+  // length. Boards that fail that test keep the stock slice:
+  //   * XteinkAdcLadder (X4, X3): the nav keys are resistor steps on a single
+  //     ADC pin, found by sampling — there is no per-key level to wake on;
+  //   * a board button hook (LilyGo T5 S3's user button on its PCA9535): the
+  //     key is behind an I2C expander, invisible to a GPIO wake, and the
+  //     expander's own INT line is not modeled here;
+  //   * a live touch panel with no level-holding INT: a contact would have no
+  //     way to signal during a long slice (see FREEINK_GT911_INT_WAKE, which
+  //     is what makes touchWakeIrqPin() report a pin at all);
+  //   * more wake pins than the table holds (see addWakePin).
+  const bool navKeysAreGpio =
+      BoardConfig::ACTIVE.inputStyle != BoardConfig::InputStyle::XteinkAdcLadder && !InputManager::hasButtonHook();
+  wakeUsable = wakePinCount > 0 && !wakePinOverflow && navKeysAreGpio && (!inputMgr.hasTouch() || touchIrq >= 0);
+  LOG_INF("PWR", "Input wake: %u pin(s), touch INT %d, gpioKeys=%d usable=%d", static_cast<unsigned>(wakePinCount),
+          static_cast<int>(touchIrq), static_cast<int>(navKeysAreGpio), static_cast<int>(wakeUsable));
+  if (!wakeUsable) {
+    wakePinCount = 0;
+  }
+}
+
+bool HalGPIO::inputWakeAvailable() const { return wakeUsable; }
+
+uint8_t HalGPIO::armInputWake(bool& allArmed) const {
+  uint8_t armedCount = 0;
+  for (uint8_t i = 0; i < wakePinCount; ++i) {
+    // Level triggers are the only thing light sleep can wake on: the GPIO edge
+    // detector is clock-gated while asleep, so gpio_wakeup_enable() accepts
+    // nothing else. A pin already at that level would end the sleep the moment
+    // it starts, so leave it out (see the header for why that costs nothing).
+    if (wakePinAsserted(wakePins[i])) continue;
+    gpio_wakeup_enable(wakePins[i].pin, wakePins[i].activeLow ? GPIO_INTR_LOW_LEVEL : GPIO_INTR_HIGH_LEVEL);
+    ++armedCount;
+  }
+  allArmed = armedCount == wakePinCount;
+  return armedCount;
+}
+
+void HalGPIO::disarmInputWake() const {
+  for (uint8_t i = 0; i < wakePinCount; ++i) {
+    gpio_wakeup_disable(wakePins[i].pin);
+    gpio_set_intr_type(wakePins[i].pin, GPIO_INTR_DISABLE);
+  }
+}
+
+#endif  // CROSSPOINT_TOUCH_INT_WAKE

@@ -120,7 +120,13 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   freeink::PowerManager::deepSleepUntilPowerButton();
 }
 
-bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+// A slice that ends this much faster than the stock cadence is treated as an
+// instant return rather than a wake: see the busy-loop note in lightSleep().
+static constexpr unsigned long IMMEDIATE_RETURN_MS = 20;
+#endif
+
+bool HalPowerManager::lightSleep(const HalGPIO& gpio, [[maybe_unused]] const unsigned long maxSliceMs) const {
   // A performance Lock means a render (or similar) task is mid-flight; light sleep
   // freezes the whole chip, so it would stall that task.
   // Note: like setPowerSaving(), read without the mutex — stale in either
@@ -160,7 +166,26 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   // press, so a misread around the sleep transition costs one extra wake
   // blip, never a phantom press. Idle cost is zero — the pin only holds its
   // pressed level while a finger is on it.
-  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(LIGHT_SLEEP_SLICE_MS) * 1000ULL);
+  unsigned long sliceMs = LIGHT_SLEEP_SLICE_MS;
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  // The same argument, widened to the rest of the inputs: with the touch INT
+  // and every nav key armed as level wakes too, the timer is no longer what
+  // ends an idle slice — the user is. The slice may then run up to the caller's
+  // bound, turning twenty short wakes per second into one long window, without
+  // costing input latency. The bound is only taken when EVERY wake pin got
+  // armed: one that was skipped for sitting at its wake level is input state
+  // the poll after this call has not consumed yet (a GT911 INT still held
+  // because update() skipped its I2C slot, a button mid-press), and sleeping a
+  // full second on it would be a visible stall.
+  bool allWakePinsArmed = false;
+  if (gpio.inputWakeAvailable() && gpio.armInputWake(allWakePinsArmed) > 0) {
+    esp_sleep_enable_gpio_wakeup();
+    if (allWakePinsArmed && maxSliceMs > sliceMs) {
+      sliceMs = maxSliceMs;
+    }
+  }
+#endif
+  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(sliceMs) * 1000ULL);
   const int8_t powerPin = BoardConfig::ACTIVE.input.power;
   if (powerPin >= 0) {
     gpio_wakeup_enable(static_cast<gpio_num_t>(powerPin),
@@ -177,6 +202,9 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     gpio_hold_en(XTEINK_C3_GPIO13);
   }
 
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  const unsigned long sleepStartMs = millis();
+#endif
   const esp_err_t err = esp_light_sleep_start();
 
   // Disarm immediately: an armed timer wake persists across sleep calls and would
@@ -191,6 +219,13 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
     gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
   }
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  // Same reason, for the input pins: they are wake sources for the duration of
+  // one slice only, so nothing here can turn a nav key or the touch INT into a
+  // deep-sleep wake source (startDeepSleep() always runs outside this call and
+  // arms its own).
+  gpio.disarmInputWake();
+#endif
 
   xSemaphoreGive(sleepMutex);
 
@@ -199,6 +234,24 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     LOG_DBG("PWR", "Light sleep rejected: %d", static_cast<int>(err));
     return false;
   }
+
+#ifdef CROSSPOINT_TOUCH_INT_WAKE
+  // Busy-loop floor. A level wake pin that asserts between armInputWake()'s
+  // released-check and the sleep start — or the power pin, which is armed above
+  // whatever its level — ends the slice immediately. One such round is fine:
+  // the poll right after this call consumes it. A line that keeps re-asserting
+  // (a GT911 INT stuck low behind an I2C fault, a chattering contact) would
+  // otherwise spin the loop at full rate with no sleep at all, the exact
+  // opposite of this feature, so anything shorter than IMMEDIATE_RETURN_MS is
+  // padded back out to the cadence the stock slice would have had. A plain
+  // delay() is safe here: the tick only stops while the chip sleeps, and the
+  // other sleeper (the render task's BUSY slice) implies a Lock, which this
+  // call already declined on.
+  const unsigned long sleptMs = millis() - sleepStartMs;
+  if (sleptMs < IMMEDIATE_RETURN_MS) {
+    delay(LIGHT_SLEEP_SLICE_MS - sleptMs);
+  }
+#endif
   return true;
 }
 
