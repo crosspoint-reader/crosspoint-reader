@@ -185,6 +185,17 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
 
 // --- Global free/cleanup ---
 
+void SdCardFont::releaseResidentCaches() {
+  clearOverflow();
+  clearPersistentCache();
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (!styles_[i].present) continue;
+    freeStyleMiniData(styles_[i]);  // also frees mini kern and restores the stub EpdFontData
+    freeStyleKernLigatureData(styles_[i]);
+    applyGlyphMissCallback(i);  // keep the on-demand miss path alive on the stub
+  }
+}
+
 void SdCardFont::freeAll() {
   clearOverflow();
   clearPersistentCache();

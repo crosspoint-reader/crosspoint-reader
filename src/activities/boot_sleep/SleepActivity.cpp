@@ -12,9 +12,6 @@
 #include <PNGdec.h>
 #include <Txt.h>
 #include <Xtc.h>
-#if FREEINK_DRIVER_SSD1677
-#include <lut/Ssd1677Luts.h>
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -619,21 +616,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
       bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
-#if FREEINK_DRIVER_SSD1677
-  const bool useFactoryGrayscale = hasGreyscale;
-  constexpr auto msbMode = GfxRenderer::FACTORY_GRAY_MSB;
-  constexpr auto lsbMode = GfxRenderer::FACTORY_GRAY_LSB;
-  constexpr const unsigned char* lut = freeink::lut_factory_quality;
-#else
-  constexpr bool useFactoryGrayscale = false;
-  constexpr auto msbMode = GfxRenderer::GRAYSCALE_MSB;
-  constexpr auto lsbMode = GfxRenderer::GRAYSCALE_LSB;
-  constexpr const unsigned char* lut = nullptr;
-#endif
-
-  if (!useFactoryGrayscale) {
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-  }
+  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 
   if (!preserveBackground &&
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
@@ -653,17 +636,17 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   if (hasGreyscale) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
-    renderer.setRenderMode(lsbMode);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
-    renderer.setRenderMode(msbMode);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleMsbBuffers();
 
-    renderer.displayGrayBuffer(lut, useFactoryGrayscale);
+    renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }
