@@ -196,6 +196,9 @@ bool ReaderActivity::handleForcedRefresh() {
     RenderLock lock(*this);
     pagesUntilFullRefresh = 1;
     forcedRefreshPending = true;
+#ifdef CROSSPOINT_PAGE_CACHE
+    onForcedRefreshLocked();
+#endif
   }
   requestUpdate();
   return true;

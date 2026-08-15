@@ -146,6 +146,14 @@ EpubReaderActivity::~EpubReaderActivity() {
     saveProgress(origin.spineIndex, origin.pageNumber, 0);
   }
 
+#ifdef CROSSPOINT_PAGE_CACHE
+  // ActivityManager destroys the current activity from exitActivity(), which its
+  // callers reach with the RenderLock held, so this teardown is locked exactly as
+  // the fill and consume paths are. Freed here, ahead of the section/epub teardown
+  // and the read-folder move below, rather than left to the member's own
+  // destructor after all of that has run with its heap still pinned.
+  dropCachedPage();
+#endif
   section.reset();
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
@@ -288,6 +296,64 @@ void EpubReaderActivity::openDictionaryWordSelect() {
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
+#ifdef CROSSPOINT_PAGE_CACHE
+void EpubReaderActivity::storeCachedPage(const int pageNumber, std::unique_ptr<Page> page) {
+  // A still-building section re-numbers pages under the entry, so it is never cached.
+  if (!page || !section || section->isBuilding()) return;
+  cachedPage = std::move(page);
+  cachedPageSpine = currentSpineIndex;
+  cachedPageNumber = pageNumber;
+  cachedPageGeneration = sectionGeneration;
+  cachedPagePageCount = section->pageCount;
+  cachedPagePartial = section->isPartial();
+}
+
+std::unique_ptr<Page> EpubReaderActivity::takeCachedPage(const int pageNumber) {
+  if (!cachedPage) return nullptr;
+  if (!section || section->isBuilding() || cachedPageGeneration != sectionGeneration ||
+      cachedPageSpine != currentSpineIndex || cachedPageNumber != pageNumber ||
+      cachedPagePageCount != section->pageCount || cachedPagePartial != section->isPartial()) {
+    // ANY mismatch drops the entry, the page number included (a backward turn, a
+    // menu/bookmark re-render). Keeping it "valid for its own page" instead is
+    // what would let two deserialized Pages be live at once: the render loads
+    // the page it actually wants while the entry still holds the old one, and
+    // the idle prewarm that follows allocates its replacement before the
+    // assignment frees it. One retained Page is the whole heap budget here.
+    dropCachedPage();
+    return nullptr;
+  }
+  auto page = std::move(cachedPage);
+  dropCachedPage();  // consumed: clear the key with it, never leave half an entry
+  return page;
+}
+
+void EpubReaderActivity::dropCachedPage() {
+  cachedPage.reset();
+  cachedPageSpine = -1;
+  cachedPageNumber = -1;
+  // The rest of the key too: a stale generation/pageCount/isPartial left behind
+  // could match a later section by accident. cachedPage == nullptr is the guard
+  // that makes it moot, but a half-cleared key is not a state worth reasoning
+  // about every time one of these fields gains a reader.
+  cachedPageGeneration = 0;
+  cachedPagePageCount = 0;
+  cachedPagePartial = false;
+}
+
+void EpubReaderActivity::onForcedRefreshLocked() {
+  // A forced refresh re-renders the CURRENT page, and the cache entry names the
+  // NEXT one, so takeCachedPage() will miss and drop it -- while the prewarm
+  // markers still name this position, so loop() would never refill it and the
+  // next forward turn would pay a full SD deserialize. Re-arm the prewarm
+  // (markers are only ever read as a pair against the live position, so clearing
+  // the page number alone is enough). Called by ReaderActivity::handleForcedRefresh
+  // under the same RenderLock that loop() takes to move them. The cost of the
+  // re-run is one glyph scan whose fonts are already cached; the point is the
+  // refill.
+  idlePrewarmPage = -1;
+}
+#endif  // CROSSPOINT_PAGE_CACHE
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     finish();
@@ -306,7 +372,8 @@ void EpubReaderActivity::loop() {
       idlePrewarmPage = section->currentPage;
       const int nextPage = section->currentPage + 1;
       if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
+        auto p = section->loadPage(nextPage);
+        if (p) {
           if (auto* fcm = renderer.getFontCacheManager()) {
             const auto t0 = millis();
             auto scope = fcm->createPrewarmScope();
@@ -314,6 +381,14 @@ void EpubReaderActivity::loop() {
             scope.endScanAndPrewarm();
             LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
           }
+#ifdef CROSSPOINT_PAGE_CACHE
+          // Keep the deserialized page instead of discarding it: the next forward
+          // turn is the render that asks for exactly this (spine, page). The scan
+          // pass does not mutate it (Page::render is const, and the only render-time
+          // state is ImageBlock's static payload cache), so the retained object is
+          // equivalent to a fresh load. Still under the prewarm's RenderLock.
+          storeCachedPage(nextPage, std::move(p));
+#endif
         }
       }
     }
@@ -845,6 +920,12 @@ bool EpubReaderActivity::launchKOReaderSync() {
       nextPageNumber = section->currentPage;
     }
     ImageBlock::setExtractor(nullptr, nullptr);
+#ifdef CROSSPOINT_PAGE_CACHE
+    // Freeing RAM for the handshake is the entire point of this block, and a
+    // retained Page is tens of KB of it. Dropping it here also keeps the
+    // "heap after" log below honest.
+    dropCachedPage();
+#endif
     section.reset();
     epub.reset();
   }
@@ -1028,6 +1109,15 @@ void EpubReaderActivity::renderBook() {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
+#ifdef CROSSPOINT_PAGE_CACHE
+    // New Section object: anything cached against the old one names a pagination
+    // that no longer exists. This is the ONLY site that installs a `section`, so
+    // it is the single funnel for every reset path (settings, spine, orientation,
+    // footnote nav, jumps, auto-turn toggle, error recovery) -- all of them
+    // section.reset() and come back through here.
+    sectionGeneration++;
+    dropCachedPage();
+#endif
     partialRebuildStartFailed = false;
 
     const bool cacheLoaded = section->loadSectionFile(renderSpec);
@@ -1225,7 +1315,24 @@ void EpubReaderActivity::renderBook() {
   updateBookmarkFlag();
 
   {
+#ifdef CROSSPOINT_PAGE_CACHE
+    // First, the idle prewarm's already-deserialized page, when it names this exact
+    // (spine, page) under an unchanged section -- the forward turn then touches SD
+    // not at all. Consumed here and nowhere else, under the RenderLock that the fill
+    // and every build tick also take: that lock is what keeps the KEY FIELDS
+    // (generation, spine, pageCount, isPartial) from moving between the check and the
+    // use. It does not cover section->currentPage, which pageTurn() moves from the
+    // loop task unlocked -- but that only selects which page is asked for, so a stale
+    // read costs a miss, never a wrong page. A miss falls through.
+    // Note this is a consume, not a fill: renderContents() below moves the Page (and
+    // currentPageFootnotes steals its footnotes first), so the render path cannot
+    // hand a copy back to the cache without a second deserialize. The prewarm is the
+    // only fill site, which is what keeps the cost at one retained Page.
+    auto p = takeCachedPage(section->currentPage);
+    if (!p) p = section->loadPage(section->currentPage);
+#else
     auto p = section->loadPage(section->currentPage);
+#endif
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
       automaticPageTurnActive = false;

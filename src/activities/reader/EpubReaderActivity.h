@@ -4,6 +4,11 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#ifdef CROSSPOINT_PAGE_CACHE
+// Section.h only forward-declares Page; the cache holds one by value-owning pointer.
+#include <Epub/Page.h>
+#endif
+
 #include <atomic>
 #include <memory>
 #include <optional>
@@ -44,6 +49,61 @@ class EpubReaderActivity final : public ReaderActivity {
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;
+#ifdef CROSSPOINT_PAGE_CACHE
+  // One-entry deserialized-page cache, filled by the idle prewarm above. That
+  // prewarm already reads (spine, currentPage+1) off SD and deserializes it just
+  // to scan its glyphs, then throws the Page away -- and the very next forward
+  // turn re-opens section.bin, seeks the page LUT and deserializes the same
+  // bytes again, on the page-turn critical path. Keeping the Page instead makes
+  // the forward turn SD-free. Owned here rather than by Section because Section
+  // objects are destroyed and rebuilt constantly, which is exactly what the
+  // cache has to outlive. Owned by EpubReaderActivity rather than ReaderActivity
+  // because the prewarm that fills it is EPUB-only; the TXT and XTC readers that
+  // share the base have no Section and no prewarm.
+  //
+  // Steady-state cost: ONE retained Page (tens of KB of text blocks), live from
+  // the prewarm that fills the entry until the render that consumes it. Never
+  // two: ANY key mismatch, page number included, drops the entry on the spot, so
+  // the next prewarm can't allocate a second Page beside a resident one -- which
+  // is also why a hit-for-its-own-page-later policy is deliberately not offered.
+  //
+  // A hit requires ALL of: same section generation, same spine, same page
+  // number, same pageCount, same isPartial(), and a section that is not
+  // building. Invalidation triggers, enumerated:
+  //  * Section replaced -- settings change, spine change, orientation change,
+  //    footnote navigation (navigateToHref / restoreSavedPosition), page-load
+  //    error recovery, percent/TOC/sync/bookmark jumps, auto-page-turn toggle.
+  //    Every one funnels through section.reset() (24 call sites) plus the ONE
+  //    site that assigns `section` -- renderBook()'s construction path -- which
+  //    bumps sectionGeneration and drops the entry. A reset with no reinstall
+  //    yet is covered too: takeCachedPage() drops on !section.
+  //  * Section re-paginated in place -- only a build does that, so a fill
+  //    requires !isBuilding() and a hit re-checks it. A partial's extension
+  //    build starting (loop() or renderBook()) invalidates immediately, as does
+  //    build progress that re-numbers pages.
+  //  * pageCount / isPartial() moving under an otherwise unchanged Section
+  //    (a build finalizing) -- both are part of the key.
+  // Fill and consume both run under the RenderLock, which is what makes those
+  // key fields coherent. The lock covers the KEY only -- the page number handed
+  // to takeCachedPage comes from section->currentPage, which pageTurn() moves
+  // from the loop task unlocked, so a stale read there can cost a miss and
+  // nothing else.
+  std::unique_ptr<Page> cachedPage;
+  int cachedPageSpine = -1;
+  int cachedPageNumber = -1;
+  uint32_t cachedPageGeneration = 0;
+  uint16_t cachedPagePageCount = 0;
+  bool cachedPagePartial = false;
+  // Bumped every time `section` is installed, so an entry can never be matched
+  // against a different Section object -- a fresh Section can land on the freed
+  // address of the old one, so a pointer alone is not a usable key.
+  uint32_t sectionGeneration = 0;
+  // All three require the RenderLock (see above).
+  void storeCachedPage(int pageNumber, std::unique_ptr<Page> page);
+  std::unique_ptr<Page> takeCachedPage(int pageNumber);
+  void dropCachedPage();
+  void onForcedRefreshLocked() override;
+#endif
   bool bookmarkRemoved = false;
   std::vector<BookmarkEntry> cachedBookmarks;
   bool recentsEntryRemoved = false;
