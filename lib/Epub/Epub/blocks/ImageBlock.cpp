@@ -12,6 +12,11 @@
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "Epub/converters/ImageDecoderFactory.h"
+#include "Epub/converters/PxcFormat.h"
+
+#ifdef CROSSPOINT_PSRAM_IMAGE_CACHE
+#include <esp_heap_caps.h>
+#endif
 
 // Cache file format:
 // - uint16_t width
@@ -89,6 +94,278 @@ void rememberImageFailure(const std::string& path) {
   if (failedImageCount == MAX_SESSION_IMAGE_FAILURES || imageFailedThisSession(path)) return;
   failedImageHashes[failedImageCount++] = imagePathHash(path);
 }
+
+// Render the payload straight off SD, a few rows at a time: the fallback for
+// every path that could not hold the image in RAM. `cacheFile` must be
+// positioned just past the header.
+bool renderStreamingFromCache(GfxRenderer& renderer, HalFile& cacheFile, const int x, const int y,
+                              const int cachedWidth, const int cachedHeight, const int bytesPerRow) {
+  // Read several rows per SD access. A one-row-per-read loop here means
+  // cachedHeight (~728) tiny reads through the storage mutex + SdFat; batching
+  // rows into a ~4KB buffer cuts that to ~20 reads per pass without holding the
+  // whole image.
+  int rowsPerRead = 4096 / bytesPerRow;
+  if (rowsPerRead < 1) rowsPerRead = 1;
+  if (rowsPerRead > cachedHeight) rowsPerRead = cachedHeight;
+  uint8_t* readBuffer = (uint8_t*)malloc((size_t)rowsPerRead * bytesPerRow);
+  if (!readBuffer) {
+    // Fall back to a single-row buffer under memory pressure.
+    rowsPerRead = 1;
+    readBuffer = (uint8_t*)malloc(bytesPerRow);
+  }
+  if (!readBuffer) {
+    LOG_ERR("IMG", "Failed to allocate row buffer");
+    return false;
+  }
+
+  DirectPixelWriter pw;
+  pw.init(renderer);
+
+  int rowsInBuffer = 0;
+  int bufferRow = 0;
+  for (int row = 0; row < cachedHeight; row++) {
+    if (bufferRow >= rowsInBuffer) {
+      const int toRead = (cachedHeight - row < rowsPerRead) ? (cachedHeight - row) : rowsPerRead;
+      const size_t bytes = (size_t)toRead * bytesPerRow;
+      if (cacheFile.read(readBuffer, bytes) != static_cast<int>(bytes)) {
+        LOG_ERR("IMG", "Cache read error at row %d", row);
+        free(readBuffer);
+        return false;
+      }
+      rowsInBuffer = toRead;
+      bufferRow = 0;
+    }
+
+    const uint8_t* rowBuffer = readBuffer + (size_t)bufferRow * bytesPerRow;
+    bufferRow++;
+
+    const int destY = y + row;
+    pw.beginRow(destY);
+    // On a grayscale strip pass only a narrow column window of the image is in
+    // the active band; skip the rest instead of unpacking+clipping every pixel.
+    int colStart, colEnd;
+    pw.bandColRange(x, cachedWidth, colStart, colEnd);
+    for (int col = colStart; col < colEnd; col++) {
+      const int byteIdx = col >> 2;            // col / 4
+      const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
+      uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+
+      pw.writePixel(x + col, pixelValue);
+    }
+  }
+
+  free(readBuffer);
+  LOG_DBG("IMG", "Cache render complete");
+  return true;
+}
+
+#ifdef CROSSPOINT_PSRAM_IMAGE_CACHE
+// --- Whole-image PSRAM render cache ------------------------------------------
+// Replaces the single per-page-render internal-RAM slot below. The tiled
+// grayscale flow re-renders an image page once for the BW double-refresh and
+// again for every band of both gray planes, and each pass re-read the whole
+// .pxc off SD (~100 ms for a full-page image, ~13 passes). Column clipping
+// cannot reduce that traffic: the row stride (~100 B) is smaller than an SD
+// sector, so every sector is touched regardless of the band window.
+//
+// PSRAM makes the obvious fix affordable. Each slot is one contiguous
+// heap_caps_malloc(MALLOC_CAP_SPIRAM) block holding a whole .pxc image (header
+// + payload), keyed by the hash of its cache path, and the set of slots
+// survives page turns. Three things follow from that:
+//  * every pass of every image on a page hits RAM, not just the first image
+//    (the internal-RAM design could only afford ONE resident image, so a
+//    two-image page re-streamed the second one ~13 times);
+//  * a back-turn, or any re-visit while the image is still resident, costs no
+//    SD access at all;
+//  * a decode can hand its freshly built payload straight over
+//    (adoptPxcImage), so the passes after a first view never read back
+//    the file the decode just wrote.
+//
+// Bounded: 8 slots x at most 96,004 B is ~750 KB of the 8 MB PSRAM, held for as
+// long as the reader is open (clearPxcLru gives it back on the way out).
+// Eviction is LRU, so a new book simply displaces the previous one's images.
+// Failure to allocate is not an error anywhere: the slot stays empty and the
+// caller falls back to the unchanged streaming path.
+//
+// Threading: the cache has no lock of its own. Its invariant is that every
+// access happens on a task holding the RenderLock -- which is true of every
+// render and of every decode, both of which run under it.
+constexpr size_t PXC_LRU_SLOTS = 8;
+
+struct PxcLruSlot {
+  uint8_t* image;   // PXC_HEADER_BYTES + payload, one PSRAM allocation
+  size_t capacity;  // bytes allocated at `image`
+  uint64_t hash;    // imagePathHash(cachePath); 0 (with image == nullptr) = empty
+  uint16_t width;
+  uint16_t height;
+  uint32_t lastUse;
+};
+
+PxcLruSlot pxcLru[PXC_LRU_SLOTS] = {};
+uint32_t pxcLruClock = 0;
+
+void pxcLruDrop(PxcLruSlot& slot) {
+  free(slot.image);  // heap_caps_malloc'd memory is free()-compatible
+  slot = {};
+}
+
+// The slot this image should occupy: its own entry if it already has one, else
+// an empty slot, else the least recently used one. Never null; the returned
+// slot may still hold another image's payload (the caller replaces it).
+PxcLruSlot& pxcLruSlotFor(const uint64_t hash) {
+  PxcLruSlot* victim = &pxcLru[0];
+  for (auto& slot : pxcLru) {
+    if (slot.image && slot.hash == hash) return slot;
+    // An empty slot has lastUse 0, so it always wins this comparison.
+    if (slot.lastUse < victim->lastUse) victim = &slot;
+  }
+  return *victim;
+}
+
+PxcLruSlot* pxcLruFind(const uint64_t hash) {
+  for (auto& slot : pxcLru) {
+    if (slot.image && slot.hash == hash) {
+      slot.lastUse = ++pxcLruClock;
+      return &slot;
+    }
+  }
+  return nullptr;
+}
+
+// True when this image's payload is already resident at the size the caller
+// expects. A peek, deliberately: asking "would this still need decoding?" is
+// not a use, so it leaves lastUse alone and cannot reorder the LRU.
+bool pxcLruHasImage(const std::string& cachePath, const int expectedWidth, const int expectedHeight) {
+  const uint64_t hash = imagePathHash(cachePath);
+  for (const auto& slot : pxcLru) {
+    if (!slot.image || slot.hash != hash) continue;
+    // Same +/-1 tolerance as the on-disk header check (readValidCacheHeader):
+    // re-layout recomputes an image's box without touching its path.
+    return abs(slot.width - expectedWidth) <= 1 && abs(slot.height - expectedHeight) <= 1;
+  }
+  return false;
+}
+
+// Point `slot` at a `bytes`-sized PSRAM block for `hash`, reusing the block it
+// already owns when that is big enough. False leaves the slot empty.
+bool pxcLruReserve(PxcLruSlot& slot, const uint64_t hash, const size_t bytes) {
+  if (slot.capacity < bytes) {
+    pxcLruDrop(slot);
+    auto* block = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (!block) return false;
+    slot.image = block;
+    slot.capacity = bytes;
+  }
+  slot.hash = hash;
+  // The payload for `hash` has not been read in yet, and a reserve that reuses
+  // an oversized block keeps the previous occupant's bytes. Zero the dimensions
+  // so the slot never advertises (new hash, old size) -- pxcLruHasImage and
+  // renderFromCache both trust that pair.
+  slot.width = 0;
+  slot.height = 0;
+  slot.lastUse = ++pxcLruClock;
+  return true;
+}
+
+void renderRowsFromPxcSlot(GfxRenderer& renderer, const PxcLruSlot& slot, const int x, const int y) {
+  const uint8_t* pixels = slot.image + PXC_HEADER_BYTES;
+  const int bytesPerRow = (slot.width + 3) / 4;
+
+  DirectPixelWriter pw;
+  pw.init(renderer);
+
+  for (int row = 0; row < slot.height; row++) {
+    const uint8_t* rowBuffer = pixels + static_cast<size_t>(row) * bytesPerRow;
+    pw.beginRow(y + row);
+    int colStart, colEnd;
+    pw.bandColRange(x, slot.width, colStart, colEnd);
+    for (int col = colStart; col < colEnd; col++) {
+      const int byteIdx = col >> 2;            // col / 4
+      const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
+      const uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+      pw.writePixel(x + col, pixelValue);
+    }
+  }
+}
+
+// cacheFile is positioned just past the header. Returns the filled slot, or
+// null when the image is too big for a slot, PSRAM is exhausted, or the read
+// came up short -- all of which fall back to streaming.
+const PxcLruSlot* loadPxcSlot(const uint64_t cacheHash, HalFile& cacheFile, const uint16_t cachedWidth,
+                              const uint16_t cachedHeight, const int bytesPerRow) {
+  const size_t payload = static_cast<size_t>(bytesPerRow) * cachedHeight;
+  if (payload == 0 || payload > PXC_MAX_PAYLOAD_BYTES) return nullptr;
+  const size_t total = PXC_HEADER_BYTES + payload;
+
+  PxcLruSlot& slot = pxcLruSlotFor(cacheHash);
+  if (!pxcLruReserve(slot, cacheHash, total)) return nullptr;
+
+  // Short reads are legal (see the book.bin mirror), so loop to completion.
+  size_t got = 0;
+  while (got < payload) {
+    const int n = cacheFile.read(slot.image + PXC_HEADER_BYTES + got, payload - got);
+    if (n <= 0) break;
+    got += static_cast<size_t>(n);
+  }
+  if (got != payload) {
+    pxcLruDrop(slot);
+    return nullptr;
+  }
+
+  memcpy(slot.image, &cachedWidth, 2);
+  memcpy(slot.image + 2, &cachedHeight, 2);
+  slot.width = cachedWidth;
+  slot.height = cachedHeight;
+  return &slot;
+}
+
+bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, const int x, const int y,
+                     const int expectedWidth, const int expectedHeight) {
+  const uint64_t cacheHash = imagePathHash(cachePath);
+  if (PxcLruSlot* slot = pxcLruFind(cacheHash)) {
+    // Re-layout (font size, orientation, margins) recomputes an image's box
+    // without touching its path, so a resident payload can name the wrong size.
+    // Same +/-1 tolerance as the on-disk header check; a mismatch drops the
+    // entry and falls through to the file, which is itself about to be rejected
+    // and re-decoded.
+    if (abs(slot->width - expectedWidth) <= 1 && abs(slot->height - expectedHeight) <= 1) {
+      renderRowsFromPxcSlot(renderer, *slot, x, y);
+      return true;
+    }
+    pxcLruDrop(*slot);
+  }
+
+  HalFile cacheFile;
+  if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
+    return false;
+  }
+
+  uint16_t cachedWidth, cachedHeight;
+  if (!readValidCacheHeader(cacheFile, expectedWidth, expectedHeight, cachedWidth, cachedHeight)) {
+    LOG_ERR("IMG", "Invalid image cache: %s", cachePath.c_str());
+    return false;
+  }
+
+  LOG_DBG("IMG", "Loading from cache: %s (%dx%d)", cachePath.c_str(), cachedWidth, cachedHeight);
+
+  const int bytesPerRow = (cachedWidth + 3) / 4;  // 2 bits per pixel, 4 pixels per byte
+
+  // First pass after a miss: pull the payload into a slot so this pass and
+  // every later one (this page render, and every re-visit until the slot is
+  // evicted) skip SD entirely.
+  if (const PxcLruSlot* slot = loadPxcSlot(cacheHash, cacheFile, cachedWidth, cachedHeight, bytesPerRow)) {
+    renderRowsFromPxcSlot(renderer, *slot, x, y);
+    LOG_DBG("IMG", "Cache render complete (payload now in PSRAM)");
+    return true;
+  }
+
+  // Streaming fallback (no slot). A failed slot load may have consumed part of
+  // the payload; rewind to just past the header.
+  cacheFile.seek(4);
+  return renderStreamingFromCache(renderer, cacheFile, x, y, cachedWidth, cachedHeight, bytesPerRow);
+}
+
+#else  // !CROSSPOINT_PSRAM_IMAGE_CACHE
 
 // --- Per-page-render RAM slot for the pixel cache ----------------------------
 // The tiled grayscale flow re-renders an image page once for the BW
@@ -232,70 +509,26 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
   // Streaming fallback (slot didn't fit). A failed slot load may have consumed
   // part of the payload; rewind to just past the header.
   cacheFile.seek(4);
-
-  // Read several rows per SD access. A one-row-per-read loop here means
-  // cachedHeight (~728) tiny reads through the storage mutex + SdFat; batching
-  // rows into a ~4KB buffer cuts that to ~20 reads per pass without holding the
-  // whole image.
-  int rowsPerRead = 4096 / bytesPerRow;
-  if (rowsPerRead < 1) rowsPerRead = 1;
-  if (rowsPerRead > cachedHeight) rowsPerRead = cachedHeight;
-  uint8_t* readBuffer = (uint8_t*)malloc((size_t)rowsPerRead * bytesPerRow);
-  if (!readBuffer) {
-    // Fall back to a single-row buffer under memory pressure.
-    rowsPerRead = 1;
-    readBuffer = (uint8_t*)malloc(bytesPerRow);
-  }
-  if (!readBuffer) {
-    LOG_ERR("IMG", "Failed to allocate row buffer");
-    return false;
-  }
-
-  DirectPixelWriter pw;
-  pw.init(renderer);
-
-  int rowsInBuffer = 0;
-  int bufferRow = 0;
-  for (int row = 0; row < cachedHeight; row++) {
-    if (bufferRow >= rowsInBuffer) {
-      const int toRead = (cachedHeight - row < rowsPerRead) ? (cachedHeight - row) : rowsPerRead;
-      const size_t bytes = (size_t)toRead * bytesPerRow;
-      if (cacheFile.read(readBuffer, bytes) != static_cast<int>(bytes)) {
-        LOG_ERR("IMG", "Cache read error at row %d", row);
-        free(readBuffer);
-        return false;
-      }
-      rowsInBuffer = toRead;
-      bufferRow = 0;
-    }
-
-    const uint8_t* rowBuffer = readBuffer + (size_t)bufferRow * bytesPerRow;
-    bufferRow++;
-
-    const int destY = y + row;
-    pw.beginRow(destY);
-    // On a grayscale strip pass only a narrow column window of the image is in
-    // the active band; skip the rest instead of unpacking+clipping every pixel.
-    int colStart, colEnd;
-    pw.bandColRange(x, cachedWidth, colStart, colEnd);
-    for (int col = colStart; col < colEnd; col++) {
-      const int byteIdx = col >> 2;            // col / 4
-      const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
-      uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
-
-      pw.writePixel(x + col, pixelValue);
-    }
-  }
-
-  free(readBuffer);
-  LOG_DBG("IMG", "Cache render complete");
-  return true;
+  return renderStreamingFromCache(renderer, cacheFile, x, y, cachedWidth, cachedHeight, bytesPerRow);
 }
+
+#endif  // CROSSPOINT_PSRAM_IMAGE_CACHE
 
 }  // namespace
 
 bool ImageBlock::hasValidCache() const {
   const auto cachePath = getCachePath(imagePath);
+#ifdef CROSSPOINT_PSRAM_IMAGE_CACHE
+  // A payload already resident in the render cache is as good as the file, and
+  // answering from RAM costs no SD access at all -- which is the point, because
+  // this runs per image on the page-turn path (renderContents, via
+  // Page::hasImagesNeedingDecode). It also means an image whose file was removed
+  // underneath a live slot (cache cleanup) stops looking like undecoded work.
+  // That caller holds the RenderLock, which is this cache's only
+  // synchronization. The file check below remains the fallback for anything not
+  // (or no longer) resident.
+  if (pxcLruHasImage(cachePath, width, height)) return true;
+#endif
   HalFile cacheFile;
   if (!Storage.openFileForRead("IMG", cachePath, cacheFile)) {
     return false;
@@ -309,7 +542,49 @@ bool ImageBlock::needsDecode() const { return !imageFailedThisSession(imagePath)
 
 void ImageBlock::clearSessionRenderFailures() { failedImageCount = 0; }
 
+#ifdef CROSSPOINT_PSRAM_IMAGE_CACHE
+// The PSRAM cache is deliberately not tied to a single page render: its whole
+// point is that a back-turn or a re-visit still hits RAM. Slots are reclaimed
+// by LRU eviction, so the reader's per-page release becomes a no-op.
+void ImageBlock::releaseRenderCache() {}
+
+void ImageBlock::clearPxcLru() {
+  size_t freed = 0;
+  for (auto& slot : pxcLru) {
+    if (!slot.image) continue;
+    freed += slot.capacity;
+    pxcLruDrop(slot);
+  }
+  if (freed) LOG_DBG("IMG", "Released %u bytes of PSRAM image cache", static_cast<unsigned>(freed));
+}
+
+bool adoptPxcImage(const std::string& cachePath, uint8_t* pxcImage, const size_t byteCount) {
+  if (!pxcImage || byteCount <= PXC_HEADER_BYTES) return false;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  memcpy(&width, pxcImage, 2);
+  memcpy(&height, pxcImage + 2, 2);
+  if (width == 0 || height == 0) return false;
+  // The donated block must be exactly one .pxc image, or a render would walk
+  // off the end of it.
+  const size_t payload = static_cast<size_t>((width + 3) / 4) * height;
+  if (payload > PXC_MAX_PAYLOAD_BYTES || PXC_HEADER_BYTES + payload != byteCount) return false;
+
+  const uint64_t hash = imagePathHash(cachePath);
+  PxcLruSlot& slot = pxcLruSlotFor(hash);
+  pxcLruDrop(slot);  // takes ownership of a whole block; never reuses the old one
+  slot.image = pxcImage;
+  slot.capacity = byteCount;
+  slot.hash = hash;
+  slot.width = width;
+  slot.height = height;
+  slot.lastUse = ++pxcLruClock;
+  LOG_DBG("IMG", "Adopted decoded payload: %s (%dx%d)", cachePath.c_str(), width, height);
+  return true;
+}
+#else
 void ImageBlock::releaseRenderCache() { releasePxcSlot(); }
+#endif
 
 void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int y) const {
   renderer.fillRect(x, y, width, height, true);

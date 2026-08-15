@@ -26,7 +26,23 @@ class ImageBlock final : public Block {
   // first draw caches the pixel payload in RAM (chunked, heap-gated, falls back
   // to streaming when it doesn't fit); the reader calls this when the page
   // render completes so nothing stays resident between pages.
+  // With CROSSPOINT_PSRAM_IMAGE_CACHE the payload lives in a PSRAM LRU that
+  // deliberately outlives the page render, and this becomes a no-op.
   static void releaseRenderCache();
+
+#ifdef CROSSPOINT_PSRAM_IMAGE_CACHE
+  // --- Whole-image PSRAM render cache -----------------------------------------
+  // The format itself, and the decode-side donation entry point, live in
+  // converters/PxcFormat.h. What belongs to the block layer is the slot set:
+  //
+  // Free every slot. The cache is bounded (8 x up to ~96 KB = ~750 KB of PSRAM)
+  // and never evicts on its own beyond LRU, because its whole point is
+  // surviving page turns. Leaving the reader ends that: the reader calls this
+  // from onExit to give the PSRAM back, and the next book starts cold rather
+  // than displacing slot by slot. Caller must hold the RenderLock (the cache
+  // has no lock of its own).
+  static void clearPxcLru();
+#endif
 
   // Lazy extraction hook: the section build only header-probes images for their
   // dimensions; the file at imagePath is extracted out of the book on first
