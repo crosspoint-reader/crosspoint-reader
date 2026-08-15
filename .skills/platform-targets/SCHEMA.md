@@ -1,7 +1,9 @@
 # Resource schema
 
 Every file in `resources/` uses this YAML frontmatter so devices can be
-compared without reading `BoardConfig.h`. Copy a present file when adding one.
+compared without reading `BoardConfig.h`. The filenames here are whatever the
+compile set currently is, not a closed board list. Copy a present file when
+adding one. The `x4` block below is an example of the **shape**, not the set.
 
 ```yaml
 device: x4

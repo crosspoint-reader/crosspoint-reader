@@ -1,6 +1,6 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for ESP32-class e-ink devices (Xteink X3/X4 C3 binary, Seeed Sticky, and later targets as `platformio.ini` adds them).
+Project: Open-source e-reader firmware for ESP32-class e-ink devices. Which boards this tree compiles is in committed `platformio.ini` and the `platform-targets` skill.
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
 ## AI Agent Identity and Cognitive Rules
@@ -50,10 +50,10 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
-* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill and its per-device `resources/` files.
-* Today `[env:default]` (and the C3 release aliases) is the shared **X3+X4** C3 binary. `[env:sticky]` is a separate S3 binary. Treat X3 and X4 as two devices in one env until that env is split.
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill and its `resources/` files (one file per device flag on that compile set).
+* One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
 * Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only — if you find a new env there, ask before researching or adding a skill resource.
-* DRAM discipline as if the C3 `default` env is in the room. PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 does not imply that; Sticky leaves PSRAM off).
+* DRAM discipline as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env). PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 silicon does not imply that).
 * Never hardcode panel size. Use `renderer.getScreenWidth()` / `getScreenHeight()` and `BoardConfig::MAX_FRAMEBUFFER_BYTES` for the compiled set.
 * Single framebuffer (`EINK_DISPLAY_SINGLE_BUFFER_MODE=1`). Storage is the SD card (books and cache). Partition table in this tree is 16MB flash.
 
@@ -107,12 +107,7 @@ Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, fr
 
 * **Standard**: C++20 (`-std=c++2a`). No Exceptions, No RTTI.
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
-* **Environments** (in `platformio.ini`):
-  * `default`: C3 X3+X4 development (LOG_LEVEL=2, serial enabled)
-  * `gh_release`: C3 X3+X4 production (LOG_LEVEL=1)
-  * `gh_release_rc`: C3 X3+X4 release candidate (LOG_LEVEL=1)
-  * `slim`: C3 X3+X4 minimal (no serial logging)
-  * `sticky` / `sticky-gh_release` / `sticky-gh_release_rc`: Seeed Sticky (S3). PSRAM left off.
+* **Environments**: whatever `[env:…]` is in committed `platformio.ini`. Device flags and hardware numbers live in the `platform-targets` skill. `LOG_LEVEL` and serial are per-env in the INI (`default` is typically 2; `*-gh_release*` typically 1).
 
 ### Critical Build Flags
 
@@ -171,7 +166,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 | `HalSystem`        | panic / reboot helpers       | Panic dump, reboot info         | `HalSystem::`     |
 | `HalTiltSensor`    | `Imu`                        | Tilt page-turn (when present)   | `halTiltSensor`   |
 
-Which extras a device actually has (RTC, IMU, touch, frontlight) comes from the `platform-targets` skill — do not assume an X4 button board. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
+Which extras a device actually has (RTC, IMU, touch, frontlight) comes from the `platform-targets` skill — do not assume one input style or accessory set. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
 
 **Location**: [lib/hal/](lib/hal/)
 
@@ -916,7 +911,7 @@ build_flags =
 
 | Workflow      | File                                        | Purpose                |
 | ------------- | ------------------------------------------- | ---------------------- |
-| Build Check   | `.github/workflows/ci.yml`                  | Compiles `default` and `sticky` |
+| Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow |
 | Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
 | Release Build | `.github/workflows/release.yml`             | Production releases    |
 | RC Build      | `.github/workflows/release_candidate.yml`   | Release candidates     |

@@ -9,7 +9,7 @@ description: Layering and abstraction discipline for the firmware. Use when touc
 and how to route through it, and where to draw a new boundary.
 
 Which extras a device actually has (touch, frontlight, tilt) come from
-`platform-targets`, not from assuming an X4 button board.
+`platform-targets`, not from assuming one input style or accessory set.
 
 ## Route through the layer, always
 
