@@ -25,6 +25,8 @@ controllers: [SSD1677]
 grayscale: 4-level
 # Bezel overlap in the panel-native frame (BoardProfile.viewableInsets).
 # Keep on-screen UI (status, gutters, margins) out of these pixels.
+# Record the *effective* insets. Profiles that omit the field still get the
+# struct defaults (top 9, right 3, bottom 3, left 3) — that is not zeros.
 viewable_insets: {top: 9, right: 3, bottom: 3, left: 3}
 
 touch: none                    # none | GT911 | FT5x06 | CHSC6x

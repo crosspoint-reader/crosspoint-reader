@@ -151,7 +151,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 ### Directory Structure
 
 * lib/: Internal libraries (Epub engine, GfxRenderer, UITheme, I18n)
-  * lib/hal/: Hardware Abstraction Layer (HalDisplay, HalGPIO, HalStorage)
+  * lib/hal/: Hardware Abstraction Layer (see HAL table below)
   * lib/I18n/: Internationalization (translations in `translations/*.yaml`, generated string tables)
 * src/activities/: UI logic using the Activity Lifecycle (onEnter, loop, onExit)
 * freeink-sdk/: Low-level SDK (EInkDisplay, InputManager, BatteryMonitor, SDCardManager)
@@ -161,11 +161,17 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 
 **CRITICAL**: Always use HAL classes, NOT SDK classes directly.
 
-| HAL Class    | Wraps SDK Class | Purpose               | Singleton Macro |
-| ------------ | --------------- | --------------------- | --------------- |
-| `HalDisplay` | `EInkDisplay`   | E-ink display control | *(none)*        |
-| `HalGPIO`    | `InputManager`  | Button input handling | *(none)*        |
-| `HalStorage` | `SDCardManager` | SD card file I/O      | `Storage`       |
+| HAL Class          | Wraps SDK Class              | Purpose                         | Access            |
+| ------------------ | ---------------------------- | ------------------------------- | ----------------- |
+| `HalDisplay`       | `EInkDisplay`                | E-ink display control           | *(none)*          |
+| `HalGPIO`          | `InputManager`               | Button input handling           | *(none)*          |
+| `HalStorage`       | `SDCardManager`              | SD card file I/O                | `Storage`         |
+| `HalClock`         | `Rtc`                        | On-board RTC (when present)     | `halClock`        |
+| `HalPowerManager`  | `BatteryMonitor` / sleep     | Battery, sleep, CPU frequency   | `powerManager`    |
+| `HalSystem`        | panic / reboot helpers       | Panic dump, reboot info         | `HalSystem::`     |
+| `HalTiltSensor`    | `Imu`                        | Tilt page-turn (when present)   | `halTiltSensor`   |
+
+Which extras a device actually has (RTC, IMU, touch, frontlight) comes from the `platform-targets` skill — do not assume an X4 button board. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
 
 **Location**: [lib/hal/](lib/hal/)
 
@@ -224,6 +230,8 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 * RAII: Use destructors for cleanup. Call `vTaskDelete()` explicitly for deterministic task release. Do NOT call `file.close()` on local `FsFile` variables — `DESTRUCTOR_CLOSES_FILE=1` handles it at scope exit (see Critical Build Flags).
 
 ### ESP32-C3 Platform Pitfalls
+
+These apply to the C3 `default` binary (the feature-presence floor). Sticky is Xtensa S3 — still avoid unaligned casts and still keep ISR code in IRAM.
 
 #### `std::string_view` and Null Termination
 
@@ -908,7 +916,7 @@ build_flags =
 
 | Workflow      | File                                        | Purpose                |
 | ------------- | ------------------------------------------- | ---------------------- |
-| Build Check   | `.github/workflows/ci.yml`                  | Verifies code compiles |
+| Build Check   | `.github/workflows/ci.yml`                  | Compiles `default` and `sticky` |
 | Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
 | Release Build | `.github/workflows/release.yml`             | Production releases    |
 | RC Build      | `.github/workflows/release_candidate.yml`   | Release candidates     |

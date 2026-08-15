@@ -19,9 +19,8 @@ Which extras a device actually has (touch, frontlight, tilt) come from
   machine and panics FreeRTOS (`AGENTS.md` has the failure mode). This is a
   correctness boundary, not a style preference.
 - **Display:** `HalDisplay` over `EInkDisplay`. **Input:** `HalGPIO` over
-  `InputManager`. Also route clock, power, system, and tilt through `HalClock`,
-  `HalPowerManager`, `HalSystem`, and `HalTiltSensor` when those exist — do not
-  reach the SDK because the always-on HAL table listed only three classes.
+  `InputManager`. **Clock / power / system / tilt:** `HalClock`,
+  `HalPowerManager`, `HalSystem`, `HalTiltSensor` — same rule as storage.
 - **Rendering:** everything through the `GUI` macro (UITheme) and the renderer's
   oriented metrics. No hardcoded fonts, colors, coordinates, or 800/480
   literals; ask the renderer for width/height and use the oriented viewable
