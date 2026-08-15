@@ -17,6 +17,7 @@ Each skill is a directory containing `SKILL.md` whose `name` matches the directo
 
 | Skill | Loads when you are... |
 |---|---|
+| `platform-targets` | asking what is true on a board/env: PSRAM, panel, controller, FB size |
 | `heap-discipline` | allocating memory: new/malloc/vector/string, buffers, caches |
 | `control-flow-clarity` | writing branching logic, state flags, modes, if/else ladders |
 | `hal-and-abstractions` | touching storage, input, display, settings, i18n, rendering |
