@@ -86,6 +86,7 @@ void CalibreConnectActivity::startWebServer() {
   // repopulated them rendering a CJK SSID) so the server object doesn't abort
   // on OOM. See CrossPointWebServerActivity::startWebServer().
   if (auto* fcm = renderer.getFontCacheManager()) {
+    LOG_DBG("CAL", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
     fcm->releaseSdFontCaches();
     LOG_DBG("CAL", "Free heap before server alloc: %d bytes", ESP.getFreeHeap());
   }
