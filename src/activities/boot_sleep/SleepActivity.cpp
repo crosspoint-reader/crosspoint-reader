@@ -558,7 +558,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, false, true);
       file.close();
       return;
     }
@@ -577,7 +577,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       delay(100);
       Bitmap bitmap(randFile, true);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-        renderBitmapSleepScreen(bitmap);
+        renderBitmapSleepScreen(bitmap, false, true);
         randFile.close();
         return;
       }
@@ -609,7 +609,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool preserveBackground,
+                                            const bool absoluteLut) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -626,7 +627,15 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
       bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
-  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+  const bool useAbsoluteGrayscale =
+      renderer.supportsAbsoluteGrayscale() && absoluteLut && hasGreyscale && !preserveBackground &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+
+  LOG_DBG("SLP", "Using absolute lut: %s", useAbsoluteGrayscale ? "true" : "false");
+
+  if (!useAbsoluteGrayscale) {
+    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+  }
 
   if (!preserveBackground &&
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
@@ -634,30 +643,41 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   if (hasGreyscale) {
-    // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
-    // calibrated against the pixel state the single-pass HALF waveform leaves
-    // behind. A FULL (GC) base parks pixels in a different charge state and
-    // the differential nudge then lands unevenly (blotchy noise in gray areas).
-    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+    if (!useAbsoluteGrayscale) {
+      // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
+      // calibrated against the pixel state the single-pass HALF waveform leaves
+      // behind. A FULL (GC) base parks pixels in a different charge state and
+      // the differential nudge then lands unevenly (blotchy noise in gray areas).
+      renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+      bitmap.rewindToData();
+      renderer.clearScreen(0x00);
+      renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+      renderer.copyGrayscaleLsbBuffers();
+
+      bitmap.rewindToData();
+      renderer.clearScreen(0x00);
+      renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+      renderer.copyGrayscaleMsbBuffers();
+
+      renderer.displayGrayBuffer();
+    } else {
+      renderer.setRenderMode(GfxRenderer::ABSOLUTE_GRAY_LSB);
+      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+      renderer.copyGrayscaleLsbBuffers();
+
+      bitmap.rewindToData();
+      renderer.setRenderMode(GfxRenderer::ABSOLUTE_GRAY_MSB);
+      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+      renderer.copyGrayscaleMsbBuffers();
+
+      renderer.displayAbsoluteGrayBuffer();
+    }
+    renderer.setRenderMode(GfxRenderer::BW);
   } else {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-  }
-
-  if (hasGreyscale) {
-    bitmap.rewindToData();
-    renderer.clearScreen(0x00);
-    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-    renderer.copyGrayscaleLsbBuffers();
-
-    bitmap.rewindToData();
-    renderer.clearScreen(0x00);
-    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-    renderer.copyGrayscaleMsbBuffers();
-
-    renderer.displayGrayBuffer();
-    renderer.setRenderMode(GfxRenderer::BW);
   }
 }
 
@@ -764,6 +784,7 @@ void SleepActivity::renderCoverSleepScreen() const {
 
   std::string coverBmpPath;
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+  bool absoluteLut = false;
 
   // Check if the current book is XTC, TXT, or EPUB
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
@@ -803,12 +824,17 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastEpub.generateCoverBmp(cropped)) {
+    // figure out which cover image renderBitmapSleepScreen will need. The othre conditions in that
+    // method (hasGreyscale and !preserveBackground) are known to be true when rendering a cover.
+    absoluteLut = renderer.supportsAbsoluteGrayscale() &&
+                  SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+
+    if (!lastEpub.generateCoverBmp(cropped, absoluteLut)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped);
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, absoluteLut);
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }
@@ -818,7 +844,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, false, absoluteLut);
       return;
     }
   }

@@ -132,6 +132,10 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.
 
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }
 
+bool HalDisplay::supportsAbsoluteGrayscale() const { return einkDisplay.supportsAbsoluteGrayscale(); }
+
+void HalDisplay::displayAbsoluteGrayBuffer(bool turnOffScreen) { einkDisplay.displayAbsoluteGrayBuffer(turnOffScreen); }
+
 void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows) {
   einkDisplay.writeGrayscalePlaneStrip(lsbPlane ? EInkDisplay::GRAY_PLANE_LSB : EInkDisplay::GRAY_PLANE_MSB, rows,
                                        yStart, numRows);
