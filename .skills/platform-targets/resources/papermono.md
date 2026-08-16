@@ -18,6 +18,7 @@ controllers: [SSD1677]
 grayscale: 3-gray
 viewable_insets: {top: 9, right: 7, bottom: 3, left: 7}
 touch: FT5x06
+multitouch: false
 frontlight: pmic-pwm
 ui_scale: 1.0
 ppi_note: null

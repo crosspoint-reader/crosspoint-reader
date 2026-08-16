@@ -18,6 +18,7 @@ controllers: [SSD1677, UC8179, UC8279]
 grayscale: 4-level
 viewable_insets: {top: 9, right: 7, bottom: 3, left: 7}
 touch: GT911
+multitouch: true
 frontlight: pwm-warm
 ui_scale: 1.2
 ppi_note: touch-board uiScale 1.2
@@ -27,11 +28,14 @@ caps: [TOUCH, FRONTLIGHT, WARMLIGHT, RTC]
 # Xteink X4 Pro
 
 ESP32-S3, distinct from the C3 X4. 800×480; controller varies by batch
-(SSD1677 / UC8179 / UC8279, probed at boot). GT911 with capacitive home key,
-warm/cool PWM frontlight, 1-bit SDMMC, CW2017 gauge, PCF8563-compatible RTC.
+(SSD1677 / UC8179 / UC8279, probed at boot). GT911 with capacitive home key
+and SDK multi-touch. Warm/cool PWM frontlight, 1-bit SDMMC, CW2017 gauge,
+PCF8563-compatible RTC.
 `uiScale` 1.2. Bezel insets 9/7/3/7. 8 MB PSRAM on silicon.
 
 Own envs (`x4pro` and release siblings). Those set `-DFREEINK_DEVICE_X4PRO=1`,
 `-DBOARD_HAS_PSRAM`, `-DUSE_BLOCK_DEVICE_INTERFACE=1`, and
 `-DFREEINK_FRONTLIGHT_LS`. CI builds `pio run -e x4pro`. Framebuffer stays
-in DRAM; PSRAM is on for other heaps.
+in DRAM; PSRAM is on for other heaps. The SDK also has opt-in
+`-DFREEINK_X4PRO_FAST_DU_SHORTCUT` (SSD1677-batch only); this tree does not
+set it.

@@ -18,6 +18,7 @@ controllers: [SSD1677]
 grayscale: 4-level
 viewable_insets: {top: 9, right: 3, bottom: 3, left: 3}
 touch: GT911
+multitouch: true
 frontlight: none
 ui_scale: 1.2
 ppi_note: ~220-235 PPI comment in BoardConfig; uiScale is hand-tuned
@@ -27,8 +28,8 @@ caps: [TOUCH, MIC, RTC, TEMP_HUMIDITY, IMU, BUZZER]
 # Seeed Sticky
 
 ESP32-S3. 3.97″ 800×480 SSD1677, GT911 (portrait digitizer, swap/flip in
-profile). PDM mic, PCF8563, SHT40, LSM6DS3, BQ27220, LEDC buzzer. SPI SD
-shares the panel bus. `uiScale` 1.2.
+profile; SDK multi-touch). PDM mic, PCF8563, SHT40, LSM6DS3, BQ27220, LEDC
+buzzer. SPI SD shares the panel bus. `uiScale` 1.2.
 
 8 MB PSRAM is on the silicon; CrossPoint leaves it **off** (`BOARD_HAS_PSRAM`
 is not set). Framebuffer stays in DRAM. S3 does not imply PSRAM is in play.

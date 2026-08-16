@@ -44,6 +44,8 @@ grayscale: 4-level
 viewable_insets: {top: 9, right: 3, bottom: 3, left: 3}
 
 touch: none                    # none | GT911 | FT5x06 | FT6336U | CHSC6x
+multitouch: false              # InputManager::supportsMultiTouch — Gt911 only today
+                               # (MAX_TOUCH_CONTACTS 4, wasMultiTouchSwipe). Others: single-contact.
 frontlight: none               # none | pwm | pwm-warm | pmic-pwm
 ui_scale: 1.0                  # BoardProfile.uiScale — not DPI
 ppi_note: null                 # comment-only in the SDK; do not invent dpi

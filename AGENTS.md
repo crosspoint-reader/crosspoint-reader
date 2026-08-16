@@ -48,7 +48,7 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 ### Hardware Specs
 
-Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
+Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, multitouch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
 * One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Open a `resources/` file when the compile set or the task names that device. When `BoardConfig.h`, the committed INI, CI, or that skill's schema moves, refresh every committed resource **and** the schema's per-field option comments — including files whose flags are not on this compile set. Do not treat unread files as must-build.
 * One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
@@ -447,7 +447,7 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
    
    - Screen-edge and swipe helpers on `MappedInputManager` (`wasSwipe`, `wasHomeGesture`, `ScreenLeft` / `ScreenRight` / …)
    
-   - Do not assume a home key or swipe; `HalGPIO` / the mapper report what is present
+   - Do not assume a home key, swipe, or multi-touch; `HalGPIO` / the mapper report what is present. The `multitouch` field in `platform-targets` is `InputManager::supportsMultiTouch` (GT911 only today). Route new SDK capability through HAL — do not call `InputManager` from activities.
 
 **Implementation**:
 
