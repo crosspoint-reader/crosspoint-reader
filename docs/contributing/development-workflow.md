@@ -30,6 +30,7 @@ If `clang-format` is missing or too old locally, see [Getting Started](./getting
 
 ## 4) Open the PR
 
+- Target `develop` (the repository's default branch)
 - Use a semantic title (example: `fix: avoid crash when opening malformed epub`)
 - Fill out `.github/PULL_REQUEST_TEMPLATE.md`
 - Describe the problem, approach, and any tradeoffs
