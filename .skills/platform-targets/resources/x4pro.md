@@ -6,11 +6,11 @@ sdk_header: freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
 shared_binary_envs: []
 mcu_family: s3
 board_package: esp32-s3-devkitc1-n16r8
-psram_in_ini: true
+psram_in_ini: false
 psram_on_silicon: true
 fb_in_psram: false
 sdmmc: true
-block_device_interface: true
+block_device_interface: false
 width: 800
 height: 480
 fb_bytes: 48000
@@ -31,6 +31,6 @@ ESP32-S3, distinct from the C3 X4. 800×480; controller varies by batch
 warm/cool PWM frontlight, 1-bit SDMMC, CW2017 gauge, PCF8563-compatible RTC.
 `uiScale` 1.2. Bezel insets 9/7/3/7. 8 MB PSRAM on silicon.
 
-No committed env on this checkout. When one exists it is expected to set
+When a committed env sets this flag it is expected to include
 `-DFREEINK_DEVICE_X4PRO=1`, `-DBOARD_HAS_PSRAM`, and
 `-DUSE_BLOCK_DEVICE_INTERFACE=1`.

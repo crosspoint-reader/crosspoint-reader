@@ -6,11 +6,11 @@ sdk_header: freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
 shared_binary_envs: []
 mcu_family: s3
 board_package: esp32-s3-devkitc1-n16r8
-psram_in_ini: true
+psram_in_ini: false
 psram_on_silicon: true
 fb_in_psram: true
 sdmmc: true
-block_device_interface: true
+block_device_interface: false
 width: 800
 height: 480
 fb_bytes: 48000
@@ -31,6 +31,6 @@ family), PMIC frontlight (AW9967 via M5PM1), PDM mic, RX8130 RTC, buzzer,
 discrete RGB LED, 1-bit SDMMC. `FREEINK_FB_PSRAM` defaults on. Bezel insets
 9/7/3/7. Bring-up hooks live in `PaperMonoBoard.h` / `M5Ioe1.h`.
 
-No committed env on this checkout. When one exists it is expected to set
+When a committed env sets this flag it is expected to include
 `-DFREEINK_DEVICE_PAPERMONO=1`, `-DBOARD_HAS_PSRAM`, and
 `-DUSE_BLOCK_DEVICE_INTERFACE=1`.
