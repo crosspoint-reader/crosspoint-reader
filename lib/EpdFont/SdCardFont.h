@@ -42,8 +42,24 @@ class SdCardFont {
   // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
   // Default 0x0F = all present styles.
   // When metadataOnly=true, only glyph metrics are loaded (no bitmap data).
+  // Accumulative: codepoints already resident from earlier prewarms stay
+  // resident (the rebuild unions them with the request, up to MAX_PAGE_GLYPHS),
+  // so per-string callers converge instead of evicting each other.
   // Returns number of glyphs that couldn't be loaded (0 on full success).
-  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false);
+  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false, bool loadKernLig = true);
+
+  // Multi-string variant: extracts codepoints from `textCount` strings fetched
+  // one at a time through `getter` (C-style callback: no std::function bloat,
+  // and callers never build a concatenated copy — a heap-tight screen aborting
+  // in a bare-new string append is exactly what this avoids). A null getter
+  // result skips that index. Unique codepoints cap at MAX_PAGE_GLYPHS.
+  // loadKernLig=false skips kern/ligature loading and the mini kern matrix:
+  // UI fallback text (CJK titles) has no useful kern pairs, and the ~3KB class
+  // tables plus per-rebuild matrix work were enough to OOM the batch on
+  // heap-tight screens. Reader-quality paths keep the default.
+  using TextGetter = const char* (*)(void* ctx, uint32_t index);
+  int prewarm(TextGetter getter, void* ctx, uint32_t textCount, uint8_t styleMask = 0x0F, bool metadataOnly = false,
+              bool loadKernLig = true);
 
   // Build a compact advance-only table for layout measurement.
   // Extracts ALL unique codepoints from words (no MAX_PAGE_GLYPHS cap),
@@ -304,7 +320,7 @@ class SdCardFont {
   template <typename Iter>
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
                              const char* extraText = nullptr);
-  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
+  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, bool loadKernLig);
 
   // Global helpers
   void freeAll();

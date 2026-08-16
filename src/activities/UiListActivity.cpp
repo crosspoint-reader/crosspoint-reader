@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -82,7 +83,7 @@ void UiListActivity::loop() {
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
     auto& n = activeNav();
-    const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.visibleRows : -n.visibleRows;
+    const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.pageRows() : -n.pageRows();
     if (n.scrollBy(delta, listCount())) requestUpdate();
     return;
   }
@@ -96,10 +97,13 @@ void UiListActivity::navigateButtons() {
   buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
   buttonNavigator.onPreviousRelease(
       [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
+  // Page by the rows the last build actually drew (pageRows), not the
+  // fixed-height visibleRows estimate: with wrapped labels the estimate
+  // overshoots and rows between pages would never be shown.
   buttonNavigator.onNextContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.visibleRows)); });
+      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.pageRows())); });
   buttonNavigator.onPreviousContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.visibleRows)); });
+      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.pageRows())); });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
@@ -135,6 +139,20 @@ void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();
   drawChrome();
   renderUi();
+  // Wrapped labels grow rows, so fewer rows can fit than the fixed-height
+  // estimate ListNav plans with. list() reports the real layout back
+  // (ListNav::onListRendered); when the selection landed past the drawn rows
+  // the nav advanced the viewport and asked for another build. Bounded: top
+  // strictly advances toward the selection each pass.
+  for (int pass = 0; activeNav().consumeRebuildNeeded() && pass < 8; ++pass) {
+    // TEMP diagnostics (#tail-clip): confirm the viewport feedback engages on
+    // device. Remove once the last-row highlight is verified.
+    LOG_INF("UiList", "TEMP viewport feedback pass=%d top=%d sel=%d drawn=%d", pass + 1, activeNav().top,
+            activeNav().selected, activeNav().drawnRows);
+    renderer.clearScreen();
+    drawChrome();
+    renderUi();
+  }
   drawFooter();
   renderer.displayBuffer();
 }

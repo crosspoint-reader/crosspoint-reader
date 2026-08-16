@@ -1,5 +1,6 @@
 #include "EpubReaderChapterSelectionActivity.h"
 
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -7,6 +8,7 @@
 #include <vector>
 
 #include "MappedInputManager.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -21,6 +23,16 @@ EpubReaderChapterSelectionActivity::EpubReaderChapterSelectionActivity(GfxRender
 
 void EpubReaderChapterSelectionActivity::onEnter() {
   UiListActivity::onEnter();
+
+  // The reader underneath pins its page-render glyph arenas while this
+  // overlay is up. clearCache() is heap-adaptive: below the retention floor
+  // it frees them (the next page render's PrewarmScope rebuilds them at
+  // normal page-turn cost), giving this list room to keep every row's
+  // fallback glyphs resident — otherwise each repaint re-reads the visible
+  // rows' glyphs from SD.
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->clearCache();
+  }
 
   if (!epub) {
     return;
@@ -54,6 +66,17 @@ void EpubReaderChapterSelectionActivity::buildTocRowItems() {
     item.actionValue = static_cast<int16_t>(i);
     tocRowItems.push_back(item);
   }
+
+  // One SD pass for every CJK title in the list; repaints (each row step
+  // redraws all rows) then hit the resident tables instead of re-reading
+  // per-string. Getter form: no concatenated copy (a bare-new string append
+  // aborts on this heap-tight screen). See GfxRenderer::prewarmFallbackText().
+  renderer.prewarmFallbackText(
+      uiScaleSpec().bodyFontId,
+      [](void* ctx, uint32_t i) -> const char* {
+        return (*static_cast<const std::vector<std::string>*>(ctx))[i].c_str();
+      },
+      &tocLabels, static_cast<uint32_t>(tocLabels.size()));
 }
 
 void EpubReaderChapterSelectionActivity::activateIndex(const int index) {

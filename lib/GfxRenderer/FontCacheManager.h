@@ -56,7 +56,19 @@ class FontCacheManager {
 
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
-  std::string scanText_;
-  uint32_t scanStyleCounts_[4] = {};
-  int scanFontId_ = -1;
+
+  // Per-font scan accumulators. A page mixes font ids (reader font, UI font,
+  // and the SD fallback the CJK-bearing strings resolve to); prewarming only
+  // the first-recorded id would leave the other fonts to fault glyph-by-glyph
+  // during the real draw pass. Fixed-size array: a render pass touches at most
+  // a handful of font ids, and entries past the cap are simply not batched
+  // (they fall back to the per-string prewarm in GfxRenderer).
+  static constexpr uint8_t MAX_SCAN_FONTS = 4;
+  struct ScanEntry {
+    int fontId = -1;
+    std::string text;
+    uint8_t styleMask = 0;
+  };
+  ScanEntry scanEntries_[MAX_SCAN_FONTS];
+  void resetScanEntries();
 };
