@@ -4,6 +4,8 @@
 #include <I18n.h>
 #include <Logging.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -68,8 +70,18 @@ bool UiListActivity::routeListTouch() {
 
 void UiListActivity::moveSelectionTo(const int index) {
   auto& n = activeNav();
+  const int previous = n.selected;
   n.selected = index;
   n.follow(listCount());
+  // Arm the selection-delta fast path; render() falls back to a full repaint
+  // unless the viewport provably didn't move. Any other requestUpdate source
+  // (data reload, touch action, custom input) never arms it. Coalesced moves
+  // (several presses before one render) keep the ORIGINAL from-row: that is
+  // the row still highlighted in the framebuffer.
+  if (previous != index) {
+    if (!selectionDeltaPending) selectionDeltaFrom = previous;
+    selectionDeltaPending = true;
+  }
   requestUpdate();
 }
 
@@ -136,6 +148,14 @@ void UiListActivity::drawFooter() {
 }
 
 void UiListActivity::render(RenderLock&&) {
+  const bool deltaPending = selectionDeltaPending;
+  const int deltaFrom = selectionDeltaFrom;
+  selectionDeltaPending = false;
+  selectionDeltaFrom = -1;
+  if (deltaPending && tryRenderSelectionDelta(deltaFrom)) {
+    return;
+  }
+
   renderer.clearScreen();
   drawChrome();
   renderUi();
@@ -145,14 +165,50 @@ void UiListActivity::render(RenderLock&&) {
   // the nav advanced the viewport and asked for another build. Bounded: top
   // strictly advances toward the selection each pass.
   for (int pass = 0; activeNav().consumeRebuildNeeded() && pass < 8; ++pass) {
-    // TEMP diagnostics (#tail-clip): confirm the viewport feedback engages on
-    // device. Remove once the last-row highlight is verified.
-    LOG_INF("UiList", "TEMP viewport feedback pass=%d top=%d sel=%d drawn=%d", pass + 1, activeNav().top,
-            activeNav().selected, activeNav().drawnRows);
     renderer.clearScreen();
     drawChrome();
     renderUi();
   }
   drawFooter();
   renderer.displayBuffer();
+  lastRenderedTop = activeNav().top;
+  partialRefreshCount = 0;
+}
+
+bool UiListActivity::tryRenderSelectionDelta(const int fromIndex) {
+  auto& n = activeNav();
+  // Preconditions: a completed full render to diff against (lastRenderedTop
+  // is only set at the end of the full path), an unchanged viewport, both
+  // rows tracked by the last build's layout, chrome that doesn't depend on
+  // the selection, and the ghosting budget.
+  if (fromIndex < 0 || fromIndex == n.selected) return false;
+  if (selectionDeltaNeedsFullChrome()) return false;
+  if (partialRefreshCount >= PARTIAL_REFRESH_LIMIT) return false;
+  if (lastRenderedTop < 0 || n.top != lastRenderedTop) return false;
+  fui::Rect fromRect{}, toRect{};
+  if (!n.rowRectFor(fromIndex, &fromRect) || !n.rowRectFor(n.selected, &toRect)) return false;
+
+  // Union of the two rows (rows share x/width; selection markers and row
+  // insets live within the row rects).
+  const int x0 = std::min(fromRect.x, toRect.x);
+  const int y0 = std::min(fromRect.y, toRect.y);
+  const int x1 = std::max(fromRect.right(), toRect.right());
+  const int y1 = std::max(fromRect.bottom(), toRect.bottom());
+
+  // Rebuild the frame under a draw clip: only ops touching the band repaint
+  // (everything else is identical to the last frame by precondition). Clear
+  // the band first — a deselected row's background may be transparent, which
+  // would leave the old highlight underneath.
+  renderer.setDrawClip(y0, y1 - y0);
+  renderer.fillRect(x0, y0, x1 - x0, y1 - y0, false);
+  renderUi();
+  renderer.clearDrawClip();
+
+  // Layout surprises (list mutated under us, selection clipped) fall back to
+  // the full path with a coherent full repaint.
+  if (n.consumeRebuildNeeded() || n.top != lastRenderedTop) return false;
+
+  if (!renderer.displayRegion(x0, y0, x1 - x0, y1 - y0)) return false;
+  partialRefreshCount++;
+  return true;
 }

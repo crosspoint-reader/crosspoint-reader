@@ -660,6 +660,13 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
     return;
   }
 
+  // Selection-delta repaint: strings whose line band can't touch the clip
+  // draw identical pixels anyway — skip the whole measure/blit (and any SD
+  // fallback work) for them.
+  if (drawClipRejects(y, getLineHeight(resolvedFontId))) {
+    return;
+  }
+
   // Redirected to the SD fallback: batch-load the string's glyphs so the draw
   // loop below doesn't fault them in one SD read at a time (#2725).
   if (resolvedFontId != fontId) {
@@ -984,6 +991,7 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
   if constexpr (C == Color::Clear) return;
   if (width <= 0 || height <= 0) return;
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
+  if (drawClipRejects(y, height)) return;  // selection-delta repaint filter
 
   // Clip in logical space.
   const int screenW = getScreenWidth();
@@ -1690,6 +1698,21 @@ void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) 
 }
 
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
+
+void GfxRenderer::setDrawClip(const int y, const int h) {
+  drawClipY0_ = y;
+  drawClipY1_ = y + h;
+  drawClipActive_ = h > 0;
+}
+
+void GfxRenderer::clearDrawClip() { drawClipActive_ = false; }
+
+bool GfxRenderer::displayRegion(const int x, const int y, const int w, const int h) {
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
+  if (!mem.valid) return false;
+  display.displayWindow(mem.x, mem.y, mem.w, mem.h);
+  return true;
+}
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
 
