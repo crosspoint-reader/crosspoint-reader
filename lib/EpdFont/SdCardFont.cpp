@@ -752,14 +752,14 @@ int32_t SdCardFont::findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) 
 // --- Prewarm ---
 
 namespace {
-const char* singleTextGetter(void* ctx, uint32_t) { return static_cast<const char*>(ctx); }
+const char* singleTextGetter(const void* ctx, uint32_t) { return static_cast<const char*>(ctx); }
 }  // namespace
 
 int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOnly, bool loadKernLig) {
-  return prewarm(&singleTextGetter, const_cast<char*>(utf8Text), 1, styleMask, metadataOnly, loadKernLig);
+  return prewarm(&singleTextGetter, utf8Text, 1, styleMask, metadataOnly, loadKernLig);
 }
 
-int SdCardFont::prewarm(TextGetter getter, void* ctx, uint32_t textCount, uint8_t styleMask, bool metadataOnly,
+int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, uint8_t styleMask, bool metadataOnly,
                         bool loadKernLig) {
   if (!loaded_ || getter == nullptr) return -1;
   styleMask = resolveStyleMask(styleMask);

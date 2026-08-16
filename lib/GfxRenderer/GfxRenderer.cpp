@@ -210,8 +210,8 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
   return fontId;
 }
 
-void GfxRenderer::prewarmFallbackText(const int fontId, const TextGetter getter, void* ctx, const uint32_t textCount,
-                                      const EpdFontFamily::Style style) const {
+void GfxRenderer::prewarmFallbackText(const int fontId, const TextGetter getter, const void* ctx,
+                                      const uint32_t textCount, const EpdFontFamily::Style style) const {
   if (getter == nullptr || textCount == 0) {
     return;
   }
@@ -236,10 +236,10 @@ void GfxRenderer::prewarmFallbackText(const int fontId, const TextGetter getter,
   // on the first repaint.
   struct WrapCtx {
     TextGetter getter;
-    void* ctx;
+    const void* ctx;
     uint32_t count;
   } wrap{getter, ctx, textCount};
-  const auto withEllipsis = [](void* wc, uint32_t i) -> const char* {
+  const auto withEllipsis = [](const void* wc, uint32_t i) -> const char* {
     const auto* w = static_cast<const WrapCtx*>(wc);
     return i < w->count ? w->getter(w->ctx, i) : "\xe2\x80\xa6";
   };

@@ -113,7 +113,7 @@ void FileBrowserActivity::rebuildRowItems() {
   } prewarmCtx{&rowNames, &basepath};
   renderer.prewarmFallbackText(
       uiScaleSpec().smallFontId,
-      [](void* ctx, uint32_t i) -> const char* {
+      [](const void* ctx, uint32_t i) -> const char* {
         const auto* c = static_cast<const PrewarmCtx*>(ctx);
         return i < c->names->size() ? (*c->names)[i].c_str() : c->path->c_str();
       },

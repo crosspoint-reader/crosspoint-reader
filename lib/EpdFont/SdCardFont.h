@@ -57,9 +57,9 @@ class SdCardFont {
   // UI fallback text (CJK titles) has no useful kern pairs, and the ~3KB class
   // tables plus per-rebuild matrix work were enough to OOM the batch on
   // heap-tight screens. Reader-quality paths keep the default.
-  using TextGetter = const char* (*)(void* ctx, uint32_t index);
-  int prewarm(TextGetter getter, void* ctx, uint32_t textCount, uint8_t styleMask = 0x0F, bool metadataOnly = false,
-              bool loadKernLig = true);
+  using TextGetter = const char* (*)(const void* ctx, uint32_t index);
+  int prewarm(TextGetter getter, const void* ctx, uint32_t textCount, uint8_t styleMask = 0x0F,
+              bool metadataOnly = false, bool loadKernLig = true);
 
   // Build a compact advance-only table for layout measurement.
   // Extracts ALL unique codepoints from words (no MAX_PAGE_GLYPHS cap),

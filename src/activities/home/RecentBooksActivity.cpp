@@ -51,13 +51,13 @@ void RecentBooksActivity::rebuildRowItems() {
   const auto count = static_cast<uint32_t>(recentBooks.size());
   renderer.prewarmFallbackText(
       uiScaleSpec().smallFontId,
-      [](void* ctx, uint32_t i) -> const char* {
+      [](const void* ctx, uint32_t i) -> const char* {
         return (*static_cast<const std::vector<RecentBook>*>(ctx))[i].title.c_str();
       },
       &recentBooks, count, EpdFontFamily::BOLD);
   renderer.prewarmFallbackText(
       uiScaleSpec().smallFontId,
-      [](void* ctx, uint32_t i) -> const char* {
+      [](const void* ctx, uint32_t i) -> const char* {
         return (*static_cast<const std::vector<RecentBook>*>(ctx))[i].author.c_str();
       },
       &recentBooks, count);

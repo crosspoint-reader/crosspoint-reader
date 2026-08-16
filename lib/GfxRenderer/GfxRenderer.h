@@ -144,8 +144,8 @@ class GfxRenderer {
   // must NOT build a concatenated std::string: its bare-new growth aborts on
   // the heap-tight screens this exists for). A null getter result skips that
   // index.
-  using TextGetter = const char* (*)(void* ctx, uint32_t index);
-  void prewarmFallbackText(int fontId, TextGetter getter, void* ctx, uint32_t textCount,
+  using TextGetter = const char* (*)(const void* ctx, uint32_t index);
+  void prewarmFallbackText(int fontId, TextGetter getter, const void* ctx, uint32_t textCount,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void prewarmFallbackText(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   bool isFontCacheScanning() const;

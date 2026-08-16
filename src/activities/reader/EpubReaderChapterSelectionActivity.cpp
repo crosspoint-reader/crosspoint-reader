@@ -77,7 +77,7 @@ void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start) {
   } prewarmCtx{windowLabels, windowCount};
   renderer.prewarmFallbackText(
       uiScaleSpec().bodyFontId,
-      [](void* ctx, uint32_t i) -> const char* {
+      [](const void* ctx, uint32_t i) -> const char* {
         const auto* c = static_cast<const PrewarmCtx*>(ctx);
         return i < static_cast<uint32_t>(c->count) ? c->labels[i].c_str() : nullptr;
       },
