@@ -76,16 +76,6 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
-  // Selection-delta draw clip (logical y band). See setDrawClip().
-  int drawClipY0_ = 0;
-  int drawClipY1_ = 0;
-  bool drawClipActive_ = false;
-  // True when a vertical span [y, y+h) lies entirely outside the clip band
-  // (with 2px slack for glyph overhang). Draw ops use this to skip work.
-  bool drawClipRejects(const int y, const int h) const {
-    return drawClipActive_ && (y + h + 2 <= drawClipY0_ || y - 2 >= drawClipY1_);
-  }
-
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
   // or measured with a mapped primary font contains a CJK codepoint the primary
@@ -158,19 +148,6 @@ class GfxRenderer {
   void prewarmFallbackText(int fontId, TextGetter getter, void* ctx, uint32_t textCount,
                            EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   void prewarmFallbackText(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
-  // Coarse CPU clip for selection-delta repaints (see UiListActivity): text
-  // and fill calls whose vertical band cannot touch [y, y+h) are skipped;
-  // everything else draws in full. The caller guarantees frame content
-  // outside the clip is identical to the previous frame, so over-draw outside
-  // the band repaints the same pixels — this is a work filter, not pixel
-  // clipping. Cleared by clearDrawClip().
-  void setDrawClip(int y, int h);
-  void clearDrawClip();
-  // Windowed panel refresh of a logical-coordinate rect (byte-aligned
-  // internally, differential fast update — see HalDisplay::displayWindow).
-  // Returns false for an empty/off-screen rect: caller should fall back to a
-  // full displayBuffer().
-  bool displayRegion(int x, int y, int w, int h);
   bool isFontCacheScanning() const;
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }

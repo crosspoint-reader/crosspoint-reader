@@ -50,10 +50,6 @@ class FileBrowserActivity final : public UiListActivity {
   // footer labels depend on path depth and picker mode.
   void drawChrome() override;
   void drawFooter() override;
-  // In the firmware picker the footer's Confirm label tracks the selected
-  // row's type (.bin file vs directory), so a selection move must repaint the
-  // chrome — no partial fast path there.
-  bool selectionDeltaNeedsFullChrome() const override { return mode == Mode::PickFirmware; }
   // forceDelete routes the touch long-press to the delete branch; button
   // navigation leaves it false and relies on getHeldTime() instead.
   void activateSelected(bool forceDelete = false);

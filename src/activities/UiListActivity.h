@@ -65,11 +65,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Button hints, drawn after the app renders. Default: Back/Select/Up/Down.
   virtual void drawFooter();
 
-  // True when moving the selection can change chrome/footer content (e.g. a
-  // footer label that depends on the selected row's type). Disables the
-  // selection-delta partial repaint, which redraws only the two affected rows.
-  virtual bool selectionDeltaNeedsFullChrome() const { return false; }
-
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
   // viewport, and write selection/viewport into props. Call from buildScreen
@@ -93,20 +88,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Named apart from UiAppHost::routeTouch so the host overload stays visible
   // (not name-hidden) to subclasses with extra touch surfaces.
   bool routeListTouch();
-  // Selection-delta fast path: when only the selection moved within an
-  // unchanged viewport, rebuild under a draw clip covering the two affected
-  // rows and push a windowed panel refresh instead of a full one. Returns
-  // false when the preconditions don't hold (caller runs the full render).
-  bool tryRenderSelectionDelta(int fromIndex);
 
   const bool wantsTouchLongPress;
-
-  // Selection-delta bookkeeping (see tryRenderSelectionDelta).
-  bool selectionDeltaPending = false;
-  int selectionDeltaFrom = -1;
-  int lastRenderedTop = -1;
-  // Ghosting policy: differential window refreshes accumulate ghosting, so
-  // every Nth selection move falls back to a full repaint + FAST refresh.
-  static constexpr uint8_t PARTIAL_REFRESH_LIMIT = 12;
-  uint8_t partialRefreshCount = 0;
 };
