@@ -767,6 +767,42 @@ int SdCardFont::prewarm(TextGetter getter, void* ctx, uint32_t textCount, uint8_
 
   unsigned long startMs = millis();
 
+  // Cap the unique-codepoint budget by what the heap can actually hold as a
+  // full mini arena (glyph structs + bitmaps, working headroom left over).
+  // Multi-string batches only: a several-hundred-chapter CJK table of
+  // contents would otherwise extract up to MAX_PAGE_GLYPHS and fail the whole
+  // arena allocation — better to load the first screens' worth and let
+  // scrolling union-in the rest page by page. Per-string requests are small
+  // and already bounded by the union gate in prewarmStyle (running the check
+  // there would also log per draw call); metadata-only prewarms load no
+  // bitmaps. Bytes/glyph prefers the measured average from the resident mini:
+  // Hangul ink boxes run well under the advanceY-squared em estimate, which
+  // otherwise roughly halves the usable budget.
+  uint32_t cpBudget = MAX_PAGE_GLYPHS;
+  if (!metadataOnly && textCount > 1) {
+    uint8_t refStyle = MAX_STYLES;
+    for (uint8_t si = 0; si < MAX_STYLES && refStyle == MAX_STYLES; si++) {
+      if ((styleMask & (1 << si)) && styles_[si].present) refStyle = si;
+    }
+    if (refStyle < MAX_STYLES) {
+      const auto& s = styles_[refStyle];
+      const uint32_t bpp = s.header.is2Bit ? 2 : 1;
+      uint32_t bitmapPerGlyph = (static_cast<uint32_t>(s.header.advanceY) * s.header.advanceY * bpp) / 8 + 4;
+      if (s.miniGlyphCount > 0 && s.miniBitmapUsed > 0) {
+        bitmapPerGlyph = s.miniBitmapUsed / s.miniGlyphCount;
+      }
+      const uint32_t perGlyph = bitmapPerGlyph + sizeof(EpdGlyph);
+      constexpr uint32_t PREWARM_HEAP_HEADROOM = 16 * 1024;
+      const uint32_t freeHeap = ESP.getFreeHeap();
+      const uint32_t budgetBytes = freeHeap > PREWARM_HEAP_HEADROOM ? freeHeap - PREWARM_HEAP_HEADROOM : 0;
+      const uint32_t budgetGlyphs = budgetBytes / (perGlyph > 0 ? perGlyph : 1);
+      if (budgetGlyphs < cpBudget) {
+        cpBudget = budgetGlyphs;
+      }
+    }
+  }
+  if (cpBudget == 0) return -1;
+
   // Step 1: Extract unique codepoints from the UTF-8 texts (shared across all styles).
   // Dedup uses O(n^2) linear scan — worst case is MAX_PAGE_GLYPHS (512) unique codepoints
   // = ~131K comparisons, but in practice pages contain far fewer unique codepoints so the
@@ -780,11 +816,11 @@ int SdCardFont::prewarm(TextGetter getter, void* ctx, uint32_t textCount, uint8_
   }
   uint32_t cpCount = 0;
 
-  for (uint32_t ti = 0; ti < textCount && cpCount < MAX_PAGE_GLYPHS; ti++) {
+  for (uint32_t ti = 0; ti < textCount && cpCount < cpBudget; ti++) {
     const char* text = getter(ctx, ti);
     if (text == nullptr) continue;
     const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-    while (*p && cpCount < MAX_PAGE_GLYPHS) {
+    while (*p && cpCount < cpBudget) {
       uint32_t cp = utf8NextCodepoint(&p);
       if (cp == 0) break;
 

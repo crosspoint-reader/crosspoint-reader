@@ -2,7 +2,6 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
-#include <Logging.h>
 
 #include <algorithm>
 
@@ -69,18 +68,24 @@ bool UiListActivity::routeListTouch() {
 }
 
 void UiListActivity::moveSelectionTo(const int index) {
-  auto& n = activeNav();
-  const int previous = n.selected;
-  n.selected = index;
-  n.follow(listCount());
-  // Arm the selection-delta fast path; render() falls back to a full repaint
-  // unless the viewport provably didn't move. Any other requestUpdate source
-  // (data reload, touch action, custom input) never arms it. Coalesced moves
-  // (several presses before one render) keep the ORIGINAL from-row: that is
-  // the row still highlighted in the framebuffer.
-  if (previous != index) {
-    if (!selectionDeltaPending) selectionDeltaFrom = previous;
-    selectionDeltaPending = true;
+  {
+    // The render task reads nav + the delta flags mid-render; a press landing
+    // during a render would otherwise tear them and a delta pass could
+    // highlight a row outside the window it refreshes.
+    RenderLock lock(*this);
+    auto& n = activeNav();
+    const int previous = n.selected;
+    n.selected = index;
+    n.follow(listCount());
+    // Arm the selection-delta fast path; render() falls back to a full repaint
+    // unless the viewport provably didn't move. Any other requestUpdate source
+    // (data reload, touch action, custom input) never arms it. Coalesced moves
+    // (several presses before one render) keep the ORIGINAL from-row: that is
+    // the row still highlighted in the framebuffer.
+    if (previous != index) {
+      if (!selectionDeltaPending) selectionDeltaFrom = previous;
+      selectionDeltaPending = true;
+    }
   }
   requestUpdate();
 }
