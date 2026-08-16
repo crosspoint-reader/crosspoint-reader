@@ -3990,6 +3990,64 @@ function resolvePath(basePath, href) {
   return resolved.replace(/\/+/g, '/');
 }
 
+/** Remove XML comments from XHTML source text. Returns {text, count, bytes}. */
+function stripComments(xml) {
+  const SKIPPED = [
+    { open: '<![CDATA[', close: ']]>' },
+    { open: '<?', close: '?>' },
+  ];
+
+  const encoder = new TextEncoder();
+  const out = [];
+  let i = 0;
+  let count = 0;
+  let bytes = 0;
+
+  const doctypeEnd = (from) => {
+    const gt = xml.indexOf('>', from);
+    const subset = xml.indexOf('[', from);
+    if (subset < 0 || (gt >= 0 && subset > gt)) return gt < 0 ? xml.length : gt + 1;
+    const close = xml.indexOf(']>', subset);
+    return close < 0 ? xml.length : close + 2;
+  };
+
+  while (i < xml.length) {
+    const next = xml.indexOf('<', i);
+    if (next < 0) { out.push(xml.slice(i)); break; }
+    if (next > i) out.push(xml.slice(i, next));
+
+    if (xml.startsWith('<!--', next)) {
+      const close = xml.indexOf('-->', next + 4);
+      const end = close < 0 ? xml.length : close + 3;
+      count++;
+      bytes += encoder.encode(xml.slice(next, end)).length;
+      i = end;
+      continue;
+    }
+
+    if (xml.startsWith('<!DOCTYPE', next)) {
+      const end = doctypeEnd(next + 9);
+      out.push(xml.slice(next, end));
+      i = end;
+      continue;
+    }
+
+    const skipped = SKIPPED.find(s => xml.startsWith(s.open, next));
+    if (skipped) {
+      const close = xml.indexOf(skipped.close, next + skipped.open.length);
+      const end = close < 0 ? xml.length : close + skipped.close.length;
+      out.push(xml.slice(next, end));
+      i = end;
+      continue;
+    }
+
+    out.push('<');
+    i = next + 1;
+  }
+
+  return { text: out.join(''), count, bytes };
+}
+
 /**
  * Serialize an XML doc back to string, preserving the original <?xml?> declaration
  * and cleaning up XMLSerializer namespace prefix noise (xmlns:ns0 etc).
@@ -5024,6 +5082,13 @@ async function convertEpubFile(file, progressCallback) {
   for (const [xhtmlPath, content] of Object.entries(xhtmlFiles)) {
     if (operationCancelled) throw new Error('Cancelled by user');
     let t = content;
+
+    const stripped = stripComments(t);
+    if (stripped.count) {
+      t = stripped.text;
+      logFix(`Comments (${stripped.count}, ${formatBytes(stripped.bytes)})`, xhtmlPath.split('/').pop());
+    }
+
     const r = fixSvgCover(t);
     if (r.fixed) { t = r.c; logFix('SVG cover', xhtmlPath.split('/').pop()); }
 
