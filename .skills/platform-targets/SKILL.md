@@ -1,6 +1,6 @@
 ---
 name: platform-targets
-description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM / BOARD_HAS_PSRAM, panel size, framebuffer, controller, touch, frontlight, uiScale, or bezel insets; when adding, correcting, or removing a device or env; when changing this skill's resource schema; or when AGENTS.md defers a hardware number here."
+description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, frontlight, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; or when AGENTS.md defers a hardware number here."
 ---
 
 # Platform Targets
@@ -38,7 +38,9 @@ It does **not** limit which resource files may exist or be refreshed.
 
 1. **Can build.** Parse committed `platformio.ini` for `[env:…]` and that env's
    `-DFREEINK_DEVICE_*`, `-DBOARD_HAS_PSRAM`, `-DUSE_BLOCK_DEVICE_INTERFACE`.
-   Treat `*-gh_release*` as aliases of the same env class.
+   Release and slim siblings (`gh_release`, `gh_release_rc`, `sticky-gh_release`,
+   `slim`, and the same family under other prefixes) are the same env class.
+   Match by name family, not a glob. The list is not exhaustive.
 2. **Should build.** Collect every `-e` argument and every CI `matrix.env` from
    `pio run` lines in `.github/workflows/ci.yml`. If INI and CI disagree, say
    so; do not invent a third list. `pio check` is not a device gate.
@@ -106,7 +108,7 @@ integrations and against every file in `resources/` (see SCHEMA.md).
 | Which `[env:…]` exist here? | committed `platformio.ini` |
 | Which device flags does each env set? | that env's `-DFREEINK_DEVICE_*` |
 | Which envs CI builds? | every `-e` / `matrix.env` on `pio run` in `.github/workflows/ci.yml` |
-| Shared-binary aliases? | same flags on `*-gh_release*`, `*-gh_release_rc`, `slim` siblings |
+| Shared-binary aliases? | same flags on release/slim siblings of that env (name family, not a glob) |
 
 | Field | Source |
 | --- | --- |

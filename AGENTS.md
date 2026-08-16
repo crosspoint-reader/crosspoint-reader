@@ -107,7 +107,7 @@ Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, fr
 
 * **Standard**: C++20 (`-std=c++2a`). No exceptions (`-fno-exceptions` in `platformio.ini`). RTTI is not pinned in this INI — confirm the env's compiler command if you need it.
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
-* **Environments**: whatever `[env:…]` is in committed `platformio.ini`. Device flags and hardware numbers live in the `platform-targets` skill. `LOG_LEVEL` and serial are per-env in the INI (`default` is typically 2; `*-gh_release*` typically 1).
+* **Environments**: whatever `[env:…]` is in committed `platformio.ini`. Device flags and hardware numbers live in the `platform-targets` skill. `LOG_LEVEL` and serial are per-env in the INI (`default` is typically 2; release siblings typically 1).
 
 ### Critical Build Flags
 
