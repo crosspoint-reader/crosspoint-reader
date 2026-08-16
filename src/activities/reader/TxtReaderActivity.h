@@ -2,26 +2,27 @@
 
 #include <Txt.h>
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/Activity.h"
+#include "ReaderActivity.h"
 
-class TxtReaderActivity final : public Activity {
+class TxtReaderActivity final : public ReaderActivity {
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
   int totalPages = 1;
-  int pagesUntilFullRefresh = 0;
 
   // Streaming text reader - stores file offsets for each page
-  std::vector<size_t> pageOffsets;  // File offset for start of each page
+  std::vector<size_t> pageOffsets;
   std::vector<std::string> currentPageLines;
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
 
-  // Cached settings for cache validation (different fonts/margins require re-indexing)
+  // Cached settings for cache validation
   int cachedFontId = 0;
   uint8_t cachedScreenMargin = 0;
   uint8_t cachedParagraphAlignment = CrossPointSettings::LEFT_ALIGN;
@@ -30,35 +31,30 @@ class TxtReaderActivity final : public Activity {
   int cachedOrientedMarginBottom = 0;
   int cachedOrientedMarginLeft = 0;
 
-  void renderPage();
-  void renderStatusBar() const;
-
-  void initializeReader();
-  bool loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
-  void buildPageIndex();
+  void renderPage(GfxRenderer& renderer);
+  void initializeReader(GfxRenderer& renderer);
+  bool loadPageAtOffset(GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
+  void buildPageIndex(GfxRenderer& renderer);
   bool loadPageIndexCache();
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+  void renderStatusBar() const;
+
+  bool loadBook() override;
+  std::string getBookTitle() const override { return txt ? txt->getTitle() : ""; }
+  void renderBook() override;
 
  public:
-  explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,
-                             int initialRefreshCountdown)
-      : Activity("TxtReader", renderer, mappedInput),
-        txt(std::move(txt)),
-        pagesUntilFullRefresh(initialRefreshCountdown) {}
-  void onEnter() override;
-  void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
-  bool isReaderActivity() const override { return true; }
-  bool handleForcedRefresh() override {
-    {
-      RenderLock lock(*this);
-      pagesUntilFullRefresh = 1;
-    }
-    requestUpdate();
-    return true;
-  }
+  explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
+                             bool allowFastInitialRefresh)
+      : ReaderActivity("TxtReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh) {}
+  ~TxtReaderActivity() override = default;
+
+  bool pageTurn(bool isForward) override;
+  bool skipPages(int amount) override;
+  bool isAtEndOfBook() const override;
+  void onReturnFromEndOfBook() override;
+
   ScreenshotInfo getScreenshotInfo() const override;
 };

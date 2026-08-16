@@ -1,6 +1,7 @@
 #pragma once
 
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "network/OtaUpdater.h"
 
 class OtaUpdateActivity : public Activity {
@@ -21,6 +22,13 @@ class OtaUpdateActivity : public Activity {
   State state = WIFI_SELECTION;
   unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   OtaUpdater updater;
+  // Optional detail line shown under the generic "Update failed" heading.
+  // Points into the i18n string table (flash-resident, so no lifetime concern);
+  // nullptr means no extra detail.
+  const char* failedDetail = nullptr;
+  // Cancel/Update confirmation over the version info (replaces the old
+  // hand-rolled bottom tap rects).
+  OptionPopup confirmPopup;
 
   void onWifiSelectionComplete(bool success);
   void runUpdateInstall();
