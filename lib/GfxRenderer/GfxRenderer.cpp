@@ -1439,6 +1439,10 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
         drawPixel(screenX, screenY, false);
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
         drawPixel(screenX, screenY, false);
+      } else if (renderMode == ABSOLUTE_GRAY_LSB) {
+        drawPixel(screenX, screenY, val & 1);  // 1, 3
+      } else if (renderMode == ABSOLUTE_GRAY_MSB) {
+        drawPixel(screenX, screenY, val > 1);  // 2, 3
       }
     }
   }
@@ -1676,7 +1680,14 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  display.displayBuffer(refreshMode, fadingFix);
+  // After an absolute LUT render, RED RAM still contains the grayscale MSB plane.
+  // Promote the first normal FAST refresh to HALF so both RAM banks are rebased
+  // before differential updates resume.
+  const bool afterAbsoluteLut = displayState == DisplayState::AbsoluteLut;
+  const auto effectiveRefreshMode =
+      afterAbsoluteLut && refreshMode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : refreshMode;
+  display.displayBuffer(effectiveRefreshMode, fadingFix);
+  displayState = DisplayState::BW;
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
@@ -2221,6 +2232,11 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuff
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
 void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
+
+void GfxRenderer::displayAbsoluteGrayBuffer() const {
+  display.displayAbsoluteGrayBuffer(fadingFix);
+  displayState = DisplayState::AbsoluteLut;
+}
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.
