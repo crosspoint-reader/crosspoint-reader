@@ -75,10 +75,6 @@ const char* asCStr(const char* s) { return s; }
 constexpr size_t MINI_RETAIN_MIN_FREE_HEAP = 40 * 1024;
 constexpr uint8_t MINI_UNDERUSE_RUNS_BEFORE_FREE = 3;
 
-// UI glyph pool revival floor: after a heap-critical release, re-allocate the
-// pool block only when comfortably clear of the render path's own floors.
-constexpr size_t UI_POOL_REVIVE_MIN_FREE_HEAP = 64 * 1024;
-
 // UI-size glyph bearings fit int8 with wide margin; clamp defensively so a
 // malformed font cannot wrap instead of merely mis-positioning.
 inline int8_t clampToI8(int16_t v) {
@@ -204,7 +200,12 @@ void SdCardFont::releaseResidentCaches() {
   clearOverflow();
   clearPersistentCache();
   // Single-block free; idempotent across the instances sharing the pool.
-  // Fills lazily revive it via reinit() once the heap recovers.
+  // Fills lazily revive it via reinit() once the heap recovers. While the
+  // heap stays under the revive floor (typically: web server + WiFi up, the
+  // reason this release exists), CJK UI strings render blank instead of
+  // rebuilding caches into a heap that cannot hold them — the degraded-but-
+  // alive counterpart to the OOM aborts this path prevents. Recovery is
+  // automatic on the first fill after the heap clears the floor.
   if (uiPool_) uiPool_->release();
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;
@@ -230,7 +231,10 @@ void SdCardFont::freeAll() {
 }
 
 void SdCardFont::clearOverflow() {
-  for (uint32_t i = 0; i < overflowCount_; i++) {
+  // Sweep every slot, not just the counted ones: pool mode allocates slot
+  // buffers per slot, and a failed decode can roll the count back below an
+  // allocated slot.
+  for (uint32_t i = 0; i < OVERFLOW_CAPACITY; i++) {
     delete[] overflow_[i].bitmap;
     overflow_[i].bitmap = nullptr;
     overflow_[i].codepoint = 0;
@@ -1175,7 +1179,7 @@ int SdCardFont::uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, ui
   auto& s = styles_[styleIdx];
 
   if (!uiPool_->isReady()) {
-    if (ESP.getFreeHeap() < UI_POOL_REVIVE_MIN_FREE_HEAP || !uiPool_->reinit()) {
+    if (ESP.getFreeHeap() < UiGlyphPool::MIN_FREE_HEAP_FOR_ALLOC || !uiPool_->reinit()) {
       return static_cast<int>(cpCount);
     }
   }
@@ -1280,9 +1284,15 @@ int SdCardFont::uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, ui
         uiPool_->insert(uiPoolInstance_, styleIdx, items[i].codepoint, m, nullptr, s.header.is2Bit);
         continue;
       }
-      if (g.dataLength > UiGlyphPool::FILL_SCRATCH_BYTES) {
-        LOG_DBG("SDCF", "UI pool fill: U+%04lX bitmap too large (%u B), skipped",
-                static_cast<unsigned long>(items[i].codepoint), g.dataLength);
+      // Both bounds checked here: the source must fit the read scratch AND
+      // the converted 1-bit form must fit a pool entry. For 2-bit sources the
+      // two are equivalent; for 1-bit sources only the second can bind, and
+      // skipping here (instead of a silent insert() reject) keeps the glyph
+      // counted as unavailable rather than re-fetched on every draw.
+      const uint16_t rawLen1Bit = UiGlyphCodec::packed1BitBytes(static_cast<uint16_t>(g.width) * g.height);
+      if (g.dataLength > UiGlyphPool::FILL_SCRATCH_BYTES || rawLen1Bit > UiGlyphPool::MAX_ENTRY_BYTES) {
+        LOG_DBG("SDCF", "UI pool fill: U+%04lX bitmap too large (%u B src, %u B 1-bit), skipped",
+                static_cast<unsigned long>(items[i].codepoint), g.dataLength, rawLen1Bit);
         continue;
       }
       const uint32_t off = s.bitmapFileOffset + g.dataOffset;
@@ -1329,24 +1339,27 @@ const EpdGlyph* SdCardFont::uiPoolServe(uint8_t styleIdx, uint32_t codepoint) {
   const bool empty = uiPool_->isEmptyBitmap(handle);
 
   const uint32_t slot = overflowNext_;
-  if (overflowCount_ < OVERFLOW_CAPACITY) {
+  const bool counted = overflowCount_ < OVERFLOW_CAPACITY;
+  if (counted) {
     overflowCount_++;
   }
   auto& e = overflow_[slot];
   if (!empty) {
     // Pool-mode slots keep a fixed MAX_ENTRY_BYTES buffer (insert() bounds
-    // every glyph to it), allocated once per slot and reused.
+    // every glyph to it), allocated once per slot and reused. clearOverflow()
+    // sweeps all slots, so a buffer left above the count after a rollback
+    // cannot leak.
     if (!e.bitmap) {
       e.bitmap = new (std::nothrow) uint8_t[UiGlyphPool::MAX_ENTRY_BYTES];
       if (!e.bitmap) {
         LOG_ERR("SDCF", "UI pool serve: OOM for decode slot");
-        if (overflowCount_ > 0 && slot == overflowCount_ - 1) overflowCount_--;
+        if (counted) overflowCount_--;
         return nullptr;
       }
     }
     if (!uiPool_->copyBitmap(handle, e.bitmap, UiGlyphPool::MAX_ENTRY_BYTES)) {
       LOG_ERR("SDCF", "UI pool serve: decode failed for U+%04lX", static_cast<unsigned long>(codepoint));
-      if (overflowCount_ > 0 && slot == overflowCount_ - 1) overflowCount_--;
+      if (counted) overflowCount_--;
       return nullptr;
     }
   }

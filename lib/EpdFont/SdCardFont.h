@@ -87,8 +87,10 @@ class SdCardFont {
   // mode prewarm() batch-fills the pool instead of rebuilding arenas, and
   // per-glyph lookups are served through the glyph-miss path with bitmaps
   // decoded to 1-bit (pixel-exact for BW-mode UI rendering, which is the only
-  // mode UI text uses). Kerning/ligatures are skipped (CJK has ~none). The
-  // pool is owned by the caller and shared between instances.
+  // mode UI text uses). Kerning is preserved: class IDs ride in the pool
+  // entries and pair values come from a shared sparse cache prefetched during
+  // prewarm. Only ligatures are skipped (CJK has none). The pool is owned by
+  // the caller and shared between instances.
   void enableUiGlyphPool(UiGlyphPool* pool, uint8_t instanceId);
   // Returns nullptr if the style is not present.
   EpdFont* getEpdFont(uint8_t style = 0);

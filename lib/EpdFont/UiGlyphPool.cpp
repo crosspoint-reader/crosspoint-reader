@@ -17,6 +17,7 @@ bool UiGlyphPool::init(size_t arenaBytes, uint16_t maxEntries) {
 bool UiGlyphPool::reinit() {
   if (block_) return true;
   if (initArenaBytes_ == 0 || initMaxEntries_ == 0) return false;
+  if (initArenaBytes_ > 0xFFFFu) return false;  // Entry::offset/length are uint16_t
   const size_t total = static_cast<size_t>(initMaxEntries_) * sizeof(Entry) + initArenaBytes_;
   block_ = makeUniqueNoThrow<uint8_t[]>(total);
   if (!block_) {

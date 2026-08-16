@@ -188,8 +188,8 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
     // raw-stored outliers and inkier families. 12KB left ~4KB unreachable.
     constexpr size_t UI_POOL_ARENA_BYTES = 8 * 1024;
     constexpr uint16_t UI_POOL_MAX_ENTRIES = 384;
-    constexpr size_t UI_POOL_MIN_FREE_HEAP = 64 * 1024;
-    if (ESP.getFreeHeap() >= UI_POOL_MIN_FREE_HEAP && uiGlyphPool_.init(UI_POOL_ARENA_BYTES, UI_POOL_MAX_ENTRIES)) {
+    if (ESP.getFreeHeap() >= UiGlyphPool::MIN_FREE_HEAP_FOR_ALLOC &&
+        uiGlyphPool_.init(UI_POOL_ARENA_BYTES, UI_POOL_MAX_ENTRIES)) {
       const auto& sdFonts = renderer.getSdCardFonts();
       for (int i = 0; i < fallbackCount; i++) {
         const auto it = sdFonts.find(fallbackFontIds[i]);

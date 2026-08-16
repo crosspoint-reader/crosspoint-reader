@@ -26,6 +26,9 @@ struct TestGlyph {
 
 uint32_t lcgState = 0x12345678;
 uint32_t lcg() { return lcgState = lcgState * 1664525u + 1013904223u; }
+// Each test reseeds so its corpus/op stream is identical under --gtest_filter,
+// --gtest_shuffle, and full-suite runs alike.
+void seedLcg() { lcgState = 0x12345678; }
 
 // Build a glyph from a per-pixel 2-bit value generator.
 template <typename Fn>
@@ -76,6 +79,7 @@ std::vector<TestGlyph> syntheticCorpus() {
 }  // namespace
 
 TEST(UiGlyphCodec, RoundtripPixelExact) {
+  seedLcg();
   uint8_t enc[UiGlyphPool::MAX_ENTRY_BYTES];
   uint8_t dec[UiGlyphPool::MAX_ENTRY_BYTES];
   int encoded = 0;
@@ -114,6 +118,7 @@ TEST(UiGlyphCodec, ConvertMatchesThreshold) {
 }
 
 TEST(UiGlyphPool, InsertFindDecode) {
+  seedLcg();
   UiGlyphPool pool;
   ASSERT_TRUE(pool.init(4096, 64));
   const auto corpus = syntheticCorpus();
@@ -138,6 +143,7 @@ TEST(UiGlyphPool, InsertFindDecode) {
 }
 
 TEST(UiGlyphPool, EvictionFuzzServesExactContent) {
+  seedLcg();
   UiGlyphPool pool;
   ASSERT_TRUE(pool.init(1024, 24));  // tiny: constant eviction
   const auto corpus = syntheticCorpus();
@@ -179,6 +185,7 @@ TEST(UiGlyphPool, EvictionFuzzServesExactContent) {
 }
 
 TEST(UiGlyphPool, SameStringFillSurvivesFullPool) {
+  seedLcg();
   UiGlyphPool pool;
   ASSERT_TRUE(pool.init(1024, 32));
   const auto corpus = syntheticCorpus();

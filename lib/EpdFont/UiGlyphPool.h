@@ -50,6 +50,11 @@ class UiGlyphPool {
   // Largest stored (encoded or raw 1-bit) bitmap; larger glyphs are rejected
   // and fall back to the caller's uncached path.
   static constexpr uint16_t MAX_ENTRY_BYTES = 160;
+  // One heap-floor policy for both allocation gates: the initial init() at
+  // font setup and the lazy reinit() after a heap-critical release. Keeping
+  // them equal means the pool never revives into a heap it would not have
+  // been created in.
+  static constexpr size_t MIN_FREE_HEAP_FOR_ALLOC = 64 * 1024;
   // Scratch large enough for the biggest raw .cpfont bitmap a fill reads
   // (2-bit at MAX_ENTRY_BYTES-scale glyphs).
   static constexpr uint16_t FILL_SCRATCH_BYTES = 320;
