@@ -141,7 +141,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See `GfxRenderer::storeBwBuffer` / `restoreBwBuffer` for the temporary-buffer malloc
 
 ### Directory Structure
 
@@ -193,7 +193,7 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 
 **SdFat is not thread-safe; all SD access MUST go through HalStorage**:
 
-- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert (`tasks.c:5156, pxTCB == pxCurrentTCBs[0]`) and panics the system. See SdFat issue #518.
+- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert and panics the system. See SdFat issue #518.
 - `HalStorage` serializes everything via `storageMutex`. Downstream code uses `HalFile` (declared in `<HalStorage.h>`); every method call (read, write, seek, close) takes the mutex. `HalFile`'s destructor also takes the mutex before letting the underlying SdFat `FsFile` close.
 - **Never** call into `SdFat` / `SdSpiCard` / `FsBaseFile` / `SDCardManager` / raw `FsFile` directly — that bypasses the mutex.
 
@@ -311,7 +311,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: `LOG_ERR` return paths in `GfxRenderer` (e.g. missing framebuffer) and `ActivityManager`
 
 **Pattern Hierarchy**:
 
@@ -360,9 +360,9 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 **Examples in codebase**:
 
-- Memory utilities: [Memory.h](lib/Memory/Memory.h) (`makeUniqueNoThrow`)
-- Cover image buffers: [HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp)
+- Memory utilities: `makeUniqueNoThrow` in `lib/Memory/Memory.h`
+- Cover image buffers: `HomeActivity::storeCoverBuffer`
+- Grayscale / BW backup: `GfxRenderer::storeBwBuffer`
 
 ### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
@@ -414,7 +414,7 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](src/MappedInputManager.cpp)
+**Source**: `MappedInputManager::mapButton` / `mapScreenDirection`
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -474,29 +474,25 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 
 ### Activity Lifecycle and Memory Management
 
-**Source**: [src/main.cpp:132-143](src/main.cpp)
+**Source**: `ActivityManager` (`replaceActivity`, `pushActivity`, `popActivity`, `exitActivity`)
 
-**CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
+**CRITICAL**: Activities are **heap-allocated** (`std::unique_ptr<Activity>`) and destroyed on exit.
 
 ```cpp
-// main.cpp navigation pattern
-void exitActivity() {
-  if (currentActivity) {
-    currentActivity->onExit();
-    delete currentActivity;  // Activity deleted here!
-    currentActivity = nullptr;
-  }
+// ActivityManager navigation
+void ActivityManager::exitActivity(...) {
+  currentActivity->onExit();
+  currentActivity.reset();  // unique_ptr deletes the activity
 }
 
-void enterNewActivity(Activity* activity) {
-  currentActivity = activity;  // Heap-allocated activity
-  currentActivity->onEnter();
+void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  // drops the stack, replaces currentActivity, calls onEnter
 }
 ```
 
 **Memory Implications**:
 
-- Activity navigation = `delete` old activity + `new` create next activity
+- Activity navigation = destroy old activity + create next activity
 - Any memory allocated in `onEnter()` MUST be freed in `onExit()`
 - FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
 - Member `FsFile` handles MUST be closed in `onExit()` (local `FsFile` variables auto-close via destructor)
@@ -513,9 +509,9 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: `ActivityManager::renderTaskTrampoline` / `xTaskCreatePinnedToCore`
 
-**Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
+**Pattern**: See Activity Lifecycle above. `xTaskCreatePinnedToCore(&renderTaskTrampoline, "Name", stackSize, this, …)`
 
 **Stack Sizing** (in BYTES, not words):
 
@@ -527,7 +523,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](src/main.cpp)
+**Source**: global `EpdFont` / `EpdFontFamily` objects and `renderer.insertFont` in `src/main.cpp`
 
 **All fonts are loaded as global static objects** at firmware startup:
 
@@ -841,7 +837,7 @@ renderer.drawText(FONT_UI, x, y, tr(STR_LOADING), true);
 
 1. Place source fonts in `lib/EpdFont/fontsrc/` (gitignored)
 2. Run conversion script (see `lib/EpdFont/README`)
-3. Update global font objects in `src/main.cpp:40-115`
+3. Update the global `EpdFont` / `EpdFontFamily` objects and `renderer.insertFont` calls in `src/main.cpp`
 4. Add font ID constant to `src/fontIds.h`
 
 ---
