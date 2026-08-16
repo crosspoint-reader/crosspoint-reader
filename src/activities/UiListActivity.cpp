@@ -66,9 +66,14 @@ bool UiListActivity::routeListTouch() {
 }
 
 void UiListActivity::moveSelectionTo(const int index) {
-  auto& n = activeNav();
-  n.selected = index;
-  n.follow(listCount());
+  {
+    // The render task reads nav mid-build (syncToProps, layout feedback); a
+    // press landing during a render would otherwise tear selection/viewport.
+    RenderLock lock(*this);
+    auto& n = activeNav();
+    n.selected = index;
+    n.follow(listCount());
+  }
   requestUpdate();
 }
 
@@ -81,9 +86,16 @@ void UiListActivity::loop() {
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
-    auto& n = activeNav();
-    const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.pageRows() : -n.pageRows();
-    if (n.scrollBy(delta, listCount())) requestUpdate();
+    bool moved = false;
+    {
+      // Same nav-vs-render race as moveSelectionTo: the render task writes
+      // pageRows/top mid-build, so read and mutate under one lock.
+      RenderLock lock(*this);
+      auto& n = activeNav();
+      const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.pageRows() : -n.pageRows();
+      moved = n.scrollBy(delta, listCount());
+    }
+    if (moved) requestUpdate();
     return;
   }
 
