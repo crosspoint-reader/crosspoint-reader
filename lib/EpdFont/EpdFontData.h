@@ -213,4 +213,11 @@ typedef struct {
   /// answer from RAM-resident data without storage I/O.  Shares glyphMissCtx.
   /// nullptr for fonts whose interval table is already complete (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
+
+  /// Kern lookup for fonts that serve glyphs via glyphMissHandler and have no
+  /// resident kern tables (UI glyph pool).  Returns the 4.4 fixed-point kern
+  /// for the pair, 0 if none.  Consulted by getKerning() only when kernMatrix
+  /// is null; must answer from RAM without storage I/O.  Shares glyphMissCtx.
+  /// nullptr everywhere else.
+  int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
 } EpdFontData;

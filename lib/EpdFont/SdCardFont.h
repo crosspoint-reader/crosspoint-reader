@@ -318,6 +318,13 @@ class SdCardFont {
   // UI-pool mode (see enableUiGlyphPool)
   int uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount);
   const EpdGlyph* uiPoolServe(uint8_t styleIdx, uint32_t codepoint);
+  // Cache kern values for the adjacent pairs of utf8Text whose class pair is
+  // not yet cached: one 1-byte read into the on-file matrix per new pair.
+  void uiPoolPrefetchKernPairs(const char* utf8Text, uint8_t styleMask);
+  // EpdFontData::kernHandler for pool mode: answers from pool entries' class
+  // IDs + the shared pair cache, RAM only (uncached pairs return 0 — the
+  // prewarm prefetch is responsible for filling them).
+  static int8_t onKernQuery(void* ctx, uint32_t leftCp, uint32_t rightCp);
   UiGlyphPool* uiPool_ = nullptr;
   uint8_t uiPoolInstance_ = 0;
 

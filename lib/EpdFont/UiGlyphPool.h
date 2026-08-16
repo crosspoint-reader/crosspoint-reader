@@ -21,14 +21,21 @@
 class UiGlyphPool {
  public:
   // Glyph metrics served to the renderer; matches the EpdGlyph fields UI
-  // rendering needs (bitmap addressing fields are pool-managed).
+  // rendering needs (bitmap addressing fields are pool-managed). left/top are
+  // int8 — UI-size glyphs fit comfortably; insert() clamps. The kern class
+  // IDs come from the font's kern tables (0 = glyph never kerns on that
+  // side); together with the pair cache they replace the ~6.7KB resident
+  // class tables per instance the arena path loads.
   struct Metrics {
     uint8_t width;
     uint8_t height;
     uint16_t advanceX;  // 12.4 fixed-point
-    int16_t left;
-    int16_t top;
+    int8_t left;
+    int8_t top;
+    uint8_t kernLeftClass;
+    uint8_t kernRightClass;
   };
+  static_assert(sizeof(Metrics) == 8, "Metrics must stay compact");
 
   struct Stats {
     uint32_t hits = 0;
@@ -65,6 +72,9 @@ class UiGlyphPool {
   // Look up a glyph; sets its ref bit (a use, for second-chance eviction).
   // Returns an entry handle, or -1. Handles are invalidated by any insert().
   int32_t find(uint8_t instanceId, uint8_t styleIdx, uint32_t codepoint);
+  // Lookup without touching ref bits or hit/miss stats — for kern queries and
+  // diagnostics, which must not perturb eviction.
+  int32_t peek(uint8_t instanceId, uint8_t styleIdx, uint32_t codepoint) const;
   const Metrics& metricsOf(int32_t handle) const;
   // True when the entry stores no bitmap bytes (zero-area glyphs, e.g. space).
   bool isEmptyBitmap(int32_t handle) const;
@@ -80,6 +90,14 @@ class UiGlyphPool {
 
   // Shared scratch for fill-path SD reads (one copy for all font instances).
   uint8_t* fillScratch() { return fillScratch_; }
+
+  // Sparse kern pair cache: (instance, style, leftClass, rightClass) -> 4.4
+  // fixed-point value, filled by the fonts' prewarm from the on-file matrix.
+  // Zeros are cached too — 86% of matrix cells are zero and an uncached zero
+  // would re-probe SD forever. Drop-when-full (UI vocabulary uses a few dozen
+  // pairs); cleared by reset()/release().
+  bool kernPairLookup(uint8_t instanceId, uint8_t styleIdx, uint8_t leftClass, uint8_t rightClass, int8_t* out) const;
+  void kernPairInsert(uint8_t instanceId, uint8_t styleIdx, uint8_t leftClass, uint8_t rightClass, int8_t value);
 
   const Stats& stats() const { return stats_; }
   void logStats(const char* label) const;
@@ -119,6 +137,15 @@ class UiGlyphPool {
   // Remembered geometry for reinit().
   size_t initArenaBytes_ = 0;
   uint16_t initMaxEntries_ = 0;
+
+  static constexpr uint16_t KERN_PAIR_CAP = 256;
+  static uint32_t kernPairKey(uint8_t instanceId, uint8_t styleIdx, uint8_t leftClass, uint8_t rightClass) {
+    return (static_cast<uint32_t>(instanceId & 0x3) << 18) | (static_cast<uint32_t>(styleIdx & 0x3) << 16) |
+           (static_cast<uint32_t>(leftClass) << 8) | rightClass;
+  }
+  // Sorted by key; each word is key<<8 | (uint8)value.
+  uint32_t kernPairs_[KERN_PAIR_CAP] = {};
+  uint16_t kernPairCount_ = 0;
 
   // Separate scratches: encodeScratch_ holds the pending insert's bytes while
   // makeRoom() uses entryScratch_ for rescue rotations; fillScratch_ holds the

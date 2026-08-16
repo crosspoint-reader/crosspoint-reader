@@ -79,6 +79,14 @@ constexpr uint8_t MINI_UNDERUSE_RUNS_BEFORE_FREE = 3;
 // pool block only when comfortably clear of the render path's own floors.
 constexpr size_t UI_POOL_REVIVE_MIN_FREE_HEAP = 64 * 1024;
 
+// UI-size glyph bearings fit int8 with wide margin; clamp defensively so a
+// malformed font cannot wrap instead of merely mis-positioning.
+inline int8_t clampToI8(int16_t v) {
+  if (v > INT8_MAX) return INT8_MAX;
+  if (v < INT8_MIN) return INT8_MIN;
+  return static_cast<int8_t>(v);
+}
+
 // Keep-if-fits buffer reuse: only reallocate when the needed size exceeds the
 // current capacity. Freeing + reallocating slightly different sizes every page
 // turn punches non-coalescing holes in the heap (the freed block rarely fits the
@@ -503,6 +511,7 @@ void SdCardFont::applyGlyphMissCallback(uint8_t styleIdx) {
   s.stubData.glyphMissHandler = &SdCardFont::onGlyphMiss;
   s.stubData.glyphMissCtx = &overflowCtx_[styleIdx];
   s.stubData.coverageHandler = &SdCardFont::onCoverageQuery;
+  s.stubData.kernHandler = uiPool_ ? &SdCardFont::onKernQuery : nullptr;
 }
 
 void SdCardFont::enableUiGlyphPool(UiGlyphPool* pool, uint8_t instanceId) {
@@ -840,6 +849,7 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
       if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
       poolMissed += uiPoolFillStyle(si, codepoints.get(), cpCount);
     }
+    uiPoolPrefetchKernPairs(utf8Text, styleMask);
     stats_.prewarmTotalMs = millis() - startMs;
     return poolMissed;
   }
@@ -1190,6 +1200,12 @@ int SdCardFont::uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, ui
   int missed = 0;
   uint32_t next = 0;
   const unsigned long sdStart = millis();
+  // Transient kern class tables: one contiguous read per fill that has
+  // misses, resolved per inserted glyph, freed on return. Replaces the
+  // resident ~6.7KB-per-instance tables the arena path keeps loaded.
+  std::unique_ptr<uint8_t[]> kernTables;
+  const uint32_t kernLeftBytes = s.header.kernLeftEntryCount * sizeof(EpdKernClassEntry);
+  const uint32_t kernTableBytes = kernLeftBytes + s.header.kernRightEntryCount * sizeof(EpdKernClassEntry);
   while (next < cpCount) {
     uint32_t n = 0;
     for (; next < cpCount && n < FILL_CHUNK; next++) {
@@ -1212,6 +1228,14 @@ int SdCardFont::uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, ui
         return missed;
       }
       fileOpen = true;
+      if (kernTableBytes > 0) {
+        kernTables = makeUniqueNoThrow<uint8_t[]>(kernTableBytes);
+        if (kernTables && (!file.seekSet(s.kernLeftFileOffset) ||
+                           file.read(kernTables.get(), kernTableBytes) != static_cast<int>(kernTableBytes))) {
+          LOG_DBG("SDCF", "UI pool fill: kern table read failed; kern classes default to 0");
+          kernTables.reset();
+        }
+      }
     }
 
     std::sort(items.get(), items.get() + n,
@@ -1240,7 +1264,18 @@ int SdCardFont::uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, ui
     uint32_t lastEnd = UINT32_MAX;
     for (uint32_t i = 0; i < got; i++) {
       const EpdGlyph& g = items[i].meta;
-      const UiGlyphPool::Metrics m{g.width, g.height, g.advanceX, g.left, g.top};
+      UiGlyphPool::Metrics m{};
+      m.width = g.width;
+      m.height = g.height;
+      m.advanceX = g.advanceX;
+      m.left = clampToI8(g.left);
+      m.top = clampToI8(g.top);
+      if (kernTables) {
+        const auto* kernLeft = reinterpret_cast<const EpdKernClassEntry*>(kernTables.get());
+        const auto* kernRight = reinterpret_cast<const EpdKernClassEntry*>(kernTables.get() + kernLeftBytes);
+        m.kernLeftClass = miniLookupKernClass(kernLeft, s.header.kernLeftEntryCount, items[i].codepoint);
+        m.kernRightClass = miniLookupKernClass(kernRight, s.header.kernRightEntryCount, items[i].codepoint);
+      }
       if (g.dataLength == 0) {
         uiPool_->insert(uiPoolInstance_, styleIdx, items[i].codepoint, m, nullptr, s.header.is2Bit);
         continue;
@@ -1320,6 +1355,95 @@ const EpdGlyph* SdCardFont::uiPoolServe(uint8_t styleIdx, uint32_t codepoint) {
   e.codepoint = codepoint;
   e.styleIdx = styleIdx;
   return &e.glyph;
+}
+
+void SdCardFont::uiPoolPrefetchKernPairs(const char* utf8Text, uint8_t styleMask) {
+  if (!uiPool_->isReady()) return;
+
+  // Collect uncached class pairs from the text's adjacent codepoints. The
+  // dedup set is tiny: a UI string yields a handful of distinct class pairs.
+  struct WantedPair {
+    uint8_t styleIdx;
+    uint8_t leftClass;
+    uint8_t rightClass;
+  };
+  constexpr uint8_t MAX_WANTED = 24;
+  WantedPair wanted[MAX_WANTED];
+  uint8_t wantedCount = 0;
+
+  for (uint8_t si = 0; si < MAX_STYLES && wantedCount < MAX_WANTED; si++) {
+    if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
+    if (styles_[si].header.kernLeftClassCount == 0) continue;
+    const unsigned char* p = reinterpret_cast<const unsigned char*>(utf8Text);
+    uint32_t prev = 0;
+    uint32_t cp;
+    while (wantedCount < MAX_WANTED && (cp = utf8NextCodepoint(&p)) != 0) {
+      // Same short-circuit as EpdFont::getKerning: CJK pairs never kern.
+      if (prev != 0 && !utf8IsCjkBreakable(prev) && !utf8IsCjkBreakable(cp)) {
+        const int32_t lh = uiPool_->peek(uiPoolInstance_, si, prev);
+        const int32_t rh = uiPool_->peek(uiPoolInstance_, si, cp);
+        if (lh >= 0 && rh >= 0) {
+          const uint8_t lc = uiPool_->metricsOf(lh).kernLeftClass;
+          const uint8_t rc = uiPool_->metricsOf(rh).kernRightClass;
+          int8_t cached;
+          if (lc != 0 && rc != 0 && !uiPool_->kernPairLookup(uiPoolInstance_, si, lc, rc, &cached)) {
+            bool have = false;
+            for (uint8_t i = 0; i < wantedCount; i++) {
+              if (wanted[i].styleIdx == si && wanted[i].leftClass == lc && wanted[i].rightClass == rc) {
+                have = true;
+                break;
+              }
+            }
+            if (!have) wanted[wantedCount++] = {si, lc, rc};
+          }
+        }
+      }
+      prev = cp;
+    }
+  }
+  if (wantedCount == 0) return;
+
+  std::sort(wanted, wanted + wantedCount, [](const WantedPair& a, const WantedPair& b) {
+    if (a.styleIdx != b.styleIdx) return a.styleIdx < b.styleIdx;
+    if (a.leftClass != b.leftClass) return a.leftClass < b.leftClass;
+    return a.rightClass < b.rightClass;
+  });
+
+  HalFile file;
+  if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+    LOG_ERR("SDCF", "Kern prefetch: failed to open %s", filePath_);
+    return;
+  }
+  for (uint8_t i = 0; i < wantedCount; i++) {
+    const auto& w = wanted[i];
+    const auto& s = styles_[w.styleIdx];
+    // Cell offset matches EpdFont::getKerning's matrix indexing.
+    const uint32_t off = s.kernMatrixFileOffset +
+                         (static_cast<uint32_t>(w.leftClass) - 1u) * s.header.kernRightClassCount + (w.rightClass - 1u);
+    int8_t value = 0;
+    if (!file.seekSet(off) || file.read(reinterpret_cast<uint8_t*>(&value), 1) != 1) {
+      LOG_ERR("SDCF", "Kern prefetch: cell read failed (style %u, %u/%u)", w.styleIdx, w.leftClass, w.rightClass);
+      break;
+    }
+    uiPool_->kernPairInsert(uiPoolInstance_, w.styleIdx, w.leftClass, w.rightClass, value);
+  }
+}
+
+int8_t SdCardFont::onKernQuery(void* ctx, uint32_t leftCp, uint32_t rightCp) {
+  const auto* oc = static_cast<OverflowContext*>(ctx);
+  auto* self = oc->self;
+  if (!self->uiPool_) return 0;
+  const int32_t lh = self->uiPool_->peek(self->uiPoolInstance_, oc->styleIdx, leftCp);
+  if (lh < 0) return 0;
+  const uint8_t lc = self->uiPool_->metricsOf(lh).kernLeftClass;
+  if (lc == 0) return 0;
+  const int32_t rh = self->uiPool_->peek(self->uiPoolInstance_, oc->styleIdx, rightCp);
+  if (rh < 0) return 0;
+  const uint8_t rc = self->uiPool_->metricsOf(rh).kernRightClass;
+  if (rc == 0) return 0;
+  int8_t value;
+  if (self->uiPool_->kernPairLookup(self->uiPoolInstance_, oc->styleIdx, lc, rc, &value)) return value;
+  return 0;  // pair not prefetched — no SD I/O from the render path
 }
 
 // --- Cache management ---

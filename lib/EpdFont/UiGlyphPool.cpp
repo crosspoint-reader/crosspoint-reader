@@ -43,6 +43,7 @@ void UiGlyphPool::release() {
   maxEntries_ = 0;
   arenaBytes_ = 0;
   used_ = 0;
+  kernPairCount_ = 0;
   stats_.storedBytes = 0;
   stats_.rawBytes = 0;
 }
@@ -50,6 +51,7 @@ void UiGlyphPool::release() {
 void UiGlyphPool::reset() {
   entryCount_ = 0;
   used_ = 0;
+  kernPairCount_ = 0;
   stats_.storedBytes = 0;
   stats_.rawBytes = 0;
 }
@@ -83,7 +85,53 @@ int32_t UiGlyphPool::find(uint8_t instanceId, uint8_t styleIdx, uint32_t codepoi
   return -1;
 }
 
+int32_t UiGlyphPool::peek(uint8_t instanceId, uint8_t styleIdx, uint32_t codepoint) const {
+  if (!block_ || entryCount_ == 0) return -1;
+  const uint32_t key = makeKey(instanceId, styleIdx, codepoint);
+  const int32_t idx = lowerBound(key);
+  if (idx < entryCount_ && (entries_[idx].key & KEY_MASK) == key) return idx;
+  return -1;
+}
+
 const UiGlyphPool::Metrics& UiGlyphPool::metricsOf(int32_t handle) const { return entries_[handle].metrics; }
+
+bool UiGlyphPool::kernPairLookup(uint8_t instanceId, uint8_t styleIdx, uint8_t leftClass, uint8_t rightClass,
+                                 int8_t* out) const {
+  const uint32_t key = kernPairKey(instanceId, styleIdx, leftClass, rightClass);
+  int32_t lo = 0, hi = kernPairCount_;
+  while (lo < hi) {
+    const int32_t mid = lo + (hi - lo) / 2;
+    if ((kernPairs_[mid] >> 8) < key) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  if (lo < kernPairCount_ && (kernPairs_[lo] >> 8) == key) {
+    if (out) *out = static_cast<int8_t>(kernPairs_[lo] & 0xFF);
+    return true;
+  }
+  return false;
+}
+
+void UiGlyphPool::kernPairInsert(uint8_t instanceId, uint8_t styleIdx, uint8_t leftClass, uint8_t rightClass,
+                                 int8_t value) {
+  if (kernPairCount_ >= KERN_PAIR_CAP) return;  // drop-when-full
+  const uint32_t key = kernPairKey(instanceId, styleIdx, leftClass, rightClass);
+  int32_t lo = 0, hi = kernPairCount_;
+  while (lo < hi) {
+    const int32_t mid = lo + (hi - lo) / 2;
+    if ((kernPairs_[mid] >> 8) < key) {
+      lo = mid + 1;
+    } else {
+      hi = mid;
+    }
+  }
+  if (lo < kernPairCount_ && (kernPairs_[lo] >> 8) == key) return;  // already cached
+  memmove(&kernPairs_[lo + 1], &kernPairs_[lo], (kernPairCount_ - lo) * sizeof(uint32_t));
+  kernPairs_[lo] = (key << 8) | static_cast<uint8_t>(value);
+  kernPairCount_++;
+}
 
 bool UiGlyphPool::isEmptyBitmap(int32_t handle) const { return entries_[handle].length == 0; }
 

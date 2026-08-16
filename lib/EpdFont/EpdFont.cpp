@@ -106,6 +106,7 @@ int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const 
     return 0;
   }
   if (!data->kernMatrix) {
+    if (data->kernHandler) return data->kernHandler(data->glyphMissCtx, leftCp, rightCp);
     return 0;
   }
   const uint8_t lc = lookupKernClass(data->kernLeftClasses, data->kernLeftEntryCount, leftCp);
