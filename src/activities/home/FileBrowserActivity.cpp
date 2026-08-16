@@ -469,6 +469,10 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // The trailing value here is just the short extension: skip the balanced
   // 60%-band wrap cap and let both name lines run the full width before it.
   props.balanceWrappedLabelWithValue = false;
+  // Wrapped two-line names shrink how many rows fit a page, so the last row
+  // of a page can end up in leftover space: draw it as a partial preview so
+  // files past the fold are visibly present, not silently absent.
+  props.partialTrailingRow = true;
   syncListViewport(screen, props);
   screen.list(props);
 }
