@@ -2,16 +2,18 @@
 
 Every file in `resources/` uses this YAML frontmatter so devices can be
 compared without reading `BoardConfig.h`. This directory is not a closed board
-list: files are added, corrected, removed, or created ahead of firmware
-(`status: upcoming`). Copy a present file when adding one. The `x4` block
-below is an example of the **shape**, not the set.
+list. Copy a present file when adding one. The `x4` block below is an example
+of the **shape**, not the set.
+
+A file may exist here whose flag is not on this checkout's compile set. Keep
+it current anyway. Open it when the task or a compile-set flag names that
+device; do not treat unread files as must-build constraints.
 
 ```yaml
 device: x4
 device_flag: FREEINK_DEVICE_X4
 sdk_profile: XTEINK_X4
 sdk_header: freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
-status: compiled               # compiled | upcoming
 shared_binary_envs: [default, gh_release, gh_release_rc, slim]
 
 mcu_family: c3                 # c3 | s3 | esp32
@@ -44,7 +46,5 @@ caps: []                       # derived in BoardConfig.h unless INI overrides
 There is no `dpi` field on `BoardProfile`. PPI appears only in SDK comments.
 `caps` are copied from header defaults; do not require them in CrossPoint INI.
 
-`status: compiled` means the flag is on this tree's compile set (committed
-`platformio.ini` ∩ CI). `status: upcoming` means the file is agent support
-only — not something this tree builds. A schema change must update this file
-and every resource so enumeration does not omit a field.
+`shared_binary_envs` is the committed envs **on this tree** that set the flag
+(`[]` if none). A schema change must update this file and every resource.

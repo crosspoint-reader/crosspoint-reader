@@ -3,7 +3,6 @@ device: sticky
 device_flag: FREEINK_DEVICE_STICKY
 sdk_profile: STICKY
 sdk_header: freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
-status: compiled
 shared_binary_envs: [sticky, sticky-gh_release, sticky-gh_release_rc]
 mcu_family: s3
 board_package: esp32-s3-devkitc1-n16r8

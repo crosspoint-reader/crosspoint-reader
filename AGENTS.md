@@ -1,6 +1,6 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for ESP32-class e-ink devices. Which boards this tree **compiles** is committed `platformio.ini` ∩ CI. Per-device facts live in the `platform-targets` skill (that list may be a superset).
+Project: Open-source e-reader firmware for ESP32-class e-ink devices. Which boards this tree **compiles** is committed `platformio.ini` ∩ CI. Per-device facts live in the `platform-targets` skill.
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
 ## AI Agent Identity and Cognitive Rules
@@ -50,7 +50,7 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
-* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. A compiled flag should have a `resources/` file; if it does not, that skill asks. That directory may also hold upcoming-device facts that are not compile targets.
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Open a `resources/` file when the compile set or the task names that device; keep every committed resource current; do not treat unread files as must-build.
 * One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
 * Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only — if you find a new env there, ask before researching or adding a skill resource.
 * DRAM discipline as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env). PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 silicon does not imply that).
