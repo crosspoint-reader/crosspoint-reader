@@ -183,7 +183,10 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   // the heap guard fails, instances simply keep the legacy arena path.
   if (fallbackCount > 0) {
     uiGlyphPool_.release();
-    constexpr size_t UI_POOL_ARENA_BYTES = 12 * 1024;
+    // Arena sized to what the 384-entry index can actually address: measured
+    // ~19-25 B/glyph compressed, so 8KB covers 384 glyphs with slack for
+    // raw-stored outliers and inkier families. 12KB left ~4KB unreachable.
+    constexpr size_t UI_POOL_ARENA_BYTES = 8 * 1024;
     constexpr uint16_t UI_POOL_MAX_ENTRIES = 384;
     constexpr size_t UI_POOL_MIN_FREE_HEAP = 64 * 1024;
     if (ESP.getFreeHeap() >= UI_POOL_MIN_FREE_HEAP && uiGlyphPool_.init(UI_POOL_ARENA_BYTES, UI_POOL_MAX_ENTRIES)) {
