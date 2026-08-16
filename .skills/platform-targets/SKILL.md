@@ -70,8 +70,10 @@ Match the task. Do not assume one of these is the only way in.
 3. **Remove an env or a resource.** **Ask** whether to delete the resource
    only if that file or env is in the change. Do not propose deleting a
    sibling file you are not touching.
-4. **Change the schema.** Edit [SCHEMA.md](SCHEMA.md), then every file in
-   `resources/` so none omit the new field. Do not drive-by schema-edit.
+4. **Change the schema.** Edit [SCHEMA.md](SCHEMA.md) — fields **and** the
+   per-item comments that list options — then every file in `resources/` so
+   none omit the new field or still name a deleted option. Do not drive-by
+   schema-edit.
 5. **Experiment / local build cleanup.** Follow the compile set on this
    checkout. Ask about deleting a resource only if that file is part of the
    experiment.
@@ -79,9 +81,17 @@ Match the task. Do not assume one of these is the only way in.
 ## Refreshing resources from sources
 
 Field meanings live in [SCHEMA.md](SCHEMA.md). This skill may edit its own
-`resources/` and `SCHEMA.md`. When sources move (`BoardConfig.h`, committed
-INI, CI, schema), refresh **all** committed resource files, not only the
-ones on this compile set.
+`resources/` and `SCHEMA.md`.
+
+If **you** change a source this skill reads, update the dependents in the
+same change. Do not leave SCHEMA comments or resource files describing the
+old integration. Sources: `BoardConfig.h` (profiles, enums, `FREEINK_CAP_*`,
+`FREEINK_FB_PSRAM`, `ViewableInsets`), committed `platformio.ini`,
+`.github/workflows/ci.yml`, and [SCHEMA.md](SCHEMA.md) itself.
+
+When any of those move, refresh **all** committed resource files, not only
+the ones on this compile set, and re-vet SCHEMA comments against the
+integrations and against every file in `resources/` (see SCHEMA.md).
 
 | Ask | Source |
 | --- | --- |
@@ -119,7 +129,8 @@ Do not take panel size, PSRAM, or caps from `AGENTS.md` or `llms.txt`.
 - [ ] Compile-set enumeration listed every INI ∩ CI flag (every `-e` and
       `matrix.env`), or said INI and CI disagree.
 - [ ] Must-build union used only those flags, not every file in `resources/`.
-- [ ] Refreshed every committed resource when sources or the schema moved.
+- [ ] If a relied-on source moved, refreshed every committed resource **and**
+      SCHEMA comments; no leftover option or missing new option.
 - [ ] Did not ask about a file or env I was not touching.
 - [ ] Asked before deleting a resource that *is* in the change; respected a no.
 - [ ] PSRAM / `MALLOC_CAP_SPIRAM` only if the env being built sets

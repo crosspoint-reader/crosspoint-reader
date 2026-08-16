@@ -9,6 +9,14 @@ A file may exist here whose flag is not on this checkout's compile set. Keep
 it current anyway. Open it when the task or a compile-set flag names that
 device; do not treat unread files as must-build constraints.
 
+The `# …` comments next to fields are a **living vocabulary**, not a frozen
+example. When an integration grows or shrinks a category (`TouchController`,
+`DisplayController`, frontlight style, `FREEINK_CAP_*`, MCU / board package,
+INI flags), update those comments here. Then re-vet every file in
+`resources/`: each value must still be a real option, and a newly added
+option must appear on the devices that have it. Do not leave a comment or a
+resource incomplete because the sample list looked fixed.
+
 ```yaml
 device: x4
 device_flag: FREEINK_DEVICE_X4
@@ -47,4 +55,5 @@ There is no `dpi` field on `BoardProfile`. PPI appears only in SDK comments.
 `caps` are copied from header defaults; do not require them in CrossPoint INI.
 
 `shared_binary_envs` is the committed envs **on this tree** that set the flag
-(`[]` if none). A schema change must update this file and every resource.
+(`[]` if none). A schema change — new field, deleted field, or an updated
+option comment — must update this file and every resource.

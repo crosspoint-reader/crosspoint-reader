@@ -51,8 +51,9 @@ choice; otherwise pick a sensible fixed default.
 
 - [ ] Checked against `SCOPE.md`; not on the out-of-scope list.
 - [ ] Stated the concrete reading benefit, not a generic "useful."
-- [ ] Named the DRAM/size cost on every present device (measured, not guessed)
-      and why the benefit wins; PSRAM only if that env sets `BOARD_HAS_PSRAM`.
+- [ ] Named the DRAM/size cost on every device this tree builds (measured, not
+      guessed) and why the benefit wins; PSRAM only if that env sets
+      `BOARD_HAS_PSRAM`.
 - [ ] Checked whether an existing activity/setting/doc already covers it.
 - [ ] New setting (if any) is justified by a real user need, not added
       "just in case."

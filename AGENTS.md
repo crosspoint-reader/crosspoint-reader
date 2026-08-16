@@ -50,9 +50,9 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
-* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Open a `resources/` file when the compile set or the task names that device; keep every committed resource current; do not treat unread files as must-build.
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Open a `resources/` file when the compile set or the task names that device. When `BoardConfig.h`, the committed INI, CI, or that skill's schema moves, refresh every committed resource **and** the schema's per-field option comments — including files whose flags are not on this compile set. Do not treat unread files as must-build.
 * One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
-* Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only — if you find a new env there, ask before researching or adding a skill resource.
+* Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only. A local-only env is a question only if the task is about that env.
 * DRAM discipline as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env). PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 silicon does not imply that).
 * Never hardcode panel size. Use `renderer.getScreenWidth()` / `getScreenHeight()` and `BoardConfig::MAX_FRAMEBUFFER_BYTES` for the compiled set.
 * Single framebuffer (`EINK_DISPLAY_SINGLE_BUFFER_MODE=1`). Storage is the SD card (books and cache). Partition table in this tree is 16MB flash.
@@ -907,10 +907,10 @@ build_flags =
 
 | Workflow      | File                                        | Purpose                |
 | ------------- | ------------------------------------------- | ---------------------- |
-| Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow |
+| Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow (the compile-set gate) |
 | Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
-| Release Build | `.github/workflows/release.yml`             | Production releases    |
-| RC Build      | `.github/workflows/release_candidate.yml`   | Release candidates     |
+| RC Build      | `.github/workflows/release_candidate.yml`   | Manual `gh_release_rc` on `release/*`; not a PR compile-set gate |
+| Fonts         | `.github/workflows/release-fonts.yml`       | SD-card fonts; not firmware |
 
 **Rules**:
 
