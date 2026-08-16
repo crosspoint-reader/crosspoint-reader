@@ -179,6 +179,15 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
 
   const esp_err_t err = esp_light_sleep_start();
 
+  if (gpio.isXteinkDevice()) {
+    // Return GPIO13 to live GPIO-matrix control the moment we wake. The hold is
+    // only needed to survive the in-sleep flash-leakage workaround (see above);
+    // left latched across idle, the battery-MOSFET pad cannot follow a USB-attach
+    // power-path transition and the device hangs.
+    gpio_hold_dis(XTEINK_C3_GPIO13);
+    gpio_set_level(XTEINK_C3_GPIO13, 1);
+  }
+
   // Disarm immediately: an armed timer wake persists across sleep calls and would
   // carry over into startDeepSleep(), waking the device on USB power after 50 ms.
   // gpio_wakeup_disable() clears only the wake-enable bit — the pin's LEVEL
@@ -247,6 +256,13 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   }
 
   const esp_err_t err = esp_light_sleep_start();
+
+  if (gpio.isXteinkDevice()) {
+    // Release the GPIO13 latch on wake; see lightSleep() for why leaving it held
+    // across idle wedges the battery-MOSFET pad on USB attach.
+    gpio_hold_dis(XTEINK_C3_GPIO13);
+    gpio_set_level(XTEINK_C3_GPIO13, 1);
+  }
 
   // Disarm everything armed above; an armed source persisting into
   // startDeepSleep() would wake the device on USB power (see lightSleep()).
