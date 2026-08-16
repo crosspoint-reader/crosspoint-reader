@@ -25,7 +25,9 @@ Two lists, both factual — do not collapse them:
 - **Skill resources** — every `resources/<device>.md`. This may be a **superset**
   of the compile set (upcoming agent support with no INI/CI change yet). A
   resource with `status: upcoming` is not a compile target. A compile-set flag
-  with no file is a gap: create the file.
+  with no file, or a file still marked `upcoming`, is a judgment call: **ask**.
+  If that work is landing on `develop`, `master`, or the remote's default
+  branch, ask specifically whether to flip `upcoming` → `compiled`.
 
 ## Interactions
 
@@ -71,7 +73,9 @@ promotion. Respect a no.
    `resources/<device>.md` (slug = flag suffix, lowercased). One env may set
    several flags; load every matching **compiled** file. If the file is missing
    or marked `upcoming` while the flag is on the compile set, **ask** (create,
-   flip status, or leave it) unless the task already said which.
+   flip status, or leave it) unless the task already said which. If the change
+   is landing on `develop`, `master`, or the remote's default branch, ask
+   about flipping `upcoming` → `compiled`.
 4. **Union.** A CrossPoint-wide firmware change must satisfy every **compiled**
    device. Upcoming resources inform design; they do not widen the must-build
    set.
@@ -133,8 +137,8 @@ treat an `upcoming` file as compiled.
       disagree.
 - [ ] Applied only `status: compiled` resources as must-build constraints.
 - [ ] Did not delete a resource, or treat one as leftover, without asking.
-- [ ] Corrected or created a file from the field map when sources disagreed
-      or a compiled flag had no file.
+- [ ] Asked when a compiled flag had no file or an `upcoming` file; asked
+      about flipping if landing on `develop`, `master`, or the default branch.
 - [ ] Schema edits updated SCHEMA.md and every resource, and were the task.
 - [ ] Asked on judgment calls (local env, leftover file, status mismatch,
       schema, INI/CI); respected a no.

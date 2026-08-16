@@ -1,6 +1,6 @@
 ---
 name: hal-and-abstractions
-description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay) instead of raw SDK classes, MappedInputManager logical buttons instead of raw GPIO indices, UITheme/GUI for all rendering, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
+description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, clock, power, system, tilt, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay / HalClock / HalPowerManager / HalSystem / HalTiltSensor) instead of raw SDK classes, MappedInputManager logical buttons instead of raw GPIO indices, UITheme/GUI for all rendering, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
 ---
 
 # HAL and Abstractions

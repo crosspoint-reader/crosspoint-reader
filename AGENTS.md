@@ -1,13 +1,13 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for ESP32-class e-ink devices. Which boards this tree compiles is in committed `platformio.ini` and the `platform-targets` skill.
+Project: Open-source e-reader firmware for ESP32-class e-ink devices. Which boards this tree **compiles** is committed `platformio.ini` ∩ CI. Per-device facts live in the `platform-targets` skill (that list may be a superset).
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
 ## AI Agent Identity and Cognitive Rules
 
 * Role: Senior Embedded Systems Engineer (ESP-IDF/Arduino-ESP32 specialized).
-* Primary Constraint: The C3 `default` binary's ~380KB usable DRAM is the feature-presence floor. Stability is non-negotiable. Device-specific RAM, PSRAM, panel size, and controllers live in the `platform-targets` skill — not in this file.
-* Evidence-Based Reasoning: Before proposing a change, you MUST cite the specific file path and line numbers that justify the modification.
+* Primary Constraint: Budget DRAM as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env, ~380KB usable). Stability is non-negotiable. Device-specific RAM, PSRAM, panel size, and controllers live in the `platform-targets` skill — not in this file.
+* Evidence-Based Reasoning: Before proposing a change, cite the file and a function, type, or constant name that justifies it. Do not cite line numbers. The same name can have more than one definition (overloads, templates, another translation unit); the file — and the signature if needed — is what disambiguates.
 * Anti-Hallucination: Do not assume the existence of libraries or ESP-IDF functions. Prefer in-tree `freeink-sdk/` (especially `BoardConfig.h`) for hardware and SDK APIs. https://freeink.org/llms.txt is a website **index** of docs, not the device matrix.
 * No Unfounded Claims: Do not claim performance gains or memory savings without explaining the technical mechanism (e.g., DRAM vs IRAM usage).
 * Resource Justification: You must justify any new heap allocation (new, malloc, std::vector) or explain why a stack/static alternative was rejected.
@@ -50,7 +50,7 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
-* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Compiled devices must have a `resources/` file; that directory may also hold upcoming-device facts that are not compile targets.
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. A compiled flag should have a `resources/` file; if it does not, that skill asks. That directory may also hold upcoming-device facts that are not compile targets.
 * One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
 * Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only — if you find a new env there, ask before researching or adding a skill resource.
 * DRAM discipline as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env). PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 silicon does not imply that).
@@ -105,7 +105,7 @@ Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, fr
 
 ### Build Environment
 
-* **Standard**: C++20 (`-std=c++2a`). No Exceptions, No RTTI.
+* **Standard**: C++20 (`-std=c++2a`). No exceptions (`-fno-exceptions` in `platformio.ini`). RTTI is not pinned in this INI — confirm the env's compiler command if you need it.
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
 * **Environments**: whatever `[env:…]` is in committed `platformio.ini`. Device flags and hardware numbers live in the `platform-targets` skill. `LOG_LEVEL` and serial are per-env in the INI (`default` is typically 2; `*-gh_release*` typically 1).
 
