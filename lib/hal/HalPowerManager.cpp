@@ -168,6 +168,16 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     esp_sleep_enable_gpio_wakeup();
   }
 
+  // Wake the instant USB is attached so a plug-in never lands inside a sleep
+  // slice: the next poll then sees USB and declines all further sleep, closing
+  // the mid-slice attach window the cached guard can't cover. X4's usbDetect is
+  // a real VBUS-driven GPIO (HIGH = attached); X3 has none (usbDetect < 0).
+  const int8_t usbPin = BoardConfig::ACTIVE.usbDetect;
+  if (usbPin >= 0) {
+    gpio_wakeup_enable(static_cast<gpio_num_t>(usbPin), GPIO_INTR_HIGH_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+  }
+
   // The C3 flash-leakage workaround pulls its DIO-unused SPIWP pad low during
   // light sleep. Hold GPIO13 high only on the X3/X4 boards that use that pad as
   // a power control; on other boards GPIO13 may be a bus signal.
@@ -199,6 +209,10 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   if (powerPin >= 0) {
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
     gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
+  }
+  if (usbPin >= 0) {
+    gpio_wakeup_disable(static_cast<gpio_num_t>(usbPin));
+    gpio_set_intr_type(static_cast<gpio_num_t>(usbPin), GPIO_INTR_DISABLE);
   }
 
   xSemaphoreGive(sleepMutex);
@@ -244,6 +258,12 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
     gpio_wakeup_enable(static_cast<gpio_num_t>(powerPin),
                        BoardConfig::ACTIVE.input.powerActiveHigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
   }
+  // Wake on USB attach mid-refresh too, so a plug-in never sleeps through the
+  // enumeration transient (see lightSleep(); X4 usbDetect only, X3 < 0).
+  const int8_t usbPin = BoardConfig::ACTIVE.usbDetect;
+  if (usbPin >= 0) {
+    gpio_wakeup_enable(static_cast<gpio_num_t>(usbPin), GPIO_INTR_HIGH_LEVEL);
+  }
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(BUSY_SLEEP_SLICE_MS) * 1000ULL);
 
@@ -274,6 +294,10 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   if (powerPin >= 0) {
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
     gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
+  }
+  if (usbPin >= 0) {
+    gpio_wakeup_disable(static_cast<gpio_num_t>(usbPin));
+    gpio_set_intr_type(static_cast<gpio_num_t>(usbPin), GPIO_INTR_DISABLE);
   }
 
   xSemaphoreGive(sleepMutex);
