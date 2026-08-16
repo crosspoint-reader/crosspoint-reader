@@ -3,14 +3,14 @@ device: x4pro
 device_flag: FREEINK_DEVICE_X4PRO
 sdk_profile: XTEINK_X4_PRO
 sdk_header: freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h
-shared_binary_envs: []
+shared_binary_envs: [x4pro, x4pro-gh_release, x4pro-gh_release_rc]
 mcu_family: s3
 board_package: esp32-s3-devkitc1-n16r8
-psram_in_ini: false
+psram_in_ini: true
 psram_on_silicon: true
 fb_in_psram: false
 sdmmc: true
-block_device_interface: false
+block_device_interface: true
 width: 800
 height: 480
 fb_bytes: 48000
@@ -31,6 +31,7 @@ ESP32-S3, distinct from the C3 X4. 800×480; controller varies by batch
 warm/cool PWM frontlight, 1-bit SDMMC, CW2017 gauge, PCF8563-compatible RTC.
 `uiScale` 1.2. Bezel insets 9/7/3/7. 8 MB PSRAM on silicon.
 
-When a committed env sets this flag it is expected to include
-`-DFREEINK_DEVICE_X4PRO=1`, `-DBOARD_HAS_PSRAM`, and
-`-DUSE_BLOCK_DEVICE_INTERFACE=1`.
+Own envs (`x4pro` and release siblings). Those set `-DFREEINK_DEVICE_X4PRO=1`,
+`-DBOARD_HAS_PSRAM`, `-DUSE_BLOCK_DEVICE_INTERFACE=1`, and
+`-DFREEINK_FRONTLIGHT_LS`. CI builds `pio run -e x4pro`. Framebuffer stays
+in DRAM; PSRAM is on for other heaps.

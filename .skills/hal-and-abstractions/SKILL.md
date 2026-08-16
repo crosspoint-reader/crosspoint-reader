@@ -1,6 +1,6 @@
 ---
 name: hal-and-abstractions
-description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, clock, power, system, tilt, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay / HalClock / HalPowerManager / HalSystem / HalTiltSensor) instead of raw SDK classes, MappedInputManager logical buttons instead of raw GPIO indices, UITheme/GUI for all rendering, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
+description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, clock, power, system, tilt, frontlight, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay / HalClock / HalPowerManager / HalSystem / HalTiltSensor / HalFrontlight) instead of raw SDK classes, MappedInputManager logical buttons instead of raw GPIO indices, UITheme/GUI for all rendering, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
 ---
 
 # HAL and Abstractions
@@ -19,8 +19,9 @@ Which extras a device actually has (touch, frontlight, tilt) come from
   machine and panics FreeRTOS (`AGENTS.md` has the failure mode). This is a
   correctness boundary, not a style preference.
 - **Display:** `HalDisplay` over `EInkDisplay`. **Input:** `HalGPIO` over
-  `InputManager`. **Clock / power / system / tilt:** `HalClock`,
-  `HalPowerManager`, `HalSystem`, `HalTiltSensor` — same rule as storage.
+  `InputManager`. **Clock / power / system / tilt / frontlight:** `HalClock`,
+  `HalPowerManager`, `HalSystem`, `HalTiltSensor`, `HalFrontlight` — same
+  rule as storage. Do not call `FrontlightManager` from activities.
 - **Rendering:** everything through the `GUI` macro (UITheme) and the renderer's
   oriented metrics. No hardcoded fonts, colors, coordinates, or panel-size
   literals; ask the renderer for width/height and use the oriented viewable
@@ -30,7 +31,7 @@ Which extras a device actually has (touch, frontlight, tilt) come from
   indices outside `ButtonRemapActivity`. Logical buttons survive user remapping
   and orientation; raw indices do not.
 - **Shared state:** the singleton macros (`SETTINGS`, `APP_STATE`, `GUI`,
-  `Storage`, `I18N`), not threaded pointers.
+  `Storage`, `I18N`, `Frontlight`), not threaded pointers.
 
 ## User-facing text
 
@@ -51,8 +52,8 @@ it carries one of those contracts or hides a real implementation choice.
 
 ## Self-review
 
-- [ ] No direct SdFat / FsFile / SDCardManager / EInkDisplay / InputManager use
-      outside `lib/hal`.
+- [ ] No direct SdFat / FsFile / SDCardManager / EInkDisplay / InputManager /
+      FrontlightManager use outside `lib/hal`.
 - [ ] File access uses `HalFile`; no `.close()` on a local handle
       (DESTRUCTOR_CLOSES_FILE); members closed in `onExit`.
 - [ ] Input uses `MappedInputManager::Button`, not raw `BTN_*` indices.

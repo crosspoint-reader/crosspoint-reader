@@ -165,6 +165,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 | `HalPowerManager`  | `BatteryMonitor` / sleep     | Battery, sleep, CPU frequency   | `powerManager`    |
 | `HalSystem`        | panic / reboot helpers       | Panic dump, reboot info         | `HalSystem::`     |
 | `HalTiltSensor`    | `Imu`                        | Tilt page-turn (when present)   | `halTiltSensor`   |
+| `HalFrontlight`    | `FrontlightManager`          | Frontlight (inert if absent)    | `Frontlight`      |
 
 Which extras a device actually has (RTC, IMU, touch, frontlight) comes from the `platform-targets` skill — do not assume one input style or accessory set. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
 
@@ -442,10 +443,16 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
    
    - `Button::PageForward` → Uses side button (swappable)
 
+4. **Touch / swipe / home** (when the device has them — see `platform-targets`):
+   
+   - Screen-edge and swipe helpers on `MappedInputManager` (`wasSwipe`, `wasHomeGesture`, `ScreenLeft` / `ScreenRight` / …)
+   
+   - Do not assume a home key or swipe; `HalGPIO` / the mapper report what is present
+
 **Implementation**:
 
 - Activities use **logical buttons** (e.g., `Button::Confirm`)
-- `MappedInputManager` translates to **physical hardware buttons**
+- `MappedInputManager` translates to **physical hardware buttons** and, when compiled in, touch
 - User can remap front buttons in settings
 - Orientation changes handled separately by renderer coordinate transforms
 
@@ -470,6 +477,7 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 #define GUI UITheme::getInstance()                   // Current theme
 #define Storage HalStorage::getInstance()            // SD card I/O
 #define I18N I18n::getInstance()                     // Internationalization
+#define Frontlight HalFrontlight::getInstance()      // Frontlight (inert if absent)
 ```
 
 ### Activity Lifecycle and Memory Management
@@ -909,6 +917,7 @@ build_flags =
 | ------------- | ------------------------------------------- | ---------------------- |
 | Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow (the compile-set gate) |
 | Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
+| Release Build | `.github/workflows/release.yml`             | Production release artifacts; not a PR compile-set gate |
 | RC Build      | `.github/workflows/release_candidate.yml`   | Manual `gh_release_rc` on `release/*`; not a PR compile-set gate |
 | Fonts         | `.github/workflows/release-fonts.yml`       | SD-card fonts; not firmware |
 
