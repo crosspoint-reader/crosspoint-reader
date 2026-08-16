@@ -19,6 +19,7 @@ parser.add_argument("name", action="store", help="name of the font.")
 parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
+parser.add_argument("--mono", dest="mono", action="store_true", help="For 1-bit fonts, rasterise with FreeType's native monochrome renderer (hinted, drop-out controlled) instead of antialiased-greyscale then threshold. Crisper stems on well-hinted faces (e.g. Ubuntu); avoid on thin faces whose sub-pixel stems would drop out. Ignored with --2bit.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
@@ -34,7 +35,15 @@ font_stack = [freetype.Face(f) for f in args.fontstack]
 is2Bit = args.is2Bit
 size = args.size
 font_name = args.name
+# --mono only affects 1-bit fonts; it is meaningless for 2-bit greyscale.
+useMono = args.mono and not is2Bit
 load_flags = freetype.FT_LOAD_RENDER
+if useMono:
+    # Rasterise with FreeType's native monochrome renderer (hinted, drop-out
+    # controlled) instead of rendering antialiased grey and thresholding.
+    # Produces crisper, evenly-weighted stems at small sizes on well-hinted
+    # faces. Still 1 bit/pixel, so glyph metrics and layout are unchanged.
+    load_flags |= freetype.FT_LOAD_TARGET_MONO
 if args.force_autohint:
     load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
 
@@ -275,68 +284,19 @@ for i_start, i_end in intervals:
         face = load_glyph(code_point)
         bitmap = face.glyph.bitmap
 
-        # Build out 4-bit greyscale bitmap
-        pixels4g = []
-        px = 0
-        for i, v in enumerate(bitmap.buffer):
-            y = i / bitmap.width
-            x = i % bitmap.width
-            if x % 2 == 0:
-                px = (v >> 4)
-            else:
-                px = px | (v & 0xF0)
-                pixels4g.append(px);
-                px = 0
-            # eol
-            if x == bitmap.width - 1 and bitmap.width % 2 > 0:
-                pixels4g.append(px)
-                px = 0
-
-        if is2Bit:
-            # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
-            # Downsample to 2-bit bitmap
-            pixels2b = []
-            px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
-            for y in range(bitmap.rows):
-                for x in range(bitmap.width):
-                    px = px << 2
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    bm = (bm >> ((x % 2) * 4)) & 0xF
-
-                    if bm >= 12:
-                        px += 3
-                    elif bm >= 8:
-                        px += 2
-                    elif bm >= 4:
-                        px += 1
-
-                    if (y * bitmap.width + x) % 4 == 3:
-                        pixels2b.append(px)
-                        px = 0
-            if (bitmap.width * bitmap.rows) % 4 != 0:
-                px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
-                pixels2b.append(px)
-
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixels2b[pixelPosition // 4]
-            #         bit_index = (3 - (pixelPosition % 4)) * 2
-            #         line += '#' if ((byte >> bit_index) & 3) > 0 else '.'
-            #     print(line)
-            # print('')
-        else:
-            # Downsample to 1-bit bitmap - treat any 2+ as black
+        if useMono:
+            # 1-bit + --mono: FreeType already rasterised this glyph in monochrome
+            # (FT_LOAD_TARGET_MONO), so every source pixel is a single bit in a
+            # row-padded, MSB-first buffer. Repack it into the firmware's
+            # continuous (non-row-padded) 1-bit bitstream.
             pixelsbw = []
             px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
+            src_pitch = abs(bitmap.pitch)
             for y in range(bitmap.rows):
                 for x in range(bitmap.width):
-                    px = px << 1
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+                    src_byte = bitmap.buffer[y * src_pitch + (x >> 3)]
+                    bit = (src_byte >> (7 - (x & 7))) & 1
+                    px = (px << 1) | bit
 
                     if (y * bitmap.width + x) % 8 == 7:
                         pixelsbw.append(px)
@@ -344,16 +304,67 @@ for i_start, i_end in intervals:
             if (bitmap.width * bitmap.rows) % 8 != 0:
                 px = px << (8 - (bitmap.width * bitmap.rows) % 8)
                 pixelsbw.append(px)
+        else:
+            # Build out 4-bit greyscale bitmap (shared by the 2-bit and the
+            # 1-bit antialiased-threshold paths below).
+            pixels4g = []
+            px = 0
+            for i, v in enumerate(bitmap.buffer):
+                y = i / bitmap.width
+                x = i % bitmap.width
+                if x % 2 == 0:
+                    px = (v >> 4)
+                else:
+                    px = px | (v & 0xF0)
+                    pixels4g.append(px)
+                    px = 0
+                # eol
+                if x == bitmap.width - 1 and bitmap.width % 2 > 0:
+                    pixels4g.append(px)
+                    px = 0
 
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixelsbw[pixelPosition // 8]
-            #         bit_index = 7 - (pixelPosition % 8)
-            #         line += '#' if (byte >> bit_index) & 1 else '.'
-            #     print(line)
-            # print('')
+            if is2Bit:
+                # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
+                # Downsample to 2-bit bitmap
+                pixels2b = []
+                px = 0
+                pitch = (bitmap.width // 2) + (bitmap.width % 2)
+                for y in range(bitmap.rows):
+                    for x in range(bitmap.width):
+                        px = px << 2
+                        bm = pixels4g[y * pitch + (x // 2)]
+                        bm = (bm >> ((x % 2) * 4)) & 0xF
+
+                        if bm >= 12:
+                            px += 3
+                        elif bm >= 8:
+                            px += 2
+                        elif bm >= 4:
+                            px += 1
+
+                        if (y * bitmap.width + x) % 4 == 3:
+                            pixels2b.append(px)
+                            px = 0
+                if (bitmap.width * bitmap.rows) % 4 != 0:
+                    px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
+                    pixels2b.append(px)
+            else:
+                # Downsample to 1-bit bitmap - treat any 2+ as black
+                pixelsbw = []
+                px = 0
+                pitch = (bitmap.width // 2) + (bitmap.width % 2)
+                for y in range(bitmap.rows):
+                    for x in range(bitmap.width):
+                        px = px << 1
+                        bm = pixels4g[y * pitch + (x // 2)]
+                        px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+
+                        if (y * bitmap.width + x) % 8 == 7:
+                            pixelsbw.append(px)
+                            px = 0
+                if (bitmap.width * bitmap.rows) % 8 != 0:
+                    px = px << (8 - (bitmap.width * bitmap.rows) % 8)
+                    pixelsbw.append(px)
 
         pixels = pixels2b if is2Bit else pixelsbw
 
@@ -919,7 +930,7 @@ print(f"""/**
  * generated by fontconvert.py
  * name: {font_name}
  * size: {size}
- * mode: {'2-bit' if is2Bit else '1-bit'}{'  compressed: true' if compress else ''}
+ * mode: {'2-bit' if is2Bit else ('1-bit mono' if useMono else '1-bit')}{'  compressed: true' if compress else ''}
  * Command used: {' '.join(sys.argv)}
  */
 #pragma once

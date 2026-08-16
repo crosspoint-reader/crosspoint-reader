@@ -71,8 +71,12 @@ for size in ${UI_FONT_SIZES[@]}; do
     # (fontstack is ordered by descending priority).
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
+    # Ubuntu is manually hinted at these small sizes, so native monochrome
+    # rasterisation (--mono) gives crisp, evenly-weighted stems. Do NOT use
+    # --mono for less-hinted / thinner faces (e.g. notosans_8 below), where
+    # sub-pixel stems would drop out and look too thin.
     python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
-      --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
+      --mono --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
     echo "Generated $output_path"
   done
 done
