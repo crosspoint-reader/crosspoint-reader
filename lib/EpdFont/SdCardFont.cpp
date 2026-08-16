@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -10,6 +11,8 @@
 #include <memory>
 
 #include "EpdFontFamily.h"
+#include "UiGlyphCodec.h"
+#include "UiGlyphPool.h"
 
 static_assert(sizeof(EpdGlyph) == 16, "EpdGlyph must be 16 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdUnicodeInterval) == 12, "EpdUnicodeInterval must be 12 bytes to match .cpfont file layout");
@@ -71,6 +74,10 @@ const char* asCStr(const char* s) { return s; }
 // resetStyleMiniData retention bounds (see the PerStyle comment in the header).
 constexpr size_t MINI_RETAIN_MIN_FREE_HEAP = 40 * 1024;
 constexpr uint8_t MINI_UNDERUSE_RUNS_BEFORE_FREE = 3;
+
+// UI glyph pool revival floor: after a heap-critical release, re-allocate the
+// pool block only when comfortably clear of the render path's own floors.
+constexpr size_t UI_POOL_REVIVE_MIN_FREE_HEAP = 64 * 1024;
 
 // Keep-if-fits buffer reuse: only reallocate when the needed size exceeds the
 // current capacity. Freeing + reallocating slightly different sizes every page
@@ -188,6 +195,9 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
 void SdCardFont::releaseResidentCaches() {
   clearOverflow();
   clearPersistentCache();
+  // Single-block free; idempotent across the instances sharing the pool.
+  // Fills lazily revive it via reinit() once the heap recovers.
+  if (uiPool_) uiPool_->release();
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     if (!styles_[i].present) continue;
     freeStyleMiniData(styles_[i]);  // also frees mini kern and restores the stub EpdFontData
@@ -205,6 +215,10 @@ void SdCardFont::freeAll() {
   styleCount_ = 0;
   contentHash_ = 0;
   loaded_ = false;
+  // Pool entries may outlive this font object (the pool is shared); detach so
+  // a reused instance can never serve another font's stale entries.
+  uiPool_ = nullptr;
+  uiPoolInstance_ = 0;
 }
 
 void SdCardFont::clearOverflow() {
@@ -489,6 +503,21 @@ void SdCardFont::applyGlyphMissCallback(uint8_t styleIdx) {
   s.stubData.glyphMissHandler = &SdCardFont::onGlyphMiss;
   s.stubData.glyphMissCtx = &overflowCtx_[styleIdx];
   s.stubData.coverageHandler = &SdCardFont::onCoverageQuery;
+}
+
+void SdCardFont::enableUiGlyphPool(UiGlyphPool* pool, uint8_t instanceId) {
+  uiPool_ = pool;
+  uiPoolInstance_ = instanceId;
+  clearOverflow();  // drop any 2-bit legacy entries; pool-mode slots hold 1-bit decodes
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (!styles_[i].present) continue;
+    freeStyleMiniData(styles_[i]);
+    // Pool bitmaps are threshold-converted 1-bit and the stub is the only
+    // EpdFontData served in pool mode, so flip its pixel format to match.
+    styles_[i].stubData.is2Bit = false;
+    applyGlyphMissCallback(i);
+  }
+  LOG_DBG("SDCF", "UI glyph pool enabled (instance %u)", instanceId);
 }
 
 bool SdCardFont::onCoverageQuery(void* ctx, const uint32_t codepoint) {
@@ -800,6 +829,19 @@ int SdCardFont::prewarm(const char* utf8Text, uint8_t styleMask, bool metadataOn
     if (!hasReplacement && cpCount < MAX_PAGE_GLYPHS) {
       codepoints[cpCount++] = REPLACEMENT_GLYPH;
     }
+  }
+
+  // UI-pool mode: batch-fill the shared pool for the missing codepoints and
+  // return. No arena rebuild, no kern/ligature load (CJK UI strings use
+  // neither), and metadataOnly is moot — pool entries are always complete.
+  if (uiPool_) {
+    int poolMissed = 0;
+    for (uint8_t si = 0; si < MAX_STYLES; si++) {
+      if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
+      poolMissed += uiPoolFillStyle(si, codepoints.get(), cpCount);
+    }
+    stats_.prewarmTotalMs = millis() - startMs;
+    return poolMissed;
   }
 
   // Add ligature output codepoints from all styles being prewarmed.
@@ -1115,6 +1157,169 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   stats_.bitmapBytes += totalBitmapSize;
 
   return missed;
+}
+
+// --- UI glyph pool mode ---
+
+int SdCardFont::uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount) {
+  auto& s = styles_[styleIdx];
+
+  if (!uiPool_->isReady()) {
+    if (ESP.getFreeHeap() < UI_POOL_REVIVE_MIN_FREE_HEAP || !uiPool_->reinit()) {
+      return static_cast<int>(cpCount);
+    }
+  }
+
+  struct FillItem {
+    uint32_t codepoint;
+    int32_t globalIndex;
+    EpdGlyph meta;
+  };
+  // Chunked so the transient buffer stays small; each chunk's reads are
+  // sorted (metadata by glyph index, bitmaps by file offset) for near-
+  // sequential SD access.
+  constexpr uint32_t FILL_CHUNK = 64;
+  auto items = makeUniqueNoThrow<FillItem[]>(FILL_CHUNK);
+  if (!items) {
+    LOG_ERR("SDCF", "UI pool fill: OOM for chunk buffer");
+    return static_cast<int>(cpCount);
+  }
+
+  HalFile file;
+  bool fileOpen = false;
+  int missed = 0;
+  uint32_t next = 0;
+  const unsigned long sdStart = millis();
+  while (next < cpCount) {
+    uint32_t n = 0;
+    for (; next < cpCount && n < FILL_CHUNK; next++) {
+      const uint32_t cp = codepoints[next];
+      if (uiPool_->find(uiPoolInstance_, styleIdx, cp) >= 0) continue;  // resident (find refreshes ref)
+      const int32_t gIdx = findGlobalGlyphIndex(s, cp);
+      if (gIdx < 0) {
+        missed++;
+        continue;
+      }
+      items[n].codepoint = cp;
+      items[n].globalIndex = gIdx;
+      n++;
+    }
+    if (n == 0) continue;
+
+    if (!fileOpen) {
+      if (!Storage.openFileForRead("SDCF", filePath_, file)) {
+        LOG_ERR("SDCF", "UI pool fill: failed to open %s", filePath_);
+        return missed;
+      }
+      fileOpen = true;
+    }
+
+    std::sort(items.get(), items.get() + n,
+              [](const FillItem& a, const FillItem& b) { return a.globalIndex < b.globalIndex; });
+    uint32_t got = 0;
+    int32_t lastReadIndex = INT32_MIN;
+    for (uint32_t i = 0; i < n; i++) {
+      const int32_t gIdx = items[i].globalIndex;
+      if (gIdx != lastReadIndex + 1) {
+        if (!file.seekSet(s.glyphsFileOffset + static_cast<uint32_t>(gIdx) * sizeof(EpdGlyph))) {
+          LOG_ERR("SDCF", "UI pool fill: seek failed (glyph %ld)", static_cast<long>(gIdx));
+          break;
+        }
+        stats_.seekCount++;
+      }
+      if (file.read(reinterpret_cast<uint8_t*>(&items[i].meta), sizeof(EpdGlyph)) != sizeof(EpdGlyph)) {
+        LOG_ERR("SDCF", "UI pool fill: short glyph read");
+        break;
+      }
+      lastReadIndex = gIdx;
+      got++;
+    }
+
+    std::sort(items.get(), items.get() + got,
+              [](const FillItem& a, const FillItem& b) { return a.meta.dataOffset < b.meta.dataOffset; });
+    uint32_t lastEnd = UINT32_MAX;
+    for (uint32_t i = 0; i < got; i++) {
+      const EpdGlyph& g = items[i].meta;
+      const UiGlyphPool::Metrics m{g.width, g.height, g.advanceX, g.left, g.top};
+      if (g.dataLength == 0) {
+        uiPool_->insert(uiPoolInstance_, styleIdx, items[i].codepoint, m, nullptr, s.header.is2Bit);
+        continue;
+      }
+      if (g.dataLength > UiGlyphPool::FILL_SCRATCH_BYTES) {
+        LOG_DBG("SDCF", "UI pool fill: U+%04lX bitmap too large (%u B), skipped",
+                static_cast<unsigned long>(items[i].codepoint), g.dataLength);
+        continue;
+      }
+      const uint32_t off = s.bitmapFileOffset + g.dataOffset;
+      if (off != lastEnd) {
+        if (!file.seekSet(off)) {
+          LOG_ERR("SDCF", "UI pool fill: bitmap seek failed");
+          break;
+        }
+        stats_.seekCount++;
+      }
+      if (file.read(uiPool_->fillScratch(), g.dataLength) != static_cast<int>(g.dataLength)) {
+        LOG_ERR("SDCF", "UI pool fill: short bitmap read");
+        break;
+      }
+      lastEnd = off + g.dataLength;
+      uiPool_->insert(uiPoolInstance_, styleIdx, items[i].codepoint, m, uiPool_->fillScratch(), s.header.is2Bit);
+      stats_.uniqueGlyphs++;
+    }
+  }
+  stats_.sdReadTimeMs += millis() - sdStart;
+  return missed;
+}
+
+const EpdGlyph* SdCardFont::uiPoolServe(uint8_t styleIdx, uint32_t codepoint) {
+  // Recently-decoded staging: repeated syllables within a string, and the
+  // measure->draw sequence for the same glyph, skip re-decoding.
+  for (uint32_t i = 0; i < overflowCount_; i++) {
+    if (overflow_[i].codepoint == codepoint && overflow_[i].styleIdx == styleIdx) {
+      return &overflow_[i].glyph;
+    }
+  }
+
+  int32_t handle = uiPool_->find(uiPoolInstance_, styleIdx, codepoint);
+  if (handle < 0) {
+    // Draw path reached a glyph prewarm never saw — single-glyph self-heal.
+    uiPoolFillStyle(styleIdx, &codepoint, 1);
+    handle = uiPool_->find(uiPoolInstance_, styleIdx, codepoint);
+    if (handle < 0) return nullptr;
+  }
+
+  const UiGlyphPool::Metrics& m = uiPool_->metricsOf(handle);
+  const uint16_t pixelCount = static_cast<uint16_t>(m.width) * m.height;
+  const uint16_t rawLen = UiGlyphCodec::packed1BitBytes(pixelCount);
+  const bool empty = uiPool_->isEmptyBitmap(handle);
+
+  const uint32_t slot = overflowNext_;
+  if (overflowCount_ < OVERFLOW_CAPACITY) {
+    overflowCount_++;
+  }
+  auto& e = overflow_[slot];
+  if (!empty) {
+    // Pool-mode slots keep a fixed MAX_ENTRY_BYTES buffer (insert() bounds
+    // every glyph to it), allocated once per slot and reused.
+    if (!e.bitmap) {
+      e.bitmap = new (std::nothrow) uint8_t[UiGlyphPool::MAX_ENTRY_BYTES];
+      if (!e.bitmap) {
+        LOG_ERR("SDCF", "UI pool serve: OOM for decode slot");
+        if (overflowCount_ > 0 && slot == overflowCount_ - 1) overflowCount_--;
+        return nullptr;
+      }
+    }
+    if (!uiPool_->copyBitmap(handle, e.bitmap, UiGlyphPool::MAX_ENTRY_BYTES)) {
+      LOG_ERR("SDCF", "UI pool serve: decode failed for U+%04lX", static_cast<unsigned long>(codepoint));
+      if (overflowCount_ > 0 && slot == overflowCount_ - 1) overflowCount_--;
+      return nullptr;
+    }
+  }
+  overflowNext_ = (slot + 1) % OVERFLOW_CAPACITY;
+  e.glyph = EpdGlyph{m.width, m.height, m.advanceX, m.left, m.top, empty ? uint16_t{0} : rawLen, 0};
+  e.codepoint = codepoint;
+  e.styleIdx = styleIdx;
+  return &e.glyph;
 }
 
 // --- Cache management ---
@@ -1436,6 +1641,10 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   if (!self->loaded_ || styleIdx >= MAX_STYLES || !self->styles_[styleIdx].present) return nullptr;
   const auto& s = self->styles_[styleIdx];
   if (!s.fullIntervals && !s.bmpIntervals) return nullptr;
+
+  // UI-pool mode: every glyph is served from the shared pool (the mini arena
+  // is never built); overflow slots stage the decoded 1-bit bitmaps.
+  if (self->uiPool_) return self->uiPoolServe(styleIdx, codepoint);
 
   // Check overflow cache first (matching both codepoint and style)
   for (uint32_t i = 0; i < self->overflowCount_; i++) {

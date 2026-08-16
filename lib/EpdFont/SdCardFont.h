@@ -19,6 +19,8 @@
 // Reader enforcement: SdCardFont::load().
 #define CPFONT_VERSION 4
 
+class UiGlyphPool;
+
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
@@ -80,7 +82,14 @@ class SdCardFont {
   // a clean start and an OOM abort.
   void releaseResidentCaches();
 
-  // Returns pointer to the managed EpdFont for a given style.
+  // Route this instance's glyph residency through a shared UiGlyphPool (UI
+  // fallback instances only — the reader path keeps the mini arena). In pool
+  // mode prewarm() batch-fills the pool instead of rebuilding arenas, and
+  // per-glyph lookups are served through the glyph-miss path with bitmaps
+  // decoded to 1-bit (pixel-exact for BW-mode UI rendering, which is the only
+  // mode UI text uses). Kerning/ligatures are skipped (CJK has ~none). The
+  // pool is owned by the caller and shared between instances.
+  void enableUiGlyphPool(UiGlyphPool* pool, uint8_t instanceId);
   // Returns nullptr if the style is not present.
   EpdFont* getEpdFont(uint8_t style = 0);
 
@@ -305,6 +314,12 @@ class SdCardFont {
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
                              const char* extraText = nullptr);
   int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly);
+
+  // UI-pool mode (see enableUiGlyphPool)
+  int uiPoolFillStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount);
+  const EpdGlyph* uiPoolServe(uint8_t styleIdx, uint32_t codepoint);
+  UiGlyphPool* uiPool_ = nullptr;
+  uint8_t uiPoolInstance_ = 0;
 
   // Global helpers
   void freeAll();

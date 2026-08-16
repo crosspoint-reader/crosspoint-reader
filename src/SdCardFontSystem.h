@@ -2,6 +2,7 @@
 
 #include <SdCardFontManager.h>
 #include <SdCardFontRegistry.h>
+#include <UiGlyphPool.h>
 
 #include <atomic>
 
@@ -55,6 +56,10 @@ class SdCardFontSystem {
 
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
+  // Shared bounded glyph cache for the UI fallback instances (see
+  // SdCardFont::enableUiGlyphPool). Reset whenever fallbacks are (re)built so
+  // entries can never outlive the font files they were decoded from.
+  UiGlyphPool uiGlyphPool_;
   std::atomic<bool> registryDirty_{false};
 };
 

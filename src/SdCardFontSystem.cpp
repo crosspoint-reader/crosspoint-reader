@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <SdCardFont.h>
 
 #include <iterator>
 
@@ -84,6 +85,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   if (wantedFamily[0] == '\0') {
     if (!currentFamily.empty()) {
       manager_.unloadAll(renderer);
+      uiGlyphPool_.release();  // fallback instances are gone; drop their entries
     }
     // Back on a built-in family, which exists only at BUILTIN_READER_POINT_SIZES:
     // a size inherited from an SD family has to come back into that set.
@@ -101,6 +103,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     if (!family) {
       LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
       manager_.unloadAll(renderer);
+      uiGlyphPool_.release();  // fallback instances are gone; drop their entries
       SETTINGS.clearSdFontFamily();
       return;
     }
@@ -116,6 +119,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
 
   if (!currentFamily.empty()) {
     manager_.unloadAll(renderer);
+    uiGlyphPool_.release();  // fallback instances are gone; drop their entries
   }
 
   const auto* family = registry_.findFamily(wantedFamily);
@@ -160,12 +164,38 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
     return;
   }
 
+  int fallbackFontIds[std::size(kUiFontSizes)] = {};
+  int fallbackCount = 0;
   for (const auto& ui : kUiFontSizes) {
     const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize);
     if (sdFontId != 0) {
       renderer.setFallbackFont(ui.fontId, sdFontId);
+      fallbackFontIds[fallbackCount++] = sdFontId;
     } else {
       LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
+    }
+  }
+
+  // Shared UI glyph pool: one bounded block (index + compressed 1-bit bitmap
+  // arena) replaces the per-string mini-arena rebuilds on these instances,
+  // so list repaints reuse glyphs across rows and screens. Re-created on
+  // every fallback (re)build so entries always match the loaded files. When
+  // the heap guard fails, instances simply keep the legacy arena path.
+  if (fallbackCount > 0) {
+    uiGlyphPool_.release();
+    constexpr size_t UI_POOL_ARENA_BYTES = 12 * 1024;
+    constexpr uint16_t UI_POOL_MAX_ENTRIES = 384;
+    constexpr size_t UI_POOL_MIN_FREE_HEAP = 64 * 1024;
+    if (ESP.getFreeHeap() >= UI_POOL_MIN_FREE_HEAP && uiGlyphPool_.init(UI_POOL_ARENA_BYTES, UI_POOL_MAX_ENTRIES)) {
+      const auto& sdFonts = renderer.getSdCardFonts();
+      for (int i = 0; i < fallbackCount; i++) {
+        const auto it = sdFonts.find(fallbackFontIds[i]);
+        if (it != sdFonts.end()) {
+          it->second->enableUiGlyphPool(&uiGlyphPool_, static_cast<uint8_t>(i));
+        }
+      }
+    } else {
+      LOG_DBG("SDFS", "UI glyph pool disabled (heap)");
     }
   }
 }
