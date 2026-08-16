@@ -53,9 +53,17 @@ It does **not** limit which resource files may exist or be refreshed.
 the task is about that env (research / add a resource / add a committed env).
 Respect a no.
 
-Hardware truth is in-tree
+Hardware truth for this checkout is in-tree
 `freeink-sdk/libs/hardware/BoardConfig/include/BoardConfig.h`.
-`https://freeink.org/llms.txt` is a website index, not `BoardConfig`.
+That header lists more devices than this tree compiles; do not treat every
+`BoardProfile` as a CrossPoint target.
+
+`https://freeink.org/llms.txt` is a website index — useful for general
+hints, not that header. Before you change the SDK or propose new device
+support, you may suggest reviewing that index and the latest branch of
+upstream `freeink-sdk` (https://github.com/Free-Ink/freeink-sdk) so
+published notes and newer profiles are not missed. Do not fill resource
+fields from either. Neither overrides the in-tree header on this checkout.
 
 ## Interactions
 
@@ -121,7 +129,9 @@ integrations and against every file in `resources/` (see SCHEMA.md).
 | `ppi_note` | SDK comments only; do not invent dpi |
 | `caps` | `FREEINK_CAP_*` macros in `BoardConfig.h` that include this device |
 
-Do not take panel size, PSRAM, or caps from `AGENTS.md` or `llms.txt`.
+Do not take panel size, PSRAM, or caps from `AGENTS.md`, `llms.txt`, or
+an upstream SDK checkout that is not this submodule. Those may inform an
+SDK or new-support review; they do not override in-tree `BoardConfig.h`.
 
 ## Self-review
 
