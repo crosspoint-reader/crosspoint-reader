@@ -915,8 +915,8 @@ build_flags =
 
 | Workflow      | File                                        | Purpose                |
 | ------------- | ------------------------------------------- | ---------------------- |
-| Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow (the compile-set gate) |
-| Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
+| Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow (the compile-set gate); `clang-format` job on `pull_request` |
+| PR Title      | `.github/workflows/pr-formatting-check.yml` | Semantic PR title check |
 | Release Build | `.github/workflows/release.yml`             | Production release artifacts; not a PR compile-set gate |
 | RC Build      | `.github/workflows/release_candidate.yml`   | Manual `gh_release_rc` on `release/*`; not a PR compile-set gate |
 | Fonts         | `.github/workflows/release-fonts.yml`       | SD-card fonts; not firmware |
@@ -925,7 +925,7 @@ build_flags =
 
 - **Fix CI failures BEFORE** requesting review
 - CI runs on: Push to PR, PR updates
-- Format check fails → Run `./bin/clang-format-fix -g`
+- `ci.yml` clang-format job fails → Run `./bin/clang-format-fix -g`
 - Build check fails → Fix compile errors
 
 ---
