@@ -497,6 +497,8 @@ void SleepActivity::onEnter() {
     return renderLastScreenSleepScreen();
   }
 
+  const bool rotateScreen = SETTINGS.sleepScreenRotate == CrossPointSettings::SLEEP_SCREEN_ROTATE_MODE::SLEEP_ROTATE_ON;
+
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
     // Transparent mode retains the current framebuffer. Materialize any
     // output-level inversion first so the retained content keeps its visible
@@ -506,7 +508,9 @@ void SleepActivity::onEnter() {
       ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     }
     drawSleepPopupPreservingFrame(renderer);
-    if (APP_STATE.lastSleepFromReader) {
+    if (rotateScreen) {
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+    } else if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
     return renderTransparentCustomSleepScreen();
@@ -516,9 +520,13 @@ void SleepActivity::onEnter() {
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    renderer.setOrientation(rotateScreen ? GfxRenderer::Orientation::PortraitInverted
+                                         : GfxRenderer::Orientation::Portrait);
   } else {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    if (rotateScreen) {
+      renderer.setOrientation(GfxRenderer::Orientation::PortraitInverted);
+    }
   }
 
   switch (SETTINGS.sleepScreen) {
