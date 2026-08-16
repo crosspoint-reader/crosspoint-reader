@@ -168,6 +168,16 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
     esp_sleep_enable_gpio_wakeup();
   }
 
+  // Wake the instant USB is attached so a plug-in never lands inside a sleep
+  // slice: the next poll then sees USB and declines all further sleep, closing
+  // the mid-slice attach window the cached guard can't cover. X4's usbDetect is
+  // a real VBUS-driven GPIO (HIGH = attached); X3 has none (usbDetect < 0).
+  const int8_t usbPin = BoardConfig::ACTIVE.usbDetect;
+  if (usbPin >= 0) {
+    gpio_wakeup_enable(static_cast<gpio_num_t>(usbPin), GPIO_INTR_HIGH_LEVEL);
+    esp_sleep_enable_gpio_wakeup();
+  }
+
   // The C3 flash-leakage workaround pulls its DIO-unused SPIWP pad low during
   // light sleep. Hold GPIO13 high only on the X3/X4 boards that use that pad as
   // a power control; on other boards GPIO13 may be a bus signal.
@@ -178,6 +188,15 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   }
 
   const esp_err_t err = esp_light_sleep_start();
+
+  if (gpio.isXteinkDevice()) {
+    // Return GPIO13 to live GPIO-matrix control the moment we wake. The hold is
+    // only needed to survive the in-sleep flash-leakage workaround (see above);
+    // left latched across idle, the battery-MOSFET pad cannot follow a USB-attach
+    // power-path transition and the device hangs.
+    gpio_hold_dis(XTEINK_C3_GPIO13);
+    gpio_set_level(XTEINK_C3_GPIO13, 1);
+  }
 
   // Disarm immediately: an armed timer wake persists across sleep calls and would
   // carry over into startDeepSleep(), waking the device on USB power after 50 ms.
@@ -190,6 +209,10 @@ bool HalPowerManager::lightSleep(const HalGPIO& gpio) const {
   if (powerPin >= 0) {
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
     gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
+  }
+  if (usbPin >= 0) {
+    gpio_wakeup_disable(static_cast<gpio_num_t>(usbPin));
+    gpio_set_intr_type(static_cast<gpio_num_t>(usbPin), GPIO_INTR_DISABLE);
   }
 
   xSemaphoreGive(sleepMutex);
@@ -235,6 +258,12 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
     gpio_wakeup_enable(static_cast<gpio_num_t>(powerPin),
                        BoardConfig::ACTIVE.input.powerActiveHigh ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL);
   }
+  // Wake on USB attach mid-refresh too, so a plug-in never sleeps through the
+  // enumeration transient (see lightSleep(); X4 usbDetect only, X3 < 0).
+  const int8_t usbPin = BoardConfig::ACTIVE.usbDetect;
+  if (usbPin >= 0) {
+    gpio_wakeup_enable(static_cast<gpio_num_t>(usbPin), GPIO_INTR_HIGH_LEVEL);
+  }
   esp_sleep_enable_gpio_wakeup();
   esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(BUSY_SLEEP_SLICE_MS) * 1000ULL);
 
@@ -248,6 +277,13 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
 
   const esp_err_t err = esp_light_sleep_start();
 
+  if (gpio.isXteinkDevice()) {
+    // Release the GPIO13 latch on wake; see lightSleep() for why leaving it held
+    // across idle wedges the battery-MOSFET pad on USB attach.
+    gpio_hold_dis(XTEINK_C3_GPIO13);
+    gpio_set_level(XTEINK_C3_GPIO13, 1);
+  }
+
   // Disarm everything armed above; an armed source persisting into
   // startDeepSleep() would wake the device on USB power (see lightSleep()).
   // As in lightSleep(): also clear the LEVEL interrupt types, which
@@ -258,6 +294,10 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   if (powerPin >= 0) {
     gpio_wakeup_disable(static_cast<gpio_num_t>(powerPin));
     gpio_set_intr_type(static_cast<gpio_num_t>(powerPin), GPIO_INTR_DISABLE);
+  }
+  if (usbPin >= 0) {
+    gpio_wakeup_disable(static_cast<gpio_num_t>(usbPin));
+    gpio_set_intr_type(static_cast<gpio_num_t>(usbPin), GPIO_INTR_DISABLE);
   }
 
   xSemaphoreGive(sleepMutex);
