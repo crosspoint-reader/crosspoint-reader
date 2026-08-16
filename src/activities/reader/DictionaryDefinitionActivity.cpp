@@ -11,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/DictHtmlPages.h"
 #include "util/HtmlToPlainText.h"
 
 namespace {
@@ -22,6 +23,13 @@ constexpr size_t MAX_LINE_BYTES = 191;
 // Body text left/right inset, matching the reader's default feel.
 constexpr int SIDE_PADDING = 20;
 
+// Styled-path ceiling: the laid-out Pages keep the whole definition resident
+// (TextBlock arenas ≈ text + ~7 bytes/word plus per-line objects), roughly
+// doubling the string's footprint while this activity is stacked over the
+// reader and word-select. Bigger definitions take the span-based plain-text
+// path, which holds no per-page copies.
+constexpr size_t MAX_STYLED_HTML_BYTES = 16 * 1024;
+
 }  // namespace
 
 void DictionaryDefinitionActivity::onEnter() {
@@ -29,9 +37,41 @@ void DictionaryDefinitionActivity::onEnter() {
   // Normalize StarDict multi-type separators so the wrap loop and the
   // C-string font APIs below both see the whole definition.
   std::replace(definition.begin(), definition.end(), '\0', '\n');
-  definition = htmlToPlainText(definition);
-  wrapText();
+  if (!(htmlDefinition && definition.size() <= MAX_STYLED_HTML_BYTES && layoutHtmlPages())) {
+    definition = htmlToPlainText(definition);
+    wrapText();
+  }
   requestUpdate();
+}
+
+DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto orientation = renderer.getOrientation();
+  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
+                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
+  const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
+  const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
+  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
+  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
+  return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING,
+          renderer.getScreenHeight() - topArea - bottomArea};
+}
+
+// Styled path: lay the HTML definition out through the EPUB chapter parser
+// into reader-identical Pages. Frees `definition` on success (the page arenas
+// own the text); any failure leaves state untouched for the plain-text path.
+bool DictionaryDefinitionActivity::layoutHtmlPages() {
+  const BodyArea body = bodyArea();
+  if (body.width <= 0 || body.height <= 0) return false;
+  if (!buildDictionaryHtmlPages(renderer, definition, static_cast<uint16_t>(body.width),
+                                static_cast<uint16_t>(body.height), pages)) {
+    return false;
+  }
+  definition.clear();
+  definition.shrink_to_fit();
+  totalPages = static_cast<int>(pages.size());
+  currentPage = 0;
+  return true;
 }
 
 int DictionaryDefinitionActivity::measureSpan(const int fontId, const char* text, size_t len) const {
@@ -56,19 +96,11 @@ void DictionaryDefinitionActivity::wrapText() {
   // falls back to an on-demand glyph load from SD (8-slot overflow ring).
   renderer.ensureSdCardFontReady(fontId, definition.c_str(), 0x01 /* REGULAR */);
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto orientation = renderer.getOrientation();
-  const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
-                           orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
-  const int maxWidth = renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING;
+  const BodyArea body = bodyArea();
+  const int maxWidth = body.width;
   const int spaceWidth = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR);
-
   const int lineHeight = renderer.getLineHeight(fontId);
-  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
-  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  linesPerPage = std::max(1, (renderer.getScreenHeight() - topArea - bottomArea) / lineHeight);
+  linesPerPage = std::max(1, body.height / lineHeight);
 
   const char* text = definition.c_str();
   const uint32_t n = static_cast<uint32_t>(definition.size());
@@ -196,10 +228,15 @@ void DictionaryDefinitionActivity::loop() {
   });
 }
 
-// Draws the current page's line spans (copied into a stack buffer for NUL
+// Draws the current page: a styled Page when the HTML layout succeeded,
+// otherwise the wrapped line spans (copied into a stack buffer for NUL
 // termination). Called twice per render: once in font-cache scan mode, once
 // for the real paint.
 void DictionaryDefinitionActivity::drawBody(const int fontId, const int x, const int startY) const {
+  if (!pages.empty()) {
+    pages[currentPage]->render(renderer, fontId, x, startY);
+    return;
+  }
   const int lineHeight = renderer.getLineHeight(fontId);
   char buf[MAX_LINE_BYTES + 1];
   const int firstLine = currentPage * linesPerPage;

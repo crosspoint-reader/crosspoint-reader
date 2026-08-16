@@ -1,6 +1,6 @@
 ---
 name: control-flow-clarity
-description: Branching and state-modeling clarity in C/C++. Use when writing or refactoring logic that branches on discrete values: if/else-if ladders, status flags, mode or state ints, or anything that should be an enum plus an exhaustive switch. Covers enum class over magic ints, exhaustive switch over nested if, early-return guard clauses, table dispatch, and when each is the right call.
+description: "Branching and state-modeling clarity in C/C++. Use when writing or refactoring logic that branches on discrete values: if/else-if ladders, status flags, mode or state ints, or anything that should be an enum plus an exhaustive switch. Covers enum class over magic ints, exhaustive switch over nested if, early-return guard clauses, table dispatch, and when each is the right call."
 ---
 
 # Control-Flow Clarity

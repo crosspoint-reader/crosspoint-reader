@@ -22,9 +22,17 @@
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"  // list icons for the compare rows
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
+// One action id for both interactive states: the compare rows (SHOWING_RESULT)
+// and the upload button (NO_REMOTE_PROGRESS) never coexist, so state
+// disambiguates them in the handler.
+constexpr fui::ActionId ACTION_ROW = 1;
+
 std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? KOReaderDocumentId::calculateFromFilename(path)
                                                  : KOReaderDocumentId::calculate(path);
@@ -64,6 +72,22 @@ void syncTimeWithNTP() {
   }
 }
 }  // namespace
+
+KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                           const std::string& epubPath, int currentSpineIndex, int currentPage,
+                                           int totalPagesInSpine, SavedProgressPosition localKoPos,
+                                           std::string localChapterName, std::optional<uint16_t> currentParagraphIndex)
+    : Activity("KOReaderSync", renderer, mappedInput),
+      UiAppHost(renderer),
+      epubPath(epubPath),
+      localChapterName(std::move(localChapterName)),
+      currentSpineIndex(currentSpineIndex),
+      currentPage(currentPage),
+      totalPagesInSpine(totalPagesInSpine),
+      currentParagraphIndex(currentParagraphIndex),
+      remoteProgress{},
+      remotePosition{},
+      localProgress(std::move(localKoPos)) {}
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
@@ -368,6 +392,10 @@ void KOReaderSyncActivity::onEnter() {
   Activity::onEnter();
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
+  resetUi();
+  app.on(ACTION_ROW, &KOReaderSyncActivity::onResultRow, this);
+  app.setScreen(&KOReaderSyncActivity::resultScreen, this);
+
   // Check for credentials first
   if (!KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
@@ -401,6 +429,178 @@ void KOReaderSyncActivity::onExit() {
   }
 }
 
+void KOReaderSyncActivity::chooseResultOption() {
+  if (selectedOption == 0) {
+    saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+  } else {
+    performUpload();
+  }
+}
+
+void KOReaderSyncActivity::startUpload() {
+  if (documentHash.empty()) {
+    documentHash = KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME
+                       ? KOReaderDocumentId::calculateFromFilename(epubPath)
+                       : KOReaderDocumentId::calculate(epubPath);
+  }
+  performUpload();
+}
+
+void KOReaderSyncActivity::onResultRow(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<KOReaderSyncActivity*>(user);
+  // Activation leaves this screen (applies/uploads); drop the flash so it does
+  // not ghost onto the next paint.
+  self->app.clearTapFlash();
+  if (self->state == SHOWING_RESULT) {
+    if (event.value < 0 || event.value > 1) return;
+    self->selectedOption = event.value;
+    self->chooseResultOption();
+  } else if (self->state == NO_REMOTE_PROGRESS) {
+    self->startUpload();
+  }
+}
+
+void KOReaderSyncActivity::resultScreen(UiScreen& screen, void* user) {
+  static_cast<KOReaderSyncActivity*>(user)->buildResultScreen(screen);
+}
+
+void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // Side padding is 0 here (like the other FreeInkApp screens): the action list
+  // supplies its own theme side padding, and the raw comparison text is indented
+  // to line up with the list rows below (see labelIndent).
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  if (state == SHOWING_RESULT) {
+    // Chapter names (remote requires the lazily-loaded Epub; local was
+    // pre-computed before the Epub was released).
+    const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
+    const std::string remoteChapter =
+        (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
+                              : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(remotePosition.spineIndex + 1));
+    const std::string localChapter =
+        !localChapterName.empty() ? localChapterName
+                                  : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
+
+    char remoteVal[64];
+    snprintf(remoteVal, sizeof(remoteVal), tr(STR_PAGE_OVERALL_FORMAT), remotePosition.pageNumber + 1,
+             remoteProgress.percentage * 100);
+    char localVal[64];
+    snprintf(localVal, sizeof(localVal), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
+             localProgress.percentage * 100);
+    char deviceStr[80];
+    deviceStr[0] = '\0';
+    if (!remoteProgress.device.empty()) {
+      snprintf(deviceStr, sizeof(deviceStr), tr(STR_DEVICE_FROM_FORMAT), remoteProgress.device.c_str());
+    }
+
+    // Labeled, multi-line comparison flowing from the top. Indent everything to
+    // the list rows' content-left (the row inset + side padding the list adds
+    // below) so the "Remote"/"Local" labels sit directly above the row icons.
+    auto labelStyle = screen.theme().bodyText;
+    labelStyle.bold = true;
+    auto detailStyle = screen.theme().smallText;
+    const int16_t labelH = screen.target().lineHeight(labelStyle.font);
+    const int16_t detailH = screen.target().lineHeight(detailStyle.font);
+    const int16_t labelIndent = static_cast<int16_t>(screen.theme().listInset + screen.theme().listSidePadding);
+    const int16_t detailIndent = static_cast<int16_t>(labelIndent + screen.theme().spaceMd);
+    const auto textLine = [&](const char* text, const fui::TextStyle& style, int16_t height, int16_t indent,
+                              int16_t gap) {
+      fui::Rect r = screen.takeTop(height, gap);
+      r.x = static_cast<int16_t>(r.x + indent);
+      r.width = static_cast<int16_t>(r.width - indent);
+      screen.target().text(r, text, style);
+    };
+    const auto labelLine = [&](const char* text) {
+      textLine(text, labelStyle, labelH, labelIndent, screen.theme().spaceSm);
+    };
+    const auto detailLine = [&](const char* text) {
+      textLine(text, detailStyle, detailH, detailIndent, screen.theme().spaceXs);
+    };
+
+    labelLine(tr(STR_REMOTE_LABEL));
+    detailLine(remoteChapter.c_str());
+    detailLine(remoteVal);
+    if (deviceStr[0] != '\0') detailLine(deviceStr);
+    screen.spacer(screen.theme().spaceLg);
+    labelLine(tr(STR_LOCAL_LABEL));
+    detailLine(localChapter.c_str());
+    detailLine(localVal);
+
+    // Two themed action rows flowing directly below the labels (not anchored to
+    // the bottom). Rendered through the list component so they inherit the
+    // active theme's row radius, insets, and selection style, matching every
+    // other selectable list in the UI. Apply Remote pulls (download), Upload
+    // Local pushes (upload); the selected row highlights for physical-button
+    // users and tap works either way.
+    screen.spacer(screen.theme().spaceMd);
+    fui::ListItem actions[2];
+    actions[0].label = tr(STR_APPLY_REMOTE);
+    actions[0].icon = fui::bitmapFromIcon(icon_download_24);
+    actions[0].actionValue = 0;
+    actions[1].label = tr(STR_UPLOAD_LOCAL);
+    actions[1].icon = fui::bitmapFromIcon(icon_upload_24);
+    actions[1].actionValue = 1;
+    fui::ListProps actionProps;
+    actionProps.items = actions;
+    actionProps.count = 2;
+    actionProps.selectedIndex = static_cast<int16_t>(selectedOption);
+    actionProps.action = ACTION_ROW;
+    actionProps.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+    actionProps.scrollIndicator = false;      // never scrolls; no indicator needed
+    // Non-touch hardware (X3/X4) keeps the original, denser row height instead
+    // of FreeInkUI's touch-target-sized default (see
+    // UiListActivity::syncListViewport); actionsBand must use the same value
+    // or the band and the rows it contains fall out of sync.
+    int16_t actionRowHeight = screen.theme().rowHeight;
+    if (!mappedInput.hasTouch()) {
+      actionRowHeight = static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight);
+      actionProps.rowHeight = actionRowHeight;
+    }
+    // Keep the theme's row inset + side padding so the selected-row highlight has
+    // the same padding around its icon/label as every other list in the UI; the
+    // labels above are indented to match this content-left.
+    const auto actionsBand =
+        static_cast<int16_t>(actionRowHeight * 2 + screen.theme().listRowGap + screen.theme().spaceSm);
+    screen.list(actionProps, actionsBand);
+    return;
+  }
+
+  if (state == NO_REMOTE_PROGRESS) {
+    auto centered = screen.theme().bodyText;
+    centered.align = fui::TextAlign::Center;
+    auto centeredBold = centered;
+    centeredBold.bold = true;
+    const int16_t lineH = screen.target().lineHeight(centered.font);
+    screen.target().text(screen.takeTop(lineH, screen.theme().spaceSm), tr(STR_NO_REMOTE_MSG), centeredBold);
+    screen.target().text(screen.takeTop(lineH, screen.theme().spaceMd), tr(STR_UPLOAD_PROMPT), centered);
+
+    // Single themed action row anchored to the bottom, matching the lists used
+    // everywhere else (inherits the theme's row radius + selection style).
+    fui::ListItem action;
+    action.label = tr(STR_UPLOAD_LOCAL);
+    action.actionValue = 0;
+    fui::ListProps actionProps;
+    actionProps.items = &action;
+    actionProps.count = 1;
+    actionProps.selectedIndex = 0;
+    actionProps.action = ACTION_ROW;
+    actionProps.inputMask = fui::InputTouch;
+    actionProps.scrollIndicator = false;
+    // See the equivalent override above; keeps actionsBand in sync with the
+    // row height actually used on non-touch hardware (X3/X4).
+    int16_t actionRowHeight = screen.theme().rowHeight;
+    if (!mappedInput.hasTouch()) {
+      actionRowHeight = static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight);
+      actionProps.rowHeight = actionRowHeight;
+    }
+    const auto actionsBand = static_cast<int16_t>(actionRowHeight + screen.theme().spaceMd);
+    screen.list(actionProps, actionsBand, fui::LayoutAnchor::Bottom);
+  }
+}
+
 void KOReaderSyncActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -408,7 +608,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_KOREADER_SYNC));
+                 state == SHOWING_RESULT ? tr(STR_PROGRESS_FOUND) : tr(STR_KOREADER_SYNC));
 
   int top = screen.y + screen.height / 2 - 40;
   if (state == NO_CREDENTIALS) {
@@ -430,64 +630,10 @@ void KOReaderSyncActivity::render(RenderLock&&) {
   }
 
   if (state == SHOWING_RESULT) {
-    // Show comparison
-    top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_PROGRESS_FOUND), true, EpdFontFamily::BOLD);
+    // Comparison rows + option selection render through the FreeInkApp
+    // (themed rows, tap-flash); the header above shows "Progress Found".
+    renderUi();
 
-    // Remote chapter name requires Epub (loaded lazily in performSync before this state).
-    const int remoteTocIndex = epub->getTocIndexForSpineIndex(remotePosition.spineIndex);
-    const std::string remoteChapter =
-        (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
-                              : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(remotePosition.spineIndex + 1));
-    // Local chapter name was pre-computed before Epub was released.
-    const std::string localChapter =
-        !localChapterName.empty() ? localChapterName
-                                  : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
-
-    // Remote progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 40, tr(STR_REMOTE_LABEL), true);
-    char remoteChapterStr[128];
-    snprintf(remoteChapterStr, sizeof(remoteChapterStr), "  %s", remoteChapter.c_str());
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 65, remoteChapterStr);
-    char remotePageStr[64];
-    snprintf(remotePageStr, sizeof(remotePageStr), tr(STR_PAGE_OVERALL_FORMAT), remotePosition.pageNumber + 1,
-             remoteProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 90, remotePageStr);
-
-    if (!remoteProgress.device.empty()) {
-      char deviceStr[64];
-      snprintf(deviceStr, sizeof(deviceStr), tr(STR_DEVICE_FROM_FORMAT), remoteProgress.device.c_str());
-      renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 115, deviceStr);
-    }
-
-    // Local progress - chapter and page
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 150, tr(STR_LOCAL_LABEL), true);
-    char localChapterStr[128];
-    snprintf(localChapterStr, sizeof(localChapterStr), "  %s", localChapter.c_str());
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 175, localChapterStr);
-    char localPageStr[64];
-    snprintf(localPageStr, sizeof(localPageStr), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
-             localProgress.percentage * 100);
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, top + 200, localPageStr);
-
-    const int optionY = top + 230;
-    const int optionHeight = 30;
-
-    // Apply option
-    if (selectedOption == 0) {
-      renderer.fillRect(screen.x, optionY - 2, screen.width - 1, optionHeight);
-    }
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_REMOTE),
-                      selectedOption != 0);
-
-    // Upload option
-    if (selectedOption == 1) {
-      renderer.fillRect(screen.x, optionY + optionHeight - 2, screen.width - 1, optionHeight);
-    }
-    renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY + optionHeight,
-                      tr(STR_UPLOAD_LOCAL), selectedOption != 1);
-
-    // Bottom button hints
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -495,8 +641,8 @@ void KOReaderSyncActivity::render(RenderLock&&) {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_NO_REMOTE_MSG), true, EpdFontFamily::BOLD);
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, tr(STR_UPLOAD_PROMPT));
+    // Prompt text + upload button render through the FreeInkApp.
+    renderUi();
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_UPLOAD), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -540,48 +686,23 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == SHOWING_RESULT) {
-    auto chooseSelected = [this] {
-      if (selectedOption == 0) {
-        saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
-      } else if (selectedOption == 1) {
-        performUpload();
-      }
-    };
+    // Touch goes through the FreeInkApp: render() registered the compare rows;
+    // route the snapshot and let onResultRow apply/upload on tap.
+    const auto route = routeTouch(mappedInput);
+    if (route.routed && app.invalidated()) requestUpdate();
+    if (route) return;  // dispatched to onResultRow
 
-    {
-      const auto& metrics = UITheme::getInstance().getMetrics();
-      const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-      const int top = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-      constexpr int optionHeight = 30;
-      int touchedOption = -1;
-      const auto touch = mappedInput.rowTouch(touchedOption, top + 230 - 2, optionHeight, 2);
-      if (touch == MappedInputManager::RowTouch::Down) {
-        if (selectedOption != touchedOption) {
-          selectedOption = touchedOption;
-          requestUpdate();
-        }
-        return;
-      }
-      if (touch == MappedInputManager::RowTouch::Tap) {
-        selectedOption = touchedOption;
-        chooseSelected();
-        return;
-      }
-    }
-
-    // Navigate options
+    // Navigate the two options with physical buttons.
     if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
-      requestUpdate();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+        mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Down) ||
+        mappedInput.wasReleased(MappedInputManager::Button::Right)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      chooseSelected();
+      chooseResultOption();
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -591,31 +712,13 @@ void KOReaderSyncActivity::loop() {
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.wasScreenTapped(tx, ty) && ty > renderer.getScreenHeight() / 3 &&
-        ty < renderer.getScreenHeight() * 2 / 3) {
-      if (documentHash.empty()) {
-        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
-          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
-        } else {
-          documentHash = KOReaderDocumentId::calculate(epubPath);
-        }
-      }
-      performUpload();
-      return;
-    }
+    // Touch goes through the FreeInkApp: render() registered the upload button.
+    const auto route = routeTouch(mappedInput);
+    if (route.routed && app.invalidated()) requestUpdate();
+    if (route) return;  // dispatched to onResultRow -> startUpload
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      // Calculate hash if not done yet
-      if (documentHash.empty()) {
-        if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
-          documentHash = KOReaderDocumentId::calculateFromFilename(epubPath);
-        } else {
-          documentHash = KOReaderDocumentId::calculate(epubPath);
-        }
-      }
-      performUpload();
+      startUpload();
     }
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {

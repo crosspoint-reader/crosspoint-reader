@@ -61,6 +61,10 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
+  // Install the slice hook that replaces the BUSY poll delay on proven-long
+  // waits (see EpdBus::setBusyWaitSliceHook for the contract)
+  void setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel));
+
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;
 
@@ -97,6 +101,13 @@ class HalDisplay {
   // EInkDisplay::writeGrayscalePlaneStrip.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
   bool supportsStripGrayscale() const;
+
+  // True when displayGrayscaleBase() defers the base activation so the gray
+  // planes join it in a single waveform (Paper Mono). Callers should then route
+  // the base of a grayscale page through displayGrayscaleBase() instead of
+  // displayBuffer(): a separate B/W refresh first makes the gray pass re-drive
+  // the whole text body (a visible flash).
+  bool combinesGrayscaleBase() const;
 
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;
