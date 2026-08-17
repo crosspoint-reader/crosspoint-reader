@@ -8,6 +8,7 @@
 
 #include <cstdio>
 
+#include "ClockTimeZones.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -77,7 +78,8 @@ void ClockSyncActivity::runSync() {
 
   // Read the freshly synced time back for the user-facing confirmation.
   char buf[9];
-  if (halClock.formatTime(buf, sizeof(buf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+  if (halClock.formatTime(buf, sizeof(buf), getClockTimeZone(SETTINGS.clockTimeZone).posixRule,
+                          SETTINGS.clockFormat == 1)) {
     snprintf(syncedTime, sizeof(syncedTime), "%s", buf);
   }
   state = SUCCESS;

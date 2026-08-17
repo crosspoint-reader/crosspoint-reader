@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "ClockTimeZones.h"
 #include "CrossPointSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
@@ -214,6 +215,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_HIDE] = StrId::STR_HIDE;
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_RIGHT] = StrId::STR_DIR_RIGHT;
     statusBarClockValues[CrossPointSettings::STATUS_BAR_CLOCK_LEFT] = StrId::STR_DIR_LEFT;
+
+    std::vector<StrId> clockTimeZoneValues;
+    clockTimeZoneValues.reserve(CLOCK_TIME_ZONE_COUNT);
+    for (uint8_t i = 0; i < CLOCK_TIME_ZONE_COUNT; ++i) {
+      clockTimeZoneValues.push_back(getClockTimeZone(i).label);
+    }
 
     std::vector<SettingInfo> v = {
         // --- Display ---
@@ -426,12 +433,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_XTC_STATUS_BAR, &CrossPointSettings::xtcStatusBarMode,
                           {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
-        // Clock entries (web settings only; device UI uses ClockOffsetActivity for the offset).
-        // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
+        // Clock entries (web settings only; device UI uses ClockTimezoneActivity).
         SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock, std::move(statusBarClockValues),
                           "statusBarClock", StrId::STR_CUSTOMISE_STATUS_BAR),
-        SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
-                           "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR),
+        SettingInfo::Enum(StrId::STR_TIME_ZONE, &CrossPointSettings::clockTimeZone, std::move(clockTimeZoneValues),
+                          "clockTimezone", StrId::STR_CUSTOMISE_STATUS_BAR),
         SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                           {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
                           StrId::STR_CUSTOMISE_STATUS_BAR),

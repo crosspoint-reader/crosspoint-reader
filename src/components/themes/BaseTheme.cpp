@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <string>
 
+#include "ClockTimeZones.h"
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UIScale.h"
@@ -961,7 +962,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   // Draw Clock (X3 only — DS3231 RTC)
   if (sb.showsClock() && halClock.isAvailable()) {
     char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clockUtcOffsetQ, sb.clock12h)) {
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), getClockTimeZone(sb.clockTimeZone).posixRule, sb.clock12h)) {
       int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
       int clockX = 0;
       // Position to the left or right of the progress text (with a small gap)

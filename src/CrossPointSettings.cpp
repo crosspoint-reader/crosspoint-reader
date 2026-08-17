@@ -9,6 +9,7 @@
 #include <iterator>
 #include <string>
 
+#include "ClockTimeZones.h"
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
@@ -172,6 +173,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  // Releases before the named-zone picker stored a manually selected fixed
+  // offset. Preserve the user's approximate region on first load, then resave
+  // under the stable zone-index key.
+  if (doc["clockTimezone"].isNull() && !doc["clockUtcOffsetQ"].isNull()) {
+    clockTimeZone = clockTimeZoneFromLegacyOffset(doc["clockUtcOffsetQ"] | static_cast<uint8_t>(48));
+    needsResave = true;
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);
@@ -240,7 +249,7 @@ CrossPointSettings::StatusBarSpec CrossPointSettings::statusBarSpec() const {
   spec.showBatteryPercent = hideBatteryPercentage == HIDE_NEVER;
   spec.clockMode = statusBarClock;
   spec.clock12h = clockFormat == 1;
-  spec.clockUtcOffsetQ = clockUtcOffsetQ;
+  spec.clockTimeZone = clockTimeZone;
   spec.progressBarMode = statusBarProgressBar;
   spec.progressBarHeightPx =
       statusBarProgressBar != HIDE_PROGRESS ? static_cast<uint8_t>((statusBarProgressBarThickness + 1) * 2) : 0;
