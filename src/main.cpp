@@ -47,7 +47,10 @@ FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
 static unsigned long allowSleepAt = 0;
-static unsigned long lastX4ProPowerClickAt = 0;
+// Timestamp of the first click of a pending X4 Pro frontlight double-click.
+// Driven by Power or Home taps depending on SETTINGS.frontlightToggleButton
+// (never both at once).
+static unsigned long lastX4ProFrontlightClickAt = 0;
 
 namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
@@ -200,27 +203,33 @@ void silentRestartToReader() {
 }
 
 bool handleX4ProFrontlightDoubleClick() {
-  if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
-    return false;
+  if (!BoardConfig::isX4Pro()) return false;
+
+  const bool useHome = SETTINGS.frontlightToggleButton == CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_HOME;
+  if (useHome) {
+    if (!gpio.hasHomeKey() || !gpio.wasHomeKeyTapped()) return false;
+    // wasHomeKeyTapped() is the SDK's own short-press classification (its long-press
+    // counterpart is a separate event), so no extra hold-time filtering is needed here.
+  } else {
+    if (!gpio.wasReleased(HalGPIO::BTN_POWER)) return false;
+    if (gpio.getPowerButtonHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS) {
+      lastX4ProFrontlightClickAt = 0;
+      return false;
+    }
   }
 
   const unsigned long now = millis();
-  if (gpio.getPowerButtonHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS) {
-    lastX4ProPowerClickAt = 0;
+  if (lastX4ProFrontlightClickAt == 0 || now - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProFrontlightClickAt = now;
     return false;
   }
 
-  if (lastX4ProPowerClickAt == 0 || now - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
-    lastX4ProPowerClickAt = now;
-    return false;
-  }
-
-  lastX4ProPowerClickAt = 0;
+  lastX4ProFrontlightClickAt = 0;
   const bool lightOn = !Frontlight.isOn();
   Frontlight.setOn(lightOn);
   SETTINGS.frontlightOn = lightOn ? 1 : 0;
   SETTINGS.saveToFile();
-  LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
+  LOG_INF("LIGHT", "Frontlight toggled %s by %s double-click", lightOn ? "on" : "off", useHome ? "home-key" : "power-button");
   return true;
 }
 
@@ -627,20 +636,50 @@ void loop() {
     screenshotComboActive = false;
   }
 
-  // Consume the second X4 Pro power-button release so it does not also run a
-  // configured short-power action after toggling the frontlight.
+  // Consume the second X4 Pro power/home click so it does not also run a
+  // configured short-power action or Home gesture after toggling the frontlight.
   if (handleX4ProFrontlightDoubleClick()) {
     return;
   }
 
+  const bool x4ProFrontlightOnPower = BoardConfig::isX4Pro() &&
+                                       SETTINGS.frontlightToggleButton ==
+                                           CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_POWER;
+
 #if FREEINK_CAP_TOUCH
   // A single X4 Pro power click becomes Confirm only after the frontlight
-  // double-click window expires without a second click.
+  // double-click window expires without a second click. Gated to Power mode
+  // so a pending Home click (unrelated) can't be mistaken for one.
   mappedInputManager.setPowerConfirmClickFrame(false);
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && BoardConfig::isX4Pro() &&
-      lastX4ProPowerClickAt != 0 && millis() - lastX4ProPowerClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
-    lastX4ProPowerClickAt = 0;
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && x4ProFrontlightOnPower &&
+      lastX4ProFrontlightClickAt != 0 && millis() - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProFrontlightClickAt = 0;
     mappedInputManager.setPowerConfirmClickFrame(true);
+  }
+#endif
+
+  // Same deferral for SLEEP: getPowerButtonDuration() drops to 10ms so a quick
+  // tap sleeps the device, which otherwise fires on button-down and never lets
+  // a second click land. Sleep only once the double-click window has passed.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP && x4ProFrontlightOnPower &&
+      lastX4ProFrontlightClickAt != 0 && millis() - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProFrontlightClickAt = 0;
+    enterDeepSleep();
+    // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
+    return;
+  }
+
+#if FREEINK_CAP_TOUCH
+  // A single Home tap becomes the Home gesture only after the frontlight
+  // double-click window expires without a second tap.
+  const bool x4ProFrontlightOnHome = BoardConfig::isX4Pro() &&
+                                      SETTINGS.frontlightToggleButton ==
+                                          CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_HOME;
+  mappedInputManager.setHomeGestureClickFrame(false);
+  if (x4ProFrontlightOnHome && lastX4ProFrontlightClickAt != 0 &&
+      millis() - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+    lastX4ProFrontlightClickAt = 0;
+    mappedInputManager.setHomeGestureClickFrame(true);
   }
 #endif
 
@@ -658,8 +697,15 @@ void loop() {
   static bool powerReleasedSinceWake = false;
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
-  if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  // On X4 Pro with SLEEP, a press still within the click window is a
+  // double-click candidate — let it be released and evaluated above instead
+  // of sleeping on button-down.
+  const bool x4ProAwaitingClickWindow = x4ProFrontlightOnPower &&
+                                         SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP &&
+                                         gpio.getPowerButtonHeldTime() <= X4PRO_POWER_CLICK_MAX_HOLD_MS;
+
+  if (!x4ProAwaitingClickWindow && powerReleasedSinceWake && millis() >= allowSleepAt &&
+      gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;

@@ -277,7 +277,16 @@ bool MappedInputManager::wasBottomEdgeUpSwipe() const { return wasEdgeSwipe(fui:
 bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); }
 
 bool MappedInputManager::wasHomeGesture() const {
-  return gpio.hasHomeKey() ? gpio.wasHomeKeyTapped() : wasBottomEdgeUpSwipe();
+  if (!gpio.hasHomeKey()) return wasBottomEdgeUpSwipe();
+#if FREEINK_CAP_TOUCH
+  // Wait out the X4 Pro's frontlight double-click window before treating its
+  // first tap as Home, when Home is configured as that toggle button.
+  if (BoardConfig::isX4Pro() &&
+      SETTINGS.frontlightToggleButton == CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_HOME) {
+    return homeGestureClickFrame;
+  }
+#endif
+  return gpio.wasHomeKeyTapped();
 }
 
 bool MappedInputManager::wasHomeKeyHold() const { return gpio.hasHomeKey() && gpio.wasHomeKeyLongPressed(); }
@@ -291,8 +300,12 @@ bool MappedInputManager::wasLightPanelGesture() const {
 bool MappedInputManager::wasPowerConfirmClick() const {
   if (!gpio.hasTouch() || SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM) return false;
   // Wait out the X4 Pro's frontlight double-click window before treating its
-  // first release as Confirm. Other touch boards can use the release directly.
-  if (BoardConfig::isX4Pro()) return powerConfirmClickFrame;
+  // first release as Confirm — but only when Power actually drives that
+  // double-click; otherwise it's a plain release, same as other touch boards.
+  if (BoardConfig::isX4Pro() &&
+      SETTINGS.frontlightToggleButton == CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_POWER) {
+    return powerConfirmClickFrame;
+  }
   return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
 }
 #endif

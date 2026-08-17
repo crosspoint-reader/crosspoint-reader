@@ -325,6 +325,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
+        // X4 Pro only; hidden from the on-device list on other boards in
+        // SettingsActivity::rebuildSettingsLists (same pattern as fadingFix).
+        SettingInfo::Enum(StrId::STR_FRONTLIGHT_TOGGLE_BTN, &CrossPointSettings::frontlightToggleButton,
+                          {StrId::STR_POWER_BUTTON, StrId::STR_HOME_KEY}, "frontlightToggleButton",
+                          StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,

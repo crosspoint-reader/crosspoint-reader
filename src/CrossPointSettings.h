@@ -140,6 +140,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
+  // Which button's double-click toggles the frontlight (X4 Pro only).
+  enum FRONTLIGHT_TOGGLE_BTN { FL_TOGGLE_POWER = 0, FL_TOGGLE_HOME = 1, FRONTLIGHT_TOGGLE_BTN_COUNT };
+
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
   // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
@@ -219,6 +222,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Which button's double-click toggles the frontlight (X4 Pro only)
+  uint8_t frontlightToggleButton = FL_TOGGLE_POWER;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;

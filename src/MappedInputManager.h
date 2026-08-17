@@ -44,6 +44,9 @@ class MappedInputManager {
   // X4 Pro delays a single power click until its frontlight double-click window
   // expires. The main loop supplies that one-frame event here.
   void setPowerConfirmClickFrame(const bool clicked) { powerConfirmClickFrame = clicked; }
+  // Same deferral for a single Home tap, when Home (not Power) is configured
+  // as the frontlight double-click button.
+  void setHomeGestureClickFrame(const bool clicked) { homeGestureClickFrame = clicked; }
 #endif
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
@@ -138,5 +141,6 @@ class MappedInputManager {
   mutable unsigned long touchHeldOverrideAt = 0;
 #if FREEINK_CAP_TOUCH
   bool powerConfirmClickFrame = false;
+  bool homeGestureClickFrame = false;
 #endif
 };
