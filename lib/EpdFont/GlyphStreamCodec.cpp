@@ -132,15 +132,24 @@ bool parseStream(const EpdFontData* fontData, const uint32_t glyphIndex, StreamI
   return true;
 }
 
-uint8_t pixelAt(const uint8_t* plane, const uint8_t width, const uint8_t height, const int x, const int y) {
+#if defined(__GNUC__) || defined(__clang__)
+#define GLYPH_STREAM_ALWAYS_INLINE inline __attribute__((always_inline))
+#else
+#define GLYPH_STREAM_ALWAYS_INLINE inline
+#endif
+
+GLYPH_STREAM_ALWAYS_INLINE uint8_t pixelAt(const uint8_t* plane, const uint8_t width, const uint8_t height, const int x,
+                                           const int y) {
   if (plane == nullptr || x < 0 || y < 0 || x >= width || y >= height) return 0;
   return plane[static_cast<size_t>(y) * width + x];
 }
 
-uint8_t basePixelAt(const uint8_t* plane, const uint8_t width, const uint8_t height, const int x, const int y,
-                    const int8_t shift) {
+GLYPH_STREAM_ALWAYS_INLINE uint8_t basePixelAt(const uint8_t* plane, const uint8_t width, const uint8_t height,
+                                               const int x, const int y, const int8_t shift) {
   return pixelAt(plane, width, height, x, y + shift);
 }
+
+#undef GLYPH_STREAM_ALWAYS_INLINE
 
 uint16_t treeProbability(const GlyphStreamTreeNode* nodes, const uint16_t nodeCount, const uint16_t* probabilities,
                          const uint8_t* features) {
