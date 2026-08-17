@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <new>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -44,6 +45,19 @@ std::vector<uint8_t> fromHex(const std::string_view text) {
     bytes.push_back(static_cast<uint8_t>((nibble(text[index]) << 4) | nibble(text[index + 1])));
   }
   return bytes;
+}
+
+void appendUtf8(std::string& text, const uint32_t codepoint) {
+  if (codepoint < 0x80) {
+    text.push_back(static_cast<char>(codepoint));
+  } else if (codepoint < 0x800) {
+    text.push_back(static_cast<char>(0xC0 | (codepoint >> 6)));
+    text.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else {
+    text.push_back(static_cast<char>(0xE0 | (codepoint >> 12)));
+    text.push_back(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    text.push_back(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  }
 }
 
 EpdFontData makeFont(const std::vector<uint8_t>& bitmap, const EpdGlyph* glyphs, const EpdUnicodeInterval* intervals,
@@ -151,6 +165,142 @@ TEST_F(GlyphStreamCodecTest, FontDecompressorPrewarmsGlyphStreamPixels) {
   EXPECT_EQ(0x80, second[0]);
 }
 
+TEST_F(GlyphStreamCodecTest, GlyphStreamCacheRetainsLeastRecentlyUsedGlyphAcrossPages) {
+  const std::vector<uint8_t> bitmap = fromHex("400040804000");
+  const EpdGlyph glyphs[] = {
+      {1, 1, 0, 0, 0, 2, 0},
+      {1, 1, 0, 0, 0, 2, 2},
+      {1, 1, 0, 0, 0, 2, 4},
+  };
+  const EpdUnicodeInterval intervals[] = {{0x41, 0x43, 0}};
+  const EpdFontData fontData = makeFont(bitmap, glyphs, intervals, 1, false);
+  const EpdFont regular(&fontData);
+  const std::map<int, EpdFontFamily> fonts{{7, EpdFontFamily(&regular)}};
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontDecompressor decompressor;
+  FontCacheManager manager(fonts, noSdFonts);
+
+  ASSERT_TRUE(decompressor.init());
+  manager.setFontDecompressor(&decompressor);
+
+  {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("AB", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+    EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheHits);
+    EXPECT_EQ(2U, decompressor.getStats().prewarmGlyphCacheMisses);
+  }
+  {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("BC", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+    EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheHits);
+    EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheMisses);
+  }
+  {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("A", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+
+    EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheHits);
+    EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheMisses);
+    const uint8_t* cached = decompressor.getBitmap(&fontData, &glyphs[0], 0);
+    ASSERT_NE(nullptr, cached);
+    EXPECT_EQ(0x00, cached[0]);
+  }
+}
+
+TEST_F(GlyphStreamCodecTest, GlyphStreamCacheEvictsOldestUnpinnedGlyphAndKeepsPackedDataIntact) {
+  constexpr uint32_t FIRST_CODEPOINT = 0x0100;
+  constexpr uint16_t GLYPH_COUNT = 257;
+  std::vector<uint8_t> bitmap;
+  std::vector<EpdGlyph> glyphs;
+  bitmap.reserve(GLYPH_COUNT * 2);
+  glyphs.reserve(GLYPH_COUNT);
+  for (uint16_t i = 0; i < GLYPH_COUNT; ++i) {
+    const uint8_t width = (i & 1) ? 9 : 1;
+    const uint16_t packedSize = (width + 7) / 8;
+    const uint32_t dataOffset = bitmap.size();
+    bitmap.push_back(0x40);
+    bitmap.push_back((i & 1) ? 0x80 : 0x00);
+    if (packedSize == 2) bitmap.push_back(0x80);
+    glyphs.push_back({width, 1, 0, 0, 0, static_cast<uint16_t>(1 + packedSize), dataOffset});
+  }
+  const EpdUnicodeInterval intervals[] = {{FIRST_CODEPOINT, FIRST_CODEPOINT + GLYPH_COUNT - 1, 0}};
+  const EpdFontData fontData = makeFont(bitmap, glyphs.data(), intervals, 1, false);
+  const EpdFont regular(&fontData);
+  const std::map<int, EpdFontFamily> fonts{{7, EpdFontFamily(&regular)}};
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontDecompressor decompressor;
+  FontCacheManager manager(fonts, noSdFonts);
+
+  ASSERT_TRUE(decompressor.init());
+  manager.setFontDecompressor(&decompressor);
+
+  auto prewarmRange = [&](const uint16_t first, const uint16_t count) {
+    std::string text;
+    text.reserve(count * 2);
+    for (uint16_t i = 0; i < count; ++i) appendUtf8(text, FIRST_CODEPOINT + first + i);
+    auto scope = manager.createPrewarmScope();
+    manager.recordText(text.c_str(), 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+  };
+
+  prewarmRange(0, 128);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(128U, decompressor.getStats().prewarmGlyphCacheMisses);
+  prewarmRange(128, 128);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(128U, decompressor.getStats().prewarmGlyphCacheMisses);
+  prewarmRange(0, 1);  // Refresh glyph zero before forcing an eviction.
+  EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheMisses);
+  prewarmRange(256, 1);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheMisses);
+
+  prewarmRange(0, 1);
+  EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheMisses);
+  prewarmRange(1, 1);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheMisses);
+
+  const uint8_t* retained = decompressor.getBitmap(&fontData, &glyphs[255], 255);
+  ASSERT_NE(nullptr, retained);
+  EXPECT_EQ(0x80, retained[0]);
+  EXPECT_EQ(0x80, retained[1]);
+}
+
+TEST_F(GlyphStreamCodecTest, HardCacheClearForcesGlyphStreamDecodeAgain) {
+  const std::vector<uint8_t> bitmap = fromHex("4000");
+  const EpdGlyph glyphs[] = {{1, 1, 0, 0, 0, 2, 0}};
+  const EpdUnicodeInterval intervals[] = {{0x41, 0x41, 0}};
+  const EpdFontData fontData = makeFont(bitmap, glyphs, intervals, 1, false);
+  const EpdFont regular(&fontData);
+  const std::map<int, EpdFontFamily> fonts{{7, EpdFontFamily(&regular)}};
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontDecompressor decompressor;
+  FontCacheManager manager(fonts, noSdFonts);
+  ASSERT_TRUE(decompressor.init());
+  manager.setFontDecompressor(&decompressor);
+
+  for (uint8_t page = 0; page < 2; ++page) {
+    auto scope = manager.createPrewarmScope();
+    manager.recordText("A", 7, EpdFontFamily::REGULAR);
+    scope.endScanAndPrewarm();
+  }
+  EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheMisses);
+
+  manager.clearCache();
+  auto scope = manager.createPrewarmScope();
+  manager.recordText("A", 7, EpdFontFamily::REGULAR);
+  scope.endScanAndPrewarm();
+  EXPECT_EQ(0U, decompressor.getStats().prewarmGlyphCacheHits);
+  EXPECT_EQ(1U, decompressor.getStats().prewarmGlyphCacheMisses);
+}
+
 TEST_F(GlyphStreamCodecTest, OneBitGlyphStreamUsesSharedDecompressorRouting) {
   EpdFontData rawFont{};
   EXPECT_FALSE(epdFontUsesDecompressor(&rawFont));
@@ -180,7 +330,7 @@ TEST_F(GlyphStreamCodecTest, FontCacheManagerPrewarmsOneBitGlyphStreamButSkipsLe
   streamManager.setFontDecompressor(&streamDecompressor);
   streamManager.prewarmCache(7, "A", 0x01);
 
-  EXPECT_EQ(1U, streamDecompressor.getStats().pageBufferBytes);
+  EXPECT_EQ(1U, streamDecompressor.getStats().glyphCacheBytes);
   const uint8_t* decoded = streamDecompressor.getBitmap(&streamFont, &streamGlyphs[0], 0);
   ASSERT_NE(nullptr, decoded);
   EXPECT_EQ(0x00, decoded[0]);
@@ -228,7 +378,7 @@ TEST_F(GlyphStreamCodecTest, PrewarmScopeRoutesTextToRecordedStyle) {
   manager.recordText("B", 7, EpdFontFamily::REGULAR);
   scope.endScanAndPrewarm();
 
-  EXPECT_EQ(3U, decompressor.getStats().pageBufferBytes);
+  EXPECT_EQ(3U, decompressor.getStats().glyphCacheBytes);
   ASSERT_NE(nullptr, decompressor.getBitmap(&regularFont, &glyphs[0], 0));
   ASSERT_NE(nullptr, decompressor.getBitmap(&regularFont, &glyphs[1], 1));
   ASSERT_NE(nullptr, decompressor.getBitmap(&boldFont, &glyphs[1], 1));
@@ -256,7 +406,7 @@ TEST_F(GlyphStreamCodecTest, PrewarmScopeMergesStylesThatResolveToTheSameFont) {
   manager.recordText("B", 7, EpdFontFamily::BOLD);
   scope.endScanAndPrewarm();
 
-  EXPECT_EQ(2U, decompressor.getStats().pageBufferBytes);
+  EXPECT_EQ(2U, decompressor.getStats().glyphCacheBytes);
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[0], 0));
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[1], 1));
   EXPECT_EQ(2U, decompressor.getStats().cacheHits);
@@ -302,7 +452,7 @@ TEST_F(GlyphStreamCodecTest, PrewarmScopePreservesUniqueMultibyteCodepoints) {
   manager.recordText("\xC3\xA9\xE4\xB8\xAD\xF0\x9F\x98\x80\xC3\xA9", 7, EpdFontFamily::REGULAR);
   scope.endScanAndPrewarm();
 
-  EXPECT_EQ(3U, decompressor.getStats().pageBufferBytes);
+  EXPECT_EQ(3U, decompressor.getStats().glyphCacheBytes);
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[0], 0));
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[1], 1));
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[2], 2));

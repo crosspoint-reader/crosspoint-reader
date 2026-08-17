@@ -59,6 +59,7 @@ class FontCacheManager {
   static constexpr uint32_t SCAN_CODEPOINT_MASK = (1U << SCAN_STYLE_SHIFT) - 1;
 
   uint8_t resolveScanStyle(int fontId, EpdFontFamily::Style style) const;
+  void clearTransientCache();
   ScanMode scanMode_ = ScanMode::None;
   uint32_t scanCodepoints_[MAX_SCAN_CODEPOINTS + 1] = {};
   uint16_t scanStyleCounts_[4] = {};

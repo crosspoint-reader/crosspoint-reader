@@ -44,6 +44,13 @@ void FontCacheManager::clearCache() {
   }
 }
 
+void FontCacheManager::clearTransientCache() {
+  if (fontDecompressor_) fontDecompressor_->clearTransientCache();
+  for (auto& [id, font] : sdCardFonts_) {
+    font->clearCache();
+  }
+}
+
 void FontCacheManager::releaseSdFontCaches() {
   if (fontDecompressor_) fontDecompressor_->clearCache();
   for (auto& [id, font] : sdCardFonts_) {
@@ -147,8 +154,9 @@ void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::S
 
 FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manager_(&manager) {
   manager_->scanMode_ = ScanMode::Scanning;
-  manager_->clearCache();
+  manager_->clearTransientCache();
   manager_->resetStats();
+  if (manager_->fontDecompressor_) manager_->fontDecompressor_->beginPrewarm();
   manager_->scanCodepointCount_ = 0;
   memset(manager_->scanStyleCounts_, 0, sizeof(manager_->scanStyleCounts_));
   manager_->scanFontId_ = -1;
@@ -190,7 +198,7 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
 FontCacheManager::PrewarmScope::~PrewarmScope() {
   if (active_) {
     endScanAndPrewarm();  // no-op if already called
-    manager_->clearCache();
+    manager_->clearTransientCache();
   }
 }
 

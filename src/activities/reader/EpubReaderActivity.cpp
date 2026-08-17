@@ -140,6 +140,7 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
 
 EpubReaderActivity::~EpubReaderActivity() {
   ImageBlock::setExtractor(nullptr, nullptr);
+  if (auto* fontCacheManager = renderer.getFontCacheManager()) fontCacheManager->clearCache();
 
   if (footnoteDepth > 0 && epub) {
     const SavedPosition& origin = savedPositions[0];
