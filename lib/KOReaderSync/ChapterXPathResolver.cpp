@@ -55,7 +55,7 @@ std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegm
   for (const auto& segment : path) {
     xpath += "/" + segment.name + "[" + std::to_string(segment.index) + "]";
   }
-  if (textNodeIndex > 0 && charOffset > 0) {
+  if (textNodeIndex > 0) {
     xpath += "/text()[" + std::to_string(textNodeIndex) + "]." + std::to_string(charOffset);
   }
   return xpath;
@@ -547,6 +547,37 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
   }
 
   LOG_DBG("KOX", "Paragraph %u not found in spine %d", paragraphIndex, spineIndex);
+  return "";
+}
+
+std::string ChapterXPathResolver::findXPathForVisibleTextOffset(const std::shared_ptr<Epub>& epub, const int spineIndex,
+                                                                const uint32_t visibleTextOffset) {
+  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+    return "";
+  }
+
+  const auto href = epub->getSpineItem(spineIndex).href;
+  if (href.empty()) {
+    return "";
+  }
+
+  XPathProgressResolver resolver(visibleTextOffset);
+  if (!resolver.ok()) {
+    return "";
+  }
+
+  resolver.spineIndex = spineIndex;
+  if (!epub->readItemContentsToStream(href, resolver, 1024) || !resolver.finish()) {
+    return "";
+  }
+
+  if (resolver.hasMatch()) {
+    LOG_DBG("KOX", "Resolved visible offset %u in spine %d -> %s", visibleTextOffset, spineIndex,
+            resolver.getXPath().c_str());
+    return resolver.getXPath();
+  }
+
+  LOG_DBG("KOX", "Visible offset %u not found in spine %d", visibleTextOffset, spineIndex);
   return "";
 }
 
