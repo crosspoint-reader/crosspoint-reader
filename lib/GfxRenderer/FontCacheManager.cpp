@@ -68,17 +68,34 @@ void FontCacheManager::resetStats() {
 
 bool FontCacheManager::isScanning() const { return scanMode_ == ScanMode::Scanning; }
 
-void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::Style style) {
-  scanText_ += text;
-  if (scanFontId_ < 0) scanFontId_ = fontId;
+uint8_t FontCacheManager::resolveScanStyle(int fontId, EpdFontFamily::Style style) const {
   const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
-  const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
-  uint32_t cpCount = 0;
-  while (*p) {
-    if ((*p & 0xC0) != 0x80) cpCount++;
-    p++;
+
+  const auto sdFont = sdCardFonts_.find(fontId);
+  if (sdFont != sdCardFonts_.end()) return sdFont->second->resolveStyle(baseStyle);
+
+  const auto font = fontMap_.find(fontId);
+  if (font == fontMap_.end()) return baseStyle;
+
+  const EpdFontData* resolvedData = font->second.getData(static_cast<EpdFontFamily::Style>(baseStyle));
+  for (uint8_t candidate = 0; candidate < 4; candidate++) {
+    if (font->second.getData(static_cast<EpdFontFamily::Style>(candidate)) == resolvedData) return candidate;
   }
-  scanStyleCounts_[baseStyle] += cpCount;
+  return baseStyle;
+}
+
+void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::Style style) {
+  if (!text || !*text) return;
+  if (scanFontId_ < 0) scanFontId_ = fontId;
+
+  const uint8_t resolvedStyle = resolveScanStyle(fontId, style);
+  uint32_t insertOffset = 0;
+  for (uint8_t i = 0; i <= resolvedStyle; i++) {
+    insertOffset += scanStyleBytes_[i];
+  }
+  const size_t textBytes = strlen(text);
+  scanText_.insert(insertOffset, text, textBytes);
+  scanStyleBytes_[resolvedStyle] += static_cast<uint32_t>(textBytes);
 }
 
 // --- PrewarmScope implementation ---
@@ -89,7 +106,7 @@ FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manage
   manager_->resetStats();
   manager_->scanText_.clear();
   manager_->scanText_.reserve(2048);  // Pre-allocate to avoid heap fragmentation from repeated concat
-  memset(manager_->scanStyleCounts_, 0, sizeof(manager_->scanStyleCounts_));
+  memset(manager_->scanStyleBytes_, 0, sizeof(manager_->scanStyleBytes_));
   manager_->scanFontId_ = -1;
 }
 
@@ -97,14 +114,21 @@ void FontCacheManager::PrewarmScope::endScanAndPrewarm() {
   manager_->scanMode_ = ScanMode::None;
   if (manager_->scanText_.empty()) return;
 
-  // Build style bitmask from all styles that appeared during the scan
-  uint8_t styleMask = 0;
+  uint32_t styleStart = 0;
   for (uint8_t i = 0; i < 4; i++) {
-    if (manager_->scanStyleCounts_[i] > 0) styleMask |= (1 << i);
-  }
-  if (styleMask == 0) styleMask = 1;  // default to regular
+    const uint32_t styleBytes = manager_->scanStyleBytes_[i];
+    if (styleBytes == 0) continue;
 
-  manager_->prewarmCache(manager_->scanFontId_, manager_->scanText_.c_str(), styleMask);
+    const uint32_t styleEnd = styleStart + styleBytes;
+    const bool hasFollowingText = styleEnd < manager_->scanText_.size();
+    const char savedByte = hasFollowingText ? manager_->scanText_[styleEnd] : '\0';
+    if (hasFollowingText) manager_->scanText_[styleEnd] = '\0';
+
+    manager_->prewarmCache(manager_->scanFontId_, manager_->scanText_.c_str() + styleStart, 1 << i);
+
+    if (hasFollowingText) manager_->scanText_[styleEnd] = savedByte;
+    styleStart = styleEnd;
+  }
 
   // Free scan string memory
   manager_->scanText_.clear();

@@ -55,8 +55,9 @@ class FontCacheManager {
   FontDecompressor* fontDecompressor_ = nullptr;
 
   enum class ScanMode : uint8_t { None, Scanning };
+  uint8_t resolveScanStyle(int fontId, EpdFontFamily::Style style) const;
   ScanMode scanMode_ = ScanMode::None;
   std::string scanText_;
-  uint32_t scanStyleCounts_[4] = {};
+  uint32_t scanStyleBytes_[4] = {};
   int scanFontId_ = -1;
 };

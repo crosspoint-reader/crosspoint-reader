@@ -184,6 +184,65 @@ TEST_F(GlyphStreamCodecTest, FontCacheManagerPrewarmsOneBitGlyphStreamButSkipsLe
   EXPECT_EQ(rawBitmap.data(), rawDecompressor.getBitmap(&rawFont, &rawGlyphs[0], 0));
 }
 
+TEST_F(GlyphStreamCodecTest, PrewarmScopeRoutesTextToRecordedStyle) {
+  const std::vector<uint8_t> regularBitmap = fromHex("40004080");
+  const std::vector<uint8_t> boldBitmap = fromHex("40004080");
+  const EpdGlyph glyphs[] = {
+      {1, 1, 0, 0, 0, 2, 0},
+      {1, 1, 0, 0, 0, 2, 2},
+  };
+  const EpdUnicodeInterval intervals[] = {{0x41, 0x42, 0}};
+  const EpdFontData regularFont = makeFont(regularBitmap, glyphs, intervals, 1, false);
+  const EpdFontData boldFont = makeFont(boldBitmap, glyphs, intervals, 1, false);
+  const EpdFont regular(&regularFont);
+  const EpdFont bold(&boldFont);
+  const std::map<int, EpdFontFamily> fonts{{7, EpdFontFamily(&regular, &bold)}};
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontDecompressor decompressor;
+  FontCacheManager manager(fonts, noSdFonts);
+
+  ASSERT_TRUE(decompressor.init());
+  manager.setFontDecompressor(&decompressor);
+  auto scope = manager.createPrewarmScope();
+  manager.recordText("A", 7, EpdFontFamily::REGULAR);
+  manager.recordText("B", 7, EpdFontFamily::BOLD);
+  manager.recordText("B", 7, EpdFontFamily::REGULAR);
+  scope.endScanAndPrewarm();
+
+  EXPECT_EQ(3U, decompressor.getStats().pageBufferBytes);
+  ASSERT_NE(nullptr, decompressor.getBitmap(&regularFont, &glyphs[0], 0));
+  ASSERT_NE(nullptr, decompressor.getBitmap(&regularFont, &glyphs[1], 1));
+  ASSERT_NE(nullptr, decompressor.getBitmap(&boldFont, &glyphs[1], 1));
+  EXPECT_EQ(3U, decompressor.getStats().cacheHits);
+}
+
+TEST_F(GlyphStreamCodecTest, PrewarmScopeMergesStylesThatResolveToTheSameFont) {
+  const std::vector<uint8_t> bitmap = fromHex("40004080");
+  const EpdGlyph glyphs[] = {
+      {1, 1, 0, 0, 0, 2, 0},
+      {1, 1, 0, 0, 0, 2, 2},
+  };
+  const EpdUnicodeInterval intervals[] = {{0x41, 0x42, 0}};
+  const EpdFontData fontData = makeFont(bitmap, glyphs, intervals, 1, false);
+  const EpdFont regular(&fontData);
+  const std::map<int, EpdFontFamily> fonts{{7, EpdFontFamily(&regular)}};
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontDecompressor decompressor;
+  FontCacheManager manager(fonts, noSdFonts);
+
+  ASSERT_TRUE(decompressor.init());
+  manager.setFontDecompressor(&decompressor);
+  auto scope = manager.createPrewarmScope();
+  manager.recordText("A", 7, EpdFontFamily::REGULAR);
+  manager.recordText("B", 7, EpdFontFamily::BOLD);
+  scope.endScanAndPrewarm();
+
+  EXPECT_EQ(2U, decompressor.getStats().pageBufferBytes);
+  ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[0], 0));
+  ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[1], 1));
+  EXPECT_EQ(2U, decompressor.getStats().cacheHits);
+}
+
 TEST_F(GlyphStreamCodecTest, CodedPayloadTruncationZeroFillsSafely) {
   const std::vector<uint8_t> bitmap(fixtures::kMaximumDimensionsOneBitBitmap.begin(),
                                     fixtures::kMaximumDimensionsOneBitBitmap.end());
