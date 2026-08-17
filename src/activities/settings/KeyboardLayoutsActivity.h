@@ -2,9 +2,8 @@
 
 #include <GfxRenderer.h>
 
-#include "activities/Activity.h"
+#include "activities/UiListActivity.h"
 #include "activities/util/KeyboardLayoutSet.h"
-#include "util/ButtonNavigator.h"
 
 class MappedInputManager;
 
@@ -15,29 +14,34 @@ class MappedInputManager;
  * is a bit mask in settings, so enabling a layout costs no RAM -- the tables are
  * const and sit in flash either way.
  */
-class KeyboardLayoutsActivity final : public Activity {
+class KeyboardLayoutsActivity final : public UiListActivity {
  public:
   explicit KeyboardLayoutsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("KeyboardLayouts", renderer, mappedInput) {}
+      : UiListActivity("KeyboardLayouts", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
 
  private:
-  void toggleSelected();
-  void onBack() { finish(); }
+  int listCount() const override { return totalItems; }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  const char* headerTitle() const override;
 
-  ButtonNavigator buttonNavigator;
-  int selectedIndex = 0;
+  static constexpr uint8_t totalItems = keyboard_layouts::COUNT;
+
+  // Row storage: totalItems is a compile-time constant, so a fixed-capacity
+  // array avoids any heap allocation for the row list. Labels are set once in
+  // onEnter(); only the ON/OFF value text is refreshed per build, and both
+  // texts are I18n table pointers, so no string storage is needed.
+  freeink::ui::ListItem rowItems[totalItems]{};
+
   // Working copy: the screen edits this and writes it back on exit, so a single
   // settings write covers a whole editing session rather than one per keypress.
   uint16_t workingMask = 0;
   // Whether the user actually toggled anything. Without this, merely opening the
   // screen on an unconfigured device would persist the derived default as an
-  // explicit choice -- costing a SPIFFS write for nothing, and freezing the set
+  // explicit choice -- costing a settings write for nothing, and freezing the set
   // so a later UI language change no longer brings its layout along.
   bool edited = false;
-  static constexpr uint8_t totalItems = keyboard_layouts::COUNT;
 };

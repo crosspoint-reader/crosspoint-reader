@@ -7,17 +7,24 @@
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 void KeyboardLayoutsActivity::onEnter() {
-  Activity::onEnter();
+  UiListActivity::onEnter();
   // Start from the effective set, not the raw setting: an unconfigured mask
   // shows as the derived default (UI language + English) rather than as nothing
   // ticked, so the screen reflects what the keyboard actually offers.
   workingMask = keyboard_layouts::enabled();
   edited = false;
-  selectedIndex = 0;
-  requestUpdate();
+
+  // Labels never change while the screen is open, so they're set once here
+  // rather than on every buildScreen() call. The layout's name is its
+  // language's name, so adding a layout needs no new translation keys.
+  for (int i = 0; i < totalItems; ++i) {
+    rowItems[i].label = I18N.getLanguageName(keyboard_layouts::ALL[i].language);
+    rowItems[i].actionValue = static_cast<int16_t>(i);
+  }
 }
 
 void KeyboardLayoutsActivity::onExit() {
@@ -28,103 +35,46 @@ void KeyboardLayoutsActivity::onExit() {
   Activity::onExit();
 }
 
-void KeyboardLayoutsActivity::toggleSelected() {
-  if (selectedIndex < 0 || selectedIndex >= totalItems) return;
-  const uint16_t b = keyboard_layouts::layoutBit(keyboard_layouts::ALL[selectedIndex].id);
-  const bool wasOn = (workingMask & b) != 0;
+const char* KeyboardLayoutsActivity::headerTitle() const { return tr(STR_KEYBOARD_LAYOUTS); }
+
+void KeyboardLayoutsActivity::activateIndex(const int index) {
+  nav.selected = index;
+  // The row stays on screen with a new ON/OFF value; a lingering flash would
+  // gray an unrelated row on the repaint below.
+  app.clearTapFlash();
+
+  const uint16_t bit = keyboard_layouts::layoutBit(keyboard_layouts::ALL[index].id);
+  const bool wasOn = (workingMask & bit) != 0;
   // Refuse to switch off the last one: an empty set would leave the keyboard
   // with no letters at all.
-  if (wasOn && (workingMask & ~b) == 0) return;
-  workingMask = static_cast<uint16_t>(wasOn ? (workingMask & ~b) : (workingMask | b));
+  if (wasOn && (workingMask & ~bit) == 0) return;
+  workingMask = static_cast<uint16_t>(wasOn ? (workingMask & ~bit) : (workingMask | bit));
   edited = true;
   requestUpdate();
 }
 
-void KeyboardLayoutsActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    toggleSelected();
-    return;
-  }
-
+void KeyboardLayoutsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  switch (handleListTouch(selectedIndex, totalItems, contentTop, contentHeight, false)) {
-    case ListTouchResult::Activated:
-      toggleSelected();
-      return;
-    case ListTouchResult::Consumed:
-      return;
-    case ListTouchResult::None:
-      break;
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  // Content: the safe area minus the header band GUI.drawHeader paints.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
+                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
+                                      static_cast<int16_t>(safe.x)});
+  screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+
+  // Labels/actionValue were set in onEnter(); only the toggle state is live.
+  // tr() returns a pointer into the I18n string table, so nothing is stored.
+  for (int i = 0; i < totalItems; ++i) {
+    rowItems[i].value =
+        (workingMask & keyboard_layouts::layoutBit(keyboard_layouts::ALL[i].id)) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
   }
 
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectedIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectedIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
-    requestUpdate();
-    return;
-  }
-
-  buttonNavigator.onNextRelease([this] {
-    selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousRelease([this] {
-    selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
-    requestUpdate();
-  });
-}
-
-void KeyboardLayoutsActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const auto metrics = UITheme::getInstance().getMetrics();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_KEYBOARD_LAYOUTS));
-
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
-      // The layout's name is its language's name, so adding a layout needs no
-      // new translation keys.
-      [](int index) { return std::string(I18N.getLanguageName(keyboard_layouts::ALL[index].language)); }, nullptr,
-      nullptr,
-      [this](int index) {
-        return (workingMask & keyboard_layouts::layoutBit(keyboard_layouts::ALL[index].id)) ? tr(STR_STATE_ON)
-                                                                                            : tr(STR_STATE_OFF);
-      },
-      true);
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+  fui::ListProps props;
+  props.items = rowItems;
+  props.count = static_cast<uint16_t>(totalItems);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  syncListViewport(screen, props);
+  screen.list(props);
 }
