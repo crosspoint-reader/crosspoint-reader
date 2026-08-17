@@ -1,0 +1,11 @@
+{
+  "scripts": {
+    "web:dev": "bun tools/web-dev-server.ts",
+    "web:check": "tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution Bundler --types bun tools/web-dev-server.ts tools/web-dev-flow-test.ts",
+    "web:test": "bun tools/web-dev-flow-test.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.13",
+    "typescript": "^6.0.3"
+  }
+}

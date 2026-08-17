@@ -31,3 +31,11 @@ lib/EpdFont/scripts/output/
 /sdkconfig.*
 sdkconfig.sticky
 flake.*
+node_modules/
+.crosspoint-web-dev-sd/
+.superpowers/
+.playwright-mcp/
+/files-*.png
+/home-*.png
+/settings-*.png
+/upload-*.png

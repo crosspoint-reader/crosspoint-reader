@@ -48,24 +48,42 @@ def sanitize_identifier(name: str) -> str:
 
 for root, _, files in os.walk(SRC_DIR):
     for file in files:
-        if file.endswith(".html") or file.endswith(".js"):
+        if file.endswith(".html") or file.endswith(".js") or file.endswith(".css") or file.endswith(".ico"):
             file_path = os.path.join(root, file)
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
+            is_binary = file.endswith(".ico")
 
-            # Only minify HTML files; JS files are typically pre-minified (e.g., jszip.min.js)
-            if file.endswith(".html"):
-                processed = minify_html(content)
+            if is_binary:
+                with open(file_path, "rb") as f:
+                    processed_bytes = f.read()
+                original_size = len(processed_bytes)
+                processed_size = original_size
+                compressed = processed_bytes
             else:
-                processed = content
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
 
-            # Compress with gzip (compresslevel 9 is maximum compression)
-            # IMPORTANT: we don't use brotli because Firefox doesn't support brotli with insecured context (only supported on HTTPS)
-            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9)
+                # Only minify HTML files; JS files are typically pre-minified (e.g., jszip.min.js)
+                if file.endswith(".html"):
+                    processed = minify_html(content)
+                else:
+                    processed = content
+
+                # Compress with gzip (compresslevel 9 is maximum compression)
+                # IMPORTANT: we don't use brotli because Firefox doesn't support brotli with insecured context (only supported on HTTPS)
+                compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9)
+                original_size = len(content)
+                processed_size = len(processed)
 
             # Create valid C identifier from filename
             # Use appropriate suffix based on file type
-            suffix = "Html" if file.endswith(".html") else "Js"
+            if file.endswith(".html"):
+                suffix = "Html"
+            elif file.endswith(".ico"):
+                suffix = "Ico"
+            elif file.endswith(".css"):
+                suffix = "Css"
+            else:
+                suffix = "Js"
             base_name = sanitize_identifier(f"{os.path.splitext(file)[0]}{suffix}")
             header_path = os.path.join(root, f"{base_name}.generated.h")
 
@@ -75,7 +93,7 @@ for root, _, files in os.walk(SRC_DIR):
                 h.write(f"#include <cstddef>\n\n")
 
                 # Write the compressed data as a byte array
-                h.write(f"constexpr char {base_name}[] PROGMEM = {{\n")
+                h.write(f"constexpr unsigned char {base_name}[] PROGMEM = {{\n")
 
                 # Write bytes in rows of 16
                 for i in range(0, len(compressed), 16):
@@ -85,9 +103,13 @@ for root, _, files in os.walk(SRC_DIR):
 
                 h.write(f"}};\n\n")
                 h.write(f"constexpr size_t {base_name}CompressedSize = {len(compressed)};\n")
-                h.write(f"constexpr size_t {base_name}OriginalSize = {len(processed)};\n")
+                h.write(f"constexpr size_t {base_name}OriginalSize = {processed_size};\n")
 
             print(f"Generated: {header_path}")
-            print(f"  Original: {len(content)} bytes")
-            print(f"  Minified: {len(processed)} bytes ({100*len(processed)/len(content):.1f}%)")
-            print(f"  Compressed: {len(compressed)} bytes ({100*len(compressed)/len(content):.1f}%)")
+            print(f"  Original: {original_size} bytes")
+            if original_size > 0:
+                print(f"  Processed: {processed_size} bytes ({100*processed_size/original_size:.1f}%)")
+                print(f"  Stored: {len(compressed)} bytes ({100*len(compressed)/original_size:.1f}%)")
+            else:
+                print(f"  Processed: {processed_size} bytes (n/a)")
+                print(f"  Stored: {len(compressed)} bytes (n/a)")
