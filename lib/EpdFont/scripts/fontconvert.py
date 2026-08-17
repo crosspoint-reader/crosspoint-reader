@@ -1,10 +1,11 @@
 #!python3
-import zlib
 import sys
 import re
 import math
 import argparse
+import zlib
 from collections import namedtuple
+from pathlib import Path
 
 # Force UTF-8 stdout so that `python fontconvert.py … > foo.h` on Windows
 # (default cp1252) doesn't emit UTF-16 LE / replacement chars in the generated
@@ -20,13 +21,16 @@ parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
-parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
+parser.add_argument("--compress", dest="compress", action="store_true", help="Compress each glyph bitmap using GlyphStream v1.")
+parser.add_argument("--dump-bitmaps", dest="dump_bitmaps", metavar="PATH", help="Write rasterized glyph pixels to an NPZ training corpus and exit.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
 import freetype
 from fontTools.ttLib import TTFont
+
+from glyphstream import RAW_FLAG, GlyphBitmap, decode_font, encode_font, load_model_header, save_bitmap_dump, unpack_bitmap
 
 GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "top", "data_length", "data_offset", "code_point"])
 
@@ -373,6 +377,20 @@ for i_start, i_end in intervals:
         )
         total_size += len(packed)
         all_glyphs.append((glyph, packed))
+
+bitmap_glyphs = [
+    GlyphBitmap(
+        props.width,
+        props.height,
+        unpack_bitmap(packed, props.width, props.height, is2Bit),
+        props.code_point,
+    )
+    for props, packed in all_glyphs
+]
+
+if args.dump_bitmaps:
+    save_bitmap_dump(args.dump_bitmaps, font_name, bitmap_glyphs, is2Bit)
+    sys.exit(0)
 
 # pipe seems to be a good heuristic for the "real" descender
 face = load_glyph(ord('|'))
@@ -764,156 +782,104 @@ compress = args.compress
 
 
 def to_byte_aligned(packed, width, height):
-    """Convert packed 2-bit bitmap to byte-aligned format (rows padded to byte boundary).
-
-    In packed format, pixels flow continuously across row boundaries (4 pixels/byte).
-    In byte-aligned format, each row starts at a byte boundary, padding the last byte
-    of each row with zero bits if width % 4 != 0. This improves DEFLATE compression
-    because identical pixel rows produce identical byte patterns regardless of position.
-    """
     if width == 0 or height == 0:
         return b''
-    row_stride = (width + 3) // 4  # bytes per byte-aligned row
+    row_stride = (width + 3) // 4
     aligned = bytearray(row_stride * height)
     for y in range(height):
         for x in range(width):
-            # Read pixel from packed format (continuous bit stream)
             packed_pos = y * width + x
-            packed_byte_idx = packed_pos // 4
-            packed_shift = (3 - (packed_pos % 4)) * 2
-            pixel = (packed[packed_byte_idx] >> packed_shift) & 0x3
-
-            # Write pixel to byte-aligned format (row-aligned)
-            aligned_byte_idx = y * row_stride + x // 4
-            aligned_shift = (3 - (x % 4)) * 2
-            aligned[aligned_byte_idx] |= (pixel << aligned_shift)
+            pixel = (packed[packed_pos // 4] >> ((3 - packed_pos % 4) * 2)) & 0x3
+            aligned[y * row_stride + x // 4] |= pixel << ((3 - x % 4) * 2)
     return bytes(aligned)
 
 
-# Build groups for compression
-if compress and not is2Bit:
-    print("Error: --compress requires --2bit (byte-aligned compression only supports 2-bit format)", file=sys.stderr)
-    sys.exit(1)
-if compress:
-    # Script-based grouping: glyphs that co-occur in typical text rendering
-    # are grouped together for efficient LRU caching on the embedded target.
-    # Since glyphs are in codepoint order, glyphs in the same Unicode block
-    # are contiguous in the array and form natural groups.
-    #
-    # On top of script boundaries, a hard size cap (GROUP_MAX_UNCOMPRESSED_BYTES)
-    # is applied: if adding the next glyph would push the uncompressed group
-    # size over the cap, the group is closed and a new one started with the
-    # same script ID. This bounds the embedded decompressor's transient
-    # malloc regardless of font density (CJK, Vietnamese, user-supplied
-    # fonts with large Unicode blocks). Without it, a single dense script
-    # group can balloon past what fits in a transient page-decompress
-    # allocation on the device.
-    SCRIPT_GROUP_RANGES = [
-        (0x0000, 0x007F),   # ASCII
-        (0x0080, 0x00FF),   # Latin-1 Supplement
-        (0x0100, 0x017F),   # Latin Extended-A
-        (0x0180, 0x024F),   # Latin Extended-B
-        (0x0300, 0x036F),   # Combining Diacritical Marks
-        (0x0400, 0x04FF),   # Cyrillic
-        (0x1EA0, 0x1EF9),   # Vietnamese Extended
-        (0x2000, 0x206F),   # General Punctuation
-        (0x2070, 0x209F),   # Superscripts & Subscripts
-        (0x20A0, 0x20CF),   # Currency Symbols
-        (0x2190, 0x21FF),   # Arrows
-        (0x2200, 0x22FF),   # Math Operators
-        (0xFB00, 0xFB06),   # Alphabetic Presentation Forms (ligatures)
-        (0xFFFD, 0xFFFD),   # Replacement Character
+def legacy_deflate_size(glyphs):
+    script_ranges = [
+        (0x0000, 0x007F),
+        (0x0080, 0x00FF),
+        (0x0100, 0x017F),
+        (0x0180, 0x024F),
+        (0x0300, 0x036F),
+        (0x0400, 0x04FF),
+        (0x1EA0, 0x1EF9),
+        (0x2000, 0x206F),
+        (0x2070, 0x209F),
+        (0x20A0, 0x20CF),
+        (0x2190, 0x21FF),
+        (0x2200, 0x22FF),
+        (0xFB00, 0xFB06),
+        (0xFFFD, 0xFFFD),
     ]
 
-    # 64 KB cap: large enough to hold any single built-in script group with
-    # headroom, small enough to be a comfortable transient malloc on the
-    # ESP32-C3.
-    GROUP_MAX_UNCOMPRESSED_BYTES = 65536
-
-    def get_script_group(code_point):
-        for i, (start, end) in enumerate(SCRIPT_GROUP_RANGES):
-            if start <= code_point <= end:
-                return i
+    def script_group(codepoint):
+        for group_index, (start, end) in enumerate(script_ranges):
+            if start <= codepoint <= end:
+                return group_index
         return -1
 
-    groups = []  # list of (first_glyph_index, glyph_count)
-    current_group_id = None
-    group_start = 0
-    group_count = 0
-    group_uncompressed = 0
+    total = 0
+    current_group = None
+    group_data = bytearray()
 
-    for i, (props, _) in enumerate(all_glyphs):
-        sg = get_script_group(props.code_point)
-        # Use the byte-aligned size (4-pixel-aligned row stride) rather than
-        # the packed length, since the decompressor consumes byte-aligned
-        # buffers. Empty glyphs contribute zero.
-        glyph_aligned_size = (((props.width + 3) // 4) * props.height
-                              if props.width > 0 and props.height > 0 else 0)
-        if glyph_aligned_size > GROUP_MAX_UNCOMPRESSED_BYTES:
-            raise ValueError(
-                f"Glyph {i} (code point U+{props.code_point:04X}) byte-aligned size "
-                f"{glyph_aligned_size} exceeds GROUP_MAX_UNCOMPRESSED_BYTES="
-                f"{GROUP_MAX_UNCOMPRESSED_BYTES}. Consider: (1) increasing GROUP_MAX_UNCOMPRESSED_BYTES, "
-                f"(2) reducing font size, or (3) excluding this codepoint."  
-            )
-        size_overflow = group_uncompressed + glyph_aligned_size > GROUP_MAX_UNCOMPRESSED_BYTES
-
-        if sg != current_group_id or size_overflow:
-            if group_count > 0:
-                groups.append((group_start, group_count))
-            current_group_id = sg
-            group_start = i
-            group_count = 1
-            group_uncompressed = glyph_aligned_size
-        else:
-            group_count += 1
-            group_uncompressed += glyph_aligned_size
-
-    if group_count > 0:
-        groups.append((group_start, group_count))
-
-    # Compress each group
-    compressed_groups = []  # list of (compressed_bytes, uncompressed_size, glyph_count, first_glyph_index)
-    compressed_bitmap_data = []
-    compressed_offset = 0
-
-    # Also build modified glyph props with within-group offsets
-    modified_glyph_props = list(glyph_props)
-
-    for first_idx, count in groups:
-        # Concatenate bitmap data for this group
-        packed_len = 0
-        group_aligned = bytearray()
-        for gi in range(first_idx, first_idx + count):
-            props, packed = all_glyphs[gi]
-            # Update glyph's dataOffset to be within-group offset (packed offset)
-            within_group_offset = packed_len
-            old_props = modified_glyph_props[gi]
-            modified_glyph_props[gi] = GlyphProps(
-                width=old_props.width,
-                height=old_props.height,
-                advance_x=old_props.advance_x,
-                left=old_props.left,
-                top=old_props.top,
-                data_length=old_props.data_length,
-                data_offset=within_group_offset,
-                code_point=old_props.code_point,
-            )
-            packed_len += len(packed)
-            group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
-
-        # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
+    def compressed_size(data):
         compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
+        return len(compressor.compress(bytes(data)) + compressor.flush())
 
-        compressed_groups.append((compressed, len(group_aligned), count, first_idx))
-        compressed_bitmap_data.extend(compressed)
-        compressed_offset += len(compressed)
+    for props, packed in glyphs:
+        aligned = to_byte_aligned(packed, props.width, props.height)
+        group = script_group(props.code_point)
+        if group != current_group or len(group_data) + len(aligned) > 65536:
+            if group_data:
+                total += compressed_size(group_data)
+            current_group = group
+            group_data = bytearray()
+        group_data.extend(aligned)
+    if group_data:
+        total += compressed_size(group_data)
+    return total
 
+
+if compress:
+    model_path = Path(__file__).resolve().parent.parent / "builtinFonts/glyphStreamModel.h"
+    model = load_model_header(model_path)
+    streams, references = encode_font(bitmap_glyphs, is2Bit, model)
+    decoded_glyphs = decode_font(bitmap_glyphs, streams, is2Bit, model)
+    for glyph_index, (expected, actual) in enumerate(zip(bitmap_glyphs, decoded_glyphs)):
+        if expected != actual:
+            raise ValueError(
+                f"GlyphStream decode mismatch at glyph {glyph_index} "
+                f"(U+{expected.codepoint:04X})"
+            )
+
+    legacy_size = legacy_deflate_size(all_glyphs) if is2Bit else len(glyph_data)
+    glyph_data = []
+    modified_glyph_props = []
+    stream_offset = 0
+    for props, stream in zip(glyph_props, streams):
+        modified_glyph_props.append(
+            GlyphProps(
+                width=props.width,
+                height=props.height,
+                advance_x=props.advance_x,
+                left=props.left,
+                top=props.top,
+                data_length=len(stream),
+                data_offset=stream_offset,
+                code_point=props.code_point,
+            )
+        )
+        glyph_data.extend(stream)
+        stream_offset += len(stream)
     glyph_props = modified_glyph_props
-    total_compressed = len(compressed_bitmap_data)
-    total_uncompressed = len(glyph_data)
-    print(f"// Compression: {total_uncompressed} -> {total_compressed} bytes ({100*total_compressed/total_uncompressed:.1f}%), {len(groups)} groups", file=sys.stderr)
+    raw_count = sum(bool(stream) and stream[0] == RAW_FLAG for stream in streams)
+    reference_count = sum(reference.base_index >= 0 for reference in references)
+    ratio = 100.0 * len(glyph_data) / legacy_size if legacy_size else 0.0
+    print(
+        f"GlyphStream: {legacy_size} -> {len(glyph_data)} bytes ({ratio:.1f}%), "
+        f"{reference_count} references, {raw_count} RAW",
+        file=sys.stderr,
+    )
 
 print(f"""/**
  * generated by fontconvert.py
@@ -926,16 +892,10 @@ print(f"""/**
 #include "EpdFontData.h"
 """)
 
-if compress:
-    print(f"static const uint8_t {font_name}Bitmaps[{len(compressed_bitmap_data)}] = {{")
-    for c in chunks(compressed_bitmap_data, 16):
-        print ("    " + " ".join(f"0x{b:02X}," for b in c))
-    print ("};\n");
-else:
-    print(f"static const uint8_t {font_name}Bitmaps[{len(glyph_data)}] = {{")
-    for c in chunks(glyph_data, 16):
-        print ("    " + " ".join(f"0x{b:02X}," for b in c))
-    print ("};\n");
+print(f"static const uint8_t {font_name}Bitmaps[{len(glyph_data)}] = {{")
+for c in chunks(glyph_data, 16):
+    print ("    " + " ".join(f"0x{b:02X}," for b in c))
+print ("};\n");
 
 def cp_label(cp):
     if cp == 0x5C:
@@ -953,14 +913,6 @@ for i_start, i_end in intervals:
     print (f"    {{ 0x{i_start:X}, 0x{i_end:X}, 0x{offset:X} }},")
     offset += i_end - i_start + 1
 print ("};\n");
-
-if compress:
-    print(f"static const EpdFontGroup {font_name}Groups[] = {{")
-    compressed_offset = 0
-    for compressed, uncompressed_size, count, first_idx in compressed_groups:
-        print(f"    {{ {compressed_offset}, {len(compressed)}, {uncompressed_size}, {count}, {first_idx} }},")
-        compressed_offset += len(compressed)
-    print("};\n")
 
 if kern_map:
     print(f"static const EpdKernClassEntry {font_name}KernLeftClasses[] = {{")
@@ -995,12 +947,8 @@ print(f"    {norm_ceil(face.size.height)},")
 print(f"    {norm_ceil(face.size.ascender)},")
 print(f"    {norm_floor(face.size.descender)},")
 print(f"    {'true' if is2Bit else 'false'},")
-if compress:
-    print(f"    {font_name}Groups,")
-    print(f"    {len(compressed_groups)},")
-else:
-    print("    nullptr,")
-    print("    0,")
+print("    nullptr,")
+print("    0,")
 # glyphToGroup (not used for script-grouped fonts)
 print("    nullptr,")
 if kern_map:
@@ -1025,4 +973,8 @@ if ligature_pairs:
 else:
     print(f"    nullptr,")
     print(f"    0,")
+print("    nullptr,")
+print("    nullptr,")
+print("    nullptr,")
+print(f"    {1 if compress else 0},")
 print("};")

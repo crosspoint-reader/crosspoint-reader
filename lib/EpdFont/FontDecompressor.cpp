@@ -4,7 +4,19 @@
 #include <Logging.h>
 #include <Utf8.h>
 
+#include <array>
 #include <cstdlib>
+#include <cstring>
+
+#include "GlyphStreamCodec.h"
+
+namespace {
+
+// FontDecompressor is a single global, non-reentrant service in firmware.
+std::array<uint8_t, GlyphStreamCodec::SCRATCH_PLANE_SIZE> glyphStreamScratchA;
+std::array<uint8_t, GlyphStreamCodec::SCRATCH_PLANE_SIZE> glyphStreamScratchB;
+
+}  // namespace
 
 FontDecompressor::~FontDecompressor() { deinit(); }
 
@@ -144,7 +156,8 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
   const uint32_t tStart = micros();
   stats.getBitmapCalls++;
 
-  if (!fontData->groups || fontData->groupCount == 0) {
+  const bool isGlyphStream = fontData->bitmapFormat == EPD_BITMAP_FORMAT_GLYPH_STREAM_V1;
+  if (!isGlyphStream && (!fontData->groups || fontData->groupCount == 0)) {
     stats.getBitmapTimeUs += micros() - tStart;
     return &fontData->bitmap[glyph->dataOffset];
   }
@@ -171,6 +184,23 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
         right = mid - 1;
     }
     break;  // Found the right slot but glyph wasn't in it; don't check other slots
+  }
+
+  if (isGlyphStream) {
+    const size_t bitmapSize = GlyphStreamCodec::packedSize(glyph->width, glyph->height, fontData->is2Bit);
+    if (!ensureCapacity(hotGlyphBuf, hotGlyphBufCapacity, bitmapSize)) {
+      LOG_ERR("FDC", "Failed to allocate %u bytes for GlyphStream output", static_cast<unsigned>(bitmapSize));
+      stats.getBitmapTimeUs += micros() - tStart;
+      return nullptr;
+    }
+    stats.cacheMisses++;
+    if (!GlyphStreamCodec::decode(fontData, glyphIndex, true, glyphStreamScratchA.data(), glyphStreamScratchB.data(),
+                                  hotGlyphBuf, bitmapSize)) {
+      stats.getBitmapTimeUs += micros() - tStart;
+      return nullptr;
+    }
+    stats.getBitmapTimeUs += micros() - tStart;
+    return hotGlyphBuf;
   }
 
   // Fallback: hot group slot
@@ -249,7 +279,9 @@ int32_t FontDecompressor::findGlyphIndex(const EpdFontData* fontData, uint32_t c
 }
 
 int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8Text) {
-  if (!fontData || !fontData->groups || !utf8Text) return 0;
+  if (!fontData || !utf8Text) return 0;
+  const bool isGlyphStream = fontData->bitmapFormat == EPD_BITMAP_FORMAT_GLYPH_STREAM_V1;
+  if (!isGlyphStream && !fontData->groups) return 0;
 
   // Allocate the next available slot (caller must call freePageBuffer/clearCache to reset)
   if (pageSlotCount >= MAX_PAGE_SLOTS) {
@@ -336,7 +368,10 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   bool groupCapWarned = false;
 
   for (uint16_t i = 0; i < glyphCount; i++) {
-    totalBytes += fontData->glyph[neededGlyphs[i]].dataLength;
+    const EpdGlyph& glyph = fontData->glyph[neededGlyphs[i]];
+    totalBytes +=
+        isGlyphStream ? GlyphStreamCodec::packedSize(glyph.width, glyph.height, fontData->is2Bit) : glyph.dataLength;
+    if (isGlyphStream) continue;
     uint16_t gi = getGroupIndex(fontData, neededGlyphs[i]);
     bool found = false;
     for (uint8_t j = 0; j < groupCount; j++) {
@@ -358,7 +393,7 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
   stats.uniqueGroupsAccessed = groupCount;
 
   // Step 3: Allocate page buffer and lookup table for this slot
-  slot.buffer = static_cast<uint8_t*>(malloc(totalBytes));
+  slot.buffer = static_cast<uint8_t*>(malloc(totalBytes > 0 ? totalBytes : 1));
   slot.glyphs = static_cast<PageGlyphEntry*>(malloc(glyphCount * sizeof(PageGlyphEntry)));
   if (!slot.buffer || !slot.glyphs) {
     LOG_ERR("FDC", "Failed to allocate page buffer (%u bytes, %u glyphs)", totalBytes, glyphCount);
@@ -388,6 +423,24 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
       j--;
     }
     slot.glyphs[j + 1] = key;
+  }
+
+  if (isGlyphStream) {
+    uint32_t writeOffset = 0;
+    int missed = 0;
+    for (uint16_t i = 0; i < slot.glyphCount; ++i) {
+      const EpdGlyph& glyph = fontData->glyph[slot.glyphs[i].glyphIndex];
+      const size_t bitmapSize = GlyphStreamCodec::packedSize(glyph.width, glyph.height, fontData->is2Bit);
+      if (!GlyphStreamCodec::decode(fontData, slot.glyphs[i].glyphIndex, true, glyphStreamScratchA.data(),
+                                    glyphStreamScratchB.data(), &slot.buffer[writeOffset], bitmapSize)) {
+        missed++;
+        continue;
+      }
+      slot.glyphs[i].bufferOffset = writeOffset;
+      writeOffset += bitmapSize;
+    }
+    LOG_DBG("FDC", "Prewarm: %u GlyphStream glyphs in %u bytes (%d missed)", glyphCount, writeOffset, missed);
+    return missed;
   }
 
   // Step 3b: Pre-scan to compute each needed glyph's byte-aligned offset within its group.

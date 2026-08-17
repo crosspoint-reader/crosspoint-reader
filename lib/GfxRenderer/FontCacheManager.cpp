@@ -44,7 +44,7 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
     if (!(styleMask & (1 << i))) continue;
     auto style = static_cast<EpdFontFamily::Style>(i);
     const EpdFontData* data = fontMap_.at(fontId).getData(style);
-    if (!data || !data->groups) continue;
+    if (!epdFontUsesDecompressor(data)) continue;
     int missed = fontDecompressor_->prewarmCache(data, utf8Text);
     if (missed > 0) {
       LOG_DBG("FCM", "prewarmCache: %d glyph(s) not cached for style %d", missed, i);

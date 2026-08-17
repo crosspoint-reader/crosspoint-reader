@@ -4,6 +4,34 @@ set -e
 
 cd "$(dirname "$0")"
 
+DUMP_DIR=""
+if [[ $# -gt 0 ]]; then
+    if [[ $# -ne 2 || "$1" != "--dump-dir" ]]; then
+        echo "Usage: $0 [--dump-dir PATH]" >&2
+        exit 2
+    fi
+    DUMP_DIR="$2"
+    mkdir -p "$DUMP_DIR"
+fi
+
+run_fontconvert() {
+    local font_name="$1"
+    local size="$2"
+    shift 2
+    if [[ -n "$DUMP_DIR" ]]; then
+        python fontconvert.py "$font_name" "$size" "$@" --dump-bitmaps "$DUMP_DIR/${font_name}.npz"
+        echo "Dumped $DUMP_DIR/${font_name}.npz"
+    else
+        # Write to a temp file first: the shell truncates a redirect target
+        # before Python starts, so a conversion failure must not leave an
+        # empty header behind.
+        local out="../builtinFonts/${font_name}.h"
+        python fontconvert.py "$font_name" "$size" "$@" > "${out}.tmp"
+        mv "${out}.tmp" "$out"
+        echo "Generated $out"
+    fi
+}
+
 READER_FONT_STYLES=("Regular" "Italic" "Bold" "BoldItalic")
 NOTOSERIF_FONT_SIZES=(12 14 16 18)
 NOTOSANS_FONT_SIZES=(12 14 16 18)
@@ -12,9 +40,7 @@ for size in ${NOTOSERIF_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="notoserif_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSerif/NotoSerif-${style}.ttf"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
-    echo "Generated $output_path"
+    run_fontconvert "$font_name" "$size" "$font_path" --2bit --compress --pnum
   done
 done
 
@@ -22,9 +48,7 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
   for style in ${READER_FONT_STYLES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
-    echo "Generated $output_path"
+    run_fontconvert "$font_name" "$size" "$font_path" --2bit --compress --pnum
   done
 done
 
@@ -70,19 +94,13 @@ for size in ${UI_FONT_SIZES[@]}; do
     # are filled from it while every glyph Ubuntu already has stays unchanged
     # (fontstack is ordered by descending priority).
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
-    output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
-      --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
-    echo "Generated $output_path"
+    run_fontconvert "$font_name" "$size" "$font_path" "$hebrew_path" "$arabic_path" "$viet_path" \
+      --compress --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}"
   done
 done
 
-python fontconvert.py notosans_8_regular 8 \
+run_fontconvert notosans_8_regular 8 \
   ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
   ../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-Regular.ttf \
   ../builtinFonts/source/NotoSansArabic/NotoSansArabic-Regular.ttf \
-  --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > ../builtinFonts/notosans_8_regular.h
-
-echo ""
-echo "Running compression verification..."
-python verify_compression.py ../builtinFonts/
+  --compress --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}"
