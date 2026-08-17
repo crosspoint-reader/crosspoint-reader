@@ -229,7 +229,8 @@ bool handleX4ProFrontlightDoubleClick() {
   Frontlight.setOn(lightOn);
   SETTINGS.frontlightOn = lightOn ? 1 : 0;
   SETTINGS.saveToFile();
-  LOG_INF("LIGHT", "Frontlight toggled %s by %s double-click", lightOn ? "on" : "off", useHome ? "home-key" : "power-button");
+  LOG_INF("LIGHT", "Frontlight toggled %s by %s double-click", lightOn ? "on" : "off",
+          useHome ? "home-key" : "power-button");
   return true;
 }
 
@@ -642,9 +643,9 @@ void loop() {
     return;
   }
 
-  const bool x4ProFrontlightOnPower = BoardConfig::isX4Pro() &&
-                                       SETTINGS.frontlightToggleButton ==
-                                           CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_POWER;
+  const bool x4ProFrontlightOnPower =
+      BoardConfig::isX4Pro() &&
+      SETTINGS.frontlightToggleButton == CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_POWER;
 
 #if FREEINK_CAP_TOUCH
   // A single X4 Pro power click becomes Confirm only after the frontlight
@@ -672,9 +673,9 @@ void loop() {
 #if FREEINK_CAP_TOUCH
   // A single Home tap becomes the Home gesture only after the frontlight
   // double-click window expires without a second tap.
-  const bool x4ProFrontlightOnHome = BoardConfig::isX4Pro() &&
-                                      SETTINGS.frontlightToggleButton ==
-                                          CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_HOME;
+  const bool x4ProFrontlightOnHome =
+      BoardConfig::isX4Pro() &&
+      SETTINGS.frontlightToggleButton == CrossPointSettings::FRONTLIGHT_TOGGLE_BTN::FL_TOGGLE_HOME;
   mappedInputManager.setHomeGestureClickFrame(false);
   if (x4ProFrontlightOnHome && lastX4ProFrontlightClickAt != 0 &&
       millis() - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
@@ -701,8 +702,8 @@ void loop() {
   // double-click candidate — let it be released and evaluated above instead
   // of sleeping on button-down.
   const bool x4ProAwaitingClickWindow = x4ProFrontlightOnPower &&
-                                         SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP &&
-                                         gpio.getPowerButtonHeldTime() <= X4PRO_POWER_CLICK_MAX_HOLD_MS;
+                                        SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP &&
+                                        gpio.getPowerButtonHeldTime() <= X4PRO_POWER_CLICK_MAX_HOLD_MS;
 
   if (!x4ProAwaitingClickWindow && powerReleasedSinceWake && millis() >= allowSleepAt &&
       gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
