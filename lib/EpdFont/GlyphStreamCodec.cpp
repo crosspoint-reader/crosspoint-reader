@@ -15,6 +15,7 @@ constexpr uint8_t RAW_FLAG = 0x40;
 constexpr uint8_t RESERVED_MASK = 0x30;
 constexpr int SHIFT_BIAS = 7;
 constexpr uint32_t TOP_VALUE = 1U << 24;
+constexpr uint8_t EMPTY_INK_ROW[GlyphStreamCodec::MAX_GLYPH_WIDTH] = {};
 
 struct StreamInfo {
   const uint8_t* payload = nullptr;
@@ -162,26 +163,27 @@ uint16_t treeProbability(const GlyphStreamTreeNode* nodes, const uint16_t nodeCo
   return probabilities[static_cast<uint16_t>(~entry)];
 }
 
-void inkFeatures(const uint8_t* plane, const EpdGlyph& glyph, const int x, const int y, const uint8_t* basePlane,
-                 const uint8_t baseHeight, const int8_t shift, uint8_t* features) {
-  features[0] = pixelAt(plane, glyph.width, glyph.height, x - 1, y) > 0;
-  features[1] = pixelAt(plane, glyph.width, glyph.height, x, y - 1) > 0;
-  features[2] = pixelAt(plane, glyph.width, glyph.height, x - 1, y - 1) > 0;
-  features[3] = pixelAt(plane, glyph.width, glyph.height, x + 1, y - 1) > 0;
-  features[4] = pixelAt(plane, glyph.width, glyph.height, x - 2, y) > 0;
-  features[5] = pixelAt(plane, glyph.width, glyph.height, x, y - 2) > 0;
-  features[6] = pixelAt(plane, glyph.width, glyph.height, x - 1, y - 2) > 0;
-  features[7] = pixelAt(plane, glyph.width, glyph.height, x + 1, y - 2) > 0;
-  features[8] = pixelAt(plane, glyph.width, glyph.height, x - 3, y) > 0;
-  features[9] = pixelAt(plane, glyph.width, glyph.height, x + 2, y - 1) > 0;
-  features[10] = pixelAt(plane, glyph.width, glyph.height, x + 2, y - 2) > 0;
-  features[11] = pixelAt(plane, glyph.width, glyph.height, x - 2, y - 1) > 0;
+void inkFeatures(const uint8_t* currentRow, const uint8_t* northRow, const uint8_t* north2Row, const uint8_t* baseRow,
+                 const uint8_t* baseNextRow, const EpdGlyph& glyph, const uint8_t x, const uint8_t y,
+                 uint8_t* features) {
+  features[0] = x >= 1 && currentRow[x - 1] > 0;
+  features[1] = northRow[x] > 0;
+  features[2] = x >= 1 && northRow[x - 1] > 0;
+  features[3] = x + 1 < glyph.width && northRow[x + 1] > 0;
+  features[4] = x >= 2 && currentRow[x - 2] > 0;
+  features[5] = north2Row[x] > 0;
+  features[6] = x >= 1 && north2Row[x - 1] > 0;
+  features[7] = x + 1 < glyph.width && north2Row[x + 1] > 0;
+  features[8] = x >= 3 && currentRow[x - 3] > 0;
+  features[9] = x + 2 < glyph.width && northRow[x + 2] > 0;
+  features[10] = x + 2 < glyph.width && north2Row[x + 2] > 0;
+  features[11] = x >= 2 && northRow[x - 2] > 0;
   features[12] = 4 * x < glyph.width;
   features[13] = 4 * x >= 3 * glyph.width;
   features[14] = 4 * y < glyph.height;
   features[15] = 4 * y >= 3 * glyph.height;
-  features[16] = basePixelAt(basePlane, glyph.width, baseHeight, x, y, shift) > 0;
-  features[17] = basePixelAt(basePlane, glyph.width, baseHeight, x, y + 1, shift) > 0;
+  features[16] = baseRow[x] > 0;
+  features[17] = baseNextRow[x] > 0;
 }
 
 void grayFeatures(const uint8_t* plane, const EpdGlyph& glyph, const int x, const int y, const uint8_t* basePlane,
@@ -233,10 +235,21 @@ bool decodeToPlane(const EpdFontData* fontData, const uint32_t glyphIndex, const
   RangeDecoder decoder(info.payload, info.payloadSize);
   uint8_t features[18] = {};
   for (uint8_t y = 0; y < glyph.height; ++y) {
+    uint8_t* currentRow = plane + static_cast<size_t>(y) * glyph.width;
+    const uint8_t* northRow = y >= 1 ? currentRow - glyph.width : EMPTY_INK_ROW;
+    const uint8_t* north2Row = y >= 2 ? currentRow - 2 * static_cast<size_t>(glyph.width) : EMPTY_INK_ROW;
+    const int baseY = static_cast<int>(y) + info.shift;
+    const uint8_t* baseRow = basePlane != nullptr && baseY >= 0 && baseY < baseHeight
+                                 ? basePlane + static_cast<size_t>(baseY) * glyph.width
+                                 : EMPTY_INK_ROW;
+    const int baseNextY = baseY + 1;
+    const uint8_t* baseNextRow = basePlane != nullptr && baseNextY >= 0 && baseNextY < baseHeight
+                                     ? basePlane + static_cast<size_t>(baseNextY) * glyph.width
+                                     : EMPTY_INK_ROW;
     for (uint8_t x = 0; x < glyph.width; ++x) {
-      inkFeatures(plane, glyph, x, y, basePlane, baseHeight, info.shift, features);
+      inkFeatures(currentRow, northRow, north2Row, baseRow, baseNextRow, glyph, x, y, features);
       const uint16_t probability = treeProbability(kInkTree, GLYPH_STREAM_INK_NODE_COUNT, kInkProbs, features);
-      plane[static_cast<size_t>(y) * glyph.width + x] = decoder.decodeBit(probability);
+      currentRow[x] = decoder.decodeBit(probability);
     }
   }
 
