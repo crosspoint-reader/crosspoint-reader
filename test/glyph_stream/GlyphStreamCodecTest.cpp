@@ -2,6 +2,8 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdlib>
+#include <new>
 #include <string_view>
 #include <vector>
 
@@ -10,6 +12,23 @@
 #include "FontDecompressor.h"
 #include "GlyphStreamCodec.h"
 #include "GlyphStreamFixtures.generated.h"
+
+namespace {
+
+bool countHeapAllocations = false;
+size_t heapAllocationCount = 0;
+
+}  // namespace
+
+void* operator new(const size_t size) {
+  if (countHeapAllocations) heapAllocationCount++;
+  if (void* allocation = std::malloc(size)) return allocation;
+  throw std::bad_alloc();
+}
+
+void operator delete(void* allocation) noexcept { std::free(allocation); }
+
+void operator delete(void* allocation, size_t) noexcept { std::free(allocation); }
 
 namespace {
 
@@ -241,6 +260,53 @@ TEST_F(GlyphStreamCodecTest, PrewarmScopeMergesStylesThatResolveToTheSameFont) {
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[0], 0));
   ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[1], 1));
   EXPECT_EQ(2U, decompressor.getStats().cacheHits);
+}
+
+TEST_F(GlyphStreamCodecTest, PrewarmScanDoesNotAllocateHeapMemory) {
+  const std::map<int, EpdFontFamily> noFonts;
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontCacheManager manager(noFonts, noSdFonts);
+
+  heapAllocationCount = 0;
+  countHeapAllocations = true;
+  auto scope = manager.createPrewarmScope();
+  manager.recordText("Repeated text: \xC3\xA9 \xE4\xB8\xAD \xF0\x9F\x98\x80", 7, EpdFontFamily::REGULAR);
+  countHeapAllocations = false;
+
+  EXPECT_EQ(0U, heapAllocationCount);
+  scope.endScanAndPrewarm();
+}
+
+TEST_F(GlyphStreamCodecTest, PrewarmScopePreservesUniqueMultibyteCodepoints) {
+  const std::vector<uint8_t> bitmap = fromHex("400040004000");
+  const EpdGlyph glyphs[] = {
+      {1, 1, 0, 0, 0, 2, 0},
+      {1, 1, 0, 0, 0, 2, 2},
+      {1, 1, 0, 0, 0, 2, 4},
+  };
+  const EpdUnicodeInterval intervals[] = {
+      {0x00E9, 0x00E9, 0},
+      {0x4E2D, 0x4E2D, 1},
+      {0x1F600, 0x1F600, 2},
+  };
+  const EpdFontData fontData = makeFont(bitmap, glyphs, intervals, 3, false);
+  const EpdFont regular(&fontData);
+  const std::map<int, EpdFontFamily> fonts{{7, EpdFontFamily(&regular)}};
+  const std::map<int, SdCardFont*> noSdFonts;
+  FontDecompressor decompressor;
+  FontCacheManager manager(fonts, noSdFonts);
+
+  ASSERT_TRUE(decompressor.init());
+  manager.setFontDecompressor(&decompressor);
+  auto scope = manager.createPrewarmScope();
+  manager.recordText("\xC3\xA9\xE4\xB8\xAD\xF0\x9F\x98\x80\xC3\xA9", 7, EpdFontFamily::REGULAR);
+  scope.endScanAndPrewarm();
+
+  EXPECT_EQ(3U, decompressor.getStats().pageBufferBytes);
+  ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[0], 0));
+  ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[1], 1));
+  ASSERT_NE(nullptr, decompressor.getBitmap(&fontData, &glyphs[2], 2));
+  EXPECT_EQ(3U, decompressor.getStats().cacheHits);
 }
 
 TEST_F(GlyphStreamCodecTest, CodedPayloadTruncationZeroFillsSafely) {
