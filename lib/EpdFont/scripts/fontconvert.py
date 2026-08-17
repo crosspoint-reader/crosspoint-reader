@@ -949,7 +949,8 @@ print(f"    {norm_floor(face.size.descender)},")
 print(f"    {'true' if is2Bit else 'false'},")
 print("    nullptr,")
 print("    0,")
-# glyphToGroup (not used for script-grouped fonts)
+# glyphToGroup is unused here: fontconvert.py never emits legacy EpdFontGroup
+# output (GlyphStream streams need no group mapping)
 print("    nullptr,")
 if kern_map:
     print(f"    {font_name}KernLeftClasses,")

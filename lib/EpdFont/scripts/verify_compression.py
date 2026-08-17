@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """
-Round-trip verification for compressed font headers.
+Round-trip verification for LEGACY DEFLATE-group compressed font headers.
 
-Parses each generated .h file in the given directory, identifies compressed fonts
-(those with a Groups array), decompresses each group (byte-aligned bitmap format),
-compacts to packed format, and verifies the data matches expected glyph sizes.
+Parses each generated .h file in the given directory, identifies legacy-group
+compressed fonts (those with a Groups array), decompresses each group
+(byte-aligned bitmap format), compacts to packed format, and verifies the data
+matches expected glyph sizes.
 
 Supports both contiguous-group fonts (Latin) and frequency-grouped fonts (CJK)
 with glyphToGroup mapping arrays.
+
+NOTE: current built-in fonts use GlyphStream v1 (no Groups array) and are
+reported as skipped by this tool — validate those with
+validate_glyphstream_fonts.py instead (see docs/glyphstream.md).
 """
 import math
 import os
@@ -104,7 +109,7 @@ def verify_font_file(filepath):
     # Check if this is a compressed font (has Groups array)
     groups_match = re.search(r'static const EpdFontGroup (\w+)Groups\[\]', content)
     if not groups_match:
-        return (os.path.basename(filepath), None, "uncompressed, skipping")
+        return (os.path.basename(filepath), None, "no legacy Groups array (uncompressed or GlyphStream), skipping")
 
     font_name = groups_match.group(1)
 
@@ -261,7 +266,7 @@ def main():
             failed += 1
             print(f"  FAIL: {filename} - {message}")
 
-    print(f"\nResults: {passed} passed, {failed} failed, {skipped} skipped (uncompressed)")
+    print(f"\nResults: {passed} passed, {failed} failed, {skipped} skipped (not legacy-group compressed)")
 
     if failed > 0:
         sys.exit(1)
