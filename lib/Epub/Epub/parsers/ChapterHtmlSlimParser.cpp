@@ -417,16 +417,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->xpathListItemIndex++;
   }
 
-  // Extract class, style, id, and dir attributes for CSS/RTL processing
+  // Extract class, style, id, and dir attributes for CSS/RTL processing.
+  // start/value drive ordered-list numbering (<ol start>, <li value>); they point
+  // into expat's atts and are only valid for the duration of this callback.
   std::string classAttr;
   std::string styleAttr;
   std::string dirAttr;
+  const char* startAttr = nullptr;
+  const char* valueAttr = nullptr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
         classAttr = atts[i + 1];
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "start") == 0) {
+        startAttr = atts[i + 1];
+      } else if (strcmp(atts[i], "value") == 0) {
+        valueAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
         // Defer both anchor recording and TOC page breaks until startNewTextBlock,
         // after the previous block is flushed to pages via makePages().
@@ -1026,6 +1034,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         if (!self->listStack.empty() && self->listStack.back().styleNone) {
           // No marker: leave the block empty so it behaves like a normal paragraph.
         } else if (!self->listStack.empty() && self->listStack.back().ordered) {
+          // <li value="N"> restarts numbering from N.
+          if (valueAttr != nullptr) {
+            const long value = strtol(valueAttr, nullptr, 10);
+            if (value >= 1) {
+              self->listStack.back().counter = static_cast<int>(value) - 1;
+            }
+          }
           self->listStack.back().counter += 1;
           char marker[16];
           snprintf(marker, sizeof(marker), "%d.", self->listStack.back().counter);
@@ -1047,6 +1062,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         ctx.ordered = strcmp(name, "ol") == 0;
         ctx.styleNone = cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None;
         ctx.depth = self->depth;
+        if (ctx.ordered && startAttr != nullptr) {
+          const long start = strtol(startAttr, nullptr, 10);
+          if (start >= 1) {
+            ctx.counter = static_cast<int>(start) - 1;
+          }
+        }
         self->listStack.push_back(ctx);
       }
     }
@@ -1583,6 +1604,9 @@ bool ChapterHtmlSlimParser::beginParse() {
   blockStyleStack.clear();
   blockStyleStack.reserve(8);
   blockStyleStack.push_back(rootBlockStyle);
+
+  listStack.clear();
+  listStack.reserve(4);
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;

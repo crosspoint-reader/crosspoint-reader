@@ -354,3 +354,31 @@ TEST(ChapterHtmlSlimParserListItemBlockTest, EmptyListItemDoesNotAbsorbNextItems
   EXPECT_EQ(lines[1][0].first, kBullet);
   EXPECT_EQ(lines[1][1].first, "Text");
 }
+
+// <ol start="N"> sets the first item's number to N instead of 1.
+TEST(ChapterHtmlSlimParserListTest, OrderedListStartAttributeSetsFirstNumber) {
+  const auto lines =
+      parseHtmlIntoLines("<html><body><ol start=\"5\"><li>Five</li><li>Six</li><li>Seven</li></ol></body></html>");
+
+  ASSERT_EQ(lines.size(), 3u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "5.");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "6.");
+  ASSERT_FALSE(lines[2].empty());
+  EXPECT_EQ(lines[2][0].first, "7.");
+}
+
+// <li value="N"> restarts numbering from N mid-list.
+TEST(ChapterHtmlSlimParserListTest, ListItemValueAttributeRestartsNumbering) {
+  const auto lines =
+      parseHtmlIntoLines("<html><body><ol><li>One</li><li value=\"9\">Nine</li><li>Ten</li></ol></body></html>");
+
+  ASSERT_EQ(lines.size(), 3u);
+  ASSERT_FALSE(lines[0].empty());
+  EXPECT_EQ(lines[0][0].first, "1.");
+  ASSERT_FALSE(lines[1].empty());
+  EXPECT_EQ(lines[1][0].first, "9.");
+  ASSERT_FALSE(lines[2].empty());
+  EXPECT_EQ(lines[2][0].first, "10.");
+}
