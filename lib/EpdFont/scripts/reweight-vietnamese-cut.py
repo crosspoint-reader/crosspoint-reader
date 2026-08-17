@@ -15,7 +15,9 @@ from fontTools.ttLib import TTFont
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 cut_path, src_path, dst_path, out_path = sys.argv[1:5]
-V = TTFont(cut_path)
+# recalcTimestamp=False keeps the source cut's head.modified, so regenerating
+# the same inputs produces a byte-identical file.
+V = TTFont(cut_path, recalcTimestamp=False)
 SRC = TTFont(src_path)
 DST = TTFont(dst_path)
 
@@ -72,7 +74,7 @@ def depth(name, seen=()):
     g = vglyf[name]
     if not g.isComposite() or name in seen:
         return 0
-    return 1 + max(depth(c.glyphName, seen + (name,)) for c in g.components)
+    return 1 + max(depth(c.glyphName, (*seen, name)) for c in g.components)
 
 
 # Shallowest composites first, so a chained base is already updated.
@@ -87,9 +89,6 @@ for name in sorted((n for n in V.getGlyphOrder() if vglyf[n].isComposite()),
     new_adv = vhmtx[base][0]
     vhmtx[name] = (new_adv, vhmtx[name][1])
     delta[name] = new_adv - old_adv
-
-# Keep the source cut's timestamp so regenerating produces an identical file.
-V["head"].modified = TTFont(cut_path)["head"].modified
 
 V.save(out_path)
 
