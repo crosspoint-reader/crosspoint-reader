@@ -477,7 +477,7 @@ bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
   return true;
 }
 
-void releaseSdFontCachesForDecode(GfxRenderer& renderer) {
+void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
   if (auto* fcm = renderer.getFontCacheManager()) {
     LOG_DBG("SLP", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
     fcm->releaseSdFontCaches();
