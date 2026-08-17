@@ -145,7 +145,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See `GfxRenderer::storeBwBuffer()` in [lib/GfxRenderer/GfxRenderer.cpp](lib/GfxRenderer/GfxRenderer.cpp) for the malloc
 
 ### Directory Structure
 
@@ -358,7 +358,7 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 - Memory utilities: [Memory.h](lib/Memory/Memory.h) (`makeUniqueNoThrow`)
 - Cover image buffers: [HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp)
+- Bitmap rendering row buffers: `drawBitmap()` / `drawBitmap1Bit()` in [GfxRenderer.cpp](lib/GfxRenderer/GfxRenderer.cpp)
 
 ### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
@@ -836,7 +836,7 @@ renderer.drawText(FONT_UI, x, y, tr(STR_LOADING), true);
 **To add custom fonts**:
 
 1. Place source fonts in `lib/EpdFont/fontsrc/` (gitignored)
-2. Run conversion script (see `lib/EpdFont/README`)
+2. Run conversion script (`lib/EpdFont/scripts/convert-builtin-fonts.sh`; format details in `docs/glyphstream.md`)
 3. Update global font objects in `src/main.cpp:40-115`
 4. Add font ID constant to `src/fontIds.h`
 

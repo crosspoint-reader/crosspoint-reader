@@ -59,7 +59,7 @@ void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
 }  // namespace
 
 const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const EpdGlyph* glyph) const {
-  if (fontData->groups != nullptr) {
+  if (epdFontUsesDecompressor(fontData)) {
     auto* fd = fontCacheManager_ ? fontCacheManager_->getDecompressor() : nullptr;
     if (!fd) {
       LOG_ERR("GFX", "Compressed font but no FontDecompressor set");

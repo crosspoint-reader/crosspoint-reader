@@ -163,6 +163,9 @@ typedef struct {
 } EPD_PACKED_ATTR EpdKernClassEntry;
 EPD_PACKED_END
 
+static constexpr uint8_t EPD_BITMAP_FORMAT_LEGACY = 0;
+static constexpr uint8_t EPD_BITMAP_FORMAT_GLYPH_STREAM_V1 = 1;
+
 /// Ligature substitution for a specific glyph pair, sorted by `pair` for binary search.
 /// `pair` encodes (leftCodepoint << 16 | rightCodepoint) for single-key lookup.
 EPD_PACKED_BEGIN
@@ -213,4 +216,11 @@ typedef struct {
   /// answer from RAM-resident data without storage I/O.  Shares glyphMissCtx.
   /// nullptr for fonts whose interval table is already complete (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
+
+  uint8_t bitmapFormat;  ///< EPD_BITMAP_FORMAT_* value
 } EpdFontData;
+
+static constexpr bool epdFontUsesDecompressor(const EpdFontData* fontData) {
+  return fontData != nullptr &&
+         (fontData->groups != nullptr || fontData->bitmapFormat == EPD_BITMAP_FORMAT_GLYPH_STREAM_V1);
+}
