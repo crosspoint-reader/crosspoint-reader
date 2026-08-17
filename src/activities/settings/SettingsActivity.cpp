@@ -368,8 +368,8 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::KeyboardLayouts:
         // No resultHandler: KeyboardLayoutsActivity owns the write and only makes it
         // when the selection actually changed. The shared handler saves
-        // unconditionally, which would put a SPIFFS write behind every visit and
-        // defeat that check.
+        // unconditionally, which would put a settings write behind every visit
+        // and defeat that check.
         startActivityForResult(std::make_unique<KeyboardLayoutsActivity>(renderer, mappedInput),
                                [](const ActivityResult&) {});
         break;
