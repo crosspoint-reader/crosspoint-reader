@@ -29,7 +29,9 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
 done
 
 UI_FONT_SIZES=(10 12)
-UI_FONT_STYLES=("Regular" "Bold")
+# Medium, not Regular, is the UI text weight: 1-bit rasterisation at these sizes
+# snaps stems to whole pixels, and Regular lands on 2px where Medium lands on 3.
+UI_FONT_STYLES=("Medium" "Bold")
 
 # Arabic glyphs for UI text (menus, file browser titles). The built-in fonts
 # must cover the *output* of MiniBidi's do_shape() — contextual presentation
@@ -63,8 +65,10 @@ for size in ${UI_FONT_SIZES[@]}; do
   for style in ${UI_FONT_STYLES[@]}; do
     font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
-    hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${style}.ttf"
-    arabic_path="../builtinFonts/source/NotoSansArabic/NotoSansArabic-${style}.ttf"
+    # Noto ships only Regular and Bold, so the Medium slot falls back to Regular.
+    if [ "$style" = "Bold" ]; then noto_style="Bold"; else noto_style="Regular"; fi
+    hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${noto_style}.ttf"
+    arabic_path="../builtinFonts/source/NotoSansArabic/NotoSansArabic-${noto_style}.ttf"
     # Ubuntu lacks the Latin Extended Additional block (U+1EA0-U+1EF9) used for
     # Vietnamese tone marks. Append a Vietnamese-only Ubuntu cut so those glyphs
     # are filled from it while every glyph Ubuntu already has stays unchanged
