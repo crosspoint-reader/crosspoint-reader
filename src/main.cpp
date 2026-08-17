@@ -652,10 +652,18 @@ void loop() {
   // double-click window expires without a second click. Gated to Power mode
   // so a pending Home click (unrelated) can't be mistaken for one.
   mappedInputManager.setPowerConfirmClickFrame(false);
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && x4ProFrontlightOnPower &&
-      lastX4ProFrontlightClickAt != 0 && millis() - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
-    lastX4ProFrontlightClickAt = 0;
-    mappedInputManager.setPowerConfirmClickFrame(true);
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM && x4ProFrontlightOnPower) {
+    if (lastX4ProFrontlightClickAt != 0 && millis() - lastX4ProFrontlightClickAt > X4PRO_POWER_DOUBLE_CLICK_MS) {
+      lastX4ProFrontlightClickAt = 0;
+      mappedInputManager.setPowerConfirmClickFrame(true);
+    }
+    // A release held too long to be a double-click candidate (but still within
+    // the normal Confirm press duration) never reaches handleX4ProFrontlightDoubleClick's
+    // click tracking above, so it needs its own Confirm check here.
+    if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > X4PRO_POWER_CLICK_MAX_HOLD_MS &&
+        gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration()) {
+      mappedInputManager.setPowerConfirmClickFrame(true);
+    }
   }
 #endif
 
