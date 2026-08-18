@@ -938,34 +938,48 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
     return false;
   }
   if (!st.aborted && st.books > 0) {
+    // A stage that cannot be read back fails the BUILD, it does not degrade.
+    // The fallback would be firstSeen == 0 for every affected book — wrong in
+    // "Recently added" today, and read back as prior truth by the next rebuild,
+    // which would then propagate the zeros forever. The previous index survives.
     HalFile read;
-    if (Storage.openFileForRead("LIBIDX", STAGE_PATH, read)) {
-      for (uint16_t i = 0; i < st.books; i++) {
-        ClixRecord r{};
-        read.seekSet(static_cast<uint64_t>(i) * STAGE_STRIDE);
-        if (read.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) break;
-        if (r.firstSeen != FIRST_SEEN_UNRESOLVED) {
-          resolvedFirstSeen[i] = r.firstSeen;
-          continue;
-        }
-        int renamed = -1;
-        for (uint16_t q = 0; q < priorCount; q++) {
-          if (priorList && !priorList[q].matched && priorList[q].size == r.fileSize) {
-            renamed = q;
-            break;
-          }
-        }
-        if (renamed >= 0) {
-          priorList[renamed].matched = true;
-          resolvedFirstSeen[i] = priorList[renamed].firstSeen;
-          stats.renamed++;
-        } else {
-          resolvedFirstSeen[i] = st.nextFirstSeen++;
-          stats.added++;
+    if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, read)) {
+      LOG_ERR("LIBIDX", "firstSeen reconciliation: cannot reopen the stage");
+      Storage.remove(STAGE_PATH);
+      Storage.remove(folderStagePath.c_str());
+      return false;
+    }
+    for (uint16_t i = 0; i < st.books; i++) {
+      ClixRecord r{};
+      read.seekSet(static_cast<uint64_t>(i) * STAGE_STRIDE);
+      if (read.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) {
+        LOG_ERR("LIBIDX", "firstSeen reconciliation: short read at record %u", static_cast<unsigned>(i));
+        read.close();
+        Storage.remove(STAGE_PATH);
+        Storage.remove(folderStagePath.c_str());
+        return false;
+      }
+      if (r.firstSeen != FIRST_SEEN_UNRESOLVED) {
+        resolvedFirstSeen[i] = r.firstSeen;
+        continue;
+      }
+      int renamed = -1;
+      for (uint16_t q = 0; q < priorCount; q++) {
+        if (priorList && !priorList[q].matched && priorList[q].size == r.fileSize) {
+          renamed = q;
+          break;
         }
       }
-      read.close();
+      if (renamed >= 0) {
+        priorList[renamed].matched = true;
+        resolvedFirstSeen[i] = priorList[renamed].firstSeen;
+        stats.renamed++;
+      } else {
+        resolvedFirstSeen[i] = st.nextFirstSeen++;
+        stats.added++;
+      }
     }
+    read.close();
     for (uint16_t q = 0; q < priorCount; q++) {
       if (priorList && !priorList[q].matched) stats.removed++;
     }
