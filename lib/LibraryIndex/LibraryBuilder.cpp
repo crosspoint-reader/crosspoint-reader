@@ -32,6 +32,8 @@ constexpr size_t NAME_BUF_SIZE = 512;
 // the display name. Fixed stride keeps the second pass a seek rather than a scan.
 constexpr size_t STAGE_NAME_BYTES = 255;
 constexpr size_t STAGE_AUTHOR_BYTES = 128;
+// A folder path is stored behind one length byte in the folder section.
+constexpr size_t FOLDER_PATH_BYTES = 255;
 struct StagedEntry {
   ClixRecord record;
   char name[STAGE_NAME_BYTES];
@@ -260,7 +262,10 @@ void stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
     entry.record.firstSeen = FIRST_SEEN_UNRESOLVED;
   }
   entry.record.folderId = folderId;
-  entry.record.nameLen = static_cast<uint8_t>(std::min<size_t>(name.size(), STAGE_NAME_BYTES));
+  // In range: walk() skips names longer than STAGE_NAME_BYTES before staging.
+  // readPath() rebuilds the file path from this slot, so a clamp here would
+  // stage a row that renders but cannot open.
+  entry.record.nameLen = static_cast<uint8_t>(name.size());
   // Only stored when the book actually told us something; otherwise the row falls
   // back to the filename and nothing is duplicated.
   const std::string& shownTitle = titleFromBook ? title : kNoTitle;
@@ -348,6 +353,17 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       st.unreadableSkipped++;
       continue;
     }
+    // The index stores the name and the folder path behind one length byte
+    // each, and readPath() reconstructs "<folder>/<name>" from those bytes. An
+    // entry that does not fit is skipped and counted, never clamped: a clamped
+    // name still renders on the shelf but reconstructs to a path that cannot
+    // open, and a byte-level cut is not even valid UTF-8. The limit is real —
+    // FAT allows 255 UTF-16 units, so a long Cyrillic or CJK filename can run
+    // to ~765 UTF-8 bytes.
+    if (name.size() > STAGE_NAME_BYTES || path.size() > FOLDER_PATH_BYTES) {
+      st.unreadableSkipped++;
+      continue;
+    }
     const uint64_t key = (static_cast<uint64_t>(fnv1a32(name.data(), name.size())) << 32) | size;
     if (std::find(seen.begin(), seen.end(), key) != seen.end()) {
       st.duplicatesDropped++;
@@ -359,7 +375,9 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       // Folders are emitted lazily, so only directories that actually hold a
       // book get an id and the ids stay dense.
       myFolderId = st.folderId++;
-      const uint8_t pathLen = static_cast<uint8_t>(std::min<size_t>(path.size(), 255));
+      // In range: entries whose folder path exceeds FOLDER_PATH_BYTES were
+      // skipped above, so no book reaches this line with an overlong path.
+      const uint8_t pathLen = static_cast<uint8_t>(path.size());
       st.folders.write(&pathLen, 1);
       st.folders.write(reinterpret_cast<const uint8_t*>(path.data()), pathLen);
       st.folderBytes += 1u + pathLen;
