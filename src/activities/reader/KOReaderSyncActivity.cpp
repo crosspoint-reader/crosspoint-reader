@@ -493,10 +493,13 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
     const std::string remoteChapter =
         (remoteTocIndex >= 0) ? epub->getTocItem(remoteTocIndex).title
                               : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(remotePosition.spineIndex + 1));
-    const std::string localChapter =
-        !localChapterName.empty()
-            ? localChapterName
-            : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(localPosition.spineIndex + 1));
+    char localChapterFallback[32];
+    const char* localChapter = localChapterName.c_str();
+    if (localChapterName.empty()) {
+      snprintf(localChapterFallback, sizeof(localChapterFallback), "%s%d", tr(STR_SECTION_PREFIX),
+               localPosition.spineIndex + 1);
+      localChapter = localChapterFallback;
+    }
 
     char remoteVal[64];
     snprintf(remoteVal, sizeof(remoteVal), tr(STR_PAGE_OVERALL_FORMAT), remotePosition.pageNumber + 1,
@@ -540,7 +543,7 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
     if (deviceStr[0] != '\0') detailLine(deviceStr);
     screen.spacer(screen.theme().spaceLg);
     labelLine(tr(STR_LOCAL_LABEL));
-    detailLine(localChapter.c_str());
+    detailLine(localChapter);
     detailLine(localVal);
 
     // Two themed action rows flowing directly below the labels (not anchored to
