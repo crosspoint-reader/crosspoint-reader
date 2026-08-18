@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
+#include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
@@ -12,9 +13,6 @@
 #include <PNGdec.h>
 #include <Txt.h>
 #include <Xtc.h>
-#if FREEINK_DRIVER_SSD1677
-#include <lut/Ssd1677Luts.h>
-#endif
 
 #include <algorithm>
 #include <cmath>
@@ -479,6 +477,14 @@ bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
   return true;
 }
 
+void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    LOG_DBG("SLP", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
+    fcm->releaseSdFontCaches();
+    LOG_DBG("SLP", "Free heap before sleep image decode: %d bytes", ESP.getFreeHeap());
+  }
+}
+
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -512,6 +518,7 @@ void SleepActivity::onEnter() {
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
+    releaseSdFontCachesForDecode(renderer);
     return renderTransparentCustomSleepScreen();
   }
 
@@ -619,21 +626,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
       bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
                                                           CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
-#if FREEINK_DRIVER_SSD1677
-  const bool useFactoryGrayscale = hasGreyscale;
-  constexpr auto msbMode = GfxRenderer::FACTORY_GRAY_MSB;
-  constexpr auto lsbMode = GfxRenderer::FACTORY_GRAY_LSB;
-  constexpr const unsigned char* lut = freeink::lut_factory_quality;
-#else
-  constexpr bool useFactoryGrayscale = false;
-  constexpr auto msbMode = GfxRenderer::GRAYSCALE_MSB;
-  constexpr auto lsbMode = GfxRenderer::GRAYSCALE_LSB;
-  constexpr const unsigned char* lut = nullptr;
-#endif
-
-  if (!useFactoryGrayscale) {
-    renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
-  }
+  renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 
   if (!preserveBackground &&
       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
@@ -653,17 +646,17 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   if (hasGreyscale) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
-    renderer.setRenderMode(lsbMode);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
-    renderer.setRenderMode(msbMode);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleMsbBuffers();
 
-    renderer.displayGrayBuffer(lut, useFactoryGrayscale);
+    renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }

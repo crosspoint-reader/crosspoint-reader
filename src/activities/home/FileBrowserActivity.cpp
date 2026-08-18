@@ -99,6 +99,25 @@ void FileBrowserActivity::rebuildRowItems() {
     item.actionValue = static_cast<int16_t>(i);
     rowItems.push_back(item);
   }
+
+  // One SD pass for every CJK filename in the folder; repaints then hit the
+  // resident tables instead of re-reading per-string. Getter form: no
+  // concatenated copy (a bare-new string append aborts under heap pressure).
+  // The last index covers the bottom path band: basepath (possibly a CJK
+  // folder name) draws in the same small font, so it must live in the same
+  // batch or it would evict the rows' glyphs when the heap gate disables
+  // union merging. (prewarmFallbackText appends the truncation ellipsis.)
+  struct PrewarmCtx {
+    const std::vector<std::string>* names;
+    const std::string* path;
+  } prewarmCtx{&rowNames, &basepath};
+  renderer.prewarmFallbackText(
+      uiScaleSpec().smallFontId,
+      [](const void* ctx, uint32_t i) -> const char* {
+        const auto* c = static_cast<const PrewarmCtx*>(ctx);
+        return i < c->names->size() ? (*c->names)[i].c_str() : c->path->c_str();
+      },
+      &prewarmCtx, static_cast<uint32_t>(rowNames.size()) + 1);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -236,6 +255,9 @@ void FileBrowserActivity::onRowLongPress(const int index) {
 
 void FileBrowserActivity::activateSelected(const bool forceDelete) {
   if (files.empty()) return;
+  // A touch activation can carry a row index captured before a delete/reload
+  // shrank the list; the next render re-registers the rows.
+  if (nav.selected < 0 || nav.selected >= listCount()) return;
 
   const std::string& entry = files[nav.selected];
   bool isDirectory = (entry.back() == '/');
@@ -262,14 +284,18 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
         LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
         if (removeDirFile(fullPath)) {
           LOG_DBG("FileBrowser", "Deleted successfully");
-          loadFiles();
-          if (files.empty()) {
-            nav.selected = 0;
-          } else if (nav.selected >= listCount()) {
-            // Move selection to the new "last" item
-            nav.selected = listCount() - 1;
+          {
+            // buildScreen() reads the row caches on the render task; see loop().
+            RenderLock lock(*this);
+            loadFiles();
+            if (files.empty()) {
+              nav.selected = 0;
+            } else if (nav.selected >= listCount()) {
+              // Move selection to the new "last" item
+              nav.selected = listCount() - 1;
+            }
+            nav.follow(listCount());
           }
-          nav.follow(listCount());
 
           requestUpdate(true);
         } else {
@@ -286,6 +312,10 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
     return;
   } else {
     // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
+    // buildScreen() runs on the render task and reads basepath plus the
+    // ListItem label/value pointers into rowNames/rowExtensions that
+    // rebuildRowItems() frees; mutate only under the render lock.
+    RenderLock lock(*this);
     if (basepath.back() != '/') basepath += "/";
 
     if (isDirectory) {
@@ -293,9 +323,12 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
       loadFiles();
       nav.selected = 0;
       nav.top = 0;
+      lock.unlock();
       requestUpdate();
     } else {
-      onSelectBook(basepath + entry);
+      const std::string fullPath = basepath + entry;
+      lock.unlock();  // onSelectBook launches an activity; don't hold the lock across it
+      onSelectBook(fullPath);
     }
   }
   return;
@@ -306,10 +339,15 @@ bool FileBrowserActivity::handleCustomInput() {
   // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
   if (mode == Mode::Books && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/") {
-    basepath = "/";
-    loadFiles();
-    nav.selected = 0;
-    nav.top = 0;
+    {
+      // buildScreen() runs on the render task and reads basepath plus the
+      // row caches rebuildRowItems() frees; mutate only under the render lock.
+      RenderLock lock(*this);
+      basepath = "/";
+      loadFiles();
+      nav.selected = 0;
+      nav.top = 0;
+    }
     requestUpdate();
     return true;
   }
@@ -329,15 +367,20 @@ bool FileBrowserActivity::handleButtons() {
       if (basepath != "/") {
         const std::string oldPath = basepath;
 
-        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-        if (basepath.empty()) basepath = "/";
-        loadFiles();
+        {
+          // buildScreen() runs on the render task and reads basepath plus the
+          // row caches rebuildRowItems() frees; mutate only under the render lock.
+          RenderLock lock(*this);
+          basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+          if (basepath.empty()) basepath = "/";
+          loadFiles();
 
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
-        nav.selected = static_cast<int>(findEntry(dirName));
-        nav.top = 0;
-        nav.follow(listCount());
+          const auto pos = oldPath.find_last_of('/');
+          const std::string dirName = oldPath.substr(pos + 1) + "/";
+          nav.selected = static_cast<int>(findEntry(dirName));
+          nav.top = 0;
+          nav.follow(listCount());
+        }
 
         requestUpdate();
       } else if (mode == Mode::PickFirmware) {
@@ -445,6 +488,10 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // The trailing value here is just the short extension: skip the balanced
   // 60%-band wrap cap and let both name lines run the full width before it.
   props.balanceWrappedLabelWithValue = false;
+  // Wrapped two-line names shrink how many rows fit a page, so the last row
+  // of a page can end up in leftover space: draw it as a partial preview so
+  // files past the fold are visibly present, not silently absent.
+  props.partialTrailingRow = true;
   syncListViewport(screen, props);
   screen.list(props);
 }
@@ -466,7 +513,8 @@ void FileBrowserActivity::drawFooter() {
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[nav.selected].back() != '/';
+  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && nav.selected >= 0 &&
+                                     nav.selected < listCount() && files[nav.selected].back() != '/';
   const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));

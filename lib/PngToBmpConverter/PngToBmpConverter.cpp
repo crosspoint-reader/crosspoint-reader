@@ -628,19 +628,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   FloydSteinbergDitherer* fsDitherer = nullptr;
   Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
 
-#if FREEINK_DRIVER_SSD1677
-  constexpr bool useOriginalThresholds = true;
-#else
-  constexpr bool useOriginalThresholds = false;
-#endif
-
   if (oneBit) {
     atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(outWidth, useOriginalThresholds);
+      atkinsonDitherer = new AtkinsonDitherer(outWidth);
     } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = new FloydSteinbergDitherer(outWidth, useOriginalThresholds);
+      fsDitherer = new FloydSteinbergDitherer(outWidth);
     }
   }
 

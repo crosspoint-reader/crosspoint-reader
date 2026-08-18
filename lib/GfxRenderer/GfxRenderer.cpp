@@ -210,6 +210,54 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
   return fontId;
 }
 
+void GfxRenderer::prewarmFallbackText(const int fontId, const TextGetter getter, const void* ctx,
+                                      const uint32_t textCount, const EpdFontFamily::Style style) const {
+  if (getter == nullptr || textCount == 0) {
+    return;
+  }
+  // Resolve the fallback id from the first string that actually redirects; a
+  // screen with no CJK strings resolves nothing and this is a no-op.
+  int fallbackFontId = fontId;
+  for (uint32_t i = 0; i < textCount && fallbackFontId == fontId; i++) {
+    const char* text = getter(ctx, i);
+    if (text == nullptr || *text == '\0') continue;
+    fallbackFontId = resolveTextFontId(fontId, text, style);
+  }
+  if (fallbackFontId == fontId) {
+    return;
+  }
+  const auto sdIt = sdCardFonts_.find(fallbackFontId);
+  if (sdIt == sdCardFonts_.end()) {
+    return;
+  }
+  const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
+  // Append one virtual index for U+2026: truncation measures every long row
+  // as "label…", so an ellipsis missing from the batch forces a union rebuild
+  // on the first repaint.
+  struct WrapCtx {
+    TextGetter getter;
+    const void* ctx;
+    uint32_t count;
+  } wrap{getter, ctx, textCount};
+  const auto withEllipsis = [](const void* wc, uint32_t i) -> const char* {
+    const auto* w = static_cast<const WrapCtx*>(wc);
+    return i < w->count ? w->getter(w->ctx, i) : "\xe2\x80\xa6";
+  };
+  // loadKernLig=false: see ensureSdGlyphsResident below.
+  sdIt->second->prewarm(withEllipsis, &wrap, textCount + 1, styleMask, /*metadataOnly=*/false,
+                        /*loadKernLig=*/false);
+}
+
+void GfxRenderer::prewarmFallbackText(const int fontId, const char* text, const EpdFontFamily::Style style) const {
+  if (text == nullptr || *text == '\0') {
+    return;
+  }
+  const int resolvedFontId = resolveTextFontId(fontId, text, style);
+  if (resolvedFontId != fontId) {
+    ensureSdGlyphsResident(resolvedFontId, text, style, false);
+  }
+}
+
 void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, const EpdFontFamily::Style style,
                                          const bool metadataOnly) const {
   const auto sdIt = sdCardFonts_.find(fontId);
@@ -218,8 +266,14 @@ void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, con
   }
   // SUP/SUB bits don't select a distinct .cpfont style bitstream — mask to the
   // base style. resolveStyleMask() inside prewarm folds absent styles.
+  // loadKernLig=false: redirected fallback strings (CJK titles, filenames)
+  // have no useful kern pairs, and the ~3KB class-table load plus per-rebuild
+  // mini-matrix build cost heap and SD time exactly where these strings live
+  // (heap-tight UI screens). The reader's PrewarmScope path keeps kern; a
+  // kern-wanting request that subset-hits a kern-free mini tops the matrix up
+  // in prewarmStyle without re-reading glyphs.
   const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
-  sdIt->second->prewarm(text, styleMask, metadataOnly);
+  sdIt->second->prewarm(text, styleMask, metadataOnly, /*loadKernLig=*/false);
 }
 
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
@@ -586,7 +640,15 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   std::string visual;
   const char* renderedText = resolveVisualText(text, visual, baseDir);
 
-  const int yPos = y + getFontAscenderSize(resolvedFontId);
+  // Baseline from the resolved font; when the string was redirected to the
+  // fallback, the caller positioned this line with the REQUESTED font's
+  // metrics (row bands, icon centering), so center the fallback's line box
+  // inside the requested font's line box instead of letting a taller/shorter
+  // fallback hang below or float above the row's visual center.
+  int yPos = y + getFontAscenderSize(resolvedFontId);
+  if (resolvedFontId != fontId) {
+    yPos += (getLineHeight(fontId) - getLineHeight(resolvedFontId)) / 2;
+  }
   int lastBaseX = x;
   int lastBaseLeft = 0;
   int lastBaseWidth = 0;
@@ -1377,10 +1439,6 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
         drawPixel(screenX, screenY, false);
       } else if (renderMode == GRAYSCALE_LSB && val == 1) {
         drawPixel(screenX, screenY, false);
-      } else if (renderMode == FACTORY_GRAY_LSB && !(val & 1)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == FACTORY_GRAY_MSB && val < 2) {
-        drawPixel(screenX, screenY, false);
       }
     }
   }
@@ -1420,9 +1478,6 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     return;
   }
 
-  // Factory grayscale inverts the pixel values
-  const bool full = !(renderMode == FACTORY_GRAY_LSB || renderMode == FACTORY_GRAY_MSB);
-
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
@@ -1457,7 +1512,7 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       // For 1-bit source: 0 or 1 -> map to black (0,1,2) or white (3)
       // val < 3 means black pixel (draw it)
       if (val < 3) {
-        drawPixel(screenX, screenY, full);
+        drawPixel(screenX, screenY, true);
       }
       // White pixels (val == 3) are not drawn (leave background)
     }
@@ -1621,14 +1676,7 @@ void GfxRenderer::invertScreen() const {
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  // After a factory LUT render, RED RAM still contains the grayscale MSB plane.
-  // Promote the first normal FAST refresh to HALF so both RAM banks are rebased
-  // before differential updates resume.
-  const bool afterFactoryLut = displayState == DisplayState::FactoryLut;
-  const auto effectiveRefreshMode =
-      afterFactoryLut && refreshMode == HalDisplay::FAST_REFRESH ? HalDisplay::HALF_REFRESH : refreshMode;
-  display.displayBuffer(effectiveRefreshMode, fadingFix);
-  displayState = DisplayState::BW;
+  display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
@@ -2172,14 +2220,7 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuff
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
-void GfxRenderer::displayGrayBuffer(const unsigned char* lut, bool factoryMode) const {
-  display.displayGrayBuffer(fadingFix, lut, factoryMode);
-  if (factoryMode) {
-    displayState = DisplayState::FactoryLut;
-  } else {
-    displayState = DisplayState::BW;
-  }
-}
+void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.
@@ -2188,6 +2229,8 @@ void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch
 }
 
 bool GfxRenderer::supportsStripGrayscale() const { return display.supportsStripGrayscale(); }
+
+bool GfxRenderer::combinesGrayscaleBase() const { return display.combinesGrayscaleBase(); }
 
 void GfxRenderer::freeBwBufferChunks() {
   for (auto& bwBufferChunk : bwBufferChunks) {

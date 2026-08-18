@@ -22,6 +22,7 @@
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
 #include "util/BmpViewerActivity.h"
+#include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -80,6 +81,11 @@ void ActivityManager::loop() {
         return;
       }
       goHome();
+      return;
+    }
+
+    if (currentActivity->name != "FrontlightPanel" && mappedInput.wasLightPanelGesture()) {
+      pushActivity(std::make_unique<FrontlightPanelActivity>(renderer, mappedInput));
       return;
     }
 
@@ -345,11 +351,7 @@ void ActivityManager::requestUpdateAndWait() {
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
   xTaskNotify(renderTaskHandle, 1, eIncrement);
-  // Tell the power manager the loop is parked here: it cannot poll input until the
-  // render finishes, so the BUSY-wait slice hook should not yield to it meanwhile.
-  powerManager.noteRenderWaitBegin();
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-  powerManager.noteRenderWaitEnd();
 }
 
 // RenderLock

@@ -65,7 +65,10 @@ class OptionPopup {
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
-    const int count = static_cast<int>(ownedStrings.size());
+    // Match the render cap: only the first MAX_OPTIONS rows exist on screen,
+    // so button wrap-around must not select an invisible option.
+    const int total = static_cast<int>(ownedStrings.size());
+    const int count = total > MAX_OPTIONS ? MAX_OPTIONS : total;
     const freeink::ui::InputSnapshot snap = touchSnapshotFrom(input);
     if (snap.touchPressed || snap.touchReleased || snap.touchHeld) {
       // Interactions are registered on the render task; only route once the

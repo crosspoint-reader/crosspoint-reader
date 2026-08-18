@@ -181,7 +181,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
-                                                                   editServer.password, 63, InputType::Password),
+                                                                   editServer.password, 63, InputType::Text),
                            handler);
   } else if (nav.selected == CUSTOM_HEADER_1_INDEX || nav.selected == CUSTOM_HEADER_2_INDEX) {
     // Custom Header 1 or 2 - single "Name: Value" line, parsed on save.
@@ -216,10 +216,11 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   // Content below the GUI.drawHeader band, above the button hints; derived
   // from the safe area so board bezel insets apply (same as LanguageSelect).
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
-                                      static_cast<int16_t>(safe.x)});
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
+                  static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
+                  static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.buttonHintsHeight),
+                  static_cast<int16_t>(safe.x)});
 
   // URL hint where the old sub-header band sat.
   const fui::Rect band = screen.takeTop(static_cast<int16_t>(metrics.tabBarHeight));
