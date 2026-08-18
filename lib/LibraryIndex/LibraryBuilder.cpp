@@ -367,10 +367,23 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       if (depth == 0) st.booksAtRoot = true;
     }
     stageRecord(st, name, size, myFolderId, joinPath(path, name));
+
+    // Once per staged book, not only once per directory: this callback is the
+    // one place the caller can feed the task watchdog, and with metadata enabled
+    // a single book can hold stageRecord() in SD reads for a long moment. One
+    // large flat folder would otherwise starve the 5 s panic timeout — and since
+    // the missing index retriggers the rebuild, the failure is a reboot loop,
+    // not one crash. A break, not a return: the directory handle is still open.
+    if (st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
+      st.aborted = true;
+      break;
+    }
   }
   dir.close();
 
-  if (st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
+  // Kept for directories that stage no books, so a deep tree of empty or
+  // book-less folders still feeds the watchdog between the per-book calls.
+  if (!st.aborted && st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
     st.aborted = true;
     return;
   }
