@@ -3,6 +3,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <Print.h>
+#include <Utf8.h>
 #include <ZipFile.h>
 
 #include <algorithm>
@@ -107,9 +108,11 @@ std::string elementText(const std::string& xml, const char* name) {
   return xml.substr(body, end - body);
 }
 
-// The five predefined XML entities, plus the numeric forms publishers use for
-// typographic apostrophes. Anything unrecognised is left as written rather than
-// dropped, so an unknown entity costs a stray "&amp;" and not a lost title.
+// The five predefined XML entities, plus general numeric character references
+// ("&#201;", "&#xC9;") — a title like "&#201;mile Zola" is valid OPF, and the
+// reader-side expat path decodes it, so the shelf must agree. Anything
+// unrecognised is left as written rather than dropped, so an unknown entity
+// costs a stray "&amp;" and not a lost title.
 std::string decodeEntities(const std::string& in) {
   std::string out;
   out.reserve(in.size());
@@ -136,6 +139,11 @@ std::string decodeEntities(const std::string& in) {
       out.push_back('\'');
     } else if (name == "#160" || name == "#xa0" || name == "nbsp") {
       out.push_back(' ');
+    } else if (name.size() > 1 && name[0] == '#') {
+      // Any other numeric reference, after the explicit cases above so their
+      // ASCII mappings still win. An invalid body appends nothing and falls
+      // back to the raw text, like an unknown named entity.
+      if (!utf8AppendNumericCharRef(name, out)) out.append(in, i, semi - i + 1);
     } else {
       out.append(in, i, semi - i + 1);
     }
