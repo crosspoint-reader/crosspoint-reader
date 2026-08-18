@@ -29,5 +29,4 @@ class XtcReaderChapterSelectionActivity final : public UiListActivity {
   explicit XtcReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              const std::shared_ptr<Xtc>& xtc, uint32_t currentPage);
   void onEnter() override;
-  bool appliesNightMode() const override { return true; }
 };

@@ -174,6 +174,8 @@ void XtcReaderActivity::renderPage() {
 
   renderer.clearScreen();
 
+  const bool allowHalf = forcedRefreshPending;
+  forcedRefreshPending = false;
   const uint16_t maxSrcY = pageHeight;
 
   if (bitDepth == 2) {
@@ -206,7 +208,7 @@ void XtcReaderActivity::renderPage() {
       // the display sync, so only the gentle reinforcement cells fire).
       // Combined-base panels (Paper Mono) instead defer the base so the gray
       // planes below join it in one waveform.
-      const auto cleanup = ReaderUtils::nightSafeRefresh(HalDisplay::HALF_REFRESH);
+      const auto cleanup = ReaderUtils::nightSafeRefresh(HalDisplay::HALF_REFRESH, allowHalf);
       if (renderer.combinesGrayscaleBase()) {
         renderer.displayGrayscaleBase(cleanup);
       } else {
@@ -283,7 +285,7 @@ void XtcReaderActivity::renderPage() {
     renderStatusBarOverlay(renderer, StatusBarOverlayPosition::Bottom);
   }
 
-  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+  ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, false, allowHalf);
 
   LOG_DBG("XTR", "Rendered page %lu/%lu (%u-bit)", currentPage + 1, xtc->getPageCount(), bitDepth);
 }

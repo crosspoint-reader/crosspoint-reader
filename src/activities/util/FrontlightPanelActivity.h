@@ -6,8 +6,9 @@
 
 // Top-anchored frontlight overlay opened by a top-edge down-swipe. It drives
 // brightness and warmth live, and includes only a sun on/off control; Night
-// Mode is toggled from the reader menu. The overlay itself still inverts
-// (appliesNightMode) so a swipe for the light does not dump a white UI.
+// Mode is toggled from the reader menu. The overlay inverts so a night swipe
+// stays dark; ActivityManager then arms a reader HALF on pop so the sun
+// does not FAST-ghost into the page.
 class FrontlightPanelActivity final : public Activity, private UiAppHost {
   ButtonNavigator buttonNavigator;
 

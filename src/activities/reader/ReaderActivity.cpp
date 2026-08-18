@@ -191,11 +191,15 @@ void ReaderActivity::render(RenderLock&&) {
   renderBook();
 }
 
+void ReaderActivity::requestCleanupRefresh() {
+  pagesUntilFullRefresh = 1;
+  forcedRefreshPending = true;
+}
+
 bool ReaderActivity::handleForcedRefresh() {
   {
     RenderLock lock(*this);
-    pagesUntilFullRefresh = 1;
-    forcedRefreshPending = true;
+    requestCleanupRefresh();
   }
   requestUpdate();
   return true;

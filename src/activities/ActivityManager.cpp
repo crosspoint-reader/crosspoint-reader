@@ -105,6 +105,7 @@ void ActivityManager::loop() {
       }
 
       ActivityResult pendingResult = std::move(currentActivity->result);
+      const bool poppedLightPanel = currentActivity->name == "FrontlightPanel";
 
       // Destroy the current activity
       exitActivity(lock);
@@ -120,6 +121,11 @@ void ActivityManager::loop() {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
+        // Invert stays on across the light panel, so polarity does not change
+        // and FAST would leave the sun in the page. Arm the reader's HALF.
+        if (poppedLightPanel && SETTINGS.screenInverted != 0) {
+          currentActivity->requestCleanupRefresh();
+        }
         // Handle result if necessary
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");

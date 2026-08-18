@@ -46,9 +46,12 @@ class Activity {
   virtual bool isReaderActivity() const { return false; }
   // True when night mode may invert this surface. ActivityManager resolves
   // polarity per render from SETTINGS.screenInverted && appliesNightMode().
-  // Reading surfaces and the in-reader overlays opened from them return true
-  // so polarity does not flip to a white UI while the setting is on.
+  // The reader, dictionary, and frontlight panel return true. Other chrome
+  // stays normal so a polarity change can HALF-clear overlay residue.
   virtual bool appliesNightMode() const { return false; }
+  // Arm a HALF cleanup on the next paint. The frontlight panel stays inverted
+  // at night; the reader uses this on pop so the sun does not FAST-ghost.
+  virtual void requestCleanupRefresh() {}
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
   virtual bool isHomeActivity() const { return false; }

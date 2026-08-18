@@ -54,5 +54,6 @@ class ReaderActivity : public Activity {
 
   bool isReaderActivity() const final { return true; }
   bool appliesNightMode() const final { return true; }
+  void requestCleanupRefresh() final;
   bool handleForcedRefresh() final;
 };

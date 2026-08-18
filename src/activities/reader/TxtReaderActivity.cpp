@@ -322,11 +322,13 @@ void TxtReaderActivity::renderPage(GfxRenderer& renderer) {
   renderLines();
   renderStatusBar();
 
+  const bool allowHalf = forcedRefreshPending;
+  forcedRefreshPending = false;
   if (SETTINGS.textAntiAliasing) {
-    ReaderUtils::displayBaseWithRefreshCycle(renderer, pagesUntilFullRefresh);
+    ReaderUtils::displayBaseWithRefreshCycle(renderer, pagesUntilFullRefresh, allowHalf);
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   } else {
-    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
+    ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, false, allowHalf);
   }
 }
 

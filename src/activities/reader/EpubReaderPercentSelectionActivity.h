@@ -15,7 +15,6 @@ class EpubReaderPercentSelectionActivity final : public Activity, private UiAppH
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool appliesNightMode() const override { return true; }
 
  private:
   // The UiAppHost app hosts the shared slider dialog (drag slider, -/+ zones,
