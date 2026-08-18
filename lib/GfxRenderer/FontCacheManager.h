@@ -65,7 +65,11 @@ class FontCacheManager {
   // (they fall back to the per-string prewarm in GfxRenderer).
   static constexpr uint8_t MAX_SCAN_FONTS = 4;
   struct ScanEntry {
-    int fontId = -1;
+    // Occupancy is tracked separately: font ids are FNV hashes cast to int
+    // (SdCardFontManager::computeFontId, src/fontIds.h) and are routinely
+    // negative, so no id value can serve as the "free slot" sentinel.
+    bool used = false;
+    int fontId = 0;
     std::string text;
     uint8_t styleMask = 0;
   };
