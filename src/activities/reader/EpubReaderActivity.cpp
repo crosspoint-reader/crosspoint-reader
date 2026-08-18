@@ -323,13 +323,22 @@ void EpubReaderActivity::loop() {
       !partialRebuildStartFailed &&
       section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
     RenderLock lock;
-    const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
-    if (!section->startBuild(buildSpec)) {
-      partialRebuildStartFailed = true;
-      LOG_ERR("ERS", "Failed to start deferred partial extension build");
-    } else {
-      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
-              section->pageCount);
+    // Re-check under the lock: the peek above and this acquire are not atomic, and a render
+    // that won the race may have finalized the extension, replaced the section, or reset it
+    // to null on its page-load-failure path -- startBuild through a stale or null section
+    // pointer is a crash. Mirrors the build pump below. cppcheck can't see the cross-task
+    // mutation, so it flags the re-check as always true.
+    // cppcheck-suppress knownConditionTrueFalse
+    if (section && !section->isBuilding() && section->isPartial() &&
+        section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+      const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
+      if (!section->startBuild(buildSpec)) {
+        partialRebuildStartFailed = true;
+        LOG_ERR("ERS", "Failed to start deferred partial extension build");
+      } else {
+        LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
+                section->pageCount);
+      }
     }
   }
 
@@ -337,7 +346,10 @@ void EpubReaderActivity::loop() {
       (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
       buildTickHeapGate()) {
     RenderLock lock;
-    if (section->isBuilding() && buildTickHeapGate()) {
+    // Same window as above: a render can reset the section between the unlocked peek and
+    // this acquire, so the isBuilding() re-check must not deref without a null re-check.
+    // cppcheck-suppress knownConditionTrueFalse
+    if (section && section->isBuilding() && buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
