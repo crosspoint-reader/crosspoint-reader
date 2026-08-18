@@ -160,6 +160,36 @@ std::string collapseWhitespace(const std::string& in) {
   return out;
 }
 
+// Whitespace as XML defines it for attribute lists.
+bool isXmlSpace(const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+
+// Value of `name="..."` (or single-quoted) inside one tag's text, tolerating
+// whitespace around '='. The left boundary must be whitespace, so "media-type"
+// cannot be matched by a search for "type". Empty when absent or malformed.
+std::string tagAttribute(const std::string& tag, const char* name) {
+  const size_t nameLen = strlen(name);
+  size_t p = 0;
+  while ((p = tag.find(name, p)) != std::string::npos) {
+    const char before = p > 0 ? tag[p - 1] : '\0';
+    size_t q = p + nameLen;
+    while (q < tag.size() && isXmlSpace(tag[q])) q++;
+    if (!isXmlSpace(before) || q >= tag.size() || tag[q] != '=') {
+      p += nameLen;
+      continue;
+    }
+    q++;
+    while (q < tag.size() && isXmlSpace(tag[q])) q++;
+    if (q >= tag.size() || (tag[q] != '"' && tag[q] != '\'')) {
+      p += nameLen;
+      continue;
+    }
+    const size_t end = tag.find(tag[q], q + 1);
+    if (end == std::string::npos) return {};
+    return tag.substr(q + 1, end - q - 1);
+  }
+  return {};
+}
+
 bool inflateBounded(ZipFile& zip, const char* entry, const size_t maxInflated, std::string& out, bool& tooLarge) {
   tooLarge = false;
   // No size pre-check. There used to be one, and it undid the whole point of the
@@ -193,16 +223,55 @@ bool inflateBounded(ZipFile& zip, const char* entry, const size_t maxInflated, s
 }  // namespace
 
 std::string opfPathFromContainer(const std::string& containerXml) {
-  // <rootfile full-path="OEBPS/content.opf" .../>. Scanned for rather than
-  // parsed: the attribute is unambiguous, and a container.xml with anything else
-  // wrong should still yield the path.
-  const size_t attr = containerXml.find("full-path=");
-  if (attr == std::string::npos) return {};
-  const size_t quote = containerXml.find_first_of("\"'", attr);
-  if (quote == std::string::npos) return {};
-  const size_t end = containerXml.find(containerXml[quote], quote + 1);
-  if (end == std::string::npos) return {};
-  return decodeEntities(containerXml.substr(quote + 1, end - quote - 1));
+  // Still a scan rather than a parse, but anchored on the same things the
+  // reader's ContainerParser anchors on: a real <rootfile> element carrying the
+  // OPF media-type, with XML comments skipped. A bare search for the first
+  // `full-path=` anywhere could take a commented-out rootfile or a non-OPF
+  // alternative rendition, and the shelf would then read a different package
+  // document than the reader opens for the same book.
+  size_t i = 0;
+  while ((i = containerXml.find('<', i)) != std::string::npos) {
+    if (containerXml.compare(i, 4, "<!--") == 0) {
+      const size_t end = containerXml.find("-->", i + 4);
+      if (end == std::string::npos) return {};
+      i = end + 3;
+      continue;
+    }
+    // "<rootfile" followed by a delimiter, so <rootfiles> does not match. No
+    // namespace-prefix tolerance, matching the reader's strcmp on "rootfile".
+    if (containerXml.compare(i + 1, 8, "rootfile") == 0) {
+      const char after = i + 9 < containerXml.size() ? containerXml[i + 9] : '\0';
+      if (isXmlSpace(after) || after == '/' || after == '>') {
+        // End of this tag, honouring quotes: attribute values may contain '>'.
+        size_t tagEnd = i + 9;
+        char quote = 0;
+        while (tagEnd < containerXml.size()) {
+          const char c = containerXml[tagEnd];
+          if (quote != 0) {
+            if (c == quote) quote = 0;
+          } else if (c == '"' || c == '\'') {
+            quote = c;
+          } else if (c == '>') {
+            break;
+          }
+          tagEnd++;
+        }
+        if (tagEnd >= containerXml.size()) return {};
+        const std::string tag = containerXml.substr(i, tagEnd - i + 1);
+        if (tagAttribute(tag, "media-type") == "application/oebps-package+xml") {
+          const std::string path = tagAttribute(tag, "full-path");
+          // The FIRST matching rootfile, which the spec names the default
+          // rendition. Multi-rendition books are the one case this can differ
+          // from ContainerParser, which keeps the last match it sees.
+          if (!path.empty()) return decodeEntities(path);
+        }
+        i = tagEnd + 1;
+        continue;
+      }
+    }
+    i++;
+  }
+  return {};
 }
 
 void parseOpfMetadata(const std::string& opfXml, BookMetadata& out) {
