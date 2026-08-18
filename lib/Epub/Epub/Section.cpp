@@ -40,7 +40,7 @@ namespace {
 // v39: Image top margin is clamped so a full-viewport-height image cannot
 //      overflow the page bottom; older caches can hold placements that panels
 //      with no bottom inset refuse to draw.
-constexpr uint8_t SECTION_FILE_VERSION = 39;
+constexpr uint8_t SECTION_FILE_VERSION = 40;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
