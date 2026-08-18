@@ -161,6 +161,14 @@ struct DirectPixelWriter {
         draw = (pixelValue == 1);
         state = false;
         break;
+      case GfxRenderer::ABSOLUTE_GRAY_LSB:
+        draw = true;
+        state = (pixelValue & 1);  // 1, 3
+        break;
+      case GfxRenderer::ABSOLUTE_GRAY_MSB:
+        draw = true;
+        state = (pixelValue > 1);  // 2, 3
+        break;
       default:
         return;
     }
