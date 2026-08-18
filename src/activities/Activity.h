@@ -44,9 +44,10 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
-  // True for the reading surfaces night mode inverts (EPUB/TXT/XTC). Resolved
-  // per render by ActivityManager, so menus, overlays, and every other screen
-  // keep normal polarity without managing the display flag themselves.
+  // True when night mode may invert this surface. ActivityManager resolves
+  // polarity per render from SETTINGS.screenInverted && appliesNightMode().
+  // Reading surfaces and the in-reader overlays opened from them return true
+  // so polarity does not flip to a white UI while the setting is on.
   virtual bool appliesNightMode() const { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }

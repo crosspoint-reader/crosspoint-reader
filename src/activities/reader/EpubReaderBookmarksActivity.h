@@ -31,6 +31,7 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
                                        const std::shared_ptr<Epub>& epub, const std::string& epubPath);
   void onEnter() override;
   void render(RenderLock&&) override;
+  bool appliesNightMode() const override { return true; }
 
  private:
   int listCount() const override { return static_cast<int>(bookmarks.size()); }

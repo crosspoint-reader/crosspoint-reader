@@ -56,9 +56,9 @@ void ActivityManager::renderTaskLoop() {
     RenderLock lock;
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-      // Night mode inverts only the reading surfaces (appliesNightMode):
-      // resolving the output polarity here, per render, means menus, popups,
-      // and every other activity revert to normal automatically.
+      // Night mode inverts surfaces that return appliesNightMode():
+      // polarity is resolved here per render so home, settings, and other
+      // chrome stay normal without each activity touching the display flag.
       display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
       currentActivity->render(std::move(lock));
     }

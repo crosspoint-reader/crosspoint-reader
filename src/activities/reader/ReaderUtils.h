@@ -149,13 +149,24 @@ inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputMan
   return (input.hasTouch() && input.wasMenuGesture()) || isTouchMenuTap(renderer, input);
 }
 
+// HALF (GC) of an inverted black page flashes the glass through white.
+// Refresh-frequency 1 makes that every turn; stay on FAST. Higher
+// frequencies still use the periodic HALF slot (and force-refresh).
+inline HalDisplay::RefreshMode nightSafeRefresh(HalDisplay::RefreshMode mode) {
+  if (mode == HalDisplay::HALF_REFRESH && SETTINGS.screenInverted != 0 && SETTINGS.getRefreshFrequency() <= 1) {
+    return HalDisplay::FAST_REFRESH;
+  }
+  return mode;
+}
+
 // One helper, blocking or deferred: the async form starts the refresh and
 // returns so the caller can overlap CPU work with the panel's refresh time.
 // Async callers must not touch the framebuffer until
 // renderer.waitRefreshComplete() and must rebuild the differential baseline
 // before the next page turn (the tiled grayscale cleanup does).
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
-  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+  const auto mode =
+      nightSafeRefresh((pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   if (async) {
     renderer.displayBufferAsync(mode);
   } else {
@@ -178,7 +189,8 @@ inline void displayBaseWithRefreshCycle(const GfxRenderer& renderer, int& pagesU
     displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
     return;
   }
-  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+  const auto mode =
+      nightSafeRefresh((pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   renderer.displayGrayscaleBase(mode);
   if (pagesUntilFullRefresh <= 1) {
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();

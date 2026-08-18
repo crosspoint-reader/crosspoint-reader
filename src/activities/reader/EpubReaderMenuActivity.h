@@ -36,6 +36,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   void render(RenderLock&&) override;
   bool handleHomeGesture() override;
+  bool appliesNightMode() const override { return true; }
 
  private:
   struct MenuItem {

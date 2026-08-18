@@ -10,6 +10,7 @@ class EpubReaderFootnotesActivity final : public UiListActivity {
  public:
   explicit EpubReaderFootnotesActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                        const std::vector<FootnoteEntry>& footnotes);
+  bool appliesNightMode() const override { return true; }
 
  private:
   int listCount() const override { return static_cast<int>(footnotes.size()); }

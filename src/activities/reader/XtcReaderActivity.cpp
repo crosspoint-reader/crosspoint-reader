@@ -206,10 +206,11 @@ void XtcReaderActivity::renderPage() {
       // the display sync, so only the gentle reinforcement cells fire).
       // Combined-base panels (Paper Mono) instead defer the base so the gray
       // planes below join it in one waveform.
+      const auto cleanup = ReaderUtils::nightSafeRefresh(HalDisplay::HALF_REFRESH);
       if (renderer.combinesGrayscaleBase()) {
-        renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+        renderer.displayGrayscaleBase(cleanup);
       } else {
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        renderer.displayBuffer(cleanup);
         renderer.preconditionGrayscale();
       }
       pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
