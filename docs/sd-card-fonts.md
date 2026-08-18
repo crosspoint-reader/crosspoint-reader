@@ -115,7 +115,7 @@ To convert your own TrueType/OpenType fonts:
 
 ### Prerequisites
 
-    pip install freetype-py fonttools pyyaml
+    pip install freetype-py fonttools
 
 ### Single font (one style)
 
@@ -140,8 +140,6 @@ To convert your own TrueType/OpenType fonts:
       --output-dir ./MyFont/
 
 ### Available Unicode interval presets
-
-> The presets below are defined in [`lib/EpdFont/scripts/intervals.yaml`](../lib/EpdFont/scripts/intervals.yaml) — the single source of truth for both this tool and the font-manifest generator. That file also records each preset's script group, which drives the on-device font browser's language grouping. This table is a convenience summary; if the two disagree, `intervals.yaml` wins. Run `--list-presets` (below) for the authoritative list.
 
 | Preset | Coverage |
 |--------|----------|
