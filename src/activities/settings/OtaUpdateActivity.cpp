@@ -11,23 +11,6 @@
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
 
-namespace {
-struct OtaActionRects {
-  Rect cancel;
-  Rect update;
-};
-
-OtaActionRects getOtaActionRects(const GfxRenderer& renderer) {
-  const int top = renderer.getScreenHeight() - 80;
-  const int width = renderer.getScreenWidth() / 2;
-  return {Rect{0, top, width, 80}, Rect{width, top, renderer.getScreenWidth() - width, 80}};
-}
-
-bool contains(const Rect& rect, const int x, const int y) {
-  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
-}
-}  // namespace
-
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
@@ -44,6 +27,16 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   const auto res = updater.checkForUpdate();
+  // NO_UPDATE here means the release carries no firmware asset for this board
+  // (expected until per-board assets are published) — not a failure.
+  if (res == OtaUpdater::NO_UPDATE) {
+    LOG_DBG("OTA", "No firmware asset for this board in latest release");
+    {
+      RenderLock lock(*this);
+      state = NO_UPDATE;
+    }
+    return;
+  }
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update check failed: %d", res);
     {
@@ -66,6 +59,17 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     RenderLock lock(*this);
     state = WAITING_CONFIRMATION;
   }
+  const char* options[] = {tr(STR_CANCEL), tr(STR_UPDATE)};
+  // Default the selection to Update so the hardware Confirm button installs,
+  // matching the pre-popup layout (Back = cancel, Confirm = update).
+  confirmPopup.show(tr(STR_NEW_UPDATE), options, 2, 1, [this](const int idx) {
+    if (idx == 1) {
+      runUpdateInstall();
+    } else {
+      finish();
+    }
+  });
+  requestUpdate();
 }
 
 void OtaUpdateActivity::onEnter() {
@@ -120,24 +124,15 @@ void OtaUpdateActivity::render(RenderLock&&) {
   if (state == CHECKING_FOR_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
   } else if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEW_UPDATE), true, EpdFontFamily::BOLD);
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + metrics.verticalSpacing,
+    // Version info sits in the upper part of the screen so the centered
+    // Cancel/Update popup doesn't cover it (same layout as ConfirmationActivity).
+    const int infoTop = pageHeight / 6;
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop,
                       (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, infoTop + height + metrics.verticalSpacing,
                       (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
-    if (mappedInput.hasTouch()) {
-      const auto actionRects = getOtaActionRects(renderer);
-      const int cancelTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_CANCEL));
-      renderer.drawText(UI_10_FONT_ID, actionRects.cancel.x + (actionRects.cancel.width - cancelTextWidth) / 2,
-                        actionRects.cancel.y + 28, tr(STR_CANCEL));
-      const int updateTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_UPDATE));
-      renderer.drawText(UI_10_FONT_ID, actionRects.update.x + (actionRects.update.width - updateTextWidth) / 2,
-                        actionRects.update.y + 28, tr(STR_UPDATE));
-    }
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    if (confirmPopup.processRender(renderer, mappedInput)) return;
   } else if (state == UPDATE_IN_PROGRESS) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING));
 
@@ -215,29 +210,9 @@ void OtaUpdateActivity::runUpdateInstall() {
 
 void OtaUpdateActivity::loop() {
   if (state == WAITING_CONFIRMATION) {
-    int x = 0;
-    int y = 0;
-    if (mappedInput.wasScreenTapped(x, y)) {
-      const auto actionRects = getOtaActionRects(renderer);
-      if (contains(actionRects.cancel, x, y)) {
-        finish();
-        return;
-      }
-      if (contains(actionRects.update, x, y)) {
-        runUpdateInstall();
-        return;
-      }
-    }
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      runUpdateInstall();
-      return;
-    }
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finish();
-    }
-
+    if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+    // Popup dismissed without a selection (Back button or tap outside): cancel.
+    finish();
     return;
   }
 

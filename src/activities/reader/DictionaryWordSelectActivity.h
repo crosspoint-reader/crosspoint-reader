@@ -112,8 +112,4 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
-
-  // The activity is entered while Confirm is still held (long-press trigger):
-  // ignore the stale release until a fresh press is seen.
-  bool confirmPressSeen = false;
 };

@@ -18,9 +18,16 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
-// Tab labels for Font | Size | Layout | Style (shared by render and loop touch hit-testing).
+// Tab labels for Font | Size | Layout | Style.
 constexpr StrId TAB_NAME_IDS[] = {StrId::STR_FONT, StrId::STR_SIZE, StrId::STR_LAYOUT, StrId::STR_STYLE};
+
+constexpr StrId LAYOUT_ROW_NAME_IDS[] = {StrId::STR_LINE_SPACING, StrId::STR_EXTRA_SPACING, StrId::STR_ALIGNMENT,
+                                         StrId::STR_SCREEN_MARGIN};
+constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
+                                        StrId::STR_TEXT_AA};
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -35,7 +42,7 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
   return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
 }
 
-constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE};
+constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
@@ -45,10 +52,12 @@ constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const SdCardFontRegistry* registry, Tab initialTab)
-    : Activity("TextSettings", renderer, mappedInput), registry_(registry), tab_(initialTab) {}
+    : UiTabListActivity("TextSettings", renderer, mappedInput), registry_(registry), tab_(initialTab) {}
+
+const char* TextSettingsActivity::tabLabel(const int index) const { return I18N.get(TAB_NAME_IDS[index]); }
 
 void TextSettingsActivity::onEnter() {
-  Activity::onEnter();
+  UiTabListActivity::onEnter();
 
   metrics_ = UITheme::getInstance().getMetrics();
   afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
@@ -70,15 +79,47 @@ void TextSettingsActivity::onEnter() {
   rebuildSizeList();
 
   currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
-  std::fill(std::begin(selectedIndex_), std::end(selectedIndex_), 1);       // default to the first list row
-  selectedIndex_[static_cast<int>(Tab::Family)] = currentFamilyIndex_ + 1;  // Family/Size open on current selection
-  selectedIndex_[static_cast<int>(Tab::Size)] = currentSizeIndex_ + 1;
-  selectedIndex_[static_cast<int>(tab_)] = 0;  // screen opens with the tab bar focused, not a list row
+  // Per-tab ring positions (0 = tab bar, 1..N = row). The base reset each
+  // tab's nav with followOnBuild armed, so each tab's first build shows its
+  // remembered selection (Family/Size open on the current item).
+  for (auto& n : tabNavs) n.selected = 1;  // default to the first list row
+  tabNavs[static_cast<int>(Tab::Family)].selected = currentFamilyIndex_ + 1;
+  tabNavs[static_cast<int>(Tab::Size)].selected = currentSizeIndex_ + 1;
+  tabNavs[static_cast<int>(tab_)].selected = 0;  // screen opens with the tab bar focused, not a list row
 
-  requestUpdate();
+  rebuildRowItems();
 }
 
-void TextSettingsActivity::onExit() { Activity::onExit(); }
+// Rebuilds rowItems_ (label + actionValue) for the active tab. Structural —
+// call only when tab_ or its backing data (fonts_/sizes_) changes, never from
+// buildScreen(), which just refreshes rowValues_/rowItems_[].value in place.
+void TextSettingsActivity::rebuildRowItems() {
+  const int count = listCount();
+  rowValues_.assign(count, std::string());
+  rowItems_.clear();
+  rowItems_.reserve(count);
+  for (int i = 0; i < count; i++) {
+    fui::ListItem item;
+    switch (tab_) {
+      case Tab::Family:
+        item.label = fonts_[i].name.c_str();
+        break;
+      case Tab::Size:
+        item.label = sizes_[i].name.c_str();
+        break;
+      case Tab::Layout:
+        item.label = I18N.get(LAYOUT_ROW_NAME_IDS[i]);
+        break;
+      case Tab::Style:
+        item.label = I18N.get(STYLE_ROW_NAME_IDS[i]);
+        break;
+      default:
+        break;
+    }
+    item.actionValue = static_cast<int16_t>(i);
+    rowItems_.push_back(item);
+  }
+}
 
 // The selectable sizes belong to the active family, so this runs on entry and
 // again after every family change. A family change goes through ensureLoaded(),
@@ -105,110 +146,115 @@ void TextSettingsActivity::rebuildSizeList() {
   }
 }
 
-TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
-  const int previewTop = afterHeader;
-  const int tabTop = previewTop + previewHeight;
-  const int captionH = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
-  const int listTop = tabTop + metrics_.tabBarHeight + metrics_.verticalSpacing;
-  const int listHeight = usableHeight - previewHeight - metrics_.tabBarHeight - metrics_.verticalSpacing - captionH;
-  return {previewTop, tabTop, listTop, listHeight};
+void TextSettingsActivity::onTabAction(const int index) {
+  if (optionPopup_.isActive()) return;
+  if (tab_ != static_cast<Tab>(index)) {
+    tab_ = static_cast<Tab>(index);
+    rebuildRowItems();
+    auto& n = activeNav();
+    n.selected = 0;          // tab taps land with the tab bar focused (legacy tap behavior)
+    n.followOnBuild = true;  // pull the new tab's viewport to its remembered selection
+    requestUpdate();
+  }
+  // The switched-to tab repaints as the selected pill; a flash overlay on top
+  // of it just repaints the pill in the focused style.
+  app.clearTapFlash();
 }
 
-bool TextSettingsActivity::handleTouch() {
-  // Inert on non-touch boards: the events simply never fire.
-  int tx = 0;
-  int ty = 0;
-  const auto geo = paneGeometry();
-  const int listCount = currentListSize();
+void TextSettingsActivity::activateIndex(const int index) {
+  if (optionPopup_.isActive()) return;
+  // Most rows repaint a different surface (popup, preview, new value);
+  // a lingering tap flash would gray an unrelated element.
+  app.clearTapFlash();
+  activateRow(index);
+}
 
-  // TODO: this tab-bar touch pass duplicates SettingsActivity's
-  // this will have to be refactored when a handleTabBarTouch() helper exist
-  // (similar to handleListTouch)
-  auto buildTabs = [this]() {
-    std::vector<TabInfo> tabs;
-    tabs.reserve(static_cast<int>(Tab::Count));
-    for (int t = 0; t < static_cast<int>(Tab::Count); t++) {
-      tabs.push_back({I18N.get(TAB_NAME_IDS[t]), tab_ == static_cast<Tab>(t)});
-    }
-    return tabs;
-  };
-  int tabHit = -1;
-  if ((mappedInput.wasScreenTouchDown(tx, ty) || mappedInput.wasScreenTapped(tx, ty)) &&
-      GUI.tabIndexFromPoint(renderer, Rect{0, geo.tabTop, renderer.getScreenWidth(), metrics_.tabBarHeight},
-                            buildTabs(), tx, ty, tabHit)) {
-    if (tab_ != static_cast<Tab>(tabHit)) {
-      tab_ = static_cast<Tab>(tabHit);
-      selectedIndex() = 0;
-      requestUpdate();
-    }
+bool TextSettingsActivity::handleCustomInput() {
+  return optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); });
+}
+
+bool TextSettingsActivity::handleButtons() {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    finish();
     return true;
   }
 
-  int row = std::max(0, selectedIndex() - 1);
-  switch (handleListTouch(row, listCount, geo.listTop, geo.listHeight, /*hasSubtitle=*/false)) {
-    case ListTouchResult::Activated:
-      selectedIndex() = row + 1;
-      activateRow(row);
-      return true;
-    case ListTouchResult::Consumed:
-      selectedIndex() = row + 1;
-      return true;
-    case ListTouchResult::None:
-      break;
-  }
-
-  // Vertical swipe pages the list (Family/Size); short lists just clamp.
-  const int pageItems = GUI.getListPageItems(geo.listHeight, false);
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectedIndex() =
-        selectedIndex() == 0 ? 1 : ButtonNavigator::nextPageIndex(selectedIndex(), listCount + 1, pageItems);
-    requestUpdate();
-    return true;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectedIndex() = ButtonNavigator::previousPageIndex(selectedIndex(), listCount + 1, pageItems);
-    requestUpdate();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (ringPos() == 0) {
+      switchTab();
+    } else {
+      activateRow(ringPos() - 1);
+    }
     return true;
   }
 
   return false;
 }
 
-void TextSettingsActivity::loop() {
-  if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
+void TextSettingsActivity::buildScreen(UiScreen& screen) {
+  // Content sits below the preview pane (render() draws header + preview
+  // directly) and above the caption band + button hints.
+  const int tabTop = afterHeader + previewHeight;
+  const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(tabTop), 0, static_cast<int16_t>(bottomReserved + captionHeight), 0});
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
+  buildTabBar(screen);
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedIndex() == 0) {
-      switchTab();
-      return;
+  // rowItems_ (label/actionValue) was built by rebuildRowItems() when the tab
+  // was last switched; only the live value text needs refreshing here, by
+  // assigning into the existing rowValues_ strings (no vector growth) rather
+  // than building a new items/values vector on every render.
+  const int count = listCount();
+  for (int i = 0; i < count; i++) {
+    switch (tab_) {
+      case Tab::Family:
+        rowValues_[i] = (i == currentFamilyIndex_) ? tr(STR_SELECTED) : "";
+        break;
+      case Tab::Size:
+        rowValues_[i] = (i == currentSizeIndex_) ? tr(STR_SELECTED) : "";
+        break;
+      case Tab::Layout:
+        rowValues_[i] = layoutValueText(i);
+        break;
+      case Tab::Style:
+        rowValues_[i] = styleValueText(i);
+        break;
+      default:
+        break;
     }
-
-    activateRow(selectedIndex() - 1);
-    return;
+    rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
   }
 
-  if (handleTouch()) return;
+  fui::ListProps props;
+  props.items = rowItems_.data();
+  props.count = static_cast<uint16_t>(rowItems_.size());
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  props.valueInset = 8;               // air between the value and the row edge
+  // Titles match the value's font size (smallText) so both sides of a row
+  // read as one unit; labels that still don't fit wrap onto a second line.
+  // maxLines=2 also marks the style explicitly set (see SettingsActivity).
+  props.labelText = screen.theme().smallText;
+  props.labelText.maxLines = 2;
+  syncTabListViewport(screen, props);
+  screen.list(props);
+}
 
-  const int ringSize = currentListSize() + 1;  // +1 for the tab bar at position 0
-
-  buttonNavigator_.onNextRelease([this, ringSize] {
-    selectedIndex() = ButtonNavigator::nextIndex(selectedIndex(), ringSize);
-    requestUpdate();
-  });
-
-  buttonNavigator_.onPreviousRelease([this, ringSize] {
-    selectedIndex() = ButtonNavigator::previousIndex(selectedIndex(), ringSize);
-    requestUpdate();
-  });
-
-  buttonNavigator_.onNextContinuous([this] { switchTab(); });
-  buttonNavigator_.onPreviousContinuous([this] { switchTab(-1); });
+const char* TextSettingsActivity::confirmLabelText() const {
+  if (ringPos() == 0) {
+    // Confirm on the tab bar advances to the next tab.
+    return I18N.get(TAB_NAME_IDS[(static_cast<int>(tab_) + 1) % static_cast<int>(Tab::Count)]);
+  }
+  switch (tab_) {
+    case Tab::Layout:
+      // Extra Paragraph Spacing toggles; the rest open a picker
+      return ringPos() - 1 == static_cast<int>(LayoutRow::ParaSpacing) ? tr(STR_TOGGLE) : tr(STR_SELECT);
+    case Tab::Style:
+      return tr(STR_TOGGLE);
+    default:
+      return tr(STR_SELECT);
+  }
 }
 
 void TextSettingsActivity::render(RenderLock&&) {
@@ -220,82 +266,25 @@ void TextSettingsActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_TEXT_SETTINGS));
 
-  const auto geo = paneGeometry();
   const char* familyName = (currentFamilyIndex_ >= 0 && currentFamilyIndex_ < static_cast<int>(fonts_.size()))
                                ? fonts_[currentFamilyIndex_].name.c_str()
                                : "";
   const char* sizeName = (currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
                              ? sizes_[currentSizeIndex_].name.c_str()
                              : "";
-  textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing,
-                              geo.previewTop, previewHeight, familyName, sizeName);
+  textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing, afterHeader,
+                              previewHeight, familyName, sizeName);
 
-  const bool onTabBar = selectedIndex() == 0;
-  std::vector<TabInfo> tabs;
-  tabs.reserve(static_cast<int>(Tab::Count));
-  for (int t = 0; t < static_cast<int>(Tab::Count); t++) {
-    tabs.push_back({I18N.get(TAB_NAME_IDS[t]), tab_ == static_cast<Tab>(t)});
-  }
-  GUI.drawTabBar(renderer, Rect{0, geo.tabTop, pageWidth, metrics_.tabBarHeight}, tabs, onTabBar);
-
-  const Rect listRect{0, geo.listTop, pageWidth, geo.listHeight};
-  const int selectedItem = selectedIndex() - 1;
-  const char* confirmLabel = tr(STR_SELECT);
-
-  switch (tab_) {
-    case Tab::Family:
-      GUI.drawList(
-          renderer, listRect, static_cast<int>(fonts_.size()), selectedItem,
-          [this](int index) { return fonts_[index].name; }, nullptr, nullptr,
-          [this](int index) -> std::string { return index == currentFamilyIndex_ ? tr(STR_SELECTED) : ""; }, true);
-      if (onTabBar) confirmLabel = tr(STR_SIZE);
-      break;
-
-    case Tab::Size:
-      GUI.drawList(
-          renderer, listRect, static_cast<int>(sizes_.size()), selectedItem,
-          [this](int index) { return sizes_[index].name; }, nullptr, nullptr,
-          [this](int index) -> std::string { return index == currentSizeIndex_ ? tr(STR_SELECTED) : ""; }, true);
-      if (onTabBar) confirmLabel = tr(STR_LAYOUT);
-      break;
-
-    case Tab::Layout: {
-      constexpr int LAYOUT_ROWS = static_cast<int>(LayoutRow::Count);
-      static constexpr StrId ROW_NAME_IDS[LAYOUT_ROWS] = {StrId::STR_LINE_SPACING, StrId::STR_EXTRA_SPACING,
-                                                          StrId::STR_ALIGNMENT, StrId::STR_SCREEN_MARGIN};
-      GUI.drawList(
-          renderer, listRect, LAYOUT_ROWS, selectedItem,
-          [](int index) { return std::string(I18N.get(ROW_NAME_IDS[index])); }, nullptr, nullptr,
-          [this](int index) { return layoutValueText(index); }, true);
-      if (onTabBar)
-        confirmLabel = tr(STR_STYLE);
-      else  // Extra Paragraph Spacing toggles; the rest open a picker
-        confirmLabel = (selectedItem == static_cast<int>(LayoutRow::ParaSpacing)) ? tr(STR_TOGGLE) : tr(STR_SELECT);
-      break;
-    }
-
-    case Tab::Style: {
-      constexpr int STYLE_ROWS = static_cast<int>(StyleRow::Count);
-      static constexpr StrId ROW_NAME_IDS[STYLE_ROWS] = {StrId::STR_FOCUS_READING, StrId::STR_HYPHENATION,
-                                                         StrId::STR_EMBEDDED_STYLE, StrId::STR_TEXT_AA};
-      GUI.drawList(
-          renderer, listRect, STYLE_ROWS, selectedItem,
-          [](int index) { return std::string(I18N.get(ROW_NAME_IDS[index])); }, nullptr, nullptr,
-          [this](int index) { return styleValueText(index); }, true);
-      confirmLabel = onTabBar ? tr(STR_FONT) : tr(STR_TOGGLE);
-      break;
-    }
-
-    default:
-      break;
-  }
+  // Tab bar + active tab's list draw inside the screen builder.
+  renderUi();
 
   if (focusedRowHasNoPreview()) {
-    const int capY = geo.listTop + geo.listHeight + metrics_.verticalSpacing;
+    const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
+    const int capY = afterHeader + usableHeight - captionHeight + metrics_.verticalSpacing;
     renderer.drawText(UI_10_FONT_ID, metrics_.previewPadding, capY, tr(STR_NOT_IN_PREVIEW));
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabelText(), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
@@ -331,7 +320,7 @@ void TextSettingsActivity::applyFamily(int listIndex) {
   // snapped the selection into it, so the Size tab's list and its nav position
   // both have to be rebuilt.
   rebuildSizeList();
-  selectedIndex_[static_cast<int>(Tab::Size)] = currentSizeIndex_ + 1;
+  tabNavs[static_cast<int>(Tab::Size)].selected = currentSizeIndex_ + 1;
 }
 
 void TextSettingsActivity::activateRow(int row) {
@@ -480,20 +469,23 @@ std::string TextSettingsActivity::styleValueText(int row) const {
 // Only Focus Reading shows in the preview (bold prefixes); the other Style rows
 // have no distinct preview.
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
-  if (selectedIndex() == 0 || tab_ != Tab::Style) return false;
-  const StyleRow row = static_cast<StyleRow>(selectedIndex() - 1);
+  if (ringPos() == 0 || tab_ != Tab::Style) return false;
+  const StyleRow row = static_cast<StyleRow>(ringPos() - 1);
   return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
 }
 
-void TextSettingsActivity::switchTab(int direction) {
-  const bool onTabBar = selectedIndex() == 0;
-  constexpr int tabCount = static_cast<int>(Tab::Count);
-  tab_ = static_cast<Tab>((static_cast<int>(tab_) + direction + tabCount) % tabCount);
-  if (onTabBar) selectedIndex() = 0;
+void TextSettingsActivity::switchTab(const int direction) {
+  const bool onTabBar = ringPos() == 0;
+  constexpr int count = static_cast<int>(Tab::Count);
+  tab_ = static_cast<Tab>((static_cast<int>(tab_) + direction + count) % count);
+  rebuildRowItems();
+  auto& n = activeNav();
+  if (onTabBar) n.selected = 0;
+  n.followOnBuild = true;  // pull the new tab's viewport to its remembered selection
   requestUpdate();
 }
 
-int TextSettingsActivity::currentListSize() const {
+int TextSettingsActivity::listCount() const {
   switch (tab_) {
     case Tab::Family:
       return static_cast<int>(fonts_.size());
@@ -508,6 +500,3 @@ int TextSettingsActivity::currentListSize() const {
       return 0;
   }
 }
-
-int& TextSettingsActivity::selectedIndex() { return selectedIndex_[static_cast<int>(tab_)]; }
-int TextSettingsActivity::selectedIndex() const { return selectedIndex_[static_cast<int>(tab_)]; }

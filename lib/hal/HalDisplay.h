@@ -98,6 +98,13 @@ class HalDisplay {
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
   bool supportsStripGrayscale() const;
 
+  // True when displayGrayscaleBase() defers the base activation so the gray
+  // planes join it in a single waveform (Paper Mono). Callers should then route
+  // the base of a grayscale page through displayGrayscaleBase() instead of
+  // displayBuffer(): a separate B/W refresh first makes the gray pass re-drive
+  // the whole text body (a visible flash).
+  bool combinesGrayscaleBase() const;
+
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;
   uint16_t getDisplayHeight() const;
