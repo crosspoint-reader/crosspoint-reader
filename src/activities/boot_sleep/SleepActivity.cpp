@@ -719,27 +719,52 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   PngToFramebufferConverter converter;
   LOG_DBG("SLP", "Rendering transparent PNG overlay: %s (%dx%d)", path.c_str(), dimensions.width, dimensions.height);
 
-  if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool useAbsoluteGrayscale = renderer.supportsAbsoluteGrayscale();
 
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-  if (!converter.decodeToFramebuffer(path, renderer, config)) {
+  if (!useAbsoluteGrayscale) {
+    if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    if (!converter.decodeToFramebuffer(path, renderer, config)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      return true;
+    }
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    if (!converter.decodeToFramebuffer(path, renderer, config)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      return true;
+    }
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
-    return true;
-  }
-  renderer.copyGrayscaleLsbBuffers();
+  } else {
+    // absolute lut mode renders inverted
+    renderer.invertScreen();
 
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-  if (!converter.decodeToFramebuffer(path, renderer, config)) {
+    renderer.setRenderMode(GfxRenderer::ABSOLUTE_GRAY_LSB);
+    if (!converter.decodeToFramebuffer(path, renderer, config)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      return true;
+    }
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.setRenderMode(GfxRenderer::ABSOLUTE_GRAY_MSB);
+    if (!converter.decodeToFramebuffer(path, renderer, config)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      return true;
+    }
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayAbsoluteGrayBuffer();
     renderer.setRenderMode(GfxRenderer::BW);
-    return true;
   }
-  renderer.copyGrayscaleMsbBuffers();
 
-  renderer.displayGrayBuffer();
-  renderer.setRenderMode(GfxRenderer::BW);
   return true;
 }
 
