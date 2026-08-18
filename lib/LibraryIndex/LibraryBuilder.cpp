@@ -495,6 +495,12 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       while ((got = folders.read(buf, sizeof(buf))) > 0) put(buf, static_cast<size_t>(got));
       if (got < 0) writeFailed = true;
       folders.close();
+    } else {
+      // Ignoring this would publish an all-zero folder section: selfSize still
+      // matches, so the index validates, and readPath() then fails for every
+      // book with nothing left to trigger a self-repair.
+      LOG_ERR("LIBIDX", "folder stage unreadable: %s", folderStagePath);
+      writeFailed = true;
     }
   }
   padTo(header.recordStart);
@@ -734,17 +740,28 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   StagedEntry& entry = staged[0];
   StagedEntry& canonical = staged[1];
 
+  // put()'s rule, applied to the reads. A short read leaves the previous book's
+  // bytes in the buffer, so the emit would write a duplicate row — and since the
+  // duplicate is internally consistent, written == selfSize still holds and the
+  // corrupt index would pass validation.
+  const auto fetch = [&stage, &writeFailed](const uint16_t stagingIndex, StagedEntry& dest) {
+    stage.seekSet(static_cast<uint64_t>(stagingIndex) * STAGE_STRIDE);
+    if (stage.read(reinterpret_cast<uint8_t*>(&dest), STAGE_STRIDE) != static_cast<int>(STAGE_STRIDE)) {
+      writeFailed = true;
+      return false;
+    }
+    return true;
+  };
+
   uint32_t nameCursor = 0;
   for (uint16_t i = 0; i < n; i++) {
-    stage.seekSet(static_cast<uint64_t>(order[i]) * STAGE_STRIDE);
-    stage.read(reinterpret_cast<uint8_t*>(&entry), STAGE_STRIDE);
+    if (!fetch(order[i], entry)) break;
     entry.record.nameOff = nameCursor;
     // The blob holds the basename, then one length byte, then the chosen author
     // spelling, then the title. Keeping them adjacent means no second offset has
     // to live in the record, which is exactly full at 128 bytes.
     const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
-    stage.seekSet(static_cast<uint64_t>(order[from]) * STAGE_STRIDE);
-    stage.read(reinterpret_cast<uint8_t*>(&canonical), STAGE_STRIDE);
+    if (!fetch(order[from], canonical)) break;
     nameCursor += blobBytesFor(entry, canonical);
     if (resolvedFirstSeen) entry.record.firstSeen = resolvedFirstSeen[order[i]];
     entry.record.dateRank = dateRankOf ? dateRankOf[i] : i;
@@ -765,13 +782,11 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
   uint32_t blobWritten = 0;
   for (uint16_t i = 0; i < n; i++) {
-    stage.seekSet(static_cast<uint64_t>(order[i]) * STAGE_STRIDE);
-    stage.read(reinterpret_cast<uint8_t*>(&entry), STAGE_STRIDE);
+    if (!fetch(order[i], entry)) break;
     put(entry.name, entry.record.nameLen);
 
     const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
-    stage.seekSet(static_cast<uint64_t>(order[from]) * STAGE_STRIDE);
-    stage.read(reinterpret_cast<uint8_t*>(&canonical), STAGE_STRIDE);
+    if (!fetch(order[from], canonical)) break;
     put(&canonical.authorLen, 1);
     if (canonical.authorLen > 0) put(canonical.author, canonical.authorLen);
     put(&entry.titleLen, 1);
