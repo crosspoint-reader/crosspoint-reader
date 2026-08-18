@@ -308,15 +308,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Keyboard layouts the user can reach, one bit per fui::KeyboardLayoutId.
-  // 0 means "not configured": the keyboard then offers the UI language's layout
-  // plus English, which is what most users need without touching settings. Any
-  // non-zero value is an explicit choice and is used as-is — the language of the
-  // books someone reads is not necessarily the language of their UI, so the set
-  // has to be theirs to pick rather than derived.
-  //
-  // uint16_t covers 16 layouts; the SDK ships 5 today. Layout tables are const
-  // and live in flash whether or not their bit is set, so enabling one costs no
-  // RAM and no flash — only the bit changes.
+  // 0 means "not configured", resolved to the UI language's layout plus English.
+  // Any other value is an explicit choice and is used as-is: the language of the
+  // books someone reads is not necessarily the language of their UI.
+  // See keyboard_layouts:: for the bit assignment and the defaulting rules.
   uint16_t keyboardLayouts = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;

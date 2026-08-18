@@ -116,12 +116,10 @@ void KeyboardEntryActivity::onEnter() {
   Activity::onEnter();
   cursorPos = text.length();
   // URL layers are EN-arranged app tables; everything else opens on the UI
-  // language's layout — unless the user has switched that one off, in which
-  // case honour their choice and open on one they did enable.
+  // language's layout, or on an enabled one if the user switched that off.
   layoutId = inputType == InputType::Url ? fui::KeyboardLayoutId::QwertyEn
                                          : keyboard_layouts::startingLayout(I18N.getLanguage());
-  // The key only earns its slot in the bottom row when there is more than one
-  // layout to reach.
+  // The key only earns its slot in the bottom row with somewhere to go.
   showLangKey = keyboard_layouts::enabledCount() > 1;
   shifted = false;
   symbols = false;
@@ -274,16 +272,21 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
       }
       clampSelection();
       return true;
-    case fui::QWERTY_KEY_LANG:
+    case fui::QWERTY_KEY_LANG: {
       delPressCount = 0;
       hintVisible = false;
-      layoutId = keyboard_layouts::next(layoutId);
+      const fui::KeyboardLayoutId nextId = keyboard_layouts::next(layoutId);
+      // The non-Latin tables draw the key even with one layout enabled; a
+      // full-screen e-ink repaint for an unchanged keyboard costs a second.
+      if (nextId == layoutId) return false;
+      layoutId = nextId;
       // Shift is per-layer: carrying it across would strand the new layout in
       // upper case. Row widths differ between scripts (Cyrillic runs 12/11/11
       // against Latin's 10/9/9), so the selection has to be re-clamped.
       shifted = false;
       clampSelection();
       return true;
+    }
     case URL_PANEL_KEY:
       delPressCount = 0;
       hintVisible = false;
@@ -935,11 +938,11 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // layer and the URL snippet panel both label it "abc" in the static tables.
   props.modeLabel =
       (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
-  // The language key shows the layout in use, the way a phone keyboard's space
-  // bar names the current language — not the one the next press leads to. Not
-  // run through tr(): these are language codes, not words to translate. Skipped
-  // when the key is not on screen, which also covers URL and symbol layers.
-  if (showLangKey) props.langLabel = keyboard_layouts::codeFor(layoutId);
+  // Names the layout in use, the way a phone's space bar does — not the one the
+  // next press leads to. No tr(): these are language codes, not words. Set even
+  // when showLangKey is false, since the non-Latin tables carry the key anyway
+  // and label it "EN" until this overrides them.
+  props.langLabel = keyboard_layouts::codeFor(layoutId);
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;

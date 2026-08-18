@@ -366,10 +366,9 @@ void SettingsActivity::toggleCurrentSetting() {
                                });
         break;
       case SettingAction::KeyboardLayouts:
-        // No resultHandler: KeyboardLayoutsActivity owns the write and only makes it
-        // when the selection actually changed. The shared handler saves
-        // unconditionally, which would put a settings write behind every visit
-        // and defeat that check.
+        // No-op handler: KeyboardLayoutsActivity owns the write and makes it only
+        // when the selection changed. The shared handler saves unconditionally,
+        // putting a settings write behind every visit.
         startActivityForResult(std::make_unique<KeyboardLayoutsActivity>(renderer, mappedInput),
                                [](const ActivityResult&) {});
         break;
