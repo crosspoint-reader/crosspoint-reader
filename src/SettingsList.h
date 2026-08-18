@@ -325,8 +325,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
-        // X4 Pro only; hidden from the on-device list on other boards in
-        // SettingsActivity::rebuildSettingsLists (same pattern as fadingFix).
+        // X4 Pro only; filtered out below for other boards. This list is shared
+        // with the web settings API, so filtering only in
+        // SettingsActivity::rebuildSettingsLists would leave it selectable (and
+        // inert) over the web UI on boards that never arm the gesture.
         SettingInfo::Enum(StrId::STR_FRONTLIGHT_TOGGLE_BTN, &CrossPointSettings::frontlightToggleButton,
                           {StrId::STR_POWER_BUTTON, StrId::STR_HOME_KEY}, "frontlightToggleButton",
                           StrId::STR_CAT_CONTROLS),
@@ -472,6 +474,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   if (!BoardConfig::hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_TAP_FOR_READER_MENU; }),
+            v.end());
+  }
+  // Only X4 Pro arms the frontlight double-click gesture; elsewhere the
+  // setting would be selectable (over the web UI) but inert.
+  if (!BoardConfig::isX4Pro()) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONTLIGHT_TOGGLE_BTN; }),
             v.end());
   }
   if (BoardConfig::hasTouch()) {

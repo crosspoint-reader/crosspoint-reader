@@ -72,9 +72,6 @@ void SettingsActivity::rebuildSettingsLists() {
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
       }
-      if (setting.valuePtr == &CrossPointSettings::frontlightToggleButton && !BoardConfig::isX4Pro()) {
-        continue;
-      }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
