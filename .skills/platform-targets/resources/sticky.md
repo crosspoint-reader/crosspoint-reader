@@ -19,9 +19,14 @@ grayscale: 4-level
 viewable_insets: {top: 9, right: 3, bottom: 3, left: 3}
 touch: GT911
 multitouch: true
+has_home_key: false
 frontlight: none
 ui_scale: 1.2
 ppi_note: ~220-235 PPI comment in BoardConfig; uiScale is hand-tuned
+usb_detect: none
+shared_pads:
+  13: display-sclk
+  20: pdm-data
 caps: [TOUCH, MIC, RTC, TEMP_HUMIDITY, IMU, BUZZER]
 ---
 

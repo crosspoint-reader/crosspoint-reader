@@ -19,9 +19,13 @@ grayscale: 3-gray
 viewable_insets: {top: 9, right: 7, bottom: 3, left: 7}
 touch: FT5x06
 multitouch: false
+has_home_key: false
 frontlight: pmic-pwm
 ui_scale: 1.0
 ppi_note: null
+usb_detect: none
+shared_pads:
+  13: sdmmc-clk
 caps: [TOUCH, FRONTLIGHT, MIC, RTC, BUZZER, LED]
 ---
 

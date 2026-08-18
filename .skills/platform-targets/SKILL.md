@@ -1,6 +1,6 @@
 ---
 name: platform-targets
-description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, multitouch, frontlight, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; or when AGENTS.md defers a hardware number here."
+description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; or when AGENTS.md defers a hardware number here."
 ---
 
 # Platform Targets
@@ -96,9 +96,10 @@ Field meanings live in [SCHEMA.md](SCHEMA.md). This skill may edit its own
 If **you** change a source this skill reads, update the dependents in the
 same change. Do not leave SCHEMA comments or resource files describing the
 old integration. Sources: `BoardConfig.h` (profiles, enums, `FREEINK_CAP_*`,
-`FREEINK_FB_PSRAM`, `ViewableInsets`), `InputManager::supportsMultiTouch`
-(for `multitouch`), committed `platformio.ini`, `.github/workflows/ci.yml`,
-and [SCHEMA.md](SCHEMA.md) itself.
+`FREEINK_FB_PSRAM`, `ViewableInsets`, `TouchConfig.hasHomeKey`),
+`InputManager::supportsMultiTouch` (for `multitouch`),
+`HalGPIO::isUsbConnected` (for `usb_detect`), committed `platformio.ini`,
+`.github/workflows/ci.yml`, and [SCHEMA.md](SCHEMA.md) itself.
 
 When any of those move, refresh **all** committed resource files, not only
 the ones on this compile set, and re-vet SCHEMA comments against the
@@ -130,6 +131,9 @@ integrations and against every file in `resources/` (see SCHEMA.md).
 | `viewable_insets` | `BoardProfile.viewableInsets` if set; else the `ViewableInsets` member defaults (9/3/3/3, not zeros) |
 | `touch` / `frontlight` / `ui_scale` | `touch`, `frontlight`, `uiScale` on the profile |
 | `multitouch` | `InputManager::supportsMultiTouch` — true only when `BoardProfile.touch.controller` is `TouchController::Gt911`. Other controllers stay single-contact. |
+| `has_home_key` | `BoardConfig::hasHomeKey` / `TouchConfig.hasHomeKey` |
+| `usb_detect` | `HalGPIO::isUsbConnected` — `bq27220` when `deviceIsX3()`, else `gpioN` from `BoardProfile.usbDetect` if `>= 0`, else `none`. Do not copy a raw `usbDetect >= 0` as a VBUS pin. |
+| `shared_pads` | This device's role for pads that collide across the compile set (today GPIO13 / GPIO20) or whose firmware use differs from the raw profile field. Not a full pinout. |
 | `ppi_note` | SDK comments only; do not invent dpi |
 | `caps` | `FREEINK_CAP_*` macros in `BoardConfig.h` that include this device |
 

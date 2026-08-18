@@ -19,9 +19,13 @@ grayscale: 4-level
 viewable_insets: {top: 9, right: 7, bottom: 3, left: 7}
 touch: GT911
 multitouch: true
+has_home_key: true
 frontlight: pwm-warm
 ui_scale: 1.2
 ppi_note: touch-board uiScale 1.2
+usb_detect: none
+shared_pads:
+  13: display-cs
 caps: [TOUCH, FRONTLIGHT, WARMLIGHT, RTC]
 ---
 

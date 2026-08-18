@@ -48,7 +48,7 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 ### Hardware Specs
 
-Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, multitouch, frontlight, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
+Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
 
 * One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Open a `resources/` file when the compile set or the task names that device. When `BoardConfig.h`, the committed INI, CI, or that skill's schema moves, refresh every committed resource **and** the schema's per-field option comments — including files whose flags are not on this compile set. Do not treat unread files as must-build.
 * One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
@@ -167,7 +167,7 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 | `HalTiltSensor`    | `Imu`                        | Tilt page-turn (when present)   | `halTiltSensor`   |
 | `HalFrontlight`    | `FrontlightManager`          | Frontlight (inert if absent)    | `Frontlight`      |
 
-Which extras a device actually has (RTC, IMU, touch, frontlight) comes from the `platform-targets` skill — do not assume one input style or accessory set. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
+Which extras a device actually has (RTC, IMU, touch, home key, frontlight, USB detect) comes from the `platform-targets` skill — do not assume one input style or accessory set. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
 
 **Location**: [lib/hal/](lib/hal/)
 
@@ -447,7 +447,7 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
    
    - Screen-edge and swipe helpers on `MappedInputManager` (`wasSwipe`, `wasHomeGesture`, `ScreenLeft` / `ScreenRight` / …)
    
-   - Do not assume a home key, swipe, or multi-touch; `HalGPIO` / the mapper report what is present. The `multitouch` field in `platform-targets` is `InputManager::supportsMultiTouch` (GT911 only today). Route new SDK capability through HAL — do not call `InputManager` from activities.
+   - Do not assume a home key, swipe, or multi-touch; `HalGPIO` / the mapper report what is present. The `has_home_key` and `multitouch` fields in `platform-targets` are `BoardConfig::hasHomeKey` and `InputManager::supportsMultiTouch` (GT911 only today). USB detect and GPIO13/20 roles also live there (`usb_detect`, `shared_pads`) — do not treat a raw `BoardProfile.usbDetect >= 0` as a VBUS pin. Route new SDK capability through HAL — do not call `InputManager` from activities.
 
 **Implementation**:
 

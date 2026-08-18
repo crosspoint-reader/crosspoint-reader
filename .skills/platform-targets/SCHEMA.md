@@ -12,10 +12,11 @@ device; do not treat unread files as must-build constraints.
 The `# …` comments next to fields are a **living vocabulary**, not a frozen
 example. When an integration grows or shrinks a category (`TouchController`,
 `DisplayController`, frontlight style, `FREEINK_CAP_*`, MCU / board package,
-INI flags), update those comments here. Then re-vet every file in
-`resources/`: each value must still be a real option, and a newly added
-option must appear on the devices that have it. Do not leave a comment or a
-resource incomplete because the sample list looked fixed.
+INI flags, USB-detect method, home key, shared-pad roles), update those
+comments here. Then re-vet every file in `resources/`: each value must still
+be a real option, and a newly added option must appear on the devices that
+have it. Do not leave a comment or a resource incomplete because the sample
+list looked fixed.
 
 ```yaml
 device: x4
@@ -46,9 +47,20 @@ viewable_insets: {top: 9, right: 3, bottom: 3, left: 3}
 touch: none                    # none | GT911 | FT5x06 | FT6336U | CHSC6x
 multitouch: false              # InputManager::supportsMultiTouch — Gt911 only today
                                # (MAX_TOUCH_CONTACTS 4, wasMultiTouchSwipe). Others: single-contact.
+has_home_key: false            # BoardConfig::hasHomeKey / TouchConfig.hasHomeKey
 frontlight: none               # none | pwm | pwm-warm | pmic-pwm
 ui_scale: 1.0                  # BoardProfile.uiScale — not DPI
 ppi_note: null                 # comment-only in the SDK; do not invent dpi
+
+# Firmware USB detect (HalGPIO::isUsbConnected), not raw BoardProfile.usbDetect.
+# X3's profile still lists pin 20; firmware reads the BQ27220 instead.
+usb_detect: gpio20             # none | gpioN | bq27220
+
+# This device's role for pads that collide across the compile set, or whose
+# firmware use differs from the raw BoardProfile field. Not a full pinout.
+shared_pads:                   # pin -> role
+  13: battery-latch            # battery-latch | sd-enable | display-cs | display-sclk | sdmmc-clk
+  20: usb-detect               # usb-detect | i2c-sda | pdm-data
 
 caps: []                       # derived in BoardConfig.h unless INI overrides
 ```
