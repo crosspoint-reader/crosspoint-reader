@@ -213,7 +213,7 @@ uint8_t bayerThreshold4x4(const int x, const int y) {
   return BAYER_4X4[((y & 0x03) << 2) | (x & 0x03)];
 }
 
-enum class TransparentOverlayPass : uint8_t { BW, GrayscaleLsb, GrayscaleMsb };
+enum class TransparentOverlayPass : uint8_t { BW, GrayscaleLsb, GrayscaleMsb, AbsoluteLsb, AbsoluteMsb };
 
 uint8_t quantizeOverlayLum(const uint8_t lum) {
   // Match Bitmap's native-palette path: 0, 85, 170, 255 map directly to levels 0..3.
@@ -289,6 +289,12 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
         case TransparentOverlayPass::GrayscaleMsb:
           if (level == 1 || level == 2) renderer.drawPixel(screenX, screenY, false);
           break;
+        case TransparentOverlayPass::AbsoluteLsb:
+          renderer.drawPixel(screenX, screenY, level & 1);
+          break;
+        case TransparentOverlayPass::AbsoluteMsb:
+          renderer.drawPixel(screenX, screenY, level > 1);
+          break;
       }
     }
   }
@@ -341,29 +347,61 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
 
   LOG_DBG("SLP", "Rendering transparent overlay: %s (%dx%d)", pathForLog, info.width, info.height);
 
-  if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
-    return AlphaOverlayResult::Error;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool useAbsoluteGrayscale = renderer.supportsAbsoluteGrayscale();
 
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-  if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
-    renderer.setRenderMode(GfxRenderer::BW);
-    // The BW composite is already on the panel. Keep it instead of falling
-    // through to another overlay with this grayscale work buffer cleared.
-    return AlphaOverlayResult::Rendered;
+  LOG_DBG("SLP", "Using absolute lut: %s", useAbsoluteGrayscale ? "true" : "false");
+
+  if (!useAbsoluteGrayscale) {
+    if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
+      return AlphaOverlayResult::Error;
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+    if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(),
+                                      TransparentOverlayPass::GrayscaleLsb)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      // The BW composite is already on the panel. Keep it instead of falling
+      // through to another overlay with this grayscale work buffer cleared.
+      return AlphaOverlayResult::Rendered;
+    }
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.clearScreen(0x00);
+    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+    if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(),
+                                      TransparentOverlayPass::GrayscaleMsb)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      return AlphaOverlayResult::Rendered;
+    }
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayGrayBuffer();
+  } else {
+    // absolute lut mode renders inverted
+    renderer.invertScreen();
+
+    renderer.setRenderMode(GfxRenderer::ABSOLUTE_GRAY_LSB);
+    if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(),
+                                      TransparentOverlayPass::AbsoluteLsb)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      // The BW composite is already on the panel. Keep it instead of falling
+      // through to another overlay with this grayscale work buffer cleared.
+      return AlphaOverlayResult::Rendered;
+    }
+    renderer.copyGrayscaleLsbBuffers();
+
+    renderer.setRenderMode(GfxRenderer::ABSOLUTE_GRAY_MSB);
+    if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(),
+                                      TransparentOverlayPass::AbsoluteMsb)) {
+      renderer.setRenderMode(GfxRenderer::BW);
+      return AlphaOverlayResult::Rendered;
+    }
+    renderer.copyGrayscaleMsbBuffers();
+
+    renderer.displayAbsoluteGrayBuffer();
   }
-  renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-  if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleMsb)) {
-    renderer.setRenderMode(GfxRenderer::BW);
-    return AlphaOverlayResult::Rendered;
-  }
-  renderer.copyGrayscaleMsbBuffers();
-
-  renderer.displayGrayBuffer();
   renderer.setRenderMode(GfxRenderer::BW);
   return AlphaOverlayResult::Rendered;
 }
