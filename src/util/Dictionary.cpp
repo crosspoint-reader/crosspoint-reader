@@ -591,9 +591,33 @@ std::string Dictionary::cleanWord(const char* word) {
   }
   if (start >= end) return "";
 
+  // Lowercase ASCII, plus the German uppercase codepoints asciiCaseCmp cannot
+  // fold: Ä/Ö/Ü (C3 84/96/9C -> C3 A4/B6/BC) and capital ẞ (E1 BA 9E -> C3 9F,
+  // one byte shorter). Query-side only: .idx/.syn are sorted ASCII-case-folded
+  // with non-ASCII bytes compared verbatim, so sentence-initial "Überprüf" or
+  // all-caps "STRAẞE" would otherwise never match their lowercase forms, while
+  // capitalized headwords like "Überprüfung" still match a folded query
+  // through the ASCII-insensitive comparison.
   std::string result(word + start, end - start);
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
+  size_t w = 0;
+  for (size_t r = 0; r < result.size();) {
+    const auto c = static_cast<unsigned char>(result[r]);
+    const auto c1 = r + 1 < result.size() ? static_cast<unsigned char>(result[r + 1]) : 0;
+    if (c == 0xC3 && (c1 == 0x84 || c1 == 0x96 || c1 == 0x9C)) {  // Ä Ö Ü
+      result[w++] = static_cast<char>(0xC3);
+      result[w++] = static_cast<char>(c1 + 0x20);  // -> ä ö ü
+      r += 2;
+    } else if (c == 0xE1 && c1 == 0xBA && r + 2 < result.size() &&
+               static_cast<unsigned char>(result[r + 2]) == 0x9E) {  // ẞ
+      result[w++] = static_cast<char>(0xC3);
+      result[w++] = static_cast<char>(0x9F);  // -> ß
+      r += 3;
+    } else {
+      result[w++] = static_cast<char>(c >= 0x80 ? c : std::tolower(c));
+      r++;
+    }
+  }
+  result.resize(w);
   return result;
 }
 
