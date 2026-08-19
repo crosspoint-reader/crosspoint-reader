@@ -666,7 +666,7 @@ bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog
   if (alphaResult == AlphaOverlayResult::Rendered) return true;
   if (alphaResult == AlphaOverlayResult::Error) return false;
 
-  Bitmap bitmap(file, true);
+  Bitmap bitmap(file);
   const auto parseResult = bitmap.parseHeaders();
   if (parseResult != BmpReaderError::Ok) {
     LOG_ERR("SLP", "Invalid sleep overlay BMP %s: %s", pathForLog, Bitmap::errorToString(parseResult));
