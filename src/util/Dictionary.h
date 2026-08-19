@@ -151,11 +151,13 @@ class Dictionary {
   // unreadable. Clobbers wordBuf.
   uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
 
-  // Copy of word with German uppercase codepoints folded (Ä/Ö/Ü -> ä/ö/ü,
-  // capital ẞ -> ß); "" when the word contains none. Used by lookup() as a
-  // fallback probe — see the comment in the implementation for why this is not
-  // part of cleanWord().
-  static std::string germanUppercaseFolded(const std::string& word);
+  // Write word into out with German uppercase codepoints folded (Ä/Ö/Ü ->
+  // ä/ö/ü, capital ẞ -> ß). False when the word contains none, or when the
+  // folded result would not fit outSize (then no headword can match it
+  // either). No heap: lookup() passes the reusable foldBuf. Used as a fallback
+  // probe — see the comment in the implementation for why this is not part of
+  // cleanWord().
+  static bool germanUppercaseFolded(const char* word, char* out, size_t outSize);
 
   DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
 
@@ -197,4 +199,10 @@ class Dictionary {
   // Shared scan buffer: lookups are single-threaded and this avoids a
   // 256-byte array on the stack of every locate() call.
   char wordBuf[256] = {};
+
+  // Umlaut-folded reprobe target. Separate from wordBuf, which locate() and
+  // locateSynonym() clobber while the folded target must stay stable across
+  // the whole probe; sized to match since readWordInto() caps headwords at
+  // the same length.
+  char foldBuf[256] = {};
 };
