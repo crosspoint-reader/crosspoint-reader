@@ -319,16 +319,13 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
-      !partialRebuildStartFailed &&
-      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+  // section is owned by the RenderLock: the render task resets or replaces it on its
+  // failure/load paths while holding the lock, so even eligibility peeks must not
+  // dereference it unlocked -- a concurrent reset would leave this task reading a freed
+  // Section mid-expression. Only lock-free state is checked outside; RenderLock::peek()
+  // is a no-wait fast gate that skips the acquire while a render is in flight.
+  if (!RenderLock::peek() && buildViewportWidth > 0 && !partialRebuildStartFailed) {
     RenderLock lock;
-    // Re-check under the lock: the peek above and this acquire are not atomic, and a render
-    // that won the race may have finalized the extension, replaced the section, or reset it
-    // to null on its page-load-failure path -- startBuild through a stale or null section
-    // pointer is a crash. Mirrors the build pump below. cppcheck can't see the cross-task
-    // mutation, so it flags the re-check as always true.
-    // cppcheck-suppress knownConditionTrueFalse
     if (section && !section->isBuilding() && section->isPartial() &&
         section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
       const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
@@ -342,14 +339,13 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (section && section->isBuilding() && !RenderLock::peek() &&
-      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
-      buildTickHeapGate()) {
+  // Same locking rule as above; the heap gate is re-checked under the lock because the
+  // acquire can block long enough for the heap picture to change.
+  if (!RenderLock::peek() && buildTickHeapGate()) {
     RenderLock lock;
-    // Same window as above: a render can reset the section between the unlocked peek and
-    // this acquire, so the isBuilding() re-check must not deref without a null re-check.
-    // cppcheck-suppress knownConditionTrueFalse
-    if (section && section->isBuilding() && buildTickHeapGate()) {
+    if (section && section->isBuilding() &&
+        (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
+        buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
