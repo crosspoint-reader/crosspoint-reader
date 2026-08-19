@@ -808,6 +808,21 @@ bool CssParser::loadFromCache() {
     return false;
   }
 
+  // unordered_map allocates a node per rule (plus the selector string) and
+  // operator new is fatal under -fno-exceptions: a failed insert calls
+  // abort() and reboots the device mid-book. Refuse the load when the heap
+  // cannot plausibly cover it; the caller degrades to uncached CSS instead.
+  // The floor is MIN_FREE_HEAP_FOR_CSS: resolveStyle() returns an empty style
+  // below it, so rules loaded into a heap that tight would never be applied.
+  constexpr uint32_t CSS_CACHE_BYTES_PER_RULE = sizeof(CssStyle) + 56;  // node + selector + bucket slot
+  const uint32_t cssEstBytes = static_cast<uint32_t>(ruleCount) * CSS_CACHE_BYTES_PER_RULE;
+  const uint32_t cssFreeHeap = ESP.getFreeHeap();
+  if (cssFreeHeap < cssEstBytes + MIN_FREE_HEAP_FOR_CSS) {
+    LOG_ERR("CSS", "Insufficient heap for %u cached rules (need ~%u, free %u)", ruleCount, cssEstBytes, cssFreeHeap);
+    rulesBySelector_.clear();
+    return false;
+  }
+
   // Size the bucket array up front to avoid incremental rehashes while loading rules.
   rulesBySelector_.reserve(ruleCount);
 
