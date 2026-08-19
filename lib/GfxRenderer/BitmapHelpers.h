@@ -4,6 +4,7 @@
 #include <cstring>
 
 struct BmpHeader;
+struct BmpHeader2Bit;
 
 // Helper functions
 uint8_t quantize(int gray, int x, int y);
@@ -15,6 +16,8 @@ enum class BmpRowOrder { BottomUp, TopDown };
 
 // Populates a 1-bit BMP header in the provided memory.
 void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder rowOrder);
+// Populates a 2-bit BMP header in the provided memory.
+void createBmpHeader2Bit(BmpHeader2Bit* bmpHeader, int width, int height, BmpRowOrder rowOrder);
 
 // 1-bit Atkinson dithering - better quality than noise dithering for thumbnails
 // Error distribution pattern (same as 2-bit but quantizes to 2 levels):

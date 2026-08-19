@@ -36,6 +36,11 @@ struct BmpHeader {
   };
   RgbQuad colors[2];
 };
+
+struct BmpHeader2Bit : public BmpHeader {
+  RgbQuad further_colors[2];
+};
+
 #pragma pack(pop)
 
 enum class BmpReaderError : uint8_t {

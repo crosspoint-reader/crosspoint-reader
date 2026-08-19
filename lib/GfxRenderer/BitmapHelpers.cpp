@@ -148,3 +148,38 @@ void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder ro
   bmpHeader->colors[1].rgbRed = 255;
   bmpHeader->colors[1].rgbReserved = 0;
 }
+
+void createBmpHeader2Bit(BmpHeader2Bit* bmpHeader, int width, int height, BmpRowOrder rowOrder) {
+  if (!bmpHeader) return;
+
+  createBmpHeader(bmpHeader, width, height, rowOrder);
+
+  bmpHeader->fileHeader.bfOffBits = sizeof(BmpHeader2Bit);
+  bmpHeader->infoHeader.biBitCount = 2;
+  bmpHeader->infoHeader.biClrUsed = 4;
+  bmpHeader->infoHeader.biClrImportant = 4;
+
+  // Color 0 (black) (set in createBmpHeader)
+  bmpHeader->colors[0].rgbBlue = 0;
+  bmpHeader->colors[0].rgbGreen = 0;
+  bmpHeader->colors[0].rgbRed = 0;
+  bmpHeader->colors[0].rgbReserved = 0;
+
+  // Color 1 (dark grey)
+  bmpHeader->colors[1].rgbBlue = 85;
+  bmpHeader->colors[1].rgbGreen = 85;
+  bmpHeader->colors[1].rgbRed = 85;
+  bmpHeader->colors[1].rgbReserved = 0;
+
+  // Color 2 (light grey)
+  bmpHeader->further_colors[0].rgbBlue = 170;
+  bmpHeader->further_colors[0].rgbGreen = 170;
+  bmpHeader->further_colors[0].rgbRed = 170;
+  bmpHeader->further_colors[0].rgbReserved = 0;
+
+  // Color 3 (white)
+  bmpHeader->further_colors[1].rgbBlue = 255;
+  bmpHeader->further_colors[1].rgbGreen = 255;
+  bmpHeader->further_colors[1].rgbRed = 255;
+  bmpHeader->further_colors[1].rgbReserved = 0;
+}

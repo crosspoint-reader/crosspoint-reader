@@ -183,16 +183,22 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  // Write 1-bit BMP header (top-down row order)
-  BmpHeader bmpHeader;
-  createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
-
-  const uint32_t rowSize = ((pageInfo.width + 31) / 32) * 4;
+  if (bitDepth == 1) {
+    // Write 1-bit BMP header (top-down row order)
+    BmpHeader bmpHeader;
+    createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+  } else {
+    // Write 2-bit BMP header (top-down row order)
+    BmpHeader2Bit bmpHeader;
+    createBmpHeader2Bit(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+  }
 
   // Write bitmap data
   // BMP requires 4-byte row alignment
-  const size_t dstRowSize = (pageInfo.width + 7) / 8;  // 1-bit destination row size
+  const uint32_t rowSize = ((pageInfo.width * bitDepth + 31) / 32) * 4;
+  const size_t dstRowSize = (pageInfo.width * bitDepth + 7) / 8;  // 1/2-bit destination row size
 
   if (bitDepth == 2) {
     // XTH 2-bit mode: Two bit planes, column-major order
@@ -222,17 +228,14 @@ bool Xtc::generateCoverBmp() const {
         const size_t bitInByte = 7 - (y % 8);  // MSB = topmost pixel
 
         const size_t byteOffset = colIndex * colBytes + byteInCol;
-        const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
-        const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
+        const uint8_t bit2 = (plane1[byteOffset] >> bitInByte) & 1;
+        const uint8_t bit1 = (plane2[byteOffset] >> bitInByte) & 1;
         const uint8_t pixelValue = (bit1 << 1) | bit2;
 
-        // Threshold: 0=white (1); 1,2,3=black (0)
-        if (pixelValue >= 1) {
-          // Set bit to 0 (black) in BMP format
-          const size_t dstByte = x / 8;
-          const size_t dstBit = 7 - (x % 8);
-          rowBuffer[dstByte] &= ~(1 << dstBit);
-        }
+        // Set 2 bits to value in BMP format
+        const size_t dstByte = x / 4;
+        const size_t dstBits = 6 - (x % 4) * 2;
+        rowBuffer[dstByte] &= ~(pixelValue << dstBits);
       }
 
       // Write converted row
