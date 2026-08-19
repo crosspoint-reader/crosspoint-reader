@@ -748,7 +748,7 @@ void WifiSelectionActivity::loop() {
     }
 
     // Check for Confirm button to select network or rescan
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!networks.empty()) {
         selectNetwork(selectedNetworkIndex);
       } else {

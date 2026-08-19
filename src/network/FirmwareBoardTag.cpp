@@ -1,5 +1,6 @@
 #include "FirmwareBoardTag.h"
 
+#include <BoardConfig.h>
 #include <cstring>
 
 // The board name derives from the FREEINK_DEVICE_* build flags so every env
