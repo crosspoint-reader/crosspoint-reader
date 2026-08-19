@@ -814,7 +814,14 @@ bool CssParser::loadFromCache() {
   // cannot plausibly cover it; the caller degrades to uncached CSS instead.
   // The floor is MIN_FREE_HEAP_FOR_CSS: resolveStyle() returns an empty style
   // below it, so rules loaded into a heap that tight would never be applied.
-  constexpr uint32_t CSS_CACHE_BYTES_PER_RULE = sizeof(CssStyle) + 56;  // node + selector + bucket slot
+  // Per rule: the map node (CssStyle + hash + next pointer), the selector's
+  // heap buffer, and one bucket slot. Selectors up to MAX_SELECTOR_LENGTH are
+  // accepted, but short ones fit std::string's inline buffer and allocate
+  // nothing, so a worst-case 256 bytes each would refuse loads that would
+  // comfortably fit. 96 covers typical selectors with margin; the guard only
+  // decides whether to attempt the load, and erring low risks the abort() this
+  // is meant to prevent, so it is deliberately not the tightest estimate.
+  constexpr uint32_t CSS_CACHE_BYTES_PER_RULE = sizeof(CssStyle) + 96;
   const uint32_t cssEstBytes = static_cast<uint32_t>(ruleCount) * CSS_CACHE_BYTES_PER_RULE;
   const uint32_t cssFreeHeap = ESP.getFreeHeap();
   if (cssFreeHeap < cssEstBytes + MIN_FREE_HEAP_FOR_CSS) {
