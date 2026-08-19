@@ -151,6 +151,12 @@ class Dictionary {
   // unreadable. Clobbers wordBuf.
   uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
 
+  // Copy of word with German uppercase codepoints folded (Ä/Ö/Ü -> ä/ö/ü,
+  // capital ẞ -> ß); "" when the word contains none. Used by lookup() as a
+  // fallback probe — see the comment in the implementation for why this is not
+  // part of cleanWord().
+  static std::string germanUppercaseFolded(const std::string& word);
+
   DictLocation locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
