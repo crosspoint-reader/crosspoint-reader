@@ -228,14 +228,15 @@ bool Xtc::generateCoverBmp() const {
         const size_t bitInByte = 7 - (y % 8);  // MSB = topmost pixel
 
         const size_t byteOffset = colIndex * colBytes + byteInCol;
-        const uint8_t bit2 = (plane1[byteOffset] >> bitInByte) & 1;
-        const uint8_t bit1 = (plane2[byteOffset] >> bitInByte) & 1;
-        const uint8_t pixelValue = (bit1 << 1) | bit2;
+        const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
+        const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
+        // BMP has another bit order than XTC
+        const uint8_t bmpPixelValue = (bit2 << 1) | bit1;
 
         // Set 2 bits to value in BMP format
         const size_t dstByte = x / 4;
         const size_t dstBits = 6 - (x % 4) * 2;
-        rowBuffer[dstByte] &= ~(pixelValue << dstBits);
+        rowBuffer[dstByte] &= ~(bmpPixelValue << dstBits);
       }
 
       // Write converted row
