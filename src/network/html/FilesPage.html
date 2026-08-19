@@ -4160,7 +4160,7 @@ function collectFontPaths(zip, opfContent, opfPath) {
 // multi-hundred-KB data: URIs, so this is a size win even without font files.
 function stripFontFaceRules(css) {
   let count = 0;
-  const stripped = css.replace(/@font-face\s*\{[^{}]*\}/gi, () => { count++; return ''; });
+  const stripped = css.replace(/@font-face(?:\s|\/\*[\s\S]*?\*\/)*\{[^{}]*\}/gi, () => { count++; return ''; });
   return { css: stripped, count };
 }
 
@@ -5163,7 +5163,8 @@ async function convertEpubFile(file, progressCallback) {
 
   // Embedded fonts are dropped entirely — CrossPoint never renders with them.
   // Counters cover font files, @font-face rules (incl. data: URI fonts), and
-  // encryption.xml shrinkage so the savings report reflects every strip site.
+  // encryption.xml shrinkage; they count uncompressed content bytes removed
+  // (the final archive-size delta is reported separately by logSummary).
   const fontPaths = collectFontPaths(zip, opfContent, opfPath);
   let removedFontCount = 0;
   let removedFontBytes = 0;
@@ -5420,7 +5421,7 @@ async function convertEpubFile(file, progressCallback) {
   }
 
   if (removedFontCount > 0 || removedFontFaceRules > 0) {
-    log(`Removed ${removedFontCount} embedded font(s) and ${removedFontFaceRules} @font-face rule(s), saved ${formatBytes(removedFontBytes)}`, '', 'INFO');
+    log(`Removed ${removedFontCount} embedded font(s) and ${removedFontFaceRules} @font-face rule(s), ${formatBytes(removedFontBytes)} of font data`, '', 'INFO');
   }
 
   if (progressCallback) progressCallback(100);
