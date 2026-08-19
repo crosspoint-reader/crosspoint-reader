@@ -154,6 +154,12 @@ void createBmpHeader2Bit(BmpHeader2Bit* bmpHeader, int width, int height, BmpRow
 
   createBmpHeader(bmpHeader, width, height, rowOrder);
 
+  uint32_t rowSize = (width * 2 + 31) / 32 * 4;
+  uint32_t imageSize = rowSize * height;
+  uint32_t fileSize = sizeof(BmpHeader2Bit) + imageSize;
+  bmpHeader->fileHeader.bfSize = fileSize;
+  bmpHeader->infoHeader.biSizeImage = imageSize;
+
   bmpHeader->fileHeader.bfOffBits = sizeof(BmpHeader2Bit);
   bmpHeader->infoHeader.biBitCount = 2;
   bmpHeader->infoHeader.biClrUsed = 4;
