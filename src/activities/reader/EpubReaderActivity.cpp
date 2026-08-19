@@ -322,11 +322,13 @@ void EpubReaderActivity::loop() {
   // section is owned by the RenderLock: the render task resets or replaces it on its
   // failure/load paths while holding the lock, so even eligibility peeks must not
   // dereference it unlocked -- a concurrent reset would leave this task reading a freed
-  // Section mid-expression. Only lock-free state is checked outside; RenderLock::peek()
-  // is a no-wait fast gate that skips the acquire while a render is in flight.
+  // Section mid-expression. Only lock-free state is checked outside. The acquire is
+  // NON-BLOCKING: this outer gate passes on virtually every pass, and a blocking
+  // acquire that loses the peek->acquire race would park the loop task behind a whole
+  // page render, stalling input polling. Deferrable work retries next pass instead.
   if (!RenderLock::peek() && buildViewportWidth > 0 && !partialRebuildStartFailed) {
-    RenderLock lock;
-    if (section && !section->isBuilding() && section->isPartial() &&
+    RenderLock lock{RenderLock::TryAcquire{}};
+    if (lock.locked() && section && !section->isBuilding() && section->isPartial() &&
         section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
       const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
       if (!section->startBuild(buildSpec)) {
@@ -339,11 +341,11 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Same locking rule as above; the heap gate is re-checked under the lock because the
-  // acquire can block long enough for the heap picture to change.
+  // Same locking rule (and same non-blocking acquire) as above; the heap gate is
+  // re-checked under the lock because state can shift between gate and acquire.
   if (!RenderLock::peek() && buildTickHeapGate()) {
-    RenderLock lock;
-    if (section && section->isBuilding() &&
+    RenderLock lock{RenderLock::TryAcquire{}};
+    if (lock.locked() && section && section->isBuilding() &&
         (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
         buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
