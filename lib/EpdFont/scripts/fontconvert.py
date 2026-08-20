@@ -191,13 +191,16 @@ def deflate_raw(data):
     much slower to compress, which is free here because this runs at font-generation time.
 
     Zopfli's Python binding emits zlib-wrapped output, so strip the 2-byte header and 4-byte
-    adler32 trailer to recover the raw block. The round-trip assert guards the wrapper format.
+    adler32 trailer to recover the raw block. The round-trip check guards that wrapper format --
+    raised rather than asserted, because `python -O` strips asserts and this one decides whether
+    the font data we emit is decodable at all.
     """
     if args.zopfli:
         import zopfli.zlib
         wrapped = zopfli.zlib.compress(bytes(data))
         raw = wrapped[2:-4]
-        assert zlib.decompress(raw, -15) == bytes(data), "zopfli raw-DEFLATE round-trip failed"
+        if zlib.decompress(raw, -15) != bytes(data):
+            raise RuntimeError("zopfli raw-DEFLATE round-trip failed; refusing to emit undecodable font data")
         return raw
     compressor = zlib.compressobj(level=9, wbits=-15)
     return compressor.compress(bytes(data)) + compressor.flush()
@@ -1093,7 +1096,7 @@ if kern_map:
     print(f"    {kern_right_class_count},")
 else:
     for _ in range(10):
-        print(f"    nullptr,")
+        print("    nullptr,")
     print(f"    0,")
     print(f"    0,")
     print(f"    0,")
