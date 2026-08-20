@@ -173,7 +173,7 @@ void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, c
 
 void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
   if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
-      !cssStyle.hasDirection()) {
+      !cssStyle.hasDirection() && !cssStyle.hasTextAlign()) {
     return;
   }
 
@@ -189,6 +189,10 @@ void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
   }
   applyTextDecorationToEntry(entry, cssStyle);
   applyDirectionToEntry(entry, cssStyle);
+  if (cssStyle.hasTextAlign()) {
+    entry.hasTextAlign = true;
+    entry.textAlign = cssStyle.textAlign;
+  }
   inlineStyleStack.push_back(entry);
   updateEffectiveInlineStyle();
 }
@@ -221,6 +225,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
       currentCssStyle.hasTextDecoration() ? currentCssStyle.textDecoration : CssTextDecoration::None;
   effectiveDirectionDefined = currentCssStyle.hasDirection();
   effectiveDirection = currentCssStyle.direction;
+  effectiveTextAlignDefined = currentCssStyle.hasTextAlign();
+  effectiveTextAlign = currentCssStyle.textAlign;
   effectiveSup = false;
   effectiveSub = false;
 
@@ -240,6 +246,10 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasDirection) {
       effectiveDirectionDefined = true;
       effectiveDirection = entry.direction;
+    }
+    if (entry.hasTextAlign) {
+      effectiveTextAlignDefined = true;
+      effectiveTextAlign = entry.textAlign;
     }
     if (entry.hasSup) {
       effectiveSup = entry.sup;
@@ -822,8 +832,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     tableCellBlockStyle.alignment =
         cssStyle.hasTextAlign()
             ? cssStyle.textAlign
-            : (cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl ? CssTextAlign::Right
-                                                                                      : CssTextAlign::Left);
+            : (self->effectiveTextAlignDefined
+                   ? self->effectiveTextAlign
+                   : (cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl ? CssTextAlign::Right
+                                                                                             : CssTextAlign::Left));
     if (cssStyle.hasDirection()) {
       tableCellBlockStyle.directionDefined = true;
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
@@ -1425,8 +1437,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
+    const bool inheritedTableTextAlign = self->tableDepth >= 1 && cssStyle.hasTextAlign();
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
-        cssStyle.hasDirection() || cssStyle.hasVerticalAlign()) {
+        cssStyle.hasDirection() || cssStyle.hasVerticalAlign() || inheritedTableTextAlign) {
       // Flush buffer before style change so preceding text gets current style
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -1444,6 +1457,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       applyTextDecorationToEntry(entry, cssStyle);
       applyDirectionToEntry(entry, cssStyle);
+      if (inheritedTableTextAlign) {
+        entry.hasTextAlign = true;
+        entry.textAlign = cssStyle.textAlign;
+      }
       if (cssStyle.hasVerticalAlign()) {
         if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
           entry.hasSup = true;

@@ -70,6 +70,8 @@ class ChapterHtmlSlimParser {
     CssTextDecoration textDecoration = CssTextDecoration::None;
     bool hasDirection = false;
     CssTextDirection direction = CssTextDirection::Ltr;
+    bool hasTextAlign = false;
+    CssTextAlign textAlign = CssTextAlign::Left;
     bool hasSup = false, sup = false;
     bool hasSub = false, sub = false;
   };
@@ -81,6 +83,8 @@ class ChapterHtmlSlimParser {
   CssTextDecoration effectiveTextDecoration = CssTextDecoration::None;
   bool effectiveDirectionDefined = false;
   CssTextDirection effectiveDirection = CssTextDirection::Ltr;
+  bool effectiveTextAlignDefined = false;
+  CssTextAlign effectiveTextAlign = CssTextAlign::Left;
   bool effectiveSup = false;
   bool effectiveSub = false;
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
