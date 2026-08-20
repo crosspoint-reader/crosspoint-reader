@@ -259,6 +259,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
+  // Creates an author-named folder and downloads the book files into it.
+  uint8_t opdsCreateAuthorFolder = 0;
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior

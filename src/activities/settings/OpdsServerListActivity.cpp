@@ -45,10 +45,10 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends three virtual items: "Add Server", "Download folder"
-  // and "Filename format".
+  // Settings mode appends three virtual items: "Add Server", "Download folder",
+  // "Filename format" and "Create author folder".
   if (!pickerMode) {
-    count += 3;
+    count += 4;
   }
   return count;
 }
@@ -101,6 +101,11 @@ void OpdsServerListActivity::rebuildRowItems() {
     format.label = tr(STR_OPDS_FILENAME_FORMAT);
     format.actionValue = static_cast<int16_t>(serverCount + 2);
     rowItems_.push_back(format);  // subtitle refreshed per render below
+
+    fui::ListItem author_folder;
+    author_folder.label = tr(STR_OPDS_CREATE_AUTHOR_FOLDER);
+    author_folder.actionValue = static_cast<int16_t>(serverCount + 3);
+    rowItems_.push_back(author_folder);  // value refreshed per render below
   }
 }
 
@@ -141,7 +146,7 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format], [Create author folder].
   if (nav.selected == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -169,6 +174,15 @@ void OpdsServerListActivity::handleSelection() {
                        SETTINGS.opdsFilenameFormat = static_cast<uint8_t>(idx);
                        SETTINGS.saveToFile();
                      });
+    requestUpdate();
+    return;
+  }
+
+  // "Create author folder": toggle option
+  if (nav.selected == serverCount + 3) {
+    bool temp = SETTINGS.opdsCreateAuthorFolder;
+    SETTINGS.opdsCreateAuthorFolder = !temp;
+    SETTINGS.saveToFile();
     requestUpdate();
     return;
   }
@@ -215,6 +229,7 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
     rowItems_[serverCount + 1].subtitle =
         SETTINGS.opdsDownloadFolder[0] ? SETTINGS.opdsDownloadFolder : tr(STR_OPDS_SD_ROOT);
     rowItems_[serverCount + 2].subtitle = I18N.get(opdsFormatLabel(SETTINGS.opdsFilenameFormat));
+    rowItems_[serverCount + 3].value = I18N.get(SETTINGS.opdsCreateAuthorFolder? StrId::STR_STATE_ON: StrId::STR_STATE_OFF);
   }
 
   fui::ListProps props;

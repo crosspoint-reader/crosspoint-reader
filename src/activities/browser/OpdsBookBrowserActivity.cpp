@@ -471,6 +471,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
   // no std::string copy. exists()/mkdir() take const char*.
   const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  const bool opdsCreateAuthorFolder = SETTINGS.opdsCreateAuthorFolder;
   bool haveFolder = folder[0] != '\0';
   if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
@@ -484,9 +485,23 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // char[] would truncate). Cold path (a multi-second download follows), so one
   // reserve'd, in-place-appended owning string is the right call.
   std::string filename;
-  filename.reserve(96);
+  filename.reserve(128);
   if (haveFolder) filename += folder;
   filename += '/';
+  do {
+    if (opdsCreateAuthorFolder) {
+      std::string temp_path = filename + book.author;
+      // If folder already exists no need to create new one
+      // In case of error just fall back to SD root downloading destination
+      if (!Storage.exists(temp_path.c_str()) && !Storage.mkdir(temp_path.c_str())) {
+        LOG_ERR("OPDS", "mkdir failed for %s", temp_path.c_str());
+        break;
+      }
+      filename += book.author;
+      filename += '/';
+    }
+  } while(0);
+
   filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 

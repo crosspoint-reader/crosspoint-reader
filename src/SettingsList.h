@@ -352,6 +352,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                           "opdsFilenameFormat"),
 
+        SettingInfo::Toggle(StrId::STR_OPDS_CREATE_AUTHOR_FOLDER, &CrossPointSettings::opdsCreateAuthorFolder,
+                            "opdsCreateAuthorFolder"),
+
         // Frontlight quick-panel state: persisted and web-exposed, but hidden
         // from the on-device Settings screen because the swipe panel owns it.
         SettingInfo::Value(StrId::STR_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 5},
