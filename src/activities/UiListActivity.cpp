@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -66,9 +68,14 @@ bool UiListActivity::routeListTouch() {
 }
 
 void UiListActivity::moveSelectionTo(const int index) {
-  auto& n = activeNav();
-  n.selected = index;
-  n.follow(listCount());
+  {
+    // The render task reads nav mid-build (syncToProps, layout feedback); a
+    // press landing during a render would otherwise tear selection/viewport.
+    RenderLock lock(*this);
+    auto& n = activeNav();
+    n.selected = index;
+    n.follow(listCount());
+  }
   requestUpdate();
 }
 
@@ -81,9 +88,16 @@ void UiListActivity::loop() {
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
-    auto& n = activeNav();
-    const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.visibleRows : -n.visibleRows;
-    if (n.scrollBy(delta, listCount())) requestUpdate();
+    bool moved = false;
+    {
+      // Same nav-vs-render race as moveSelectionTo: the render task writes
+      // pageRows/top mid-build, so read and mutate under one lock.
+      RenderLock lock(*this);
+      auto& n = activeNav();
+      const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.pageRows() : -n.pageRows();
+      moved = n.scrollBy(delta, listCount());
+    }
+    if (moved) requestUpdate();
     return;
   }
 
@@ -96,10 +110,13 @@ void UiListActivity::navigateButtons() {
   buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
   buttonNavigator.onPreviousRelease(
       [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
+  // Page by the rows the last build actually drew (pageRows), not the
+  // fixed-height visibleRows estimate: with wrapped labels the estimate
+  // overshoots and rows between pages would never be shown.
   buttonNavigator.onNextContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.visibleRows)); });
+      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.pageRows())); });
   buttonNavigator.onPreviousContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.visibleRows)); });
+      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.pageRows())); });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
@@ -110,6 +127,8 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
     // as many rows per screen as they did before the FreeInkUI migration.
     // props.rowHeight must be set explicitly: screen.list() otherwise falls
     // back to the (touch-friendly) theme token, not this local value.
+    // A label that must wrap (labelText.maxLines > 1) grows only its own row:
+    // list() sizes wrapped items per-row, so the dense height stays.
     const auto& metrics = UITheme::getInstance().getMetrics();
     rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
     props.rowHeight = rowHeight;
@@ -133,6 +152,16 @@ void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();
   drawChrome();
   renderUi();
+  // Wrapped labels grow rows, so fewer rows can fit than the fixed-height
+  // estimate ListNav plans with. list() reports the real layout back
+  // (ListNav::onListRendered); when the selection landed past the drawn rows
+  // the nav advanced the viewport and asked for another build. Bounded: top
+  // strictly advances toward the selection each pass.
+  for (int pass = 0; activeNav().consumeRebuildNeeded() && pass < 8; ++pass) {
+    renderer.clearScreen();
+    drawChrome();
+    renderUi();
+  }
   drawFooter();
   renderer.displayBuffer();
 }

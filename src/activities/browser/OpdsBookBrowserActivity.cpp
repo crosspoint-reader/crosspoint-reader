@@ -380,6 +380,11 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
   const bool feedTruncated = parser.truncated();
+  // Reset the selection before the swap: the render task reads
+  // entries[selectorIndex] under only an empty() guard, and the new feed can
+  // be shorter than the old selection.
+  selectorIndex = 0;
+  listNav.reset();
   entries = std::move(parser).getEntries();
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
@@ -393,8 +398,6 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
-  selectorIndex = 0;
-  listNav.reset();
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   rebuildRowItems();

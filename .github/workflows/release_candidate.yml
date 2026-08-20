@@ -7,6 +7,18 @@ jobs:
   build-release-candidate:
     if: startsWith(github.ref_name, 'release/')
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pio_env: gh_release_rc
+            asset: firmware.bin
+          - pio_env: sticky-gh_release_rc
+            asset: firmware-sticky.bin
+          - pio_env: x4pro-gh_release_rc
+            asset: firmware-x4pro.bin
+          - pio_env: papermono-gh_release_rc
+            asset: firmware-papermono.bin
     steps:
       - uses: actions/checkout@v6
         with:
@@ -14,7 +26,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.14'
+          python-version: '3.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -23,7 +35,15 @@ jobs:
           enable-cache: false
 
       - name: Install PlatformIO Core
-        run: uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+        run: |
+          uv pip install --system -U https://github.com/pioarduino/platformio-core/archive/refs/tags/v6.1.19.zip
+          # platform-espressif32's builder/main.py imports these unconditionally; its own
+          # penv bootstrap (builder/penv_setup.py) is supposed to install them automatically
+          # but isn't picking them up reliably in this runner image, so pin them explicitly.
+          uv pip install --system -U "littlefs-python>=0.16.0" "fatfs-ng>=0.1.14" "pyyaml>=6.0.2" \
+            "rich-click>=1.8.6" "zopfli>=0.2.2" "intelhex>=2.3.0" "rich>=14.0.0" "urllib3<2" \
+            "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
+            "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
 
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
@@ -40,15 +60,22 @@ jobs:
       - name: Build CrossPoint Release Candidate
         env:
           CROSSPOINT_RC_HASH: ${{ env.SHORT_SHA }}
-        run: pio run -e gh_release_rc
+        run: pio run -e ${{ matrix.pio_env }} -j1
+
+      - name: Name release asset
+        run: |
+          if [ "${{ matrix.asset }}" != "firmware.bin" ]; then
+            cp ".pio/build/${{ matrix.pio_env }}/firmware.bin" \
+              ".pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}"
+          fi
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: CrossPoint-RC-${{ env.BRANCH_SUFFIX }}
+          name: CrossPoint-RC-${{ env.BRANCH_SUFFIX }}-${{ matrix.pio_env }}
           path: |
-            .pio/build/gh_release_rc/bootloader.bin
-            .pio/build/gh_release_rc/firmware.bin
-            .pio/build/gh_release_rc/firmware.elf
-            .pio/build/gh_release_rc/firmware.map
-            .pio/build/gh_release_rc/partitions.bin
+            .pio/build/${{ matrix.pio_env }}/bootloader.bin
+            .pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}
+            .pio/build/${{ matrix.pio_env }}/firmware.elf
+            .pio/build/${{ matrix.pio_env }}/firmware.map
+            .pio/build/${{ matrix.pio_env }}/partitions.bin

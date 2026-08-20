@@ -90,15 +90,22 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 39
+### Version 41
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 39 keeps the version 38 serialized layout unchanged. It was bumped
+Version 41 keeps the version 40 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
 than flattened paragraphs with synthetic row/cell labels.
+
+Version 40 keeps the version 39 serialized layout unchanged. It was bumped
+because ruby groups now remain intact when large text blocks are soft-flushed.
+
+Version 39 keeps the version 38 serialized layout unchanged. It was bumped
+because image top margins are now clamped to keep full-height images within the
+page viewport.
 
 Version 38 keeps the version 37 serialized layout unchanged. It was bumped
 because Focus Reading now permits line breaks at visible hyphens and dashes
@@ -151,7 +158,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 38
+#define EXPECTED_VERSION 41
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
