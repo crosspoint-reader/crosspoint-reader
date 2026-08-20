@@ -91,6 +91,8 @@ class ChapterHtmlSlimParser {
   bool tableRowStacked = false;
   size_t tableCellTextBytes = 0;
   std::vector<std::unique_ptr<ParsedText>> tableRowCells;
+  std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
+  std::vector<uint32_t> tableLineVisibleOffsets;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on

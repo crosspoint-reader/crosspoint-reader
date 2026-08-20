@@ -510,25 +510,30 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   const uint16_t textWidth = static_cast<uint16_t>(cellWidth - TABLE_CELL_HORIZONTAL_PADDING * 2);
-  std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> cellLines;
-  std::vector<uint32_t> lineVisibleOffsets;
-  lineVisibleOffsets.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+  for (auto& lines : tableCellLines) {
+    lines.clear();
+  }
+  tableLineVisibleOffsets.clear();
+  if (tableLineVisibleOffsets.capacity() < MAX_GRID_TABLE_CELL_WORDS * 2) {
+    tableLineVisibleOffsets.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+  }
   size_t maxLineCount = 0;
   bool rowRtl = tableRowCells.front()->getBlockStyle().isRtl;
 
   for (size_t column = 0; column < columnCount; ++column) {
-    auto& lines = cellLines[column];
+    auto& lines = tableCellLines[column];
     // Two wrapped lines per buffered word avoids normal vector growth (max 64).
-    lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+    if (lines.capacity() < MAX_GRID_TABLE_CELL_WORDS * 2) {
+      lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+    }
     tableRowCells[column]->layoutAndExtractLines(
-        renderer, fontId, textWidth,
-        [&lines, &lineVisibleOffsets](const std::shared_ptr<TextBlock>& line, const uint32_t offset) {
+        renderer, fontId, textWidth, [this, &lines](const std::shared_ptr<TextBlock>& line, const uint32_t offset) {
           const size_t lineIndex = lines.size();
           lines.push_back(line);
-          if (lineVisibleOffsets.size() <= lineIndex) {
-            lineVisibleOffsets.resize(lineIndex + 1, UINT32_MAX);
+          if (tableLineVisibleOffsets.size() <= lineIndex) {
+            tableLineVisibleOffsets.resize(lineIndex + 1, UINT32_MAX);
           }
-          lineVisibleOffsets[lineIndex] = std::min(lineVisibleOffsets[lineIndex], offset);
+          tableLineVisibleOffsets[lineIndex] = std::min(tableLineVisibleOffsets[lineIndex], offset);
         });
     if (column == 0 && !lines.empty()) {
       rowRtl = lines.front()->getBlockStyle().isRtl;
@@ -536,16 +541,22 @@ void ChapterHtmlSlimParser::finishTableRow() {
     maxLineCount = std::max(maxLineCount, lines.size());
   }
   tableRowCells.clear();
+  const auto clearLayoutLines = [this]() {
+    for (auto& lines : tableCellLines) {
+      lines.clear();
+    }
+    tableLineVisibleOffsets.clear();
+  };
 
   for (size_t lineIndex = 0; lineIndex < maxLineCount; ++lineIndex) {
     const uint32_t lineVisibleOffset =
-        lineIndex < lineVisibleOffsets.size() ? lineVisibleOffsets[lineIndex] : visibleTextOffset;
+        lineIndex < tableLineVisibleOffsets.size() ? tableLineVisibleOffsets[lineIndex] : visibleTextOffset;
     int16_t rowLineHeight = lineHeight;
     for (size_t column = 0; column < columnCount; ++column) {
-      if (lineIndex < cellLines[column].size()) {
-        rowLineHeight = std::max<int16_t>(rowLineHeight,
-                                          static_cast<int16_t>(lineHeight + cellLines[column][lineIndex]->getRubyShift(
-                                                                                renderer.getFontAscenderSize(fontId))));
+      if (lineIndex < tableCellLines[column].size()) {
+        rowLineHeight = std::max<int16_t>(
+            rowLineHeight, static_cast<int16_t>(lineHeight + tableCellLines[column][lineIndex]->getRubyShift(
+                                                                 renderer.getFontAscenderSize(fontId))));
       }
     }
 
@@ -560,6 +571,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
       currentPage = makeUniqueNoThrow<Page>();
       if (!currentPage) {
         LOG_ERR("EHP", "OOM: page for table row");
+        clearLayoutLines();
         return;
       }
       currentPageNextY = 0;
@@ -575,11 +587,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
       currentPage->elements.reserve(currentPage->elements.size() + linesToReserve * columnCount + 1);
     }
     for (size_t column = 0; column < columnCount; ++column) {
-      if (lineIndex >= cellLines[column].size()) {
+      if (lineIndex >= tableCellLines[column].size()) {
         continue;
       }
 
-      auto& line = cellLines[column][lineIndex];
+      auto& line = tableCellLines[column][lineIndex];
       auto style = line->getBlockStyle();
       const size_t physicalColumn = rowRtl ? columnCount - column - 1 : column;
       style.marginLeft = static_cast<int16_t>(physicalColumn * cellWidth + TABLE_CELL_HORIZONTAL_PADDING);
@@ -595,6 +607,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
 
   addTableRowSeparator();
   tableRowStacked = false;
+  clearLayoutLines();
 }
 
 void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -709,6 +722,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->nextWordContinues = false;
       self->tableDepth += 1;
+      self->depth += 1;
       return;
     }
 
@@ -1712,6 +1726,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     }
     self->nextWordContinues = false;
     self->tableDepth -= 1;
+    self->depth -= 1;
     LOG_DBG("EHP", "nested table flattened into enclosing cell");
     return;
   }
@@ -1868,6 +1883,10 @@ bool ChapterHtmlSlimParser::beginParse() {
   tableRowStacked = false;
   tableCellTextBytes = 0;
   tableRowCells.clear();
+  for (auto& lines : tableCellLines) {
+    lines.clear();
+  }
+  tableLineVisibleOffsets.clear();
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
