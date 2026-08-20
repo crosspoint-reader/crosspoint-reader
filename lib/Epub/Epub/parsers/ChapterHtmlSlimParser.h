@@ -103,6 +103,7 @@ class ChapterHtmlSlimParser {
   uint32_t currentPageVisibleOffset = 0;
   bool currentPageVisibleOffsetSet = false;
   bool insideBody = false;
+  bool htmlEnded_ = false;
   bool syntheticCharacterData = false;
   uint16_t nonVisibleTextDepth = 0;
 
