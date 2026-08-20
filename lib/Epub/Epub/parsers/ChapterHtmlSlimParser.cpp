@@ -107,6 +107,19 @@ const char* getAttribute(const XML_Char** atts, const char* attrName) {
   return nullptr;
 }
 
+uint16_t parseTableSpan(const char* value) {
+  if (!value || value[0] == '\0') return 1;
+
+  uint32_t span = 0;
+  for (const char* current = value; *current != '\0'; ++current) {
+    if (*current < '0' || *current > '9') return 1;
+    const uint32_t digit = static_cast<uint32_t>(*current - '0');
+    if (span > (UINT16_MAX - digit) / 10) return UINT16_MAX;
+    span = span * 10 + digit;
+  }
+  return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
+}
+
 // Returns true if the HTML element is a purely inline, non-navigable wrapper.
 // IDs on these elements are never meaningful navigation targets in epub content.
 // Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
@@ -156,6 +169,28 @@ void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, c
     entry.hasTextDecoration = true;
     entry.textDecoration = css.textDecoration;
   }
+}
+
+void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
+  if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
+      !cssStyle.hasDirection()) {
+    return;
+  }
+
+  StyleStackEntry entry;
+  entry.depth = depth;
+  if (cssStyle.hasFontWeight()) {
+    entry.hasBold = true;
+    entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+  }
+  if (cssStyle.hasFontStyle()) {
+    entry.hasItalic = true;
+    entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+  }
+  applyTextDecorationToEntry(entry, cssStyle);
+  applyDirectionToEntry(entry, cssStyle);
+  inlineStyleStack.push_back(entry);
+  updateEffectiveInlineStyle();
 }
 
 void ChapterHtmlSlimParser::pushDecorationStyleEntry(const CssTextDecoration defaultDecoration,
@@ -731,11 +766,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
       self->makePages();
+      self->currentTextBlock.reset();
     }
     self->flushPendingAnchor();
+    self->pushTableTextStyleEntry(cssStyle);
     self->tableDepth = 1;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
     self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS);
@@ -750,7 +788,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->makePages();
     }
     self->currentTextBlock.reset();
-    self->tableRowStacked = false;
+    self->tableRowStacked = self->tableRowsSpannedRemaining > 0;
+    if (self->tableRowsSpannedRemaining != UINT16_MAX && self->tableRowsSpannedRemaining > 0) {
+      self->tableRowsSpannedRemaining--;
+    }
+    self->pushTableTextStyleEntry(cssStyle);
     self->depth += 1;
     return;
   }
@@ -764,6 +806,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->makePages();
     }
     self->currentTextBlock.reset();
+
+    const uint16_t columnSpan = parseTableSpan(getAttribute(atts, "colspan"));
+    const uint16_t rowSpan = parseTableSpan(getAttribute(atts, "rowspan"));
+    if (columnSpan > 1 || rowSpan > 1) {
+      self->fallbackTableRowToStacked();
+    }
+    if (rowSpan > 1) {
+      const uint16_t remaining = rowSpan == UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(rowSpan - 1);
+      self->tableRowsSpannedRemaining = std::max(self->tableRowsSpannedRemaining, remaining);
+    }
 
     auto tableCellBlockStyle = BlockStyle();
     tableCellBlockStyle.textAlignDefined = true;
@@ -789,8 +841,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->tableCellTextBytes = 0;
     self->wordsExtractedInBlock = 0;
     self->flushPendingAnchor();
+    self->pushTableTextStyleEntry(cssStyle);
 
-    if (strcmp(name, "th") == 0) {
+    if (strcmp(name, "th") == 0 && (!cssStyle.hasFontWeight() || cssStyle.fontWeight == CssFontWeight::Bold)) {
       self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     }
 
@@ -1803,6 +1856,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableDepth = 0;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
     self->nextWordContinues = false;
@@ -1883,6 +1937,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;
+  tableRowsSpannedRemaining = 0;
   tableCellTextBytes = 0;
   tableRowCells.clear();
   for (auto& lines : tableCellLines) {
