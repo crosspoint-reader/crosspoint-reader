@@ -500,7 +500,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
       filename += StringUtils::sanitizeFilename(book.author);
       filename += '/';
     }
-  } while(0);
+  } while (0);
 
   filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());

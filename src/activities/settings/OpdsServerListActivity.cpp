@@ -146,7 +146,8 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format], [Create author folder].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format], [Create author
+  // folder].
   if (nav.selected == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -229,7 +230,8 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
     rowItems_[serverCount + 1].subtitle =
         SETTINGS.opdsDownloadFolder[0] ? SETTINGS.opdsDownloadFolder : tr(STR_OPDS_SD_ROOT);
     rowItems_[serverCount + 2].subtitle = I18N.get(opdsFormatLabel(SETTINGS.opdsFilenameFormat));
-    rowItems_[serverCount + 3].value = I18N.get(SETTINGS.opdsCreateAuthorFolder? StrId::STR_STATE_ON: StrId::STR_STATE_OFF);
+    rowItems_[serverCount + 3].value =
+        I18N.get(SETTINGS.opdsCreateAuthorFolder ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
   }
 
   fui::ListProps props;
