@@ -490,14 +490,14 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   filename += '/';
   do {
     if (opdsCreateAuthorFolder) {
-      std::string temp_path = filename + book.author;
+      std::string temp_path = filename + StringUtils::sanitizeFilename(book.author);
       // If folder already exists no need to create new one
       // In case of error just fall back to SD root downloading destination
       if (!Storage.exists(temp_path.c_str()) && !Storage.mkdir(temp_path.c_str())) {
         LOG_ERR("OPDS", "mkdir failed for %s", temp_path.c_str());
         break;
       }
-      filename += book.author;
+      filename += StringUtils::sanitizeFilename(book.author);
       filename += '/';
     }
   } while(0);
