@@ -1,6 +1,6 @@
 ---
 name: platform-targets
-description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; when starting a new checkout or pre-warming the PlatformIO .pio cache; or when AGENTS.md defers a hardware number here."
+description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; when optionally pre-warming the PlatformIO .pio cache; or when AGENTS.md defers a hardware number here."
 ---
 
 # Platform Targets
@@ -68,6 +68,10 @@ published notes and newer profiles are not missed. Do not fill resource
 fields from either. Neither overrides the in-tree header on this checkout.
 
 ## Warm the PlatformIO cache
+
+Not required. Skip this unless you want a warm `.pio/`. If you do, this
+is a consistent way to fill it. Compiling only the env the task needs is
+enough.
 
 The expensive part is the first compile of ESP-IDF/Arduino, the SDK, and
 shared CrossPoint TUs. After that, switching devices is mostly relinking
@@ -172,6 +176,15 @@ integrations and against every file in `resources/` (see SCHEMA.md).
 Do not take panel size, PSRAM, or caps from `AGENTS.md`, `llms.txt`, or
 an upstream SDK checkout that is not this submodule. Those may inform an
 SDK or new-support review; they do not override in-tree `BoardConfig.h`.
+
+A vendor product page is not a released unit. Cite that page in the
+resource body. If a schematic PDF is a sublink of the page, cite it
+under the page — that is one vendor source, generally authoritative for
+the published pin map / sheet. A GitHub attachment of the same file is a
+rehost, not a second origin. YAML follows the table above (current
+checkout firmware). Until a released unit is measured, list divergences
+and the first source of each firmware choice — do not rewrite firmware
+to match the page.
 
 ## Self-review
 

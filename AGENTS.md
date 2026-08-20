@@ -109,6 +109,56 @@ Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, mu
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
 * **Environments**: whatever `[env:…]` is in committed `platformio.ini`. Device flags and hardware numbers live in the `platform-targets` skill. `LOG_LEVEL` and serial are per-env in the INI (`default` is typically 2; release siblings typically 1).
 
+### Shared tools, isolated builds
+
+PlatformIO toolchains are large; `.pio` trees must not be shared across
+agents. Split them:
+
+| Share across worktrees (tools / downloads) | Isolate per worktree (outputs) |
+|---|---|
+| `PLATFORMIO_CORE_DIR` (default `~/.platformio`) | `PLATFORMIO_WORKSPACE_DIR` (default `<project>/.pio`) |
+| `packages/` (compiler, esptool, Arduino-ESP32, ESP-IDF) | `PLATFORMIO_BUILD_DIR` (`<project>/.pio/build`) |
+| `platforms/` | `PLATFORMIO_LIBDEPS_DIR` (`<project>/.pio/libdeps`) |
+| `.cache/` (downloaded platform zips) | Firmware `.bin` / `.elf` / compile_commands |
+
+Leave `PLATFORMIO_CORE_DIR` at the shared default. Do **not** set
+`core_dir` to a path inside a worktree (that duplicates multi-hundred-MB
+toolchains). Do **not** point `PLATFORMIO_WORKSPACE_DIR`,
+`PLATFORMIO_BUILD_DIR`, or `PLATFORMIO_LIBDEPS_DIR` at the core dir or at
+any other shared folder.
+
+A worktree already has its own project directory, so the default
+`<project>/.pio` is isolated. That is the whole isolation mechanism — keep
+it.
+
+Optional extra reuse (still not a substitute for a per-worktree `.pio`):
+
+```bash
+# Content-addressed object cache. Safe to share; misses are fine.
+export PLATFORMIO_BUILD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/platformio-build-cache"
+```
+
+If `ccache` is on the PATH, a shared `CCACHE_DIR` is likewise safe.
+
+Never run two `pio run` processes in the **same** project directory at
+once. Two worktrees sharing `~/.platformio` is expected; two processes
+sharing one `.pio/build/<env>` will clobber firmware and object files.
+
+Optional cache warmth (sequential `pio run`) is in the `platform-targets`
+skill. Skip it unless you want a warm `.pio/`.
+
+If `platformio.local.ini` points `lib_deps` at a local `freeink-sdk`
+checkout (`symlink://…`), that checkout must be this agent's own — not a
+shared tree another agent is editing.
+
+Host-test scripts under `freeink-sdk/` write to `$TMPDIR` with **fixed**
+subdirectory names. Before running them, point `TMPDIR` at a directory
+unique to this worktree so parallel agents do not clobber each other:
+
+```bash
+export TMPDIR="$(mktemp -d)"
+```
+
 ### Critical Build Flags
 
 These flags in `platformio.ini` fundamentally affect firmware behavior:
@@ -714,6 +764,27 @@ upstream    https://github.com/crosspoint-reader/crosspoint-reader.git (fetch/pu
 3. If the user explicitly approves a push, inspect remotes again and use `fork` for the feature branch unless the user specifies otherwise.
 4. Never add Claude, Codex, or assistant self-attribution as a commit co-author or generated-by trailer.
 5. When a change supersedes or adapts another person's PR, verify the original human author from Git/GitHub and add that person as `Co-Authored-By`; skip bot authors.
+
+### Worktrees
+
+Do not edit, build, or commit in a checkout another person or agent is
+using. Never run two `pio run` processes in the same project directory.
+
+Not required when this checkout is already yours alone. If two agents or
+people would otherwise share a tree, a dedicated git worktree is a
+consistent way to isolate them. One concurrent agent, one worktree.
+
+1. Branch from `develop` unless the task continues an existing branch.
+2. Add a sibling worktree (name from the task slug; follow this repository's
+   branch naming):
+
+   ```bash
+   git worktree add -b <branch> ../crosspoint-reader-<slug> develop
+   ```
+
+3. In that worktree: `git submodule update --init` (`freeink-sdk`).
+4. Work, build, and test only inside that directory. Remove the worktree
+   when the task is finished (`git worktree remove`).
 
 ### Branch Naming Convention
 
