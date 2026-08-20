@@ -252,3 +252,22 @@ TEST(TransparentMark, LettersAndLatinMarksAreNot) {
   EXPECT_FALSE(BidiUtils::isTransparentMark(0x0661));  // Arabic-Indic digit
   EXPECT_FALSE(BidiUtils::isTransparentMark('a'));
 }
+
+TEST(ComputeVisualWordOrder, HebrewWithEmbeddedLatin) {
+  const std::vector<std::string> words = {"יואב", "עובד", "ב-NASA", "שנתיים"};
+  std::vector<uint16_t> visualOrder;
+  const bool reordered = BidiUtils::computeVisualWordOrder(words, /*paragraphIsRtl=*/true, visualOrder);
+  EXPECT_TRUE(reordered);
+  const std::vector<uint16_t> expected = {3, 2, 1, 0};
+  EXPECT_EQ(visualOrder, expected);
+}
+
+TEST(DetectTextDirection, DominantScriptDetection) {
+  // Paragraph starting with LTR acronym but predominantly Hebrew
+  const std::vector<std::string> words1 = {"NASA", "הוא", "מקום", "העבודה", "שלו"};
+  EXPECT_EQ(BidiUtils::detectTextDirection(words1, 0), 1);
+
+  // Paragraph predominantly English with small Hebrew word
+  const std::vector<std::string> words2 = {"The", "Hebrew", "word", "is", "שלום", "here"};
+  EXPECT_EQ(BidiUtils::detectTextDirection(words2, 0), 0);
+}

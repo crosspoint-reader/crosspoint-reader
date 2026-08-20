@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace BidiUtils {
@@ -12,6 +14,10 @@ inline constexpr int RTL_PARAGRAPH_PROBE_DEPTH = 5;
 bool startsWithRtl(const char* utf8, int maxStrongChars = RTL_PARAGRAPH_PROBE_DEPTH);
 
 int detectParagraphLevel(const char* utf8, int fallbackLevel = 0, int maxStrongChars = 64);
+
+int detectTextDirection(const std::vector<std::string>& words, int fallbackLevel = 0);
+int detectTextDirection(const std::deque<std::string>& words, int fallbackLevel = 0);
+int detectTextDirection(const std::vector<std::string_view>& words, int fallbackLevel = 0);
 
 // True for RTL-script non-spacing marks (Hebrew niqqud/cantillation, Arabic
 // harakat and Quranic annotation): zero-width for measurement, transparent for

@@ -666,15 +666,9 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 
   // Per-paragraph RTL auto-detection: only when CSS/HTML didn't explicitly set direction.
-  // Explicit dir="ltr" must be respected and not overridden by content heuristic.
-  if (!blockStyle.directionDefined && hasRtlWord) {
-    // Check the first few words for RTL letter codepoints (no heap allocation).
-    const size_t wordsToScan = std::min(words.size(), RTL_PARAGRAPH_PROBE_WORDS);
-    for (size_t i = 0; i < wordsToScan; ++i) {
-      if (BidiUtils::startsWithRtl(words[i].c_str(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH)) {
-        blockStyle.isRtl = true;
-        break;
-      }
+  if (!blockStyle.directionDefined) {
+    if (BidiUtils::detectTextDirection(words, 0) == 1) {
+      blockStyle.isRtl = true;
     }
   }
 
@@ -1292,10 +1286,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const int effectivePageWidth = pageWidth - firstLineIndent;
   const bool isLastLine = breakIndex == lineBreakIndices.size() - 1;
 
-  // For RTL, implicit/default Left alignment becomes Right alignment.
-  // Explicit text-align:left must remain left for CSS correctness.
+  // Detect effective line direction per UAX#9 P2/P3 rules:
+  // Inherit paragraph direction if RTL, or detect dominant script direction across line words.
+  const bool effectiveRtl = blockStyle.isRtl || (BidiUtils::detectTextDirection(lineWords, 0) == 1);
+
+  // For RTL lines, implicit/default Left alignment (start-aligned) becomes Right alignment.
+  // Explicit text-align: left must remain left for CSS correctness.
   const CssTextAlign effectiveAlignment =
-      (blockStyle.isRtl && !blockStyle.textAlignDefined && blockStyle.alignment == CssTextAlign::Left)
+      (effectiveRtl && !blockStyle.textAlignDefined && blockStyle.alignment == CssTextAlign::Left)
           ? CssTextAlign::Right
           : blockStyle.alignment;
 
@@ -1312,7 +1310,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Skip expensive visual-order resolution for pure LTR paragraphs that have no RTL words.
   const bool shouldResolveVisualOrder = blockStyle.isRtl || hasRtlWord;
   const bool willReorder =
-      shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
+      shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, effectiveRtl, visualOrderScratch);
 
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
@@ -1394,7 +1392,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     const int contentWidth = reorderedWordWidthSum + reorderedNaturalGaps + justifyContribution;
 
     int xpos = 0;
-    if (blockStyle.isRtl) {
+    if (effectiveRtl) {
       if (effectiveAlignment == CssTextAlign::Right || effectiveAlignment == CssTextAlign::Justify) {
         xpos = effectivePageWidth - contentWidth;
       } else if (effectiveAlignment == CssTextAlign::Center) {
@@ -1444,7 +1442,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     lineWordStyles.swap(reorderedStylesScratch);
   } else {
     // Standard LTR/RTL positioning loop when no visual reordering is needed
-    if (blockStyle.isRtl) {
+    if (effectiveRtl) {
       // RTL: position words from right to left
       int xpos = effectivePageWidth;
       if (effectiveAlignment == CssTextAlign::Left) {

@@ -4,6 +4,7 @@
 #include <string>
 #define REPLACEMENT_GLYPH 0xFFFD
 
+int utf8CodepointLen(unsigned char c);
 uint32_t utf8NextCodepoint(const unsigned char** string);
 // Appends a Unicode codepoint to a std::string in UTF-8 encoding.
 void utf8AppendCodepoint(uint32_t cp, std::string& out);

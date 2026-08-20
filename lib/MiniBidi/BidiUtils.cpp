@@ -81,6 +81,41 @@ int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int ma
   return fallbackLevel & 1;
 }
 
+template <typename Container>
+static int detectContainerDirection(const Container& words, const int fallbackLevel) {
+  int rtlCount = 0;
+  int ltrCount = 0;
+  for (const auto& word : words) {
+    auto* p = reinterpret_cast<const unsigned char*>(word.data());
+    const auto* end = p + word.size();
+    while (p < end) {
+      if (utf8CodepointLen(*p) > static_cast<int>(end - p)) break;
+      const uint32_t cp = utf8NextCodepoint(&p);
+      if (!cp || cp == REPLACEMENT_GLYPH) break;
+      const uchar cls = bidi_class(cp);
+      if (cls == R || cls == AL) {
+        rtlCount++;
+      } else if (cls == L) {
+        ltrCount++;
+      }
+    }
+  }
+  if (rtlCount == ltrCount) return fallbackLevel & 1;
+  return (rtlCount > ltrCount) ? 1 : 0;
+}
+
+int detectTextDirection(const std::vector<std::string>& words, const int fallbackLevel) {
+  return detectContainerDirection(words, fallbackLevel);
+}
+
+int detectTextDirection(const std::deque<std::string>& words, const int fallbackLevel) {
+  return detectContainerDirection(words, fallbackLevel);
+}
+
+int detectTextDirection(const std::vector<std::string_view>& words, const int fallbackLevel) {
+  return detectContainerDirection(words, fallbackLevel);
+}
+
 bool isTransparentMark(const uint32_t cp) {
   // RTL-script combining marks: Hebrew niqqud/cantillation and Arabic
   // harakat/Quranic annotation.  Transparent for Arabic joining (do_shape
