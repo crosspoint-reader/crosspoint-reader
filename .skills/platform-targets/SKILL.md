@@ -1,6 +1,6 @@
 ---
 name: platform-targets
-description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; or when AGENTS.md defers a hardware number here."
+description: "Device and PlatformIO-env facts for CrossPoint. Use when the task mentions a board, env, FREEINK_DEVICE_*, PSRAM, panel, framebuffer, controller, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, uiScale, bezel insets, or other device hardware capabilities; when adding, correcting, or removing a device or env; when changing this skill's resource schema; when starting a new checkout or pre-warming the PlatformIO .pio cache; or when AGENTS.md defers a hardware number here."
 ---
 
 # Platform Targets
@@ -66,6 +66,38 @@ support, you may suggest reviewing that index and the latest branch of
 upstream `freeink-sdk` (https://github.com/Free-Ink/freeink-sdk) so
 published notes and newer profiles are not missed. Do not fill resource
 fields from either. Neither overrides the in-tree header on this checkout.
+
+## Warm the PlatformIO cache
+
+The expensive part is the first compile of ESP-IDF/Arduino, the SDK, and
+shared CrossPoint TUs. After that, switching devices is mostly relinking
+plus the files that differ per `-DFREEINK_DEVICE_*`.
+
+Warm **sequentially**. Do not run two `pio run -e` at once — they share
+`.pio/`. Firmware compile only; do not flash or attach hardware. Upload
+and monitor are separate.
+
+```bash
+pio run -e default
+pio run -e x4pro
+pio run -e sticky
+pio run -e papermono
+```
+
+`default` first: C3, X3+X4 in one binary, tightest DRAM. `x4pro` pulls
+the S3 toolchain and the three X4 Pro drivers (SSD1677 / UC8179 / UC8279).
+`sticky` and `papermono` fill the rest of the CI compile set. These are
+the representative envs, not every release/slim sibling. If INI ∩ CI
+grows or shrinks, update this list from the compile set — do not invent
+a third order.
+
+`pio run -t clean` throws that warmth away. Incremental rebuilds after
+checking out a close branch stay fast if you leave `.pio/` in place.
+
+Optional host-side warmth only if you want it: leave the PlatformIO penv
+as-is (`~/.platformio/`). If you use `compile_commands.json` / clangd,
+generate that once after a successful `default` build — do not regenerate
+per env.
 
 ## Interactions
 
@@ -154,3 +186,5 @@ SDK or new-support review; they do not override in-tree `BoardConfig.h`.
 - [ ] PSRAM / `MALLOC_CAP_SPIRAM` only if the env being built sets
       `BOARD_HAS_PSRAM`; the tightest compiled DRAM target still builds
       without that allocation.
+- [ ] Did not run two `pio run -e` at once. Did not `pio run -t clean` a
+      warm `.pio` unless asked.

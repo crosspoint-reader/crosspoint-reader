@@ -32,7 +32,11 @@ caps: [TOUCH, FRONTLIGHT, WARMLIGHT, RTC]
 # Xteink X4 Pro
 
 ESP32-S3, distinct from the C3 X4. 800×480; controller varies by batch
-(SSD1677 / UC8179 / UC8279, probed at boot). GT911 with capacitive home key
+(SSD1677 / UC8179 / UC8279, probed at boot). Those are three drivers
+(`Ssd1677Driver`, `Uc8179Driver`, `Uc8279X4Driver`) — do not treat the two
+UltraChip batches as one Half/GC path. X3's `Uc8279Driver` (UC8279d) is a
+different state machine. VER LUT_VER 0x02 vs 0x68 selects UC8279 X4 AA
+tables only. GT911 with capacitive home key
 and SDK multi-touch. Warm/cool PWM frontlight, 1-bit SDMMC, CW2017 gauge,
 PCF8563-compatible RTC.
 `uiScale` 1.2. Bezel insets 9/7/3/7. 8 MB PSRAM on silicon.
