@@ -93,6 +93,7 @@ class ChapterHtmlSlimParser {
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
+  bool tableRowRtl = false;
   uint16_t tableRowsSpannedRemaining = 0;
   size_t tableCellTextBytes = 0;
   std::vector<std::unique_ptr<ParsedText>> tableRowCells;

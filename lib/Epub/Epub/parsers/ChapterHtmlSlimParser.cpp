@@ -563,7 +563,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
     tableLineVisibleOffsets.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
   }
   size_t maxLineCount = 0;
-  bool rowRtl = tableRowCells.front()->getBlockStyle().isRtl;
+  const bool rowRtl = tableRowRtl;
 
   for (size_t column = 0; column < columnCount; ++column) {
     auto& lines = tableCellLines[column];
@@ -580,9 +580,6 @@ void ChapterHtmlSlimParser::finishTableRow() {
           }
           tableLineVisibleOffsets[lineIndex] = std::min(tableLineVisibleOffsets[lineIndex], offset);
         });
-    if (column == 0 && !lines.empty()) {
-      rowRtl = lines.front()->getBlockStyle().isRtl;
-    }
     maxLineCount = std::max(maxLineCount, lines.size());
   }
   tableRowCells.clear();
@@ -783,6 +780,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->tableDepth = 1;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tableRowRtl = cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl;
     self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
@@ -799,6 +797,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->currentTextBlock.reset();
     self->tableRowStacked = self->tableRowsSpannedRemaining > 0;
+    self->tableRowRtl = cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl;
     if (self->tableRowsSpannedRemaining != UINT16_MAX && self->tableRowsSpannedRemaining > 0) {
       self->tableRowsSpannedRemaining--;
     }
