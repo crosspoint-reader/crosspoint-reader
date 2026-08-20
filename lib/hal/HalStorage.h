@@ -85,6 +85,7 @@ class HalFile : public Print {
   size_t position() const;
   int read(void* buf, size_t count);
   int read();  // read a single byte
+  size_t write(const uint8_t* buf, size_t count) override;
   size_t write(const void* buf, size_t count);
   size_t write(uint8_t b) override;
   bool rename(const char* newPath);

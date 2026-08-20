@@ -793,7 +793,18 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->currentPageVisibleOffsetSet = false;
                 }
 
-                // Apply top margin from container block
+                // Apply top margin from container block. Clamp it so the image never
+                // overflows the page bottom: a full-viewport-height image leaves no room
+                // for the margin, and the break above only fires on non-empty pages, so a
+                // fresh page would otherwise place the image at y=marginTop and run
+                // marginTop pixels past viewportHeight. A large bottom reserve (status
+                // bar / big screen margin) absorbs that overflow silently, but with a
+                // thin reserve it crosses the physical screen edge and fails
+                // ImageBlock::render's bounds check, dropping the image entirely.
+                if (self->currentPageNextY + imageMarginTop + displayHeight > self->viewportHeight) {
+                  const int room = self->viewportHeight - displayHeight - self->currentPageNextY;
+                  imageMarginTop = static_cast<int16_t>(room > 0 ? room : 0);
+                }
                 self->currentPageNextY += imageMarginTop;
 
                 // Create ImageBlock and add to page
@@ -1326,7 +1337,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   const size_t blockWordCount = self->currentTextBlock->size();
   const size_t softFlushThreshold =
       self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
-  if (blockWordCount > softFlushThreshold) {
+  if (blockWordCount > softFlushThreshold && !self->inRuby) {
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
     const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)

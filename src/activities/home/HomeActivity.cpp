@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
@@ -22,8 +23,10 @@
 #include "fontIds.h"
 
 HomeActivity::HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                           const HomeMenuItem initialMenuItemValue)
-    : Activity("Home", renderer, mappedInput), initialMenuItem(initialMenuItemValue) {}
+                           const HomeMenuItem initialMenuItemValue, const bool cleanInitialRefreshValue)
+    : Activity("Home", renderer, mappedInput),
+      initialMenuItem(initialMenuItemValue),
+      cleanInitialRefresh(cleanInitialRefreshValue) {}
 
 HomeActivity::~HomeActivity() = default;
 
@@ -226,13 +229,10 @@ void HomeActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
-
   // Back is otherwise unused on the home menu: open the most recently read
   // book directly (recentBooks is most-recent-first and already pruned of
-  // files missing from the SD card). backPressSeen guards against the stale
-  // release of the Back press that closed the previous activity.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
+  // files missing from the SD card).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && !recentBooks.empty()) {
     onSelectBook(recentBooks[0].path);
     return;
   }
@@ -344,7 +344,7 @@ void HomeActivity::render(RenderLock&&) {
                                             tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
 
   if (!firstRenderDone) {
     firstRenderDone = true;

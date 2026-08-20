@@ -42,7 +42,7 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
   return fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? fontFamily : 0;
 }
 
-constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE};
+constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
@@ -170,25 +170,7 @@ void TextSettingsActivity::activateIndex(const int index) {
 }
 
 bool TextSettingsActivity::handleCustomInput() {
-  if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) {  // picker owns input while open
-    // The popup acts on button press; if that input closed it, the trailing
-    // release must be swallowed below (Back would close this screen, Confirm
-    // would re-activate the selected row).
-    popupClosing_ = !optionPopup_.isActive();
-    return true;
-  }
-  if (popupClosing_) {
-    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // closing press still held
-    }
-    popupClosing_ = false;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      return true;  // swallow the release that closed the popup
-    }
-  }
-  return false;
+  return optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
 bool TextSettingsActivity::handleButtons() {
@@ -197,7 +179,7 @@ bool TextSettingsActivity::handleButtons() {
     return true;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ringPos() == 0) {
       switchTab();
     } else {

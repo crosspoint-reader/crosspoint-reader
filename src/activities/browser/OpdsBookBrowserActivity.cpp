@@ -51,8 +51,6 @@ void OpdsBookBrowserActivity::onEnter() {
   searchTemplate = "";
   currentPath = "";
   selectorIndex = 0;
-  consumeConfirm = false;
-  consumeBack = false;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
 
@@ -112,15 +110,6 @@ void OpdsBookBrowserActivity::onCancelEvent(const fui::ActionEvent&, void* user)
 
 void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
-    return;
-  }
-
-  if (consumeConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
-    return;
-  }
-  if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    consumeBack = false;
     return;
   }
 
@@ -391,6 +380,11 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
   const bool feedTruncated = parser.truncated();
+  // Reset the selection before the swap: the render task reads
+  // entries[selectorIndex] under only an empty() guard, and the new feed can
+  // be shorter than the old selection.
+  selectorIndex = 0;
+  listNav.reset();
   entries = std::move(parser).getEntries();
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
@@ -404,8 +398,6 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
-  selectorIndex = 0;
-  listNav.reset();
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
   rebuildRowItems();
@@ -555,10 +547,6 @@ void OpdsBookBrowserActivity::launchSearch() {
 
   auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
-    // Swallow the release of the Confirm press that closed the keyboard only
-    // when that button is actually still held on resume — a blanket flag set
-    // at launch went stale on touch flows and ate the next genuine Confirm.
-    consumeConfirm = mappedInput.isPressed(MappedInputManager::Button::Confirm);
     state = BrowserState::BROWSING;
     if (!result.isCancelled) {
       performSearch(std::get<KeyboardResult>(result.data).text);

@@ -1,6 +1,6 @@
 # Touch and UI Development
 
-CrossPoint runs on touch devices (Seeed Sticky, M5Paper, LilyGo T5) alongside the button-only Xteink X3/X4. Every screen must work with both input styles.
+CrossPoint runs on touch devices (Seeed Sticky, M5Paper, M5Stack PaperMono, LilyGo T5, Xteink X4 Pro) alongside the button-only Xteink X3/X4. Every screen must work with both input styles.
 
 **There is one supported way to build a new screen: FreeInkUI, hosted through the firmware base classes below.** Touch hit-testing, tap highlighting, long-press, swipe scrolling, and button focus navigation all come from the shared stack; you never hand-roll coordinate math.
 
@@ -18,7 +18,7 @@ The old bridge helpers (`rowTouch`, `colTouch`, `wasTapInRect`, manual rect `con
 | A modal picker or confirm inside a legacy activity | `OptionPopup` (or push `ConfirmationActivity`) | [`OtaUpdateActivity`](../../src/activities/settings/OtaUpdateActivity.cpp) |
 | A Yes/No prompt inside a FUI screen | build `fui::optionDialog` into the screen | `WifiSelectionActivity::buildPromptDialog` |
 
-All four paths route input through the same SDK interaction table, so touch and physical buttons fire the same actions with no per-screen coordinate code.
+All of these paths route input through the same SDK interaction table, so touch and physical buttons fire the same actions with no per-screen coordinate code.
 
 ## The hosting stack
 
