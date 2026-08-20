@@ -30,7 +30,9 @@ class Atkinson1BitDitherer {
   explicit Atkinson1BitDitherer(int width) : width(width) {
     if (width <= 0) return;
 
-    const size_t rowSize = static_cast<size_t>(width) + 4;
+    const size_t candidateRowSize = static_cast<size_t>(width) + 4;
+    if (candidateRowSize > SIZE_MAX / (3 * sizeof(int16_t))) return;
+    rowSize = candidateRowSize;
     errorRows = makeUniqueNoThrow<int16_t[]>(rowSize * 3);
     if (!errorRows) return;
 
@@ -90,19 +92,20 @@ class Atkinson1BitDitherer {
     errorRow0 = errorRow1;
     errorRow1 = errorRow2;
     errorRow2 = temp;
-    memset(errorRow2, 0, (width + 4) * sizeof(int16_t));
+    memset(errorRow2, 0, rowSize * sizeof(int16_t));
   }
 
   void reset() {
     if (!isValid()) return;
 
-    memset(errorRow0, 0, (width + 4) * sizeof(int16_t));
-    memset(errorRow1, 0, (width + 4) * sizeof(int16_t));
-    memset(errorRow2, 0, (width + 4) * sizeof(int16_t));
+    memset(errorRow0, 0, rowSize * sizeof(int16_t));
+    memset(errorRow1, 0, rowSize * sizeof(int16_t));
+    memset(errorRow2, 0, rowSize * sizeof(int16_t));
   }
 
  private:
   int width;
+  size_t rowSize{0};
   std::unique_ptr<int16_t[]> errorRows;
   int16_t* errorRow0 = nullptr;
   int16_t* errorRow1 = nullptr;
@@ -120,7 +123,9 @@ class AtkinsonDitherer {
   explicit AtkinsonDitherer(int width) : width(width) {
     if (width <= 0) return;
 
-    const size_t rowSize = static_cast<size_t>(width) + 4;
+    const size_t candidateRowSize = static_cast<size_t>(width) + 4;
+    if (candidateRowSize > SIZE_MAX / (3 * sizeof(int16_t))) return;
+    rowSize = candidateRowSize;
     errorRows = makeUniqueNoThrow<int16_t[]>(rowSize * 3);
     if (!errorRows) return;
 
@@ -199,19 +204,20 @@ class AtkinsonDitherer {
     errorRow0 = errorRow1;
     errorRow1 = errorRow2;
     errorRow2 = temp;
-    memset(errorRow2, 0, (width + 4) * sizeof(int16_t));
+    memset(errorRow2, 0, rowSize * sizeof(int16_t));
   }
 
   void reset() {
     if (!isValid()) return;
 
-    memset(errorRow0, 0, (width + 4) * sizeof(int16_t));
-    memset(errorRow1, 0, (width + 4) * sizeof(int16_t));
-    memset(errorRow2, 0, (width + 4) * sizeof(int16_t));
+    memset(errorRow0, 0, rowSize * sizeof(int16_t));
+    memset(errorRow1, 0, rowSize * sizeof(int16_t));
+    memset(errorRow2, 0, rowSize * sizeof(int16_t));
   }
 
  private:
-  int width;
+  const int width;
+  size_t rowSize{0};
   std::unique_ptr<int16_t[]> errorRows;
   int16_t* errorRow0 = nullptr;
   int16_t* errorRow1 = nullptr;
@@ -231,7 +237,9 @@ class FloydSteinbergDitherer {
   explicit FloydSteinbergDitherer(int width) : width(width), rowCount(0) {
     if (width <= 0) return;
 
-    const size_t rowSize = static_cast<size_t>(width) + 2;
+    const size_t candidateRowSize = static_cast<size_t>(width) + 2;
+    if (candidateRowSize > SIZE_MAX / (2 * sizeof(int16_t))) return;
+    rowSize = candidateRowSize;
     errorRows = makeUniqueNoThrow<int16_t[]>(rowSize * 2);
     if (!errorRows) return;
 
@@ -330,7 +338,7 @@ class FloydSteinbergDitherer {
     errorCurRow = errorNextRow;
     errorNextRow = temp;
     // Clear the next row buffer
-    memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
+    memset(errorNextRow, 0, rowSize * sizeof(int16_t));
     rowCount++;
   }
 
@@ -341,14 +349,15 @@ class FloydSteinbergDitherer {
   void reset() {
     if (!isValid()) return;
 
-    memset(errorCurRow, 0, (width + 2) * sizeof(int16_t));
-    memset(errorNextRow, 0, (width + 2) * sizeof(int16_t));
+    memset(errorCurRow, 0, rowSize * sizeof(int16_t));
+    memset(errorNextRow, 0, rowSize * sizeof(int16_t));
     rowCount = 0;
   }
 
  private:
   int width;
   int rowCount;
+  size_t rowSize{0};
   std::unique_ptr<int16_t[]> errorRows;
   int16_t* errorCurRow = nullptr;
   int16_t* errorNextRow = nullptr;
