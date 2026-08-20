@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <expat.h>
 
+#include <array>
 #include <climits>
 #include <functional>
 #include <memory>
