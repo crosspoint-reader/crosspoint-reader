@@ -181,7 +181,9 @@ bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) c
 
 bool HalGPIO::isTouchHeldAt(float& nx, float& ny) const { return touchEnabled_ && inputMgr.isTouchHeldAt(nx, ny); }
 
-bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const { return touchEnabled_ && inputMgr.wasTouchLongPress(nx, ny); }
+bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const {
+  return touchEnabled_ && inputMgr.wasTouchLongPress(nx, ny);
+}
 
 void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 

@@ -12,7 +12,7 @@ namespace {
 // Row order mirrors the control center's tile grid, so hiding a row and looking
 // at the panel line up.
 const StrId menuNames[] = {
-    StrId::STR_NIGHT_MODE, StrId::STR_FORCE_REFRESH, StrId::STR_ORIENTATION,
+    StrId::STR_NIGHT_MODE,   StrId::STR_FORCE_REFRESH,     StrId::STR_ORIENTATION,
     StrId::STR_TOUCH_TOGGLE, StrId::STR_SCREENSHOT_BUTTON, StrId::STR_SLEEP,
 };
 
