@@ -40,6 +40,7 @@
 
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
+  bool touchEnabled_ = true;
   InputManager inputMgr;
 #endif
 
@@ -84,6 +85,11 @@ class HalGPIO {
   bool hasHomeKey() const;
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
+  // Touch kill-switch (control center tile): every touch query below reports
+  // nothing while disabled, so a palm resting on the glass cannot turn pages.
+  // Buttons are unaffected, which is also the way back out.
+  void setTouchEnabled(bool enabled) { touchEnabled_ = enabled; }
+  bool touchEnabled() const { return touchEnabled_; }
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
   // Raw release edge, reported even when the contact was not a tap (swipe end,

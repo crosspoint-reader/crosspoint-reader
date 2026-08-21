@@ -4,9 +4,15 @@
 #include "components/UiAppHost.h"
 #include "util/ButtonNavigator.h"
 
-// Top-anchored frontlight overlay opened by a top-edge down-swipe. It drives
-// brightness and warmth live, and includes only a sun on/off control; Night
-// Mode deliberately lives in the reader menu instead.
+// Top-anchored control center opened by a top-edge down-swipe, a status-bar tap,
+// or a button bound to "Control Center" (iOS Control Center style): a grabber,
+// the frontlight brightness/warmth sliders (on boards with a light), and a grid
+// of quick-setting tiles — night mode, ghost-cleanup refresh, reading
+// orientation, the touch kill-switch, a screenshot, and sleep, each of which the
+// user can hide (Settings -> Display -> Customise Control Center). The
+// frontlight controls are always there: they are what the panel is for. Pure
+// 1-bit: no dithered fills, selection reads as a filled tile. The grabber sits
+// along the panel's bottom edge, the edge the sheet is dragged from.
 class FrontlightPanelActivity final : public Activity, private UiAppHost {
   ButtonNavigator buttonNavigator;
 
@@ -31,15 +37,28 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   static void onToggleEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onBrightnessStepEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onWarmthStepEvent(const freeink::ui::ActionEvent& event, void* user);
+  static void onTileEvent(const freeink::ui::ActionEvent& event, void* user);
 
   void buildPanelScreen(UiScreen& screen);
-  void addStepSlider(UiScreen& screen, const freeink::ui::Rect& row, uint8_t value, freeink::ui::ActionId sliderAction,
-                     freeink::ui::ActionId stepAction);
+  // One slider row: a caption line (name + live percentage) above
+  // [-] [draggable 1-bit capsule] [+], plus a lamp on/off button after the +
+  // when showToggle is set (the brightness row).
+  void addSliderRow(UiScreen& screen, const char* label, uint8_t value, freeink::ui::ActionId sliderAction,
+                    freeink::ui::ActionId stepAction, bool showToggle);
   int computePanelBottom() const;
   void adjustBrightness(int delta);
   void adjustWarmth(int delta);
   void toggleLight();
+  void runTile(int idx);
   void close();
+
+  // Quick-setting tiles, in grid order (2 columns). This is the catalogue size;
+  // which of them are laid out is a user setting (Settings -> Display ->
+  // Customise Control Center), so the grid may be shorter or empty.
+  static constexpr int kTileCount = 6;
+  // One-shot: the "refresh" tile re-drives the whole frame with the
+  // ghost-cleanup waveform on the next render.
+  bool cleanRefreshPending = false;
 
  public:
   explicit FrontlightPanelActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
