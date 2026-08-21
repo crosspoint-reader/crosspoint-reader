@@ -33,6 +33,8 @@ UI_FONT_SIZES=(10 12)
 # snaps stems to whole pixels, and Regular lands on 2px where Medium lands on 3.
 UI_FONT_STYLES=("Medium" "Bold")
 
+python generate-ui-noto-fonts.py
+
 # Arabic glyphs for UI text (menus, file browser titles). The built-in fonts
 # must cover the *output* of MiniBidi's do_shape() — contextual presentation
 # forms — not base letters, or shaped UI text silently drops glyphs.
@@ -65,8 +67,8 @@ for size in ${UI_FONT_SIZES[@]}; do
   for style in ${UI_FONT_STYLES[@]}; do
     font_name="ubuntu_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/Ubuntu/Ubuntu-${style}.ttf"
-    # Noto ships only Regular and Bold, so the Medium slot falls back to Regular.
-    if [ "$style" = "Bold" ]; then noto_style="Bold"; else noto_style="Regular"; fi
+    # UI-specific optical faces retain readable stroke weight under --mono.
+    if [ "$style" = "Bold" ]; then noto_style="UIBold"; else noto_style="UIMedium"; fi
     hebrew_path="../builtinFonts/source/NotoSansHebrew/NotoSansHebrew-${noto_style}.ttf"
     arabic_path="../builtinFonts/source/NotoSansArabic/NotoSansArabic-${noto_style}.ttf"
     # Ubuntu lacks the Latin Extended Additional block (U+1EA0-U+1EF9) used for
@@ -75,15 +77,14 @@ for size in ${UI_FONT_SIZES[@]}; do
     # (fontstack is ordered by descending priority).
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    # Ubuntu is manually hinted at these small sizes, so native monochrome
-    # rasterisation (--mono) gives crisp, evenly-weighted stems. Do NOT use
-    # --mono for less-hinted / thinner faces (e.g. notosans_8 below), where
-    # sub-pixel stems would drop out and look too thin.
+    # Every face in this stack is optically weighted for monochrome rendering.
     python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
       --mono --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
     echo "Generated $output_path"
   done
 done
+
+python verify-ui-noto-fonts.py
 
 python fontconvert.py notosans_8_regular 8 \
   ../builtinFonts/source/NotoSans/NotoSans-Regular.ttf \
