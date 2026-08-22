@@ -239,11 +239,11 @@ bool TerminalWifi::parseHello() {
     } else {
       return false;
     }
-    char* end = nullptr;
-    const unsigned long long epoch = std::strtoull(epochText, &end, 10);
-    if (end == epochText || *end != '\0') return false;
-    const long offset = std::strtol(offsetText, &end, 10);
-    if (end == offsetText || *end != '\0' || epoch < 946684800ULL || epoch > 4102444800ULL || offset < -840 ||
+    char* parseEnd = nullptr;
+    const unsigned long long epoch = std::strtoull(epochText, &parseEnd, 10);
+    if (parseEnd == epochText || *parseEnd != '\0') return false;
+    const long offset = std::strtol(offsetText, &parseEnd, 10);
+    if (parseEnd == offsetText || *parseEnd != '\0' || epoch < 946684800ULL || epoch > 4102444800ULL || offset < -840 ||
         offset > 840 || *cursor == '\0') {
       return false;
     }
@@ -258,16 +258,16 @@ bool TerminalWifi::parseHello() {
 #else
     helloVersion = 2;
     char* cursor = helloBuffer + sizeof(HELLO_V2_PREFIX) - 1;
-    char* end = nullptr;
-    const unsigned long long epoch = std::strtoull(cursor, &end, 10);
-    if (end == cursor || *end != ' ') return false;
-    cursor = end + 1;
-    const long offset = std::strtol(cursor, &end, 10);
-    if (end == cursor || *end != ' ' || epoch < 946684800ULL || epoch > 4102444800ULL || offset < -840 ||
+    char* parseEnd = nullptr;
+    const unsigned long long epoch = std::strtoull(cursor, &parseEnd, 10);
+    if (parseEnd == cursor || *parseEnd != ' ') return false;
+    cursor = parseEnd + 1;
+    const long offset = std::strtol(cursor, &parseEnd, 10);
+    if (parseEnd == cursor || *parseEnd != ' ' || epoch < 946684800ULL || epoch > 4102444800ULL || offset < -840 ||
         offset > 840) {
       return false;
     }
-    nameStart = end + 1;
+    nameStart = parseEnd + 1;
     hostEpochSeconds = static_cast<uint64_t>(epoch);
     hostUtcOffsetMinutes = static_cast<int16_t>(offset);
     hostTimeCapturedAt = millis();

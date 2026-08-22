@@ -1072,7 +1072,7 @@ void TerminalActivity::drawRefreshDiagnostics() {
   char last[20];
   char waveform[20];
   char transfer[20];
-  char render[20];
+  char renderTime[20];
   char queue[20];
   char lut[20];
   char plane[20];
@@ -1083,7 +1083,7 @@ void TerminalActivity::drawRefreshDiagnostics() {
   millisTenths(renderRefreshMetrics.lastTotalUs, last, sizeof(last));
   millisTenths(renderRefreshMetrics.lastWaveformUs, waveform, sizeof(waveform));
   millisTenths(renderRefreshMetrics.lastTransferUs, transfer, sizeof(transfer));
-  millisTenths(renderRefreshMetrics.lastRenderUs, render, sizeof(render));
+  millisTenths(renderRefreshMetrics.lastRenderUs, renderTime, sizeof(renderTime));
   millisTenths(renderRefreshMetrics.lastQueueUs, queue, sizeof(queue));
   millisTenths(renderRefreshMetrics.lastLutUs, lut, sizeof(lut));
   millisTenths(renderRefreshMetrics.lastPlaneUs, plane, sizeof(plane));
@@ -1096,7 +1096,7 @@ void TerminalActivity::drawRefreshDiagnostics() {
   char line[112];
   std::snprintf(line, sizeof(line), "Last %s   waveform %s", last, waveform);
   renderer.drawCenteredText(UI_10_FONT_ID, 165, line);
-  std::snprintf(line, sizeof(line), "Queue %s   render %s", queue, render);
+  std::snprintf(line, sizeof(line), "Queue %s   render %s", queue, renderTime);
   renderer.drawCenteredText(UI_10_FONT_ID, 205, line);
   std::snprintf(line, sizeof(line), "Transfer %s: plane %s LUT %s base %s", transfer, plane, lut, baseline);
   renderer.drawCenteredText(UI_10_FONT_ID, 245, line);

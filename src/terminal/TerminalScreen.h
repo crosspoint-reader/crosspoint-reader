@@ -61,7 +61,7 @@ class TerminalScreen {
   void markAllDirty();
 
  private:
-  Cell cells[ROWS][COLS];
+  Cell cells[ROWS][COLS]{};
   uint8_t cursorRow = 0;
   uint8_t cursorColumn = 0;
   uint8_t currentAttributes = ATTR_NONE;
