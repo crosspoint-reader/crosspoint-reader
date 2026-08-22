@@ -23,7 +23,9 @@ bool moveBook(const std::string& oldPath, const std::string& newPath) {
   }
 
   if (APP_STATE.openEpubPath == oldPath) {
-    APP_STATE.openEpubPath = newPath;
+    // A destination that is not a book leaves nothing to resume into: the
+    // reader would open the new path as an EPUB whatever it now holds.
+    APP_STATE.openEpubPath = cache.dropped ? "" : newPath;
     APP_STATE.saveToFile();
   }
   return true;
