@@ -36,6 +36,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [Cover settings](#cover-settings)
       - [Custom images](#custom-images)
     - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
+    - [3.9 Language Packs (SD Card)](#39-language-packs-sd-card)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
@@ -310,7 +311,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
 
-- **Language**: Set the UI language. CrossPoint supports 24 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, and Hebrew.
+- **Language**: Set the UI language. English, Japanese, Spanish, French and German are built into the firmware. The
+  rest — Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish,
+  Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, Hebrew and more — are listed
+  too, but marked **Needs pack** until you install a language pack. See [Language Packs (SD Card)](#39-language-packs-sd-card).
 
 - **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
 
@@ -552,6 +556,23 @@ There are three ways to install fonts:
 Once installed, custom fonts appear in **Settings → Reader → Font Family** alongside the built-in fonts.
 
 See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation details and SD card folder structure.
+
+### 3.9 Language Packs (SD Card)
+
+English, Japanese, Spanish, French and German are built into the firmware. Every other translation ships separately as
+a **language pack**, so the ~30 remaining languages do not have to occupy flash on a device that only ever displays one
+of them. All languages still appear in **Settings → System → Language**; the ones without a pack installed are marked
+**Needs pack** and selecting one leaves the interface as it was.
+
+To install one:
+
+1. Download `language-packs.zip` from the [release you are running](https://github.com/eszter007/matcha-reader/releases).
+2. Unzip it and copy the `.cplang` file for your language — for example `RU.cplang` — into `/.crosspoint/lang/` on the
+   SD card, creating the folder if it is not there. You can copy them all; only the selected one is ever loaded.
+3. Put the card back and pick the language in **Settings → System → Language**.
+
+A pack is tied to the firmware it was built with. After a firmware update, download the packs from the new release as
+well: a mismatched pack is refused and the language stays on English rather than showing wrong text.
 
 ---
 
