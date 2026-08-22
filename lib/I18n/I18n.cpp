@@ -21,6 +21,13 @@ namespace {
 constexpr char PACK_MAGIC[8] = {'C', 'P', 'L', 'A', 'N', 'G', '\0', '\0'};
 constexpr uint16_t PACK_VERSION = 1;
 constexpr size_t PACK_HEADER_BYTES = 18;
+
+// HalFile::read returns a signed count, so every length check against a sizeof()
+// would be a signed/unsigned comparison. One named predicate instead.
+bool readExactly(HalFile& file, void* dst, const size_t count) {
+  const int got = file.read(dst, count);
+  return got > 0 && static_cast<size_t>(got) == count;
+}
 }  // namespace
 
 I18n& I18n::getInstance() {
@@ -74,7 +81,7 @@ bool I18n::loadPack(const Language lang) {
   if (!Storage.openFileForRead("I18N", path, file)) return false;
 
   uint8_t header[PACK_HEADER_BYTES];
-  if (file.read(header, sizeof(header)) != sizeof(header)) return false;
+  if (!readExactly(file, header, sizeof(header))) return false;
   if (memcmp(header, PACK_MAGIC, sizeof(PACK_MAGIC)) != 0) {
     LOG_ERR("I18N", "%s: not a language pack", path);
     return false;
@@ -103,7 +110,7 @@ bool I18n::loadPack(const Language lang) {
     LOG_ERR("I18N", "OOM: %u bytes for %s", static_cast<unsigned>(offsetBytes + blobLen), path);
     return false;
   }
-  if (file.read(buffer.get(), offsetBytes + blobLen) != static_cast<int>(offsetBytes + blobLen)) {
+  if (!readExactly(file, buffer.get(), offsetBytes + blobLen)) {
     LOG_ERR("I18N", "%s: truncated pack", path);
     return false;
   }
