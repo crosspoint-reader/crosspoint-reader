@@ -58,12 +58,13 @@ void moveBookCache(const std::string& oldPath, const std::string& newPath) {
     return;
   }
 
+  // Drop whatever sits at the destination even when the book has no cache to
+  // move: left there, it would be picked up as this book's own cache.
+  if (Storage.exists(newCachePath.c_str())) {
+    Storage.removeDir(newCachePath.c_str());
+  }
+
   if (Storage.exists(oldCachePath.c_str())) {
-    // SdFat's rename does not overwrite, so a stale cache left at the
-    // destination path would make the move fail.
-    if (Storage.exists(newCachePath.c_str())) {
-      Storage.removeDir(newCachePath.c_str());
-    }
     if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
       LOG_ERR("BookCache", "Failed to move cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
     }
