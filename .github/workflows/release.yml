@@ -82,10 +82,9 @@ jobs:
             .pio/build/${{ matrix.pio_env }}/firmware.map
             .pio/build/${{ matrix.pio_env }}/partitions.bin
 
-  # Languages that are not compiled in ship as .cplang packs for the SD card. A pack is
-  # only valid for the firmware it was generated with -- it is indexed by string-key
-  # position and refuses to load when the count differs -- so it is built from the same
-  # tag as the .bin files and attached to the same release.
+  # Languages left out of the firmware ship as .cplang packs for the SD card. A pack is
+  # indexed by string-key position and refuses to load when the count differs, so it only
+  # works with the build it came from. Built from the same tag, attached to the same release.
   language-packs:
     runs-on: ubuntu-latest
     steps:
@@ -105,11 +104,11 @@ jobs:
             exit 1
           fi
           echo "Built-in languages: $BUILTIN"
-          # --strip-unused matches the pre-build hook, so the key count agrees with the firmware.
+          # --strip-unused: the pre-build hook uses it, so the key counts must agree.
           python3 scripts/gen_i18n.py lib/I18n/translations lib/I18n/ \
             --strip-unused --builtin-langs "$BUILTIN" --pack-dir dist/lang
-          # With the default `all` every language is compiled in and there is nothing to
-          # ship, so the steps below are skipped rather than attaching an empty zip.
+          # At the default `all` there is nothing to ship. Skip the steps below rather than
+          # attach an empty zip to every release.
           COUNT=$(find dist/lang -name '*.cplang' | wc -l | tr -d ' ')
           echo "Generated $COUNT pack(s)"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"

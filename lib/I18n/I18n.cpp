@@ -16,14 +16,14 @@ namespace {
 // .cplang layout, little-endian, written by scripts/gen_i18n.py::write_language_packs():
 //   magic[8] "CPLANG\0\0" | version u16 | keyCount u16 | blobLen u16 | code[4]
 //   offsets u16 * keyCount | blob blobLen
-// Offsets carry the same bit-15 "same as English" encoding the compiled tables use, which is
-// why English is always built in -- a pack resolves those entries against STRINGS_EN_DATA.
+// Offsets use the same bit-15 "same as English" encoding as the compiled tables, so a pack
+// resolves those entries against STRINGS_EN_DATA. That is why English is always built in.
 constexpr char PACK_MAGIC[8] = {'C', 'P', 'L', 'A', 'N', 'G', '\0', '\0'};
 constexpr uint16_t PACK_VERSION = 1;
 constexpr size_t PACK_HEADER_BYTES = 18;
 
-// HalFile::read returns a signed count, so every length check against a sizeof()
-// would be a signed/unsigned comparison. One named predicate instead.
+// HalFile::read returns a signed count. Comparing it against a sizeof() is a sign mismatch,
+// so wrap it once.
 bool readExactly(HalFile& file, void* dst, const size_t count) {
   const int got = file.read(dst, count);
   return got > 0 && static_cast<size_t>(got) == count;
@@ -41,8 +41,8 @@ const char* I18n::get(StrId id) const {
     return "???";
   }
 
-  // A loaded pack wins: getLanguageStrings() answers {nullptr, nullptr} for any language whose
-  // strings are not compiled in.
+  // A loaded pack wins. getLanguageStrings() returns {nullptr, nullptr} for anything not
+  // compiled in.
   const LangStrings lang = _packStrings.data ? _packStrings : getLanguageStrings(_language);
   if (!lang.data || !lang.offsets) return "???";
 
@@ -57,8 +57,8 @@ bool I18n::setLanguage(Language lang) {
     return false;
   }
   if (isLanguageBuiltIn(lang)) {
-    // Release the previous pack: nothing reads it once a compiled-in language is active, and it
-    // is the largest single allocation this class ever makes.
+    // Drop the old pack. It is the biggest allocation this class makes, and nothing reads it
+    // once a compiled-in language is active.
     _packBuffer.reset();
     _packStrings = {nullptr, nullptr};
     _language = lang;
@@ -96,8 +96,8 @@ bool I18n::loadPack(const Language lang) {
     LOG_ERR("I18N", "%s: pack version %u, firmware wants %u", path, version, PACK_VERSION);
     return false;
   }
-  // The offsets index the string table by position, so a pack built against a different set of
-  // keys would silently return the wrong strings. Refuse it instead.
+  // Offsets index the table by position. A pack built against different keys would return the
+  // wrong strings, quietly. Refuse it.
   if (keyCount != static_cast<uint16_t>(StrId::_COUNT)) {
     LOG_ERR("I18N", "%s: pack has %u keys, firmware has %u -- regenerate the packs", path, keyCount,
             static_cast<unsigned>(StrId::_COUNT));
@@ -115,8 +115,7 @@ bool I18n::loadPack(const Language lang) {
     return false;
   }
 
-  // Publish only once the whole pack is in hand, so a failed read can never leave get() pointing
-  // at a half-filled buffer.
+  // Publish only after the whole read succeeds. A partial read must never reach get().
   _packBuffer = std::move(buffer);
   _packStrings = {reinterpret_cast<const char*>(_packBuffer.get() + offsetBytes),
                   reinterpret_cast<const uint16_t*>(_packBuffer.get())};

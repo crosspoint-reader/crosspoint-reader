@@ -37,8 +37,8 @@ void LanguageSelectActivity::onEnter() {
     if (SORTED_LANGUAGE_INDICES[i] == currentLang) {
       item.value = tr(STR_SELECTED);
     } else if (!I18n::isLanguageAvailable(lang)) {
-      // Listed but not selectable until its pack is on the card. Shown rather than hidden so
-      // the language is discoverable and the reason is on screen.
+      // Listed but not selectable until the pack is on the card. Hiding it would just make the
+      // language look unsupported.
       item.value = tr(STR_LANGUAGE_PACK_MISSING);
     }
     item.actionValue = static_cast<int16_t>(i);
