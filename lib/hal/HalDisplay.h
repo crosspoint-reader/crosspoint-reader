@@ -17,6 +17,27 @@ class HalDisplay {
     FAST_REFRESH   // Fast refresh using custom LUT
   };
 
+  enum class FastRefreshProfile : uint8_t {
+    PanelDefault,
+    TerminalInteractive,
+    TerminalSettle,
+    TerminalTurbo = TerminalInteractive,
+  };
+  struct RefreshTiming {
+    uint32_t totalUs;
+    uint32_t waveformUs;
+    uint32_t transferUs;
+    uint32_t lutUs;
+    uint32_t planeUs;
+    uint32_t baselineUs;
+    uint32_t activationToBusyUs;
+    uint32_t powerOffUs;
+    uint32_t presentedAtUs;
+    uint32_t readyAtUs;
+    bool windowed;
+  };
+  using PackedWindowRegion = freeink::PackedWindowRegion;
+
   // Pass seamless=true on any path where the panel already shows the
   // content it should after begin() returns (silent reboot's popup,
   // sleep-wake with a restored buffer). Skips the wakeup-gated
@@ -39,6 +60,11 @@ class HalDisplay {
                             bool fromProgmem = false) const;
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
+  // X4-only differential window. Returns false without refreshing when the
+  // active panel does not support the bounded window path.
+  bool displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
+  bool displayPackedWindowsAsync(const uint8_t* packed, size_t packedSize, const PackedWindowRegion* regions,
+                                 size_t regionCount, bool turnOffScreen = false);
   // Non-blocking refresh (shadow-free): starts the panel waveform and returns
   // while the panel refreshes on its own. The framebuffer must stay untouched
   // until waitRefreshComplete(), and the caller must rebuild the differential
@@ -47,9 +73,13 @@ class HalDisplay {
   void displayBufferAsync(RefreshMode mode = RefreshMode::FAST_REFRESH);
   // Block until a pending deferred refresh completes (no-op when none is).
   void waitRefreshComplete();
+  bool refreshBusy();
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;
+  void setFastRefreshProfile(FastRefreshProfile profile);
+  FastRefreshProfile getFastRefreshProfile() const;
+  RefreshTiming getLastRefreshTiming() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Output polarity. The framebuffer remains in normal polarity; inversion is

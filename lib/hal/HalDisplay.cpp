@@ -65,6 +65,20 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
 }
 
+bool HalDisplay::displayWindow(const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h,
+                               const bool turnOffScreen) {
+  if (gpio.deviceIsX3()) return false;
+  einkDisplay.displayWindow(x, y, w, h, turnOffScreen);
+  return true;
+}
+
+bool HalDisplay::displayPackedWindowsAsync(const uint8_t* packed, const size_t packedSize,
+                                           const PackedWindowRegion* regions, const size_t regionCount,
+                                           const bool turnOffScreen) {
+  if (gpio.deviceIsX3()) return false;
+  return einkDisplay.displayPackedWindowsAsync(packed, packedSize, regions, regionCount, turnOffScreen);
+}
+
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
@@ -75,7 +89,37 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
 
 void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
 
+bool HalDisplay::refreshBusy() { return einkDisplay.refreshBusy(); }
+
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
+
+void HalDisplay::setFastRefreshProfile(const FastRefreshProfile profile) {
+  freeink::FastRefreshProfile sdkProfile = freeink::FastRefreshProfile::PanelDefault;
+  if (profile == FastRefreshProfile::TerminalInteractive) {
+    sdkProfile = freeink::FastRefreshProfile::TerminalInteractive;
+  } else if (profile == FastRefreshProfile::TerminalSettle) {
+    sdkProfile = freeink::FastRefreshProfile::TerminalSettle;
+  }
+  einkDisplay.setFastRefreshProfile(sdkProfile);
+}
+
+HalDisplay::FastRefreshProfile HalDisplay::getFastRefreshProfile() const {
+  const auto profile = einkDisplay.fastRefreshProfile();
+  if (profile == freeink::FastRefreshProfile::TerminalInteractive) {
+    return FastRefreshProfile::TerminalInteractive;
+  }
+  if (profile == freeink::FastRefreshProfile::TerminalSettle) {
+    return FastRefreshProfile::TerminalSettle;
+  }
+  return FastRefreshProfile::PanelDefault;
+}
+
+HalDisplay::RefreshTiming HalDisplay::getLastRefreshTiming() const {
+  const auto timing = einkDisplay.getLastRefreshTiming();
+  return {timing.totalUs,    timing.waveformUs,         timing.transferUs, timing.lutUs,         timing.planeUs,
+          timing.baselineUs, timing.activationToBusyUs, timing.powerOffUs, timing.presentedAtUs, timing.readyAtUs,
+          timing.windowed};
+}
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {

@@ -1,0 +1,6 @@
+# name|type|flags|sequence|payload|encoded frame (all integer fields are hexadecimal)
+terminal-output-abc|01|00|01020304|616263|0100000301020304616263
+heartbeat-rollover|06|00|ffffffff||06000000ffffffff
+session-end|07|00|00000003||0700000000000003
+optional-extension|80|00|00000002|0001|80000002000000020001
+diagnostic-row-black|03|00|00000007|030301|0300000300000007030301

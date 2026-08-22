@@ -12,6 +12,16 @@ OVERRIDES = f"""
 #ifndef HAVE_FFDHE_2048
 #define HAVE_FFDHE_2048
 #endif
+/* SecureNet uses the client half while knietty accepts authenticated inbound
+   TLS sessions. Arduino's client example preset disables server symbols; keep
+   both halves in this firmware. */
+#undef NO_WOLFSSL_SERVER
+/* Retain the authenticated client leaf long enough for knietty to hash and
+   pin it after the TLS handshake. This enables wolfSSL's compact peer-cert
+   accessors without the much larger OpenSSL compatibility layer. */
+#ifndef KEEP_PEER_CERT
+#define KEEP_PEER_CERT
+#endif
 /* MEMFIX-PORT: 8192 handles up to RSA-4096 keys (the public-CA maximum,
    ISRG Root X1 included) with half the per-bignum heap of 16384: with
    WOLFSSL_SMALL_STACK each fast-math temp is FP_MAX_BITS/8 * 2 bytes on the

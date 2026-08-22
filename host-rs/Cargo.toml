@@ -1,0 +1,27 @@
+[package]
+name = "knietty-host"
+version = "0.1.0"
+description = "Portable Rust host bridge for the knietty E Ink terminal"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+
+[dependencies]
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+nix = { version = "0.31.3", default-features = false, features = ["feature", "fs", "hostname", "net", "poll", "process", "signal", "term", "time", "user"] }
+rcgen = { version = "=0.13.2", default-features = false, features = ["ring"] }
+rustls = { version = "=0.23.23", default-features = false, features = ["ring", "std"] }
+serde_json = "1"
+sha2 = "0.10.8"
+signal-hook = { version = "0.4.4", default-features = false }
+# Keep rcgen/rustls transitive releases compatible with the declared Rust 1.80 MSRV.
+time = "=0.3.36"
+zeroize = "=1.8.1"
+
+[[bin]]
+name = "knietty"
+path = "src/main.rs"
+
+[profile.release]
+strip = true
+lto = "thin"

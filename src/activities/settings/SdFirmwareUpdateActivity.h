@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 
 #include "activities/Activity.h"
@@ -43,8 +44,10 @@ class SdFirmwareUpdateActivity : public Activity {
 
   std::string firmwarePath;
   size_t firmwareSize = 0;
-  size_t writtenBytes = 0;
+  std::atomic<size_t> writtenBytes{0};
   unsigned int lastRenderedPercent = 101;
+  static constexpr unsigned int PROGRESS_RENDER_STEP_PERCENT = 10;
+  unsigned int nextProgressRenderPercent = PROGRESS_RENDER_STEP_PERCENT;
   std::string errorMessage;
 
   void launchPicker();

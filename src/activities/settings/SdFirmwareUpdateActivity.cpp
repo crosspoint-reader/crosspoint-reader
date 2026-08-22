@@ -143,8 +143,9 @@ void SdFirmwareUpdateActivity::onConfirmationResult(const ActivityResult& result
   {
     RenderLock lock(*this);
     state = State::UPDATING;
-    writtenBytes = 0;
+    writtenBytes.store(0, std::memory_order_relaxed);
     lastRenderedPercent = 101;
+    nextProgressRenderPercent = PROGRESS_RENDER_STEP_PERCENT;
   }
   requestUpdateAndWait();
   performUpdate();
@@ -155,11 +156,23 @@ void SdFirmwareUpdateActivity::performUpdate() {
 
   auto progressCb = +[](size_t written, size_t total, void* ctx) {
     auto* self = static_cast<SdFirmwareUpdateActivity*>(ctx);
-    self->writtenBytes = written;
-    self->firmwareSize = total;
+    self->writtenBytes.store(written, std::memory_order_release);
+#ifndef KNIETTY_ENABLED
     // immediate=true: wake the render task directly. We're in a tight sync
     // loop so the main loop won't drain the requestedUpdate flag for us.
     self->requestUpdate(true);
+#else
+    const unsigned int percent =
+        total == 0 ? 0 : static_cast<unsigned int>((static_cast<uint64_t>(written) * 100) / total);
+    if (percent < self->nextProgressRenderPercent && written != total) return;
+
+    // The display and SD card share SPI. Block until each coarse E Ink update
+    // finishes before the flasher resumes reading, avoiding the concurrent
+    // transfers that made the former per-chunk progress callback unreliable.
+    self->nextProgressRenderPercent =
+        std::min(101U, (percent / PROGRESS_RENDER_STEP_PERCENT + 1) * PROGRESS_RENDER_STEP_PERCENT);
+    self->requestUpdateAndWait();
+#endif
   };
 
   // Re-validate at flash time (TOCTOU): SD is removable, so don't trust the
@@ -172,9 +185,16 @@ void SdFirmwareUpdateActivity::performUpdate() {
     // BAD_CHIP / WRONG_BOARD here is the TOCTOU re-validation catching a
     // wrong-device image the pre-confirmation pass missed (e.g. the SD card
     // was swapped).
-    errorMessage = result == firmware_flash::Result::BAD_CHIP || result == firmware_flash::Result::WRONG_BOARD
-                       ? tr(STR_FIRMWARE_WRONG_DEVICE)
-                       : tr(STR_FIRMWARE_WRITE_FAILED);
+    if (result == firmware_flash::Result::BAD_CHIP || result == firmware_flash::Result::WRONG_BOARD) {
+      errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+    } else {
+      errorMessage = tr(STR_FIRMWARE_WRITE_FAILED);
+#ifdef KNIETTY_ENABLED
+      errorMessage += " (";
+      errorMessage += firmware_flash::resultName(result);
+      errorMessage += ")";
+#endif
+    }
     RenderLock lock(*this);
     state = State::FAILED;
     requestUpdate();
@@ -224,8 +244,11 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
   if (state == State::VALIDATING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_VALIDATING_FIRMWARE));
   } else if (state == State::UPDATING) {
-    // Throttle redraws to once per percent.
-    const unsigned int pct = firmwareSize > 0 ? static_cast<unsigned int>((writtenBytes * 100) / firmwareSize) : 0;
+    // Skip duplicate paints; knietty schedules coarse synchronous steps while
+    // the ordinary build may request this render more frequently.
+    const size_t written = writtenBytes.load(std::memory_order_acquire);
+    const unsigned int pct =
+        firmwareSize > 0 ? static_cast<unsigned int>((static_cast<uint64_t>(written) * 100) / firmwareSize) : 0;
     if (pct == lastRenderedPercent) {
       return;
     }

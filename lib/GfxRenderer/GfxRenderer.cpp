@@ -1693,6 +1693,56 @@ void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
 
+bool GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, width, height, panelWidth, panelHeight);
+  if (!mem.valid) return false;
+
+  // FreeInk's current X4 window driver builds one contiguous transfer buffer.
+  // Bound that transient allocation; large updates use the resident full
+  // framebuffer and avoid a potentially fatal allocation on the C3.
+  static constexpr size_t MAX_WINDOW_BYTES = 8192;
+  const size_t windowBytes = static_cast<size_t>(mem.w / 8) * mem.h;
+  if (fadingFix || windowBytes > MAX_WINDOW_BYTES) {
+    displayBuffer(HalDisplay::FAST_REFRESH);
+    return false;
+  }
+
+  if (!display.displayWindow(mem.x, mem.y, mem.w, mem.h, false)) {
+    displayBuffer(HalDisplay::FAST_REFRESH);
+    return false;
+  }
+  return true;
+}
+
+bool GfxRenderer::packWindowRegion(const int x, const int y, const int width, const int height, uint8_t* packed,
+                                   const size_t packedCapacity, const size_t offset,
+                                   HalDisplay::PackedWindowRegion& region, size_t& bytes) const {
+  bytes = 0;
+  if (packed == nullptr || offset > packedCapacity) return false;
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, width, height, panelWidth, panelHeight);
+  if (!mem.valid) return false;
+  const size_t rowBytes = mem.w / 8;
+  const size_t needed = rowBytes * mem.h;
+  if (needed > packedCapacity - offset) return false;
+  for (uint16_t row = 0; row < mem.h; ++row) {
+    const uint8_t* source = frameBuffer + static_cast<uint32_t>(mem.y + row) * panelWidthBytes + mem.x / 8;
+    memcpy(packed + offset + static_cast<size_t>(row) * rowBytes, source, rowBytes);
+  }
+  region = {mem.x, mem.y, mem.w, mem.h, static_cast<uint32_t>(offset)};
+  bytes = needed;
+  return true;
+}
+
+bool GfxRenderer::displayPackedWindowsAsync(const uint8_t* packed, const size_t packedSize,
+                                            const HalDisplay::PackedWindowRegion* regions,
+                                            const size_t regionCount) const {
+  if (fadingFix || !display.supportsAsyncRefresh()) return false;
+  if (!display.displayPackedWindowsAsync(packed, packedSize, regions, regionCount, false)) return false;
+  return true;
+}
+
+bool GfxRenderer::refreshBusy() const { return display.refreshBusy(); }
+
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
   if (dst == nullptr || w <= 0 || h <= 0) return 0;
 

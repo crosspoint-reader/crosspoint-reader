@@ -181,6 +181,7 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+  bool getFadingFix() const { return fadingFix; }
 
   // Screen ops
   int getScreenWidth() const;
@@ -198,8 +199,21 @@ class GfxRenderer {
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.
   bool supportsAsyncRefresh() const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Display a logical screen rectangle through the X4 differential-window
+  // path. Falls back to a full FAST/HALF update when the region or state is not
+  // safe for a bounded temporary transfer. Returns true when a window was used.
+  bool displayWindow(int x, int y, int width, int height) const;
+  // Pack one logical rectangle into caller-owned contiguous storage and return
+  // its byte-aligned panel-memory descriptor. Used to combine sparse terminal
+  // row spans into one deferred SSD1677 activation without a framebuffer copy.
+  bool packWindowRegion(int x, int y, int width, int height, uint8_t* packed, size_t packedCapacity, size_t offset,
+                        HalDisplay::PackedWindowRegion& region, size_t& bytes) const;
+  bool displayPackedWindowsAsync(const uint8_t* packed, size_t packedSize,
+                                 const HalDisplay::PackedWindowRegion* regions, size_t regionCount) const;
+  bool refreshBusy() const;
+  void setFastRefreshProfile(HalDisplay::FastRefreshProfile profile) const { display.setFastRefreshProfile(profile); }
+  HalDisplay::FastRefreshProfile getFastRefreshProfile() const { return display.getFastRefreshProfile(); }
+  HalDisplay::RefreshTiming getLastRefreshTiming() const { return display.getLastRefreshTiming(); }
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;

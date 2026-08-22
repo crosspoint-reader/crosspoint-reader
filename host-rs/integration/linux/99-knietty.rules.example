@@ -1,0 +1,9 @@
+# USB CDC is not used by the current Wi-Fi-only knietty firmware on the tested
+# China-locked X4. This optional template is retained for future hardware that
+# exposes CDC. Replace the placeholders with values captured from `udevadm info`.
+# Install only one rule; VID, PID, and serial is the preferred match.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="VVVV", ATTRS{idProduct}=="PPPP", ATTRS{serial}=="DEVICE_SERIAL", SYMLINK+="knietty", TAG+="uaccess"
+
+# If no stable serial is exposed, use the exact observed product string in
+# addition to VID/PID. Do not install this fallback unchanged.
+# SUBSYSTEM=="tty", ATTRS{idVendor}=="VVVV", ATTRS{idProduct}=="PPPP", ATTRS{product}=="EXACT_PRODUCT", SYMLINK+="knietty", TAG+="uaccess"

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>dev.knietty.host</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__KNIETTY_EXECUTABLE__</string>
+    <string>--transport</string>
+    <string>wifi</string>
+    <string>--host</string>
+    <string>auto</string>
+    <string>--cols</string>
+    <string>80</string>
+    <string>--rows</string>
+    <string>24</string>
+    <string>--reconnect</string>
+    <string>--no-local-input</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/knietty.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/knietty.log</string>
+</dict>
+</plist>

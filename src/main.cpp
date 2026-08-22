@@ -256,9 +256,15 @@ void enterDeepSleep(bool fromTimeout = false) {
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
       (fromTimeout &&
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
+#ifdef KNIETTY_STABLE_POWER
+  // Normal sleep takes the released boot path; only Quick Resume depends on a
+  // retained framebuffer and skips the splash.
+  APP_STATE.showBootScreen = !isQuickResumeSleep;
+#else
   // Every sleep mode leaves a complete retained frame on the e-ink panel. Keep
   // it visible until the first useful reader or home paint replaces it.
   APP_STATE.showBootScreen = false;
+#endif
 
   APP_STATE.saveToFile();
 
@@ -383,7 +389,6 @@ void setup() {
       gpio.update();
       delay(10);
     }
-
     const uint8_t recoveryButton = BoardConfig::isX4Pro() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
     if (gpio.isPressed(recoveryButton)) {
       recoveryFirmwareMode = true;
@@ -575,8 +580,10 @@ void loop() {
     lastMemPrint = millis();
   }
 
+#ifndef KNIETTY_ENABLED
   // Handle incoming serial commands,
-  // nb: we use logSerial from logging to avoid deprecation warnings
+  // nb: we use logSerial from logging to avoid deprecation warnings. Dedicated
+  // knietty builds reserve every CDC byte for TerminalActivity instead.
   if (logSerial.available() > 0) {
     String line = logSerial.readStringUntil('\n');
     if (line.startsWith("CMD:")) {
@@ -591,6 +598,7 @@ void loop() {
       }
     }
   }
+#endif
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
@@ -663,8 +671,8 @@ void loop() {
   static bool powerReleasedSinceWake = false;
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
-  if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+  if (!activityManager.ownsPowerButton() && powerReleasedSinceWake && millis() >= allowSleepAt &&
+      gpio.isPressed(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
@@ -687,7 +695,7 @@ void loop() {
 #endif
 
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
+  if (!activityManager.ownsPowerButton() && SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
     if (!activityManager.handleForcedRefresh()) {

@@ -25,6 +25,9 @@ lib/EpdFont/scripts/output/
 # locks, settings.local, scout CLEANUP.md).
 .claude/*
 /managed_components
+/host-rs/target/
+# Raw PTY captures may contain screen contents and echoed commands.
+/captures/
 /.dummy
 /CMakeLists.txt
 /dependencies.lock

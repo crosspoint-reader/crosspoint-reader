@@ -1,0 +1,13 @@
+[Unit]
+Description=knietty XTEINK X4 foreground terminal bridge
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.cargo/bin/knietty --transport wifi --host auto --cols 80 --rows 24 --reconnect --no-local-input
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

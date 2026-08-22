@@ -1,4 +1,4 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/Free-Ink/freeink-sdk.git
+	url = https://github.com/integerQuant/freeink-sdk.git
 	branch = main

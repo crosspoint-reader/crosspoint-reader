@@ -43,6 +43,10 @@ class Activity {
 
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
+  // Activities that give the power button an in-app meaning can suppress the
+  // global short-refresh and long-hold deep-sleep handlers. They remain
+  // responsible for presenting and handling that button themselves.
+  virtual bool ownsPowerButton() const { return false; }
   virtual bool isReaderActivity() const { return false; }
   // True for the reading surfaces night mode inverts (EPUB/TXT/XTC). Resolved
   // per render by ActivityManager, so menus, overlays, and every other screen
