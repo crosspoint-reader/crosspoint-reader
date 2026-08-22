@@ -16,6 +16,8 @@ std::shared_ptr<Epub> epubWith(std::string xhtml) {
 
 const char* kNestedFixture = R"(<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><body><div><section><p>Alpha bravo</p><p>Second <em>nested</em> tail</p></section></div></body></html>)";
+
+const char* kNonVisibleInlineFixture = R"(<html><body><p><RP><span>hidden</span></RP>Visible text</p></body></html>)";
 }  // namespace
 
 TEST(KOReaderXPathResolver, ResolvesExactOffsetWithFullAncestry) {
@@ -37,6 +39,13 @@ TEST(KOReaderXPathResolver, EmitsDetailedAnchorForOffsetZero) {
 
   EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 0),
             "/body/DocFragment[1]/body/div[1]/section[1]/p[1]/text()[1].0");
+}
+
+TEST(KOReaderXPathResolver, IgnoresNestedNonVisibleInlineText) {
+  const auto epub = epubWith(kNonVisibleInlineFixture);
+
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 0),
+            "/body/DocFragment[1]/body/p[1]/text()[1].0");
 }
 
 TEST(KOReaderXPathResolver, CountsUtf8CodepointsInsteadOfBytes) {

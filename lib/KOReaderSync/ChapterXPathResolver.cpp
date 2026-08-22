@@ -1,5 +1,6 @@
 #include "ChapterXPathResolver.h"
 
+#include <Epub/VisibleTextUtils.h>
 #include <Logging.h>
 #include <Print.h>
 #include <Utf8.h>
@@ -419,6 +420,10 @@ class XPathProgressResolver final : public Print {
     textNodeIndexStack.push_back(0);
     pendingTextNode = true;
 
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
+      nonVisibleDepth++;
+    }
+
     if (name == "p") {
       paragraphDepth++;
     }
@@ -442,9 +447,13 @@ class XPathProgressResolver final : public Print {
       parentStates.clear();
       path.clear();
       textNodeIndexStack.clear();
+      nonVisibleDepth = 0;
       return;
     }
 
+    if (nonVisibleDepth > 0) {
+      nonVisibleDepth--;
+    }
     if (name == "p" && paragraphDepth > 0) {
       paragraphDepth--;
     }
@@ -467,7 +476,7 @@ class XPathProgressResolver final : public Print {
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
+    if (!insideBody || nonVisibleDepth > 0 || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
       return;
     }
 
@@ -511,6 +520,7 @@ class XPathProgressResolver final : public Print {
   int bodyDepth = -1;
   int paragraphDepth = 0;
   int liDepth = 0;
+  uint16_t nonVisibleDepth = 0;
   size_t visibleChars = 0;
   size_t textNodeStartChars = 0;
   std::vector<int> textNodeIndexStack;

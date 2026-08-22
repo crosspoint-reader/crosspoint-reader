@@ -25,8 +25,7 @@ class Epub {
     return {"chapter" + std::to_string(spineIndex) + ".xhtml"};
   }
 
-  bool readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize,
-                                bool = false) const {
+  bool readItemContentsToStream(const std::string& itemHref, Print& out, const size_t chunkSize, bool = false) const {
     for (int spineIndex = 0; spineIndex < getSpineItemsCount(); spineIndex++) {
       if (itemHref != getSpineItem(spineIndex).href) {
         continue;
