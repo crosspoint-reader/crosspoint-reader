@@ -23,7 +23,8 @@ std::string bookCachePath(const std::string& path) {
   if (FsHelpers::hasXtcExtension(path)) {
     return BookCachePath::forBook(CACHE_ROOT, BookCachePath::XTC_PREFIX, path);
   }
-  if (FsHelpers::hasTxtExtension(path)) {
+  // Markdown is read by the TXT reader, so it caches under the same prefix.
+  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     return BookCachePath::forBook(CACHE_ROOT, BookCachePath::TXT_PREFIX, path);
   }
   return {};
@@ -34,7 +35,7 @@ void clearBookCache(const std::string& path) {
     Epub(path, CACHE_ROOT).clearCache();
   } else if (FsHelpers::hasXtcExtension(path)) {
     Xtc(path, CACHE_ROOT).clearCache();
-  } else if (FsHelpers::hasTxtExtension(path)) {
+  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     Txt(path, CACHE_ROOT).clearCache();
   } else {
     return;
