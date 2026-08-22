@@ -471,8 +471,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Prefer per-server saveDirectory; fall back to the global setting ("" => SD root).
   // Both are null-terminated (std::string::c_str() / char[64]); exists()/mkdir()
   // take const char*.
-  const char* folder = !server.saveDirectory.empty() ? server.saveDirectory.c_str()
-                                                     : SETTINGS.opdsDownloadFolder;
+  const char* folder = !server.saveDirectory.empty() ? server.saveDirectory.c_str() : SETTINGS.opdsDownloadFolder;
   bool haveFolder = folder[0] != '\0';
   if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every

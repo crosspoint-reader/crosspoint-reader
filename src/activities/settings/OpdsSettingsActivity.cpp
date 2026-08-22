@@ -34,9 +34,9 @@ OpdsSettingsActivity::OpdsSettingsActivity(GfxRenderer& renderer, MappedInputMan
     : UiListActivity("OpdsSettings", renderer, mappedInput), serverIndex(serverIndex) {
   // Labels never change (unlike the values, which track editServer's fields
   // live), so they're set once here rather than every buildScreen() call.
-  static constexpr StrId fieldNames[BASE_ITEMS] = {
-      StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL, StrId::STR_USERNAME, StrId::STR_PASSWORD,
-      StrId::STR_OPDS_DOWNLOAD_FOLDER};
+  static constexpr StrId fieldNames[BASE_ITEMS] = {StrId::STR_SERVER_NAME, StrId::STR_OPDS_SERVER_URL,
+                                                   StrId::STR_USERNAME, StrId::STR_PASSWORD,
+                                                   StrId::STR_OPDS_DOWNLOAD_FOLDER};
   for (int i = 0; i < BASE_ITEMS; i++) {
     fieldRowItems[i].label = I18N.get(fieldNames[i]);
     fieldRowItems[i].actionValue = static_cast<int16_t>(i);
@@ -173,10 +173,9 @@ void OpdsSettingsActivity::handleSelection() {
         requestUpdate();
       }
     };
-    startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
-                                                editServer.saveDirectory, 63, InputType::Text),
-        handler);
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
+                                                                   editServer.saveDirectory, 63, InputType::Text),
+                           handler);
   } else if (nav.selected == 5 && !isNewServer) {
     // Delete flow is only available for existing servers.
     if (!OPDS_STORE.removeServer(static_cast<size_t>(serverIndex))) {
@@ -213,8 +212,7 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   fieldRowItems[1].value = editServer.url.empty() ? tr(STR_NOT_SET) : editServer.url.c_str();
   fieldRowItems[2].value = editServer.username.empty() ? tr(STR_NOT_SET) : editServer.username.c_str();
   fieldRowItems[3].value = editServer.password.empty() ? tr(STR_NOT_SET) : "******";
-  fieldRowItems[4].value =
-      editServer.saveDirectory.empty() ? tr(STR_OPDS_SD_ROOT) : editServer.saveDirectory.c_str();
+  fieldRowItems[4].value = editServer.saveDirectory.empty() ? tr(STR_OPDS_SD_ROOT) : editServer.saveDirectory.c_str();
 
   fui::ListProps props;
   props.items = fieldRowItems;
