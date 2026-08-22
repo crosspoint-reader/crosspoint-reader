@@ -1,5 +1,6 @@
 #include "BookCacheUtils.h"
 
+#include <BookCachePath.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -16,29 +17,17 @@ constexpr char CACHE_ROOT[] = "/.crosspoint";
 
 }  // namespace
 
-bool isBookCacheDirectoryName(const char* name) {
-  if (!name) {
-    return false;
-  }
-
-  constexpr char EPUB_PREFIX[] = "epub_";
-  constexpr char TXT_PREFIX[] = "txt_";
-  constexpr char XTC_PREFIX[] = "xtc_";
-
-  return strncmp(name, EPUB_PREFIX, std::size(EPUB_PREFIX) - 1) == 0 ||
-         strncmp(name, TXT_PREFIX, std::size(TXT_PREFIX) - 1) == 0 ||
-         strncmp(name, XTC_PREFIX, std::size(XTC_PREFIX) - 1) == 0;
-}
+bool isBookCacheDirectoryName(const char* name) { return name && BookCachePath::isCacheDirName(name); }
 
 std::string bookCachePath(const std::string& path) {
   if (FsHelpers::hasEpubExtension(path)) {
-    return Epub(path, CACHE_ROOT).getCachePath();
+    return BookCachePath::forBook(CACHE_ROOT, BookCachePath::EPUB_PREFIX, path);
   }
   if (FsHelpers::hasXtcExtension(path)) {
-    return Xtc(path, CACHE_ROOT).getCachePath();
+    return BookCachePath::forBook(CACHE_ROOT, BookCachePath::XTC_PREFIX, path);
   }
   if (FsHelpers::hasTxtExtension(path)) {
-    return Txt(path, CACHE_ROOT).getCachePath();
+    return BookCachePath::forBook(CACHE_ROOT, BookCachePath::TXT_PREFIX, path);
   }
   return {};
 }

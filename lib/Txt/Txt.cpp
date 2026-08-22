@@ -1,14 +1,13 @@
 #include "Txt.h"
 
+#include <BookCachePath.h>
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
 
 Txt::Txt(std::string path, std::string cacheBasePath)
     : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
-  // Generate cache path from file path hash
-  const size_t hash = std::hash<std::string>{}(filepath);
-  cachePath = this->cacheBasePath + "/txt_" + std::to_string(hash);
+  cachePath = BookCachePath::forBook(this->cacheBasePath, BookCachePath::TXT_PREFIX, filepath);
 }
 
 bool Txt::load() {
