@@ -18,7 +18,14 @@ struct BookCacheMove {
   bool dropped = false;
 };
 
-// Call once the file itself has been moved on disk. Drops the cache instead of
+// Removes the cache directory a file would map to, if one is there. A book
+// about to be moved onto that path must not inherit it. False when it is
+// there and could not be removed.
+bool clearCacheAt(const std::string& path);
+
+// Call once the file itself has been moved on disk, and once the destination
+// has been cleared with clearCacheAt: a cache still sitting there fails the
+// move, since SdFat's rename does not overwrite. Drops the cache instead of
 // moving it when the destination is not a recognised book type.
 BookCacheMove moveBookCache(const std::string& oldPath, const std::string& newPath);
 

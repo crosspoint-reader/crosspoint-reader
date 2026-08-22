@@ -42,18 +42,21 @@ void clearBookCache(const std::string& path) {
   LOG_DBG("BookCache", "Done checking metadata cache for: %s", path.c_str());
 }
 
-BookCacheMove moveBookCache(const std::string& oldPath, const std::string& newPath) {
-  const std::string newCachePath = bookCachePath(newPath);
-
-  // Anything already at the destination belongs to a book that no longer lives
-  // there. Left in place it would be picked up as the moved file's own cache,
-  // whether or not that file brings a cache of its own.
-  if (!newCachePath.empty() && Storage.exists(newCachePath.c_str())) {
-    if (!Storage.removeDir(newCachePath.c_str())) {
-      LOG_ERR("BookCache", "Failed to clear cache dir %s (non-fatal)", newCachePath.c_str());
-    }
+bool clearCacheAt(const std::string& path) {
+  const std::string cachePath = bookCachePath(path);
+  if (cachePath.empty() || !Storage.exists(cachePath.c_str())) {
+    return true;
   }
 
+  if (!Storage.removeDir(cachePath.c_str())) {
+    LOG_ERR("BookCache", "Failed to clear cache dir %s", cachePath.c_str());
+    return false;
+  }
+  return true;
+}
+
+BookCacheMove moveBookCache(const std::string& oldPath, const std::string& newPath) {
+  const std::string newCachePath = bookCachePath(newPath);
   const std::string oldCachePath = bookCachePath(oldPath);
   if (oldCachePath.empty()) {
     return {};
