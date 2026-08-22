@@ -14,6 +14,7 @@
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
+#include "util/BookFile.h"
 
 UITheme UITheme::instance;
 
@@ -133,11 +134,14 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   if (filename.back() == '/') {
     return Folder;
   }
-  if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename)) {
-    return Book;
-  }
-  if (FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename)) {
-    return Text;
+  switch (bookFormat(filename)) {
+    case BookFormat::Epub:
+    case BookFormat::Xtc:
+      return Book;
+    case BookFormat::Txt:
+      return Text;
+    case BookFormat::Unknown:
+      break;
   }
   if (FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename)) {
     return Image;

@@ -8,16 +8,11 @@
 #include <algorithm>
 #include <string_view>
 
+#include "BookFile.h"
 #include "CrossPointSettings.h"
 
 namespace {
 constexpr size_t NAME_BUFFER_SIZE = 500;
-
-bool isSupportedBookFile(const std::string_view name) {
-  // Formats ReaderActivity can open (bmp is a viewer, not a book, so it is excluded)
-  return FsHelpers::hasEpubExtension(name) || FsHelpers::hasXtcExtension(name) || FsHelpers::hasTxtExtension(name) ||
-         FsHelpers::hasMarkdownExtension(name);
-}
 }  // namespace
 
 std::vector<std::string> NextBookFinder::findNextBooks(const std::string& currentBookPath, const size_t maxCount) {
@@ -60,7 +55,7 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
     if (!SETTINGS.showHiddenFiles && nameBuffer[0] == '.') {
       continue;
     }
-    if (!isSupportedBookFile(nameBuffer.get())) {
+    if (!isBook(nameBuffer.get())) {
       continue;
     }
     std::string name{nameBuffer.get()};

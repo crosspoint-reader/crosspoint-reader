@@ -1,13 +1,12 @@
 #include "RecentBooksStore.h"
 
-#include <Epub.h>
-#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
-#include <Xtc.h>
 
 #include <algorithm>
 #include <iterator>
+
+#include "util/BookFile.h"
 
 void RecentBooksStore::toJson(JsonDocument& doc) const {
   JsonArray arr = doc["books"].to<JsonArray>();
@@ -112,29 +111,6 @@ bool RecentBooksStore::pruneMissing() {
 }
 
 RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
-  std::string lastBookFileName = "";
-  const size_t lastSlash = path.find_last_of('/');
-  if (lastSlash != std::string::npos) {
-    lastBookFileName = path.substr(lastSlash + 1);
-  }
-
-  LOG_DBG("RBS", "Loading recent book: %s", path.c_str());
-
-  // If epub, try to load the metadata for title/author and cover.
-  // Use buildIfMissing=false to avoid heavy epub loading on boot; getTitle()/getAuthor() may be
-  // blank until the book is opened, and entries with missing title are omitted from recent list.
-  if (FsHelpers::hasEpubExtension(lastBookFileName)) {
-    Epub epub(path, "/.crosspoint");
-    epub.load(false, true);
-    return RecentBook{path, epub.getTitle(), epub.getAuthor(), epub.getThumbBmpPath()};
-  } else if (FsHelpers::hasXtcExtension(lastBookFileName)) {
-    // Handle XTC file
-    Xtc xtc(path, "/.crosspoint");
-    if (xtc.load()) {
-      return RecentBook{path, xtc.getTitle(), xtc.getAuthor(), xtc.getThumbBmpPath()};
-    }
-  } else if (FsHelpers::hasTxtExtension(lastBookFileName) || FsHelpers::hasMarkdownExtension(lastBookFileName)) {
-    return RecentBook{path, lastBookFileName, "", ""};
-  }
-  return RecentBook{path, "", "", ""};
+  const BookInfo info = readBookInfo(path);
+  return RecentBook{path, info.title, info.author, info.thumbBmpPath};
 }
