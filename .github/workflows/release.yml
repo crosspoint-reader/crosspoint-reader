@@ -81,3 +81,50 @@ jobs:
             .pio/build/${{ matrix.pio_env }}/firmware.elf
             .pio/build/${{ matrix.pio_env }}/firmware.map
             .pio/build/${{ matrix.pio_env }}/partitions.bin
+
+  # Languages left out of the firmware ship as .cplang packs for the SD card. A pack is
+  # indexed by string-key position and refuses to load when the count differs, so it only
+  # works with the build it came from. Built from the same tag, attached to the same release.
+  language-packs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Generate language packs
+        run: |
+          # Read the built-in set from platformio.ini so the packs are exactly the
+          # complement of what the firmware carries.
+          BUILTIN=$(sed -n 's/^custom_i18n_builtin_langs *= *//p' platformio.ini | head -1)
+          if [ -z "$BUILTIN" ]; then
+            echo "custom_i18n_builtin_langs missing from platformio.ini" >&2
+            exit 1
+          fi
+          echo "Built-in languages: $BUILTIN"
+          # --strip-unused: the pre-build hook uses it, so the key counts must agree.
+          python3 scripts/gen_i18n.py lib/I18n/translations lib/I18n/ \
+            --strip-unused --builtin-langs "$BUILTIN" --pack-dir dist/lang
+          # At the default `all` there is nothing to ship. Skip the steps below rather than
+          # attach an empty zip to every release.
+          COUNT=$(find dist/lang -name '*.cplang' | wc -l | tr -d ' ')
+          echo "Generated $COUNT pack(s)"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+        id: packs
+
+      - name: Bundle packs
+        if: steps.packs.outputs.count != '0'
+        run: |
+          cd dist
+          zip -r ../language-packs.zip lang
+
+      - name: Upload Artifacts
+        if: steps.packs.outputs.count != '0'
+        uses: actions/upload-artifact@v4
+        with:
+          name: language-packs
+          path: |
+            language-packs.zip
+            dist/lang/*.cplang

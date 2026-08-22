@@ -36,6 +36,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
       - [Cover settings](#cover-settings)
       - [Custom images](#custom-images)
     - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
+    - [3.9 Language Packs (SD Card)](#39-language-packs-sd-card)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
@@ -310,7 +311,9 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
 
-- **Language**: Set the UI language. CrossPoint supports 24 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, and Hebrew.
+- **Language**: Set the UI language. Official builds carry every translation. Some builds compile in only a few and
+  ship the rest as SD card files — there, the missing ones are listed but marked **Needs pack**. See
+  [Language Packs (SD Card)](#39-language-packs-sd-card).
 
 - **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
 
@@ -553,7 +556,22 @@ Once installed, custom fonts appear in **Settings → Reader → Font Family** a
 
 See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation details and SD card folder structure.
 
----
+### 3.9 Language Packs (SD Card)
+
+Official releases compile every translation into the firmware. This section only applies to builds that trade
+languages for flash space. Those keep a few languages in the firmware and ship the rest as `.cplang` files for the SD
+card. Every language still appears in the list. The ones needing a file are marked **Needs pack**, and picking one
+does nothing until you install it.
+
+To install one:
+
+1. Download `language-packs.zip` from the release you are running.
+2. Unzip it. Copy the file for your language, e.g. `RU.cplang` into `/.crosspoint/lang/` on the card. Create the
+   folder if it is missing.
+3. Put the card back, then choose the language in **Settings → System → Language**.
+
+Packs and firmware are a matched pair. After a firmware update, get the packs from that release too. An old pack is
+rejected and the language stays as it was.
 
 ## 4. Reading Mode
 

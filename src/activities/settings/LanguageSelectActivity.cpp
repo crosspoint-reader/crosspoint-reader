@@ -31,10 +31,15 @@ void LanguageSelectActivity::onEnter() {
   // and the "Selected" marker can't go stale mid-visit since activateIndex()
   // finishes the activity immediately on selection.
   for (int i = 0; i < totalItems; ++i) {
+    const auto lang = static_cast<Language>(SORTED_LANGUAGE_INDICES[i]);
     fui::ListItem item;
-    item.label = I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[i]));
+    item.label = I18N.getLanguageName(lang);
     if (SORTED_LANGUAGE_INDICES[i] == currentLang) {
       item.value = tr(STR_SELECTED);
+    } else if (!I18n::isLanguageAvailable(lang)) {
+      // Listed but not selectable until the pack is on the card. Hiding it would just make the
+      // language look unsupported.
+      item.value = tr(STR_LANGUAGE_PACK_MISSING);
     }
     item.actionValue = static_cast<int16_t>(i);
     rowItems[i] = item;
@@ -50,9 +55,18 @@ void LanguageSelectActivity::activateIndex(const int index) {
   nav.selected = index;
   const uint8_t langIndex = SORTED_LANGUAGE_INDICES[index];
 
+  bool switched = false;
   {
     RenderLock lock(*this);
-    I18N.setLanguage(static_cast<Language>(langIndex));
+    switched = I18N.setLanguage(static_cast<Language>(langIndex));
+  }
+
+  // Only record a language the UI actually switched to. A language whose .cplang pack is not on
+  // the card leaves the interface in the previous one, and persisting the choice anyway would
+  // mean every later boot silently falls back with nothing on screen explaining why.
+  if (!switched) {
+    requestUpdate();
+    return;
   }
 
   SETTINGS.language = langIndex;

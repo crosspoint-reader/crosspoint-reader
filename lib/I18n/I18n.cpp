@@ -1,11 +1,34 @@
 #include "I18n.h"
 
+#include <HalStorage.h>
+#include <Logging.h>
+#include <Memory.h>
+
 #include <cstddef>
+#include <cstdio>
 #include <cstring>
 
 #include "I18nStrings.h"
 
 using namespace i18n_strings;
+
+namespace {
+// .cplang layout, little-endian, written by scripts/gen_i18n.py::write_language_packs():
+//   magic[8] "CPLANG\0\0" | version u16 | keyCount u16 | blobLen u16 | code[4]
+//   offsets u16 * keyCount | blob blobLen
+// Offsets use the same bit-15 "same as English" encoding as the compiled tables, so a pack
+// resolves those entries against STRINGS_EN_DATA. That is why English is always built in.
+constexpr char PACK_MAGIC[8] = {'C', 'P', 'L', 'A', 'N', 'G', '\0', '\0'};
+constexpr uint16_t PACK_VERSION = 1;
+constexpr size_t PACK_HEADER_BYTES = 18;
+
+// HalFile::read returns a signed count. Comparing it against a sizeof() is a sign mismatch,
+// so wrap it once.
+bool readExactly(HalFile& file, void* dst, const size_t count) {
+  const int got = file.read(dst, count);
+  return got > 0 && static_cast<size_t>(got) == count;
+}
+}  // namespace
 
 I18n& I18n::getInstance() {
   static I18n instance;
@@ -18,8 +41,10 @@ const char* I18n::get(StrId id) const {
     return "???";
   }
 
-  // Use generated helper function - no hardcoded switch needed!
-  const LangStrings lang = getLanguageStrings(_language);
+  // A loaded pack wins. getLanguageStrings() returns {nullptr, nullptr} for anything not
+  // compiled in.
+  const LangStrings lang = _packStrings.data ? _packStrings : getLanguageStrings(_language);
+  if (!lang.data || !lang.offsets) return "???";
 
   // If bit 15 of the offset is set, apply the offset to the English lookup table
   const uint16_t off = lang.offsets[index];
@@ -27,11 +52,84 @@ const char* I18n::get(StrId id) const {
   return lang.data + off;
 }
 
-void I18n::setLanguage(Language lang) {
+bool I18n::setLanguage(Language lang) {
   if (lang >= Language::_COUNT) {
-    return;
+    return false;
+  }
+  if (isLanguageBuiltIn(lang)) {
+    // Drop the old pack. It is the biggest allocation this class makes, and nothing reads it
+    // once a compiled-in language is active.
+    _packBuffer.reset();
+    _packStrings = {nullptr, nullptr};
+    _language = lang;
+    return true;
+  }
+  if (!loadPack(lang)) {
+    LOG_ERR("I18N", "No usable pack for %s; keeping %s", LANGUAGE_CODES[static_cast<size_t>(lang)],
+            LANGUAGE_CODES[static_cast<size_t>(_language)]);
+    return false;
   }
   _language = lang;
+  return true;
+}
+
+bool I18n::loadPack(const Language lang) {
+  char path[64];
+  snprintf(path, sizeof(path), "%s/%s.cplang", PACK_DIR, LANGUAGE_CODES[static_cast<size_t>(lang)]);
+
+  HalFile file;
+  if (!Storage.openFileForRead("I18N", path, file)) return false;
+
+  uint8_t header[PACK_HEADER_BYTES];
+  if (!readExactly(file, header, sizeof(header))) return false;
+  if (memcmp(header, PACK_MAGIC, sizeof(PACK_MAGIC)) != 0) {
+    LOG_ERR("I18N", "%s: not a language pack", path);
+    return false;
+  }
+  uint16_t version = 0;
+  uint16_t keyCount = 0;
+  uint16_t blobLen = 0;
+  memcpy(&version, header + 8, sizeof(version));
+  memcpy(&keyCount, header + 10, sizeof(keyCount));
+  memcpy(&blobLen, header + 12, sizeof(blobLen));
+  if (version != PACK_VERSION) {
+    LOG_ERR("I18N", "%s: pack version %u, firmware wants %u", path, version, PACK_VERSION);
+    return false;
+  }
+  // Offsets index the table by position. A pack built against different keys would return the
+  // wrong strings, quietly. Refuse it.
+  if (keyCount != static_cast<uint16_t>(StrId::_COUNT)) {
+    LOG_ERR("I18N", "%s: pack has %u keys, firmware has %u -- regenerate the packs", path, keyCount,
+            static_cast<unsigned>(StrId::_COUNT));
+    return false;
+  }
+
+  const size_t offsetBytes = static_cast<size_t>(keyCount) * sizeof(uint16_t);
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(offsetBytes + blobLen);
+  if (!buffer) {
+    LOG_ERR("I18N", "OOM: %u bytes for %s", static_cast<unsigned>(offsetBytes + blobLen), path);
+    return false;
+  }
+  if (!readExactly(file, buffer.get(), offsetBytes + blobLen)) {
+    LOG_ERR("I18N", "%s: truncated pack", path);
+    return false;
+  }
+
+  // Publish only after the whole read succeeds. A partial read must never reach get().
+  _packBuffer = std::move(buffer);
+  _packStrings = {reinterpret_cast<const char*>(_packBuffer.get() + offsetBytes),
+                  reinterpret_cast<const uint16_t*>(_packBuffer.get())};
+  LOG_INF("I18N", "Loaded %s pack (%u bytes)", LANGUAGE_CODES[static_cast<size_t>(lang)],
+          static_cast<unsigned>(offsetBytes + blobLen));
+  return true;
+}
+
+bool I18n::isLanguageAvailable(const Language lang) {
+  if (lang >= Language::_COUNT) return false;
+  if (isLanguageBuiltIn(lang)) return true;
+  char path[64];
+  snprintf(path, sizeof(path), "%s/%s.cplang", PACK_DIR, LANGUAGE_CODES[static_cast<size_t>(lang)]);
+  return Storage.exists(path);
 }
 
 const char* I18n::getLanguageName(Language lang) const {

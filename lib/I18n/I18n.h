@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 
 #include "I18nKeys.h"
 /**
@@ -21,7 +22,17 @@ class I18n {
   const char* operator[](StrId id) const { return get(id); }
 
   Language getLanguage() const { return _language; }
-  void setLanguage(Language lang);
+  /// Select the UI language. A compiled-in language switches with no I/O. Anything else needs
+  /// its .cplang pack on the card, read here into one heap buffer. If the pack is missing or
+  /// unusable the language does not change and this returns false.
+  bool setLanguage(Language lang);
+
+  /// True when `lang` can be selected right now — compiled in, or its pack is on the card.
+  /// The picker uses this to mark the rest.
+  static bool isLanguageAvailable(Language lang);
+
+  /// Directory holding the .cplang packs, alongside the SD font roots.
+  static constexpr const char* PACK_DIR = "/.crosspoint/lang";
   const char* getLanguageName(Language lang) const;
   static Language languageFromCode(const char* code);
 
@@ -32,7 +43,16 @@ class I18n {
  private:
   I18n() : _language(Language::EN) {}
 
+  // Reads PACK_DIR/<CODE>.cplang into _packBuffer and points _packStrings at it.
+  // Leaves both untouched and returns false on any rejection.
+  bool loadPack(Language lang);
+
   Language _language;
+  // Backing store for a language that is not compiled in, held while that language is active.
+  // get() runs in the render loop and resolves by pointer; it never touches the card. Null when
+  // the active language is built in.
+  std::unique_ptr<uint8_t[]> _packBuffer;
+  LangStrings _packStrings{nullptr, nullptr};
 };
 
 // Convenience macros
