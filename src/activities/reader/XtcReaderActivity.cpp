@@ -180,13 +180,12 @@ void XtcReaderActivity::renderPage() {
     const size_t planeSize = (static_cast<size_t>(pageWidth) * pageHeight + 7) / 8;
     const uint8_t* plane1 = pageBuffer;
     const uint8_t* plane2 = pageBuffer + planeSize;
-    const size_t colBytes = (pageHeight + 7) / 8;
 
     auto getPixelValue = [&](uint16_t x, uint16_t y) -> uint8_t {
-      const size_t colIndex = pageWidth - 1 - x;
-      const size_t byteInCol = y / 8;
-      const size_t bitInByte = 7 - (y % 8);
-      const size_t byteOffset = colIndex * colBytes + byteInCol;
+      // Columns run right to left and their bits are packed continuously, as loadPage() reads them
+      const size_t bitIndex = static_cast<size_t>(pageWidth - 1 - x) * pageHeight + y;
+      const size_t byteOffset = bitIndex / 8;
+      const size_t bitInByte = 7 - (bitIndex % 8);
       const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
       const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
       return (bit1 << 1) | bit2;

@@ -165,18 +165,14 @@ bool Xtc::generateCoverBmp() const {
   }
 
   const size_t dstRowSize = (static_cast<size_t>(pageInfo.width) * bitDepth + 7) / 8;
-  const size_t colBytes = (pageInfo.height + 7) / 8;  // Bytes per column, 2-bit only
 
   // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes.
-  // A height that is not a multiple of 8 leaves the last column partly filled, so the
-  // plane the columns actually span is longer than the declared plane size.
+  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
   size_t planeSize = 0;
   size_t bitmapSize;
   if (bitDepth == 2) {
     planeSize = (static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8;
-    const size_t spannedSize = static_cast<size_t>(pageInfo.width) * colBytes;
-    bitmapSize = planeSize + std::max(planeSize, spannedSize);
+    bitmapSize = planeSize * 2;
   } else {
     bitmapSize = dstRowSize * pageInfo.height;
   }
@@ -213,6 +209,11 @@ bool Xtc::generateCoverBmp() const {
   const uint8_t padding[4] = {0, 0, 0, 0};
   const size_t paddingSize = (4 - dstRowSize % 4) % 4;  // BMP rows are 4-byte aligned
 
+  bool writeOk = true;
+  const auto writeChunk = [&](const void* data, size_t size) {
+    writeOk = writeOk && coverBmp.write(data, size) == size;
+  };
+
   if (bitDepth == 2) {
     // XTH 2-bit mode: Two bit planes, column-major order
     // - Columns scanned right to left (x = width-1 down to 0)
@@ -224,17 +225,16 @@ bool Xtc::generateCoverBmp() const {
 
     Bmp2BitHeader bmpHeader;
     createBmp2BitHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
-    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+    writeChunk(&bmpHeader, sizeof(bmpHeader));
 
-    for (uint16_t y = 0; y < pageInfo.height; y++) {
+    for (uint16_t y = 0; y < pageInfo.height && writeOk; y++) {
       memset(rowBuffer.get(), 0, dstRowSize);
-
-      const size_t byteInCol = y / 8;
-      const size_t bitInByte = 7 - (y % 8);  // MSB = topmost pixel
 
       for (uint16_t x = 0; x < pageInfo.width; x++) {
         // Column-major, right to left: column index = (width - 1 - x)
-        const size_t byteOffset = (pageInfo.width - 1 - x) * colBytes + byteInCol;
+        const size_t bitIndex = static_cast<size_t>(pageInfo.width - 1 - x) * pageInfo.height + y;
+        const size_t byteOffset = bitIndex / 8;
+        const size_t bitInByte = 7 - (bitIndex % 8);  // MSB = topmost pixel
         const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
         const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
         const uint8_t pixelValue = (bit1 << 1) | bit2;
@@ -242,23 +242,31 @@ bool Xtc::generateCoverBmp() const {
         rowBuffer[x >> 2] |= XTC_LEVEL_TO_PALETTE[pixelValue] << (6 - ((x & 3) * 2));
       }
 
-      coverBmp.write(rowBuffer.get(), dstRowSize);
+      writeChunk(rowBuffer.get(), dstRowSize);
       if (paddingSize > 0) {
-        coverBmp.write(padding, paddingSize);
+        writeChunk(padding, paddingSize);
       }
     }
   } else {
     // Source rows are already packed as 1-bit BMP rows
     BmpHeader bmpHeader;
     createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
-    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+    writeChunk(&bmpHeader, sizeof(bmpHeader));
 
-    for (uint16_t y = 0; y < pageInfo.height; y++) {
-      coverBmp.write(pageBuffer.get() + y * dstRowSize, dstRowSize);
+    for (uint16_t y = 0; y < pageInfo.height && writeOk; y++) {
+      writeChunk(pageBuffer.get() + y * dstRowSize, dstRowSize);
       if (paddingSize > 0) {
-        coverBmp.write(padding, paddingSize);
+        writeChunk(padding, paddingSize);
       }
     }
+  }
+
+  if (!writeOk) {
+    LOG_ERR("XTC", "Failed to write cover BMP: %s", coverPath.c_str());
+    // Close before removing the half-written file, otherwise the next run caches it
+    coverBmp.close();
+    Storage.remove(coverPath.c_str());
+    return false;
   }
 
   LOG_DBG("XTC", "Generated cover BMP: %s (%u-bit)", coverPath.c_str(), bitDepth);
@@ -317,14 +325,11 @@ bool Xtc::generateThumbBmp(int height) const {
   LOG_DBG("XTC", "Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)", pageInfo.width, pageInfo.height, thumbWidth,
           thumbHeight, scale);
 
-  // Allocate buffer for page data, sized like generateCoverBmp() so partly filled
-  // columns of an XTH plane stay inside the buffer
+  // Allocate buffer for page data
   const size_t planeSize = (bitDepth == 2) ? ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) : 0;
-  const size_t planeBytes =
-      (bitDepth == 2) ? std::max(planeSize, static_cast<size_t>(pageInfo.width) * ((pageInfo.height + 7) / 8)) : 0;
   size_t bitmapSize;
   if (bitDepth == 2) {
-    bitmapSize = planeSize + planeBytes;
+    bitmapSize = planeSize * 2;
   } else {
     bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
   }
@@ -370,7 +375,6 @@ bool Xtc::generateThumbBmp(int height) const {
   // Pre-calculate plane info for 2-bit mode
   const uint8_t* plane1 = (bitDepth == 2) ? pageBuffer : nullptr;
   const uint8_t* plane2 = (bitDepth == 2) ? pageBuffer + planeSize : nullptr;
-  const size_t colBytes = (bitDepth == 2) ? ((pageInfo.height + 7) / 8) : 0;
   const size_t srcRowBytes = (bitDepth == 1) ? ((pageInfo.width + 7) / 8) : 0;
   uint8_t rowsSinceYield = 0;
 
@@ -406,12 +410,11 @@ bool Xtc::generateThumbBmp(int height) const {
             // XTH 2-bit mode: pixel value 0-3
             // Bounds check for column index
             if (srcX < pageInfo.width) {
-              const size_t colIndex = pageInfo.width - 1 - srcX;
-              const size_t byteInCol = srcY / 8;
-              const size_t bitInByte = 7 - (srcY % 8);
-              const size_t byteOffset = colIndex * colBytes + byteInCol;
+              const size_t bitIndex = (pageInfo.width - 1 - srcX) * static_cast<size_t>(pageInfo.height) + srcY;
+              const size_t byteOffset = bitIndex / 8;
+              const size_t bitInByte = 7 - (bitIndex % 8);
               // Bounds check for buffer access
-              if (byteOffset < planeBytes) {
+              if (byteOffset < planeSize) {
                 const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
                 const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
                 const uint8_t pixelValue = (bit1 << 1) | bit2;
