@@ -8,9 +8,6 @@
 #include "RecentBooksStore.h"
 
 bool moveBook(const std::string& oldPath, const std::string& newPath) {
-  const std::string oldCachePath = bookCachePath(oldPath);
-  const std::string newCachePath = bookCachePath(newPath);
-
   // SdFat must not rename a path that still has an open file, so callers hand
   // over a path they have already closed.
   if (!Storage.rename(oldPath.c_str(), newPath.c_str())) {
@@ -18,12 +15,11 @@ bool moveBook(const std::string& oldPath, const std::string& newPath) {
     return false;
   }
 
-  moveBookCache(oldPath, newPath);
-
-  if (newCachePath.empty()) {
+  const BookCacheMove cache = moveBookCache(oldPath, newPath);
+  if (cache.dropped) {
     RECENT_BOOKS.removeByPath(oldPath);
   } else {
-    RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
+    RECENT_BOOKS.updatePath(oldPath, newPath, cache.from, cache.to);
   }
 
   if (APP_STATE.openEpubPath == oldPath) {
