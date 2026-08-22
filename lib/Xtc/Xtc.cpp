@@ -415,9 +415,9 @@ bool Xtc::generateThumbBmp(int height) const {
                 const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
                 const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
                 const uint8_t pixelValue = (bit1 << 1) | bit2;
-                // Convert 2-bit (0-3) to grayscale: 0=black, 3=white
-                // pixelValue: 0=white, 1=light gray, 2=dark gray, 3=black (XTC polarity)
-                grayValue = (3 - pixelValue) * 85;  // 0->255, 1->170, 2->85, 3->0
+                // XTC levels are not ordered by darkness: 0=white, 1=dark gray, 2=light gray, 3=black
+                static constexpr uint8_t XTC_LEVEL_TO_GRAY[4] = {255, 85, 170, 0};
+                grayValue = XTC_LEVEL_TO_GRAY[pixelValue];
               }
             }
           } else {
