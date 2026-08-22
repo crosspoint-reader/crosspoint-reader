@@ -90,40 +90,28 @@ std::string generateBookCoverBmp(const std::string& path, const bool cropped) {
   switch (bookFormat(path)) {
     case BookFormat::Epub: {
       Epub epub(path, BOOK_CACHE_ROOT);
-      if (!epub.load(true, true)) {
-        LOG_ERR("BookFile", "Failed to load EPUB: %s", path.c_str());
-        return {};
+      if (epub.load(true, true) && epub.generateCoverBmp(cropped)) {
+        return epub.getCoverBmpPath(cropped);
       }
-      if (!epub.generateCoverBmp(cropped)) {
-        LOG_ERR("BookFile", "Failed to generate EPUB cover bmp: %s", path.c_str());
-        return {};
-      }
-      return epub.getCoverBmpPath(cropped);
+      LOG_ERR("BookFile", "No EPUB cover: %s", path.c_str());
+      return {};
     }
     case BookFormat::Xtc: {
       Xtc xtc(path, BOOK_CACHE_ROOT);
-      if (!xtc.load()) {
-        LOG_ERR("BookFile", "Failed to load XTC: %s", path.c_str());
-        return {};
+      if (xtc.load() && xtc.generateCoverBmp()) {
+        return xtc.getCoverBmpPath();
       }
-      if (!xtc.generateCoverBmp()) {
-        LOG_ERR("BookFile", "Failed to generate XTC cover bmp: %s", path.c_str());
-        return {};
-      }
-      return xtc.getCoverBmpPath();
+      LOG_ERR("BookFile", "No XTC cover: %s", path.c_str());
+      return {};
     }
     case BookFormat::Txt: {
-      // The cover is a sibling image file, not something stored in the book.
+      // A sibling image file, so having none is the normal case, not a failure.
       Txt txt(path, BOOK_CACHE_ROOT);
-      if (!txt.load()) {
-        LOG_ERR("BookFile", "Failed to load TXT: %s", path.c_str());
-        return {};
+      if (txt.load() && txt.generateCoverBmp()) {
+        return txt.getCoverBmpPath();
       }
-      if (!txt.generateCoverBmp()) {
-        LOG_DBG("BookFile", "No cover image found for TXT: %s", path.c_str());
-        return {};
-      }
-      return txt.getCoverBmpPath();
+      LOG_DBG("BookFile", "No TXT cover: %s", path.c_str());
+      return {};
     }
     case BookFormat::Unknown:
       return {};
