@@ -230,19 +230,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                           {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY),
-#if FREEINK_CAP_FRONTLIGHT
-        // Frontlit panels ghost less, so they additionally offer disabling
-        // the periodic full refresh entirely (index 5 = REFRESH_NEVER).
         SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                            StrId::STR_PAGES_30, StrId::STR_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-#else
-        SettingInfo::Enum(
-            StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-            {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
-            "refreshFrequency", StrId::STR_CAT_DISPLAY),
-#endif
         SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
                           {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
                            StrId::STR_THEME_ROUNDEDRAFF},
@@ -252,12 +243,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #if FREEINK_CAP_FRONTLIGHT
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                             "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY),
+#endif
         // Night mode = inverted output polarity everywhere (ActivityManager
-        // applies it to every activity on frontlit boards), so it lives in
-        // the Display category here.
+        // applies it to every activity), so it lives in the Display category.
         SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
                             StrId::STR_CAT_DISPLAY),
-#endif
 
         // --- Reader ---
         // Built-in font-family entry. Replaced per-call with a registry-aware
@@ -305,13 +295,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
-#if !FREEINK_CAP_FRONTLIGHT
-        // Night mode = inverted output polarity on the reading surfaces only
-        // (EPUB/TXT/XTC; ActivityManager resolves the polarity per render).
-        // Reader category, since it does not affect the rest of the UI.
-        SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::screenInverted, "screenInverted",
-                            StrId::STR_CAT_READER),
-#endif
         // --- Controls ---
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",

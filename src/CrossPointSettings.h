@@ -120,8 +120,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // E-ink refresh frequency (pages between full refreshes).
-  // REFRESH_NEVER is only offered on frontlit boards (see SettingsList.h);
-  // elsewhere a stored value of 5 clamps back to the default on load.
   enum REFRESH_FREQUENCY {
     REFRESH_1 = 0,
     REFRESH_5 = 1,
@@ -195,9 +193,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
-  // Night mode: inverted output polarity. On frontlit boards it applies to
-  // every activity; elsewhere only to the reading surfaces (resolved per
-  // render by ActivityManager via Activity::appliesNightMode).
+  // Night mode: inverted output polarity, applied to every activity per
+  // render by ActivityManager. The sleep screen opts out itself.
   uint8_t screenInverted = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;

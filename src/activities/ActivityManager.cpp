@@ -1,6 +1,5 @@
 #include "ActivityManager.h"
 
-#include <BoardConfig.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <HalDisplay.h>
@@ -57,17 +56,9 @@ void ActivityManager::renderTaskLoop() {
     RenderLock lock;
     if (currentActivity) {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-#if FREEINK_CAP_FRONTLIGHT
-      // Frontlit boards invert everywhere: night mode is a global output
-      // polarity, not a reader-only one. The sleep screen still forces
-      // normal polarity itself (SleepActivity).
+      // Night mode is a global output polarity applied to every activity.
+      // The sleep screen forces normal polarity itself (SleepActivity).
       display.setInverted(SETTINGS.screenInverted != 0);
-#else
-      // Night mode inverts only the reading surfaces (appliesNightMode):
-      // resolving the output polarity here, per render, means menus, popups,
-      // and every other activity revert to normal automatically.
-      display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
-#endif
       currentActivity->render(std::move(lock));
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
