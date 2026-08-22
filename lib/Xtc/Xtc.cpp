@@ -14,6 +14,8 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include <algorithm>
+
 namespace {
 void yieldDuringThumbnail(uint8_t& rowsSinceYield) {
   if (++rowsSinceYield < 8) return;
@@ -162,19 +164,36 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  // Allocate buffer for page data
+  const size_t dstRowSize = (static_cast<size_t>(pageInfo.width) * bitDepth + 7) / 8;
+  const size_t colBytes = (pageInfo.height + 7) / 8;  // Bytes per column, 2-bit only
+
   // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
+  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes.
+  // A height that is not a multiple of 8 leaves the last column partly filled, so the
+  // plane the columns actually span is longer than the declared plane size.
+  size_t planeSize = 0;
   size_t bitmapSize;
   if (bitDepth == 2) {
-    bitmapSize = ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) * 2;
+    planeSize = (static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8;
+    const size_t spannedSize = static_cast<size_t>(pageInfo.width) * colBytes;
+    bitmapSize = planeSize + std::max(planeSize, spannedSize);
   } else {
-    bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
+    bitmapSize = dstRowSize * pageInfo.height;
   }
   auto pageBuffer = makeUniqueNoThrow<uint8_t[]>(bitmapSize);
   if (!pageBuffer) {
     LOG_ERR("XTC", "Failed to allocate page buffer (%lu bytes)", bitmapSize);
     return false;
+  }
+
+  // Allocated before the file is opened so a failure never leaves a truncated cover cached
+  std::unique_ptr<uint8_t[]> rowBuffer;
+  if (bitDepth == 2) {
+    rowBuffer = makeUniqueNoThrow<uint8_t[]>(dstRowSize);
+    if (!rowBuffer) {
+      LOG_ERR("XTC", "Failed to allocate row buffer (%lu bytes)", dstRowSize);
+      return false;
+    }
   }
 
   // Load first page (cover)
@@ -191,7 +210,6 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  const size_t dstRowSize = (static_cast<size_t>(pageInfo.width) * bitDepth + 7) / 8;
   const uint8_t padding[4] = {0, 0, 0, 0};
   const size_t paddingSize = (4 - dstRowSize % 4) % 4;  // BMP rows are 4-byte aligned
 
@@ -201,20 +219,12 @@ bool Xtc::generateCoverBmp() const {
     // - 8 vertical pixels per byte (MSB = topmost pixel in group)
     // - First plane: Bit1, Second plane: Bit2
     // - Pixel value = (bit1 << 1) | bit2
-    const size_t planeSize = (static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8;
     const uint8_t* plane1 = pageBuffer.get();              // Bit1 plane
     const uint8_t* plane2 = pageBuffer.get() + planeSize;  // Bit2 plane
-    const size_t colBytes = (pageInfo.height + 7) / 8;     // Bytes per column
 
     Bmp2BitHeader bmpHeader;
     createBmp2BitHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
     coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
-
-    auto rowBuffer = makeUniqueNoThrow<uint8_t[]>(dstRowSize);
-    if (!rowBuffer) {
-      LOG_ERR("XTC", "Failed to allocate row buffer (%lu bytes)", dstRowSize);
-      return false;
-    }
 
     for (uint16_t y = 0; y < pageInfo.height; y++) {
       memset(rowBuffer.get(), 0, dstRowSize);
