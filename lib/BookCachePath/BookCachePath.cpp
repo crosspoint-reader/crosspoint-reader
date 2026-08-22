@@ -18,9 +18,20 @@ std::string forBook(std::string_view cacheRoot, std::string_view prefix, const s
   return path;
 }
 
+namespace {
+
+bool isPrefixedHash(std::string_view name, std::string_view prefix) {
+  if (name.substr(0, prefix.size()) != prefix) {
+    return false;
+  }
+  const std::string_view hash = name.substr(prefix.size());
+  return !hash.empty() && hash.find_first_not_of("0123456789") == std::string_view::npos;
+}
+
+}  // namespace
+
 bool isCacheDirName(std::string_view name) {
-  return name.substr(0, EPUB_PREFIX.size()) == EPUB_PREFIX || name.substr(0, XTC_PREFIX.size()) == XTC_PREFIX ||
-         name.substr(0, TXT_PREFIX.size()) == TXT_PREFIX;
+  return isPrefixedHash(name, EPUB_PREFIX) || isPrefixedHash(name, XTC_PREFIX) || isPrefixedHash(name, TXT_PREFIX);
 }
 
 }  // namespace BookCachePath

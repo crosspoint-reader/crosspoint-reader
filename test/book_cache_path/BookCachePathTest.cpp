@@ -67,6 +67,16 @@ TEST(BookCachePath, RejectsNamesThatAreNotBookCaches) {
   EXPECT_FALSE(BookCachePath::isCacheDirName("my_epub_123"));
 }
 
+// The name decides what "Clear Cache" deletes, so a directory that merely
+// starts like one must not be swept up with the real caches.
+TEST(BookCachePath, RejectsAPrefixWithoutAHashAfterIt) {
+  EXPECT_FALSE(BookCachePath::isCacheDirName("epub_"));
+  EXPECT_FALSE(BookCachePath::isCacheDirName("epub_notes"));
+  EXPECT_FALSE(BookCachePath::isCacheDirName("epub_123abc"));
+  EXPECT_FALSE(BookCachePath::isCacheDirName("txt_ 12"));
+  EXPECT_TRUE(BookCachePath::isCacheDirName("epub_0"));
+}
+
 TEST(BookCachePath, GeneratedNameIsRecognisedAsACacheDirectory) {
   const std::string path = BookCachePath::forBook(ROOT, BookCachePath::TXT_PREFIX, "/books/notes.txt");
   const std::string name = path.substr(path.rfind('/') + 1);
