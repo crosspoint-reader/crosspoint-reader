@@ -5,8 +5,8 @@
 namespace BookCachePath {
 
 std::string forBook(std::string_view cacheRoot, std::string_view prefix, const std::string& bookPath) {
-  // Hash std::string, not the view: the digits are baked into on-disk directory
-  // names, so the hashed type must stay what existing caches were built with.
+  // Hash std::string, not the view: the digits are part of existing on-disk
+  // directory names, so the hashed type has to stay what they were built with.
   const std::string hash = std::to_string(std::hash<std::string>{}(bookPath));
 
   std::string path;
