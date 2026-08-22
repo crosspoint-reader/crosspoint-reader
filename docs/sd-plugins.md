@@ -180,7 +180,7 @@ Two browse formats:
   "download": {
     "url": "https://.../books/{id}/download",
     "method": "POST",
-    "headers": { "Authorization": "Bearer {token}" },  // sent on the file GET too
+    "headers": { "Authorization": "Bearer {token}" },  // file GET too, unless url_path is set
     "body": "{}",
     "url_path": "url",                      // response field with the file URL;
                                             // omit to treat "url" itself as the file URL

@@ -1220,12 +1220,19 @@ void PluginCatalogActivity::downloadItem(const Item& item) {
 
   const std::string dlUser = substituted(manifest.dlUser, &item);
   const std::string dlPass = substituted(manifest.dlPass, &item);
-  const auto dlHeaders = substitutedHeaders(manifest.dlHeaders, &item);
+  // url_path already authenticated the JSON hop; the resolved file URL must not
+  // inherit those headers (S3 pre-signed GETs reject a second Authorization).
+  const std::vector<HttpDownloader::Header> fileHeaders = manifest.dlUrlPath.empty()
+                                                              ? substitutedHeaders(manifest.dlHeaders, &item)
+                                                              : std::vector<HttpDownloader::Header>{};
   dlLastRenderedPercent = -1;
   dlLastProgressUpdateMs = 0;
+  session.reset();  // free browse TLS before the large file GET
   const auto result = HttpDownloader::downloadToFile(
       fileUrl, dest, [this](const size_t downloaded, const size_t total) { onDownloadProgress(downloaded, total); },
-      &cancelDownload, dlUser, dlPass, dlHeaders);
+      &cancelDownload, dlUser, dlPass, fileHeaders);
+  session.reset(new (std::nothrow) freeink::SecureHttpClient());
+  if (session) session->setReuse(true);
 
   if (result == HttpDownloader::ABORTED) {
     finishCancelledDownload();
