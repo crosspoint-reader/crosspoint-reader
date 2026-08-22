@@ -18,8 +18,10 @@ reconnect, connection approval and TLS, typing and btop, display commands,
 graceful exit, returning to reader operation, and sleep/wake outside Terminal.
 The rebased tree also passes the complete Rust host matrix, 177/177 native
 tests, and the `knietty_async_window` firmware build. The clean implementation
-checkpoints are parent `5135f049` and FreeInk `0b9b49f`; publication as two
-dependent draft PRs is the next integration action.
+checkpoints are parent `5135f049` and FreeInk `0b9b49f`. They are published as
+dependent drafts in FreeInk PR #49 and CrossPoint PR #3158. Upstream CI on
+software head `f2497a77` passes formatting, cppcheck, all 177 native tests, and
+the Default, Sticky, X4 Pro, and PaperMono firmware builds.
 
 Milestone 07 is complete with a negative optimization result. Milestone 08 is
 complete on the ordinary no-Mode-2
@@ -1401,6 +1403,13 @@ if it is visually consequential.
 
 ## Last known-good commit
 
+- `f2497a77` is the current clean parent software head. It adds only the
+  clang-format-21 correction and cppcheck findings discovered after publication
+  to hardware-known-good `5135f049`: explicit terminal cell-array initialization
+  and non-shadowing local names. Upstream CI passes formatting, cppcheck,
+  177/177 native tests, all four stock firmware targets, and aggregate Test
+  Status. These mechanical/static-analysis changes have not been separately
+  reflashed.
 - `5135f049` is the current rebased hardware-known-good knietty checkpoint and
   points to clean FreeInk checkpoint `0b9b49f`. It embeds firmware identity
   `knietty-0.1.2`, is based on current CrossPoint `develop` and FreeInk `main`,
@@ -1485,11 +1494,12 @@ if it is visually consequential.
 
 ## Next concrete step
 
-Publish the clean FreeInk dependency branch first, then the clean parent branch,
-and open dependent draft PRs under the `integerQuant` forks. Keep the parent PR
-explicitly dependent on the FreeInk PR and retain 80 x 24. After publication,
-monitor CI and address review findings without merging until both repositories
-agree on the dependency integration path.
+Monitor FreeInk PR #49 and CrossPoint PR #3158, address concrete maintainer
+feedback, and do not merge until both repositories agree on the dependency
+integration path. The CrossPoint draft is explicitly outside the current
+core-reader scope; treat maintainer scope direction as the gate. Retain 80 x 24
+and keep the temporary forked submodule URL until the SDK dependency has an
+accepted canonical commit.
 
 Release evidence still needed includes abrupt WLAN/power keepalive disconnect
 time under TLS and an independent Linux host matrix. Exact macOS/device results
