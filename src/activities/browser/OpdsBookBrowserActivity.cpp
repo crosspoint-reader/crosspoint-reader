@@ -9,6 +9,8 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -37,12 +39,14 @@ constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
 std::string sanitizeDirComponent(std::string s) {
   while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.erase(s.begin());
   while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
-  for (char& ch : s) {
-    if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' ||
-        ch == '|') {
-      ch = '_';
-    }
-  }
+  std::replace_if(
+      s.begin(), s.end(),
+      [](char ch) {
+        return ch == '/' || ch == '\' || ch == ' : ' || ch == ' * ' || ch == ' ? ' || ch == ' "' || ch == '<' ||
+                                                                                         ch == '>' ||
+                                                                                     ch == '|';
+      },
+      '_');
   while (!s.empty() && s.back() == '.') s.pop_back();
   if (s.empty() || s == "." || s == "..") return "";
   constexpr size_t kMax = 48;
