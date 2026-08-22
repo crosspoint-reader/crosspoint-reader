@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include "util/BookCacheUtils.h"
+#include "util/BookMove.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -537,17 +538,7 @@ void WebDAVHandler::handleMove(WebServer& s) {
     Storage.remove(dstPath.c_str());
   }
 
-  HalFile file = Storage.open(srcPath.c_str());
-  if (!file) {
-    s.send(500, "text/plain", "Failed to open source");
-    return;
-  }
-
-  clearBookCache(srcPath.c_str());
-  bool success = file.rename(dstPath.c_str());
-  file.close();
-
-  if (success) {
+  if (moveBook(srcPath.c_str(), dstPath.c_str())) {
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
