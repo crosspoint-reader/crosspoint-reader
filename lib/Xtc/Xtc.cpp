@@ -297,24 +297,8 @@ bool Xtc::generateThumbBmp(int height) const {
   float scale = (scaleX > scaleY) ? scaleX : scaleY;  // for cropping
 
   // Only scale down, never up
-  if (scale >= 1.0f) {
-    // Page is already small enough, just use cover.bmp
-    // Copy cover.bmp to thumb.bmp
-    if (generateCoverBmp()) {
-      HalFile src, dst;
-      if (Storage.openFileForRead("XTC", getCoverBmpPath(), src)) {
-        if (Storage.openFileForWrite("XTC", getThumbBmpPath(height), dst)) {
-          uint8_t buffer[512];
-          while (src.available()) {
-            size_t bytesRead = src.read(buffer, sizeof(buffer));
-            dst.write(buffer, bytesRead);
-          }
-        }
-      }
-      LOG_DBG("XTC", "Copied cover to thumb (no scaling needed)");
-      return Storage.exists(getThumbBmpPath(height).c_str());
-    }
-    return false;
+  if (scale > 1.0f) {
+    scale = 1.0f;
   }
 
   uint16_t thumbWidth = static_cast<uint16_t>(pageInfo.width * scale);
