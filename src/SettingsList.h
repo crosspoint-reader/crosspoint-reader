@@ -361,6 +361,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #endif
         SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn"),
 
+        // --- Readwise Sync (web-exposed; edited on-device via ReadwiseSettingsActivity) ---
+        SettingInfo::String(StrId::STR_READWISE_API_KEY, &SETTINGS.readwiseApiKey[0], sizeof(SETTINGS.readwiseApiKey),
+                            "readwiseApiKey")
+            .withObfuscated(),
+        SettingInfo::String(StrId::STR_READWISE_TAG, &SETTINGS.readwiseTag[0], sizeof(SETTINGS.readwiseTag),
+                            "readwiseTag"),
+
         // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
         SettingInfo::DynamicString(
             StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },

@@ -3,6 +3,8 @@
 
 #include <functional>
 #include <string>
+#include <utility>
+#include <vector>
 
 /**
  * HTTP client utility for fetching content and downloading files. Built on
@@ -15,6 +17,7 @@ class HttpDownloader {
   // Called with each body chunk as it arrives; return false to abort. Lets a
   // streaming parser consume the response without buffering the whole body.
   using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;
+  using HeaderList = std::vector<std::pair<std::string, std::string>>;
 
   enum DownloadError {
     OK = 0,
@@ -37,6 +40,12 @@ class HttpDownloader {
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
                        const std::string& password = "");
+
+  /**
+   * Like the overload above, but sends arbitrary request headers (e.g. token
+   * auth) instead of Basic credentials.
+   */
+  static bool fetchUrl(const std::string& url, const DataCallback& onData, const HeaderList& headers);
 
   /**
    * Download a file to the SD card with optional credentials.

@@ -24,6 +24,7 @@ enum class SettingAction {
   Language,
   DownloadFonts,
   TextSettings,
+  Readwise,
 };
 
 struct SettingInfo {

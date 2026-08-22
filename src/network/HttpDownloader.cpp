@@ -36,6 +36,7 @@ constexpr int MAX_REDIRECTS = 5;
 struct Sink {
   std::function<bool(const uint8_t*, size_t)> write;  // returns false to abort the transfer
   HttpDownloader::ProgressCallback progress;
+  HttpDownloader::HeaderList extraHeaders;
   bool* cancelFlag = nullptr;
   size_t total = 0;
   size_t downloaded = 0;
@@ -66,6 +67,9 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       const std::string credentials = username + ":" + password;
       const String encoded = base64::encode(credentials.c_str());
       http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
+    }
+    for (const auto& header : sink.extraHeaders) {
+      http.addHeader(header.first, header.second);
     }
 
     LOG_DBG("HTTP", "wolfSSL GET: %s", url.c_str());
@@ -143,6 +147,9 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     const std::string credentials = username + ":" + password;
     const String header = "Basic " + base64::encode(credentials.c_str());
     esp_http_client_set_header(client, "Authorization", header.c_str());
+  }
+  for (const auto& header : sink.extraHeaders) {
+    esp_http_client_set_header(client, header.first.c_str(), header.second.c_str());
   }
 
   // open()/read() does not auto-follow redirects (only perform() does), so step
@@ -256,6 +263,14 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   Sink sink;
   sink.write = onData;
   return runGetSecure(url, username, password, sink) == OK;
+}
+
+bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const HeaderList& headers) {
+  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
+  Sink sink;
+  sink.write = onData;
+  sink.extraHeaders = headers;
+  return runGetSecure(url, "", "", sink) == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,

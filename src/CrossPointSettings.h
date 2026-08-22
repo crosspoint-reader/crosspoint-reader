@@ -280,6 +280,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Readwise Reader sync credentials. Articles tagged readwiseTag are
+  // downloaded as EPUBs into /Readwise on demand.
+  char readwiseApiKey[64] = "";
+  char readwiseTag[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
