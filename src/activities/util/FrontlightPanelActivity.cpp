@@ -12,6 +12,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
@@ -76,10 +77,14 @@ uint8_t percentFromPermille(const int16_t permille) {
   return static_cast<uint8_t>(value);
 }
 
+// Both style sets below are compile-time constants living in flash rather than
+// values a render builds: fui::StyleSet is 324 bytes, well past the 256-byte
+// budget a local gets (AGENTS.md), and neither varies at runtime.
+//
 // Slider step buttons: same outlined-card language as the tiles, inverted while
 // pressed so a tap is visibly acknowledged on a slow panel.
-fui::StyleSet stepStyles() {
-  fui::StyleSet s;
+constexpr fui::StyleSet makeStepStyles() {
+  fui::StyleSet s{};
   s.explicitlySet = true;
   s.normal.background = fui::Paint::solid(fui::Color::White);
   s.normal.foreground = fui::Paint::solid(fui::Color::Black);
@@ -97,8 +102,8 @@ fui::StyleSet stepStyles() {
 
 // 1-bit tile styling: an outlined card, filled solid black when the setting it
 // carries is on (the "checked" state), never a dithered gray.
-fui::StyleSet tileStyles() {
-  fui::StyleSet s;
+constexpr fui::StyleSet makeTileStyles() {
+  fui::StyleSet s{};
   s.explicitlySet = true;
   s.normal.background = fui::Paint::solid(fui::Color::White);
   s.normal.foreground = fui::Paint::solid(fui::Color::Black);
@@ -113,6 +118,9 @@ fui::StyleSet tileStyles() {
   s.disabled = s.normal;
   return s;
 }
+
+constexpr fui::StyleSet kStepStyles = makeStepStyles();
+constexpr fui::StyleSet kTileStyles = makeTileStyles();
 }  // namespace
 
 // main.cpp's deep-sleep entry (persists state, draws the sleep screen, sleeps).
@@ -143,7 +151,7 @@ void FrontlightPanelActivity::onEnter() {
   requestUpdate();
 }
 
-void FrontlightPanelActivity::onExit() {
+void FrontlightPanelActivity::persistLightSettings() {
   // brightness/warmth are always restored unconditionally on boot (see
   // main.cpp), so they never diverge from SETTINGS at onEnter() — comparing
   // against SETTINGS here only fires on a genuine user change. lightOn has
@@ -157,6 +165,10 @@ void FrontlightPanelActivity::onExit() {
     if (lightOnChanged) SETTINGS.frontlightOn = lightOn ? 1 : 0;
     SETTINGS.saveToFile();
   }
+}
+
+void FrontlightPanelActivity::onExit() {
+  persistLightSettings();
   Activity::onExit();
 }
 
@@ -212,6 +224,14 @@ void FrontlightPanelActivity::runTile(const int idx) {
     case 2:  // Cycle the reading orientation
       SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);
       SETTINGS.saveToFile();
+      // Nothing else would turn the renderer: ActivityManager::Pop restores the
+      // activity underneath without calling onEnter(), so its
+      // applyInitialOrientation() never runs. Apply it here instead — renderUi()
+      // re-derives the device context on the next render, so the hit rects
+      // follow the new frame on their own. A rotation rewrites every pixel, so
+      // it takes the clean waveform like night mode does.
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      cleanRefreshPending = true;
       requestUpdate();
       break;
     case 3:  // Touch kill-switch (for reading with the palm on the glass)
@@ -224,6 +244,10 @@ void FrontlightPanelActivity::runTile(const int idx) {
       break;
     }
     case 5:  // Sleep now
+      // enterDeepSleep() does not return, so onExit() will not run: fold the
+      // panel's own unsaved brightness/warmth in before it writes and sleeps,
+      // or a slider moved just before tapping this tile is lost on wake.
+      persistLightSettings();
       SETTINGS.saveToFile();
       enterDeepSleep(false);
       break;
@@ -365,16 +389,15 @@ void FrontlightPanelActivity::addSliderRow(UiScreen& screen, const char* label, 
   const int16_t stepW = kSliderRowHeight;  // square, finger-sized
   const auto stepButton = [&](const int16_t x, const char* glyph, const int16_t delta) {
     const fui::Rect rect{x, band.y, stepW, kSliderRowHeight};
-    fui::ButtonProps props;
-    props.label = glyph;
-    props.action = stepAction;
-    props.value = delta;
-    props.inputMask = fui::InputTouch;
+    stepProps.label = glyph;
+    stepProps.action = stepAction;
+    stepProps.value = delta;
+    stepProps.inputMask = fui::InputTouch;
     // Title weight: a body-size "-" is a hairline inside a 56px button.
-    props.text = theme.titleText;
-    props.text.bold = true;
-    props.styles = stepStyles();
-    screen.button(props, rect);
+    stepProps.text = theme.titleText;
+    stepProps.text.bold = true;
+    stepProps.styles = kStepStyles;
+    screen.button(stepProps, rect);
   };
 
   int16_t bandRight = band.right();
@@ -399,6 +422,7 @@ void FrontlightPanelActivity::addSliderRow(UiScreen& screen, const char* label, 
   // The pill spans the gap between the two step buttons.
   const int16_t rowX = static_cast<int16_t>(band.x + stepW + theme.spaceMd);
   const fui::Rect row{rowX, band.y, static_cast<int16_t>(plusX - theme.spaceMd - rowX), kSliderRowHeight};
+  constexpr int16_t kStroke = 2;
 
   // 1-bit capsule, drawn here rather than through fui::slider: that component
   // pairs a square-cornered progress fill with a separate knob, which on a
@@ -407,12 +431,20 @@ void FrontlightPanelActivity::addSliderRow(UiScreen& screen, const char* label, 
   // filled capsule is the iOS brightness control anyway — the fill edge IS the
   // handle. Drag still works identically: dragPermille comes from the hit rect,
   // so registering it directly gives the same events fui::slider would.
+  // Two fixed 56px step buttons, an optional 56px lamp toggle and the gaps
+  // between them are charged against the row before the pill gets what is left.
+  // Below the width of the handle itself there is no capsule to draw — the
+  // handle would spill over the buttons either side, and a track thinner than
+  // the 2px outline would put a negative width into fill(). The step buttons
+  // still drive the value there, so the row stays usable.
+  const int16_t minTrack = static_cast<int16_t>(kSliderRowHeight + 2 * kStroke);
+  if (row.width < minTrack) return;
+
   screen.frame().hit(row, sliderAction, 0, fui::InputTouch | fui::InputDrag);
   screen.target().fill(row, fui::Paint::solid(fui::Color::White), kSliderTrackRadius);
   // The fill sits INSIDE the outline (inset by the stroke width) so the capsule
   // reads as one unbroken shape at every value instead of the fill riding over
   // its own border.
-  constexpr int16_t kStroke = 2;
   const fui::Rect inner = row.inset(fui::Insets{kStroke, kStroke, kStroke, kStroke});
   // A round handle rides the boundary between the filled and empty track, and
   // the fill runs to its center. The handle is what hides the fill's square
@@ -481,7 +513,6 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
         // non-default, attention-worthy state (input is off).
         gpio.touchEnabled() ? fui::StateNormal : fui::StateChecked, fui::StateNormal, fui::StateNormal};
 
-    const fui::StyleSet styles = tileStyles();
     const int rows = (tileCount + kTileCols - 1) / kTileCols;
     for (int r = 0; r < rows; ++r) {
       const fui::Rect band = screen.takeTop(kTileHeight, r + 1 < rows ? kTileGap : 0)
@@ -492,14 +523,13 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
         if (slot >= tileCount) break;
         const int id = ids[slot];
         const fui::Rect tile{static_cast<int16_t>(band.x + c * (tileW + kTileGap)), band.y, tileW, kTileHeight};
-        fui::ButtonProps props;
-        props.label = labels[id];
-        props.action = ACTION_TILE;
-        props.value = static_cast<int16_t>(id);
-        props.state = states[id];
-        props.styles = styles;
-        props.text = theme.smallText;
-        screen.button(props, tile);
+        tileProps.label = labels[id];
+        tileProps.action = ACTION_TILE;
+        tileProps.value = static_cast<int16_t>(id);
+        tileProps.state = states[id];
+        tileProps.styles = kTileStyles;
+        tileProps.text = theme.smallText;
+        screen.button(tileProps, tile);
       }
     }
   }
@@ -528,6 +558,9 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   renderer.fillRect(0, panelBottom - 2, pageWidth, 2, true);
   // A tile that rewrote the whole frame (night mode) or explicitly asked for a
   // cleanup re-drives every pixel once; ordinary repaints stay on the fast path.
-  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+  // FULL, not HALF: HALF is the balanced-speed waveform and leaves some ghost
+  // behind, which is exactly what the tile that sets this flag is asked to
+  // remove.
+  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
   cleanRefreshPending = false;
 }

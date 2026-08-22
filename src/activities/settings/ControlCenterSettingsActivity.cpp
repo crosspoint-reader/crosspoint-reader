@@ -11,13 +11,13 @@ namespace fui = freeink::ui;
 namespace {
 // Row order mirrors the control center's tile grid, so hiding a row and looking
 // at the panel line up.
-const StrId menuNames[] = {
+constexpr StrId menuNames[] = {
     StrId::STR_NIGHT_MODE,   StrId::STR_FORCE_REFRESH,     StrId::STR_ORIENTATION,
     StrId::STR_TOUCH_TOGGLE, StrId::STR_SCREENSHOT_BUTTON, StrId::STR_SLEEP,
 };
 
 // The flag each row drives, same order.
-uint8_t CrossPointSettings::* const menuFlags[] = {
+constexpr uint8_t CrossPointSettings::* menuFlags[] = {
     &CrossPointSettings::ccTileNightMode, &CrossPointSettings::ccTileRefresh,    &CrossPointSettings::ccTileOrientation,
     &CrossPointSettings::ccTileTouch,     &CrossPointSettings::ccTileScreenshot, &CrossPointSettings::ccTileSleep,
 };
@@ -52,9 +52,10 @@ void ControlCenterSettingsActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
+  // tr() hands back a pointer into the static string table, so the row can
+  // hold it directly — no per-render std::string to build and free.
   for (int i = 0; i < ITEM_COUNT; i++) {
-    rowValues_[i] = SETTINGS.*(menuFlags[i]) ? tr(STR_SHOW) : tr(STR_HIDE);
-    rowItems_[i].value = rowValues_[i].c_str();
+    rowItems_[i].value = SETTINGS.*(menuFlags[i]) ? tr(STR_SHOW) : tr(STR_HIDE);
   }
 
   fui::ListProps props;

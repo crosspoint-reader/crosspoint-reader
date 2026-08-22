@@ -31,6 +31,14 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   bool draggingSlider = false;
   int panelBottom = 0;
 
+  // fui::ButtonProps embeds a 324-byte fui::StyleSet, so the two the render
+  // path fills in live here instead of on the stack (AGENTS.md: locals stay
+  // under 256 bytes). ui::button() takes them by const reference and draws
+  // immediately, so one instance per call site is enough — every field either
+  // is reassigned on each use or keeps its constructed default.
+  freeink::ui::ButtonProps stepProps;
+  freeink::ui::ButtonProps tileProps;
+
   static void panelScreen(UiScreen& screen, void* user);
   static void onBrightnessEvent(const freeink::ui::ActionEvent& event, void* user);
   static void onWarmthEvent(const freeink::ui::ActionEvent& event, void* user);
@@ -50,6 +58,10 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   void adjustWarmth(int delta);
   void toggleLight();
   void runTile(int idx);
+  // Copy the panel's live brightness/warmth/lightOn into SETTINGS and save if
+  // anything actually changed. onExit() runs it on the ordinary way out; the
+  // sleep tile has to run it itself, because enterDeepSleep() never returns.
+  void persistLightSettings();
   void close();
 
   // Quick-setting tiles, in grid order (2 columns). This is the catalogue size;

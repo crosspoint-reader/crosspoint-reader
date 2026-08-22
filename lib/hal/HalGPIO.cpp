@@ -190,10 +190,12 @@ void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
 unsigned long HalGPIO::lastTouchHeldMs() const { return inputMgr.lastTouchHeldMs(); }
 
 bool HalGPIO::wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const {
-  return inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
+  return touchEnabled_ && inputMgr.wasSwipe(nxStart, nyStart, nxEnd, nyEnd);
 }
 
-bool HalGPIO::wasTouchActivity() const { return inputMgr.wasTouchActivity(); }
+// Gated with the rest: an ungated activity report would let a palm resting on
+// the glass hold the device awake while the kill-switch says touch is off.
+bool HalGPIO::wasTouchActivity() const { return touchEnabled_ && inputMgr.wasTouchActivity(); }
 
 void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
   InputManager::setSharedConfirmPowerShortPressEmitsPower(enabled);

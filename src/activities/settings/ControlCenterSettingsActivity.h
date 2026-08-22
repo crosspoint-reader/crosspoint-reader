@@ -1,6 +1,4 @@
 #pragma once
-#include <string>
-
 #include "activities/UiListActivity.h"
 
 // Control center contents: one Show/Hide row per quick-setting tile, in the
@@ -22,8 +20,8 @@ class ControlCenterSettingsActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
 
-  // Labels are fixed (set once in onEnter); only the Show/Hide value text is
-  // refreshed per render, in place.
-  std::string rowValues_[ITEM_COUNT];
+  // Labels are fixed (set once in onEnter); only the Show/Hide value pointer is
+  // refreshed per render, in place. Both point into the string table, so the
+  // rows own no storage of their own.
   freeink::ui::ListItem rowItems_[ITEM_COUNT]{};
 };
