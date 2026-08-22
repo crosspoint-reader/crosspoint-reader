@@ -468,9 +468,11 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  // Prefer per-server saveDirectory; fall back to the global setting ("" => SD root).
+  // Both are null-terminated (std::string::c_str() / char[64]); exists()/mkdir()
+  // take const char*.
+  const char* folder = !server.saveDirectory.empty() ? server.saveDirectory.c_str()
+                                                     : SETTINGS.opdsDownloadFolder;
   bool haveFolder = folder[0] != '\0';
   if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
     // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
