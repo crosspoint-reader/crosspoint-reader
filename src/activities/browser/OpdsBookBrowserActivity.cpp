@@ -33,6 +33,50 @@ constexpr fui::ActionId ACTION_CANCEL = 3;
 constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
 constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
 
+// FAT-safe single path component from an OPDS navigation <title>.
+std::string sanitizeDirComponent(std::string s) {
+  while (!s.empty() && (s.front() == ' ' || s.front() == '\t')) s.erase(s.begin());
+  while (!s.empty() && (s.back() == ' ' || s.back() == '\t')) s.pop_back();
+  for (char& ch : s) {
+    if (ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' ||
+        ch == '|') {
+      ch = '_';
+    }
+  }
+  while (!s.empty() && s.back() == '.') s.pop_back();
+  if (s.empty() || s == "." || s == "..") return "";
+  constexpr size_t kMax = 48;
+  if (s.size() > kMax) s.resize(kMax);
+  return s;
+}
+
+bool isPaginationTitle(const std::string& title) { return title == tr(STR_PREV_PAGE) || title == tr(STR_NEXT_PAGE); }
+
+// Create each segment of an absolute SD path (leading '/'). Returns false if
+// any mkdir fails (caller may fall back to a shallower root).
+bool ensureDirs(const std::string& absPath) {
+  if (absPath.empty() || absPath == "/") return true;
+  std::string built;
+  built.reserve(absPath.size());
+  size_t i = 0;
+  if (absPath.front() == '/') {
+    built += '/';
+    i = 1;
+  }
+  while (i < absPath.size()) {
+    while (i < absPath.size() && absPath[i] == '/') ++i;
+    if (i >= absPath.size()) break;
+    const size_t start = i;
+    while (i < absPath.size() && absPath[i] != '/') ++i;
+    built.append(absPath, start, i - start);
+    if (!Storage.exists(built.c_str()) && !Storage.mkdir(built.c_str())) {
+      return false;
+    }
+    if (i < absPath.size()) built += '/';
+  }
+  return true;
+}
+
 }  // namespace
 
 OpdsBookBrowserActivity::OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -48,6 +92,8 @@ void OpdsBookBrowserActivity::onEnter() {
   state = BrowserState::CHECK_WIFI;
   entries.clear();
   navigationHistory.clear();
+  folderNames.clear();
+  folderDeltas.clear();
   searchTemplate = "";
   currentPath = "";
   selectorIndex = 0;
@@ -69,6 +115,8 @@ void OpdsBookBrowserActivity::onExit() {
   Activity::onExit();
   entries.clear();
   navigationHistory.clear();
+  folderNames.clear();
+  folderDeltas.clear();
 
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
@@ -429,7 +477,24 @@ void OpdsBookBrowserActivity::releaseEntries() {
 }
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
+  // ".." / parent-directory entries (common in filesystem-style OPDS) should
+  // unwind the same way as the Back button so folderNames stays aligned.
+  if ((entry.title == ".." || entry.title == ".") && !navigationHistory.empty()) {
+    navigateBack();
+    return;
+  }
+
   navigationHistory.push_back(currentPath);
+  int8_t delta = 0;
+  if (!isPaginationTitle(entry.title)) {
+    const std::string component = sanitizeDirComponent(entry.title);
+    if (!component.empty()) {
+      folderNames.push_back(component);
+      delta = 1;
+    }
+  }
+  folderDeltas.push_back(delta);
+
   // Resolve to a full URL so sub-sub-navigation retains parent path context
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   currentPath = UrlUtils::buildUrl(feedUrl, entry.href);
@@ -448,6 +513,11 @@ void OpdsBookBrowserActivity::navigateBack() {
   } else {
     currentPath = navigationHistory.back();
     navigationHistory.pop_back();
+    if (!folderDeltas.empty()) {
+      const int8_t delta = folderDeltas.back();
+      folderDeltas.pop_back();
+      if (delta > 0 && !folderNames.empty()) folderNames.pop_back();
+    }
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     releaseEntries();
@@ -468,16 +538,26 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
-    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
-    // existing caller checks exists() before mkdir. On real failure, fall back
-    // to SD root so the download is never lost.
-    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
+  // Save root: per-server saveDirectory when set, else global opdsDownloadFolder,
+  // else SD root. Then append OPDS navigation folder titles (folderNames) so
+  // hierarchical catalogs (e.g. rdltr art/film/...) land under matching dirs
+  // even when the server was opened via a short link.
+  std::string dir;
+  {
+    const char* root = SETTINGS.opdsDownloadFolder;
+    if (root[0] != '\0') dir = root;
+  }
+  for (const auto& component : folderNames) {
+    if (component.empty()) continue;
+    dir += '/';
+    dir += component;
+  }
+
+  bool haveFolder = !dir.empty();
+  if (haveFolder && !ensureDirs(dir)) {
+    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", dir.c_str());
     haveFolder = false;
+    dir.clear();
   }
 
   // downloadToFile() needs a std::string, and titles are unbounded (a fixed
@@ -485,7 +565,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // reserve'd, in-place-appended owning string is the right call.
   std::string filename;
   filename.reserve(96);
-  if (haveFolder) filename += folder;
+  if (haveFolder) filename += dir;
   filename += '/';
   filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
@@ -584,6 +664,7 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
   if (pos != std::string::npos) url.replace(pos, placeholder.length(), urlEncode(query));
 
   navigationHistory.push_back(currentPath);
+  folderDeltas.push_back(0);  // search does not add a download subfolder
   currentPath = url;
 
   state = BrowserState::LOADING;
