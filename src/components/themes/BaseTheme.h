@@ -126,7 +126,20 @@ struct ThemeMetrics {
 };
 
 enum UIIcon {
-  None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark, Terminal
+  None = 0,
+  Folder,
+  Text,
+  Image,
+  Book,
+  File,
+  Recent,
+  Settings,
+  Transfer,
+  Library,
+  Wifi,
+  Hotspot,
+  Bookmark,
+  Terminal
 };
 
 // Default theme implementation (Classic Theme)
