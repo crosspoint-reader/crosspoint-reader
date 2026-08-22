@@ -558,20 +558,20 @@ See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation detai
 
 ### 3.9 Language Packs (SD Card)
 
-Official releases compile every translation into the firmware, so this section will not apply to you unless you are
-running a build that trades languages for flash space. Those builds keep a few languages inside the firmware and ship
-the others as `.cplang` files for the SD card. All languages stay in the list either way; the ones you would need a
-file for are marked **Needs pack**, and picking one does nothing until the file is there.
+Official releases compile every translation into the firmware. This section only applies to builds that trade
+languages for flash space. Those keep a few languages in the firmware and ship the rest as `.cplang` files for the SD
+card. Every language still appears in the list. The ones needing a file are marked **Needs pack**, and picking one
+does nothing until you install it.
 
 To install one:
 
 1. Download `language-packs.zip` from the release you are running.
-2. Unzip it. Copy the file for your language — `RU.cplang`, say — into `/.crosspoint/lang/` on the card. Create the
-   folder if it is missing. Copying all of them is fine; only the language you pick gets loaded.
+2. Unzip it. Copy the file for your language, e.g. `RU.cplang` into `/.crosspoint/lang/` on the card. Create the
+   folder if it is missing.
 3. Put the card back, then choose the language in **Settings → System → Language**.
 
-Packs and firmware are a matched pair. Update the firmware and you need the packs from that same release: an old pack
-is rejected and the language stays put, rather than filling the screen with wrong text.
+Packs and firmware are a matched pair. After a firmware update, get the packs from that release too. An old pack is
+rejected and the language stays as it was.
 
 ## 4. Reading Mode
 
