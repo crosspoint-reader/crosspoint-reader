@@ -11,7 +11,6 @@
 
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
-#include "ControlCenterSettingsActivity.h"
 #include "CrossPointSettings.h"
 #include "FontDownloadActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -98,13 +97,6 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
-  // The control center's entry points are all touch (top-edge swipe,
-  // status-bar tap), so the customization row only exists on touch boards --
-  // on a buttons-only board it would configure a panel that cannot open.
-  if (mappedInput.hasTouch()) {
-    displaySettings.push_back(
-        SettingInfo::Action(StrId::STR_CUSTOMISE_CONTROL_CENTER, SettingAction::CustomiseControlCenter));
-  }
 
   // Update currentSettings pointer and count for the active category
   switch (selectedCategoryIndex) {
@@ -324,9 +316,6 @@ void SettingsActivity::toggleCurrentSetting() {
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
         startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::CustomiseControlCenter:
-        startActivityForResult(std::make_unique<ControlCenterSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);

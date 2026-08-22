@@ -221,16 +221,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
-  // Control center contents (ControlCenterSettingsActivity, touch boards
-  // only). One flag per quick-setting tile; the frontlight row is not listed
-  // because it is the panel's reason for existing -- with every tile off the
-  // panel is still the brightness control.
-  uint8_t ccTileNightMode = 1;
-  uint8_t ccTileRefresh = 1;
-  uint8_t ccTileOrientation = 1;
-  uint8_t ccTileTouch = 1;
-  uint8_t ccTileScreenshot = 1;
-  uint8_t ccTileSleep = 1;
   uint8_t orientation = PORTRAIT;
   // Button layouts (front layout retained for migration only)
   uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;

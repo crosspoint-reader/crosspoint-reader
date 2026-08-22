@@ -234,22 +234,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
             {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
             "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        // --- Control Center contents (web config; on-device editing lives in
-        // ControlCenterSettingsActivity, touch boards only) ---
-        // One toggle per quick-setting tile, in the panel's grid order. The
-        // frontlight row has no flag: it is what the panel is for.
-        SettingInfo::Toggle(StrId::STR_NIGHT_MODE, &CrossPointSettings::ccTileNightMode, "ccTileNightMode",
-                            StrId::STR_CUSTOMISE_CONTROL_CENTER),
-        SettingInfo::Toggle(StrId::STR_FORCE_REFRESH, &CrossPointSettings::ccTileRefresh, "ccTileRefresh",
-                            StrId::STR_CUSTOMISE_CONTROL_CENTER),
-        SettingInfo::Toggle(StrId::STR_ORIENTATION, &CrossPointSettings::ccTileOrientation, "ccTileOrientation",
-                            StrId::STR_CUSTOMISE_CONTROL_CENTER),
-        SettingInfo::Toggle(StrId::STR_TOUCH_TOGGLE, &CrossPointSettings::ccTileTouch, "ccTileTouch",
-                            StrId::STR_CUSTOMISE_CONTROL_CENTER),
-        SettingInfo::Toggle(StrId::STR_SCREENSHOT_BUTTON, &CrossPointSettings::ccTileScreenshot, "ccTileScreenshot",
-                            StrId::STR_CUSTOMISE_CONTROL_CENTER),
-        SettingInfo::Toggle(StrId::STR_SLEEP, &CrossPointSettings::ccTileSleep, "ccTileSleep",
-                            StrId::STR_CUSTOMISE_CONTROL_CENTER),
         SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
                           {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
                            StrId::STR_THEME_ROUNDEDRAFF},
