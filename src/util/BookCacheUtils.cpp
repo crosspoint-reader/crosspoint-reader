@@ -49,7 +49,9 @@ BookCacheMove moveBookCache(const std::string& oldPath, const std::string& newPa
   // there. Left in place it would be picked up as the moved file's own cache,
   // whether or not that file brings a cache of its own.
   if (!newCachePath.empty() && Storage.exists(newCachePath.c_str())) {
-    Storage.removeDir(newCachePath.c_str());
+    if (!Storage.removeDir(newCachePath.c_str())) {
+      LOG_ERR("BookCache", "Failed to clear cache dir %s (non-fatal)", newCachePath.c_str());
+    }
   }
 
   const std::string oldCachePath = bookCachePath(oldPath);
