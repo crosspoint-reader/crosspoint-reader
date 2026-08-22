@@ -42,20 +42,9 @@ std::string sanitizeDirComponent(std::string s) {
   std::replace_if(
       s.begin(), s.end(),
       [](char ch) {
-        switch (ch) {
-          case '/':
-          case '\\':
-          case ':':
-          case '*':
-          case '?':
-          case '"':
-          case '<':
-          case '>':
-          case '|':
-            return true;
-          default:
-            return false;
-        }
+        if (static_cast<unsigned char>(ch) < 0x20) return true;
+        return ch == '/' || ch == '\\' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' ||
+               ch == '|';
       },
       '_');
   while (!s.empty() && s.back() == '.') s.pop_back();
@@ -494,8 +483,8 @@ void OpdsBookBrowserActivity::releaseEntries() {
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   // ".." / parent-directory entries (common in filesystem-style OPDS) should
   // unwind the same way as the Back button so folderNames stays aligned.
-  if ((entry.title == ".." || entry.title == ".") && !navigationHistory.empty()) {
-    navigateBack();
+  if (entry.title == ".." || entry.title == ".") {
+    navigateBack();  // empty history → onGoHome()
     return;
   }
 
