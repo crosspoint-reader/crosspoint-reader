@@ -317,10 +317,14 @@ bool Xtc::generateThumbBmp(int height) const {
   LOG_DBG("XTC", "Generating thumb BMP: %dx%d -> %dx%d (scale: %.3f)", pageInfo.width, pageInfo.height, thumbWidth,
           thumbHeight, scale);
 
-  // Allocate buffer for page data
+  // Allocate buffer for page data, sized like generateCoverBmp() so partly filled
+  // columns of an XTH plane stay inside the buffer
+  const size_t planeSize = (bitDepth == 2) ? ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) : 0;
+  const size_t planeBytes =
+      (bitDepth == 2) ? std::max(planeSize, static_cast<size_t>(pageInfo.width) * ((pageInfo.height + 7) / 8)) : 0;
   size_t bitmapSize;
   if (bitDepth == 2) {
-    bitmapSize = ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) * 2;
+    bitmapSize = planeSize + planeBytes;
   } else {
     bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
   }
@@ -364,7 +368,6 @@ bool Xtc::generateThumbBmp(int height) const {
   uint32_t scaleInv_fp = static_cast<uint32_t>(65536.0f / scale);
 
   // Pre-calculate plane info for 2-bit mode
-  const size_t planeSize = (bitDepth == 2) ? ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) : 0;
   const uint8_t* plane1 = (bitDepth == 2) ? pageBuffer : nullptr;
   const uint8_t* plane2 = (bitDepth == 2) ? pageBuffer + planeSize : nullptr;
   const size_t colBytes = (bitDepth == 2) ? ((pageInfo.height + 7) / 8) : 0;
@@ -408,7 +411,7 @@ bool Xtc::generateThumbBmp(int height) const {
               const size_t bitInByte = 7 - (srcY % 8);
               const size_t byteOffset = colIndex * colBytes + byteInCol;
               // Bounds check for buffer access
-              if (byteOffset < planeSize) {
+              if (byteOffset < planeBytes) {
                 const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
                 const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
                 const uint8_t pixelValue = (bit1 << 1) | bit2;
