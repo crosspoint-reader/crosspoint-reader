@@ -108,13 +108,21 @@ jobs:
           # --strip-unused matches the pre-build hook, so the key count agrees with the firmware.
           python3 scripts/gen_i18n.py lib/I18n/translations lib/I18n/ \
             --strip-unused --builtin-langs "$BUILTIN" --pack-dir dist/lang
+          # With the default `all` every language is compiled in and there is nothing to
+          # ship, so the steps below are skipped rather than attaching an empty zip.
+          COUNT=$(find dist/lang -name '*.cplang' | wc -l | tr -d ' ')
+          echo "Generated $COUNT pack(s)"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+        id: packs
 
       - name: Bundle packs
+        if: steps.packs.outputs.count != '0'
         run: |
           cd dist
           zip -r ../language-packs.zip lang
 
       - name: Upload Artifacts
+        if: steps.packs.outputs.count != '0'
         uses: actions/upload-artifact@v4
         with:
           name: language-packs
