@@ -8,9 +8,6 @@
 #include <Txt.h>
 #include <Xtc.h>
 
-#include "CrossPointState.h"
-#include "RecentBooksStore.h"
-
 namespace {
 
 constexpr char CACHE_ROOT[] = "/.crosspoint";
@@ -54,7 +51,6 @@ void moveBookCache(const std::string& oldPath, const std::string& newPath) {
   const std::string newCachePath = bookCachePath(newPath);
   if (newCachePath.empty()) {
     clearBookCache(oldPath);
-    RECENT_BOOKS.removeByPath(oldPath);
     return;
   }
 
@@ -68,11 +64,5 @@ void moveBookCache(const std::string& oldPath, const std::string& newPath) {
     if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
       LOG_ERR("BookCache", "Failed to move cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
     }
-  }
-
-  RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
-  if (APP_STATE.openEpubPath == oldPath) {
-    APP_STATE.openEpubPath = newPath;
-    APP_STATE.saveToFile();
   }
 }

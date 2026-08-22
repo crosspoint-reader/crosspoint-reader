@@ -26,6 +26,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookMove.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -923,11 +924,11 @@ void CrossPointWebServer::handleRename() const {
     return;
   }
 
-  const bool success = file.rename(newPath.c_str());
+  // SdFat cannot rename a path that still has an open file.
   file.close();
+  const bool success = moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
-    moveBookCache(itemPath.c_str(), newPath.c_str());
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
@@ -1016,11 +1017,11 @@ void CrossPointWebServer::handleMove() const {
     return;
   }
 
-  const bool success = file.rename(newPath.c_str());
+  // SdFat cannot rename a path that still has an open file.
   file.close();
+  const bool success = moveBook(itemPath.c_str(), newPath.c_str());
 
   if (success) {
-    moveBookCache(itemPath.c_str(), newPath.c_str());
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {

@@ -16,7 +16,7 @@
 #include <iterator>
 #include <limits>
 
-#include "../../util/BookCacheUtils.h"
+#include "../../util/BookMove.h"
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
@@ -117,12 +117,9 @@ std::string buildReadFolderDestination(const std::string& srcPath) {
 
 void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath) {
   LOG_INF("ERS", "Moving finished epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
-  if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
+  if (!moveBook(srcPath, dstPath)) {
     LOG_ERR("ERS", "Failed to move finished book to '/Read' folder");
-    return;
   }
-
-  moveBookCache(srcPath, dstPath);
 }
 
 }  // namespace
