@@ -42,9 +42,20 @@ std::string sanitizeDirComponent(std::string s) {
   std::replace_if(
       s.begin(), s.end(),
       [](char ch) {
-        return ch == '/' || ch == '\' || ch == ' : ' || ch == ' * ' || ch == ' ? ' || ch == ' "' || ch == '<' ||
-                                                                                         ch == '>' ||
-                                                                                     ch == '|';
+        switch (ch) {
+          case '/':
+          case '\\':
+          case ':':
+          case '*':
+          case '?':
+          case '"':
+          case '<':
+          case '>':
+          case '|':
+            return true;
+          default:
+            return false;
+        }
       },
       '_');
   while (!s.empty() && s.back() == '.') s.pop_back();
