@@ -37,12 +37,8 @@ constexpr int16_t kToolRowH = 64;
 constexpr int16_t kToolPillInset = 10;
 constexpr int16_t kToolIconTop = 8;
 constexpr int kToolCount = 3;
-// Top bar: at least this tall; the iOS-6 back tab's height, arrow depth and
-// label padding.
+// Top bar: at least this tall.
 constexpr int16_t kHeaderMinH = 60;
-constexpr int16_t kBackButtonH = 32;
-constexpr int16_t kBackArrow = 12;
-constexpr int16_t kBackPadX = 10;
 // Bottom sheet height for the panels, as a share of the screen: the page stays
 // readable above it, and the list still gets several finger-sized rows.
 constexpr int kPanelHeightPercent = 62;
@@ -158,9 +154,8 @@ void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anc
 }
 
 // Top bar: a white band (at least kHeaderMinH tall -- the reading page's
-// chrome needs a little more presence than a list header) with an iOS-6 style
-// "back" button on the left (a bordered tab whose left end is an arrow) that
-// leaves the book for the library, the book title centred, and the battery on
+// chrome needs a little more presence than a list header) with a "< Library"
+// back control on the left that leaves the book for the library, the book title centred, and the battery on
 // the right. Detached-battery themes (Lyra) keep their own structure: battery
 // in the top strip, title and button on the lower sub-band.
 void ReaderToolbarUi::buildHeader(UiScreen& screen) {
@@ -212,46 +207,24 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
                                   static_cast<int16_t>(bandH - metrics.batteryBarHeight - tokens.headerUnderline)}
                       : fui::Rect{band.x, band.y, band.width, static_cast<int16_t>(bandH - tokens.headerUnderline)};
 
-  // Back button: label inside a bordered tab whose left end comes to a point
-  // (iOS 6). The tab's body is a rounded rect open on the left; the arrow is
-  // two strokes meeting at the tip, and the page text behind the tip is
-  // already painted out with the band.
+  // Back button: a chevron and the library's name, plain text -- the page is
+  // the content here, so the bar keeps to type and a single glyph.
   const char* backLabel = tr(STR_LIBRARY);
-  fui::TextStyle backStyle = tokens.smallText;
+  fui::TextStyle backStyle = tokens.bodyText;
   backStyle.bold = true;
-  backStyle.align = fui::TextAlign::Center;
   const int16_t textW = screen.target().measureText(backStyle.font, backLabel, backStyle).width;
-  const int16_t btnH = kBackButtonH;
-  const int16_t bodyW = static_cast<int16_t>(textW + 2 * kBackPadX);
+  const int16_t textH = screen.target().lineHeight(backStyle.font);
+  const int16_t lineTop = band.y;
+  const int16_t lineH = static_cast<int16_t>(bandH - tokens.headerUnderline);
   const int16_t btnX = static_cast<int16_t>(band.x + tokens.headerSidePadding);
-  // Centred on the whole bar (above the rule), whatever the title line does.
-  const int16_t btnY = static_cast<int16_t>(band.y + (bandH - tokens.headerUnderline - btnH) / 2);
-  const fui::Rect tab{static_cast<int16_t>(btnX + kBackArrow), btnY, bodyW, btnH};
-  const uint8_t tabRadius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, 8));
-  screen.target().fill(tab, paper, tabRadius, fui::CornerTopRight | fui::CornerBottomRight);
-  screen.target().stroke(tab, ink, 2, tabRadius, fui::CornerTopRight | fui::CornerBottomRight);
-  // Open the tab's left edge, then draw the arrow onto it: one 2px run per
-  // row along the two diagonals (scanlines instead of drawn lines, so the
-  // edge stays a clean 1-bit stair with no aliasing gaps).
-  // (Only between the top and bottom borders, which the arrow's ends meet.)
-  screen.target().fill(
-      fui::Rect{static_cast<int16_t>(tab.x - 1), static_cast<int16_t>(tab.y + 2), 4, static_cast<int16_t>(btnH - 4)},
-      paper);
-  // Bridge the arrow's ends into the body's top/bottom borders (the stroke
-  // keeps clear of the open left edge), so the outline is one closed wire.
-  screen.target().fill(fui::Rect{static_cast<int16_t>(tab.x - 1), tab.y, 10, 2}, ink);
-  screen.target().fill(fui::Rect{static_cast<int16_t>(tab.x - 1), static_cast<int16_t>(tab.bottom() - 2), 10, 2}, ink);
-  const int half = btnH / 2;
-  for (int dy = 0; dy < btnH; ++dy) {
-    const int dist = dy < half ? half - dy : dy - half;  // 0 at the tip row
-    // Edge x for this row: the tip at dist 0, the tab body at dist == half.
-    const int edgeX = btnX + (dist * kBackArrow + half / 2) / half;
-    screen.target().fill(fui::Rect{static_cast<int16_t>(edgeX), static_cast<int16_t>(btnY + dy), 2, 1}, ink);
-  }
-  screen.target().text(tab, backLabel, backStyle);
-  // Finger-sized target around the drawn button.
-  const fui::Rect backHit{band.x, band.y, static_cast<int16_t>(kBackArrow + bodyW + 2 * tokens.headerSidePadding),
-                          static_cast<int16_t>(bandH - tokens.headerUnderline)};
+  const fui::Rect chevron{btnX, static_cast<int16_t>(lineTop + (lineH - 24) / 2), 24, 24};
+  screen.target().bitmap(chevron, fui::bitmapFromIcon(icon_reader_back_24), fui::BitmapMode::Center, ink);
+  const fui::Rect backText{static_cast<int16_t>(chevron.right() + 2),
+                           static_cast<int16_t>(lineTop + (lineH - textH) / 2), textW, textH};
+  screen.target().text(backText, backLabel, backStyle);
+  // Finger-sized target around the chevron + label.
+  const fui::Rect backHit{band.x, lineTop, static_cast<int16_t>(backText.right() - band.x + tokens.headerSidePadding),
+                          lineH};
   screen.frame().hit(backHit, ACTION_HOME, 0, fui::InputTouch);
 
   // Title, centred on the line between the button and the battery.
