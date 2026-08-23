@@ -158,10 +158,9 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
 
   const uint16_t percent = powerManager.getBatteryPercentage();
   const bool showPercent = SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-  batteryText_ = std::to_string(percent) + "%";
+  snprintf(batteryText_, sizeof(batteryText_), "%u%%", static_cast<unsigned>(percent));
   const int16_t labelW =
-      showPercent ? screen.target().measureText(tokens.smallText.font, batteryText_.c_str(), tokens.smallText).width
-                  : 0;
+      showPercent ? screen.target().measureText(tokens.smallText.font, batteryText_, tokens.smallText).width : 0;
   constexpr int16_t kBatteryGap = 4;  // BaseTheme::batteryPercentSpacing
   // The icon glyph extends 2px past glyphWidth (terminal nub); reserve it or
   // the percent label's rect comes up short and the text truncates.
@@ -177,20 +176,38 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   headerProps_.leadingIcon = fui::bitmapFromIcon(icon_reader_back_24);
   headerProps_.leadingAction = ACTION_DISMISS;
   headerProps_.leadingRadius = 8;
-  headerProps_.rightReserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd);
-  headerProps_.leftReserve = headerProps_.rightReserve;  // keep the title centred on the band
+  // Two header structures, as BaseTheme::drawHeader: a shared line (title
+  // between the chevron and the battery), or the theme's detached layout
+  // (Lyra) with the battery in its own top strip and the title on the lower
+  // sub-band, owning the full width.
+  const bool batteryDetached = metrics.headerBatteryDetached;
+  if (batteryDetached) {
+    const int titleLineHeight = screen.target().lineHeight(tokens.titleText.font);
+    const int titleTop = static_cast<int>(band.height) - tokens.headerUnderline - tokens.spaceMd - titleLineHeight;
+    headerProps_.titleOffsetY = static_cast<int16_t>(titleTop - (static_cast<int>(band.height) - titleLineHeight) / 2);
+    headerProps_.leftReserve = 0;
+    headerProps_.rightReserve = 0;
+  } else {
+    headerProps_.titleOffsetY = 0;
+    headerProps_.rightReserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd);
+    headerProps_.leftReserve = headerProps_.rightReserve;  // keep the title centred on the band
+  }
   screen.header(headerProps_);
 
   fui::BatteryIndicatorProps battery;
   battery.percent = static_cast<uint8_t>(percent > 100 ? 100 : percent);
   battery.charging = gpio.isUsbConnected();
-  battery.label = showPercent ? batteryText_.c_str() : nullptr;
+  battery.label = showPercent ? batteryText_ : nullptr;
   battery.text = tokens.smallText;
   battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
   battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
   battery.gap = kBatteryGap;
-  const int16_t batteryX = static_cast<int16_t>(band.right() - tokens.headerSidePadding - batteryReserve);
-  fui::batteryIndicator(screen.frame(), fui::Rect{batteryX, band.y, batteryReserve, tokens.headerHeight}, battery);
+  // Detached: hug the corner within the battery strip (12px, the legacy
+  // inset); shared line: sit on the content grid, centred on the band.
+  const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
+  const int16_t batteryX = static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
+  const int16_t batteryH = batteryDetached ? static_cast<int16_t>(metrics.batteryBarHeight) : tokens.headerHeight;
+  fui::batteryIndicator(screen.frame(), fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
 }
 
 void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
@@ -217,11 +234,10 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
   // Scrub row: < [progress track + knob: tap/drag to jump] >
   {
     const fui::Rect band = screen.takeTop(kScrubButton, tokens.spaceMd);
-    stepProps_.label = "<";
+    stepProps_.label = nullptr;
+    stepProps_.icon = fui::bitmapFromIcon(icon_reader_back_24);
     stepProps_.action = ACTION_PREV;
     stepProps_.inputMask = fui::InputTouch;
-    stepProps_.text = tokens.smallText;
-    stepProps_.text.bold = false;
     stepProps_.styles.explicitlySet = true;
     stepProps_.styles.normal.background = fui::Paint::solid(fui::Color::White);
     stepProps_.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
@@ -235,7 +251,7 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
     stepProps_.styles.active.background = fui::Paint::solid(fui::Color::Black);
     stepProps_.styles.active.foreground = fui::Paint::solid(fui::Color::White);
     screen.button(stepProps_, fui::Rect{band.x, band.y, kScrubButton, kScrubButton});
-    stepProps_.label = ">";
+    stepProps_.icon = fui::bitmapFromIcon(icon_reader_next_24);
     stepProps_.action = ACTION_NEXT;
     screen.button(stepProps_,
                   fui::Rect{static_cast<int16_t>(band.right() - kScrubButton), band.y, kScrubButton, kScrubButton});

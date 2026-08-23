@@ -99,6 +99,6 @@ class ReaderToolbarUi : public UiAppHost {
   freeink::ui::ButtonProps stepProps_;
   freeink::ui::ListProps listProps_;
   freeink::ui::HeaderProps headerProps_;
-  std::string batteryText_;
+  char batteryText_[8] = {};
   freeink::ui::Rect pageIndicatorRect_{};
 };

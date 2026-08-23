@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws the 24px Contents / Text / More (and back chevron) glyphs for the toolbar reader menu's
+"""Draws the 24px Contents / Text / More (and the back / next chevrons) glyphs for the toolbar reader menu's
 tile row into src/components/icons/readerToolbarIcons.h.
 
 The tile icons are three simple shapes (menu bars, "Aa" in the UI face, an
@@ -52,6 +52,11 @@ def draw_icons():
     d = ImageDraw.Draw(im)
     d.line([(15 * S, 4 * S), (8 * S, 12 * S), (15 * S, 20 * S)], fill=0, width=2 * S, joint="curve")
     icons["back"] = down(im)
+
+    im = canvas()
+    d = ImageDraw.Draw(im)
+    d.line([(9 * S, 4 * S), (16 * S, 12 * S), (9 * S, 20 * S)], fill=0, width=2 * S, joint="curve")
+    icons["next"] = down(im)
     return icons
 
 
@@ -90,8 +95,8 @@ def main():
         data, c = pack(im)
         body = ", ".join(f"0x{b:02X}" for b in data)
         out.append(f"// {name}")
-        out.append(f"static const uint8_t icon_reader_{name}_24_bits[] = {{{body}}};")
-        out.append(f"static const freeink::Icon icon_reader_{name}_24 = {{{PX}, {PX}, {c}, icon_reader_{name}_24_bits}};")
+        out.append(f"static constexpr uint8_t icon_reader_{name}_24_bits[] = {{{body}}};")
+        out.append(f"static constexpr freeink::Icon icon_reader_{name}_24 = {{{PX}, {PX}, {c}, icon_reader_{name}_24_bits}};")
         out.append("")
     open(OUT, "w", newline="\n").write("\n".join(out))
     print(f"wrote {OUT}")
