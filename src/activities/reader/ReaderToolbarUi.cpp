@@ -231,8 +231,11 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
   fui::SheetProps sheetProps;
   sheetProps.anchor = fui::SheetEdge::Bottom;
   sheetProps.dismissAction = ACTION_DISMISS;
-  sheetProps.grabberMargin = tokens.spaceMd;
-  sheetProps.grabberInset = tokens.spaceSm;
+  // Grabber air matches the frontlight panel's card language (spaceLg around
+  // the grabber, spaceMd more toward the free edge) so the two sheets read as
+  // the same family.
+  sheetProps.grabberMargin = tokens.spaceLg;
+  sheetProps.grabberInset = static_cast<int16_t>(tokens.spaceLg + tokens.spaceMd);
   const int16_t grabberBand =
       static_cast<int16_t>(sheetProps.grabberMargin + sheetProps.grabberHeight + sheetProps.grabberInset);
   screen.sheet(sheetProps, static_cast<int16_t>(contentH + grabberBand));
@@ -306,8 +309,9 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   fui::SheetProps sheetProps;
   sheetProps.anchor = fui::SheetEdge::Bottom;
   sheetProps.dismissAction = ACTION_DISMISS;  // tap the page above the sheet = back to the toolbar
-  sheetProps.grabberMargin = tokens.spaceMd;
-  sheetProps.grabberInset = tokens.spaceMd;
+  // Same grabber air as the toolbar sheet / frontlight panel.
+  sheetProps.grabberMargin = tokens.spaceLg;
+  sheetProps.grabberInset = static_cast<int16_t>(tokens.spaceLg + tokens.spaceMd);
   screen.sheet(sheetProps, static_cast<int16_t>((safe.height * kPanelHeightPercent) / 100));
   screen.insetContent(fui::Insets{0, tokens.spaceLg, 0, tokens.spaceLg});
 
