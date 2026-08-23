@@ -23,7 +23,6 @@ constexpr fui::ActionId ACTION_PREV = 3;     // scrub row: previous chapter
 constexpr fui::ActionId ACTION_NEXT = 4;     // scrub row: next chapter
 constexpr fui::ActionId ACTION_SCRUB = 5;    // progress track: dragPermille along the book
 constexpr fui::ActionId ACTION_ROW = 6;      // panel list row, value = row index
-constexpr fui::ActionId ACTION_HOME = 7;     // top bar back button: leave the book for the library
 
 // Scrub row: two small round-cornered chapter buttons flanking a thin progress
 // track with a round knob -- the reading page's chrome is light, so the
@@ -32,10 +31,11 @@ constexpr int16_t kScrubButton = 36;  // chapter step buttons (square)
 constexpr int16_t kScrubKnob = 16;    // round knob on the 2px progress track
 constexpr int16_t kScrubGap = 12;     // air between the buttons and the track
 // Tool row: a 24px glyph over a small label per slot, the active slot in an
-// outline pill. The whole slot is the tap target.
-constexpr int16_t kToolRowH = 64;
+// outline pill. The whole slot is the tap target; the glyph+label stack is
+// centred vertically so the row height sets the touch-target size.
+constexpr int16_t kToolRowH = 80;
 constexpr int16_t kToolPillInset = 10;
-constexpr int16_t kToolIconTop = 8;
+constexpr int16_t kToolIconLabelGap = 2;
 constexpr int kToolCount = 3;
 // Bottom sheet height for the panels, as a share of the screen: the page stays
 // readable above it, and the list still gets several finger-sized rows.
@@ -49,7 +49,7 @@ void ReaderToolbarUi::begin() {
   pending_ = Routed{};
   visibleRows_ = 0;
   topIndex_ = 0;
-  for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_HOME; ++id) {
+  for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_ROW; ++id) {
     app.on(id, &ReaderToolbarUi::onAction, this);
   }
   app.setScreen(&ReaderToolbarUi::screenFn, this);
@@ -95,9 +95,6 @@ void ReaderToolbarUi::onAction(const fui::ActionEvent& event, void* user) {
     case ACTION_ROW:
       out.event = Event::Row;
       break;
-    case ACTION_HOME:
-      out.event = Event::Home;
-      break;
     default:
       break;
   }
@@ -136,6 +133,8 @@ void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anc
   fui::TextStyle labelStyle = tokens.smallText;
   labelStyle.align = fui::TextAlign::Center;
   const uint8_t pillRadius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, (kToolRowH - 2 * 4) / 2));
+  const int16_t stackH = static_cast<int16_t>(24 + kToolIconLabelGap + labelH);
+  const int16_t iconTop = static_cast<int16_t>(std::max(0, (row.height - stackH) / 2));
   for (int i = 0; i < kToolCount; ++i) {
     const fui::Rect slot{static_cast<int16_t>(row.x + slotW * i), row.y, slotW, row.height};
     if (i == model_.activeTool) {
@@ -143,27 +142,27 @@ void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anc
                              fui::Paint::solid(fui::Color::Black), 2, pillRadius);
     }
     const fui::Rect iconRect{static_cast<int16_t>(slot.x + (slot.width - 24) / 2),
-                             static_cast<int16_t>(slot.y + kToolIconTop), 24, 24};
+                             static_cast<int16_t>(slot.y + iconTop), 24, 24};
     screen.target().bitmap(iconRect, icons[i], fui::BitmapMode::Center);
-    const fui::Rect labelRect{slot.x, static_cast<int16_t>(slot.y + kToolIconTop + 24 + 2), slot.width, labelH};
+    const fui::Rect labelRect{slot.x, static_cast<int16_t>(slot.y + iconTop + 24 + kToolIconLabelGap), slot.width,
+                              labelH};
     screen.target().text(labelRect, labels[i], labelStyle);
     screen.frame().hit(slot, ACTION_TOOL, static_cast<int16_t>(i), fui::InputTouch);
   }
 }
 
-// Top bar: a white band (the theme's header height) with a back chevron on
-// the left that leaves the book for the library, the book title centred, and the battery on
-// the right. Detached-battery themes (Lyra) keep their own structure: battery
-// in the top strip, title and button on the lower sub-band.
+// Top bar: a white band (the theme's header height) with the book title
+// centred on the band and the battery on the right. Detached-battery themes
+// (Lyra) keep the battery in their top strip. The band registers no tap
+// targets of its own, so a tap anywhere on it falls through to the sheet's
+// outside-tap dismiss -- the same gesture that opened the toolbar closes it.
 void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   const auto& tokens = screen.theme();
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const fui::Rect body = screen.body();
   const int16_t bandH = tokens.headerHeight;
   const fui::Rect band = screen.takeTop(bandH);
   const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
   const fui::Paint paper = fui::Paint::solid(fui::Color::White);
-  (void)body;
 
   // The page text runs under this band: paint it out, then the bottom rule.
   screen.target().fill(band, paper);
@@ -197,30 +196,12 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   const int16_t batteryH = batteryDetached ? static_cast<int16_t>(metrics.batteryBarHeight) : bandH;
   fui::batteryIndicator(screen.frame(), fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
 
-  // The line the title and the back button share: the whole band, or the
-  // sub-band under the battery strip on detached themes.
-  const fui::Rect line =
-      batteryDetached ? fui::Rect{band.x, static_cast<int16_t>(band.y + metrics.batteryBarHeight), band.width,
-                                  static_cast<int16_t>(bandH - metrics.batteryBarHeight - tokens.headerUnderline)}
-                      : fui::Rect{band.x, band.y, band.width, static_cast<int16_t>(bandH - tokens.headerUnderline)};
-
-  // Back: a lone chevron on the left (tap = leave the book for the library).
-  const int16_t lineTop = band.y;
-  const int16_t lineH = static_cast<int16_t>(bandH - tokens.headerUnderline);
-  const int16_t btnX = static_cast<int16_t>(band.x + tokens.headerSidePadding);
-  const fui::Rect chevron{btnX, static_cast<int16_t>(lineTop + (lineH - 24) / 2), 24, 24};
-  screen.target().bitmap(chevron, fui::bitmapFromIcon(icon_reader_back_24), fui::BitmapMode::Center, ink);
-  // Finger-sized target around the glyph.
-  const fui::Rect backHit{band.x, lineTop, static_cast<int16_t>(chevron.right() - band.x + tokens.headerSidePadding),
-                          lineH};
-  screen.frame().hit(backHit, ACTION_HOME, 0, fui::InputTouch);
-
-  // Title, centred on the line between the button and the battery.
+  // Title, centred on the band both ways (the underline band excluded).
   if (model_.bookTitle) {
     fui::TextStyle titleStyle = tokens.titleText;
     titleStyle.bold = true;
     titleStyle.align = fui::TextAlign::Center;
-    const int16_t leftEdge = static_cast<int16_t>(backHit.right() + tokens.spaceSm);
+    const int16_t leftEdge = static_cast<int16_t>(band.x + tokens.headerSidePadding);
     const int16_t rightEdge =
         static_cast<int16_t>(batteryDetached ? band.right() - tokens.headerSidePadding : batteryX - tokens.spaceMd);
     // Keep the title centred on the band when there is room, else on the gap.
@@ -230,9 +211,10 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
     int16_t x = static_cast<int16_t>(band.x + (band.width - titleW) / 2);
     if (x < leftEdge) x = leftEdge;
     if (x + titleW > rightEdge) x = static_cast<int16_t>(rightEdge - titleW);
+    const int16_t lineH = static_cast<int16_t>(bandH - tokens.headerUnderline);
     const int16_t th = screen.target().lineHeight(titleStyle.font);
-    screen.target().text(fui::Rect{x, static_cast<int16_t>(line.y + (line.height - th) / 2), titleW, th},
-                         model_.bookTitle, titleStyle);
+    screen.target().text(fui::Rect{x, static_cast<int16_t>(band.y + (lineH - th) / 2), titleW, th}, model_.bookTitle,
+                         titleStyle);
   }
 }
 
@@ -355,6 +337,9 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   const uint16_t rows = fui::listVisibleRows(listRect, listProps_.rowHeight, tokens.listRowGap);
   visibleRows_ = rows > 0 ? rows : 1;
   const int selected = std::clamp(model_.selectedIndex, -1, model_.itemCount - 1);
+  // Explicit viewport request (touch paging): the base the follow logic works
+  // from, so it still pulls a shown cursor into view.
+  if (model_.topIndex >= 0) topIndex_ = std::min(model_.topIndex, std::max(0, model_.itemCount - 1));
   if (model_.itemCount > 0) {
     // Follow the cursor (or the row the reader asked to show) into view.
     const int follow = selected >= 0 ? selected : std::min(topIndex_, model_.itemCount - 1);

@@ -48,6 +48,12 @@
 #include "util/ScreenshotUtil.h"
 
 namespace {
+// The X4 Pro carries the X4's panel but sits outside isXteinkDevice() (that
+// helper also gates power management). Overlay refresh choices are per-panel:
+// this family runs the grayscale anti-aliasing pass, so chrome painted over a
+// fresh page needs the HALF ghost-cleanup and closing re-renders the page.
+bool xteinkClassPanel() { return gpio.isXteinkDevice() || BoardConfig::isX4Pro(); }
+
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
@@ -1373,7 +1379,7 @@ void EpubReaderActivity::renderBook() {
     // HALF on the Xteink grayscale panels: the page render above just ran the
     // anti-aliasing waveform, and a FAST differential leaves the covered text
     // ghosting gray through the chrome background (see openOverlay).
-    renderer.displayBuffer(gpio.isXteinkDevice() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+    renderer.displayBuffer(xteinkClassPanel() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   }
 }
 
@@ -1740,6 +1746,7 @@ void EpubReaderActivity::openOverlay(Overlay target) {
   if (previous == Overlay::None) toolbarUi->begin();
   // Buttons show a cursor from the start; touch boards only once a button moves it.
   panelCursorShown = !mappedInput.hasTouch();
+  panelTopIndex = -1;  // fresh panel: viewport follows the selection (or the top)
   switch (target) {
     case Overlay::Toolbar:
       focusedTool = 0;
@@ -1766,21 +1773,35 @@ void EpubReaderActivity::openOverlay(Overlay target) {
   // lands before the overlay does.
   //
   // Refresh mode: HALF only for the FIRST overlay over a fresh page on the
-  // Xteink grayscale panels -- the page was just driven by the anti-aliasing
-  // waveform, and a FAST differential can't fully erase that charge (the
-  // covered text ghosts gray through the chrome, same mechanism as #2190's
-  // image ghosting). Overlay->overlay transitions repaint over chrome that
-  // HALF/FAST already drew, where a differential is clean -- FAST keeps them
-  // snappy and flash-free. On other panels HALF is the flashing quality mode,
-  // and FAST is clean for every transition.
+  // Xteink-class grayscale panels -- the page was just driven by the
+  // anti-aliasing waveform, and a FAST differential can't fully erase that
+  // charge (the covered text ghosts gray through the chrome, same mechanism
+  // as #2190's image ghosting; skipping it bakes residue in under the sheet
+  // that every later differential preserves). Overlay->overlay transitions
+  // repaint over chrome that HALF/FAST already drew, where a differential is
+  // clean -- FAST keeps them snappy and flash-free, same as the settings
+  // lists. On other panels HALF is the flashing quality mode, and FAST is
+  // clean for every transition.
   if (section) {
+    // Serialize against the render task: renderBook may be mid-page (status
+    // bar included) in the shared framebuffer, and painting the chrome from
+    // the loop task at the same time interleaves the two frames.
+    RenderLock lock;
     if (previous == Overlay::None) {
       // Snapshot the clean page so stepping back from a panel to the toolbar
       // (and closing, where supported) can restore it without a re-render.
       overlayPageStored = renderer.storeBwBuffer();
+    } else if (overlayPageStored) {
+      // Overlay -> overlay: wipe the previous chrome (toolbar header, sheet,
+      // progress row) back to the clean page so none of it shows around or
+      // through the new sheet; re-store for the next transition. No baseline
+      // resync: the glass still shows the old chrome, and the differential
+      // must keep diffing against it to erase it.
+      renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+      overlayPageStored = renderer.storeBwBuffer();
     }
     renderOverlay();
-    const bool needsGhostCleanup = gpio.isXteinkDevice() && previous == Overlay::None;
+    const bool needsGhostCleanup = xteinkClassPanel() && previous == Overlay::None;
     renderer.displayBuffer(needsGhostCleanup ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   } else {
     requestUpdate();  // no page yet: renderBook() draws the overlay once it is
@@ -1793,8 +1814,11 @@ void EpubReaderActivity::openOverlay(Overlay target) {
 void EpubReaderActivity::closeOverlayToPage() {
   overlay = Overlay::None;
   toolbarUi.reset();  // ~1 KB of interaction table + props, only needed while open
-  if (!gpio.isXteinkDevice() && overlayPageStored) {
-    renderer.restoreBwBuffer();
+  if (!xteinkClassPanel() && overlayPageStored) {
+    RenderLock lock;  // the render task shares the framebuffer
+    // No baseline resync: the glass shows the chrome, and erasing it needs
+    // the differential to keep diffing against the last pushed frame.
+    renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
     overlayPageStored = false;
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return;
@@ -1807,7 +1831,10 @@ void EpubReaderActivity::renderOverlay() {
   if (!epub || !section || !toolbarUi) return;
 
   ReaderToolbarUi::Model model;
-  model.activeTool = focusedTool;
+  // The toolbar's tool pill is the button-navigation cursor: tap-first (same
+  // convention as the panel lists), it only shows once a button has moved it.
+  // Panels override below: there the pill marks the open panel on every board.
+  model.activeTool = (overlay == Overlay::Toolbar && !panelCursorShown) ? -1 : focusedTool;
   // Strings the model points at live here until render() returns.
   std::string bookTitle, chapterTitle, pageInfo;
 
@@ -1838,6 +1865,7 @@ void EpubReaderActivity::renderOverlay() {
   // Tap-first: the cursor is only drawn once a button has moved it, so a
   // tapped row does not stay inverted after its action.
   model.selectedIndex = panelCursorShown ? panelIndex : -1;
+  model.topIndex = panelTopIndex;
   if (overlay == Overlay::Contents) {
     model.panelTitle = tr(STR_TOOL_CONTENTS);
     model.itemCount = epub->getTocItemsCount();
@@ -1869,6 +1897,7 @@ void EpubReaderActivity::renderOverlay() {
 void EpubReaderActivity::handleOverlayInput() {
   if (!toolbarUi) return;
   const auto fastRedraw = [this] {
+    RenderLock lock;  // the render task shares the framebuffer
     renderOverlay();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   };
@@ -1901,12 +1930,6 @@ void EpubReaderActivity::handleOverlayInput() {
       case ReaderToolbarUi::Event::Dismiss:
         closeOverlayToPage();
         return;
-      case ReaderToolbarUi::Event::Home:
-        // The top bar's back button leaves the book for the library.
-        overlay = Overlay::None;
-        discardOverlayPage();
-        onGoHome();
-        return;
       case ReaderToolbarUi::Event::Tool:
         focusedTool = routed.value;
         openOverlay(toolOverlay(focusedTool));
@@ -1933,11 +1956,13 @@ void EpubReaderActivity::handleOverlayInput() {
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       focusedTool = (focusedTool + 2) % 3;
+      panelCursorShown = true;
       fastRedraw();
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
       focusedTool = (focusedTool + 1) % 3;
+      panelCursorShown = true;
       fastRedraw();
       return;
     }
@@ -2017,19 +2042,29 @@ void EpubReaderActivity::handleOverlayInput() {
     // it (2+ refreshes -> one FAST). Re-store right away so another panel
     // round-trip can restore again.
     if (overlayPageStored) {
-      renderer.restoreBwBuffer();
-      overlayPageStored = renderer.storeBwBuffer();
-      fastRedraw();
+      {
+        RenderLock lock;  // the render task shares the framebuffer
+        // No baseline resync: the glass shows the panel, and erasing it needs
+        // the differential to keep diffing against the last pushed frame.
+        renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+        overlayPageStored = renderer.storeBwBuffer();
+      }
+      fastRedraw();  // takes its own RenderLock
       return;
     }
     requestUpdate();
   };
 
-  // Pages the list by one screen of rows; the cursor rides along so the
-  // buttons continue from what is shown.
+  // Pages the list by one screen of rows. The VIEWPORT moves, not just the
+  // cursor: on touch boards the cursor is hidden and the list window only
+  // follows a shown selection, so paging the cursor alone repaints the same
+  // rows. A shown cursor rides along so the buttons continue from what is
+  // visible.
   const auto pageList = [this, count, pageRows, &fastRedraw](int direction) {
     if (count <= 0) return;
-    panelIndex = std::clamp(panelIndex + direction * pageRows, 0, count - 1);
+    const int maxTop = std::max(0, count - pageRows);
+    panelTopIndex = std::clamp(toolbarUi->topIndex() + direction * pageRows, 0, maxTop);
+    if (panelCursorShown) panelIndex = std::clamp(panelIndex + direction * pageRows, 0, count - 1);
     fastRedraw();
   };
 
@@ -2063,13 +2098,16 @@ void EpubReaderActivity::handleOverlayInput() {
     default:
       break;
   }
-  if (routed.routed) return;  // consumed by the chrome (title band, dead space)
-
+  // Swipe up/down pages the list. Checked before the routed-frame return:
+  // FUI routes every touch frame over the sheet, so a swipe's frames count as
+  // routed (without dispatching -- too much travel for a tap) and the gesture
+  // would otherwise never be seen.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
     pageList(swipe == MappedInputManager::SwipeDir::Up ? 1 : -1);
     return;
   }
+  if (routed.routed) return;  // consumed by the chrome (title band, dead space)
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     dismissPanel();
@@ -2316,8 +2354,11 @@ void EpubReaderActivity::activateMoreRow(int row) {
       Frontlight.setOn(lightOn);
       SETTINGS.frontlightOn = lightOn ? 1 : 0;
       SETTINGS.saveToFile();
-      renderOverlay();
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      {
+        RenderLock lock;  // the render task shares the framebuffer
+        renderOverlay();
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      }
       return;
     }
     default:

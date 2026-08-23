@@ -23,7 +23,7 @@ class MappedInputManager;
 // clears the screen: the page stays visible around the chrome.
 class ReaderToolbarUi : public UiAppHost {
  public:
-  enum class Event { None, Dismiss, Tool, PrevChapter, NextChapter, Scrub, Row, Home };
+  enum class Event { None, Dismiss, Tool, PrevChapter, NextChapter, Scrub, Row };
 
   struct Model {
     bool panel = false;  // false = toolbar, true = a Contents/Text/More panel
@@ -36,6 +36,7 @@ class ReaderToolbarUi : public UiAppHost {
     const char* panelTitle = nullptr;
     int itemCount = 0;
     int selectedIndex = -1;  // row the buttons' cursor sits on; -1 = none shown
+    int topIndex = -1;       // viewport request (first visible row); -1 = keep
     std::function<std::string(int)> rowText;
     std::function<std::string(int)> rowValue;
     // Tile row: the tool in focus (toolbar) / the open panel (panel). 0..2.
