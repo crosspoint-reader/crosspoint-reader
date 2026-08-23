@@ -981,8 +981,8 @@ void SleepActivity::renderBookPhysicalSleepScreen() const {
   }
 
   // 3. Define book geometry
-  int W = 220;
-  int H = 320;
+  constexpr int W = 220;
+  constexpr int H = 320;
   int cx = pageWidth / 2;
   int cy = pageHeight / 2 - 20;
 
@@ -1082,7 +1082,7 @@ void SleepActivity::renderBookPhysicalSleepScreen() const {
   // Draw reading percentage
   if (info.success) {
     char progressStr[64];
-    snprintf(progressStr, sizeof(progressStr), "%d%% read", static_cast<int>(p * 100.0f + 0.5f));
+    snprintf(progressStr, sizeof(progressStr), tr(STR_READ_PERCENT), static_cast<int>(p * 100.0f + 0.5f));
     renderer.drawCenteredText(UI_12_FONT_ID, y_b + T + 70, progressStr, true, EpdFontFamily::BOLD);
   } else {
     renderer.drawCenteredText(SMALL_FONT_ID, y_b + T + 70, tr(STR_SLEEPING));
