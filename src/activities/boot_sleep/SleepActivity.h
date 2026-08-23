@@ -23,6 +23,8 @@ class SleepActivity final : public Activity {
   void renderLastScreenSleepScreen() const;
   void renderTransparentCustomSleepScreen() const;
   void renderBlankSleepScreen() const;
+  void renderBookPhysicalSleepScreen() const;
+  void drawBookCover(const Bitmap* bitmap, int x, int y, int w, int h, const std::string& title, const std::string& author) const;
 
   bool fromTimeout = false;
 };
