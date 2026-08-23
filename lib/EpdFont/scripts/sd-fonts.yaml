@@ -328,3 +328,32 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-BoldItalic.ttf"}
+
+  # ── Korean ─────────────────────────────────────────────────────────────
+
+  - name: Pretendard
+    description: "Modern Korean sans-serif (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,cjk,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Bold.otf"}
+
+  - name: PretendardMedium
+    description: "Pretendard at Medium weight, slightly heavier body text (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,cjk,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Medium.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-ExtraBold.otf"}
+
+  - name: PretendardSemiBold
+    description: "Pretendard at SemiBold weight, heavier body text (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,cjk,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-SemiBold.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Black.otf"}
