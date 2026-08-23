@@ -78,12 +78,16 @@ for size in ${UI_FONT_SIZES[@]}; do
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
     # Every face in this stack is optically weighted for monochrome rendering.
-    # Ubuntu is manually hinted and keeps its own hints. The Noto faces are
-    # variable-font instances and carry none, so Hebrew needs the auto-hinter to
-    # reach the same even stem width; Arabic stays on the plain grid fit, where
-    # the auto-hinter costs more ink than verify-ui-noto-fonts.py allows.
+    # The Noto faces are variable-font instances and carry no hints, so Hebrew
+    # needs the auto-hinter to reach the same even stem width; Arabic stays on
+    # the plain grid fit, where the auto-hinter costs more ink than
+    # verify-ui-noto-fonts.py allows. Ubuntu Bold keeps its own hints, but
+    # Ubuntu Medium's bytecode grid-fits U+0442 wider than its advance and lands
+    # its left bearing at -1, so that face runs on the auto-hinter as well.
+    autohint_args=(--autohint-font $hebrew_path)
+    if [ "$style" = "Medium" ]; then autohint_args+=(--autohint-font $font_path); fi
     python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
-      --mono --autohint-font $hebrew_path --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
+      --mono "${autohint_args[@]}" --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
     echo "Generated $output_path"
   done
 done
