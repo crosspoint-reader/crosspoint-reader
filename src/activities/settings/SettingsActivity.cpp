@@ -4,7 +4,6 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <LibraryBuilder.h>
-#include <LibraryIndexFile.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -430,30 +429,14 @@ void SettingsActivity::rebuildLibraryIndex() {
   RenderLock lock(*this);
   GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
 
-  // Carry the monotonic counter forward so "recently added" ordering survives the
-  // rebuild: a book that was already on the card must not jump to the top. The
-  // reader is closed at the end of this scope, before the build reopens the file.
-  uint16_t carried = 0;
-  {
-    library::LibraryIndexFile previous;
-    if (previous.open(library::libraryIndexPath())) carried = previous.header().nextFirstSeen;
-  }
-
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex(
-      "/", carried, stats, SETTINGS.libraryUseMetadata != 0,
-      [](const uint16_t booksSoFar, const char*, void*) {
-        // Let the idle task run so the task watchdog stays fed: its panic
-        // timeout is 5 s and a metadata walk can run longer than that.
-        if ((booksSoFar & 31u) == 0) delay(1);
-        return true;
-      },
-      nullptr);
+  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
   if (ok) {
     LOG_INF("LIB", "rebuild: %u books (%u new, %u renamed, %u removed, %u enriched) in %ums",
             static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.added),
             static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
             static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.walkMs));
+    if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
   } else {
     LOG_ERR("LIB", "index rebuild failed");
   }
