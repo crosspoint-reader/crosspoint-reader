@@ -1,7 +1,7 @@
 _language_name: "Orangutan"
 _language_code: "OOK"
 _order: "34"
-_bcp47: "x-ook"
+_bcp47: "ook"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "OOK"
