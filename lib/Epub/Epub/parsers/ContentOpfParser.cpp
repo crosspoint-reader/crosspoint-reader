@@ -30,6 +30,29 @@ bool startsWithImageMediaType(const std::string& mediaType) {
 
   return true;
 }
+
+bool isXmlWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
+
+void appendMetadataText(std::string& out, const XML_Char* text, const int len, bool& spacePending,
+                        bool* separatorPending = nullptr) {
+  for (int i = 0; i < len; i++) {
+    const char c = text[i];
+    if (isXmlWhitespace(c)) {
+      spacePending = true;
+      continue;
+    }
+
+    if (separatorPending != nullptr && *separatorPending) {
+      out.append(", ");
+      *separatorPending = false;
+      spacePending = false;
+    } else if (spacePending && !out.empty()) {
+      out.push_back(' ');
+    }
+    spacePending = false;
+    out.push_back(c);
+  }
+}
 }  // namespace
 
 bool ContentOpfParser::setup() {
@@ -109,17 +132,21 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     // Only capture the first dc:title element; subsequent ones are subtitles
     if (self->title.empty()) {
       self->state = IN_BOOK_TITLE;
+      self->metadataSpacePending = false;
     }
     return;
   }
 
   if (self->state == IN_METADATA && strcmp(name, "dc:creator") == 0) {
     self->state = IN_BOOK_AUTHOR;
+    self->metadataSpacePending = false;
+    self->authorSeparatorPending = !self->author.empty();
     return;
   }
 
   if (self->state == IN_METADATA && strcmp(name, "dc:language") == 0) {
     self->state = IN_BOOK_LANGUAGE;
+    self->metadataSpacePending = false;
     return;
   }
 
@@ -340,20 +367,17 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
   auto* self = static_cast<ContentOpfParser*>(userData);
 
   if (self->state == IN_BOOK_TITLE) {
-    self->title.append(s, len);
+    appendMetadataText(self->title, s, len, self->metadataSpacePending);
     return;
   }
 
   if (self->state == IN_BOOK_AUTHOR) {
-    if (!self->author.empty()) {
-      self->author.append(", ");  // Add separator for multiple authors
-    }
-    self->author.append(s, len);
+    appendMetadataText(self->author, s, len, self->metadataSpacePending, &self->authorSeparatorPending);
     return;
   }
 
   if (self->state == IN_BOOK_LANGUAGE) {
-    self->language.append(s, len);
+    appendMetadataText(self->language, s, len, self->metadataSpacePending);
     return;
   }
 }

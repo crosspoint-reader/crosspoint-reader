@@ -32,6 +32,11 @@ class ContentOpfParser final : public Print {
   HalFile tempItemStore;
   std::string coverItemId;
   bool hasExplicitStartReference = false;
+  // XML character data is allowed to arrive in several callbacks for one text
+  // node (notably around character references). Keep whitespace and creator
+  // separation as element state rather than inferring either from callbacks.
+  bool metadataSpacePending = false;
+  bool authorSeparatorPending = false;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
