@@ -73,6 +73,14 @@ bool sortKeyLess(const SortKey& a, const SortKey& b) {
   return a.ordinal < b.ordinal;
 }
 
+// Let FreeRTOS run the idle task during every long phase, including builds
+// without a UI callback and the sort/emit work after the directory walk. The
+// counter keeps the delay out of tight per-byte operations while bounding CPU
+// work between yields.
+void serviceBuilder(uint32_t& workUnits) {
+  if ((++workUnits & 0x1Fu) == 0) delay(1);
+}
+
 ClixFormat formatForName(const std::string& name) {
   if (FsHelpers::checkFileExtension(name, ".epub")) return CLIX_FORMAT_EPUB;
   if (FsHelpers::checkFileExtension(name, ".txt")) return CLIX_FORMAT_TXT;
@@ -151,6 +159,7 @@ struct WalkState {
   PriorEntry* prior = nullptr;
   uint16_t priorCount = 0;
   uint16_t reused = 0;
+  uint32_t serviceUnits = 0;
 };
 
 // Bound to shownTitle when a book told us nothing. A `std::string()` temporary
@@ -163,6 +172,7 @@ const std::string kNoTitle;
 // already dominated by SD seeks.
 int findPrior(WalkState& st, const uint32_t nameHash, const uint32_t size) {
   for (uint16_t i = 0; i < st.priorCount; i++) {
+    serviceBuilder(st.serviceUnits);
     if (!st.prior[i].matched && st.prior[i].nameHash == nameHash && st.prior[i].size == size) return i;
   }
   return -1;
@@ -307,6 +317,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
   uint16_t myFolderId = 0;
 
   for (HalFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+    serviceBuilder(st.serviceUnits);
     if (st.aborted || st.failed || st.books >= CLIX_MAX_RECORDS) {
       entry.close();
       break;
@@ -356,6 +367,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     if (st.dedupKeys != nullptr) {
       bool duplicate = false;
       for (uint16_t i = 0; i < seenCount; i++) {
+        serviceBuilder(st.serviceUnits);
         if (st.dedupKeys[i] == key) {
           duplicate = true;
           break;
@@ -393,12 +405,10 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     }
     if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name))) break;
 
-    // Once per staged book, not only once per directory: this callback is the
-    // one place the caller can feed the task watchdog, and with metadata enabled
-    // a single book can hold stageRecord() in SD reads for a long moment. One
-    // large flat folder would otherwise starve the 5 s panic timeout — and since
-    // the missing index retriggers the rebuild, the failure is a reboot loop,
-    // not one crash. A break, not a return: the directory handle is still open.
+    // Once per staged book, not only once per directory, so the UI can report
+    // useful progress and cancellation remains responsive. Watchdog servicing
+    // is internal and therefore still happens when this callback is null. A
+    // break, not a return: the directory handle is still open.
     if (st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
       st.aborted = true;
       break;
@@ -406,8 +416,8 @@ void walk(WalkState& st, const std::string& path, const int depth) {
   }
   dir.close();
 
-  // Kept for directories that stage no books, so a deep tree of empty or
-  // book-less folders still feeds the watchdog between the per-book calls.
+  // Kept for directories that stage no books, so the UI still observes progress
+  // through a deep tree of empty or book-less folders.
   if (!st.aborted && !st.failed && st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
     st.aborted = true;
     return;
@@ -429,6 +439,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     bool found = false;
     std::string sub;
     for (HalFile entry = parent.openNextFile(); entry; entry = parent.openNextFile()) {
+      serviceBuilder(st.serviceUnits);
       st.nameBuf[0] = '\0';
       entry.getName(st.nameBuf, NAME_BUF_SIZE);
       const bool isDir = entry.isDirectory();
@@ -478,12 +489,16 @@ uint32_t blobBytesFor(const StagedEntry& entry, const StagedEntry& canonical) {
 bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order, const uint16_t* resolvedFirstSeen,
                BuildStats& stats) {
   const uint16_t n = st.books;
+  uint32_t serviceUnits = 0;
 
   // newOrdinalOf[stagingIndex] = position in title order. Needed because both
   // permutation arrays index the FINAL record order, not the walk order.
   auto newOrdinalOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
   if (!newOrdinalOf) return false;
-  for (uint16_t i = 0; i < n; i++) newOrdinalOf[order[i]] = i;
+  for (uint16_t i = 0; i < n; i++) {
+    serviceBuilder(serviceUnits);
+    newOrdinalOf[order[i]] = i;
+  }
 
   ClixHeader header{};
   memcpy(header.magic, CLIX_MAGIC, sizeof(CLIX_MAGIC));
@@ -524,10 +539,11 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     if (ioFailed) return;
     if (out.write(static_cast<const uint8_t*>(data), len) != static_cast<int>(len)) ioFailed = true;
   };
-  const auto padTo = [&out, &ioFailed](const uint32_t target) {
+  const auto padTo = [&out, &ioFailed, &serviceUnits](const uint32_t target) {
     if (ioFailed) return;
     static const uint8_t zeros[64] = {0};
     while (out.position() < target) {
+      serviceBuilder(serviceUnits);
       const uint32_t gap = target - static_cast<uint32_t>(out.position());
       const size_t want = std::min<uint32_t>(gap, sizeof(zeros));
       if (out.write(zeros, want) != static_cast<int>(want)) {
@@ -559,6 +575,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       // huge unsigned length.
       int got = 0;
       while ((got = folders.read(buf, sizeof(buf))) > 0) {
+        serviceBuilder(serviceUnits);
         put(buf, static_cast<size_t>(got));
         copied += static_cast<uint32_t>(got);
       }
@@ -606,6 +623,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   uint16_t known = 0;
   if (authorSort && authorRankOf) {
     for (uint16_t i = 0; i < n; i++) {
+      serviceBuilder(serviceUnits);
       ClixRecord r{};
       if (!readStageAt(static_cast<uint64_t>(order[i]) * STAGE_STRIDE, &r, sizeof(r))) break;
       if (r.authorKeyLen == 0) {
@@ -619,11 +637,19 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       authorSort[i].ordinal = i;
     }
     if (!ioFailed) {
-      if (n > 1) std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
-      for (uint16_t k = 0; k < n; k++) authorRankOf[authorSort[k].ordinal] = k;
+      if (n > 1) {
+        delay(1);
+        std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
+        delay(1);
+      }
+      for (uint16_t k = 0; k < n; k++) {
+        serviceBuilder(serviceUnits);
+        authorRankOf[authorSort[k].ordinal] = k;
+      }
     }
   } else {
     for (uint16_t i = 0; i < n; i++) {
+      serviceBuilder(serviceUnits);
       if (authorRankOf) authorRankOf[i] = i;
     }
     stats.ranksDegraded = true;
@@ -648,7 +674,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   auto canonicalFrom = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
   auto spellingScratch = makeUniqueNoThrow<SpellingSlot[]>(MAX_AUTHOR_SPELLINGS);
   if (canonicalFrom) {
-    for (uint16_t i = 0; i < n; i++) canonicalFrom[i] = i;
+    for (uint16_t i = 0; i < n; i++) {
+      serviceBuilder(serviceUnits);
+      canonicalFrom[i] = i;
+    }
   } else {
     LOG_ERR("LIBIDX", "canonical author array alloc failed; author order degraded");
     stats.ranksDegraded = true;
@@ -660,9 +689,11 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   if (!ioFailed && canonicalFrom && spellingScratch && authorSort && n > 1) {
     uint16_t runStart = 0;
     while (runStart < n) {
+      serviceBuilder(serviceUnits);
       uint16_t runEnd = runStart + 1;
       while (runEnd < n &&
              memcmp(authorSort[runEnd].key, authorSort[runStart].key, sizeof(authorSort[runStart].key)) == 0) {
+        serviceBuilder(serviceUnits);
         runEnd++;
       }
       // A run of one has nothing to reconcile, and the unknown-author run (key
@@ -681,6 +712,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
         uint8_t spellingCount = 0;
 
         for (uint16_t a = runStart; a < runEnd; a++) {
+          serviceBuilder(serviceUnits);
           const uint16_t ord = authorSort[a].ordinal;
           uint8_t len = 0;
           if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, authorLen), &len,
@@ -729,7 +761,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
             bestOrdinal = sp.ordinal;
           }
         }
-        for (uint16_t a = runStart; a < runEnd; a++) canonicalFrom[authorSort[a].ordinal] = bestOrdinal;
+        for (uint16_t a = runStart; a < runEnd; a++) {
+          serviceBuilder(serviceUnits);
+          canonicalFrom[authorSort[a].ordinal] = bestOrdinal;
+        }
       }
       runStart = runEnd;
     }
@@ -748,6 +783,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // same string, so they cannot split across two places.
   if (!ioFailed && authorSort && authorRankOf && canonicalFrom && n > 1) {
     for (uint16_t i = 0; i < n; i++) {
+      serviceBuilder(serviceUnits);
       // canonicalFrom holds TITLE-order positions, and the staging file is keyed
       // by walk order — order[] is the map between them. Reading staging with the
       // title position directly fetches an unrelated book, which is what split
@@ -775,8 +811,13 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       authorSort[i].ordinal = i;
     }
     if (!ioFailed) {
+      delay(1);
       std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
-      for (uint16_t k = 0; k < n; k++) authorRankOf[authorSort[k].ordinal] = k;
+      delay(1);
+      for (uint16_t k = 0; k < n; k++) {
+        serviceBuilder(serviceUnits);
+        authorRankOf[authorSort[k].ordinal] = k;
+      }
     }
   }
 
@@ -800,6 +841,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   auto dateRankOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
   if (!ioFailed && dateSort && dateRankOf) {
     for (uint16_t i = 0; i < n; i++) {
+      serviceBuilder(serviceUnits);
       ClixRecord r{};
       if (!readStageAt(static_cast<uint64_t>(order[i]) * STAGE_STRIDE, &r, sizeof(r))) break;
       // Big-endian into the key so memcmp orders numerically.
@@ -810,8 +852,15 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       dateSort[i].ordinal = i;
     }
     if (!ioFailed) {
-      if (n > 1) std::sort(dateSort.get(), dateSort.get() + n, sortKeyLess);
-      for (uint16_t k = 0; k < n; k++) dateRankOf[dateSort[k].ordinal] = k;
+      if (n > 1) {
+        delay(1);
+        std::sort(dateSort.get(), dateSort.get() + n, sortKeyLess);
+        delay(1);
+      }
+      for (uint16_t k = 0; k < n; k++) {
+        serviceBuilder(serviceUnits);
+        dateRankOf[dateSort[k].ordinal] = k;
+      }
     }
   } else {
     stats.ranksDegraded = true;
@@ -856,6 +905,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
   uint32_t nameCursor = 0;
   for (uint16_t i = 0; i < n; i++) {
+    serviceBuilder(serviceUnits);
     if (!fetch(order[i], entry)) break;
     entry.record.nameOff = nameCursor;
     // The blob holds the basename, then one length byte, then the chosen author
@@ -872,10 +922,12 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   padTo(header.permStart);
 
   for (uint16_t k = 0; k < n; k++) {
+    serviceBuilder(serviceUnits);
     const uint16_t ordinal = authorSort ? authorSort[k].ordinal : k;
     put(&ordinal, sizeof(ordinal));
   }
   for (uint16_t k = 0; k < n; k++) {
+    serviceBuilder(serviceUnits);
     const uint16_t ordinal = dateSort ? dateSort[k].ordinal : newOrdinalOf[k];
     put(&ordinal, sizeof(ordinal));
   }
@@ -883,6 +935,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
   uint32_t blobWritten = 0;
   for (uint16_t i = 0; i < n; i++) {
+    serviceBuilder(serviceUnits);
     if (!fetch(order[i], entry)) break;
     put(entry.name, entry.record.nameLen);
 
@@ -944,9 +997,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 const char* libraryIndexPath() { return INDEX_PATH; }
 const char* libraryStagePath() { return STAGE_PATH; }
 
-bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSeen, BuildStats& stats,
-                       const bool readMetadata, const BuildProgressFn onProgress, void* progressCtx) {
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata,
+                       const BuildProgressFn onProgress, void* progressCtx) {
   const uint32_t startMs = millis();
+  uint32_t serviceUnits = 0;
   stats = BuildStats{};
 
   Storage.mkdir(CACHE_DIR);
@@ -972,14 +1026,17 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
   // Failure here is not fatal: the build simply treats every book as new.
   std::unique_ptr<PriorEntry[]> priorList;
   uint16_t priorCount = 0;
+  uint16_t nextFirstSeen = 0;
   {
     LibraryIndexFile previous;
     if (previous.open(INDEX_PATH)) {
+      nextFirstSeen = previous.header().nextFirstSeen;
       priorCount = previous.bookCount();
       priorList = makeUniqueNoThrow<PriorEntry[]>(priorCount == 0 ? 1 : priorCount);
       if (priorList) {
         uint16_t kept = 0;
         for (uint16_t i = 0; i < priorCount; i++) {
+          serviceBuilder(serviceUnits);
           ClixRecord r{};
           std::string name;
           if (!previous.readRecord(i, r) || !previous.readName(r, name)) continue;
@@ -1000,7 +1057,7 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
   st.nameBuf = nameBuf.get();
   st.dedupKeys = dedupKeys.get();
   st.dedupDegraded = !dedupKeys;
-  st.nextFirstSeen = previousNextFirstSeen;
+  st.nextFirstSeen = nextFirstSeen;
   st.prior = priorList.get();
   st.priorCount = priorList ? priorCount : 0;
   st.readMetadata = readMetadata;
@@ -1068,9 +1125,10 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
       return false;
     }
     for (uint16_t i = 0; i < st.books; i++) {
+      serviceBuilder(serviceUnits);
       ClixRecord r{};
-      read.seekSet(static_cast<uint64_t>(i) * STAGE_STRIDE);
-      if (read.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) {
+      if (!read.seekSet(static_cast<uint64_t>(i) * STAGE_STRIDE) ||
+          read.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) {
         LOG_ERR("LIBIDX", "firstSeen reconciliation: short read at record %u", static_cast<unsigned>(i));
         read.close();
         Storage.remove(STAGE_PATH);
@@ -1083,6 +1141,7 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
       }
       int renamed = -1;
       for (uint16_t q = 0; q < priorCount; q++) {
+        serviceBuilder(serviceUnits);
         if (priorList && !priorList[q].matched && priorList[q].size == r.fileSize) {
           renamed = q;
           break;
@@ -1099,6 +1158,7 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
     }
     read.close();
     for (uint16_t q = 0; q < priorCount; q++) {
+      serviceBuilder(serviceUnits);
       if (priorList && !priorList[q].matched) stats.removed++;
     }
   }
@@ -1124,13 +1184,17 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
     Storage.remove(folderStagePath.c_str());
     return false;
   }
-  for (uint16_t i = 0; i < st.books; i++) order[i] = i;
+  for (uint16_t i = 0; i < st.books; i++) {
+    serviceBuilder(serviceUnits);
+    order[i] = i;
+  }
 
   if (sortable && st.books > 1) {
     auto keys = makeUniqueNoThrow<SortKey[]>(st.books);
     HalFile stage;
     if (keys && Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) {
       for (uint16_t i = 0; i < st.books; i++) {
+        serviceBuilder(serviceUnits);
         ClixRecord r{};
         const uint64_t offset = static_cast<uint64_t>(i) * STAGE_STRIDE;
         if (!stage.seekSet(offset) ||
@@ -1146,8 +1210,13 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
         keys[i].ordinal = i;
       }
       stage.close();
+      delay(1);
       std::sort(keys.get(), keys.get() + st.books, sortKeyLess);
-      for (uint16_t i = 0; i < st.books; i++) order[i] = keys[i].ordinal;
+      delay(1);
+      for (uint16_t i = 0; i < st.books; i++) {
+        serviceBuilder(serviceUnits);
+        order[i] = keys[i].ordinal;
+      }
     } else {
       stats.ranksDegraded = true;
       LOG_ERR("LIBIDX", "sort skipped: key array alloc or stage reopen failed");
