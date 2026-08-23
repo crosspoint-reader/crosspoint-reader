@@ -5,9 +5,11 @@
 #include <LibraryBuilder.h>
 #include <LibraryText.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -104,6 +106,9 @@ void LibraryListActivity::onEnter() {
     indexReady = rebuildIndex() && openIndex();
   }
   degraded = indexReady && index.ranksDegraded();
+  if (indexReady && index.dedupDegraded()) {
+    LOG_ERR("LIB", "index was built without duplicate detection");
+  }
 
   // Entered while Confirm was still held (typical when launched from the home
   // menu): ignore its release, or we would open whatever sits at row 0.
@@ -113,8 +118,10 @@ void LibraryListActivity::onEnter() {
 
 void LibraryListActivity::onExit() {
   index.close();
-  pageStarts.clear();
-  filtered.clear();
+  clearPageHistory();
+  filtered.reset();
+  filteredCount = 0;
+  filterFailed = false;
   query.clear();
   Activity::onExit();
 }
@@ -125,23 +132,8 @@ bool LibraryListActivity::openIndex() {
 }
 
 bool LibraryListActivity::rebuildIndex() {
-  // Carry the monotonic counter forward so "recently added" ordering survives a
-  // rebuild: a book that was already on the card must not jump to the top.
-  uint16_t carriedFirstSeen = 0;
-  {
-    library::LibraryIndexFile previous;
-    if (previous.open(library::libraryIndexPath())) carriedFirstSeen = previous.header().nextFirstSeen;
-  }
   library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex(
-      "/", carriedFirstSeen, stats, SETTINGS.libraryUseMetadata != 0,
-      [](const uint16_t booksSoFar, const char*, void*) {
-        // Same watchdog feed as the Settings rebuild: the idle task must run
-        // or a 5 s panic timeout fires mid-walk.
-        if ((booksSoFar & 31u) == 0) delay(1);
-        return true;
-      },
-      nullptr);
+  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
   if (!ok) {
     LOG_ERR("LIB", "index build failed");
     return false;
@@ -150,6 +142,7 @@ bool LibraryListActivity::rebuildIndex() {
           static_cast<unsigned>(stats.unchanged), static_cast<unsigned>(stats.added),
           static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
           static_cast<unsigned>(stats.duplicatesDropped), static_cast<unsigned>(stats.unreadableSkipped));
+  if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
   return true;
 }
 
@@ -197,10 +190,18 @@ void LibraryListActivity::openSearch() {
                            if (result.isCancelled) return;
                            query = std::get<KeyboardResult>(result.data).text;
                            applyFilter();
-                           // The result belongs to the list: the cursor lands
-                           // on the first surviving row, not on the strip.
                            auto& nav = activeNav();
-                           nav.selected = 1;
+                           if (!query.empty() && filteredCount == 0 && !degraded) {
+                             // Keep Search reachable when nothing matches. A
+                             // row cursor at 1 would point at no component and
+                             // trap Left/Right behind count == 0.
+                             nav.selected = 0;
+                             tabCursor = SEARCH_TAB;
+                           } else {
+                             // A non-empty result belongs to the list: land on
+                             // its first surviving row, not on the strip.
+                             nav.selected = 1;
+                           }
                            nav.top = 0;
                            requestUpdate();
                          });
@@ -212,7 +213,6 @@ void LibraryListActivity::applySortOrder(const library::SortOrder order) {
   // now somewhere else entirely. It also invalidates the filter, which holds
   // POSITIONS in the old order.
   applyFilter();
-  pageStarts.clear();
   // The order changed under the ring; the strip keeps the focus it had, any
   // row selection collapses to the first row of the new order.
   auto& nav = activeNav();
@@ -271,7 +271,7 @@ int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
 
 int LibraryListActivity::rowCount() const {
-  return query.empty() ? static_cast<int>(index.bookCount()) : static_cast<int>(filtered.size());
+  return query.empty() ? static_cast<int>(index.bookCount()) : static_cast<int>(filteredCount);
 }
 
 int LibraryListActivity::listCount() const { return rowCount(); }
@@ -280,42 +280,57 @@ int LibraryListActivity::listCount() const { return rowCount(); }
 // unfiltered, so the shelf costs nothing when nothing is typed.
 int LibraryListActivity::rowFor(const int entry) const {
   if (query.empty()) return entry;
-  if (entry < 0 || entry >= static_cast<int>(filtered.size())) return 0;
+  if (entry < 0 || entry >= static_cast<int>(filteredCount) || !filtered) return 0;
   return filtered[entry];
 }
 
 // One pass over the sort order, keeping what matches. No index, no cache: at the
-// 512-book cap this is 512 comparisons of at most 96 bytes, which is far below
-// the cost of the panel repaint that will follow it anyway.
+// 4096-book format cap this is 4096 comparisons of at most 96 bytes. The result
+// array is allocated once with the exact upper bound and fails back to an
+// explicit message rather than letting vector growth abort the firmware.
 void LibraryListActivity::applyFilter() {
-  filtered.clear();
+  filtered.reset();
+  filteredCount = 0;
+  filterFailed = false;
   // Cleared even on the empty-query path: dropping a filter changes the list
   // just as much as applying one.
-  pageStarts.clear();
+  clearPageHistory();
   if (query.empty()) return;
 
   // Folded the same way the stored folds were, articles removed included —
   // otherwise "the hobbit" searches for a word no record contains.
   const std::string needle = library::fold(query, /*stripArticle=*/true);
   const int total = static_cast<int>(index.bookCount());
-  filtered.reserve(static_cast<size_t>(total));
+  if (total <= 0) return;
+
+  auto matches = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(total));
+  if (!matches) {
+    LOG_ERR("LIB", "cannot allocate %u-byte search result buffer", static_cast<unsigned>(total * sizeof(uint16_t)));
+    filterFailed = true;
+    return;
+  }
+
+  uint16_t matchCount = 0;
+  std::string author;
   for (int row = 0; row < total; row++) {
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
     library::ClixRecord record{};
     if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) continue;
     if (library::matchesQuery(std::string_view(record.fold, record.foldLen), needle)) {
-      filtered.push_back(static_cast<uint16_t>(row));
+      matches[matchCount++] = static_cast<uint16_t>(row);
       continue;
     }
     // The stored fold covers the title only, so the author has to be read and
     // folded here. That is the search most worth having: the reader who knows
     // the author usually also knows where the book is, while "emily" finding
     // Alice Hunter is the case the shelf exists to answer.
-    std::string author;
+    author.clear();
     if (index.readAuthor(record, author) && library::matchesQuery(library::fold(author), needle)) {
-      filtered.push_back(static_cast<uint16_t>(row));
+      matches[matchCount++] = static_cast<uint16_t>(row);
     }
   }
+  filtered = std::move(matches);
+  filteredCount = matchCount;
 }
 
 // Which letter a book files under, matching the column the reader is looking at:
@@ -397,7 +412,7 @@ void LibraryListActivity::jumpToLetter(const char letter) {
       auto& nav = activeNav();
       nav.selected = entry + 1;
       nav.top = entry;
-      pageStarts.clear();
+      clearPageHistory();
       return;
     }
   }
@@ -614,7 +629,7 @@ bool LibraryListActivity::handleButtons() {
   // Left and Right page. The front pair is the only axis the reader can spare:
   // at 69 books, stepping one row at a time is 34 presses to the middle and
   // paging is 5.
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenRight) && count > 0) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenRight) && (tabsFocused() || count > 0)) {
     if (tabsFocused()) {
       cycleSortOrder(/*forward=*/true);
     } else {
@@ -622,7 +637,7 @@ bool LibraryListActivity::handleButtons() {
     }
     return true;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) && count > 0) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) && (tabsFocused() || count > 0)) {
     if (tabsFocused()) {
       cycleSortOrder(/*forward=*/false);
     } else {
@@ -1013,14 +1028,19 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
     return;
   }
 
-  if (rowCount() == 0) {
-    screen.centeredText(tr(STR_LIBRARY_EMPTY));
-    return;
-  }
-
   if (!degraded) {
     buildSortTabs(screen);
     screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
+  }
+  if (rowCount() == 0) {
+    const char* message = tr(STR_LIBRARY_NO_RESULTS);
+    if (filterFailed) {
+      message = tr(STR_LIBRARY_SEARCH_UNAVAILABLE);
+    } else if (query.empty()) {
+      message = tr(STR_LIBRARY_EMPTY);
+    }
+    screen.centeredText(message);
+    return;
   }
   buildRows(screen);
 }
@@ -1080,15 +1100,26 @@ void LibraryListActivity::render(RenderLock&&) {
 
 // Page boundaries are content-dependent in author order (headings consume band
 // height), so they cannot be computed from an index. They are therefore
-// remembered as the reader moves forward, which makes going back exact rather
-// than an estimate that would drift on every turn.
+// remembered as the reader moves forward, which makes going back exact while
+// the boundary remains in the fixed recent-page history.
+void LibraryListActivity::clearPageHistory() { pageStartCount = 0; }
+
+void LibraryListActivity::rememberPageStart(const uint16_t start) {
+  if (pageStartCount < pageStarts.size()) {
+    pageStarts[pageStartCount++] = start;
+    return;
+  }
+  memmove(pageStarts.data(), pageStarts.data() + 1, (pageStarts.size() - 1) * sizeof(pageStarts[0]));
+  pageStarts.back() = start;
+}
+
 void LibraryListActivity::nextPage() {
   const int count = rowCount();
   auto& nav = activeNav();
   const int next = nav.top + nav.visibleRows;
   if (next >= count) return;
-  if (pageStarts.empty()) pageStarts.push_back(0);
-  pageStarts.push_back(static_cast<uint16_t>(next));
+  if (pageStartCount == 0) rememberPageStart(0);
+  rememberPageStart(static_cast<uint16_t>(next));
   nav.top = next;
   nav.selected = next + 1;
   requestUpdate();
@@ -1097,15 +1128,16 @@ void LibraryListActivity::nextPage() {
 void LibraryListActivity::previousPage(const bool selectLast) {
   auto& nav = activeNav();
   if (nav.top <= 0) return;
-  if (pageStarts.size() > 1) {
-    pageStarts.pop_back();
-    nav.top = pageStarts.back();
+  if (pageStartCount > 1) {
+    pageStartCount--;
+    nav.top = pageStarts[pageStartCount - 1];
   } else {
     // No recorded history — the reader jumped here by some other route. Fall
     // back to a screenful back; it may not land on a boundary this pass, but
     // the next render re-measures and nothing is lost.
     nav.top = std::max(0, nav.top - nav.visibleRows);
-    pageStarts.assign(1, static_cast<uint16_t>(nav.top));
+    clearPageHistory();
+    rememberPageStart(static_cast<uint16_t>(nav.top));
   }
   // selectLast is only known to be right after the build that measures this
   // page, so aim past the end and let buildRows clamp it.

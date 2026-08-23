@@ -2,7 +2,9 @@
 
 #include <LibraryIndexFile.h>
 
+#include <array>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -21,8 +23,9 @@
 // the widget — more books on the screen, even if half a name is hidden.
 //
 // Only the visible window of rows is materialized per render (strings and
-// ListItems for at most one page), so nothing proportional to the library is
-// held: the index streams from SD and the screen keeps a page of strings.
+// ListItems for at most one page). The ordinary shelf therefore keeps one page
+// of strings; an active search additionally uses one fallible uint16_t slot per
+// indexed book so an allocation failure remains recoverable on the C3.
 class LibraryListActivity final : public UiTabListActivity {
  public:
   LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
@@ -69,6 +72,8 @@ class LibraryListActivity final : public UiTabListActivity {
   void flipTitleDirection();
   void nextPage();
   void previousPage(bool selectLast = false);
+  void clearPageHistory();
+  void rememberPageStart(uint16_t start);
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
@@ -117,10 +122,12 @@ class LibraryListActivity final : public UiTabListActivity {
   int tabCursor = 0;
 
   // Rows surviving the current query, as positions in the active sort order.
-  // Empty query means no filtering and this stays untouched, so the ordinary
-  // shelf pays nothing for the feature.
+  // Empty query means no filtering and this owns no allocation, so the ordinary
+  // shelf pays nothing proportional to the library for the feature.
   std::string query;
-  std::vector<uint16_t> filtered;
+  std::unique_ptr<uint16_t[]> filtered;
+  uint16_t filteredCount = 0;
+  bool filterFailed = false;
 
   // The A-Z grid is a mode of this activity, not a separate one: it borrows the
   // same render and input pass, so it needs no lifecycle of its own.
@@ -135,10 +142,13 @@ class LibraryListActivity final : public UiTabListActivity {
   // which they mean instead of the code guessing.
   bool jumpByGivenName = false;
 
-  // First entry of each page visited on the way here, so going back lands on
-  // the same boundaries the reader came through — pages are not uniform in
-  // author order, where section headings consume band height.
-  std::vector<uint16_t> pageStarts;
+  // First entry of each recent page visited on the way here, so going back
+  // lands on the same boundaries the reader came through. This fixed history
+  // lives in the heap-allocated activity and cannot grow until vector::push_back
+  // aborts on the C3. Older boundaries fall back to a measured-page estimate.
+  static constexpr size_t PAGE_HISTORY_CAPACITY = 128;
+  std::array<uint16_t, PAGE_HISTORY_CAPACITY> pageStarts{};
+  size_t pageStartCount = 0;
 
   // Visible-window row storage, reused across renders (buildRows). Bounded by
   // the densest page, never by the library. Headings get their own storage:
