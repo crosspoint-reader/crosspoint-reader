@@ -10,7 +10,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
-#include <vector>
 
 #include "LibraryIndexFile.h"
 #include "LibraryText.h"
@@ -58,6 +57,15 @@ struct SortKey {
   uint16_t ordinal;
 };
 static_assert(sizeof(SortKey) == 14, "SortKey must stay small: it is the only per-book resident cost");
+
+constexpr uint8_t MAX_AUTHOR_SPELLINGS = 16;
+struct SpellingSlot {
+  char text[STAGE_AUTHOR_BYTES];
+  uint16_t ordinal;
+  uint16_t count;
+  uint8_t len;
+};
+static_assert(sizeof(SpellingSlot) <= 136, "spelling vote scratch grew unexpectedly");
 
 bool sortKeyLess(const SortKey& a, const SortKey& b) {
   const int cmp = memcmp(a.key, b.key, sizeof(a.key));
@@ -137,6 +145,8 @@ struct WalkState {
   uint16_t nextFirstSeen = 0;
   uint16_t duplicatesDropped = 0;
   uint16_t unreadableSkipped = 0;
+  uint64_t* dedupKeys = nullptr;
+  bool dedupDegraded = false;
   bool booksAtRoot = false;
   bool aborted = false;
   bool failed = false;
@@ -283,24 +293,24 @@ void walk(WalkState& st, const std::string& path, const int depth) {
   }
   dir.rewindDirectory();
 
-  // Names already staged from THIS directory, as 4-byte hashes rather than the
-  // names themselves. A damaged FAT can enumerate the same entry twice; the
-  // second one would be a phantom book the user cannot open.
+  // Identities already staged from THIS directory. A damaged FAT can enumerate
+  // the same entry twice; the second one would be a phantom book the user cannot
+  // open.
   //
   // Hashes because the names do not fit. Two thousand books in one flat folder —
   // the figure LibraryFormat.h cites as the case to survive — is about 360 KB of
   // std::string against a device that has under 200 KB free, and std::vector grows
   // by throwing, so the failure is abort() and a reboot loop on every rebuild
-  // rather than a degraded scan. At four bytes each the same folder costs 8 KB.
+  // rather than a degraded scan. The one fixed buffer is allocated fallibly by
+  // buildLibraryIndex(), reused for each directory, and never grows.
   //
   // Keyed on (name hash, size) packed into 64 bits, not the hash alone. Two
   // different books colliding in 32 bits AND sharing a byte-exact size is
   // implausible where a bare hash collision is merely unlikely, and the cost of
   // being wrong is a real book silently missing from the shelf — the failure
   // hardest to notice and hardest to explain.
-  std::vector<uint64_t> seen;
-  seen.reserve(32);
-  std::vector<std::string> subdirs;
+  uint16_t seenCount = 0;
+  uint16_t subdirCount = 0;
 
   bool folderEmitted = false;
   uint16_t myFolderId = 0;
@@ -320,14 +330,16 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     const std::string name(st.nameBuf);
 
     if (isDir) {
-      // Bounded for the same reason `seen` holds hashes: a pathological level
-      // with thousands of directories must degrade, not abort the device.
-      // Skipped ones are counted so the build can say the walk was partial.
-      if (subdirs.size() >= 256) {
+      // Remember only the count. After this handle is closed, each child name is
+      // found by reopening and rescanning the directory. That avoids a vector of
+      // heap-allocating strings while respecting SdFat's one-reader constraint.
+      // The O(n²) fallback applies only to directory names, capped here at 256;
+      // normal book folders have a handful.
+      if (subdirCount >= 256) {
         st.unreadableSkipped++;
         continue;
       }
-      subdirs.push_back(name);
+      subdirCount++;
       continue;
     }
     if (!isBookName(name)) continue;
@@ -350,12 +362,26 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       continue;
     }
     const uint64_t key = (static_cast<uint64_t>(fnv1a32(name.data(), name.size())) << 32) | size;
-    if (std::find(seen.begin(), seen.end(), key) != seen.end()) {
-      st.duplicatesDropped++;
-      continue;
+    if (st.dedupKeys != nullptr) {
+      bool duplicate = false;
+      for (uint16_t i = 0; i < seenCount; i++) {
+        if (st.dedupKeys[i] == key) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (duplicate) {
+        st.duplicatesDropped++;
+        continue;
+      }
+      if (seenCount < LIBRARY_MAX_DEDUP_KEYS) {
+        st.dedupKeys[seenCount++] = key;
+      } else if (!st.dedupDegraded) {
+        LOG_INF("LIBIDX", "duplicate detection capped at %u entries in %s",
+                static_cast<unsigned>(LIBRARY_MAX_DEDUP_KEYS), path.c_str());
+        st.dedupDegraded = true;
+      }
     }
-    seen.push_back(key);
-
     if (!folderEmitted) {
       // Folders are emitted lazily, so only directories that actually hold a
       // book get an id and the ids stay dense.
@@ -396,10 +422,41 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     return;
   }
 
-  // Subdirectories are walked after this directory's own handle is closed:
-  // SdFat on hardware allows only one open reader at a time per path, and a
-  // deep tree would otherwise hold a handle per level.
-  for (const std::string& sub : subdirs) {
+  // Subdirectories are walked after this directory's own handle is closed.
+  // Reopen and locate one child at a time: SdFat permits only one reader, and
+  // retaining all names would reintroduce an unbounded vector of std::string.
+  for (uint16_t target = 0; target < subdirCount; target++) {
+    HalFile parent = Storage.open(path.c_str());
+    if (!parent || !parent.isDirectory()) {
+      if (parent) parent.close();
+      st.unreadableSkipped++;
+      return;
+    }
+    parent.rewindDirectory();
+
+    uint16_t visibleDir = 0;
+    bool found = false;
+    std::string sub;
+    for (HalFile entry = parent.openNextFile(); entry; entry = parent.openNextFile()) {
+      st.nameBuf[0] = '\0';
+      entry.getName(st.nameBuf, NAME_BUF_SIZE);
+      const bool isDir = entry.isDirectory();
+      entry.close();
+      if (!isDir || st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
+      if (visibleDir++ == target) {
+        sub.assign(st.nameBuf);
+        found = true;
+        break;
+      }
+    }
+    parent.close();
+    if (!found) {
+      // The card changed while being walked. Do not guess which child replaced
+      // the missing ordinal; report a partial walk and keep what was staged.
+      st.unreadableSkipped++;
+      break;
+    }
+
     walk(st, joinPath(path, sub), depth + 1);
     if (st.aborted || st.failed) return;
   }
@@ -598,10 +655,18 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // authorSort is already grouped: books by one person are contiguous in it. So
   // this is one walk over the runs, holding only the current run's spellings.
   auto canonicalFrom = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
+  auto spellingScratch = makeUniqueNoThrow<SpellingSlot[]>(MAX_AUTHOR_SPELLINGS);
   if (canonicalFrom) {
     for (uint16_t i = 0; i < n; i++) canonicalFrom[i] = i;
+  } else {
+    LOG_ERR("LIBIDX", "canonical author array alloc failed; author order degraded");
+    stats.ranksDegraded = true;
   }
-  if (!ioFailed && canonicalFrom && authorSort && n > 1) {
+  if (!spellingScratch) {
+    LOG_ERR("LIBIDX", "author spelling scratch alloc failed; spelling harmonisation skipped");
+    stats.ranksDegraded = true;
+  }
+  if (!ioFailed && canonicalFrom && spellingScratch && authorSort && n > 1) {
     uint16_t runStart = 0;
     while (runStart < n) {
       uint16_t runEnd = runStart + 1;
@@ -622,13 +687,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
         // point: one person has two or three spellings on a real card, however
         // many books they wrote, so this holds a handful of short strings instead
         // of one per book.
-        struct Spelling {
-          std::string text;
-          uint16_t ordinal;
-          int count;
-        };
-        std::vector<Spelling> spellings;
-        spellings.reserve(4);
+        uint8_t spellingCount = 0;
 
         for (uint16_t a = runStart; a < runEnd; a++) {
           const uint16_t ord = authorSort[a].ordinal;
@@ -642,11 +701,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
           const size_t want = std::min<size_t>(len, sizeof(buf));
           if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, author), buf, want))
             break;
-          const std::string text(buf, want);
-
           bool merged = false;
-          for (auto& sp : spellings) {
-            if (sp.text == text) {
+          for (uint8_t i = 0; i < spellingCount; i++) {
+            SpellingSlot& sp = spellingScratch[i];
+            if (sp.len == want && memcmp(sp.text, buf, want) == 0) {
               sp.count++;
               merged = true;
               break;
@@ -655,19 +713,27 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
           // A hard cap so a card full of near-identical spellings cannot grow this
           // without bound. Sixteen is far past anything real; beyond it the vote
           // simply decides among the first sixteen.
-          if (!merged && spellings.size() < 16) spellings.push_back(Spelling{text, ord, 1});
+          if (!merged && spellingCount < MAX_AUTHOR_SPELLINGS) {
+            SpellingSlot& sp = spellingScratch[spellingCount++];
+            memcpy(sp.text, buf, want);
+            sp.ordinal = ord;
+            sp.count = 1;
+            sp.len = static_cast<uint8_t>(want);
+          }
         }
 
         uint16_t bestOrdinal = authorSort[runStart].ordinal;
         int bestScore = -1;
         size_t bestLen = 0;
-        std::string bestText;
-        for (const auto& sp : spellings) {
-          const bool better = sp.count > bestScore || (sp.count == bestScore && sp.text.size() < bestLen) ||
-                              (sp.count == bestScore && sp.text.size() == bestLen && sp.text < bestText);
+        const char* bestText = nullptr;
+        for (uint8_t i = 0; i < spellingCount; i++) {
+          const SpellingSlot& sp = spellingScratch[i];
+          const bool better = sp.count > bestScore || (sp.count == bestScore && sp.len < bestLen) ||
+                              (sp.count == bestScore && sp.len == bestLen &&
+                               (bestText == nullptr || memcmp(sp.text, bestText, sp.len) < 0));
           if (better) {
             bestScore = sp.count;
-            bestLen = sp.text.size();
+            bestLen = sp.len;
             bestText = sp.text;
             bestOrdinal = sp.ordinal;
           }
@@ -851,6 +917,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // WALK_COMPLETE would silently show a partial shelf as if it were the whole one.
   header.flags = (st.aborted || st.books >= CLIX_MAX_RECORDS ? 0 : CLIX_FLAG_WALK_COMPLETE) |
                  (stats.ranksDegraded ? CLIX_FLAG_RANKS_DEGRADED : 0) |
+                 (stats.dedupDegraded ? CLIX_FLAG_DEDUP_DEGRADED : 0) |
                  (stats.booksAtRoot ? CLIX_FLAG_BOOKS_AT_ROOT : 0);
 
   out.seekSet(0);
@@ -902,6 +969,14 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
     return false;
   }
 
+  auto dedupKeys = makeUniqueNoThrow<uint64_t[]>(LIBRARY_MAX_DEDUP_KEYS);
+  if (!dedupKeys) {
+    // Duplicate detection is defensive against damaged FAT directory entries.
+    // Losing that defence may expose duplicate rows, but it must not make the
+    // whole library unavailable when 8 KiB cannot be allocated on a C3.
+    LOG_ERR("LIBIDX", "dedup key buffer alloc failed; continuing without duplicate detection");
+  }
+
   // Load what the previous index knew, so the walk can recognise the same books.
   // Failure here is not fatal: the build simply treats every book as new.
   std::unique_ptr<PriorEntry[]> priorList;
@@ -932,6 +1007,8 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
 
   WalkState st;
   st.nameBuf = nameBuf.get();
+  st.dedupKeys = dedupKeys.get();
+  st.dedupDegraded = !dedupKeys;
   st.nextFirstSeen = previousNextFirstSeen;
   st.prior = priorList.get();
   st.priorCount = priorList ? priorCount : 0;
@@ -1039,6 +1116,7 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
   stats.folders = st.folderId;
   stats.duplicatesDropped = st.duplicatesDropped;
   stats.unreadableSkipped = st.unreadableSkipped;
+  stats.dedupDegraded = st.dedupDegraded;
   stats.booksAtRoot = st.booksAtRoot;
   stats.unchanged = st.reused;
   stats.enriched = st.enriched;

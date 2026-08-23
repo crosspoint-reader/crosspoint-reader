@@ -39,6 +39,11 @@ inline constexpr int LIBRARY_MAX_DEPTH = 5;
 // CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
 inline constexpr uint16_t LIBRARY_MAX_SORTED = 512;
 
+// Duplicate identities remembered while one directory is enumerated. The
+// fixed, fallible allocation is 8 KiB at this cap; unlike std::vector it cannot
+// grow into abort() when a damaged or unusually flat directory is scanned.
+inline constexpr uint16_t LIBRARY_MAX_DEDUP_KEYS = 1024;
+
 struct BuildStats {
   uint16_t books = 0;
   uint16_t folders = 0;
@@ -53,6 +58,7 @@ struct BuildStats {
   uint16_t removed = 0;    // previous entry no book claimed
   uint16_t enriched = 0;   // took its title or author from the book rather than the filename
   bool ranksDegraded = false;
+  bool dedupDegraded = false;
   bool booksAtRoot = false;
 };
 

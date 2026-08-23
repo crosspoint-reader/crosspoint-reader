@@ -408,5 +408,11 @@ placeholder — an index that saw part of the card must not claim otherwise.
 happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
 RAM.
 
+`DEDUP_DEGRADED` says a directory exceeded the fixed 1024-entry duplicate-key
+buffer, or that its fallible 8 KiB allocation failed. The walk still indexes
+every enumerated book; it only stops remembering additional identities for
+duplicate-dirent detection, so a damaged FAT may expose duplicates but cannot
+make a real book disappear.
+
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.

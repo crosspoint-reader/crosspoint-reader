@@ -164,6 +164,15 @@ TEST(LibraryFormatValidation, AcceptsAnEmptyLibrary) {
   EXPECT_EQ(h.selfSize, CLIX_ALIGN);
 }
 
+TEST(LibraryHeaderFlags, DedupDegradationIsPersistedWithoutChangingTheLayout) {
+  ClixHeader h = makeHeader(60, 116);
+  h.flags = CLIX_FLAG_WALK_COMPLETE | CLIX_FLAG_DEDUP_DEGRADED;
+
+  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::Ok);
+  EXPECT_NE(h.flags & CLIX_FLAG_DEDUP_DEGRADED, 0);
+  EXPECT_EQ(sizeof(ClixHeader), 64u);
+}
+
 TEST(LibraryRecordFlags, PackAndUnpackRoundTrip) {
   for (const uint8_t fmt : {CLIX_FORMAT_EPUB, CLIX_FORMAT_TXT, CLIX_FORMAT_XTC, CLIX_FORMAT_OTHER}) {
     for (const uint8_t prov :

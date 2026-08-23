@@ -52,6 +52,7 @@ enum ClixFlags : uint8_t {
   CLIX_FLAG_RANKS_DEGRADED = 1 << 1,
   CLIX_FLAG_ENRICH_COMPLETE = 1 << 2,
   CLIX_FLAG_BOOKS_AT_ROOT = 1 << 3,
+  CLIX_FLAG_DEDUP_DEGRADED = 1 << 4,
 };
 
 enum ClixFormat : uint8_t {
