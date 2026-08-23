@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws the 24px Contents / Text / More glyphs for the toolbar reader menu's
+"""Draws the 24px Contents / Text / More (and back chevron) glyphs for the toolbar reader menu's
 tile row into src/components/icons/readerToolbarIcons.h.
 
 The tile icons are three simple shapes (menu bars, "Aa" in the UI face, an
@@ -47,6 +47,11 @@ def draw_icons():
         r = 1.6 * S
         d.ellipse([(x * S - r, 12 * S - r), (x * S + r, 12 * S + r)], fill=0)
     icons["more"] = down(im)
+
+    im = canvas()
+    d = ImageDraw.Draw(im)
+    d.line([(15 * S, 4 * S), (8 * S, 12 * S), (15 * S, 20 * S)], fill=0, width=2 * S, joint="curve")
+    icons["back"] = down(im)
     return icons
 
 

@@ -21,12 +21,20 @@ constexpr fui::ActionId ACTION_DISMISS = 1;  // tap outside the sheet (page / to
 constexpr fui::ActionId ACTION_TOOL = 2;     // value = 0 Contents, 1 Text, 2 More
 constexpr fui::ActionId ACTION_PREV = 3;     // scrub row: previous chapter
 constexpr fui::ActionId ACTION_NEXT = 4;     // scrub row: next chapter
-constexpr fui::ActionId ACTION_SCRUB = 5;    // capsule: dragPermille along the book
+constexpr fui::ActionId ACTION_SCRUB = 5;    // progress track: dragPermille along the book
 constexpr fui::ActionId ACTION_ROW = 6;      // panel list row, value = row index
 
-constexpr int16_t kScrubControlHeight = 56;  // the capsule + its step buttons
-constexpr int16_t kToolTileHeight = 56;
-constexpr int16_t kToolTileGap = 12;
+// Scrub row: two small round-cornered chapter buttons flanking a thin progress
+// track with a round knob -- the reading page's chrome is light, so the
+// controls stay slim rather than control-center sized.
+constexpr int16_t kScrubButton = 36;  // chapter step buttons (square)
+constexpr int16_t kScrubKnob = 16;    // round knob on the 2px progress track
+constexpr int16_t kScrubGap = 12;     // air between the buttons and the track
+// Tool row: a 24px glyph over a small label per slot, the active slot in an
+// outline pill. The whole slot is the tap target.
+constexpr int16_t kToolRowH = 64;
+constexpr int16_t kToolPillInset = 10;
+constexpr int16_t kToolIconTop = 8;
 constexpr int kToolCount = 3;
 // Bottom sheet height for the panels, as a share of the screen: the page stays
 // readable above it, and the list still gets several finger-sized rows.
@@ -50,7 +58,7 @@ void ReaderToolbarUi::render() { renderUi(); }
 
 ReaderToolbarUi::Routed ReaderToolbarUi::route(const MappedInputManager& input) {
   pending_ = Routed{};
-  // routeHeld: the scrub capsule is a drag target, so held frames must reach it.
+  // routeHeld: the scrub track is a drag target, so held frames must reach it.
   const auto touch = routeTouch(input, false, /*routeHeld=*/true);
   pending_.routed = touch.routed;
   pending_.x = touch.snap.touchX;
@@ -105,38 +113,43 @@ void ReaderToolbarUi::screenFn(UiScreen& screen, void* user) {
 
 int16_t ReaderToolbarUi::toolRowHeight(const UiScreen& screen) const {
   (void)screen;
-  return fui::tileGridHeight(kToolCount, kToolCount, kToolTileHeight, kToolTileGap);
+  return kToolRowH;
 }
 
-// The Contents / Text / More row: three tiles, the active one filled. Tile
-// values are the tool ids, so the reader's focusedTool maps straight onto them.
+// The Contents / Text / More row: three equal slots, each a glyph over its
+// label, the active one inside an outline pill (the theme's control radius).
+// Each slot is registered as one tap target; the glyph and label are drawn
+// straight into it, so the row stays light (no filled tiles).
 void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anchor) {
+  const auto& tokens = screen.theme();
   const char* labels[kToolCount] = {tr(STR_TOOL_CONTENTS), tr(STR_TOOL_TEXT), tr(STR_TOOL_MORE)};
   const fui::BitmapRef icons[kToolCount] = {fui::bitmapFromIcon(icon_reader_contents_24),
                                             fui::bitmapFromIcon(icon_reader_text_24),
                                             fui::bitmapFromIcon(icon_reader_more_24)};
+  const fui::Rect row = screen.take(anchor, kToolRowH);
+  const int16_t slotW = static_cast<int16_t>(row.width / kToolCount);
+  const int16_t labelH = screen.target().lineHeight(tokens.smallText.font);
+  fui::TextStyle labelStyle = tokens.smallText;
+  labelStyle.align = fui::TextAlign::Center;
+  const uint8_t pillRadius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, (kToolRowH - 2 * 4) / 2));
   for (int i = 0; i < kToolCount; ++i) {
-    toolItems_[i].label = labels[i];
-    toolItems_[i].icon = icons[i];
-    toolItems_[i].value = static_cast<int16_t>(i);
-    toolItems_[i].state = i == model_.activeTool ? fui::StateChecked : fui::StateNormal;
+    const fui::Rect slot{static_cast<int16_t>(row.x + slotW * i), row.y, slotW, row.height};
+    if (i == model_.activeTool) {
+      screen.target().stroke(slot.inset(fui::Insets{4, kToolPillInset, 4, kToolPillInset}),
+                             fui::Paint::solid(fui::Color::Black), 2, pillRadius);
+    }
+    const fui::Rect iconRect{static_cast<int16_t>(slot.x + (slot.width - 24) / 2),
+                             static_cast<int16_t>(slot.y + kToolIconTop), 24, 24};
+    screen.target().bitmap(iconRect, icons[i], fui::BitmapMode::Center);
+    const fui::Rect labelRect{slot.x, static_cast<int16_t>(slot.y + kToolIconTop + 24 + 2), slot.width, labelH};
+    screen.target().text(labelRect, labels[i], labelStyle);
+    screen.frame().hit(slot, ACTION_TOOL, static_cast<int16_t>(i), fui::InputTouch);
   }
-  toolProps_.items = toolItems_;
-  toolProps_.count = kToolCount;
-  toolProps_.columns = kToolCount;
-  toolProps_.action = ACTION_TOOL;
-  toolProps_.tileHeight = kToolTileHeight;
-  toolProps_.gap = kToolTileGap;
-  toolProps_.iconSize = 24;
-  toolProps_.text = screen.theme().smallText;
-  toolProps_.text.bold = true;
-  screen.tileGrid(toolProps_, anchor);
 }
 
-// Top bar: white band with the book title centred and the battery on the
-// right. No button of its own — the sheet registers everything outside
-// itself (this bar included) as the dismiss target, which is what a tap up
-// here means anyway.
+// Top bar: white band with a back chevron, the book title centred and the
+// battery on the right. The chevron dismisses; so does a tap anywhere else
+// outside the sheet (the sheet registers that region itself).
 void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   const auto& tokens = screen.theme();
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -161,6 +174,9 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   headerProps_.title = model_.bookTitle;
   headerProps_.centered = true;
   headerProps_.borderEdges = fui::EdgeBottom;
+  headerProps_.leadingIcon = fui::bitmapFromIcon(icon_reader_back_24);
+  headerProps_.leadingAction = ACTION_DISMISS;
+  headerProps_.leadingRadius = 8;
   headerProps_.rightReserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd);
   headerProps_.leftReserve = headerProps_.rightReserve;  // keep the title centred on the band
   screen.header(headerProps_);
@@ -182,39 +198,80 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
 
   buildHeader(screen);
 
-  // Scrub row: chapter title as the caption, page/percent as the readout,
-  // previous/next chapter on the step buttons, the book's progress on the
-  // capsule (tap or drag to jump).
-  scrubProps_.label = model_.chapterTitle;
-  scrubProps_.value = model_.pageInfo;
-  scrubProps_.sliderValue = std::clamp(model_.progressPermille, 0, 1000);
-  scrubProps_.max = 1000;
-  scrubProps_.sliderAction = ACTION_SCRUB;
-  scrubProps_.decrement = ACTION_PREV;
-  scrubProps_.increment = ACTION_NEXT;
-  scrubProps_.decrementLabel = "<";
-  scrubProps_.incrementLabel = ">";
-  scrubProps_.labelText = tokens.smallText;
-  scrubProps_.labelText.bold = true;
-  scrubProps_.valueText = tokens.smallText;
-
-  // Sheet height from its content: air, scrub row, air, tool row, air.
-  const int16_t scrubH = fui::sliderRowHeight(screen.target(), scrubProps_, kScrubControlHeight);
-  const int16_t contentH =
-      static_cast<int16_t>(tokens.spaceLg + scrubH + tokens.spaceMd + toolRowHeight(screen) + tokens.spaceMd);
+  // Sheet height from its content: scrub row, meta line, tool row, and the
+  // air between them.
+  const int16_t metaH = screen.target().lineHeight(tokens.smallText.font);
+  const int16_t contentH = static_cast<int16_t>(tokens.spaceMd + kScrubButton + tokens.spaceMd + metaH +
+                                                tokens.spaceSm + kToolRowH + tokens.spaceSm);
   fui::SheetProps sheetProps;
   sheetProps.anchor = fui::SheetEdge::Bottom;
   sheetProps.dismissAction = ACTION_DISMISS;
   sheetProps.grabberMargin = tokens.spaceMd;
-  sheetProps.grabberInset = tokens.spaceMd;
+  sheetProps.grabberInset = tokens.spaceSm;
   const int16_t grabberBand =
       static_cast<int16_t>(sheetProps.grabberMargin + sheetProps.grabberHeight + sheetProps.grabberInset);
   screen.sheet(sheetProps, static_cast<int16_t>(contentH + grabberBand));
   screen.insetContent(fui::Insets{0, tokens.spaceLg, 0, tokens.spaceLg});
-
-  screen.spacer(tokens.spaceLg);
-  screen.sliderRow(scrubProps_, kScrubControlHeight);
   screen.spacer(tokens.spaceMd);
+
+  // Scrub row: < [progress track + knob: tap/drag to jump] >
+  {
+    const fui::Rect band = screen.takeTop(kScrubButton, tokens.spaceMd);
+    stepProps_.label = "<";
+    stepProps_.action = ACTION_PREV;
+    stepProps_.inputMask = fui::InputTouch;
+    stepProps_.text = tokens.smallText;
+    stepProps_.text.bold = false;
+    stepProps_.styles.explicitlySet = true;
+    stepProps_.styles.normal.background = fui::Paint::solid(fui::Color::White);
+    stepProps_.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
+    stepProps_.styles.normal.border = fui::Paint::solid(fui::Color::Black);
+    stepProps_.styles.normal.borderWidth = 1;
+    stepProps_.styles.normal.radius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, kScrubButton / 2));
+    stepProps_.styles.selected = stepProps_.styles.normal;
+    stepProps_.styles.focused = stepProps_.styles.normal;
+    stepProps_.styles.disabled = stepProps_.styles.normal;
+    stepProps_.styles.active = stepProps_.styles.normal;
+    stepProps_.styles.active.background = fui::Paint::solid(fui::Color::Black);
+    stepProps_.styles.active.foreground = fui::Paint::solid(fui::Color::White);
+    screen.button(stepProps_, fui::Rect{band.x, band.y, kScrubButton, kScrubButton});
+    stepProps_.label = ">";
+    stepProps_.action = ACTION_NEXT;
+    screen.button(stepProps_,
+                  fui::Rect{static_cast<int16_t>(band.right() - kScrubButton), band.y, kScrubButton, kScrubButton});
+
+    // Progress: a 2px track with a solid round knob at the book position (the
+    // fill edge IS the handle, so nothing else is drawn), the scrub hit rect
+    // spanning the whole band height so a finger a little off the line still
+    // scrubs. Tap-to-jump / drag arrive as dragPermille along this rect.
+    const int16_t trackX = static_cast<int16_t>(band.x + kScrubButton + kScrubGap);
+    const int16_t trackW = static_cast<int16_t>(band.width - 2 * (kScrubButton + kScrubGap));
+    const int16_t trackY = static_cast<int16_t>(band.y + band.height / 2);
+    const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
+    screen.target().fill(fui::Rect{trackX, static_cast<int16_t>(trackY - 1), trackW, 2}, ink);
+    const int permille = std::clamp(model_.progressPermille, 0, 1000);
+    const int16_t knobX = static_cast<int16_t>(trackX + (static_cast<int32_t>(trackW - 1) * permille) / 1000);
+    screen.target().fill(fui::Rect{static_cast<int16_t>(knobX - kScrubKnob / 2),
+                                   static_cast<int16_t>(trackY - kScrubKnob / 2), kScrubKnob, kScrubKnob},
+                         ink, static_cast<uint8_t>(kScrubKnob / 2));
+    screen.frame().hit(fui::Rect{trackX, band.y, trackW, band.height}, ACTION_SCRUB, 0,
+                       fui::InputTouch | fui::InputDrag);
+  }
+
+  // Meta line: chapter title (left), chapter page / book percent (right).
+  {
+    const fui::Rect line = screen.takeTop(metaH, tokens.spaceSm);
+    fui::TextStyle titleStyle = tokens.smallText;
+    titleStyle.bold = true;
+    fui::TextStyle infoStyle = tokens.smallText;
+    infoStyle.align = fui::TextAlign::Right;
+    const int16_t infoW =
+        model_.pageInfo ? screen.target().measureText(infoStyle.font, model_.pageInfo, infoStyle).width : 0;
+    const fui::Rect titleRect{line.x, line.y, static_cast<int16_t>(line.width - infoW - tokens.spaceMd), line.height};
+    if (model_.chapterTitle) screen.target().text(titleRect, model_.chapterTitle, titleStyle);
+    if (model_.pageInfo) screen.target().text(line, model_.pageInfo, infoStyle);
+  }
+
   buildToolRow(screen, fui::LayoutAnchor::Top);
 }
 
@@ -243,9 +300,9 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
 
   // Switcher row along the sheet's bottom edge (above the button-hint row on
   // button boards); the list takes what is left.
-  screen.spacer(static_cast<int16_t>(tokens.spaceMd + std::max(0, model_.bottomReserve)), fui::LayoutAnchor::Bottom);
+  screen.spacer(static_cast<int16_t>(tokens.spaceSm + std::max(0, model_.bottomReserve)), fui::LayoutAnchor::Bottom);
   buildToolRow(screen, fui::LayoutAnchor::Bottom);
-  screen.spacer(tokens.spaceMd, fui::LayoutAnchor::Bottom);
+  screen.spacer(tokens.spaceSm, fui::LayoutAnchor::Bottom);
 
   listProps_.count = static_cast<uint16_t>(std::max(0, model_.itemCount));
   listProps_.action = ACTION_ROW;

@@ -94,11 +94,9 @@ class ReaderToolbarUi : public UiAppHost {
   std::string windowLabels_[kMaxWindow];
   std::string windowValues_[kMaxWindow];
   freeink::ui::ListItem windowItems_[kMaxWindow];
-  // fui::SliderRowProps / TileGridProps embed a 324-byte StyleSet: keep them
-  // off the stack (AGENTS.md: locals stay under 256 bytes).
-  freeink::ui::SliderRowProps scrubProps_;
-  freeink::ui::TileGridProps toolProps_;
-  freeink::ui::TileGridItem toolItems_[3];
+  // fui::ButtonProps / ListProps / HeaderProps embed a 324-byte StyleSet: keep
+  // them off the stack (AGENTS.md: locals stay under 256 bytes).
+  freeink::ui::ButtonProps stepProps_;
   freeink::ui::ListProps listProps_;
   freeink::ui::HeaderProps headerProps_;
   std::string batteryText_;
