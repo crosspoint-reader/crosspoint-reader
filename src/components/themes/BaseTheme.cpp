@@ -1,5 +1,6 @@
 #include "BaseTheme.h"
 
+#include <BoardConfig.h>
 #include <FreeInkUIGfxRenderer.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
@@ -932,8 +933,17 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
     const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
     const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
-                             paddingBottom + (fillMargin ? 1 : 0);
+    // The fill-to-edge extension below is deliberately NOT orientedMarginBottom:
+    // that rotates per reading orientation, and on boards whose left/right
+    // viewableInsets differ from their top/bottom (e.g. the X4 Pro, where
+    // left/right were tuned for scrollbar visibility, not bezel overlap) it
+    // makes the bar's total rendered height — meant to reflect only the
+    // user's Progress Bar Thickness setting — swing with orientation instead.
+    // Anchoring to the board's actual bottom inset keeps the fill amount (and
+    // so the bar's apparent thickness) identical in every orientation.
+    const int edgeFillMargin = BoardConfig::ACTIVE.viewableInsets.bottom;
+    const int progressBarY =
+        renderer.getScreenHeight() - edgeFillMargin - sb.progressBarHeightPx - paddingBottom + (fillMargin ? 1 : 0);
     size_t progress;
     if (sb.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
       progress = static_cast<size_t>(bookProgress);
@@ -942,7 +952,7 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
       progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
     }
     const int barWidth = progressBarMaxWidth * progress / 100;
-    const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
+    const int barHeight = sb.progressBarHeightPx + (fillMargin ? edgeFillMargin - 1 : 0);
     renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
   }
 
