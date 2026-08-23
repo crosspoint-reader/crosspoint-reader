@@ -65,11 +65,10 @@ using BuildProgressFn = bool (*)(uint16_t booksSoFar, const char* currentPath, v
 // Walk `rootPath`, write `/.crosspoint/library.idx`, and report what happened.
 // `previousNextFirstSeen` carries the monotonic counter across rebuilds so
 // "recently added" ordering survives; pass 0 on a first build.
-// `readMetadata` makes the walk prefer the title and author held INSIDE each
-// book over the ones its filename suggests. It only reads caches that already
-// exist — a book the reader has never opened keeps its filename — because
-// building that cache is the reader's own full indexing pass and would take
-// minutes across a library.
+// `readMetadata` makes the walk prefer the title and author held inside each
+// book over its filename. It reads an existing cache when available; otherwise
+// it stops the normal EPUB parser at the end of <metadata>, before the manifest,
+// without building the reader's spine, TOC, CSS, or section caches.
 bool buildLibraryIndex(const char* rootPath, uint16_t previousNextFirstSeen, BuildStats& stats,
                        bool readMetadata = false, BuildProgressFn onProgress = nullptr, void* progressCtx = nullptr);
 

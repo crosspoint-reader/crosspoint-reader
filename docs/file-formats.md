@@ -379,6 +379,12 @@ the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" gro
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
+The record flag byte uses bits 0–2 for the file format, bits 3–4 for author
+provenance, and bit 5 to say that the displayed title came from book metadata.
+Bits 6–7 are reserved and writers leave them clear. Bit 6 was once intended to
+mean that an OPF exceeded a separate shelf-parser buffer, but that parser and
+buffer no longer exist; metadata now uses the reader's streaming XML parser.
+
 ### The name blob
 
 Per record, at `nameStart + nameOff`:

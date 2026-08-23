@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "LibraryIndexFile.h"
-#include "LibraryMeta.h"
 #include "LibraryText.h"
 
 namespace library {
@@ -182,17 +181,14 @@ void stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   // Which of the two metadata paths supplied the author, so the record can say so
   // rather than claiming the cache for everything.
   bool authorFromOpf = false;
-  bool opfTooLarge = false;
 
-  // A book the reader has already opened carries its own title and author in a
-  // cache beside it. Reading that is a small file read; building it is the
-  // reader's whole indexing pass, so buildIfMissing stays false and a book never
-  // opened simply keeps the name it has on disk.
+  // Prefer the reader's existing cache. For an unopened book, loadMetadata()
+  // reuses the same EPUB parser but stops before the manifest, so this never
+  // builds spine, TOC, CSS, cover, or section caches during the library walk.
   if (st.readMetadata && FsHelpers::hasEpubExtension(name)) {
-    // Cheap path first: a book the reader has opened already carries its title
-    // and author in a cache beside it, and reading that is one small file.
     Epub epub(fullPath, CACHE_DIR);
-    if (epub.load(false, true)) {
+    Epub::MetadataSource source = Epub::MetadataSource::NONE;
+    if (epub.loadMetadata(&source)) {
       if (!epub.getTitle().empty()) {
         title = epub.getTitle();
         titleFromBook = true;
@@ -200,27 +196,10 @@ void stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
       if (!epub.getAuthor().empty()) {
         author = epub.getAuthor();
         authorFromBook = true;
+        authorFromOpf = source == Epub::MetadataSource::PACKAGE_DOCUMENT;
       }
     }
-    // Otherwise inflate the package document. Two small entries out of the zip,
-    // not the seconds-per-book indexing pass that would build the cache above.
-    if (!titleFromBook && !authorFromBook) {
-      BookMetadata meta;
-      const bool read = readBookMetadata(fullPath, meta);
-      opfTooLarge = meta.opfTooLarge;
-      if (!read) LOG_DBG("LIBIDX", "no metadata for %s", fullPath.c_str());
-      if (read) {
-        if (!meta.title.empty()) {
-          title = meta.title;
-          titleFromBook = true;
-        }
-        if (!meta.author.empty()) {
-          author = meta.author;
-          authorFromBook = true;
-          authorFromOpf = true;
-        }
-      }
-    }
+    if (!titleFromBook && !authorFromBook) LOG_DBG("LIBIDX", "no metadata for %s", fullPath.c_str());
   }
   // Exporters write "Unknown" into dc:creator often enough that treating it as
   // a person would put a fictional author at the top of the shelf. fold() already
@@ -273,7 +252,7 @@ void stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   if (entry.titleLen > 0) memcpy(entry.title, shownTitle.data(), entry.titleLen);
   entry.record.foldLen = static_cast<uint8_t>(std::min(folded.size(), CLIX_FOLD_BYTES));
   entry.record.authorKeyLen = static_cast<uint8_t>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES));
-  entry.record.flags = makeRecordFlags(formatForName(name), provenance, titleFromBook, opfTooLarge);
+  entry.record.flags = makeRecordFlags(formatForName(name), provenance, titleFromBook);
   memcpy(entry.record.fold, folded.data(), entry.record.foldLen);
   memcpy(entry.record.authorKey, key.data(), entry.record.authorKeyLen);
   memcpy(entry.name, name.data(), entry.record.nameLen);

@@ -70,6 +70,9 @@ bool ContentOpfParser::setup() {
 
 ContentOpfParser::~ContentOpfParser() {
   destroyXmlParser(parser);
+  if (metadataOnly) {
+    return;
+  }
   if (tempItemStore) {
     tempItemStore.close();
   }
@@ -109,6 +112,11 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
     currentBufferPos += toRead;
     remainingInBuffer -= toRead;
     remainingSize -= toRead;
+
+    if (metadataOnly && metadataComplete) {
+      const size_t processed = size - remainingInBuffer;
+      return processed < size ? processed : size - 1;
+    }
   }
 
   return size;
@@ -117,6 +125,16 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ContentOpfParser*>(userData);
   (void)atts;
+
+  if (self->metadataOnly && self->metadataComplete) {
+    return;
+  }
+  if (self->metadataOnly &&
+      (strcmp(name, "manifest") == 0 || strcmp(name, "opf:manifest") == 0 || strcmp(name, "spine") == 0 ||
+       strcmp(name, "opf:spine") == 0 || strcmp(name, "guide") == 0 || strcmp(name, "opf:guide") == 0)) {
+    self->metadataComplete = true;
+    return;
+  }
 
   if (self->state == START && (strcmp(name, "package") == 0 || strcmp(name, "opf:package") == 0)) {
     self->state = IN_PACKAGE;
@@ -366,6 +384,10 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<ContentOpfParser*>(userData);
 
+  if (self->metadataOnly && self->metadataComplete) {
+    return;
+  }
+
   if (self->state == IN_BOOK_TITLE) {
     appendMetadataText(self->title, s, len, self->metadataSpacePending);
     return;
@@ -385,6 +407,10 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<ContentOpfParser*>(userData);
   (void)name;
+
+  if (self->metadataOnly && self->metadataComplete) {
+    return;
+  }
 
   if (self->state == IN_SPINE && (strcmp(name, "spine") == 0 || strcmp(name, "opf:spine") == 0)) {
     self->state = IN_PACKAGE;
@@ -421,6 +447,7 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
 
   if (self->state == IN_METADATA && (strcmp(name, "metadata") == 0 || strcmp(name, "opf:metadata") == 0)) {
     self->state = IN_PACKAGE;
+    self->metadataComplete = true;
     return;
   }
 
