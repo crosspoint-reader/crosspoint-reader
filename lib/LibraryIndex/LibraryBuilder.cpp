@@ -19,6 +19,7 @@ namespace {
 
 constexpr char INDEX_PATH[] = "/.crosspoint/library.idx";
 constexpr char NEW_PATH[] = "/.crosspoint/library.new";
+constexpr char BACKUP_PATH[] = "/.crosspoint/library.bak";
 constexpr char STAGE_PATH[] = "/.crosspoint/library.stage";
 constexpr char CACHE_DIR[] = "/.crosspoint";
 
@@ -79,6 +80,86 @@ bool sortKeyLess(const SortKey& a, const SortKey& b) {
 // work between yields.
 void serviceBuilder(uint32_t& workUnits) {
   if ((++workUnits & 0x1Fu) == 0) delay(1);
+}
+
+bool recoverInterruptedInstall() {
+  if (!Storage.exists(BACKUP_PATH)) return true;
+  if (!Storage.exists(INDEX_PATH)) {
+    if (Storage.rename(BACKUP_PATH, INDEX_PATH)) {
+      LOG_INF("LIBIDX", "restored previous index after interrupted install");
+      return true;
+    }
+    LOG_ERR("LIBIDX", "cannot restore %s; rebuild deferred", BACKUP_PATH);
+    return false;
+  }
+
+  // Both names exist when power was lost after the new index became live but
+  // before backup cleanup. Validate them one at a time (SdFat has one reader)
+  // before deciding which copy is stale.
+  LibraryIndexFile candidate;
+  if (candidate.open(INDEX_PATH)) {
+    candidate.close();
+    if (Storage.remove(BACKUP_PATH)) return true;
+    LOG_ERR("LIBIDX", "cannot remove stale backup; rebuild deferred");
+    return false;
+  }
+  candidate.close();
+
+  if (candidate.open(BACKUP_PATH)) {
+    candidate.close();
+    if (!Storage.remove(INDEX_PATH) || !Storage.rename(BACKUP_PATH, INDEX_PATH)) {
+      LOG_ERR("LIBIDX", "validated backup could not replace an invalid live index");
+      return false;
+    }
+    LOG_INF("LIBIDX", "restored previous index after interrupted install");
+    return true;
+  }
+  candidate.close();
+
+  // Neither file validates. The live path will be preserved until a complete
+  // new index is ready; the unusable backup only blocks transactional install.
+  if (!Storage.remove(BACKUP_PATH)) {
+    LOG_ERR("LIBIDX", "invalid stale backup cannot be removed; rebuild deferred");
+    return false;
+  }
+  return true;
+}
+
+bool installNewIndex() {
+  const bool hadPrevious = Storage.exists(INDEX_PATH);
+
+  // A backup beside a live index is left by a successful install interrupted
+  // before cleanup. It is stale now; remove it before reserving that name for
+  // the current previous index.
+  if (Storage.exists(BACKUP_PATH) && !Storage.remove(BACKUP_PATH)) {
+    LOG_ERR("LIBIDX", "cannot remove stale backup; keeping the live index");
+    Storage.remove(NEW_PATH);
+    return false;
+  }
+
+  if (hadPrevious && !Storage.rename(INDEX_PATH, BACKUP_PATH)) {
+    LOG_ERR("LIBIDX", "cannot stage previous index for replacement");
+    Storage.remove(NEW_PATH);
+    return false;
+  }
+
+  if (!Storage.rename(NEW_PATH, INDEX_PATH)) {
+    LOG_ERR("LIBIDX", "rename %s -> %s failed", NEW_PATH, INDEX_PATH);
+    if (hadPrevious && !Storage.rename(BACKUP_PATH, INDEX_PATH)) {
+      // recoverInterruptedInstall() retries this on the next rebuild. Do not
+      // remove the backup: it is the only complete index left.
+      LOG_ERR("LIBIDX", "previous index rollback failed; backup retained at %s", BACKUP_PATH);
+    }
+    Storage.remove(NEW_PATH);
+    return false;
+  }
+
+  if (hadPrevious && !Storage.remove(BACKUP_PATH)) {
+    // The new live index is already complete. A stale backup is harmless and is
+    // removed before the next replacement attempt.
+    LOG_ERR("LIBIDX", "new index installed but stale backup cleanup failed");
+  }
+  return true;
 }
 
 ClixFormat formatForName(const std::string& name) {
@@ -982,14 +1063,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     return false;
   }
 
-  // Rename last. Until this line the previous index is still the live one.
-  Storage.remove(INDEX_PATH);
-  if (!Storage.rename(NEW_PATH, INDEX_PATH)) {
-    LOG_ERR("LIBIDX", "rename %s -> %s failed", NEW_PATH, INDEX_PATH);
-    Storage.remove(NEW_PATH);
-    return false;
-  }
-  return true;
+  // Rename last. The previous index moves to a recoverable backup until the new
+  // file owns the live path; a failed rename rolls it back instead of deleting
+  // the only usable shelf.
+  return installNewIndex();
 }
 
 }  // namespace
@@ -1004,6 +1081,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   stats = BuildStats{};
 
   Storage.mkdir(CACHE_DIR);
+  if (!recoverInterruptedInstall()) return false;
   Storage.remove(STAGE_PATH);
   const std::string folderStagePath = std::string(STAGE_PATH) + ".f";
   Storage.remove(folderStagePath.c_str());
