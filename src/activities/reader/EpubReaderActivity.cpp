@@ -1901,6 +1901,12 @@ void EpubReaderActivity::handleOverlayInput() {
       case ReaderToolbarUi::Event::Dismiss:
         closeOverlayToPage();
         return;
+      case ReaderToolbarUi::Event::Home:
+        // The top bar's back button leaves the book for the library.
+        overlay = Overlay::None;
+        discardOverlayPage();
+        onGoHome();
+        return;
       case ReaderToolbarUi::Event::Tool:
         focusedTool = routed.value;
         openOverlay(toolOverlay(focusedTool));

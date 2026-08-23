@@ -23,7 +23,7 @@ class MappedInputManager;
 // clears the screen: the page stays visible around the chrome.
 class ReaderToolbarUi : public UiAppHost {
  public:
-  enum class Event { None, Dismiss, Tool, PrevChapter, NextChapter, Scrub, Row };
+  enum class Event { None, Dismiss, Tool, PrevChapter, NextChapter, Scrub, Row, Home };
 
   struct Model {
     bool panel = false;  // false = toolbar, true = a Contents/Text/More panel
@@ -98,7 +98,6 @@ class ReaderToolbarUi : public UiAppHost {
   // them off the stack (AGENTS.md: locals stay under 256 bytes).
   freeink::ui::ButtonProps stepProps_;
   freeink::ui::ListProps listProps_;
-  freeink::ui::HeaderProps headerProps_;
   char batteryText_[8] = {};
   freeink::ui::Rect pageIndicatorRect_{};
 };

@@ -23,6 +23,7 @@ constexpr fui::ActionId ACTION_PREV = 3;     // scrub row: previous chapter
 constexpr fui::ActionId ACTION_NEXT = 4;     // scrub row: next chapter
 constexpr fui::ActionId ACTION_SCRUB = 5;    // progress track: dragPermille along the book
 constexpr fui::ActionId ACTION_ROW = 6;      // panel list row, value = row index
+constexpr fui::ActionId ACTION_HOME = 7;     // top bar back button: leave the book for the library
 
 // Scrub row: two small round-cornered chapter buttons flanking a thin progress
 // track with a round knob -- the reading page's chrome is light, so the
@@ -36,6 +37,12 @@ constexpr int16_t kToolRowH = 64;
 constexpr int16_t kToolPillInset = 10;
 constexpr int16_t kToolIconTop = 8;
 constexpr int kToolCount = 3;
+// Top bar: at least this tall; the iOS-6 back tab's height, arrow depth and
+// label padding.
+constexpr int16_t kHeaderMinH = 60;
+constexpr int16_t kBackButtonH = 32;
+constexpr int16_t kBackArrow = 12;
+constexpr int16_t kBackPadX = 10;
 // Bottom sheet height for the panels, as a share of the screen: the page stays
 // readable above it, and the list still gets several finger-sized rows.
 constexpr int kPanelHeightPercent = 62;
@@ -48,7 +55,7 @@ void ReaderToolbarUi::begin() {
   pending_ = Routed{};
   visibleRows_ = 0;
   topIndex_ = 0;
-  for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_ROW; ++id) {
+  for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_HOME; ++id) {
     app.on(id, &ReaderToolbarUi::onAction, this);
   }
   app.setScreen(&ReaderToolbarUi::screenFn, this);
@@ -93,6 +100,9 @@ void ReaderToolbarUi::onAction(const fui::ActionEvent& event, void* user) {
       break;
     case ACTION_ROW:
       out.event = Event::Row;
+      break;
+    case ACTION_HOME:
+      out.event = Event::Home;
       break;
     default:
       break;
@@ -147,53 +157,41 @@ void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anc
   }
 }
 
-// Top bar: white band with a back chevron, the book title centred and the
-// battery on the right. The chevron dismisses; so does a tap anywhere else
-// outside the sheet (the sheet registers that region itself).
+// Top bar: a white band (at least kHeaderMinH tall -- the reading page's
+// chrome needs a little more presence than a list header) with an iOS-6 style
+// "back" button on the left (a bordered tab whose left end is an arrow) that
+// leaves the book for the library, the book title centred, and the battery on
+// the right. Detached-battery themes (Lyra) keep their own structure: battery
+// in the top strip, title and button on the lower sub-band.
 void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   const auto& tokens = screen.theme();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const fui::Rect body = screen.body();
-  const fui::Rect band{body.x, body.y, body.width, tokens.headerHeight};
+  const int16_t bandH = std::max<int16_t>(tokens.headerHeight, kHeaderMinH);
+  const fui::Rect band = screen.takeTop(bandH);
+  const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
+  const fui::Paint paper = fui::Paint::solid(fui::Color::White);
+  (void)body;
 
+  // The page text runs under this band: paint it out, then the bottom rule.
+  screen.target().fill(band, paper);
+  if (tokens.headerUnderline > 0) {
+    screen.target().fill(fui::Rect{band.x, static_cast<int16_t>(band.bottom() - tokens.headerUnderline), band.width,
+                                   static_cast<int16_t>(tokens.headerUnderline)},
+                         ink);
+  }
+
+  // Battery (right).
   const uint16_t percent = powerManager.getBatteryPercentage();
   const bool showPercent = SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   snprintf(batteryText_, sizeof(batteryText_), "%u%%", static_cast<unsigned>(percent));
   const int16_t labelW =
       showPercent ? screen.target().measureText(tokens.smallText.font, batteryText_, tokens.smallText).width : 0;
-  constexpr int16_t kBatteryGap = 4;  // BaseTheme::batteryPercentSpacing
-  // The icon glyph extends 2px past glyphWidth (terminal nub); reserve it or
-  // the percent label's rect comes up short and the text truncates.
-  constexpr int16_t kBatteryNubWidth = 2;
+  constexpr int16_t kBatteryGap = 4;       // BaseTheme::batteryPercentSpacing
+  constexpr int16_t kBatteryNubWidth = 2;  // the glyph's terminal nub past glyphWidth
   const int16_t batteryReserve =
       static_cast<int16_t>(metrics.batteryWidth + kBatteryNubWidth + (showPercent ? labelW + kBatteryGap : 0));
-
-  // The page text runs under this band: paint it out before the header draws.
-  screen.target().fill(band, fui::Paint::solid(fui::Color::White));
-  headerProps_.title = model_.bookTitle;
-  headerProps_.centered = true;
-  headerProps_.borderEdges = fui::EdgeBottom;
-  headerProps_.leadingIcon = fui::bitmapFromIcon(icon_reader_back_24);
-  headerProps_.leadingAction = ACTION_DISMISS;
-  headerProps_.leadingRadius = 8;
-  // Two header structures, as BaseTheme::drawHeader: a shared line (title
-  // between the chevron and the battery), or the theme's detached layout
-  // (Lyra) with the battery in its own top strip and the title on the lower
-  // sub-band, owning the full width.
   const bool batteryDetached = metrics.headerBatteryDetached;
-  if (batteryDetached) {
-    const int titleLineHeight = screen.target().lineHeight(tokens.titleText.font);
-    const int titleTop = static_cast<int>(band.height) - tokens.headerUnderline - tokens.spaceMd - titleLineHeight;
-    headerProps_.titleOffsetY = static_cast<int16_t>(titleTop - (static_cast<int>(band.height) - titleLineHeight) / 2);
-    headerProps_.leftReserve = 0;
-    headerProps_.rightReserve = 0;
-  } else {
-    headerProps_.titleOffsetY = 0;
-    headerProps_.rightReserve = static_cast<int16_t>(batteryReserve + tokens.spaceMd);
-    headerProps_.leftReserve = headerProps_.rightReserve;  // keep the title centred on the band
-  }
-  screen.header(headerProps_);
-
   fui::BatteryIndicatorProps battery;
   battery.percent = static_cast<uint8_t>(percent > 100 ? 100 : percent);
   battery.charging = gpio.isUsbConnected();
@@ -202,12 +200,74 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
   battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
   battery.gap = kBatteryGap;
-  // Detached: hug the corner within the battery strip (12px, the legacy
-  // inset); shared line: sit on the content grid, centred on the band.
   const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
   const int16_t batteryX = static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
-  const int16_t batteryH = batteryDetached ? static_cast<int16_t>(metrics.batteryBarHeight) : tokens.headerHeight;
+  const int16_t batteryH = batteryDetached ? static_cast<int16_t>(metrics.batteryBarHeight) : bandH;
   fui::batteryIndicator(screen.frame(), fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
+
+  // The line the title and the back button share: the whole band, or the
+  // sub-band under the battery strip on detached themes.
+  const fui::Rect line =
+      batteryDetached ? fui::Rect{band.x, static_cast<int16_t>(band.y + metrics.batteryBarHeight), band.width,
+                                  static_cast<int16_t>(bandH - metrics.batteryBarHeight - tokens.headerUnderline)}
+                      : fui::Rect{band.x, band.y, band.width, static_cast<int16_t>(bandH - tokens.headerUnderline)};
+
+  // Back button: label inside a bordered tab whose left end comes to a point
+  // (iOS 6). The tab's body is a rounded rect open on the left; the arrow is
+  // two strokes meeting at the tip, and the page text behind the tip is
+  // already painted out with the band.
+  const char* backLabel = tr(STR_LIBRARY);
+  fui::TextStyle backStyle = tokens.smallText;
+  backStyle.bold = true;
+  backStyle.align = fui::TextAlign::Center;
+  const int16_t textW = screen.target().measureText(backStyle.font, backLabel, backStyle).width;
+  const int16_t btnH = kBackButtonH;
+  const int16_t bodyW = static_cast<int16_t>(textW + 2 * kBackPadX);
+  const int16_t btnX = static_cast<int16_t>(band.x + tokens.headerSidePadding);
+  const int16_t btnY = static_cast<int16_t>(line.y + (line.height - btnH) / 2);
+  const fui::Rect tab{static_cast<int16_t>(btnX + kBackArrow), btnY, bodyW, btnH};
+  const uint8_t tabRadius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, 8));
+  screen.target().fill(tab, paper, tabRadius, fui::CornerTopRight | fui::CornerBottomRight);
+  screen.target().stroke(tab, ink, 2, tabRadius, fui::CornerTopRight | fui::CornerBottomRight);
+  // Open the tab's left edge, then draw the arrow onto it: one 2px run per
+  // row along the two diagonals (scanlines instead of drawn lines, so the
+  // edge stays a clean 1-bit stair with no aliasing gaps).
+  // (Only between the top and bottom borders, which the arrow's ends meet.)
+  screen.target().fill(
+      fui::Rect{static_cast<int16_t>(tab.x - 1), static_cast<int16_t>(tab.y + 2), 4, static_cast<int16_t>(btnH - 4)},
+      paper);
+  const int half = btnH / 2;
+  for (int dy = 0; dy < btnH; ++dy) {
+    const int dist = dy < half ? half - dy : dy - half;  // 0 at the tip row
+    // Edge x for this row: the tip at dist 0, the tab body at dist == half.
+    const int edgeX = btnX + (dist * kBackArrow + half / 2) / half;
+    screen.target().fill(fui::Rect{static_cast<int16_t>(edgeX), static_cast<int16_t>(btnY + dy), 2, 1}, ink);
+  }
+  screen.target().text(tab, backLabel, backStyle);
+  // Finger-sized target around the drawn button.
+  const fui::Rect backHit{band.x, line.y, static_cast<int16_t>(kBackArrow + bodyW + 2 * tokens.headerSidePadding),
+                          line.height};
+  screen.frame().hit(backHit, ACTION_HOME, 0, fui::InputTouch);
+
+  // Title, centred on the line between the button and the battery.
+  if (model_.bookTitle) {
+    fui::TextStyle titleStyle = tokens.titleText;
+    titleStyle.bold = true;
+    titleStyle.align = fui::TextAlign::Center;
+    const int16_t leftEdge = static_cast<int16_t>(backHit.right() + tokens.spaceSm);
+    const int16_t rightEdge =
+        static_cast<int16_t>(batteryDetached ? band.right() - tokens.headerSidePadding : batteryX - tokens.spaceMd);
+    // Keep the title centred on the band when there is room, else on the gap.
+    const int16_t maxW = static_cast<int16_t>(rightEdge - leftEdge);
+    const int16_t titleW =
+        std::min<int16_t>(maxW, screen.target().measureText(titleStyle.font, model_.bookTitle, titleStyle).width);
+    int16_t x = static_cast<int16_t>(band.x + (band.width - titleW) / 2);
+    if (x < leftEdge) x = leftEdge;
+    if (x + titleW > rightEdge) x = static_cast<int16_t>(rightEdge - titleW);
+    const int16_t th = screen.target().lineHeight(titleStyle.font);
+    screen.target().text(fui::Rect{x, static_cast<int16_t>(line.y + (line.height - th) / 2), titleW, th},
+                         model_.bookTitle, titleStyle);
+  }
 }
 
 void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
