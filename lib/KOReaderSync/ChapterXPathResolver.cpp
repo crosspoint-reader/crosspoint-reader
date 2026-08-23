@@ -156,6 +156,9 @@ class ParagraphTextCounter final : public Print {
       return;
     }
 
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
+      nonVisibleDepth++;
+    }
     if (name == "p") {
       paragraphDepth++;
     }
@@ -172,16 +175,20 @@ class ParagraphTextCounter final : public Print {
 
     if (depth == bodyDepth && name == "body") {
       insideBody = false;
+      nonVisibleDepth = 0;
       return;
     }
 
+    if (nonVisibleDepth > 0) {
+      nonVisibleDepth--;
+    }
     if (name == "p" && paragraphDepth > 0) {
       paragraphDepth--;
     }
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || paragraphDepth <= 0 || len <= 0) {
+    if (!insideBody || nonVisibleDepth > 0 || paragraphDepth <= 0 || len <= 0) {
       return;
     }
 
@@ -196,6 +203,7 @@ class ParagraphTextCounter final : public Print {
   int depth = 0;
   int bodyDepth = -1;
   int paragraphDepth = 0;
+  uint16_t nonVisibleDepth = 0;
   size_t visibleChars = 0;
 };
 
