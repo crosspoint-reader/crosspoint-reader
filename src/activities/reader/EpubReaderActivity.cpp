@@ -36,6 +36,7 @@
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
 #include "ReaderFontSizes.h"
+#include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -242,6 +243,9 @@ void EpubReaderActivity::openReaderMenu() {
     overlay = Overlay::Toolbar;
     focusedTool = 0;
     panelHoldJumped = false;
+    panelCursorShown = !mappedInput.hasTouch();
+    if (!toolbarUi) toolbarUi = std::make_unique<ReaderToolbarUi>(renderer);
+    toolbarUi->begin();
     discardOverlayPage();
     requestUpdate();
     return;
@@ -1732,6 +1736,10 @@ void EpubReaderActivity::discardOverlayPage() {
 void EpubReaderActivity::openOverlay(Overlay target) {
   const Overlay previous = overlay;
   overlay = target;
+  if (!toolbarUi) toolbarUi = std::make_unique<ReaderToolbarUi>(renderer);
+  if (previous == Overlay::None) toolbarUi->begin();
+  // Buttons show a cursor from the start; touch boards only once a button moves it.
+  panelCursorShown = !mappedInput.hasTouch();
   switch (target) {
     case Overlay::Toolbar:
       focusedTool = 0;
@@ -1784,6 +1792,7 @@ void EpubReaderActivity::openOverlay(Overlay target) {
 // re-render, no flash; Xteink boards re-render to restore the AA planes.
 void EpubReaderActivity::closeOverlayToPage() {
   overlay = Overlay::None;
+  toolbarUi.reset();  // ~1 KB of interaction table + props, only needed while open
   if (!gpio.isXteinkDevice() && overlayPageStored) {
     renderer.restoreBwBuffer();
     overlayPageStored = false;
@@ -1795,53 +1804,70 @@ void EpubReaderActivity::closeOverlayToPage() {
 }
 
 void EpubReaderActivity::renderOverlay() {
-  if (!epub || !section) return;
-  const Rect screen{0, 0, renderer.getScreenWidth(), renderer.getScreenHeight()};
+  if (!epub || !section || !toolbarUi) return;
+
+  ReaderToolbarUi::Model model;
+  model.activeTool = focusedTool;
+  // Strings the model points at live here until render() returns.
+  std::string bookTitle, chapterTitle, pageInfo;
 
   if (overlay == Overlay::Toolbar) {
-    const std::string bookTitle = utf8ComposeNfc(epub->getTitle());
-    const std::string chapterTitle = currentChapterTitle();
+    bookTitle = utf8ComposeNfc(epub->getTitle());
+    chapterTitle = currentChapterTitle();
     const int pageCount = section->estimatedTotalPages();
     const float chapterProgress =
         pageCount > 0 ? static_cast<float>(section->currentPage + 1) / static_cast<float>(pageCount) : 0.0f;
     const float bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress);
-    ReaderToolbarInfo info;
-    info.bookTitle = bookTitle.c_str();
-    info.chapterTitle = chapterTitle.c_str();
-    info.chapterPage = section->currentPage + 1;
-    info.chapterPageCount = pageCount;
-    info.bookPercent = clampPercent(static_cast<int>(bookProgress * 100.0f + 0.5f));
-    info.progress = bookProgress;
-    info.focusedTool = focusedTool;
-    GUI.drawReaderToolbar(renderer, screen, info);
+    pageInfo = std::to_string(section->currentPage + 1) + "/" + std::to_string(pageCount) + "   " +
+               std::to_string(clampPercent(static_cast<int>(bookProgress * 100.0f + 0.5f))) + "%";
+    model.bookTitle = bookTitle.c_str();
+    model.chapterTitle = chapterTitle.c_str();
+    model.pageInfo = pageInfo.c_str();
+    model.progressPermille = static_cast<int>(bookProgress * 1000.0f + 0.5f);
+    toolbarUi->setModel(model);
+    toolbarUi->render();
     return;
   }
 
   // Panels (Contents / Text / More): a bottom sheet over the page + button hints.
-  if (overlay == Overlay::Contents) {
-    GUI.drawReaderPanel(
-        renderer, screen, tr(STR_TOOL_CONTENTS), epub->getTocItemsCount(), panelIndex,
-        [this](int i) {
-          const auto item = epub->getTocItem(i);
-          const int depth = item.level > 1 ? (item.level - 1) * 2 : 0;
-          return std::string(depth, ' ') + item.title;
-        },
-        nullptr, /*activeTool=*/0);
-  } else if (overlay == Overlay::Text) {
-    GUI.drawReaderPanel(
-        renderer, screen, tr(STR_TOOL_TEXT), kTextRowCount, panelIndex, [this](int i) { return textRowName(i); },
-        [this](int i) { return textRowValue(i); }, /*activeTool=*/1);
-  } else if (overlay == Overlay::More) {
-    GUI.drawReaderPanel(
-        renderer, screen, tr(STR_TOOL_MORE), static_cast<int>(moreActions.size()), panelIndex,
-        [this](int i) { return moreRowName(i); }, [this](int i) { return moreRowValue(i); }, /*activeTool=*/2);
+  model.panel = true;
+  if (!mappedInput.hasTouch()) {
+    model.bottomReserve = UITheme::getInstance().getMetrics().buttonHintsHeight;
+    model.denseRows = true;
   }
+  // Tap-first: the cursor is only drawn once a button has moved it, so a
+  // tapped row does not stay inverted after its action.
+  model.selectedIndex = panelCursorShown ? panelIndex : -1;
+  if (overlay == Overlay::Contents) {
+    model.panelTitle = tr(STR_TOOL_CONTENTS);
+    model.itemCount = epub->getTocItemsCount();
+    model.rowText = [this](int i) {
+      const auto item = epub->getTocItem(i);
+      const int depth = item.level > 1 ? (item.level - 1) * 2 : 0;
+      return std::string(depth, ' ') + item.title;
+    };
+  } else if (overlay == Overlay::Text) {
+    model.panelTitle = tr(STR_TOOL_TEXT);
+    model.itemCount = kTextRowCount;
+    model.rowText = [this](int i) { return textRowName(i); };
+    model.rowValue = [this](int i) { return textRowValue(i); };
+  } else {
+    model.panelTitle = tr(STR_TOOL_MORE);
+    model.itemCount = static_cast<int>(moreActions.size());
+    model.rowText = [this](int i) { return moreRowName(i); };
+    model.rowValue = [this](int i) { return moreRowValue(i); };
+  }
+  toolbarUi->setModel(model);
+  toolbarUi->render();
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (!mappedInput.hasTouch()) {
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 }
 
 void EpubReaderActivity::handleOverlayInput() {
+  if (!toolbarUi) return;
   const auto fastRedraw = [this] {
     renderOverlay();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -1861,46 +1887,39 @@ void EpubReaderActivity::handleOverlayInput() {
     }
     requestUpdate();
   };
+  const auto toolOverlay = [](int tool) {
+    return tool == 0 ? Overlay::Contents : (tool == 1 ? Overlay::Text : Overlay::More);
+  };
+
+  // Touch first: FreeInkUI routes the frame against the tap targets the last
+  // render registered and hands back the action it mapped to.
+  const auto routed = toolbarUi->route(mappedInput);
 
   // --- Toolbar ---
   if (overlay == Overlay::Toolbar) {
-    // Touch mirrors the button paths: tap a tool to open its panel, the scrub
-    // buttons/track to move between chapters, anywhere else (page or top bar,
-    // where the back chevron sits) to dismiss.
-    const auto hit = GUI.readerToolbarHitAreas(renderer);
-    int tx = 0;
-    int ty = 0;
-    if (hit.valid && mappedInput.wasScreenTapped(tx, ty)) {
-      const auto in = [&](const Rect& r) {
-        return tx >= r.x && tx < r.x + r.width && ty >= r.y && ty < r.y + r.height;
-      };
-      for (int i = 0; i < 3; ++i) {
-        if (in(hit.tools[i])) {
-          focusedTool = i;
-          openOverlay(i == 0 ? Overlay::Contents : (i == 1 ? Overlay::Text : Overlay::More));
-          return;
-        }
-      }
-      if (in(hit.prevBtn)) {
-        gotoSpine(currentSpineIndex - 1);
-        return;
-      }
-      if (in(hit.nextBtn)) {
-        gotoSpine(currentSpineIndex + 1);
-        return;
-      }
-      if (in(hit.track)) {
-        const float frac =
-            hit.track.width > 1 ? static_cast<float>(tx - hit.track.x) / static_cast<float>(hit.track.width - 1) : 0.0f;
-        gotoSpine(static_cast<int>(frac * static_cast<float>(epub->getSpineItemsCount() - 1) + 0.5f));
-        return;
-      }
-      if (ty < hit.bottomTop) {
+    switch (routed.event) {
+      case ReaderToolbarUi::Event::Dismiss:
         closeOverlayToPage();
         return;
-      }
-      return;  // tap on the bottom bar's dead space: consumed, no action
+      case ReaderToolbarUi::Event::Tool:
+        focusedTool = routed.value;
+        openOverlay(toolOverlay(focusedTool));
+        return;
+      case ReaderToolbarUi::Event::PrevChapter:
+        gotoSpine(currentSpineIndex - 1);
+        return;
+      case ReaderToolbarUi::Event::NextChapter:
+        gotoSpine(currentSpineIndex + 1);
+        return;
+      case ReaderToolbarUi::Event::Scrub:
+        gotoSpine(static_cast<int>((static_cast<float>(routed.permille) / 1000.0f) *
+                                       static_cast<float>(epub->getSpineItemsCount() - 1) +
+                                   0.5f));
+        return;
+      default:
+        break;
     }
+    if (routed.routed) return;  // a touch frame the chrome consumed (or dead space)
 
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       closeOverlayToPage();
@@ -1917,7 +1936,7 @@ void EpubReaderActivity::handleOverlayInput() {
       return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      openOverlay(focusedTool == 0 ? Overlay::Contents : (focusedTool == 1 ? Overlay::Text : Overlay::More));
+      openOverlay(toolOverlay(focusedTool));
       return;
     }
     const bool prev = mappedInput.wasReleased(MappedInputManager::Button::Up);
@@ -1932,10 +1951,12 @@ void EpubReaderActivity::handleOverlayInput() {
   const int count = overlay == Overlay::Contents ? epub->getTocItemsCount()
                     : overlay == Overlay::Text   ? kTextRowCount
                                                  : static_cast<int>(moreActions.size());
+  const int pageRows = std::max(1, toolbarUi->visibleRows());
 
   // Activate the highlighted row: change a value / jump to a chapter / run an
   // action. Shared by the Confirm button and a row tap.
-  const auto activateRow = [this, &fastRedraw] {
+  const auto activateRow = [this, count, &fastRedraw] {
+    if (panelIndex < 0 || panelIndex >= count) return;
     if (overlay == Overlay::Text) {
       if (panelIndex == 0) {
         // Full font picker (built-in + SD fonts), the same screen Settings uses.
@@ -1948,7 +1969,8 @@ void EpubReaderActivity::handleOverlayInput() {
                                  overlay = Overlay::Text;  // back to the Text panel
                                  panelIndex = 0;
                                  snapshotTextSettings();
-                                 requestUpdate();  // re-render page + Text panel
+                                 if (toolbarUi) toolbarUi->begin();  // the picker drew its own FUI screen
+                                 requestUpdate();                    // re-render page + Text panel
                                });
       } else {
         cycleTextRow(panelIndex, +1);
@@ -1997,60 +2019,50 @@ void EpubReaderActivity::handleOverlayInput() {
     requestUpdate();
   };
 
-  // Touch: tap a row to activate it, tap the visible page above the sheet to
-  // step back to the toolbar, swipe up/down (or tap the right edge) to page
-  // long lists.
-  const auto hit = GUI.readerPanelHitAreas(renderer);
-  if (hit.valid) {
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.wasScreenTapped(tx, ty)) {
-      if (ty < hit.panelTop) {
-        dismissPanel();
-        return;
-      }
+  // Pages the list by one screen of rows; the cursor rides along so the
+  // buttons continue from what is shown.
+  const auto pageList = [this, count, pageRows, &fastRedraw](int direction) {
+    if (count <= 0) return;
+    panelIndex = std::clamp(panelIndex + direction * pageRows, 0, count - 1);
+    fastRedraw();
+  };
+
+  switch (routed.event) {
+    case ReaderToolbarUi::Event::Dismiss:
+      dismissPanel();
+      return;
+    case ReaderToolbarUi::Event::Tool: {
       // Sheet-bottom tool switcher: hop straight to another panel (Text
       // persists its edits through applyReaderTextSettings on the way out).
-      for (int i = 0; i < 3; ++i) {
-        const Rect& r = hit.tools[i];
-        if (r.width > 0 && tx >= r.x && tx < r.x + r.width && ty >= r.y && ty < r.y + r.height) {
-          const Overlay target = i == 0 ? Overlay::Contents : (i == 1 ? Overlay::Text : Overlay::More);
-          if (target != overlay) {
-            if (overlay == Overlay::Text && textSettingsChanged()) applyReaderTextSettings();
-            focusedTool = i;
-            openOverlay(target);
-          }
-          return;
-        }
+      const Overlay target = toolOverlay(routed.value);
+      if (target != overlay) {
+        if (overlay == Overlay::Text && textSettingsChanged()) applyReaderTextSettings();
+        focusedTool = routed.value;
+        openOverlay(target);
       }
-      // Right-edge strip pages the sheet by taps (upper half = previous page,
-      // lower half = next page).
-      if (count > 0 && hit.pageItems > 0 && tx >= renderer.getScreenWidth() - 44) {
-        const int step = ty >= (hit.panelTop + renderer.getScreenHeight()) / 2 ? hit.pageItems : -hit.pageItems;
-        panelIndex = std::clamp(panelIndex + step, 0, count - 1);
-        fastRedraw();
-        return;
-      }
-      if (count > 0 && ty >= hit.listTop && hit.rowHeight > 0 && hit.pageItems > 0) {
-        const int slot = (ty - hit.listTop) / hit.rowHeight;
-        const int pageStart = (panelIndex >= 0 ? panelIndex : 0) / hit.pageItems * hit.pageItems;
-        const int i = pageStart + slot;
-        if (slot >= 0 && slot < hit.pageItems && i < count) {
-          panelIndex = i;
-          activateRow();
-          return;
-        }
-      }
-      return;  // tap on the sheet's title/dead space: consumed, no action
-    }
-    const auto swipe = mappedInput.wasSwipe();
-    if (count > 0 && hit.pageItems > 0 &&
-        (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down)) {
-      const int step = swipe == MappedInputManager::SwipeDir::Up ? hit.pageItems : -hit.pageItems;
-      panelIndex = std::clamp(panelIndex + step, 0, count - 1);
-      fastRedraw();
       return;
     }
+    case ReaderToolbarUi::Event::Row:
+      // A tap on the right-edge strip pages the sheet instead (upper half =
+      // previous page, lower half = next): swipes are unreliable on etched
+      // glass, and a long contents list needs a fast way through.
+      if (routed.x >= renderer.getScreenWidth() - 44) {
+        pageList(routed.y >= renderer.getScreenHeight() - (renderer.getScreenHeight() * 62) / 200 ? 1 : -1);
+        return;
+      }
+      panelIndex = routed.value;
+      panelCursorShown = false;
+      activateRow();
+      return;
+    default:
+      break;
+  }
+  if (routed.routed) return;  // consumed by the chrome (title band, dead space)
+
+  const auto swipe = mappedInput.wasSwipe();
+  if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    pageList(swipe == MappedInputManager::SwipeDir::Up ? 1 : -1);
+    return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -2063,7 +2075,7 @@ void EpubReaderActivity::handleOverlayInput() {
     return;
   }
 
-  // Up/Down (side) and Left/Right (front) move the selection: a tap steps one
+  // Up/Down (side) and Left/Right (front) move the cursor: a tap steps one
   // row, holding past PANEL_HOLD_MS jumps PANEL_HOLD_STEP rows in one go, which
   // is how you cross a hundreds-of-chapters contents list without a press per
   // row. The jump fires once on the hold and swallows the release that ends it,
@@ -2077,6 +2089,7 @@ void EpubReaderActivity::handleOverlayInput() {
       const int step = down ? PANEL_HOLD_STEP : -PANEL_HOLD_STEP;
       panelIndex = std::clamp(panelIndex + step, 0, count - 1);
       panelHoldJumped = true;
+      panelCursorShown = true;
       fastRedraw();
       return;
     }
@@ -2089,6 +2102,7 @@ void EpubReaderActivity::handleOverlayInput() {
       if (!panelHoldJumped) {
         panelIndex = releasedUp ? ButtonNavigator::previousIndex(panelIndex, count)
                                 : ButtonNavigator::nextIndex(panelIndex, count);
+        panelCursorShown = true;
         fastRedraw();
       }
       panelHoldJumped = false;
