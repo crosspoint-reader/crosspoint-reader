@@ -139,6 +139,7 @@ struct WalkState {
   uint16_t unreadableSkipped = 0;
   bool booksAtRoot = false;
   bool aborted = false;
+  bool failed = false;
   bool readMetadata = false;
   uint16_t enriched = 0;
   HalFile folders;  // folder section, staged separately then copied in
@@ -168,7 +169,7 @@ int findPrior(WalkState& st, const uint32_t nameHash, const uint32_t size) {
 
 // parentBasename and depth are gone with the folder-as-author rule they served:
 // nothing about a book's surroundings names its author any more.
-void stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize, const uint16_t folderId,
+bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize, const uint16_t folderId,
                  const std::string& fullPath) {
   StagedEntry entry{};
   // The filename is a fallback for the title and nothing else: no parsing, and
@@ -261,14 +262,19 @@ void stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   entry.authorLen = static_cast<uint8_t>(std::min(displayAuthor.size(), STAGE_AUTHOR_BYTES));
   memcpy(entry.author, displayAuthor.data(), entry.authorLen);
 
-  st.stage.write(reinterpret_cast<const uint8_t*>(&entry), STAGE_STRIDE);
+  if (st.stage.write(reinterpret_cast<const uint8_t*>(&entry), STAGE_STRIDE) != STAGE_STRIDE) {
+    LOG_ERR("LIBIDX", "record stage write failed: %s", fullPath.c_str());
+    st.failed = true;
+    return false;
+  }
   st.nameBytes += entry.record.nameLen;
   st.totalBookBytes += fileSize;
   st.books++;
+  return true;
 }
 
 void walk(WalkState& st, const std::string& path, const int depth) {
-  if (st.aborted || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
+  if (st.aborted || st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
 
   HalFile dir = Storage.open(path.c_str());
   if (!dir || !dir.isDirectory()) {
@@ -300,7 +306,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
   uint16_t myFolderId = 0;
 
   for (HalFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
-    if (st.aborted || st.books >= CLIX_MAX_RECORDS) {
+    if (st.aborted || st.failed || st.books >= CLIX_MAX_RECORDS) {
       entry.close();
       break;
     }
@@ -353,17 +359,22 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     if (!folderEmitted) {
       // Folders are emitted lazily, so only directories that actually hold a
       // book get an id and the ids stay dense.
-      myFolderId = st.folderId++;
+      myFolderId = st.folderId;
       // In range: entries whose folder path exceeds FOLDER_PATH_BYTES were
       // skipped above, so no book reaches this line with an overlong path.
       const uint8_t pathLen = static_cast<uint8_t>(path.size());
-      st.folders.write(&pathLen, 1);
-      st.folders.write(reinterpret_cast<const uint8_t*>(path.data()), pathLen);
+      if (st.folders.write(&pathLen, 1) != 1 ||
+          st.folders.write(reinterpret_cast<const uint8_t*>(path.data()), pathLen) != pathLen) {
+        LOG_ERR("LIBIDX", "folder stage write failed: %s", path.c_str());
+        st.failed = true;
+        break;
+      }
       st.folderBytes += 1u + pathLen;
+      st.folderId++;
       folderEmitted = true;
       if (depth == 0) st.booksAtRoot = true;
     }
-    stageRecord(st, name, size, myFolderId, joinPath(path, name));
+    if (!stageRecord(st, name, size, myFolderId, joinPath(path, name))) break;
 
     // Once per staged book, not only once per directory: this callback is the
     // one place the caller can feed the task watchdog, and with metadata enabled
@@ -380,7 +391,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
 
   // Kept for directories that stage no books, so a deep tree of empty or
   // book-less folders still feeds the watchdog between the per-book calls.
-  if (!st.aborted && st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
+  if (!st.aborted && !st.failed && st.onProgress != nullptr && !st.onProgress(st.books, path.c_str(), st.progressCtx)) {
     st.aborted = true;
     return;
   }
@@ -390,7 +401,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
   // deep tree would otherwise hold a handle per level.
   for (const std::string& sub : subdirs) {
     walk(st, joinPath(path, sub), depth + 1);
-    if (st.aborted) return;
+    if (st.aborted || st.failed) return;
   }
 }
 
@@ -457,25 +468,34 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // Returns false rather than spinning. A full card makes write() return 0, and
   // the old loop never advanced past it — the device simply hung mid-rebuild with
   // no message, which is worse than any error.
-  bool writeFailed = false;
-  // Every write goes through here. Checking them one by one was the alternative,
-  // and the review found the ones that had been missed — a short write on a full
-  // card leaves a file that still passes the header check because the header was
-  // written last and describes what was intended, not what landed.
-  const auto put = [&out, &writeFailed](const void* data, const size_t len) {
-    if (writeFailed) return;
-    if (out.write(static_cast<const uint8_t*>(data), len) != static_cast<int>(len)) writeFailed = true;
+  bool ioFailed = false;
+  // Every final-index write goes through here. A short write on a full card
+  // leaves a file that still passes the header check when the header describes
+  // what was intended rather than what landed.
+  const auto put = [&out, &ioFailed](const void* data, const size_t len) {
+    if (ioFailed) return;
+    if (out.write(static_cast<const uint8_t*>(data), len) != static_cast<int>(len)) ioFailed = true;
   };
-  const auto padTo = [&out, &writeFailed](const uint32_t target) {
+  const auto padTo = [&out, &ioFailed](const uint32_t target) {
+    if (ioFailed) return;
     static const uint8_t zeros[64] = {0};
     while (out.position() < target) {
       const uint32_t gap = target - static_cast<uint32_t>(out.position());
       const size_t want = std::min<uint32_t>(gap, sizeof(zeros));
       if (out.write(zeros, want) != static_cast<int>(want)) {
-        writeFailed = true;
+        ioFailed = true;
         return;
       }
     }
+  };
+  const auto readStageAt = [&stage, &ioFailed](const uint64_t offset, void* data, const size_t len) {
+    if (ioFailed) return false;
+    if (!stage.seekSet(offset) || stage.read(reinterpret_cast<uint8_t*>(data), len) != static_cast<int>(len)) {
+      LOG_ERR("LIBIDX", "record stage read failed at %u", static_cast<unsigned>(offset));
+      ioFailed = true;
+      return false;
+    }
+    return true;
   };
 
   // Header placeholder; rewritten below once authorRank/dateRank are known.
@@ -486,21 +506,37 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     HalFile folders;
     if (Storage.openFileForRead("LIBIDX", folderStagePath, folders)) {
       uint8_t buf[256];
+      uint32_t copied = 0;
       // read() returns int: a -1 error must fail the emit, not wrap into a
       // huge unsigned length.
       int got = 0;
-      while ((got = folders.read(buf, sizeof(buf))) > 0) put(buf, static_cast<size_t>(got));
-      if (got < 0) writeFailed = true;
+      while ((got = folders.read(buf, sizeof(buf))) > 0) {
+        put(buf, static_cast<size_t>(got));
+        copied += static_cast<uint32_t>(got);
+      }
+      if (got < 0) ioFailed = true;
       folders.close();
+      if (copied != st.folderBytes) {
+        LOG_ERR("LIBIDX", "folder stage truncated: read %u of %u bytes", static_cast<unsigned>(copied),
+                static_cast<unsigned>(st.folderBytes));
+        ioFailed = true;
+      }
     } else {
       // Ignoring this would publish an all-zero folder section: selfSize still
       // matches, so the index validates, and readPath() then fails for every
       // book with nothing left to trigger a self-repair.
       LOG_ERR("LIBIDX", "folder stage unreadable: %s", folderStagePath);
-      writeFailed = true;
+      ioFailed = true;
     }
   }
   padTo(header.recordStart);
+  if (ioFailed) {
+    LOG_ERR("LIBIDX", "emit failed while copying the folder stage");
+    stage.close();
+    out.close();
+    Storage.remove(NEW_PATH);
+    return false;
+  }
 
   // Author order has to be known BEFORE the records are written, because each
   // record carries its own authorRank. So: read the keys, sort, invert, then
@@ -523,8 +559,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   if (authorSort && authorRankOf) {
     for (uint16_t i = 0; i < n; i++) {
       ClixRecord r{};
-      stage.seekSet(static_cast<uint64_t>(order[i]) * STAGE_STRIDE);
-      stage.read(reinterpret_cast<uint8_t*>(&r), sizeof(r));
+      if (!readStageAt(static_cast<uint64_t>(order[i]) * STAGE_STRIDE, &r, sizeof(r))) break;
       if (r.authorKeyLen == 0) {
         // 0xFF outranks every folded byte, so unknown authors land at the end.
         memset(authorSort[i].key, 0xFF, sizeof(authorSort[i].key));
@@ -535,8 +570,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       }
       authorSort[i].ordinal = i;
     }
-    if (n > 1) std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
-    for (uint16_t k = 0; k < n; k++) authorRankOf[authorSort[k].ordinal] = k;
+    if (!ioFailed) {
+      if (n > 1) std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
+      for (uint16_t k = 0; k < n; k++) authorRankOf[authorSort[k].ordinal] = k;
+    }
   } else {
     for (uint16_t i = 0; i < n; i++) {
       if (authorRankOf) authorRankOf[i] = i;
@@ -564,7 +601,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   if (canonicalFrom) {
     for (uint16_t i = 0; i < n; i++) canonicalFrom[i] = i;
   }
-  if (canonicalFrom && authorSort && n > 1) {
+  if (!ioFailed && canonicalFrom && authorSort && n > 1) {
     uint16_t runStart = 0;
     while (runStart < n) {
       uint16_t runEnd = runStart + 1;
@@ -596,13 +633,15 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
         for (uint16_t a = runStart; a < runEnd; a++) {
           const uint16_t ord = authorSort[a].ordinal;
           uint8_t len = 0;
-          stage.seekSet(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, authorLen));
-          if (stage.read(reinterpret_cast<uint8_t*>(&len), sizeof(len)) != sizeof(len) || len == 0) continue;
+          if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, authorLen), &len,
+                           sizeof(len)))
+            break;
+          if (len == 0) continue;
 
           char buf[STAGE_AUTHOR_BYTES];
           const size_t want = std::min<size_t>(len, sizeof(buf));
-          stage.seekSet(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, author));
-          if (stage.read(reinterpret_cast<uint8_t*>(buf), want) != static_cast<int>(want)) continue;
+          if (!readStageAt(static_cast<uint64_t>(order[ord]) * STAGE_STRIDE + offsetof(StagedEntry, author), buf, want))
+            break;
           const std::string text(buf, want);
 
           bool merged = false;
@@ -650,7 +689,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // by surname, as a library would. Keying off the canonical name rather than the
   // raw one is what keeps a group whole: all of a group's books resolve to the
   // same string, so they cannot split across two places.
-  if (authorSort && authorRankOf && canonicalFrom && n > 1) {
+  if (!ioFailed && authorSort && authorRankOf && canonicalFrom && n > 1) {
     for (uint16_t i = 0; i < n; i++) {
       // canonicalFrom holds TITLE-order positions, and the staging file is keyed
       // by walk order — order[] is the map between them. Reading staging with the
@@ -659,11 +698,13 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       const uint16_t src = order[canonicalFrom[i]];
       uint8_t authorLen = 0;
       char author[STAGE_AUTHOR_BYTES] = {};
-      stage.seekSet(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, authorLen));
-      stage.read(reinterpret_cast<uint8_t*>(&authorLen), sizeof(authorLen));
+      if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, authorLen), &authorLen,
+                       sizeof(authorLen)))
+        break;
       if (authorLen > 0) {
-        stage.seekSet(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, author));
-        stage.read(reinterpret_cast<uint8_t*>(author), std::min<size_t>(authorLen, sizeof(author)));
+        if (!readStageAt(static_cast<uint64_t>(src) * STAGE_STRIDE + offsetof(StagedEntry, author), author,
+                         std::min<size_t>(authorLen, sizeof(author))))
+          break;
       }
 
       const std::string key = authorLen == 0 ? std::string() : surnameKey(std::string_view(author, authorLen));
@@ -676,8 +717,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       }
       authorSort[i].ordinal = i;
     }
-    std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
-    for (uint16_t k = 0; k < n; k++) authorRankOf[authorSort[k].ordinal] = k;
+    if (!ioFailed) {
+      std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
+      for (uint16_t k = 0; k < n; k++) authorRankOf[authorSort[k].ordinal] = k;
+    }
   }
 
   // --- arrival order -------------------------------------------------------
@@ -698,11 +741,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     stats.ranksDegraded = true;
   }
   auto dateRankOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
-  if (dateSort && dateRankOf) {
+  if (!ioFailed && dateSort && dateRankOf) {
     for (uint16_t i = 0; i < n; i++) {
       ClixRecord r{};
-      stage.seekSet(static_cast<uint64_t>(order[i]) * STAGE_STRIDE);
-      stage.read(reinterpret_cast<uint8_t*>(&r), sizeof(r));
+      if (!readStageAt(static_cast<uint64_t>(order[i]) * STAGE_STRIDE, &r, sizeof(r))) break;
       // Big-endian into the key so memcmp orders numerically.
       const uint16_t seen = resolvedFirstSeen ? resolvedFirstSeen[order[i]] : r.firstSeen;
       memset(dateSort[i].key, 0, sizeof(dateSort[i].key));
@@ -710,10 +752,20 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       dateSort[i].key[1] = static_cast<char>(seen & 0xFF);
       dateSort[i].ordinal = i;
     }
-    if (n > 1) std::sort(dateSort.get(), dateSort.get() + n, sortKeyLess);
-    for (uint16_t k = 0; k < n; k++) dateRankOf[dateSort[k].ordinal] = k;
+    if (!ioFailed) {
+      if (n > 1) std::sort(dateSort.get(), dateSort.get() + n, sortKeyLess);
+      for (uint16_t k = 0; k < n; k++) dateRankOf[dateSort[k].ordinal] = k;
+    }
   } else {
     stats.ranksDegraded = true;
+  }
+
+  if (ioFailed) {
+    LOG_ERR("LIBIDX", "emit failed while reading the record stage");
+    stage.close();
+    out.close();
+    Storage.remove(NEW_PATH);
+    return false;
   }
 
   // Records, in title order, with both ranks and the name offset filled in.
@@ -741,13 +793,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // bytes in the buffer, so the emit would write a duplicate row — and since the
   // duplicate is internally consistent, written == selfSize still holds and the
   // corrupt index would pass validation.
-  const auto fetch = [&stage, &writeFailed](const uint16_t stagingIndex, StagedEntry& dest) {
-    stage.seekSet(static_cast<uint64_t>(stagingIndex) * STAGE_STRIDE);
-    if (stage.read(reinterpret_cast<uint8_t*>(&dest), STAGE_STRIDE) != static_cast<int>(STAGE_STRIDE)) {
-      writeFailed = true;
-      return false;
-    }
-    return true;
+  const auto fetch = [&readStageAt](const uint16_t stagingIndex, StagedEntry& dest) {
+    return readStageAt(static_cast<uint64_t>(stagingIndex) * STAGE_STRIDE, &dest, STAGE_STRIDE);
   };
 
   uint32_t nameCursor = 0;
@@ -814,9 +861,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   const bool sizeMatches = written == header.selfSize;
   out.close();
 
-  if (writeFailed || !sizeMatches) {
-    LOG_ERR("LIBIDX", "emit incomplete (write %s, size %u vs %u) — keeping the old index",
-            writeFailed ? "failed" : "ok", static_cast<unsigned>(written), static_cast<unsigned>(header.selfSize));
+  if (ioFailed || !sizeMatches) {
+    LOG_ERR("LIBIDX", "emit incomplete (I/O %s, size %u vs %u) — keeping the old index", ioFailed ? "failed" : "ok",
+            static_cast<unsigned>(written), static_cast<unsigned>(header.selfSize));
     // Leave the previous index alone. A shelf that is a rebuild out of date is
     // worth incomparably more than none at all, and a full card is exactly when
     // the reader can least afford to lose it.
@@ -908,6 +955,12 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
   // is partial, and every section derived from it would inherit the holes.
   if (st.aborted) {
     LOG_INF("LIBIDX", "walk aborted; keeping the previous index");
+    Storage.remove(STAGE_PATH);
+    Storage.remove(folderStagePath.c_str());
+    return false;
+  }
+  if (st.failed) {
+    LOG_ERR("LIBIDX", "staging failed; keeping the previous index");
     Storage.remove(STAGE_PATH);
     Storage.remove(folderStagePath.c_str());
     return false;
@@ -1010,8 +1063,15 @@ bool buildLibraryIndex(const char* rootPath, const uint16_t previousNextFirstSee
     if (keys && Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) {
       for (uint16_t i = 0; i < st.books; i++) {
         ClixRecord r{};
-        stage.seekSet(static_cast<uint64_t>(i) * STAGE_STRIDE);
-        stage.read(reinterpret_cast<uint8_t*>(&r), sizeof(r));
+        const uint64_t offset = static_cast<uint64_t>(i) * STAGE_STRIDE;
+        if (!stage.seekSet(offset) ||
+            stage.read(reinterpret_cast<uint8_t*>(&r), sizeof(r)) != static_cast<int>(sizeof(r))) {
+          LOG_ERR("LIBIDX", "title sort: record stage read failed at %u", static_cast<unsigned>(offset));
+          stage.close();
+          Storage.remove(STAGE_PATH);
+          Storage.remove(folderStagePath.c_str());
+          return false;
+        }
         memset(keys[i].key, 0, sizeof(keys[i].key));
         memcpy(keys[i].key, r.fold, std::min<size_t>(r.foldLen, sizeof(keys[i].key)));
         keys[i].ordinal = i;
