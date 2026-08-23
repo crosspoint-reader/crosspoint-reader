@@ -224,7 +224,8 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   const int16_t btnH = kBackButtonH;
   const int16_t bodyW = static_cast<int16_t>(textW + 2 * kBackPadX);
   const int16_t btnX = static_cast<int16_t>(band.x + tokens.headerSidePadding);
-  const int16_t btnY = static_cast<int16_t>(line.y + (line.height - btnH) / 2);
+  // Centred on the whole bar (above the rule), whatever the title line does.
+  const int16_t btnY = static_cast<int16_t>(band.y + (bandH - tokens.headerUnderline - btnH) / 2);
   const fui::Rect tab{static_cast<int16_t>(btnX + kBackArrow), btnY, bodyW, btnH};
   const uint8_t tabRadius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, 8));
   screen.target().fill(tab, paper, tabRadius, fui::CornerTopRight | fui::CornerBottomRight);
@@ -236,6 +237,10 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   screen.target().fill(
       fui::Rect{static_cast<int16_t>(tab.x - 1), static_cast<int16_t>(tab.y + 2), 4, static_cast<int16_t>(btnH - 4)},
       paper);
+  // Bridge the arrow's ends into the body's top/bottom borders (the stroke
+  // keeps clear of the open left edge), so the outline is one closed wire.
+  screen.target().fill(fui::Rect{static_cast<int16_t>(tab.x - 1), tab.y, 10, 2}, ink);
+  screen.target().fill(fui::Rect{static_cast<int16_t>(tab.x - 1), static_cast<int16_t>(tab.bottom() - 2), 10, 2}, ink);
   const int half = btnH / 2;
   for (int dy = 0; dy < btnH; ++dy) {
     const int dist = dy < half ? half - dy : dy - half;  // 0 at the tip row
@@ -245,8 +250,8 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   }
   screen.target().text(tab, backLabel, backStyle);
   // Finger-sized target around the drawn button.
-  const fui::Rect backHit{band.x, line.y, static_cast<int16_t>(kBackArrow + bodyW + 2 * tokens.headerSidePadding),
-                          line.height};
+  const fui::Rect backHit{band.x, band.y, static_cast<int16_t>(kBackArrow + bodyW + 2 * tokens.headerSidePadding),
+                          static_cast<int16_t>(bandH - tokens.headerUnderline)};
   screen.frame().hit(backHit, ACTION_HOME, 0, fui::InputTouch);
 
   // Title, centred on the line between the button and the battery.
