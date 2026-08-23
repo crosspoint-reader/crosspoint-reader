@@ -1376,6 +1376,8 @@ void EpubReaderActivity::renderBook() {
     discardOverlayPage();
     overlayPageStored = renderer.storeBwBuffer();
     renderOverlay();
+    // An open option picker rides on top of the freshly drawn panel.
+    if (overlayPopup.isActive()) overlayPopup.render(renderer);
     // HALF on the Xteink grayscale panels: the page render above just ran the
     // anti-aliasing waveform, and a FAST differential leaves the covered text
     // ghosting gray through the chrome background (see openOverlay).
@@ -1696,6 +1698,8 @@ void EpubReaderActivity::renderStatusBar() const {
 // Toolbar reader menu
 // ---------------------------------------------------------------------------
 
+namespace {}  // namespace
+
 namespace {
 constexpr int kTextRowCount = 5;
 }  // namespace
@@ -1713,24 +1717,101 @@ std::string EpubReaderActivity::currentChapterTitle() const {
   return tr(STR_UNNAMED);
 }
 
-void EpubReaderActivity::snapshotTextSettings() {
-  static_assert(sizeof(textSnapshot.sdFontFamilyName) >= sizeof(SETTINGS.sdFontFamilyName),
-                "text settings snapshot must hold the full SD font family name");
-  textSnapshot.fontFamily = SETTINGS.fontFamily;
-  textSnapshot.fontPointSize = SETTINGS.fontPointSize;
-  textSnapshot.lineSpacing = SETTINGS.lineSpacing;
-  textSnapshot.paragraphAlignment = SETTINGS.paragraphAlignment;
-  textSnapshot.focusReadingEnabled = SETTINGS.focusReadingEnabled;
-  strncpy(textSnapshot.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(textSnapshot.sdFontFamilyName) - 1);
-  textSnapshot.sdFontFamilyName[sizeof(textSnapshot.sdFontFamilyName) - 1] = '\0';
+std::string EpubReaderActivity::textRowName(int row) const {
+  switch (row) {
+    case 0:
+      return tr(STR_FONT);
+    case 1:
+      return tr(STR_FONT_SIZE);
+    case 2:
+      return tr(STR_LINE_SPACING);
+    case 3:
+      return tr(STR_PARA_ALIGNMENT);
+    case 4:
+      return tr(STR_FOCUS_READING);
+    default:
+      return "";
+  }
 }
 
-bool EpubReaderActivity::textSettingsChanged() const {
-  return textSnapshot.fontFamily != SETTINGS.fontFamily || textSnapshot.fontPointSize != SETTINGS.fontPointSize ||
-         textSnapshot.lineSpacing != SETTINGS.lineSpacing ||
-         textSnapshot.paragraphAlignment != SETTINGS.paragraphAlignment ||
-         textSnapshot.focusReadingEnabled != SETTINGS.focusReadingEnabled ||
-         strncmp(textSnapshot.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(textSnapshot.sdFontFamilyName)) != 0;
+std::string EpubReaderActivity::textRowValue(int row) const {
+  static constexpr StrId kFamily[] = {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
+  static constexpr StrId kSpacing[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
+  static constexpr StrId kAlign[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER,
+                                     StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE};
+  static_assert(std::size(kSpacing) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing labels");
+  static_assert(std::size(kAlign) == CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, "alignment labels");
+  switch (row) {
+    case 0:
+      if (SETTINGS.sdFontFamilyName[0] != '\0') return SETTINGS.sdFontFamilyName;
+      return I18N.get(kFamily[SETTINGS.fontFamily % CrossPointSettings::FONT_FAMILY_COUNT]);
+    case 1:
+      return std::to_string(SETTINGS.fontPointSize) + " pt";
+    case 2:
+      return I18N.get(kSpacing[SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT]);
+    case 3:
+      return I18N.get(kAlign[SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT]);
+    case 4:
+      return SETTINGS.focusReadingEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    default:
+      return "";
+  }
+}
+
+// Live apply: persist, re-paginate, and let renderBook() redraw the page with
+// the open panel back on top -- the book itself is the preview.
+void EpubReaderActivity::applyTextSettingLive() {
+  applyReaderTextSettings();
+  discardOverlayPage();  // the stored page is laid out with the old settings
+  requestUpdate();
+}
+
+// Settings-style option pickers for the Text panel's enum rows. Every
+// selection applies immediately to the page under the sheet.
+void EpubReaderActivity::showTextRowPopup(const int row) {
+  static constexpr StrId kSpacingIds[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
+  static constexpr StrId kAlignIds[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER,
+                                        StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE};
+  static_assert(std::size(kSpacingIds) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing options");
+  static_assert(std::size(kAlignIds) == CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, "alignment options");
+  switch (row) {
+    case 1: {
+      // The point sizes the active family actually ships.
+      const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
+      if (sizes.empty()) return;
+      std::vector<std::string> labels;
+      labels.reserve(sizes.size());
+      for (const uint8_t size : sizes) labels.push_back(std::to_string(size) + " pt");
+      const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
+      int curIdx = 0;
+      for (size_t i = 0; i < sizes.size(); ++i) {
+        if (sizes[i] == cur) curIdx = static_cast<int>(i);
+      }
+      overlayPopup.show(StrId::STR_FONT_SIZE, labels, curIdx, [this, sizes](int idx) {
+        if (idx < 0 || idx >= static_cast<int>(sizes.size())) return;
+        SETTINGS.fontPointSize = sizes[idx];
+        applyTextSettingLive();
+      });
+      break;
+    }
+    case 2:
+      overlayPopup.show(StrId::STR_LINE_SPACING, kSpacingIds, static_cast<int>(std::size(kSpacingIds)),
+                        SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT, [this](int idx) {
+                          SETTINGS.lineSpacing = static_cast<uint8_t>(idx);
+                          applyTextSettingLive();
+                        });
+      break;
+    case 3:
+      overlayPopup.show(StrId::STR_PARA_ALIGNMENT, kAlignIds, static_cast<int>(std::size(kAlignIds)),
+                        SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, [this](int idx) {
+                          SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx);
+                          applyTextSettingLive();
+                        });
+      break;
+    default:
+      return;
+  }
+  paintOverlayPopup();
 }
 
 void EpubReaderActivity::discardOverlayPage() {
@@ -1756,7 +1837,6 @@ void EpubReaderActivity::openOverlay(Overlay target) {
       break;
     case Overlay::Text:
       panelIndex = 0;
-      snapshotTextSettings();
       break;
     case Overlay::More:
       panelIndex = 0;
@@ -1808,7 +1888,8 @@ void EpubReaderActivity::openOverlay(Overlay target) {
 // re-render, no flash; Xteink boards re-render to restore the AA planes.
 void EpubReaderActivity::closeOverlayToPage() {
   overlay = Overlay::None;
-  toolbarUi.reset();  // ~1 KB of interaction table + props, only needed while open
+  overlayPopup.dismiss();  // an option picker cannot outlive its panel
+  toolbarUi.reset();       // ~1 KB of interaction table + props, only needed while open
   if (!xteinkClassPanel() && overlayPageStored) {
     RenderLock lock;  // the render task shares the framebuffer
     // No baseline resync: the glass shows the chrome, and erasing it needs
@@ -1891,6 +1972,28 @@ void EpubReaderActivity::renderOverlay() {
 
 void EpubReaderActivity::handleOverlayInput() {
   if (!toolbarUi) return;
+
+  // A modal option picker over the panel owns all input while open.
+  if (overlayPopup.isActive()) {
+    overlayPopup.handleInput(mappedInput, [this] {
+      if (overlayPopup.isActive()) {
+        paintOverlayPopup();  // highlight moved
+        return;
+      }
+      // Dismissed or selected: erase the dialog -- clean page back, then the
+      // panel over it (the dialog can overhang the sheet onto the page).
+      RenderLock lock;
+      if (overlayPageStored) {
+        renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+        overlayPageStored = renderer.storeBwBuffer();
+        renderOverlay();
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      } else {
+        requestUpdate();
+      }
+    });
+    return;
+  }
   const auto fastRedraw = [this] {
     RenderLock lock;  // the render task shares the framebuffer
     renderOverlay();
@@ -1985,8 +2088,10 @@ void EpubReaderActivity::handleOverlayInput() {
     if (panelIndex < 0 || panelIndex >= count) return;
     if (overlay == Overlay::Text) {
       if (panelIndex == 0) {
-        // Full font picker (built-in + SD fonts), the same screen Settings uses.
+        // Full font picker (built-in + SD fonts, live preview) -- the same
+        // screen Settings uses; a popup cannot scroll a long font list.
         overlay = Overlay::None;
+        overlayPopup.dismiss();
         discardOverlayPage();
         startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
                                                                       TextSettingsActivity::Tab::Family),
@@ -1994,14 +2099,16 @@ void EpubReaderActivity::handleOverlayInput() {
                                  applyReaderTextSettings();
                                  overlay = Overlay::Text;  // back to the Text panel
                                  panelIndex = 0;
-                                 snapshotTextSettings();
                                  if (toolbarUi) toolbarUi->begin();  // the picker drew its own FUI screen
                                  requestUpdate();                    // re-render page + Text panel
                                });
+      } else if (panelIndex == 4) {
+        // Focus Reading is a genuine on/off: a tap toggles and applies live.
+        SETTINGS.focusReadingEnabled = SETTINGS.focusReadingEnabled ? 0 : 1;
+        applyTextSettingLive();
       } else {
-        cycleTextRow(panelIndex, +1);
-        SETTINGS.saveToFile();  // persist immediately so changes always stick
-        fastRedraw();
+        // Enum rows open the Settings-style option picker.
+        showTextRowPopup(panelIndex);
       }
     } else if (overlay == Overlay::Contents) {
       const auto item = epub->getTocItem(panelIndex);
@@ -2021,17 +2128,9 @@ void EpubReaderActivity::handleOverlayInput() {
     }
   };
 
-  // Steps up to the toolbar (Text persists + re-paginates first) -- the Back
-  // button and a tap on the page above the sheet.
+  // Steps up to the toolbar -- the Back button and a tap on the page above
+  // the sheet.
   const auto dismissPanel = [this, &fastRedraw] {
-    if (overlay == Overlay::Text && textSettingsChanged()) {
-      // Text changes re-paginate, so the stored page snapshot is stale.
-      applyReaderTextSettings();
-      overlay = Overlay::Toolbar;
-      discardOverlayPage();
-      requestUpdate();
-      return;
-    }
     overlay = Overlay::Toolbar;
     // Restore the snapshotted page under the toolbar instead of re-rendering
     // it (2+ refreshes -> one FAST). Re-store right away so another panel
@@ -2068,11 +2167,9 @@ void EpubReaderActivity::handleOverlayInput() {
       dismissPanel();
       return;
     case ReaderToolbarUi::Event::Tool: {
-      // Sheet-bottom tool switcher: hop straight to another panel (Text
-      // persists its edits through applyReaderTextSettings on the way out).
+      // Sheet-bottom tool switcher: hop straight to another panel.
       const Overlay target = toolOverlay(routed.value);
       if (target != overlay) {
-        if (overlay == Overlay::Text && textSettingsChanged()) applyReaderTextSettings();
         focusedTool = routed.value;
         openOverlay(target);
       }
@@ -2149,80 +2246,13 @@ void EpubReaderActivity::handleOverlayInput() {
   }
 }
 
-std::string EpubReaderActivity::textRowName(int row) const {
-  switch (row) {
-    case 0:
-      return tr(STR_FONT);
-    case 1:
-      return tr(STR_FONT_SIZE);
-    case 2:
-      return tr(STR_LINE_SPACING);
-    case 3:
-      return tr(STR_PARA_ALIGNMENT);
-    case 4:
-      return tr(STR_FOCUS_READING);
-    default:
-      return "";
-  }
-}
-
-std::string EpubReaderActivity::textRowValue(int row) const {
-  static constexpr StrId kFamily[] = {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
-  static constexpr StrId kSpacing[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE, StrId::STR_EXTRA_WIDE};
-  static constexpr StrId kAlign[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER,
-                                     StrId::STR_ALIGN_RIGHT, StrId::STR_BOOK_S_STYLE};
-  static_assert(std::size(kSpacing) == CrossPointSettings::LINE_COMPRESSION_COUNT, "line spacing labels");
-  static_assert(std::size(kAlign) == CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT, "alignment labels");
-  switch (row) {
-    case 0:
-      if (SETTINGS.sdFontFamilyName[0] != '\0') return SETTINGS.sdFontFamilyName;
-      return I18N.get(kFamily[SETTINGS.fontFamily % CrossPointSettings::FONT_FAMILY_COUNT]);
-    case 1:
-      return std::to_string(SETTINGS.fontPointSize) + " pt";
-    case 2:
-      return I18N.get(kSpacing[SETTINGS.lineSpacing % CrossPointSettings::LINE_COMPRESSION_COUNT]);
-    case 3:
-      return I18N.get(kAlign[SETTINGS.paragraphAlignment % CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT]);
-    case 4:
-      return SETTINGS.focusReadingEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-    default:
-      return "";
-  }
-}
-
-void EpubReaderActivity::cycleTextRow(int row, int dir) {
-  const auto wrap = [](int value, int d, int count) { return static_cast<uint8_t>((value + d + count) % count); };
-  switch (row) {
-    case 1: {
-      // Cycle through the point sizes the active family actually ships.
-      const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.sdFontFamilyName);
-      if (!sizes.empty()) {
-        const uint8_t cur = snapToNearestPointSize(sizes, SETTINGS.fontPointSize);
-        int idx = 0;
-        for (size_t i = 0; i < sizes.size(); ++i) {
-          if (sizes[i] == cur) {
-            idx = static_cast<int>(i);
-            break;
-          }
-        }
-        idx = (idx + dir + static_cast<int>(sizes.size())) % static_cast<int>(sizes.size());
-        SETTINGS.fontPointSize = sizes[idx];
-      }
-      break;
-    }
-    case 2:
-      SETTINGS.lineSpacing = wrap(SETTINGS.lineSpacing, dir, CrossPointSettings::LINE_COMPRESSION_COUNT);
-      break;
-    case 3:
-      SETTINGS.paragraphAlignment =
-          wrap(SETTINGS.paragraphAlignment, dir, CrossPointSettings::PARAGRAPH_ALIGNMENT_COUNT);
-      break;
-    case 4:
-      SETTINGS.focusReadingEnabled = SETTINGS.focusReadingEnabled ? 0 : 1;
-      break;
-    default:
-      break;
-  }
+// First paint of the option picker over the panel (and highlight repaints).
+// The dialog draws over the current framebuffer without clearing; erasing it
+// on dismissal is the popup gate's restore in handleOverlayInput().
+void EpubReaderActivity::paintOverlayPopup() {
+  RenderLock lock;
+  overlayPopup.render(renderer);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
 void EpubReaderActivity::applyReaderTextSettings() {
@@ -2327,17 +2357,33 @@ void EpubReaderActivity::activateMoreRow(int row) {
   const auto action = moreActions[row];
   // In-place toggles keep the panel open and re-render the page beneath it.
   switch (action) {
-    case MA::ROTATE_SCREEN:
-      applyOrientation((SETTINGS.orientation + 1) % CrossPointSettings::ORIENTATION_COUNT);
-      discardOverlayPage();
-      requestUpdate();
+    case MA::ROTATE_SCREEN: {
+      static constexpr StrId kOrientIds[] = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW,
+                                             StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW};
+      static_assert(std::size(kOrientIds) == CrossPointSettings::ORIENTATION_COUNT, "orientation options");
+      overlayPopup.show(StrId::STR_ORIENTATION, kOrientIds, static_cast<int>(std::size(kOrientIds)),
+                        SETTINGS.orientation % CrossPointSettings::ORIENTATION_COUNT, [this](int idx) {
+                          if (idx == SETTINGS.orientation) return;
+                          applyOrientation(static_cast<uint8_t>(idx));
+                          // The stored page is laid out for the old orientation.
+                          discardOverlayPage();
+                          requestUpdate();
+                        });
+      paintOverlayPopup();
       return;
-    case MA::AUTO_PAGE_TURN:
-      autoTurnOption = (autoTurnOption + 1) % static_cast<int>(std::size(PAGE_TURN_RATES));
-      toggleAutoPageTurn(static_cast<uint8_t>(autoTurnOption));
-      discardOverlayPage();
-      requestUpdate();
+    }
+    case MA::AUTO_PAGE_TURN: {
+      std::vector<std::string> labels;
+      labels.reserve(std::size(PAGE_TURN_RATES));
+      labels.emplace_back(tr(STR_STATE_OFF));
+      for (size_t i = 1; i < std::size(PAGE_TURN_RATES); ++i) labels.push_back(std::to_string(PAGE_TURN_RATES[i]));
+      overlayPopup.show(StrId::STR_AUTO_TURN_PAGES_PER_MIN, labels, autoTurnOption, [this](int idx) {
+        autoTurnOption = idx;
+        toggleAutoPageTurn(static_cast<uint8_t>(idx));
+      });
+      paintOverlayPopup();
       return;
+    }
     case MA::NIGHT_MODE:
       SETTINGS.screenInverted = SETTINGS.screenInverted == 0 ? 1 : 0;
       SETTINGS.saveToFile();

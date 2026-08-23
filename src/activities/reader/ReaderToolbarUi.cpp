@@ -37,9 +37,12 @@ constexpr int16_t kToolRowH = 80;
 constexpr int16_t kToolPillInset = 10;
 constexpr int16_t kToolIconLabelGap = 2;
 constexpr int kToolCount = 3;
-// Bottom sheet height for the panels, as a share of the screen: the page stays
-// readable above it, and the list still gets several finger-sized rows.
+// Bottom sheet height for the panels: the target share of the screen the
+// sheet aims for, and the cap it may grow to when rounding the list area up
+// to a whole row (buildPanel sizes the sheet to exact rows so no dead band is
+// left above the switcher). The page stays readable above either.
 constexpr int kPanelHeightPercent = 62;
+constexpr int kPanelHeightMaxPercent = 72;
 }  // namespace
 
 ReaderToolbarUi::ReaderToolbarUi(GfxRenderer& renderer) : UiAppHost(renderer) {}
@@ -312,7 +315,27 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   // Same grabber air as the toolbar sheet / frontlight panel.
   sheetProps.grabberMargin = tokens.spaceLg;
   sheetProps.grabberInset = static_cast<int16_t>(tokens.spaceLg + tokens.spaceMd);
-  screen.sheet(sheetProps, static_cast<int16_t>((safe.height * kPanelHeightPercent) / 100));
+
+  // Size the sheet to an exact number of list rows instead of a fixed screen
+  // share: a percentage leaves up to a row's height of dead space above the
+  // switcher. Chrome = everything in the sheet that is not the list; the row
+  // count starts from the target share and grows one row when that still fits
+  // the cap, so the leftover becomes a row instead of a gap.
+  const int16_t rowH =
+      model_.denseRows ? static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight) : tokens.rowHeight;
+  const int16_t rowStride = static_cast<int16_t>(rowH + tokens.listRowGap);
+  const int16_t grabberBand =
+      static_cast<int16_t>(sheetProps.grabberMargin + sheetProps.grabberHeight + sheetProps.grabberInset);
+  const int16_t titleH = screen.target().lineHeight(tokens.titleText.font);
+  const int16_t chrome = static_cast<int16_t>(grabberBand + titleH + tokens.spaceMd + tokens.spaceSm +
+                                              std::max(0, model_.bottomReserve) + kToolRowH + tokens.spaceSm);
+  const int16_t target = static_cast<int16_t>((safe.height * kPanelHeightPercent) / 100);
+  const int16_t cap = static_cast<int16_t>((safe.height * kPanelHeightMaxPercent) / 100);
+  int sheetRows = (target - chrome + tokens.listRowGap) / rowStride;
+  if (static_cast<int16_t>(chrome + (sheetRows + 1) * rowStride - tokens.listRowGap) <= cap) ++sheetRows;
+  if (sheetRows < 1) sheetRows = 1;
+  const int16_t sheetH = static_cast<int16_t>(chrome + sheetRows * rowStride - tokens.listRowGap);
+  screen.sheet(sheetProps, sheetH);
   screen.insetContent(fui::Insets{0, tokens.spaceLg, 0, tokens.spaceLg});
 
   // Title line: panel name left, page position right when the list spans pages.

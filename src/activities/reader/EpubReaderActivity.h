@@ -14,6 +14,7 @@
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
+#include "components/OptionPopup.h"
 
 class EpubReaderActivity final : public ReaderActivity {
   std::shared_ptr<Epub> epub;
@@ -75,22 +76,16 @@ class EpubReaderActivity final : public ReaderActivity {
   // FreeInkUI chrome + tap targets for the overlay; created when it opens,
   // released when it closes.
   std::unique_ptr<ReaderToolbarUi> toolbarUi;
+  // Modal option picker over the panel (same component the Settings screens
+  // use), for enum rows: font size / line spacing / alignment / orientation /
+  // auto page turn. Toggle rows stay one-tap toggles, as in Settings.
+  OptionPopup overlayPopup;
   // True while a clean-page snapshot (renderer.storeBwBuffer) backs the open
   // overlay, letting panel->toolbar steps restore the page without a full
   // re-render. Discarded on close / whenever the page under the overlay changes.
   bool overlayPageStored = false;
   int autoTurnOption = 0;  // current auto page-turn rate index (More panel)
   std::vector<EpubReaderMenuActivity::MenuAction> moreActions;
-  // Snapshot of the reader-text settings taken when the Text panel opens, so
-  // leaving it can skip the re-pagination when nothing actually changed.
-  struct TextSettingsSnapshot {
-    uint8_t fontFamily = 0;
-    uint8_t fontPointSize = 0;
-    uint8_t lineSpacing = 0;
-    uint8_t paragraphAlignment = 0;
-    uint8_t focusReadingEnabled = 0;
-    char sdFontFamilyName[32] = {};
-  } textSnapshot;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
@@ -139,12 +134,13 @@ class EpubReaderActivity final : public ReaderActivity {
   void handleOverlayInput();
   void renderOverlay();
   std::string currentChapterTitle() const;
-  void snapshotTextSettings();
-  bool textSettingsChanged() const;
   // Text panel rows (font, size, line spacing, alignment, focus reading).
   std::string textRowName(int row) const;
   std::string textRowValue(int row) const;
-  void cycleTextRow(int row, int dir);
+  void showTextRowPopup(int row);
+  // Persist + re-paginate + re-render under the open panel (live preview).
+  void applyTextSettingLive();
+  void paintOverlayPopup();
   // Persist the reader text settings, (re)load the selected SD font, and
   // re-paginate the current chapter so changes apply without re-opening the book.
   void applyReaderTextSettings();
