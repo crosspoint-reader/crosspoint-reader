@@ -1772,16 +1772,12 @@ void EpubReaderActivity::openOverlay(Overlay target) {
   // re-render the whole page first: slow, and visibly wrong, since that repaint
   // lands before the overlay does.
   //
-  // Refresh mode: HALF only for the FIRST overlay over a fresh page on the
-  // Xteink-class grayscale panels -- the page was just driven by the
-  // anti-aliasing waveform, and a FAST differential can't fully erase that
-  // charge (the covered text ghosts gray through the chrome, same mechanism
-  // as #2190's image ghosting; skipping it bakes residue in under the sheet
-  // that every later differential preserves). Overlay->overlay transitions
-  // repaint over chrome that HALF/FAST already drew, where a differential is
-  // clean -- FAST keeps them snappy and flash-free, same as the settings
-  // lists. On other panels HALF is the flashing quality mode, and FAST is
-  // clean for every transition.
+  // Refresh mode: FAST for every overlay paint, first open included. The AA
+  // pass only grays glyph edges, and residue a FAST differential leaves under
+  // the sheet has not shown in practice; it also self-heals on the
+  // Xteink-class panels, whose close path re-renders the page. If text or
+  // images ever visibly ghost through the chrome, restore a HALF cleanup on
+  // the first open (see #2190 for the mechanism).
   if (section) {
     // Serialize against the render task: renderBook may be mid-page (status
     // bar included) in the shared framebuffer, and painting the chrome from
@@ -1801,8 +1797,7 @@ void EpubReaderActivity::openOverlay(Overlay target) {
       overlayPageStored = renderer.storeBwBuffer();
     }
     renderOverlay();
-    const bool needsGhostCleanup = xteinkClassPanel() && previous == Overlay::None;
-    renderer.displayBuffer(needsGhostCleanup ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   } else {
     requestUpdate();  // no page yet: renderBook() draws the overlay once it is
   }
