@@ -7,6 +7,7 @@
 #include <vector>
 
 class GfxRenderer;
+class Bitmap;
 struct RecentBook;
 
 struct Rect {
@@ -263,6 +264,11 @@ class BaseTheme {
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
+  virtual void drawPhysicalBook(const GfxRenderer& renderer, float progress, uint32_t estimatedLength,
+                                const Bitmap* coverBitmap, const std::string& title,
+                                const std::string& author, bool lightMode) const;
+  virtual void drawBookCover(const GfxRenderer& renderer, const Bitmap* bitmap, int x, int y, int w, int h,
+                             const std::string& title, const std::string& author) const;
   virtual bool showsFileIcons() const { return false; }
 
   // Shared constants and helpers for battery drawing (used by all themes)

@@ -872,7 +872,7 @@ BookProgressInfo getBookProgressInfo() {
       if (Storage.openFileForRead("SLP", xtc.getCachePath() + "/progress.bin", f)) {
         uint8_t data[4];
         if (f.read(data, 4) == 4) {
-          currentPage = data[0] + (data[1] << 8);
+          currentPage = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
         }
       }
       uint32_t totalPages = xtc.getPageCount();
@@ -890,7 +890,7 @@ BookProgressInfo getBookProgressInfo() {
       if (Storage.openFileForRead("SLP", txt.getCachePath() + "/progress.bin", f)) {
         uint8_t data[4];
         if (f.read(data, 4) == 4) {
-          currentPage = data[0] + (data[1] << 8);
+          currentPage = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
         }
       }
       uint32_t totalPages = 0;
@@ -943,9 +943,6 @@ BookProgressInfo getBookProgressInfo() {
 } // namespace
 
 void SleepActivity::renderBookPhysicalSleepScreen() const {
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
   // 1. Get progress and book length
   BookProgressInfo info = getBookProgressInfo();
 
@@ -980,81 +977,7 @@ void SleepActivity::renderBookPhysicalSleepScreen() const {
     }
   }
 
-  // 3. Define book geometry
-  constexpr int W = 220;
-  constexpr int H = 320;
-  int cx = pageWidth / 2;
-  int cy = pageHeight / 2 - 20;
-
-  int x_l = cx - W / 2;
-  int x_r = cx + W / 2;
-  int y_t = cy - H / 2;
-  int y_b = cy + H / 2;
-
-  // Thickness based on estimatedLength
-  int T = 15;
-  if (info.success && info.estimatedLength > 0) {
-    float lengthFactor = static_cast<float>(info.estimatedLength) / 1500000.0f;
-    if (lengthFactor > 1.0f) lengthFactor = 1.0f;
-    if (lengthFactor < 0.0f) lengthFactor = 0.0f;
-    T = 15 + static_cast<int>(lengthFactor * 50);
-  }
-
-  float p = info.success ? info.progress : 0.0f;
-  if (p < 0.0f) p = 0.0f;
-  if (p > 1.0f) p = 1.0f;
-
-  bool hasGreyscale = bitmap && bitmap->hasGreyscale() && 
-                      (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
-
-  // 4. PASS 1: BW Render Pass
-  renderer.setRenderMode(GfxRenderer::BW);
-  renderer.clearScreen(0xFF); // Clear screen to white
-
-  // Draw the Right Pages Face
-  int rightX[] = { x_r, x_r + T, x_r + T, x_r };
-  int rightY[] = { y_t, y_t + T, y_b + T, y_b };
-  renderer.fillPolygon(rightX, rightY, 4, false); // Fill with white
-  renderer.drawLine(x_r, y_t, x_r + T, y_t + T, true);
-  renderer.drawLine(x_r + T, y_t + T, x_r + T, y_b + T, true);
-  renderer.drawLine(x_r + T, y_b + T, x_r, y_b, true);
-  for (int y = y_t + 6; y < y_b; y += 6) {
-    renderer.drawLine(x_r, y, x_r + T, y + T, true);
-  }
-
-  // Draw the Bottom Pages Face
-  int bottomX[] = { x_l, x_r, x_r + T, x_l + T };
-  int bottomY[] = { y_b, y_b, y_b + T, y_b + T };
-  renderer.fillPolygon(bottomX, bottomY, 4, false); // Fill with white
-  renderer.drawLine(x_l, y_b, x_l + T, y_b + T, true);
-  renderer.drawLine(x_l + T, y_b + T, x_r + T, y_b + T, true);
-  for (int offset = 6; offset < T; offset += 6) {
-    renderer.drawLine(x_l + offset, y_b + offset, x_r + offset, y_b + offset, true);
-  }
-
-  // Draw book outlines
-  renderer.drawRect(x_l, y_t, W, H, true);
-  renderer.drawLine(x_r, y_t, x_r + T, y_t + T, true);
-  renderer.drawLine(x_r + T, y_t + T, x_r + T, y_b + T, true);
-  renderer.drawLine(x_r + T, y_b + T, x_l + T, y_b + T, true);
-  renderer.drawLine(x_l + T, y_b + T, x_l, y_b, true);
-
-  // Draw the bookmark ribbon
-  int rx = cx + static_cast<int>(p * T);
-  int ry = y_b + static_cast<int>(p * T);
-  int r_end_y = y_b + T + 50;
-
-  // Solid black ribbon
-  renderer.fillRect(rx - 5, ry, 10, r_end_y - ry, true);
-  // White borders
-  renderer.drawLine(rx - 6, ry, rx - 6, r_end_y, false);
-  renderer.drawLine(rx + 6, ry, rx + 6, r_end_y, false);
-  // V-cut
-  int xPoints[] = { rx - 6, rx, rx + 6 };
-  int yPoints[] = { r_end_y, r_end_y - 6, r_end_y };
-  renderer.fillPolygon(xPoints, yPoints, 3, false);
-
-  // Draw book cover
+  // Get title and author
   std::string title = "";
   std::string author = "";
   if (!APP_STATE.openEpubPath.empty()) {
@@ -1077,66 +1000,8 @@ void SleepActivity::renderBookPhysicalSleepScreen() const {
       }
     }
   }
-  drawBookCover(bitmap.get(), x_l, y_t, W, H, title, author);
 
-  // Draw reading percentage
-  if (info.success) {
-    char progressStr[64];
-    snprintf(progressStr, sizeof(progressStr), tr(STR_READ_PERCENT), static_cast<int>(p * 100.0f + 0.5f));
-    renderer.drawCenteredText(UI_12_FONT_ID, y_b + T + 70, progressStr, true, EpdFontFamily::BOLD);
-  } else {
-    renderer.drawCenteredText(SMALL_FONT_ID, y_b + T + 70, tr(STR_SLEEPING));
-  }
-
-  // Invert screen if in dark mode
-  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
-    renderer.invertScreen();
-  }
-
-  if (hasGreyscale) {
-    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
-  } else {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-  }
-
-  if (hasGreyscale) {
-    bitmap->rewindToData();
-    renderer.clearScreen(0x00);
-    renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-    renderer.drawBitmap(*bitmap, x_l, y_t, W, H);
-    renderer.copyGrayscaleLsbBuffers();
-
-    bitmap->rewindToData();
-    renderer.clearScreen(0x00);
-    renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-    renderer.drawBitmap(*bitmap, x_l, y_t, W, H);
-    renderer.copyGrayscaleMsbBuffers();
-
-    renderer.displayGrayBuffer();
-    renderer.setRenderMode(GfxRenderer::BW);
-  }
-}
-
-void SleepActivity::drawBookCover(const Bitmap* bitmap, int x, int y, int w, int h, const std::string& title, const std::string& author) const {
-  if (bitmap) {
-    renderer.drawBitmap(*bitmap, x, y, w, h);
-  } else {
-    renderer.fillRect(x, y, w, h, true);
-    renderer.fillRect(x + 4, y + 4, w - 8, h - 8, false);
-    renderer.drawRect(x + 8, y + 8, w - 16, h - 16, true);
-
-    int titleY = y + 40;
-    int lineH = renderer.getLineHeight(UI_12_FONT_ID);
-    auto wrapped = renderer.wrappedText(UI_12_FONT_ID, title.c_str(), w - 32, 4, EpdFontFamily::BOLD);
-    for (const auto& line : wrapped) {
-      int textW = renderer.getTextWidth(UI_12_FONT_ID, line.c_str(), EpdFontFamily::BOLD);
-      renderer.drawText(UI_12_FONT_ID, x + (w - textW) / 2, titleY, line.c_str(), true, EpdFontFamily::BOLD);
-      titleY += lineH + 4;
-    }
-
-    if (!author.empty()) {
-      int authorW = renderer.getTextWidth(UI_10_FONT_ID, author.c_str());
-      renderer.drawText(UI_10_FONT_ID, x + (w - authorW) / 2, y + h - 50, author.c_str());
-    }
-  }
+  float progressVal = info.success ? info.progress : -1.0f;
+  bool lightMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT;
+  GUI.drawPhysicalBook(renderer, progressVal, info.estimatedLength, bitmap.get(), title, author, lightMode);
 }
