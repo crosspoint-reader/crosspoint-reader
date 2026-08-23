@@ -14,10 +14,11 @@ std::shared_ptr<Epub> epubWith(std::string xhtml) {
   return std::make_shared<Epub>(std::move(spine));
 }
 
-const char* kNestedFixture = R"(<?xml version="1.0" encoding="UTF-8"?>
+constexpr char kNestedFixture[] = R"(<?xml version="1.0" encoding="UTF-8"?>
 <html xmlns="http://www.w3.org/1999/xhtml"><body><div><section><p>Alpha bravo</p><p>Second <em>nested</em> tail</p></section></div></body></html>)";
 
-const char* kNonVisibleInlineFixture = R"(<html><body><p><RP><span>hidden</span></RP>Visible text</p></body></html>)";
+constexpr char kNonVisibleInlineFixture[] =
+    R"(<html><body><p><RP><span>hidden</span></RP>Visible text</p></body></html>)";
 }  // namespace
 
 TEST(KOReaderXPathResolver, ResolvesExactOffsetWithFullAncestry) {
