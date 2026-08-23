@@ -23,6 +23,46 @@ struct TabInfo {
   bool selected;
 };
 
+// Data the reader passes to drawReaderToolbar(): the in-page toolbar overlay
+// shown on Select while reading (Settings -> Reader -> Reader Menu -> Toolbar).
+// Chapter page/percent are what the reader already tracks (chapter-relative
+// page X/Y + whole-book percent); there is no book-level page numbering.
+struct ReaderToolbarInfo {
+  const char* bookTitle = nullptr;
+  const char* chapterTitle = nullptr;
+  int chapterPage = 0;       // 1-based page within the current chapter
+  int chapterPageCount = 0;  // total pages in the current chapter
+  int bookPercent = 0;       // 0..100 progress through the whole book
+  float progress = 0.0f;     // 0..1 position for the scrub knob
+  int focusedTool = 0;       // 0=Contents, 1=Text, 2=More
+};
+
+// Tap-target geometry for the reader toolbar overlay. The overlay is painted
+// straight onto the page framebuffer (no FreeInkUI screen, so no registered
+// hit rects); these structs mirror the draw math so the reader can hit-test
+// taps. Every rect is in logical screen coordinates.
+struct ReaderToolbarHit {
+  // Rect's constructor is explicit, so spell the member defaults out (a bare
+  // {} would be copy-list-initialization, which explicit forbids).
+  Rect topBar = Rect();                      // tap = dismiss (the back chevron lives here)
+  Rect prevBtn = Rect();                     // scrub row: previous chapter
+  Rect nextBtn = Rect();                     // scrub row: next chapter
+  Rect track = Rect();                       // scrub row: progress track (tap = jump to fraction)
+  Rect tools[3] = {Rect(), Rect(), Rect()};  // Contents / Text / More
+  int bottomTop = 0;                         // bottom bar top edge; taps between topBar and here dismiss
+  bool valid = false;
+};
+
+struct ReaderPanelHit {
+  int panelTop = 0;  // bottom-sheet top edge; taps above dismiss to the toolbar
+  int listTop = 0;   // first row y
+  int rowHeight = 0;
+  int pageItems = 0;
+  // The sheet's own Contents/Text/More switcher row (tap to jump panels).
+  Rect tools[3] = {Rect(), Rect(), Rect()};
+  bool valid = false;
+};
+
 struct ThemeMetrics {
   int batteryWidth;
   int batteryHeight;
@@ -218,6 +258,8 @@ class BaseTheme {
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                        bool showPercentage = true) const;  // Left aligned (reader mode)
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
+                        bool showPercentage = true) const;  // Right aligned (icon at rect.x, % to its left)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
@@ -249,6 +291,21 @@ class BaseTheme {
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
+  // Reader toolbar overlay (the "Toolbar" reader-menu style): a top bar (back
+  // chevron, book title, battery) and a bottom bar (chapter scrub row, chapter
+  // meta row, Contents/Text/More tool row) painted over the already-rendered
+  // page. `screen` is the full screen rect. Themes may override the look;
+  // readerToolbarHitAreas() must stay in sync with the draw math.
+  virtual void drawReaderToolbar(GfxRenderer& renderer, Rect screen, const ReaderToolbarInfo& info) const;
+  // A reader overlay panel: a bottom sheet with a title and a paged row list
+  // (name left, optional value right) over the page -- the toolbar's Contents /
+  // Text / More tools. activeTool highlights the sheet's own Contents/Text/More
+  // switcher row (0/1/2); pass -1 to omit that row.
+  virtual void drawReaderPanel(GfxRenderer& renderer, Rect screen, const char* title, int itemCount, int selectedIndex,
+                               const std::function<std::string(int)>& rowText,
+                               const std::function<std::string(int)>& rowValue = nullptr, int activeTool = -1) const;
+  virtual ReaderToolbarHit readerToolbarHitAreas(const GfxRenderer& renderer) const;
+  virtual ReaderPanelHit readerPanelHitAreas(const GfxRenderer& renderer) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;

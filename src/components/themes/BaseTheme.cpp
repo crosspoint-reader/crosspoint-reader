@@ -10,8 +10,10 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <string>
 
+#include "CrossPointSettings.h"
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UIScale.h"
@@ -105,6 +107,23 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
+  }
+
+  const Rect iconRect{rect.x, y, rect.width, rect.height};
+  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
+  fillBatteryIcon(renderer, iconRect, percentage);
+}
+
+void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+  // Right aligned: percentage on the left, icon on the right. rect.x is the icon's
+  // left edge (the caller positions it).
+  const uint16_t percentage = powerManager.getBatteryPercentage();
+  const int y = rect.y + 6;
+
+  if (showPercentage) {
+    const auto percentageText = std::to_string(percentage) + "%";
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
@@ -1144,4 +1163,243 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
     renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Reader toolbar overlay (Settings -> Reader -> Reader Menu -> Toolbar)
+// ---------------------------------------------------------------------------
+namespace {
+// Geometry shared by the draw functions and the readerToolbarHitAreas /
+// readerPanelHitAreas tap maps. Sized for fingers (~48px), so the same layout
+// serves touch and button boards.
+constexpr int kReaderTopBarH = 60;
+constexpr int kReaderBottomBarH = 208;
+constexpr int kScrubBtn = 52;         // prev/next chapter buttons (square)
+constexpr int kScrubRowY = 16;        // scrub row offset inside the bottom bar
+constexpr int kMetaRowY = 84;         // meta divider offset inside the bottom bar
+constexpr int kToolRowY = 116;        // tool row divider offset inside the bottom bar
+constexpr int kPanelRowH = 56;        // panel (Contents/Text/More) row height
+constexpr int kPanelToolRowH = 78;    // panel-bottom tool switcher (glyph + label)
+constexpr int kPanelTopPercent = 38;  // sheet top edge as a percent of the screen height
+constexpr int kToolbarTitleFontId = UI_12_FONT_ID;
+constexpr int kToolbarBodyFontId = UI_10_FONT_ID;
+constexpr int kToolbarCaptionFontId = SMALL_FONT_ID;
+
+// Chevron ("<" / ">") drawn from strokes so it doesn't depend on glyph coverage.
+void drawChevron(const GfxRenderer& renderer, int cx, int cy, int s, bool left) {
+  const int dx = left ? -s / 2 : s / 2;
+  renderer.drawLine(cx - dx, cy - s, cx + dx, cy, 2, true);
+  renderer.drawLine(cx + dx, cy, cx - dx, cy + s, 2, true);
+}
+
+// The Contents / Text / More row: three equal slots, the active one in a
+// rounded pill sized to its full tap slot. Glyphs come from primitives
+// (hamburger / "Aa" / dots). `rowY` is the divider line; `rowH` the band below it.
+void drawToolRow(const GfxRenderer& renderer, int x, int rowY, int width, int rowH, int activeTool) {
+  renderer.drawLine(x + 16, rowY, x + width - 16, rowY);
+  const char* labels[3] = {tr(STR_TOOL_CONTENTS), tr(STR_TOOL_TEXT), tr(STR_TOOL_MORE)};
+  const int slotW = width / 3;
+  const int glyphY = rowY + (rowH >= 90 ? 20 : 16);
+  for (int i = 0; i < 3; ++i) {
+    const int cx = x + slotW * i + slotW / 2;
+    if (i == activeTool) {
+      renderer.drawRoundedRect(cx - slotW / 2 + 10, rowY + 6, slotW - 20, rowH - 12, 2, 14, true);
+    }
+    if (i == 0) {  // Contents: hamburger
+      for (int k = 0; k < 3; ++k) renderer.drawLine(cx - 13, glyphY + k * 7, cx + 13, glyphY + k * 7, 2, true);
+    } else if (i == 1) {  // Text: "Aa"
+      const int aw = renderer.getTextWidth(kToolbarTitleFontId, "Aa", EpdFontFamily::BOLD);
+      renderer.drawText(kToolbarTitleFontId, cx - aw / 2, glyphY - 8, "Aa", true, EpdFontFamily::BOLD);
+    } else {  // More: three dots
+      for (int k = -1; k <= 1; ++k) renderer.fillRect(cx + k * 9 - 1, glyphY + 7, 4, 4, true);
+    }
+    const int lw = renderer.getTextWidth(kToolbarCaptionFontId, labels[i], EpdFontFamily::BOLD);
+    renderer.drawText(kToolbarCaptionFontId, cx - lw / 2, glyphY + 32, labels[i], true, EpdFontFamily::BOLD);
+  }
+}
+
+int panelListTop(const GfxRenderer& renderer, int panelTop) {
+  const int titleY = panelTop + 14;
+  const int dividerY = titleY + renderer.getLineHeight(kToolbarTitleFontId) + 8;
+  return dividerY + 10;
+}
+
+// Touch boards show no button-hint row under the sheet; keep a small inset so
+// the last row doesn't kiss the screen edge.
+int panelHintReserve() { return gpio.hasTouch() ? 12 : 44; }
+}  // namespace
+
+void BaseTheme::drawReaderToolbar(GfxRenderer& renderer, Rect screen, const ReaderToolbarInfo& info) const {
+  const int X = screen.x;
+  const int Y = screen.y;
+  const int W = screen.width;
+  const int H = screen.height;
+  const int pad = 20;
+
+  // --- Top bar: back chevron (left), centered book title, battery (right) ---
+  const int topH = kReaderTopBarH;
+  renderer.fillRect(X, Y, W, topH, false);              // clear the page text behind the bar
+  renderer.drawLine(X, Y + topH, X + W - 1, Y + topH);  // -1: drawLine endpoints are inclusive
+  drawChevron(renderer, X + 26, Y + topH / 2, 8, true);
+
+  if (info.bookTitle != nullptr) {
+    // Reserve room on the right for the battery so the centred title can't run under it.
+    const auto t = renderer.truncatedText(kToolbarTitleFontId, info.bookTitle, W - 160, EpdFontFamily::BOLD);
+    const int th = renderer.getLineHeight(kToolbarTitleFontId);
+    renderer.drawCenteredText(kToolbarTitleFontId, Y + (topH - th) / 2, t.c_str(), true, EpdFontFamily::BOLD);
+  }
+
+  const auto& m = UITheme::getInstance().getMetrics();
+  const bool showBatteryPercentage =
+      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+  const int batteryY = Y + (topH - m.batteryHeight) / 2;
+  drawBatteryRight(renderer, Rect(X + W - pad - m.batteryWidth, batteryY, m.batteryWidth, m.batteryHeight),
+                   showBatteryPercentage);
+
+  // --- Bottom bar: scrub row, meta row, tool row ---
+  const int bottomH = kReaderBottomBarH;
+  const int by = Y + H - bottomH;
+  renderer.fillRect(X, by, W, bottomH, false);
+  renderer.drawLine(X, by, X + W - 1, by);
+
+  // Scrub row: prev/next chapter buttons flanking a progress track + knob.
+  const int btn = kScrubBtn;
+  const int sy = by + kScrubRowY;
+  const int leftBtnX = X + 16;
+  const int rightBtnX = X + W - 16 - btn;
+  renderer.drawRoundedRect(leftBtnX, sy, btn, btn, 1, 12, true);
+  renderer.drawRoundedRect(rightBtnX, sy, btn, btn, 1, 12, true);
+  drawChevron(renderer, leftBtnX + btn / 2, sy + btn / 2, 8, true);
+  drawChevron(renderer, rightBtnX + btn / 2, sy + btn / 2, 8, false);
+  const int trackX0 = leftBtnX + btn + 14;
+  const int trackX1 = rightBtnX - 14;
+  const int trackY = sy + btn / 2;
+  renderer.drawLine(trackX0, trackY, trackX1, trackY, 2, true);
+  const float prog = std::max(0.0f, std::min(1.0f, info.progress));
+  const int knobX = trackX0 + static_cast<int>(prog * static_cast<float>(trackX1 - trackX0));
+  renderer.fillRoundedRect(knobX - 8, trackY - 8, 16, 16, 8, Color::Black);
+
+  // Meta row: chapter title (left), chapter page X/Y + book percent (right).
+  const int my = by + kMetaRowY;
+  renderer.drawLine(X + 16, my, X + W - 16, my);
+  if (info.chapterTitle != nullptr && info.chapterTitle[0] != '\0') {
+    const auto ch = renderer.truncatedText(kToolbarCaptionFontId, info.chapterTitle, W / 2 - pad, EpdFontFamily::BOLD);
+    renderer.drawText(kToolbarCaptionFontId, X + pad, my + 6, ch.c_str(), true, EpdFontFamily::BOLD);
+  }
+  const std::string pageInfo = std::to_string(info.chapterPage) + "/" + std::to_string(info.chapterPageCount) + "   " +
+                               std::to_string(info.bookPercent) + "%";
+  const int pw = renderer.getTextWidth(kToolbarCaptionFontId, pageInfo.c_str(), EpdFontFamily::BOLD);
+  renderer.drawText(kToolbarCaptionFontId, X + W - pad - pw, my + 6, pageInfo.c_str(), true, EpdFontFamily::BOLD);
+
+  // Tool row: Contents / Text / More.
+  drawToolRow(renderer, X, by + kToolRowY, W, bottomH - kToolRowY, info.focusedTool);
+}
+
+void BaseTheme::drawReaderPanel(GfxRenderer& renderer, Rect screen, const char* title, int itemCount, int selectedIndex,
+                                const std::function<std::string(int)>& rowText,
+                                const std::function<std::string(int)>& rowValue, int activeTool) const {
+  const int X = screen.x;
+  const int Y = screen.y;
+  const int W = screen.width;
+  const int H = screen.height;
+  const int P = UITheme::getInstance().getMetrics().contentSidePadding;
+
+  // Bottom sheet covering the lower part of the screen; the page stays visible above.
+  const int panelTop = Y + (H * kPanelTopPercent) / 100;
+  renderer.fillRect(X, panelTop, W, (Y + H) - panelTop, false);  // clear page text behind the sheet
+  renderer.drawLine(X, panelTop, X + W - 1, panelTop);           // -1: drawLine endpoints are inclusive
+  renderer.drawLine(X, panelTop + 1, X + W - 1, panelTop + 1);   // 2px top edge
+
+  const int titleY = panelTop + 14;
+  renderer.drawText(kToolbarTitleFontId, X + P, titleY, title, true, EpdFontFamily::BOLD);
+  const int dividerY = titleY + renderer.getLineHeight(kToolbarTitleFontId) + 8;
+  renderer.drawLine(X + P, dividerY, X + W - P, dividerY);
+
+  const int contentTop = dividerY + 10;
+  const int toolRowH = activeTool >= 0 ? kPanelToolRowH : 0;
+  const int contentH = (Y + H) - contentTop - panelHintReserve() - toolRowH;
+
+  // Rows at a finger-sized kPanelRowH: name left, value right, rounded
+  // selection outline (no inverted row, so the text stays crisp on e-ink).
+  // readerPanelHitAreas mirrors this grid exactly.
+  const int pageItems = contentH / kPanelRowH;
+  if (pageItems > 0 && itemCount > 0) {
+    const int pageStart = (selectedIndex >= 0 ? selectedIndex : 0) / pageItems * pageItems;
+    const int nameLineH = renderer.getLineHeight(kToolbarBodyFontId);
+    const int textDy = (kPanelRowH - nameLineH) / 2;
+    for (int slot = 0; slot < pageItems; ++slot) {
+      const int i = pageStart + slot;
+      if (i >= itemCount) break;
+      const int rowY = contentTop + slot * kPanelRowH;
+      if (i == selectedIndex) {
+        renderer.drawRoundedRect(X + P - 6, rowY + 2, W - 2 * (P - 6), kPanelRowH - 4, 2, 12, true);
+      }
+      const std::string value = rowValue ? rowValue(i) : std::string();
+      const int valueW =
+          value.empty() ? 0 : renderer.getTextWidth(kToolbarBodyFontId, value.c_str(), EpdFontFamily::BOLD);
+      const int nameMaxW = W - 2 * P - (valueW > 0 ? valueW + 16 : 0);
+      const auto name = renderer.truncatedText(kToolbarBodyFontId, rowText(i).c_str(), nameMaxW);
+      renderer.drawText(kToolbarBodyFontId, X + P, rowY + textDy, name.c_str());
+      if (valueW > 0) {
+        renderer.drawText(kToolbarBodyFontId, X + W - P - valueW, rowY + textDy, value.c_str(), true,
+                          EpdFontFamily::BOLD);
+      }
+    }
+
+    // Page position indicator next to the title when the list spans pages.
+    const int totalPages = (itemCount + pageItems - 1) / pageItems;
+    if (totalPages > 1) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%d/%d", pageStart / pageItems + 1, totalPages);
+      const int tw = renderer.getTextWidth(kToolbarCaptionFontId, buf);
+      renderer.drawText(kToolbarCaptionFontId, X + W - P - tw, titleY + 4, buf);
+    }
+  }
+
+  // Sheet-bottom tool switcher: the same Contents / Text / More row the
+  // toolbar shows, so panels are one tap apart.
+  if (activeTool >= 0) {
+    drawToolRow(renderer, X, (Y + H) - kPanelToolRowH, W, kPanelToolRowH, activeTool);
+  }
+}
+
+ReaderToolbarHit BaseTheme::readerToolbarHitAreas(const GfxRenderer& renderer) const {
+  // Mirrors drawReaderToolbar (screen = full logical screen).
+  const int W = renderer.getScreenWidth();
+  const int H = renderer.getScreenHeight();
+  ReaderToolbarHit hit;
+  hit.topBar = Rect(0, 0, W, kReaderTopBarH);
+  const int by = H - kReaderBottomBarH;
+  hit.bottomTop = by;
+  const int btn = kScrubBtn;
+  const int sy = by + kScrubRowY;
+  // A little slop around the scrub controls; the row is otherwise empty.
+  const int slop = 6;
+  hit.prevBtn = Rect(16 - slop, sy - slop, btn + 2 * slop, btn + 2 * slop);
+  hit.nextBtn = Rect(W - 16 - btn - slop, sy - slop, btn + 2 * slop, btn + 2 * slop);
+  const int trackX0 = 16 + btn + 14;
+  const int trackX1 = W - 16 - btn - 14;
+  hit.track = Rect(trackX0, sy - slop, trackX1 - trackX0, btn + 2 * slop);
+  const int ty = by + kToolRowY;
+  const int slotW = W / 3;
+  for (int i = 0; i < 3; ++i) hit.tools[i] = Rect(slotW * i, ty, slotW, H - ty);
+  hit.valid = true;
+  return hit;
+}
+
+ReaderPanelHit BaseTheme::readerPanelHitAreas(const GfxRenderer& renderer) const {
+  // Mirrors drawReaderPanel's row grid (with the tool switcher row shown).
+  const int W = renderer.getScreenWidth();
+  const int H = renderer.getScreenHeight();
+  ReaderPanelHit hit;
+  hit.panelTop = (H * kPanelTopPercent) / 100;
+  hit.listTop = panelListTop(renderer, hit.panelTop);
+  hit.rowHeight = kPanelRowH;
+  const int contentH = H - hit.listTop - panelHintReserve() - kPanelToolRowH;
+  hit.pageItems = contentH / hit.rowHeight;
+  const int ty = H - kPanelToolRowH;
+  const int slotW = W / 3;
+  for (int i = 0; i < 3; ++i) hit.tools[i] = Rect(slotW * i, ty, slotW, kPanelToolRowH);
+  hit.valid = hit.pageItems > 0;
+  return hit;
 }
