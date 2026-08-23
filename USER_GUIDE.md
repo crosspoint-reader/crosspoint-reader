@@ -6,6 +6,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [1. Hardware Overview](#1-hardware-overview)
     - [Button Layout](#button-layout)
     - [Taking a Screenshot](#taking-a-screenshot)
+    - [Frontlight (X4 Pro only)](#frontlight-x4-pro-only)
   - [2. Power \& Startup](#2-power--startup)
     - [Power On / Off](#power-on--off)
     - [First Launch](#first-launch)
@@ -68,6 +69,16 @@ Button layout can be customized in the **[Controls Settings](#363-controls)**.
 When the Power Button and Volume Down button are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
 
 Alternatively, while reading a book, press the **Confirm** button to open the reader menu and select **Take screenshot**.
+
+### Frontlight (X4 Pro only)
+
+The X4 Pro has a built-in frontlight with adjustable brightness and warmth. It is controlled from a swipe panel rather than the Settings menu:
+
+* **Open the frontlight panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). Drag the brightness and warmth sliders to adjust the light live, or tap the sun icon to turn it on or off.
+* **Quick toggle:** Double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
+
+> [!NOTE]
+> Frontlight brightness, warmth, and on/off state are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to control them.
 
 ---
 
