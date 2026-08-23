@@ -342,7 +342,6 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   {
     fui::TextStyle titleStyle = tokens.titleText;
     titleStyle.bold = true;
-    const int16_t titleH = screen.target().lineHeight(titleStyle.font);
     const fui::Rect line = screen.takeTop(titleH, tokens.spaceMd);
     screen.target().text(line, model_.panelTitle, titleStyle);
     // Filled in below once the viewport is known; reserve the rect now.
