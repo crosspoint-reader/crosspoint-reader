@@ -156,6 +156,12 @@ class EpubReaderActivity final : public ReaderActivity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
   void applyOrientation(uint8_t orientation);
+  void applyInitialOrientation() override;
+  // The orientation the current layout was built for. The control center's
+  // orientation tile can move SETTINGS.orientation while this reader sits on
+  // the activity stack, and Pop restores it without onEnter(), so the drift has
+  // to be noticed here rather than assumed away.
+  uint8_t appliedOrientation = 0;
 
   bool loadBook() override;
   std::string getBookTitle() const override { return epub ? epub->getTitle() : ""; }

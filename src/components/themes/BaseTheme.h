@@ -163,6 +163,14 @@ struct ThemeMetrics {
   int textFieldNormalThickness;
   int textFieldCursorThickness;
   int textFieldLineEndOffset;
+
+  // FreeInkUI control shape (the control center panel), same contract as the
+  // list fields above: quick-setting tiles and slider step buttons, the
+  // sheet's free-edge corners, and the capsule slider's corners (255 = full
+  // stadium, i.e. radius = half the control height).
+  int controlRadius;
+  int sheetRadius;
+  int capsuleRadius;
 };
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
@@ -247,7 +255,10 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0};
+                                 .textFieldLineEndOffset = 0,
+                                 .controlRadius = 0,
+                                 .sheetRadius = 0,
+                                 .capsuleRadius = 0};
 }
 
 class BaseTheme {

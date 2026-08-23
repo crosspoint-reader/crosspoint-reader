@@ -312,6 +312,15 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Someone else turned the screen while this reader was stacked (the control
+  // center's orientation tile). Reflow before the next render, or the page
+  // would be drawn with a layout built for the previous frame size.
+  if (appliedOrientation != SETTINGS.orientation) {
+    applyOrientation(SETTINGS.orientation);
+    requestUpdate();
+    return;
+  }
+
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (section && !section->isBuilding() && !RenderLock::peek() && renderer.hasFrameBuffer() &&
       lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
@@ -915,8 +924,15 @@ bool EpubReaderActivity::launchKOReaderSync() {
   return true;
 }
 
+void EpubReaderActivity::applyInitialOrientation() {
+  ReaderActivity::applyInitialOrientation();
+  appliedOrientation = SETTINGS.orientation;
+}
+
 void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
-  if (SETTINGS.orientation == orientation) {
+  // Also runs when SETTINGS already holds the new value but this layout was
+  // built for the old one — that is what an external change looks like here.
+  if (SETTINGS.orientation == orientation && appliedOrientation == orientation) {
     return;
   }
 
@@ -928,9 +944,12 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     nextPageNumber = section->currentPage;
   }
 
-  SETTINGS.orientation = orientation;
-  SETTINGS.saveToFile();
+  if (SETTINGS.orientation != orientation) {
+    SETTINGS.orientation = orientation;
+    SETTINGS.saveToFile();
+  }
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+  appliedOrientation = orientation;
   section.reset();
 }
 
