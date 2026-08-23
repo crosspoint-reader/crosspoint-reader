@@ -334,7 +334,7 @@ families:
   - name: Pretendard
     description: "Modern Korean sans-serif (Hangul, Latin)"
     scripts: [hangul, latin]
-    intervals: hangul,cjk,latin-ext,punctuation,reading,symbols
+    intervals: hangul,latin-ext,punctuation,reading,symbols
     sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Regular.otf"}
@@ -343,17 +343,34 @@ families:
   - name: PretendardMedium
     description: "Pretendard at Medium weight, slightly heavier body text (Hangul, Latin)"
     scripts: [hangul, latin]
-    intervals: hangul,cjk,latin-ext,punctuation,reading,symbols
+    intervals: hangul,latin-ext,punctuation,reading,symbols
     sizes: [8, 10, 12, 14, 16, 18]
     styles:
       regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Medium.otf"}
       bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-ExtraBold.otf"}
 
-  - name: PretendardSemiBold
-    description: "Pretendard at SemiBold weight, heavier body text (Hangul, Latin)"
-    scripts: [hangul, latin]
-    intervals: hangul,cjk,latin-ext,punctuation,reading,symbols
+  - name: RIDIBatang
+    description: "RIDI's e-book serif, single weight (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
     sizes: [8, 10, 12, 14, 16, 18]
     styles:
-      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-SemiBold.otf"}
-      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Black.otf"}
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/RIDIBatang/f1628238e56fd41c12451dfc7d975527b61ebfc7/RIDIBatang.otf"}
+
+  - name: MaruBuri
+    description: "Naver's serif for screen reading (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
+
+  - name: MaruBuriSemiBold
+    description: "MaruBuri at SemiBold weight, heavier body text (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-SemiBold.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
