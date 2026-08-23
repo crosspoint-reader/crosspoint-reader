@@ -1827,20 +1827,24 @@ void EpubReaderActivity::openOverlay(Overlay target) {
   if (previous == Overlay::None) toolbarUi->begin();
   // Buttons show a cursor from the start; touch boards only once a button moves it.
   panelCursorShown = !mappedInput.hasTouch();
-  panelTopIndex = -1;  // fresh panel: viewport follows the selection (or the top)
   switch (target) {
     case Overlay::Toolbar:
       focusedTool = 0;
       break;
     case Overlay::Contents:
       panelIndex = std::max(0, epub->getTocIndexForSpineIndex(currentSpineIndex));
+      // Fresh viewport opening on the current chapter, cursor shown or not.
+      toolbarUi->nav().reset(panelIndex);
+      toolbarUi->nav().top = panelIndex;
       break;
     case Overlay::Text:
       panelIndex = 0;
+      toolbarUi->nav().reset();
       break;
     case Overlay::More:
       panelIndex = 0;
       buildMoreActions();
+      toolbarUi->nav().reset();
       break;
     default:
       break;
@@ -1941,7 +1945,6 @@ void EpubReaderActivity::renderOverlay() {
   // Tap-first: the cursor is only drawn once a button has moved it, so a
   // tapped row does not stay inverted after its action.
   model.selectedIndex = panelCursorShown ? panelIndex : -1;
-  model.topIndex = panelTopIndex;
   if (overlay == Overlay::Contents) {
     model.panelTitle = tr(STR_TOOL_CONTENTS);
     model.itemCount = epub->getTocItemsCount();
@@ -2149,17 +2152,18 @@ void EpubReaderActivity::handleOverlayInput() {
     requestUpdate();
   };
 
-  // Pages the list by one screen of rows. The VIEWPORT moves, not just the
-  // cursor: on touch boards the cursor is hidden and the list window only
-  // follows a shown selection, so paging the cursor alone repaints the same
-  // rows. A shown cursor rides along so the buttons continue from what is
-  // visible.
+  // Pages the list by one screen of rows through the nav (measured page size,
+  // no-op at the ends). A shown cursor rides along so the buttons continue
+  // from what is visible; on touch boards only the viewport moves.
   const auto pageList = [this, count, pageRows, &fastRedraw](int direction) {
     if (count <= 0) return;
-    const int maxTop = std::max(0, count - pageRows);
-    panelTopIndex = std::clamp(toolbarUi->topIndex() + direction * pageRows, 0, maxTop);
-    if (panelCursorShown) panelIndex = std::clamp(panelIndex + direction * pageRows, 0, count - 1);
-    fastRedraw();
+    const bool moved = toolbarUi->nav().scrollBy(direction * pageRows, count);
+    if (panelCursorShown) {
+      panelIndex = std::clamp(panelIndex + direction * pageRows, 0, count - 1);
+      fastRedraw();
+      return;
+    }
+    if (moved) fastRedraw();
   };
 
   switch (routed.event) {

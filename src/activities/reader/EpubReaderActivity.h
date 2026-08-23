@@ -59,10 +59,6 @@ class EpubReaderActivity final : public ReaderActivity {
   Overlay overlay = Overlay::None;
   int focusedTool = 0;  // toolbar tool focus: 0=Contents, 1=Text, 2=More
   int panelIndex = 0;   // selected row within the active panel
-  // Panel viewport request (first visible row), -1 = follow the selection.
-  // Touch paging (swipe / right-edge strip) moves this: with the cursor hidden
-  // there is no selection for the list window to follow.
-  int panelTopIndex = -1;
   // Panel list navigation: a tap steps one row, a hold jumps PANEL_HOLD_STEP rows in one go
   // (a contents list runs to hundreds of chapters). One jump per hold, not a repeat -- every
   // step repaints the panel, so repeating is bounded by the e-ink refresh anyway and reads as

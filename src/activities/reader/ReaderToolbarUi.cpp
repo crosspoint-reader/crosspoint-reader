@@ -50,15 +50,20 @@ ReaderToolbarUi::ReaderToolbarUi(GfxRenderer& renderer) : UiAppHost(renderer) {}
 void ReaderToolbarUi::begin() {
   resetUi();
   pending_ = Routed{};
-  visibleRows_ = 0;
-  topIndex_ = 0;
+  nav_.reset();
   for (fui::ActionId id = ACTION_DISMISS; id <= ACTION_ROW; ++id) {
     app.on(id, &ReaderToolbarUi::onAction, this);
   }
   app.setScreen(&ReaderToolbarUi::screenFn, this);
 }
 
-void ReaderToolbarUi::render() { renderUi(); }
+void ReaderToolbarUi::render() {
+  renderUi();
+  // Wrapped rows can fit fewer than the fixed-height estimate; the nav then
+  // advances the viewport after layout and asks for a rebuild. Converges (top
+  // only moves forward toward the selection); the bound is a backstop.
+  for (int pass = 0; pass < 3 && nav_.consumeRebuildNeeded(); ++pass) renderUi();
+}
 
 ReaderToolbarUi::Routed ReaderToolbarUi::route(const MappedInputManager& input) {
   pending_ = Routed{};
@@ -135,7 +140,9 @@ void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anc
   const int16_t labelH = screen.target().lineHeight(tokens.smallText.font);
   fui::TextStyle labelStyle = tokens.smallText;
   labelStyle.align = fui::TextAlign::Center;
-  const uint8_t pillRadius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, (kToolRowH - 2 * 4) / 2));
+  // Theme radius as-is (the frontlight panel pattern); the fill clamps to
+  // the shape's own height so round themes cannot overshoot.
+  const uint8_t pillRadius = tokens.controlRadius;
   const int16_t stackH = static_cast<int16_t>(24 + kToolIconLabelGap + labelH);
   const int16_t iconTop = static_cast<int16_t>(std::max(0, (row.height - stackH) / 2));
   for (int i = 0; i < kToolCount; ++i) {
@@ -227,9 +234,10 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
   buildHeader(screen);
 
   // Sheet height from its content: scrub row, meta line, tool row, and the
-  // air between them.
+  // air between them (a full spaceLg under the scrub row, so the progress
+  // track and its chapter buttons don't crowd the meta line).
   const int16_t metaH = screen.target().lineHeight(tokens.smallText.font);
-  const int16_t contentH = static_cast<int16_t>(tokens.spaceMd + kScrubButton + tokens.spaceMd + metaH +
+  const int16_t contentH = static_cast<int16_t>(tokens.spaceMd + kScrubButton + tokens.spaceLg + metaH +
                                                 tokens.spaceSm + kToolRowH + tokens.spaceSm);
   fui::SheetProps sheetProps;
   sheetProps.anchor = fui::SheetEdge::Bottom;
@@ -247,7 +255,7 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
 
   // Scrub row: < [progress track + knob: tap/drag to jump] >
   {
-    const fui::Rect band = screen.takeTop(kScrubButton, tokens.spaceMd);
+    const fui::Rect band = screen.takeTop(kScrubButton, tokens.spaceLg);
     stepProps_.label = nullptr;
     stepProps_.icon = fui::bitmapFromIcon(icon_reader_back_24);
     stepProps_.action = ACTION_PREV;
@@ -257,7 +265,7 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
     stepProps_.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
     stepProps_.styles.normal.border = fui::Paint::solid(fui::Color::Black);
     stepProps_.styles.normal.borderWidth = 1;
-    stepProps_.styles.normal.radius = static_cast<uint8_t>(std::min<int>(tokens.controlRadius, kScrubButton / 2));
+    stepProps_.styles.normal.radius = tokens.controlRadius;
     stepProps_.styles.selected = stepProps_.styles.normal;
     stepProps_.styles.focused = stepProps_.styles.normal;
     stepProps_.styles.disabled = stepProps_.styles.normal;
@@ -360,25 +368,19 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   listProps_.rowHeight =
       model_.denseRows ? static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight) : tokens.rowHeight;
   const fui::Rect listRect = screen.body();
-  const uint16_t rows = fui::listVisibleRows(listRect, listProps_.rowHeight, tokens.listRowGap);
-  visibleRows_ = rows > 0 ? rows : 1;
-  const int selected = std::clamp(model_.selectedIndex, -1, model_.itemCount - 1);
-  // Explicit viewport request (touch paging): the base the follow logic works
-  // from, so it still pulls a shown cursor into view.
-  if (model_.topIndex >= 0) topIndex_ = std::min(model_.topIndex, std::max(0, model_.itemCount - 1));
-  if (model_.itemCount > 0) {
-    // Follow the cursor (or the row the reader asked to show) into view.
-    const int follow = selected >= 0 ? selected : std::min(topIndex_, model_.itemCount - 1);
-    topIndex_ = fui::listTopIndexFor(static_cast<int16_t>(follow), static_cast<uint16_t>(std::max(0, topIndex_)),
-                                     static_cast<uint16_t>(visibleRows_), static_cast<uint16_t>(model_.itemCount));
-  } else {
-    topIndex_ = 0;
-  }
+  const int count = std::max(0, model_.itemCount);
+  // The nav owns selection + viewport (same fui::ListNav idiom as the list
+  // menu screens). A shown cursor re-follows into view on every build; a
+  // hidden one (-1, touch) leaves the viewport where scrolling put it.
+  nav_.selected = std::clamp(model_.selectedIndex, -1, count - 1);
+  nav_.followOnBuild = nav_.selected >= 0;
+  nav_.followPending = false;
+  nav_.syncToProps(listRect, listProps_.rowHeight, tokens.listRowGap, count, listProps_);
 
   // Materialise only the visible window of rows.
-  const int windowCount = std::min({visibleRows_, model_.itemCount - topIndex_, kMaxWindow});
+  const int windowCount = std::min({nav_.visibleRows, count - nav_.top, kMaxWindow});
   for (int i = 0; i < windowCount; ++i) {
-    const int index = topIndex_ + i;
+    const int index = nav_.top + i;
     windowLabels_[i] = model_.rowText ? model_.rowText(index) : std::string();
     windowValues_[i] = model_.rowValue ? model_.rowValue(index) : std::string();
     fui::ListItem item;
@@ -388,20 +390,19 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
     windowItems_[i] = item;
   }
   listProps_.items = windowItems_;
-  listProps_.itemsWindowFirst = static_cast<uint16_t>(topIndex_);
+  listProps_.itemsWindowFirst = static_cast<uint16_t>(nav_.top);
   listProps_.itemsWindowCount = static_cast<uint16_t>(std::max(0, windowCount));
-  listProps_.topIndex = static_cast<uint16_t>(topIndex_);
-  listProps_.selectedIndex = static_cast<int16_t>(selected);
   listProps_.valueText = tokens.bodyText;
   listProps_.valueText.bold = true;
-  if (model_.itemCount > 0) {
+  if (count > 0) {
     screen.list(listProps_);
   }
 
-  const int totalPages = visibleRows_ > 0 ? (model_.itemCount + visibleRows_ - 1) / visibleRows_ : 0;
+  const int pageRows = nav_.pageRows();
+  const int totalPages = pageRows > 0 ? (count + pageRows - 1) / pageRows : 0;
   if (totalPages > 1) {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%d/%d", topIndex_ / visibleRows_ + 1, totalPages);
+    snprintf(buf, sizeof(buf), "%d/%d", nav_.top / pageRows + 1, totalPages);
     fui::TextStyle pageStyle = tokens.smallText;
     pageStyle.align = fui::TextAlign::Right;
     screen.target().text(pageIndicatorRect_, buf, pageStyle);

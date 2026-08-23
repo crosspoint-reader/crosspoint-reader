@@ -4,6 +4,7 @@
 #include <string>
 
 #include "components/UiAppHost.h"
+#include "components/lists/list.h"
 
 class GfxRenderer;
 class MappedInputManager;
@@ -36,7 +37,6 @@ class ReaderToolbarUi : public UiAppHost {
     const char* panelTitle = nullptr;
     int itemCount = 0;
     int selectedIndex = -1;  // row the buttons' cursor sits on; -1 = none shown
-    int topIndex = -1;       // viewport request (first visible row); -1 = keep
     std::function<std::string(int)> rowText;
     std::function<std::string(int)> rowValue;
     // Tile row: the tool in focus (toolbar) / the open panel (panel). 0..2.
@@ -70,10 +70,15 @@ class ReaderToolbarUi : public UiAppHost {
   // Route one loop-task input frame; returns the action it mapped to, if any.
   Routed route(const MappedInputManager& input);
 
-  // Panel list viewport after the last render: rows that fit one page, and the
-  // first row shown. 0 before the first render.
-  int visibleRows() const { return visibleRows_; }
-  int topIndex() const { return topIndex_; }
+  // Panel list selection/viewport, shared with the reader's input handling.
+  // The same fui::ListNav the list-menu screens use: scrollBy() pages the
+  // viewport (measured page size, no-op detection), the top/selected fields
+  // are the live state, and buildPanel() syncs it into the list each build.
+  freeink::ui::ListNav& nav() { return nav_; }
+  // Rows one page holds (measured after the first render), and the first
+  // visible row.
+  int visibleRows() const { return nav_.pageRows(); }
+  int topIndex() const { return nav_.top; }
 
  private:
   static void screenFn(UiScreen& screen, void* user);
@@ -86,8 +91,7 @@ class ReaderToolbarUi : public UiAppHost {
 
   Model model_;
   Routed pending_;
-  int visibleRows_ = 0;
-  int topIndex_ = 0;
+  freeink::ui::ListNav nav_;
 
   // Row window materialised for the visible page only (a contents list runs to
   // hundreds of entries; labels are copied here so ListItem can point at them).
