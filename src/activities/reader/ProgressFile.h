@@ -61,4 +61,50 @@ inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_
   return true;
 }
 
+struct EpubProgress {
+  uint32_t spineIndex = 0;
+  uint32_t pageNumber = 0;
+  uint32_t chapterTotalPages = 0;
+  uint32_t visibleTextOffset = 0;
+  bool hasVisibleTextOffset = false;
+  bool success = false;
+};
+
+inline bool readEpubProgress(HalFile& file, EpubProgress& progress) {
+  uint8_t data[10];
+  int dataSize = file.read(data, sizeof(data));
+  if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
+    progress.spineIndex = static_cast<uint32_t>(data[0]) | (static_cast<uint32_t>(data[1]) << 8);
+    progress.pageNumber = static_cast<uint32_t>(data[2]) | (static_cast<uint32_t>(data[3]) << 8);
+    if (progress.pageNumber == UINT16_MAX) {
+      progress.pageNumber = 0;
+    }
+    if (dataSize == 6 || dataSize == 10) {
+      progress.chapterTotalPages = static_cast<uint32_t>(data[4]) | (static_cast<uint32_t>(data[5]) << 8);
+    }
+    if (dataSize == 10) {
+      progress.visibleTextOffset = static_cast<uint32_t>(data[6]) |
+                                   (static_cast<uint32_t>(data[7]) << 8) |
+                                   (static_cast<uint32_t>(data[8]) << 16) |
+                                   (static_cast<uint32_t>(data[9]) << 24);
+      progress.hasVisibleTextOffset = true;
+    }
+    progress.success = true;
+    return true;
+  }
+  return false;
+}
+
+inline bool read32BitPageProgress(HalFile& file, uint32_t& page) {
+  uint8_t data[4];
+  if (file.read(data, 4) == 4) {
+    page = static_cast<uint32_t>(data[0]) |
+           (static_cast<uint32_t>(data[1]) << 8) |
+           (static_cast<uint32_t>(data[2]) << 16) |
+           (static_cast<uint32_t>(data[3]) << 24);
+    return true;
+  }
+  return false;
+}
+
 }  // namespace ProgressFile

@@ -267,10 +267,13 @@ class BaseTheme {
   virtual void drawPhysicalBook(const GfxRenderer& renderer, float progress, uint32_t estimatedLength,
                                 const Bitmap* coverBitmap, const std::string& title,
                                 const std::string& author, bool lightMode) const;
-  virtual void drawBookCover(const GfxRenderer& renderer, const Bitmap* bitmap, int x, int y, int w, int h,
-                             const std::string& title, const std::string& author) const;
   virtual bool showsFileIcons() const { return false; }
 
+ protected:
+  virtual void drawBookCover(const GfxRenderer& renderer, const Bitmap* bitmap, int x, int y, int w, int h,
+                             const std::string& title, const std::string& author) const;
+
+ public:
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);

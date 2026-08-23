@@ -852,9 +852,14 @@ void SleepActivity::renderBlankSleepScreen() const {
 
 namespace {
 
+constexpr uint32_t XTC_BYTES_PER_PAGE = 2000;
+
 struct BookProgressInfo {
   float progress = 0.0f;
   uint32_t estimatedLength = 0;
+  std::string coverBmpPath;
+  std::string title;
+  std::string author;
   bool success = false;
 };
 
@@ -864,22 +869,26 @@ BookProgressInfo getBookProgressInfo() {
     return info;
   }
 
+  const bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
+
   if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
     Xtc xtc(APP_STATE.openEpubPath, "/.crosspoint");
     if (xtc.load()) {
       uint32_t currentPage = 0;
       HalFile f;
       if (Storage.openFileForRead("SLP", xtc.getCachePath() + "/progress.bin", f)) {
-        uint8_t data[4];
-        if (f.read(data, 4) == 4) {
-          currentPage = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
-        }
+        ProgressFile::read32BitPageProgress(f, currentPage);
       }
       uint32_t totalPages = xtc.getPageCount();
       if (totalPages > 0) {
         info.progress = static_cast<float>(currentPage) / totalPages;
       }
-      info.estimatedLength = totalPages * 2000;
+      info.estimatedLength = totalPages * XTC_BYTES_PER_PAGE;
+      if (xtc.generateCoverBmp()) {
+        info.coverBmpPath = xtc.getCoverBmpPath();
+      }
+      info.title = xtc.getTitle();
+      info.author = xtc.getAuthor();
       info.success = true;
     }
   } else if (FsHelpers::hasTxtExtension(APP_STATE.openEpubPath)) {
@@ -888,52 +897,48 @@ BookProgressInfo getBookProgressInfo() {
       uint32_t currentPage = 0;
       HalFile f;
       if (Storage.openFileForRead("SLP", txt.getCachePath() + "/progress.bin", f)) {
-        uint8_t data[4];
-        if (f.read(data, 4) == 4) {
-          currentPage = data[0] + (data[1] << 8) + (data[2] << 16) + (data[3] << 24);
-        }
+        ProgressFile::read32BitPageProgress(f, currentPage);
       }
       uint32_t totalPages = 0;
       HalFile indexFile;
       if (Storage.openFileForRead("SLP", txt.getCachePath() + "/index.bin", indexFile)) {
         uint8_t header[30];
         if (indexFile.read(header, 30) >= 30) {
-          totalPages = header[26] + (header[27] << 8) + (header[28] << 16) + (header[29] << 24);
+          totalPages = static_cast<uint32_t>(header[26]) |
+                       (static_cast<uint32_t>(header[27]) << 8) |
+                       (static_cast<uint32_t>(header[28]) << 16) |
+                       (static_cast<uint32_t>(header[29]) << 24);
         }
       }
       if (totalPages > 0) {
         info.progress = static_cast<float>(currentPage) / totalPages;
       }
       info.estimatedLength = txt.getFileSize();
+      if (txt.generateCoverBmp()) {
+        info.coverBmpPath = txt.getCoverBmpPath();
+      }
+      info.title = txt.getTitle();
       info.success = true;
     }
   } else if (FsHelpers::hasEpubExtension(APP_STATE.openEpubPath)) {
     Epub epub(APP_STATE.openEpubPath, "/.crosspoint");
     if (epub.load(true, true)) {
-      uint32_t currentSpineIndex = 0;
-      uint32_t nextPageNumber = 0;
-      uint32_t cachedChapterTotalPageCount = 0;
-
+      ProgressFile::EpubProgress epubProgress;
       HalFile f;
       if (Storage.openFileForRead("SLP", epub.getCachePath() + "/progress.bin", f)) {
-        uint8_t data[10];
-        int dataSize = f.read(data, sizeof(data));
-        if (dataSize >= 4) {
-          currentSpineIndex = data[0] + (data[1] << 8);
-          nextPageNumber = data[2] + (data[3] << 8);
-        }
-        if (dataSize == 6 || dataSize == 10) {
-          cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-        }
+        ProgressFile::readEpubProgress(f, epubProgress);
       }
-
       float chapterProgress = 0.0f;
-      if (cachedChapterTotalPageCount > 0) {
-        chapterProgress = static_cast<float>(nextPageNumber) / cachedChapterTotalPageCount;
+      if (epubProgress.chapterTotalPages > 0) {
+        chapterProgress = static_cast<float>(epubProgress.pageNumber) / epubProgress.chapterTotalPages;
       }
-
-      info.progress = epub.calculateProgress(currentSpineIndex, chapterProgress);
+      info.progress = epub.calculateProgress(epubProgress.spineIndex, chapterProgress);
       info.estimatedLength = epub.getBookSize();
+      if (epub.generateCoverBmp(cropped)) {
+        info.coverBmpPath = epub.getCoverBmpPath(cropped);
+      }
+      info.title = epub.getTitle();
+      info.author = epub.getAuthor();
       info.success = true;
     }
   }
@@ -947,61 +952,16 @@ void SleepActivity::renderBookPhysicalSleepScreen() const {
   BookProgressInfo info = getBookProgressInfo();
 
   // 2. Load cover if exists
-  std::string coverBmpPath;
-  bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
-  if (!APP_STATE.openEpubPath.empty()) {
-    if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
-      Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
-      if (lastXtc.load() && lastXtc.generateCoverBmp()) {
-        coverBmpPath = lastXtc.getCoverBmpPath();
-      }
-    } else if (FsHelpers::hasTxtExtension(APP_STATE.openEpubPath)) {
-      Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
-      if (lastTxt.load() && lastTxt.generateCoverBmp()) {
-        coverBmpPath = lastTxt.getCoverBmpPath();
-      }
-    } else if (FsHelpers::hasEpubExtension(APP_STATE.openEpubPath)) {
-      Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
-      if (lastEpub.load(true, true) && lastEpub.generateCoverBmp(cropped)) {
-        coverBmpPath = lastEpub.getCoverBmpPath(cropped);
-      }
-    }
-  }
-
   HalFile file;
   std::unique_ptr<Bitmap> bitmap = nullptr;
-  if (!coverBmpPath.empty() && Storage.openFileForRead("SLP", coverBmpPath, file)) {
+  if (info.success && !info.coverBmpPath.empty() && Storage.openFileForRead("SLP", info.coverBmpPath, file)) {
     auto bmp = makeUniqueNoThrow<Bitmap>(file);
     if (bmp && bmp->parseHeaders() == BmpReaderError::Ok) {
       bitmap = std::move(bmp);
     }
   }
 
-  // Get title and author
-  std::string title = "";
-  std::string author = "";
-  if (!APP_STATE.openEpubPath.empty()) {
-    if (FsHelpers::hasXtcExtension(APP_STATE.openEpubPath)) {
-      Xtc lastXtc(APP_STATE.openEpubPath, "/.crosspoint");
-      if (lastXtc.load()) {
-        title = lastXtc.getTitle();
-        author = lastXtc.getAuthor();
-      }
-    } else if (FsHelpers::hasTxtExtension(APP_STATE.openEpubPath)) {
-      Txt lastTxt(APP_STATE.openEpubPath, "/.crosspoint");
-      if (lastTxt.load()) {
-        title = lastTxt.getTitle();
-      }
-    } else if (FsHelpers::hasEpubExtension(APP_STATE.openEpubPath)) {
-      Epub lastEpub(APP_STATE.openEpubPath, "/.crosspoint");
-      if (lastEpub.load(true, true)) {
-        title = lastEpub.getTitle();
-        author = lastEpub.getAuthor();
-      }
-    }
-  }
-
   float progressVal = info.success ? info.progress : -1.0f;
-  bool lightMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT;
-  GUI.drawPhysicalBook(renderer, progressVal, info.estimatedLength, bitmap.get(), title, author, lightMode);
+  constexpr bool lightMode = false; // Sleep screen is dark (inverted) by default
+  GUI.drawPhysicalBook(renderer, progressVal, info.estimatedLength, bitmap.get(), info.title, info.author, lightMode);
 }

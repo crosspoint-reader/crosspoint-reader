@@ -18,6 +18,7 @@
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
+#include "ProgressFile.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "DictionaryWordSelectActivity.h"
@@ -192,24 +193,16 @@ bool EpubReaderActivity::loadBook() {
 
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[10];
-    int dataSize = f.read(data, sizeof(data));
-    if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
-      currentSpineIndex = data[0] + (data[1] << 8);
-      nextPageNumber = data[2] + (data[3] << 8);
-      if (nextPageNumber == UINT16_MAX) {
-        LOG_DBG("ERS", "Ignoring stale last-page sentinel from progress cache");
-        nextPageNumber = 0;
-      }
+    ProgressFile::EpubProgress progress;
+    if (ProgressFile::readEpubProgress(f, progress)) {
+      currentSpineIndex = progress.spineIndex;
+      nextPageNumber = progress.pageNumber;
       cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = progress.chapterTotalPages;
+      if (progress.hasVisibleTextOffset) {
+        cachedVisibleTextOffset = progress.visibleTextOffset;
+      }
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
-    }
-    if (dataSize == 6) {
-      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-    } else if (dataSize == 10) {
-      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-      cachedVisibleTextOffset = static_cast<uint32_t>(data[6]) | (static_cast<uint32_t>(data[7]) << 8) |
-                                (static_cast<uint32_t>(data[8]) << 16) | (static_cast<uint32_t>(data[9]) << 24);
     }
   }
 

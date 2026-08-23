@@ -393,9 +393,9 @@ void TxtReaderActivity::saveProgress() const {
 void TxtReaderActivity::loadProgress() {
   HalFile f;
   if (Storage.openFileForRead("TRS", txt->getCachePath() + "/progress.bin", f)) {
-    uint8_t data[4];
-    if (f.read(data, 4) == 4) {
-      currentPage = data[0] + (data[1] << 8);
+    uint32_t progressPage = 0;
+    if (ProgressFile::read32BitPageProgress(f, progressPage)) {
+      currentPage = static_cast<int>(progressPage);
       if (currentPage >= totalPages) {
         currentPage = totalPages - 1;
       }

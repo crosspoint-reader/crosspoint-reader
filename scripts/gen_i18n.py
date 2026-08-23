@@ -107,6 +107,15 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
     return result
 
 
+def extract_format_specifiers(s: str) -> List[str]:
+    """
+    Extract all printf-style format specifiers from a string, ignoring '%%'.
+    """
+    s_clean = s.replace("%%", "")
+    pattern = r"%(?:[0-9]*\$)?[-+#0]*[0-9]*(?:\.[0-9]+)?[lhjztL]*[diouxXfFeEgGaAcspn]"
+    return re.findall(pattern, s_clean)
+
+
 # ---------------------------------------------------------------------------
 # Load all languages from a directory of YAML files
 # ---------------------------------------------------------------------------
@@ -225,10 +234,20 @@ def load_translations(
                 value = english_data[key]
                 inherited_sets[lang_idx].add(key)
                 if verbose:
-                    print(
-                        f"  INFO: '{key}' missing in {language_codes[lang_idx]}, using English fallback"
-                    )
+                    print(f"  INFO: '{key}' missing in {language_codes[lang_idx]}, using English fallback")
             row.append(value)
+        # Validate format specifiers match English reference
+        ref_val = row[0]
+        ref_specs = extract_format_specifiers(ref_val)
+        for lang_idx, val in enumerate(row):
+            val_specs = extract_format_specifiers(val)
+            if val_specs != ref_specs:
+                fname = ordered_files[lang_idx]
+                raise ValueError(
+                    f"Format specifier mismatch in '{fname}' for key '{key}':\n"
+                    f"  Expected (EN): {ref_specs} from \"{ref_val}\"\n"
+                    f"  Got: {val_specs} from \"{val}\""
+                )
         translations[key] = row
 
     # Warn about extra keys in non-English files

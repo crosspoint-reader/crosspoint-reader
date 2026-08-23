@@ -1153,9 +1153,13 @@ void BaseTheme::drawPhysicalBook(const GfxRenderer& renderer, float progress, ui
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
+  constexpr int MIN_THICKNESS = 15;
+  constexpr int MAX_THICKNESS_EXTRA = 50;
+  constexpr float LENGTH_SCALE = 1500000.0f;
+
   // 1. Define book geometry
-  constexpr int W = 220;
-  constexpr int H = 320;
+  const int W = (pageWidth * 11) / 24; // Scales to 220 for 480 wide
+  const int H = (pageHeight * 2) / 5;   // Scales to 320 for 800 high
   int cx = pageWidth / 2;
   int cy = pageHeight / 2 - 20;
 
@@ -1165,12 +1169,12 @@ void BaseTheme::drawPhysicalBook(const GfxRenderer& renderer, float progress, ui
   int y_b = cy + H / 2;
 
   // Thickness based on estimatedLength
-  int T = 15;
+  int T = MIN_THICKNESS;
   if (estimatedLength > 0) {
-    float lengthFactor = static_cast<float>(estimatedLength) / 1500000.0f;
+    float lengthFactor = static_cast<float>(estimatedLength) / LENGTH_SCALE;
     if (lengthFactor > 1.0f) lengthFactor = 1.0f;
     if (lengthFactor < 0.0f) lengthFactor = 0.0f;
-    T = 15 + static_cast<int>(lengthFactor * 50);
+    T = MIN_THICKNESS + static_cast<int>(lengthFactor * MAX_THICKNESS_EXTRA);
   }
 
   float p = progress;
@@ -1271,7 +1275,23 @@ void BaseTheme::drawPhysicalBook(const GfxRenderer& renderer, float progress, ui
 void BaseTheme::drawBookCover(const GfxRenderer& renderer, const Bitmap* bitmap, int x, int y, int w, int h,
                              const std::string& title, const std::string& author) const {
   if (bitmap) {
-    renderer.drawBitmap(*bitmap, x, y, w, h);
+    int coverW = w;
+    int coverH = h;
+    int imgWidth = bitmap->getWidth();
+    int imgHeight = bitmap->getHeight();
+    if (imgWidth > 0 && imgHeight > 0) {
+      float aspectRatio = static_cast<float>(imgWidth) / imgHeight;
+      if (aspectRatio > static_cast<float>(w) / h) {
+        coverW = w;
+        coverH = static_cast<int>(w / aspectRatio);
+      } else {
+        coverH = h;
+        coverW = static_cast<int>(h * aspectRatio);
+      }
+    }
+    int coverX = x + (w - coverW) / 2;
+    int coverY = y + (h - coverH) / 2;
+    renderer.drawBitmap(*bitmap, coverX, coverY, coverW, coverH);
   } else {
     renderer.fillRect(x, y, w, h, true);
     renderer.fillRect(x + 4, y + 4, w - 8, h - 8, false);
