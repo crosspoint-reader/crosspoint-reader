@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "LibraryText.h"
+
 namespace library {
 
 LibraryIndexFile::~LibraryIndexFile() { close(); }
@@ -169,7 +171,7 @@ bool LibraryIndexFile::readPath(const ClixRecord& record, std::string& out) {
       if (!readAt(offset + 1, dir.data(), pathLen)) return false;
       std::string name;
       if (!readName(record, name)) return false;
-      out = dir + "/" + name;
+      out = joinLibraryPath(dir, name);
       return true;
     }
     offset += 1u + pathLen;

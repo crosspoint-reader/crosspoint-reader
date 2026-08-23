@@ -91,15 +91,6 @@ bool isBookName(const std::string& name) {
 // card written on a Mac shows every book twice.
 bool isHiddenOrSidecar(const char* name) { return name[0] == '.'; }
 
-// Join without doubling the separator. The walk starts at "/", so a naive
-// concatenation yields "//SciFi/book.epub": tolerated by the filesystem, but it
-// is also the string handed to Epub and ZipFile, and to the cache-path hash that
-// has to match the one the reader computed when it opened the same book.
-std::string joinPath(const std::string& dir, const std::string& name) {
-  if (dir.empty() || dir == "/") return "/" + name;
-  return dir + "/" + name;
-}
-
 std::string stemOf(const std::string& name) {
   const size_t dot = name.find_last_of('.');
   return (dot == std::string::npos || dot == 0) ? name : name.substr(0, dot);
@@ -400,7 +391,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       folderEmitted = true;
       if (depth == 0) st.booksAtRoot = true;
     }
-    if (!stageRecord(st, name, size, myFolderId, joinPath(path, name))) break;
+    if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name))) break;
 
     // Once per staged book, not only once per directory: this callback is the
     // one place the caller can feed the task watchdog, and with metadata enabled
@@ -457,7 +448,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       break;
     }
 
-    walk(st, joinPath(path, sub), depth + 1);
+    walk(st, joinLibraryPath(path, sub), depth + 1);
     if (st.aborted || st.failed) return;
   }
 }
