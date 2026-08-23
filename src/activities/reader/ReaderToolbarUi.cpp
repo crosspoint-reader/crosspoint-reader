@@ -37,8 +37,6 @@ constexpr int16_t kToolRowH = 64;
 constexpr int16_t kToolPillInset = 10;
 constexpr int16_t kToolIconTop = 8;
 constexpr int kToolCount = 3;
-// Top bar: at least this tall.
-constexpr int16_t kHeaderMinH = 60;
 // Bottom sheet height for the panels, as a share of the screen: the page stays
 // readable above it, and the list still gets several finger-sized rows.
 constexpr int kPanelHeightPercent = 62;
@@ -153,16 +151,15 @@ void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anc
   }
 }
 
-// Top bar: a white band (at least kHeaderMinH tall -- the reading page's
-// chrome needs a little more presence than a list header) with a "< Library"
-// back control on the left that leaves the book for the library, the book title centred, and the battery on
+// Top bar: a white band (the theme's header height) with a back chevron on
+// the left that leaves the book for the library, the book title centred, and the battery on
 // the right. Detached-battery themes (Lyra) keep their own structure: battery
 // in the top strip, title and button on the lower sub-band.
 void ReaderToolbarUi::buildHeader(UiScreen& screen) {
   const auto& tokens = screen.theme();
   const auto& metrics = UITheme::getInstance().getMetrics();
   const fui::Rect body = screen.body();
-  const int16_t bandH = std::max<int16_t>(tokens.headerHeight, kHeaderMinH);
+  const int16_t bandH = tokens.headerHeight;
   const fui::Rect band = screen.takeTop(bandH);
   const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
   const fui::Paint paper = fui::Paint::solid(fui::Color::White);
@@ -207,23 +204,14 @@ void ReaderToolbarUi::buildHeader(UiScreen& screen) {
                                   static_cast<int16_t>(bandH - metrics.batteryBarHeight - tokens.headerUnderline)}
                       : fui::Rect{band.x, band.y, band.width, static_cast<int16_t>(bandH - tokens.headerUnderline)};
 
-  // Back button: a chevron and the library's name, plain text -- the page is
-  // the content here, so the bar keeps to type and a single glyph.
-  const char* backLabel = tr(STR_LIBRARY);
-  fui::TextStyle backStyle = tokens.bodyText;
-  backStyle.bold = true;
-  const int16_t textW = screen.target().measureText(backStyle.font, backLabel, backStyle).width;
-  const int16_t textH = screen.target().lineHeight(backStyle.font);
+  // Back: a lone chevron on the left (tap = leave the book for the library).
   const int16_t lineTop = band.y;
   const int16_t lineH = static_cast<int16_t>(bandH - tokens.headerUnderline);
   const int16_t btnX = static_cast<int16_t>(band.x + tokens.headerSidePadding);
   const fui::Rect chevron{btnX, static_cast<int16_t>(lineTop + (lineH - 24) / 2), 24, 24};
   screen.target().bitmap(chevron, fui::bitmapFromIcon(icon_reader_back_24), fui::BitmapMode::Center, ink);
-  const fui::Rect backText{static_cast<int16_t>(chevron.right() + 2),
-                           static_cast<int16_t>(lineTop + (lineH - textH) / 2), textW, textH};
-  screen.target().text(backText, backLabel, backStyle);
-  // Finger-sized target around the chevron + label.
-  const fui::Rect backHit{band.x, lineTop, static_cast<int16_t>(backText.right() - band.x + tokens.headerSidePadding),
+  // Finger-sized target around the glyph.
+  const fui::Rect backHit{band.x, lineTop, static_cast<int16_t>(chevron.right() - band.x + tokens.headerSidePadding),
                           lineH};
   screen.frame().hit(backHit, ACTION_HOME, 0, fui::InputTouch);
 
