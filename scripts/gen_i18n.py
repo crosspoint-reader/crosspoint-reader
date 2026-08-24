@@ -10,6 +10,8 @@ Reads YAML files from a translations directory (one file per language) and gener
 Each YAML file must contain:
   _language_name: "Native Name"     (e.g. "Español")
   _language_code: "ENUM_NAME"       (e.g. "ES")
+  _order: "N"                       (e.g. "1"; historical metadata, unused)
+  _bcp47: "tag"                     (e.g. "es"; drives Language enum order)
   STR_KEY: "translation text"
 
 The English file is the reference. Missing keys in other languages are
@@ -113,15 +115,16 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 def load_translations(
     translations_dir: str,
     verbose: bool = False,
-) -> Tuple[List[str], List[str], List[str], Dict[str, List[str]], List[Set[str]]]:
+) -> Tuple[List[str], List[str], List[str], List[str], Dict[str, List[str]], List[Set[str]]]:
     """
     Read every YAML file in *translations_dir* and return:
         language_codes   e.g. ["EN", "ES", ...]
         language_names   e.g. ["English", "Español", ...]
+        language_bcp47   e.g. ["en", "es", ...]
         string_keys      ordered list of STR_* keys (from English)
         translations     {key: [translation_per_language]}
 
-    English is always first;
+    English is always first; the rest are sorted by _bcp47.
     """
     yaml_dir = Path(translations_dir)
     if not yaml_dir.is_dir():
@@ -146,48 +149,51 @@ def load_translations(
     if english_file is None:
         raise ValueError("No YAML file with _language_code: EN found")
 
-    duplicate_orders: Dict[str, List[str]] = {}
-    order_to_files: Dict[str, List[str]] = {}
     for fname, data in parsed.items():
-        order = data.get("_order")
-        if not order:
-            continue
-        order_to_files.setdefault(order, []).append(fname)
+        if not data.get("_bcp47"):
+            raise ValueError(f"{fname}: missing _bcp47")
 
-    for order, files in order_to_files.items():
-        if len(files) > 1:
-            duplicate_orders[order] = sorted(files)
+    def _check_unique(field: str) -> None:
+        """Raise if any two files share the same value for *field* (e.g. "_order", "_bcp47")."""
+        files_by_value: Dict[str, List[str]] = {}
+        for fname, data in parsed.items():
+            value = data.get(field)
+            if not value:
+                continue
+            files_by_value.setdefault(value, []).append(fname)
 
-    if duplicate_orders:
-        duplicate_messages = [
-            f"_order {order}: {', '.join(files)}"
-            for order, files in sorted(
-                duplicate_orders.items(), key=lambda item: int(item[0])
+        duplicates = {value: sorted(files) for value, files in files_by_value.items() if len(files) > 1}
+        if duplicates:
+            duplicate_messages = [
+                f"{field} {value}: {', '.join(files)}" for value, files in sorted(duplicates.items())
+            ]
+            raise ValueError(
+                f"Duplicate {field} values found:\n  "
+                + "\n  ".join(duplicate_messages)
+                + f"\nEach {field} value must be unique to ensure a deterministic language order."
             )
-        ]
-        raise ValueError(
-            "Duplicate _order values found:\n  "
-            + "\n  ".join(duplicate_messages)
-            + "\nEach _order value must be unique to ensure a deterministic language order."
-        )
 
-    # Order: English first, then by _order metadata (falls back to filename)
-    def sort_key(fname: str) -> Tuple[int, int, str]:
-        """English always first (0), then by _order, then by filename."""
+    _check_unique("_order")
+    _check_unique("_bcp47")
+
+    # Order: English first (enum value 0), then by _bcp47 tag alphabetically.
+    # This assigns the Language enum ordinal and also drives the visible
+    # Settings menu order (see SORTED_LANGUAGE_INDICES). It has no effect on
+    # stored user preferences, since settings.json persists the
+    # _language_code string, not the ordinal. _order is retained as metadata
+    # and still validated for uniqueness, but no longer drives enum assignment.
+    def sort_key(fname: str) -> Tuple[int, str]:
+        """English always first (0), then by BCP47 tag."""
         if fname == english_file:
-            return (0, 0, fname)
-        order = parsed[fname].get("_order", "999")
-        try:
-            order_int = int(order)
-        except ValueError:
-            order_int = 999
-        return (1, order_int, fname)
+            return (0, "")
+        return (1, parsed[fname]["_bcp47"])
 
     ordered_files = sorted(parsed, key=sort_key)
 
     # Extract metadata
     language_codes: List[str] = []
     language_names: List[str] = []
+    language_bcp47: List[str] = []
     for fname in ordered_files:
         data = parsed[fname]
         code = data.get("_language_code")
@@ -196,6 +202,7 @@ def load_translations(
             raise ValueError(f"{fname}: missing _language_code or _language_name")
         language_codes.append(code)
         language_names.append(name)
+        language_bcp47.append(data["_bcp47"])
 
     # String keys come from English (order matters)
     english_data = parsed[english_file]
@@ -239,7 +246,7 @@ def load_translations(
 
     if verbose:
         print(f"Loaded {len(language_codes)} languages, {len(string_keys)} string keys")
-    return language_codes, language_names, string_keys, translations, inherited_sets
+    return language_codes, language_names, language_bcp47, string_keys, translations, inherited_sets
 
 
 # ---------------------------------------------------------------------------
@@ -438,6 +445,7 @@ def compute_character_set(translations: Dict[str, List[str]], lang_index: int) -
 def generate_keys_header(
     languages: List[str],
     language_names: List[str],
+    language_bcp47: List[str],
     string_keys: List[str],
     output_path: str,
     verbose: bool = False,
@@ -462,10 +470,11 @@ def generate_keys_header(
     lines.append("")
 
     # Language enum
-    lines.append("// Language enum")
+    lines.append("// Language enum (ordered by _bcp47, English first)")
     lines.append("enum class Language : uint8_t {")
-    for i, lang in enumerate(languages):
-        lines.append(f"  {lang} = {i},")
+    code_width = max(len(lang) for lang in languages)
+    for i, (lang, bcp47) in enumerate(zip(languages, language_bcp47)):
+        lines.append(f"  {lang:<{code_width}} = {i},  // {bcp47}")
     lines.append("  _COUNT")
     lines.append("};")
     lines.append("")
@@ -527,16 +536,16 @@ def generate_keys_header(
     lines.append("")
 
     # Sorted language indices for display order
-    # (English first, then by native language name alphabetically)
+    # (English first, then by _bcp47 tag alphabetically)
     english_idx = languages.index("EN")
     rest = sorted(
         (i for i in range(len(languages)) if i != english_idx),
-        key=lambda i: language_names[i],
+        key=lambda i: language_bcp47[i],
     )
     sorted_indices = [english_idx] + rest
-    lines.append("// Sorted language indices by native name (auto-generated by gen_i18n.py)")
+    lines.append("// Sorted language indices by _bcp47 (auto-generated by gen_i18n.py)")
     for rank, idx in enumerate(sorted_indices):
-        lines.append(f"//   {rank:>2}: {languages[idx]:<4} {language_names[idx]}")
+        lines.append(f"//   {rank:>2}: {languages[idx]:<4} {language_bcp47[idx]:<8} {language_names[idx]}")
     lines.append(
         "constexpr uint8_t SORTED_LANGUAGE_INDICES[] = {"
         f"{', '.join(str(i) for i in sorted_indices)}"
@@ -724,6 +733,7 @@ def generate_strings_cpp(
 def _print_language_table(
     language_codes: List[str],
     language_names: List[str],
+    language_bcp47: List[str],
     inherited_sets: List[Set[str]],
     string_keys: List[str],
     unused_keys: Set[str],
@@ -731,20 +741,20 @@ def _print_language_table(
 ) -> None:
     """Print a per-language summary table."""
     total = len(string_keys)
-    headers = ("Language", "Code", "Own", "Fallback", "Unused", "Data (B)")
+    headers = ("Language", "Code", "BCP47", "Own", "Fallback", "Unused", "Data (B)")
 
     rows = []
-    for code, name, inherited, size in zip(
-        language_codes, language_names, inherited_sets, data_sizes
+    for code, name, bcp47, inherited, size in zip(
+        language_codes, language_names, language_bcp47, inherited_sets, data_sizes
     ):
         own = total - len(inherited)
         fallback = len(inherited)
         # strings this language translated but the code never calls
         unused = len(unused_keys - inherited)
-        rows.append((name, code, str(own), str(fallback), str(unused), str(size)))
+        rows.append((name, code, bcp47, str(own), str(fallback), str(unused), str(size)))
 
-    # EN first, then alphabetically by ISO code
-    rows.sort(key=lambda r: (0 if r[1] == "EN" else 1, r[1]))
+    # EN first, then alphabetically by _bcp47 (matches the Language enum order)
+    rows.sort(key=lambda r: (0 if r[1] == "EN" else 1, r[2]))
 
     col_widths = [len(h) for h in headers]
     for row in rows:
@@ -856,7 +866,7 @@ def main(
         print()
 
     try:
-        languages, language_names, string_keys, translations, inherited_sets = (
+        languages, language_names, language_bcp47, string_keys, translations, inherited_sets = (
             load_translations(translations_dir, verbose)
         )
 
@@ -900,6 +910,7 @@ def main(
         _print_language_table(
             languages,
             language_names,
+            language_bcp47,
             inherited_sets,
             string_keys,
             unused_set,
@@ -923,7 +934,7 @@ def main(
 
         out = Path(output_dir)
         generate_keys_header(
-            languages, language_names, string_keys, str(out / "I18nKeys.h"), verbose
+            languages, language_names, language_bcp47, string_keys, str(out / "I18nKeys.h"), verbose
         )
         generate_strings_header(
             languages, language_names, str(out / "I18nStrings.h"), verbose

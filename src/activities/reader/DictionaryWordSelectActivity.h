@@ -25,9 +25,6 @@ class DictionaryWordSelectActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
-  // Redraws the reader's page (word boxes over it), so it follows the reading
-  // surface's night-mode polarity; a normal-polarity flash mid-lookup jars.
-  bool appliesNightMode() const override { return true; }
 
  private:
   // Screen box of one selectable word. `text` points into the owned Page's
@@ -83,8 +80,4 @@ class DictionaryWordSelectActivity final : public Activity {
   int16_t snapshotW = 0;
   int16_t snapshotH = 0;
   int snapshotIdx = -1;
-
-  // The activity is entered while Confirm is still held (long-press trigger):
-  // ignore the stale release until a fresh press is seen.
-  bool confirmPressSeen = false;
 };

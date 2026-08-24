@@ -19,7 +19,10 @@ enum class TagBreak : uint8_t { None, Line, Paragraph };
 TagBreak tagBreak(const std::string& input, size_t start, size_t end) {
   while (start < end && (input[start] == '/' || std::isspace(static_cast<unsigned char>(input[start])))) start++;
   const size_t nameStart = start;
-  while (start < end && std::isalpha(static_cast<unsigned char>(input[start]))) start++;
+  // Alphanumeric, not alphabetic: a name scan that stops at the first digit
+  // reads "h1" as "h", so none of the heading names below could ever match and
+  // a definition's headings ran into the text that followed them.
+  while (start < end && std::isalnum(static_cast<unsigned char>(input[start]))) start++;
   const size_t len = start - nameStart;
   if (len == 0) return TagBreak::None;
 

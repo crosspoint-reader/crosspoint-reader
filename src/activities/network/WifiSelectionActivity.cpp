@@ -183,6 +183,9 @@ void WifiSelectionActivity::startWifiScan(const bool autoScan) {
   listNav.reset();
   state = WifiSelectionState::SCANNING;
   networks.clear();
+  // The cached rows point into the cleared networks' strings; drop them too.
+  networkStatuses.clear();
+  networkRowItems.clear();
   requestUpdate();
 
   // Set WiFi mode to station
@@ -208,7 +211,6 @@ void WifiSelectionActivity::processWifiScanResults() {
     appendHiddenNetworkEntry();
     rebuildNetworkRowItems();
     autoConnecting = false;
-    manualNetworkListRequested = false;
     state = WifiSelectionState::NETWORK_LIST;
     selectedNetworkIndex = 0;
     requestUpdate();
@@ -263,7 +265,6 @@ void WifiSelectionActivity::processWifiScanResults() {
   }
 
   autoConnecting = false;
-  manualNetworkListRequested = false;
   state = WifiSelectionState::NETWORK_LIST;
   selectedNetworkIndex = 0;
   requestUpdate();
@@ -347,7 +348,7 @@ void WifiSelectionActivity::promptPasswordEntry() {
   startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
                                                                  "",  // No initial text
                                                                  64,  // Max password length
-                                                                 InputType::Password),
+                                                                 InputType::Text),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) {
                              state = WifiSelectionState::NETWORK_LIST;
@@ -446,6 +447,7 @@ void WifiSelectionActivity::showNetworkListFromAutoConnect() {
 
   if (networks.empty()) {
     startWifiScan(false);
+    manualNetworkListRequested = true;
     return;
   }
 
@@ -738,6 +740,13 @@ void WifiSelectionActivity::loop() {
 
   // Handle network list state
   if (state == WifiSelectionState::NETWORK_LIST) {
+    if (manualNetworkListRequested) {
+      if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+        manualNetworkListRequested = false;
+      }
+      return;
+    }
+
     // Check for Back button to exit (cancel)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onComplete(false);
@@ -745,7 +754,7 @@ void WifiSelectionActivity::loop() {
     }
 
     // Check for Confirm button to select network or rescan
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!networks.empty()) {
         selectNetwork(selectedNetworkIndex);
       } else {
@@ -940,7 +949,8 @@ void WifiSelectionActivity::buildListScreen(UiScreen& screen) {
     // Non-touch hardware (X3/X4) keeps the original, denser row height
     // instead of FreeInkUI's touch-target-sized default (see
     // UiListActivity::syncListViewport; this screen predates that base and
-    // syncs its own viewport directly).
+    // syncs its own viewport directly). A long SSID that wraps grows only
+    // its own row: list() sizes wrapped items per-row.
     rowHeight = static_cast<int16_t>(metrics.listRowHeight);
     props.rowHeight = rowHeight;
   }

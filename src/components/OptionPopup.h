@@ -65,7 +65,10 @@ class OptionPopup {
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
-    const int count = static_cast<int>(ownedStrings.size());
+    // Match the render cap: only the first MAX_OPTIONS rows exist on screen,
+    // so button wrap-around must not select an invisible option.
+    const int total = static_cast<int>(ownedStrings.size());
+    const int count = total > MAX_OPTIONS ? MAX_OPTIONS : total;
     const freeink::ui::InputSnapshot snap = touchSnapshotFrom(input);
     if (snap.touchPressed || snap.touchReleased || snap.touchHeld) {
       // Interactions are registered on the render task; only route once the
@@ -115,12 +118,12 @@ class OptionPopup {
       selectedIndex = (selectedIndex + 1) % count;
       requestUpdate();
       return true;
-    } else if (input.wasPressed(MappedInputManager::Button::Confirm)) {
+    } else if (input.wasReleased(MappedInputManager::Button::Confirm)) {
       active = false;
       if (onSelectCallback) onSelectCallback(selectedIndex);
       requestUpdate();
       return true;
-    } else if (input.wasPressed(MappedInputManager::Button::Back)) {
+    } else if (input.wasReleased(MappedInputManager::Button::Back)) {
       active = false;
       requestUpdate();
       return true;

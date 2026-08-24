@@ -45,35 +45,6 @@ class HalGPIO {
 
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
-  unsigned long usbLastPollMs = 0;
-  bool usbElectricalConnected = false;  // last result of the per-device electrical/charge check
-
-  // X3 USB detection is a BQ27220 I2C read (~0.3-1 ms of awake CPU per call);
-  // polled every loop it costs a few percent of the light-sleep idle floor for
-  // nothing. At >=1 s intervals the energy cost is unmeasurable (~µC/s), so 1 s
-  // is chosen for prompt plug/unplug UX (battery icon, light-sleep USB guard /
-  // CDC recovery). X4 detection is a single digitalRead and stays per-loop.
-  static constexpr unsigned long USB_POLL_X3_MS = 1000;
-
-  // USB-Serial-JTAG SOF activity, sampled by update(): the host sends a SOF
-  // frame every 1 ms while the bus is enumerated, so a frame index that moved
-  // between two samples means a live host link. Catches what the charge-based
-  // X3 check misses: a data-only cable, and any cable once the battery is full
-  // (charge current ~0). Samples must be >SOF_SAMPLE_MS apart — update() can be
-  // called back-to-back (inner input loops), and adjacent reads would compare
-  // equal and flicker the verdict.
-  uint16_t lastSofFrameIndex = 0;
-  unsigned long sofLastSampleMs = 0;
-  bool usbSofActive = false;
-  static constexpr unsigned long SOF_SAMPLE_MS = 10;
-
-  // Per-device electrical/charge-inference USB check (fresh read; X3 = BQ27220
-  // charge current over I2C, X4 = VBUS-driven level on GPIO20).
-  bool isUsbElectricalConnected() const;
-
-  // Shared body of update()/pollUsbState(): SOF sampling + throttled electrical
-  // check + combined-verdict edge tracking.
-  void updateUsbState(unsigned long now);
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
@@ -105,14 +76,14 @@ class HalGPIO {
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
-  // True while a raw button-state change is still inside the debounce window.
-  // The idle loop polls fast while this is set so the confirming sample lands
-  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
-  // otherwise appear in a single sample and never commit (dropped press).
-  bool isDebouncePending() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
   bool hasTouch() const;
+  // Capacitive Home key reported by the touch controller (X4 Pro). The tap
+  // event fires on release and excludes a long hold.
+  bool hasHomeKey() const;
+  bool wasHomeKeyTapped() const;
+  bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
   // Raw release edge, reported even when the contact was not a tap (swipe end,
@@ -134,26 +105,13 @@ class HalGPIO {
   bool wasTouchActivity() const;
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
-  // Verify power button was held long enough after wakeup.
+  // Verify that the physical power button remains held through input debounce.
   // Returns true if verification succeeded, false if device should return to sleep.
   // Should only be called when wakeup reason is PowerButton.
-  bool verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
+  bool verifyPowerButtonWakeup();
 
   // Check if USB is connected
   bool isUsbConnected() const;
-
-  // Sample USB state without a full input update. Called during setup() BEFORE
-  // the first e-ink refresh: the boot paint happens before loop() ever runs
-  // update(), so without this the light-sleep slice guards see the unsampled
-  // default ("no USB") and sleeping through the boot refresh kills a live CDC
-  // link (charge-based X3 detection also reads false whenever the battery is
-  // full). Two calls >=SOF_SAMPLE_MS apart establish the SOF verdict; the
-  // method itself waits out the floor if called too soon after the last sample.
-  void pollUsbState();
-
-  // USB state as sampled by the last update() call.
-  // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
-  bool isUsbConnectedCached() const { return lastUsbConnected; }
 
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;

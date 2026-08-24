@@ -94,6 +94,9 @@ void EpubReaderBookmarksActivity::openSelectedBookmark() {
 
 void EpubReaderBookmarksActivity::activateIndex(const int index) {
   if (confirmPopup.isActive()) return;
+  // The interaction table can deliver a row index captured before a delete
+  // shrank the list; the next render re-registers the rows.
+  if (index < 0 || index >= listCount()) return;
   // The tapped row leaves this screen; a lingering flash would gray an
   // unrelated row on the next render.
   app.clearTapFlash();
@@ -103,6 +106,7 @@ void EpubReaderBookmarksActivity::activateIndex(const int index) {
 
 void EpubReaderBookmarksActivity::onRowLongPress(const int index) {
   if (confirmPopup.isActive()) return;
+  if (index < 0 || index >= listCount()) return;
   // The row is deleted; a lingering flash would gray an unrelated row on the
   // next render.
   app.clearTapFlash();
@@ -115,24 +119,7 @@ void EpubReaderBookmarksActivity::onRowLongPress(const int index) {
 
 bool EpubReaderBookmarksActivity::handleCustomInput() {
   // Delete confirmation popup
-  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-    // The popup acts on button press; if that input closed it, the trailing
-    // release must be swallowed below (Back would leave the activity, Confirm
-    // would open the selected bookmark).
-    popupClosing = !confirmPopup.isActive();
-    return true;
-  }
-  if (popupClosing) {
-    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // closing press still held
-    }
-    popupClosing = false;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      return true;  // swallow the release that closed the popup
-    }
-  }
+  if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
   if (confirmingDelete) {
     // Popup dismissed without a selection (Back button or tap outside): cancel delete
     confirmingDelete = false;
@@ -151,15 +138,13 @@ bool EpubReaderBookmarksActivity::handleButtons() {
     return true;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
-    openSelectedBookmark();
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
+      showDeleteConfirmation();
+    } else {
+      openSelectedBookmark();
+    }
     return true;
-  }
-
-  if (mappedInput.isPressed(MappedInputManager::Button::Confirm) && mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
-    // No pass-consumed return here: the legacy loop fell through to swipe and
-    // button navigation after arming the confirmation.
-    showDeleteConfirmation();
   }
 
   return false;
@@ -183,12 +168,13 @@ void EpubReaderBookmarksActivity::showDeleteConfirmation() {
 
 void EpubReaderBookmarksActivity::deleteSelectedBookmark() {
   bookmarks.erase(bookmarks.begin() + nav.selected);
+  // Deleting shifts every later bookmark's index, so the cached subtitles and
+  // actionValues must be re-derived, not just trimmed — and before the SD
+  // save, so the render task never sees rows aliasing the erased storage.
+  rebuildBookmarkRowItems();
   if (!BookmarkFile::save(epubPath, bookmarks)) {
     LOG_ERR("EPB", "Failed to save bookmarks after delete");
   }
-  // Deleting shifts every later bookmark's index, so the cached subtitles and
-  // actionValues must be re-derived, not just trimmed.
-  rebuildBookmarkRowItems();
 
   // Move selector up if we deleted the last item
   if (nav.selected >= static_cast<int>(bookmarks.size()) && nav.selected > 0) {

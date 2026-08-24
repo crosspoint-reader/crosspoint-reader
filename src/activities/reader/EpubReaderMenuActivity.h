@@ -15,6 +15,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
     SELECT_CHAPTER,
     FOOTNOTES,
     TEXT_SETTINGS,
+    NIGHT_MODE,
+    FRONTLIGHT,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
@@ -43,20 +45,18 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks);
 
-  // Row storage: menuItems is at most MAX_MENU_ITEMS (1 fixed + FOOTNOTES +
-  // BOOKMARKS + 11 always-present rows in buildMenuItems()), so a
+  // Row storage: menuItems is at most MAX_MENU_ITEMS, so a
   // fixed-capacity array avoids any heap allocation for the row list. Labels
   // are set once in the constructor (buildMenuRowItems()); buildScreen()
-  // only refreshes the two rows whose value reflects live state (rotation,
-  // page-turn interval).
-  static constexpr size_t MAX_MENU_ITEMS = 14;
+  // only refreshes rows whose values reflect live state.
+  static constexpr size_t MAX_MENU_ITEMS = 16;
   freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
   void buildMenuRowItems();
 
   int listCount() const override { return static_cast<int>(menuItems.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  // Popup input/close-swallow runs before any button or touch handling.
+  // Popup input runs before any button or touch handling.
   bool handleCustomInput() override;
   // Back closes on RELEASE and Confirm activates on RELEASE; everything else
   // (row navigation, page jumps) falls through to the base handler.
@@ -70,9 +70,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   const std::vector<MenuItem> menuItems;
 
   OptionPopup optionPopup;
-  // True while the button press that closed the popup is still held; its release
-  // must not fall through to the menu's own Back/Confirm handlers.
-  bool popupClosing = false;
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
