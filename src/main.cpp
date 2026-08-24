@@ -365,6 +365,8 @@ void setup() {
   const auto wakeupReason = gpio.getWakeupReason();
   bool wakeInputSampled = false;
   bool recoveryButtonHeldAtWake = false;
+  const auto recoveryButton =
+      BoardConfig::isX4Pro() ? MappedInputManager::Button::Down : MappedInputManager::Button::Up;
   const bool hasReadablePowerButton = BoardConfig::ACTIVE.input.power >= 0;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !BoardConfig::isPaperMono() && hasReadablePowerButton) {
     // Require the physical power button to remain down through one debounced
@@ -377,8 +379,7 @@ void setup() {
       powerManager.startDeepSleep(gpio);
     }
     wakeInputSampled = true;
-    const uint8_t recoveryButton = BoardConfig::isX4Pro() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
-    recoveryButtonHeldAtWake = gpio.isPressed(recoveryButton);
+    recoveryButtonHeldAtWake = mappedInputManager.isPressed(recoveryButton);
   }
 
   halTiltSensor.begin();
@@ -424,9 +425,8 @@ void setup() {
       }
     }
 
-    const uint8_t recoveryButton = BoardConfig::isX4Pro() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
     if (!wakeInputSampled) {
-      recoveryButtonHeld = gpio.isPressed(recoveryButton);
+      recoveryButtonHeld = mappedInputManager.isPressed(recoveryButton);
     }
     if (recoveryButtonHeld) {
       recoveryFirmwareMode = true;
