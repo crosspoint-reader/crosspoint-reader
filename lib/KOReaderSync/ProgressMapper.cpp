@@ -172,9 +172,13 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
     XPathStep& step = steps[count];
     const size_t bracket = xpath.find('[', pos);
     const size_t nameEnd = (bracket != std::string::npos && bracket < segEnd) ? bracket : segEnd;
-    const size_t nameLen = nameEnd - pos;
+    size_t localNameStart = pos;
+    for (size_t i = pos; i < nameEnd; i++) {
+      if (xpath[i] == ':') localNameStart = i + 1;
+    }
+    const size_t nameLen = nameEnd - localNameStart;
     if (nameLen == 0 || nameLen >= sizeof(step.tag)) return 0;
-    memcpy(step.tag, xpath.c_str() + pos, nameLen);
+    memcpy(step.tag, xpath.c_str() + localNameStart, nameLen);
     step.tag[nameLen] = '\0';
 
     if (bracket != std::string::npos && bracket < segEnd) {
@@ -198,12 +202,35 @@ int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) 
 
 class ParagraphStreamer final : public Print {
   size_t bytesWritten = 0;
-  bool globalInTag = false;
   bool globalInEntity = false;
   static constexpr size_t MAX_ENTITY_SIZE = 16;
   char entityBuffer[MAX_ENTITY_SIZE] = {};
   size_t entityLen = 0;
   bool prevCR = false;  // last counted visible byte was a CR (XML line-ending normalization)
+  bool parseValid = true;
+
+  enum LexerState : uint8_t {
+    LEX_DATA,
+    LEX_AFTER_LT,
+    LEX_TAG_NAME,
+    LEX_TAG_ATTRS,
+    LEX_BANG,
+    LEX_COMMENT_PROBE,
+    LEX_CDATA_PROBE,
+    LEX_COMMENT,
+    LEX_PI,
+    LEX_CDATA,
+    LEX_DECLARATION
+  } lexerState = LEX_DATA;
+  uint8_t cdataProbePos = 0;
+  uint8_t commentDashCount = 0;
+  bool piQuestionPending = false;
+  uint8_t declarationSubsetDepth = 0;
+  bool declarationInQuote = false;
+  char declarationQuote = 0;
+  bool declarationInComment = false;
+  uint8_t declarationCommentDashCount = 0;
+  uint8_t declarationCommentProbe = 0;
 
   // Forward mode: count <p> paragraphs at a byte offset (legacy, used by generateXPath)
   size_t fwdTarget;
@@ -239,10 +266,13 @@ class ParagraphStreamer final : public Print {
   bool relaxFirstStepDepth = false;
 
   // Tag name accumulation
-  enum TagParseState { TAG_IDLE, TAG_IN_NAME, TAG_ATTRS } tagState = TAG_IDLE;
   bool tagIsClose = false;
   char tagName[12] = {};
   int tagNameLen = 0;
+  bool tagNameOverflow = false;
+  bool tagSelfClosing = false;
+  bool inUnquotedAttrValue = false;
+  bool awaitingAttrValue = false;
 
   int matchedDepth = 0;
 
@@ -267,6 +297,7 @@ class ParagraphStreamer final : public Print {
   uint8_t nonVisibleDepth = 0;
   bool insideBody = false;
   bool targetBodyText = false;
+  bool pendingTextNode = true;
 
   bool isNonVisibleTag() const { return VisibleTextUtils::isNonVisibleElement(tagName); }
 
@@ -275,6 +306,46 @@ class ParagraphStreamer final : public Print {
   static bool isAttrNameChar(uint8_t c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' ||
            c == ':' || c == '.';
+  }
+
+  static bool isTagNameDelimiter(uint8_t c) {
+    return c == '>' || c == '/' || c == ' ' || c == '\t' || c == '\n' || c == '\r';
+  }
+
+  void normalizeTagName() {
+    if (tagNameLen <= 0) return;
+    int localStart = 0;
+    for (int i = 0; i < tagNameLen; i++) {
+      if (tagName[i] == ':') localStart = i + 1;
+    }
+    if (localStart > 0) {
+      const int localLen = tagNameLen - localStart;
+      memmove(tagName, tagName + localStart, static_cast<size_t>(localLen));
+      tagNameLen = localLen;
+    }
+    tagName[tagNameLen] = '\0';
+  }
+
+  bool inTargetDirectText() const {
+    if (!revPFound || revDone || nonVisibleDepth > 0) return false;
+    return (stepCount > 0) ? (matchedDepth == stepCount && htmlDepth == stepEnteredAtDepth[stepCount - 1])
+                           : (paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth);
+  }
+
+  void markTextNodeBoundary() {
+    if (inTargetDirectText()) {
+      pendingTextNode = true;
+    }
+  }
+
+  void beginTextNodeIfNeeded() {
+    if (!inTargetDirectText() || !pendingTextNode) return;
+    pendingTextNode = false;
+    currentTextNode++;
+    if (revChar <= 0 && currentTextNode == targetTextNode) {
+      targetVisChars = totalVisChars;
+      revDone = true;
+    }
   }
 
   void resetAnchorAttrScan() {
@@ -394,6 +465,7 @@ class ParagraphStreamer final : public Print {
   }
 
   void onVisibleCodepoint() {
+    beginTextNodeIfNeeded();
     totalVisChars++;
     if (revPFound && !revDone) {
       // Ancestry mode: count only while inside the fully-matched element and in the target text node.
@@ -436,6 +508,8 @@ class ParagraphStreamer final : public Print {
       // decodes it to a single codepoint. Count one here too, not the raw "&#NNN" characters.
       onVisibleCodepoint();
     else
+      // DTD-defined entities are intentionally unsupported: only the built-in
+      // HTML table, numeric references, and literal fallback are allocation-free.
       flushEntityAsLiteral();
     globalInEntity = false;
     entityLen = 0;
@@ -447,7 +521,8 @@ class ParagraphStreamer final : public Print {
       revPFound = true;
       revVisChars = 0;
       paragraphHtmlDepth = htmlDepth;
-      currentTextNode = 1;
+      currentTextNode = 0;
+      pendingTextNode = true;
       if (revChar <= 0 && targetTextNode <= 1) {
         targetVisChars = totalVisChars;
         revDone = true;
@@ -464,7 +539,8 @@ class ParagraphStreamer final : public Print {
       if (targetBodyText) {
         revPFound = true;
         paragraphHtmlDepth = htmlDepth;
-        currentTextNode = 1;
+        currentTextNode = 0;
+        pendingTextNode = true;
         if (revChar <= 0 && targetTextNode <= 1) {
           targetVisChars = totalVisChars;
           revDone = true;
@@ -514,7 +590,8 @@ class ParagraphStreamer final : public Print {
             revPFound = true;
             capturedAnchorIdLen = 0;
             revVisChars = 0;
-            currentTextNode = 1;  // Reset text node counter for this element
+            currentTextNode = 0;  // Start the first text node lazily on visible content.
+            pendingTextNode = true;
             if (revChar <= 0 && targetTextNode <= 1) {
               targetVisChars = totalVisChars;
               revDone = true;
@@ -542,13 +619,10 @@ class ParagraphStreamer final : public Print {
       return;
     }
 
-    // Legacy mode: each direct child element closing advances the text node index.
+    // Element boundaries start a new text node lazily, so empty children do not
+    // manufacture text()[N] entries.
     if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth + 1) {
-      currentTextNode++;
-      if (currentTextNode == targetTextNode && revChar <= 0) {
-        targetVisChars = totalVisChars;
-        revDone = true;
-      }
+      pendingTextNode = true;
     }
     // Legacy mode: stop tracking when the matched paragraph itself closes.
     if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth) {
@@ -560,11 +634,7 @@ class ParagraphStreamer final : public Print {
     if (stepCount > 0 && matchedDepth == stepCount && revPFound && !revDone) {
       const int elementDepth = stepEnteredAtDepth[stepCount - 1];
       if (htmlDepth == elementDepth + 1) {
-        currentTextNode++;
-        if (currentTextNode == targetTextNode && revChar <= 0) {
-          targetVisChars = totalVisChars;
-          revDone = true;
-        }
+        pendingTextNode = true;
       }
     }
 
@@ -587,55 +657,311 @@ class ParagraphStreamer final : public Print {
     if (htmlDepth > 0) htmlDepth--;
   }
 
-  void processByteInTag(uint8_t c) {
-    switch (tagState) {
-      case TAG_IDLE:
+  void appendTagName(uint8_t c) {
+    // Keep only the local QName suffix so a long namespace prefix cannot consume
+    // the fixed buffer before the final ':' is seen.
+    if (c == ':') {
+      tagNameLen = 0;
+      tagNameOverflow = false;
+      return;
+    }
+    if (tagNameLen + 1 < static_cast<int>(sizeof(tagName))) {
+      tagName[tagNameLen++] = static_cast<char>(c);
+    } else {
+      tagNameOverflow = true;
+    }
+  }
+
+  void finishTagName() {
+    normalizeTagName();
+    if (tagNameLen == 0 || tagNameOverflow) {
+      parseValid = false;
+      return;
+    }
+    if (tagIsClose)
+      onCloseTag();
+    else
+      onOpenTag();
+  }
+
+  void finishTag() {
+    if (lexerState == LEX_TAG_NAME) {
+      finishTagName();
+    } else if (lexerState == LEX_TAG_ATTRS) {
+      endAnchorIdScan();
+    }
+    if (tagSelfClosing && !tagIsClose && !tagNameOverflow) onCloseTag();
+    lexerState = LEX_DATA;
+    tagNameLen = 0;
+    tagNameOverflow = false;
+    tagSelfClosing = false;
+    inAttrQuote = false;
+    attrQuoteChar = 0;
+    inUnquotedAttrValue = false;
+    awaitingAttrValue = false;
+    capturingAnchorTag = false;
+    resetAnchorAttrScan();
+  }
+
+  void beginDeclaration(uint8_t firstByte) {
+    lexerState = LEX_DECLARATION;
+    declarationSubsetDepth = 0;
+    declarationInQuote = false;
+    declarationQuote = 0;
+    declarationInComment = false;
+    declarationCommentDashCount = 0;
+    declarationCommentProbe = 0;
+    processDeclarationByte(firstByte);
+  }
+
+  void beginComment() {
+    lexerState = LEX_COMMENT;
+    commentDashCount = 0;
+    markTextNodeBoundary();
+  }
+
+  void beginProcessingInstruction() {
+    lexerState = LEX_PI;
+    piQuestionPending = false;
+    markTextNodeBoundary();
+  }
+
+  void beginCdata() {
+    lexerState = LEX_CDATA;
+    commentDashCount = 0;
+    markTextNodeBoundary();
+  }
+
+  void processDeclarationByte(uint8_t c) {
+    if (declarationInComment) {
+      if (c == '-') {
+        declarationCommentDashCount = std::min<uint8_t>(2, declarationCommentDashCount + 1);
+      } else if (c == '>' && declarationCommentDashCount >= 2) {
+        declarationInComment = false;
+        declarationCommentDashCount = 0;
+      } else {
+        declarationCommentDashCount = 0;
+      }
+      return;
+    }
+
+    if (declarationInQuote) {
+      if (c == declarationQuote) {
+        declarationInQuote = false;
+        declarationQuote = 0;
+      }
+      return;
+    }
+
+    if (declarationCommentProbe != 0) {
+      const uint8_t expected = declarationCommentProbe == 1 ? '!' : '-';
+      if (c == expected) {
+        if (declarationCommentProbe == 3) {
+          declarationInComment = true;
+          declarationCommentProbe = 0;
+          declarationCommentDashCount = 0;
+        } else {
+          declarationCommentProbe++;
+        }
+        return;
+      }
+      declarationCommentProbe = (c == '<') ? 1 : 0;
+    } else if (c == '<') {
+      declarationCommentProbe = 1;
+      return;
+    }
+
+    if (c == '"' || c == '\'') {
+      declarationInQuote = true;
+      declarationQuote = static_cast<char>(c);
+    } else if (c == '[') {
+      if (declarationSubsetDepth < UINT8_MAX) declarationSubsetDepth++;
+    } else if (c == ']') {
+      if (declarationSubsetDepth > 0) declarationSubsetDepth--;
+    } else if (c == '>' && declarationSubsetDepth == 0) {
+      lexerState = LEX_DATA;
+    }
+  }
+
+  void processTagAttributeByte(uint8_t c) {
+    if (inAttrQuote) {
+      if (c == attrQuoteChar) {
+        inAttrQuote = false;
+        attrQuoteChar = 0;
+      }
+    } else if (c == '"' || c == '\'') {
+      inAttrQuote = true;
+      attrQuoteChar = static_cast<char>(c);
+      inUnquotedAttrValue = false;
+      awaitingAttrValue = false;
+    } else if (isAttrWhitespace(c)) {
+      if (!awaitingAttrValue) inUnquotedAttrValue = false;
+    } else if (c == '=') {
+      awaitingAttrValue = true;
+    } else if (c == '/' && !inUnquotedAttrValue && !awaitingAttrValue) {
+      // Defer the close callback until '>'. A slash in a quoted or unquoted
+      // value therefore cannot corrupt element depth.
+      tagSelfClosing = true;
+      if (capturingAnchorTag) scanAnchorAttribute(c);
+      return;
+    } else {
+      if (tagSelfClosing) tagSelfClosing = false;
+      if (awaitingAttrValue) {
+        inUnquotedAttrValue = true;
+        awaitingAttrValue = false;
+      }
+    }
+    if (capturingAnchorTag) scanAnchorAttribute(c);
+  }
+
+  void processVisibleByte(uint8_t c, bool decodeEntities, bool afterCR) {
+    if (decodeEntities && globalInEntity) {
+      if (c == ';') {
+        if (entityLen + 1 < MAX_ENTITY_SIZE) entityBuffer[entityLen++] = static_cast<char>(c);
+        finishEntity();
+        return;
+      }
+      if (c == '<' || isAttrWhitespace(c) || entityLen + 1 >= MAX_ENTITY_SIZE) {
+        flushEntityAsLiteral();
+        globalInEntity = false;
+        entityLen = 0;
+        if (c != '<') return;
+      } else {
+        entityBuffer[entityLen++] = static_cast<char>(c);
+        return;
+      }
+    }
+    if (decodeEntities && c == '&') {
+      globalInEntity = true;
+      entityBuffer[0] = '&';
+      entityLen = 1;
+      return;
+    }
+    if (c == '\n' && afterCR) return;
+    const bool startsCodepoint = (c & 0xC0) != 0x80;
+    if (startsCodepoint) onVisibleCodepoint();
+    prevCR = c == '\r';
+  }
+
+  void processLexerByte(uint8_t c, bool afterCR) {
+    switch (lexerState) {
+      case LEX_AFTER_LT:
         if (c == '/') {
           tagIsClose = true;
-          tagState = TAG_IN_NAME;
-        } else if (c != '!' && c != '?') {
-          tagIsClose = false;
-          tagName[0] = static_cast<char>(c);
-          tagNameLen = 1;
-          tagState = TAG_IN_NAME;
-        }
-        break;
-      case TAG_IN_NAME:
-        if (c == '>' || c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '/') {
-          tagName[tagNameLen] = '\0';
-          if (tagNameLen > 0) {
-            if (tagIsClose)
-              onCloseTag();
-            else
-              onOpenTag();
-            // Self-closing open tag (<br/>). Don't double-fire for close tags (</br/>).
-            if (c == '/' && !tagIsClose) onCloseTag();
-          }
           tagNameLen = 0;
-          tagState = (c == '>') ? TAG_IDLE : TAG_ATTRS;
-        } else if (tagNameLen + 1 < static_cast<int>(sizeof(tagName))) {
-          tagName[tagNameLen++] = static_cast<char>(c);
+          tagNameOverflow = false;
+          tagSelfClosing = false;
+          lexerState = LEX_TAG_NAME;
+        } else if (c == '?') {
+          beginProcessingInstruction();
+        } else if (c == '!') {
+          lexerState = LEX_BANG;
+        } else if (c == '>') {
+          parseValid = false;
+          lexerState = LEX_DATA;
+        } else {
+          tagIsClose = false;
+          tagNameLen = 0;
+          tagNameOverflow = false;
+          tagSelfClosing = false;
+          appendTagName(c);
+          lexerState = LEX_TAG_NAME;
         }
         break;
-      case TAG_ATTRS:
-        // Track quoted attribute values so '/' inside them is not mistaken for self-closing.
-        if (!inAttrQuote) {
-          if (c == '"' || c == '\'') {
-            inAttrQuote = true;
-            attrQuoteChar = c;
+      case LEX_BANG:
+        if (c == '-') {
+          lexerState = LEX_COMMENT_PROBE;
+        } else if (c == '[') {
+          cdataProbePos = 0;
+          lexerState = LEX_CDATA_PROBE;
+        } else {
+          beginDeclaration(c);
+        }
+        break;
+      case LEX_COMMENT_PROBE:
+        if (c == '-')
+          beginComment();
+        else
+          beginDeclaration(c);
+        break;
+      case LEX_CDATA_PROBE: {
+        static constexpr char kCdata[] = "CDATA[";
+        if (c == static_cast<uint8_t>(kCdata[cdataProbePos])) {
+          cdataProbePos++;
+          if (cdataProbePos == sizeof(kCdata) - 1) beginCdata();
+        } else {
+          beginDeclaration(c);
+        }
+        break;
+      }
+      case LEX_TAG_NAME:
+        if (isTagNameDelimiter(c)) {
+          if (c == '>') {
+            finishTag();
+          } else {
+            finishTagName();
+            lexerState = LEX_TAG_ATTRS;
+            if (c == '/') tagSelfClosing = !tagIsClose;
           }
-        } else if (c == attrQuoteChar) {
-          inAttrQuote = false;
-          attrQuoteChar = 0;
+        } else {
+          appendTagName(c);
         }
-        if (capturingAnchorTag) {
-          scanAnchorAttribute(c);
+        break;
+      case LEX_TAG_ATTRS:
+        if (c == '>' && !inAttrQuote)
+          finishTag();
+        else
+          processTagAttributeByte(c);
+        break;
+      case LEX_COMMENT:
+        if (c == '-') {
+          commentDashCount = std::min<uint8_t>(2, commentDashCount + 1);
+        } else if (c == '>' && commentDashCount >= 2) {
+          lexerState = LEX_DATA;
+          commentDashCount = 0;
+          markTextNodeBoundary();
+        } else {
+          commentDashCount = 0;
         }
-        // Only treat '/' as self-closing when outside a quoted attribute value.
-        if (c == '/' && !inAttrQuote) {
-          endAnchorIdScan();
-          onCloseTag();
+        break;
+      case LEX_PI:
+        if (c == '?') {
+          piQuestionPending = true;
+        } else if (c == '>' && piQuestionPending) {
+          lexerState = LEX_DATA;
+          piQuestionPending = false;
+          markTextNodeBoundary();
+        } else {
+          piQuestionPending = false;
         }
+        break;
+      case LEX_CDATA:
+        if (c == ']') {
+          if (commentDashCount == 2 && insideBody && nonVisibleDepth == 0) {
+            processVisibleByte(']', false, afterCR);
+          }
+          commentDashCount = std::min<uint8_t>(2, commentDashCount + 1);
+        } else if (c == '>' && commentDashCount >= 2) {
+          lexerState = LEX_DATA;
+          commentDashCount = 0;
+          markTextNodeBoundary();
+        } else {
+          if (insideBody && nonVisibleDepth == 0) {
+            bool pendingAfterCR = afterCR;
+            for (uint8_t i = 0; i < commentDashCount; i++) {
+              processVisibleByte(']', false, pendingAfterCR);
+              pendingAfterCR = prevCR;
+            }
+            processVisibleByte(c, false, pendingAfterCR);
+          }
+          commentDashCount = 0;
+        }
+        break;
+      case LEX_DECLARATION:
+        processDeclarationByte(c);
+        break;
+      case LEX_DATA:
+        processVisibleByte(c, true, afterCR);
         break;
     }
   }
@@ -654,9 +980,9 @@ class ParagraphStreamer final : public Print {
                     bool relaxFirstStep = false)
       : fwdTarget(SIZE_MAX),
         revChar(charOff),
+        targetTextNode(textNodeIdx),
         steps(xpathSteps),
         stepCount(xpathStepCount),
-        targetTextNode(textNodeIdx),
         relaxFirstStepDepth(relaxFirstStep) {
     memset(stepEnteredAtDepth, -1, sizeof(stepEnteredAtDepth));
   }
@@ -672,75 +998,31 @@ class ParagraphStreamer final : public Print {
       fwdCaptured = true;
     }
     bytesWritten++;
-
-    if (globalInEntity) {
-      if (entityLen + 1 < MAX_ENTITY_SIZE) {
-        entityBuffer[entityLen++] = static_cast<char>(c);
-      } else {
-        flushEntityAsLiteral();
-        globalInEntity = false;
-        entityLen = 0;
-      }
-      if (globalInEntity) {
-        if (c == ';') {
-          finishEntity();
-        } else if (c == '<' || c == ' ' || c == '\t' || c == '\n' || c == '\r') {
+    const bool afterCR = prevCR;
+    prevCR = false;
+    if (lexerState == LEX_DATA) {
+      if (c == '<') {
+        if (globalInEntity) {
           flushEntityAsLiteral();
           globalInEntity = false;
           entityLen = 0;
         }
-      }
-      return 1;
-    }
-
-    // XML 1.0 §2.11 line-ending normalization: expat (which builds the page LUT) collapses a
-    // "\r\n" pair and a lone "\r" to a single "\n". Mirror that so this byte counter -- which the
-    // resolved offset is measured against -- stays codepoint-for-codepoint identical. prevCR is
-    // set only by the visible-text branch below, so any non-text byte clears it here.
-    const bool afterCR = prevCR;
-    prevCR = false;
-
-    if (c == '<') {
-      globalInTag = true;
-      tagState = TAG_IDLE;
-      tagNameLen = 0;
-      tagIsClose = false;
-      capturingAnchorTag = false;
-      resetAnchorAttrScan();
-      inAttrQuote = false;
-      attrQuoteChar = 0;
-    } else if (c == '>') {
-      if (tagState == TAG_ATTRS) {
-        endAnchorIdScan();
-      }
-      globalInTag = false;
-      inAttrQuote = false;
-      if (tagState == TAG_IN_NAME && tagNameLen > 0) {
-        tagName[tagNameLen] = '\0';
-        if (tagIsClose)
-          onCloseTag();
-        else
-          onOpenTag();
+        lexerState = LEX_AFTER_LT;
         tagNameLen = 0;
+        tagNameOverflow = false;
+        tagIsClose = false;
+        tagSelfClosing = false;
+        capturingAnchorTag = false;
+        resetAnchorAttrScan();
+        inAttrQuote = false;
+        attrQuoteChar = 0;
+        inUnquotedAttrValue = false;
+        awaitingAttrValue = false;
+      } else if (insideBody && nonVisibleDepth == 0) {
+        processVisibleByte(c, true, afterCR);
       }
-      tagState = TAG_IDLE;
-    } else if (globalInTag) {
-      processByteInTag(c);
-    } else if (!insideBody || nonVisibleDepth > 0) {
-      // Ignore head/style/script/title text. KOReader XPaths are body-relative, and CSS text
-      // should not contribute to intra-spine progress.
     } else {
-      if (c == '&') {
-        globalInEntity = true;
-        entityBuffer[0] = '&';
-        entityLen = 1;
-      } else if (c == '\n' && afterCR) {
-        // Second half of a CRLF: the newline was already counted on the preceding CR.
-      } else {
-        const bool startsCodepoint = (c & 0xC0) != 0x80;
-        if (startsCodepoint) onVisibleCodepoint();
-        prevCR = (c == '\r');  // a lone/leading CR is the newline; swallow any '\n' that follows
-      }
+      processLexerByte(c, afterCR);
     }
     return 1;
   }
@@ -750,12 +1032,17 @@ class ParagraphStreamer final : public Print {
     return size;
   }
 
+  bool finish() {
+    if (globalInEntity || lexerState != LEX_DATA) parseValid = false;
+    return parseValid;
+  }
+
   int paragraphCount() const { return fwdCaptured ? fwdResult : pCount; }
   int getParagraphAtMatch() const { return paragraphAtMatch; }
   int getListItemAtMatch() const { return liCountAtMatch; }
   const char* getCapturedAnchorId() const { return capturedAnchorIdLen > 0 ? capturedAnchorId : nullptr; }
   size_t totalBytes() const { return bytesWritten; }
-  bool found() const { return revDone; }
+  bool found() const { return parseValid && revDone; }
   size_t getTotalVisChars() const { return totalVisChars; }
   size_t getTargetVisChars() const { return targetVisChars; }
   float progress() const {
@@ -765,7 +1052,7 @@ class ParagraphStreamer final : public Print {
 
 bool streamSpine(const std::shared_ptr<Epub>& epub, int spineIndex, ParagraphStreamer& s) {
   const auto href = epub->getSpineItem(spineIndex).href;
-  return !href.empty() && epub->readItemContentsToStream(href, s, 1024);
+  return !href.empty() && epub->readItemContentsToStream(href, s, 1024) && s.finish();
 }
 }  // namespace
 
