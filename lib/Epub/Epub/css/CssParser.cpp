@@ -20,10 +20,10 @@ struct StackBuffer {
   char data[CAPACITY];
   size_t len = 0;
 
-  void push_back(char c) {
-    if (len < CAPACITY - 1) {
-      data[len++] = c;
-    }
+  bool push_back(char c) {
+    if (len >= CAPACITY) return false;
+    data[len++] = c;
+    return true;
   }
 
   void clear() { len = 0; }
@@ -754,6 +754,9 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
 
   int bodyDepth = 0;
   bool skippingRule = false;
+  bool selectorTruncated = false;
+  bool declarationTruncated = false;
+  bool inputTruncated = false;
   CssStyle currentStyle;
 
   auto handleChar = [&](const char c) {
@@ -782,12 +785,13 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
         bodyDepth = 1;
         currentStyle = CssStyle{};
         declBuffer.clear();
-        if (selector.size() > MAX_SELECTOR_LENGTH * 4) {
-          skippingRule = true;
-        }
+        skippingRule = selectorTruncated || selector.size() > MAX_SELECTOR_LENGTH * 4;
         return;
       }
-      selector.push_back(c);
+      if (!selector.push_back(c)) {
+        selectorTruncated = true;
+        inputTruncated = true;
+      }
       return;
     }
 
@@ -799,7 +803,7 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
     if (c == '}') {
       --bodyDepth;
       if (bodyDepth == 0) {
-        if (!skippingRule && !declBuffer.empty()) {
+        if (!skippingRule && !declarationTruncated && !declBuffer.empty()) {
           parseDeclarationIntoStyle(declBuffer, currentStyle);
         }
         if (!skippingRule) {
@@ -808,6 +812,8 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
         selector.clear();
         declBuffer.clear();
         skippingRule = false;
+        selectorTruncated = false;
+        declarationTruncated = false;
         return;
       }
       return;
@@ -817,12 +823,16 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
     }
     if (!skippingRule) {
       if (c == ';') {
-        if (!declBuffer.empty()) {
+        if (!declarationTruncated && !declBuffer.empty()) {
           parseDeclarationIntoStyle(declBuffer, currentStyle);
-          declBuffer.clear();
         }
+        declBuffer.clear();
+        declarationTruncated = false;
       } else {
-        declBuffer.push_back(c);
+        if (!declBuffer.push_back(c)) {
+          declarationTruncated = true;
+          inputTruncated = true;
+        }
       }
     }
   };
@@ -872,8 +882,11 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
     handleChar('/');
   }
 
+  if (inputTruncated) {
+    LOG_ERR("CSS", "CSS input exceeded parser buffer; cache will remain partial");
+  }
   LOG_DBG("CSS", "Parsed %zu rules from %zu bytes", ruleCount(), totalRead);
-  return ruleGrowthStopped_ ? ParseResult::Partial : ParseResult::Complete;
+  return ruleGrowthStopped_ || inputTruncated ? ParseResult::Partial : ParseResult::Complete;
 }
 
 // Style resolution

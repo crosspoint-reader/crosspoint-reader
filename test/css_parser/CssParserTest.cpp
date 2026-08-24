@@ -130,6 +130,28 @@ TEST_F(CssParserTest, RepeatedOverridesReuseAnUnsharedStyleSlot) {
   EXPECT_FLOAT_EQ(parser.resolveStyle("p", "same").textIndent.value, static_cast<float>(kMaxUniqueStyles + 20));
 }
 
+TEST_F(CssParserTest, OversizedSelectorGroupMarksParsePartialAndSkipsRule) {
+  CssParser parser(cachePath());
+  const std::string css = "." + std::string(1100, 'a') +
+                          " { font-weight: bold; }\n"
+                          ".valid { font-style: italic; }\n";
+
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Partial);
+  EXPECT_EQ(parser.ruleCount(), 1u);
+  EXPECT_EQ(parser.resolveStyle("span", "valid").fontStyle, CssFontStyle::Italic);
+}
+
+TEST_F(CssParserTest, OversizedDeclarationMarksParsePartialAndKeepsFollowingDeclarations) {
+  CssParser parser(cachePath());
+  const std::string css = ".long { font-weight: " + std::string(1100, 'x') + "; font-style: italic; }\n";
+
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Partial);
+  EXPECT_EQ(parser.ruleCount(), 1u);
+  const CssStyle style = parser.resolveStyle("span", "long");
+  EXPECT_FALSE(style.hasFontWeight());
+  EXPECT_EQ(style.fontStyle, CssFontStyle::Italic);
+}
+
 TEST_F(CssParserTest, CanonicalCacheRoundTripPreservesStyles) {
   CssParser writer(cachePath());
   ASSERT_EQ(loadCss(writer,
