@@ -30,8 +30,11 @@ from a computer. All three roots are scanned; on a name collision the earlier
 root in that order wins.
 
 A plugin can ship any combination: `plugin.js` alone (web-only),
-`device.json` alone (on-device only), or both (e.g. sign in from either side,
-browse on the reader).
+`device.json` alone (on-device only), or both. A `device.json` may declare only
+`events` and omit `browse.url`; that is a valid background/events plugin. It is
+listed with its title and description (and may document setup in `README.md`),
+and selecting it opens that README when present. It has no catalog action and
+is never sent into the catalog error flow.
 
 The plugin sources and examples live in the separate `sd-plugins` repository,
 which also documents the browser-side `plugin.js` API. This document covers the
@@ -89,13 +92,18 @@ api.registerAction('myaction', async (args) => {
 });
 ```
 
-## Surface 3: on-device catalog screens (`device.json`)
+## Surface 3: on-device manifests and catalog screens (`device.json`)
 
 A declarative manifest the firmware's generic `PluginCatalogActivity` renders
 under **Settings → System → Plugins**. It expresses "authenticated JSON
 catalog: sign in, browse, download, sidecar" — enough for most book services —
 without any code running on the device. Anything beyond this vocabulary
 belongs in `plugin.js`.
+
+`browse.url` makes the manifest an openable catalog. An `events` section
+without `browse.url` instead makes it a background/events manifest: discovery
+keeps its title/description/README semantics, while the picker deliberately
+does not open it as a catalog. A manifest may combine both sections.
 
 The firmware piece (service-agnostic, in `src/activities/plugins/`):
 `PluginCatalogActivity`, one activity that opens as a picker over the
@@ -145,7 +153,7 @@ Two browse formats:
 
   "browse": {                               // required
     "format": "json",                       // or "xml"
-    "url": "https://.../search",
+    "url": "https://.../search",             // required only for an openable catalog
     "method": "POST",                       // default GET
     "headers": { "Authorization": "Bearer {token}" },
     "body": "{\"page\":{page},\"per_page\":{limit}}",
@@ -286,8 +294,8 @@ Two browse formats:
 
 ## Surface 4: firmware events and the book metadata sidecar
 
-The firmware can record whitelisted moments (a reading session ended, the
-device is entering sleep, a catalog download finished) into a per-plugin queue
+The firmware can record whitelisted moments (`reader.session`, sleep entry, a
+catalog download finished) into a per-plugin queue
 and later replay them through HTTP request templates declared in
 `device.json` — including bounded WiFi bring-up at sleep entry for handlers
 that opt in. A companion convention, the `<book path>.meta.json` sidecar,

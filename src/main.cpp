@@ -285,6 +285,10 @@ static bool loadSleepFrameBuffer() {
 // either way. Deferrable events already queued (reader.exit) ride along in
 // the same drain.
 static void deliverSleepPluginEvents() {
+  // Activity-owned state must be queued before sleep.enter and before this
+  // same-sleep drain. The hook is idempotent with ordinary activity teardown.
+  activityManager.prepareForSleep();
+
   // Sleeping straight out of a book is the common flow, but the reader's own
   // reader.exit only fires later, inside goToSleep() — after this drain. Carry
   // the book and progress on sleep.enter itself so a sync handler bound to it
@@ -301,23 +305,33 @@ static void deliverSleepPluginEvents() {
   pluginevents::emit(pluginevents::Event::SleepEnter, vars, varCount);
   if (WiFi.status() == WL_CONNECTED) {
     pluginevents::drain(&renderer);
-  } else if (pluginevents::wantsConnect(pluginevents::Event::SleepEnter) && powerManager.getBatteryPercentage() >= 20) {
-    const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
-    if (cred) {
-      GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-      WiFi.mode(WIFI_STA);
-      WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
-      const unsigned long joinDeadline = millis() + 10000;
-      while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
-        delay(100);
-      }
-      if (WiFi.status() == WL_CONNECTED) {
-        trustedtime::startSync();  // snap the clock floor while the network is up
-        pluginevents::drain(&renderer);
-      } else {
-        LOG_DBG("MAIN", "Sleep-event WiFi join timed out; deferring delivery");
-      }
-    }
+    return;
+  }
+  // wantsConnectAny(), not wantsConnect(SleepEnter). This change adds a fifth
+  // event, reader.session, which is queued during the reading turn and drained
+  // on this same sleep. Gating the join on SleepEnter alone would leave a
+  // reader.session subscriber undelivered whenever nothing subscribed to
+  // sleep.enter itself, which is the common case for a progress-sync plugin.
+  //
+  // Structure follows upstream's early-return form from "Simplify sleep.enter
+  // WiFi connection logic"; only the predicate is widened.
+  if (!pluginevents::wantsConnectAny()) return;
+  if (powerManager.getBatteryPercentage() < 20) return;
+  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+  if (!cred) return;
+
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  const unsigned long joinDeadline = millis() + 10000;
+  while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
+    delay(100);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    trustedtime::startSync();  // snap the clock floor while the network is up
+    pluginevents::drain(&renderer);
+  } else {
+    LOG_DBG("MAIN", "Sleep-event WiFi join timed out; deferring delivery");
   }
 }
 

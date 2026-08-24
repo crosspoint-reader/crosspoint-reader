@@ -9,6 +9,7 @@
 #include "activities/CatalogActivity.h"
 #include "network/HttpDownloader.h"
 #include "util/PluginHttp.h"
+#include "util/PluginLocations.h"
 
 class HalFile;
 namespace freeink {
@@ -21,6 +22,8 @@ struct PluginRef {
   std::string title;         // from device.json or manifest.json (falls back to name)
   std::string description;   // one-line summary, if provided
   std::string manifestPath;  // device.json path, "" for a web-only plugin
+  std::string readmePath;    // README.md path when present
+  PluginLocations::DeviceKind deviceKind = PluginLocations::DeviceKind::None;
 };
 
 // Rescan plugin roots on demand; metadata is owned by the picker.
