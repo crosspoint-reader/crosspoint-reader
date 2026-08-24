@@ -32,9 +32,7 @@ class HalFile {
     return static_cast<int>(std::fread(buffer, 1, count, file_));
   }
 
-  size_t write(const void* buffer, size_t count) {
-    return file_ ? std::fwrite(buffer, 1, count, file_) : 0;
-  }
+  size_t write(const void* buffer, size_t count) { return file_ ? std::fwrite(buffer, 1, count, file_) : 0; }
 
   size_t write(uint8_t byte) { return write(&byte, 1); }
 
@@ -73,9 +71,7 @@ class HalStorage {
   bool openFileForRead(const char*, const char* path, HalFile& file) { return file.open(path, "rb"); }
   bool openFileForRead(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "rb"); }
   bool openFileForWrite(const char*, const char* path, HalFile& file) { return file.open(path, "wb"); }
-  bool openFileForWrite(const char*, const std::string& path, HalFile& file) {
-    return file.open(path.c_str(), "wb");
-  }
+  bool openFileForWrite(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "wb"); }
 };
 
 #define Storage HalStorage::getInstance()
