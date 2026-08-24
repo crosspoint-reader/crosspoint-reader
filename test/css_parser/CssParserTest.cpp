@@ -1,8 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
+#include <vector>
 
 #include "CssParser.h"
 
@@ -12,6 +15,10 @@ namespace {
 
 constexpr size_t kMaxRules = 1500;
 constexpr size_t kMaxUniqueStyles = 256;
+constexpr size_t kCacheHeaderBytes = sizeof(uint8_t) * 2 + sizeof(uint16_t);
+constexpr size_t kStyleEnumPrefixBytes = 5;
+constexpr size_t kStyleLengthFieldCount = 11;
+constexpr size_t kStyleLengthBytes = sizeof(decltype(CssLength::value)) + sizeof(uint8_t);
 
 class CssParserTest : public ::testing::Test {
  protected:
@@ -26,6 +33,16 @@ class CssParserTest : public ::testing::Test {
 
   std::string cachePath() const { return directory_.string(); }
   fs::path cacheFile() const { return directory_ / "css_rules.cache"; }
+
+  std::vector<uint8_t> readCache() const {
+    std::ifstream input(cacheFile(), std::ios::binary);
+    return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  }
+
+  void writeCache(const std::vector<uint8_t>& bytes) const {
+    std::ofstream output(cacheFile(), std::ios::binary | std::ios::trunc);
+    output.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  }
 
   CssParser::ParseResult loadCss(CssParser& parser, const std::string& css) const {
     const fs::path sourcePath = directory_ / "input.css";
@@ -67,7 +84,7 @@ TEST_F(CssParserTest, DeduplicatedStylesReachTheBoundedRuleCap) {
     css += ".class-" + std::to_string(i) + " { font-weight: bold; text-indent: 1.5em; }\n";
   }
 
-  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::DegradedLowHeap);
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Partial);
   EXPECT_EQ(parser.ruleCount(), kMaxRules);
   EXPECT_EQ(parser.resolveStyle("div", "class-1499").fontWeight, CssFontWeight::Bold);
   EXPECT_FALSE(parser.resolveStyle("div", "class-1500").hasFontWeight());
@@ -81,7 +98,7 @@ TEST_F(CssParserTest, CascadeUpdatesContinueAfterRuleCap) {
   }
   css += ".class-1499 { font-style: italic; }\n";
 
-  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::DegradedLowHeap);
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Partial);
   EXPECT_EQ(parser.ruleCount(), kMaxRules);
   const CssStyle style = parser.resolveStyle("div", "class-1499");
   EXPECT_EQ(style.fontWeight, CssFontWeight::Bold);
@@ -95,7 +112,7 @@ TEST_F(CssParserTest, UniqueStyleCapStopsWithoutCorruptingAcceptedRules) {
     css += ".unique-" + std::to_string(i) + " { text-indent: " + std::to_string(i + 1) + "px; }\n";
   }
 
-  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::DegradedLowHeap);
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Partial);
   EXPECT_EQ(parser.ruleCount(), kMaxUniqueStyles);
   EXPECT_FLOAT_EQ(parser.resolveStyle("p", "unique-255").textIndent.value, 256.0f);
   EXPECT_FALSE(parser.resolveStyle("p", "unique-256").hasTextIndent());
@@ -156,6 +173,37 @@ TEST_F(CssParserTest, CompleteCacheDefersPayloadValidationToHydration) {
   CssParser reader(cachePath());
   EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
   EXPECT_TRUE(reader.empty());
+}
+
+TEST_F(CssParserTest, CacheHydrationRejectsInvalidStyleEnumBytes) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, ".a { font-weight: bold; margin-top: 2em; }\n"), CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+
+  const std::vector<uint8_t> validCache = readCache();
+  ASSERT_GE(validCache.size(), kCacheHeaderBytes + sizeof(uint16_t));
+  uint16_t selectorLength = 0;
+  memcpy(&selectorLength, validCache.data() + kCacheHeaderBytes, sizeof(selectorLength));
+  const size_t styleOffset = kCacheHeaderBytes + sizeof(selectorLength) + selectorLength;
+
+  std::vector<size_t> enumOffsets = {0, 1, 2, 3, 4};
+  for (size_t i = 0; i < kStyleLengthFieldCount; ++i) {
+    enumOffsets.push_back(kStyleEnumPrefixBytes + i * kStyleLengthBytes + sizeof(decltype(CssLength::value)));
+  }
+  enumOffsets.push_back(kStyleEnumPrefixBytes + kStyleLengthFieldCount * kStyleLengthBytes);
+  enumOffsets.push_back(kStyleEnumPrefixBytes + kStyleLengthFieldCount * kStyleLengthBytes + 1);
+
+  for (const size_t enumOffset : enumOffsets) {
+    SCOPED_TRACE(enumOffset);
+    std::vector<uint8_t> corruptedCache = validCache;
+    ASSERT_LT(styleOffset + enumOffset, corruptedCache.size());
+    corruptedCache[styleOffset + enumOffset] = 0xff;
+    writeCache(corruptedCache);
+
+    CssParser reader(cachePath());
+    EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
+    EXPECT_TRUE(reader.empty());
+  }
 }
 
 }  // namespace

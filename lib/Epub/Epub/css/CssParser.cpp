@@ -207,30 +207,44 @@ void encodeStyleWire(const CssStyle& style, uint8_t (&out)[STYLE_WIRE_BYTES]) {
 
 bool decodeStyleWire(const uint8_t (&in)[STYLE_WIRE_BYTES], CssStyle& style) {
   size_t offset = 0;
-  style.textAlign = static_cast<CssTextAlign>(in[offset++]);
-  style.fontStyle = static_cast<CssFontStyle>(in[offset++]);
-  style.fontWeight = static_cast<CssFontWeight>(in[offset++]);
-  style.textDecoration = static_cast<CssTextDecoration>(in[offset++] & CSS_TEXT_DECORATION_MASK);
-  style.direction = static_cast<CssTextDirection>(in[offset++]);
+  const uint8_t textAlign = in[offset++];
+  const uint8_t fontStyle = in[offset++];
+  const uint8_t fontWeight = in[offset++];
+  const uint8_t textDecoration = in[offset++];
+  const uint8_t direction = in[offset++];
+  if (textAlign > static_cast<uint8_t>(CssTextAlign::None) || fontStyle > static_cast<uint8_t>(CssFontStyle::Italic) ||
+      fontWeight > static_cast<uint8_t>(CssFontWeight::Bold) || (textDecoration & ~CSS_TEXT_DECORATION_MASK) != 0 ||
+      direction > static_cast<uint8_t>(CssTextDirection::Rtl)) {
+    return false;
+  }
+  style.textAlign = static_cast<CssTextAlign>(textAlign);
+  style.fontStyle = static_cast<CssFontStyle>(fontStyle);
+  style.fontWeight = static_cast<CssFontWeight>(fontWeight);
+  style.textDecoration = static_cast<CssTextDecoration>(textDecoration);
+  style.direction = static_cast<CssTextDirection>(direction);
 
   const auto getLength = [&in, &offset](CssLength& length) {
     memcpy(&length.value, in + offset, sizeof(length.value));
     offset += sizeof(length.value);
-    length.unit = static_cast<CssUnit>(in[offset++]);
+    const uint8_t unit = in[offset++];
+    if (unit > static_cast<uint8_t>(CssUnit::Percent)) return false;
+    length.unit = static_cast<CssUnit>(unit);
+    return true;
   };
-  getLength(style.textIndent);
-  getLength(style.marginTop);
-  getLength(style.marginBottom);
-  getLength(style.marginLeft);
-  getLength(style.marginRight);
-  getLength(style.paddingTop);
-  getLength(style.paddingBottom);
-  getLength(style.paddingLeft);
-  getLength(style.paddingRight);
-  getLength(style.imageHeight);
-  getLength(style.imageWidth);
-  style.display = static_cast<CssDisplay>(in[offset++]);
-  style.verticalAlign = static_cast<CssVerticalAlign>(in[offset++]);
+  if (!getLength(style.textIndent) || !getLength(style.marginTop) || !getLength(style.marginBottom) ||
+      !getLength(style.marginLeft) || !getLength(style.marginRight) || !getLength(style.paddingTop) ||
+      !getLength(style.paddingBottom) || !getLength(style.paddingLeft) || !getLength(style.paddingRight) ||
+      !getLength(style.imageHeight) || !getLength(style.imageWidth)) {
+    return false;
+  }
+
+  const uint8_t display = in[offset++];
+  const uint8_t verticalAlign = in[offset++];
+  if (display > static_cast<uint8_t>(CssDisplay::None) || verticalAlign > static_cast<uint8_t>(CssVerticalAlign::Sub)) {
+    return false;
+  }
+  style.display = static_cast<CssDisplay>(display);
+  style.verticalAlign = static_cast<CssVerticalAlign>(verticalAlign);
 
   uint32_t definedBits = 0;
   memcpy(&definedBits, in + offset, sizeof(definedBits));
@@ -859,7 +873,7 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
   }
 
   LOG_DBG("CSS", "Parsed %zu rules from %zu bytes", ruleCount(), totalRead);
-  return ruleGrowthStopped_ ? ParseResult::DegradedLowHeap : ParseResult::Complete;
+  return ruleGrowthStopped_ ? ParseResult::Partial : ParseResult::Complete;
 }
 
 // Style resolution

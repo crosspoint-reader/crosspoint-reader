@@ -300,7 +300,7 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
       LOG_ERR("EBP", "Insufficient heap for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
               MIN_HEAP_FOR_CSS_PARSING, cssPath.c_str());
       if (parseResult == CssParser::ParseResult::Complete) {
-        parseResult = CssParser::ParseResult::DegradedLowHeap;
+        parseResult = CssParser::ParseResult::Partial;
       }
       continue;
     }
@@ -311,6 +311,9 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
       if (cssFileSize > MAX_CSS_FILE_SIZE) {
         LOG_ERR("EBP", "CSS file too large (%zu bytes > %zu max), skipping: %s", cssFileSize, MAX_CSS_FILE_SIZE,
                 cssPath.c_str());
+        if (parseResult == CssParser::ParseResult::Complete) {
+          parseResult = CssParser::ParseResult::Partial;
+        }
         continue;
       }
     }
@@ -347,9 +350,8 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
     Storage.remove(tmpCssPath.c_str());
     if (streamResult == CssParser::ParseResult::Error) {
       parseResult = CssParser::ParseResult::Error;
-    } else if (streamResult == CssParser::ParseResult::DegradedLowHeap &&
-               parseResult == CssParser::ParseResult::Complete) {
-      parseResult = CssParser::ParseResult::DegradedLowHeap;
+    } else if (streamResult == CssParser::ParseResult::Partial && parseResult == CssParser::ParseResult::Complete) {
+      parseResult = CssParser::ParseResult::Partial;
     }
   }
 
@@ -359,19 +361,19 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
     return parseResult;
   }
 
-  if (parseResult == CssParser::ParseResult::DegradedLowHeap && cssParser->empty()) {
+  if (parseResult == CssParser::ParseResult::Partial && cssParser->empty()) {
     LOG_ERR("EBP", "CSS parsing stopped before any usable rules were loaded; cache will not be replaced");
     cssParser->clear();
     return CssParser::ParseResult::Error;
   }
 
-  if (parseResult == CssParser::ParseResult::DegradedLowHeap && hasPartialCache) {
+  if (parseResult == CssParser::ParseResult::Partial && hasPartialCache) {
     LOG_DBG("EBP", "CSS retry remained partial; preserving the previous partial cache");
     cssParser->clear();
     return parseResult;
   }
 
-  // A degraded cache remains useful for this session, but its header ensures a
+  // A partial cache remains useful for this session, but its header ensures a
   // later EPUB load retries the source stylesheets when more heap is available.
   if (!cssParser->saveToCache(parseResult == CssParser::ParseResult::Complete)) {
     LOG_ERR("EBP", "Failed to save CSS rules to cache");
@@ -429,9 +431,9 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
           LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
           return false;
         }
-        const bool cssCacheChanged = cssParseResult == CssParser::ParseResult::Complete ||
-                                     (cssParseResult == CssParser::ParseResult::DegradedLowHeap &&
-                                      cacheStatus != CssParser::CacheStatus::Partial);
+        const bool cssCacheChanged =
+            cssParseResult == CssParser::ParseResult::Complete ||
+            (cssParseResult == CssParser::ParseResult::Partial && cacheStatus != CssParser::CacheStatus::Partial);
         if (cssCacheChanged) {
           // The CSS cache changed, so section caches must use the same rule set.
           Storage.removeDir((cachePath + "/sections").c_str());

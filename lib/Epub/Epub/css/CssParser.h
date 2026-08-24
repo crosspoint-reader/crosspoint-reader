@@ -32,7 +32,7 @@ class CssParser {
  public:
   enum class ParseResult : uint8_t {
     Complete,
-    DegradedLowHeap,
+    Partial,
     Error,
   };
 
@@ -64,7 +64,7 @@ class CssParser {
    * Load and parse CSS from a file stream.
    * Can be called multiple times to accumulate rules from multiple stylesheets.
    * @param source Open file handle to read from
-   * @return Complete unless low heap stopped rule growth or the source was invalid
+   * @return Complete unless bounded storage stopped rule growth or the source was invalid
    */
   ParseResult loadFromStream(HalFile& source);
 
