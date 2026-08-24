@@ -12,8 +12,8 @@ class MappedInputManager;
 // FreeInkUI chrome for the toolbar reader menu (Settings -> Reader -> Reader
 // Menu Style -> Toolbar), painted over the page that is already on screen:
 //
-//  - Toolbar: a top header (book title, battery) and a bottom sheet holding a
-//    chapter scrub row (< capsule >) and a Contents / Text / More tile row.
+//  - Toolbar: a bottom sheet holding a chapter scrub row (< capsule >) and a
+//    Contents / Text / More tile row; the page above it stays untouched.
 //  - Panel: a taller bottom sheet with a title, a paged row list (name left,
 //    value right) and the same tile row as a switcher.
 //
@@ -29,7 +29,6 @@ class ReaderToolbarUi : public UiAppHost {
   struct Model {
     bool panel = false;  // false = toolbar, true = a Contents/Text/More panel
     // Toolbar
-    const char* bookTitle = nullptr;
     const char* chapterTitle = nullptr;
     const char* pageInfo = nullptr;  // "12/40   51%"
     int progressPermille = 0;        // 0..1000 book progress (scrub handle)
@@ -86,7 +85,6 @@ class ReaderToolbarUi : public UiAppHost {
   void buildToolbar(UiScreen& screen);
   void buildPanel(UiScreen& screen);
   void buildToolRow(UiScreen& screen, freeink::ui::LayoutAnchor anchor);
-  void buildHeader(UiScreen& screen);
   int16_t toolRowHeight(const UiScreen& screen) const;
 
   Model model_;
@@ -103,6 +101,5 @@ class ReaderToolbarUi : public UiAppHost {
   // them off the stack (AGENTS.md: locals stay under 256 bytes).
   freeink::ui::ButtonProps stepProps_;
   freeink::ui::ListProps listProps_;
-  char batteryText_[8] = {};
   freeink::ui::Rect pageIndicatorRect_{};
 };

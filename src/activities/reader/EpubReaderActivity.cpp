@@ -10,7 +10,6 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <Utf8.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -1916,10 +1915,9 @@ void EpubReaderActivity::renderOverlay() {
   // Panels override below: there the pill marks the open panel on every board.
   model.activeTool = (overlay == Overlay::Toolbar && !panelCursorShown) ? -1 : focusedTool;
   // Strings the model points at live here until render() returns.
-  std::string bookTitle, chapterTitle, pageInfo;
+  std::string chapterTitle, pageInfo;
 
   if (overlay == Overlay::Toolbar) {
-    bookTitle = utf8ComposeNfc(epub->getTitle());
     chapterTitle = currentChapterTitle();
     const int pageCount = section->estimatedTotalPages();
     const float chapterProgress =
@@ -1927,7 +1925,6 @@ void EpubReaderActivity::renderOverlay() {
     const float bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress);
     pageInfo = std::to_string(section->currentPage + 1) + "/" + std::to_string(pageCount) + "   " +
                std::to_string(clampPercent(static_cast<int>(bookProgress * 100.0f + 0.5f))) + "%";
-    model.bookTitle = bookTitle.c_str();
     model.chapterTitle = chapterTitle.c_str();
     model.pageInfo = pageInfo.c_str();
     model.progressPermille = static_cast<int>(bookProgress * 1000.0f + 0.5f);
