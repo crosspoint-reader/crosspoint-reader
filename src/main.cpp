@@ -52,9 +52,6 @@ static unsigned long lastX4ProPowerClickAt = 0;
 namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
 constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
-constexpr unsigned long X4PRO_RECOVERY_SETTLE_MS = 20;
-constexpr unsigned long DEFAULT_RECOVERY_SETTLE_MS = 500;
-constexpr unsigned long WAKE_INPUT_SETTLE_MS = 10;
 }  // namespace
 
 // A wake hold must never become an in-app power-button action.  Boot may continue
@@ -363,29 +360,17 @@ void setup() {
   powerManager.begin();
 
   const auto wakeupReason = gpio.getWakeupReason();
-  bool wakeInputSampled = false;
-  bool recoveryButtonHeldAtWake = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {
+    powerManager.startDeepSleep(gpio);
+  }
+
   const auto recoveryButton =
       BoardConfig::isX4Pro() ? MappedInputManager::Button::Down : MappedInputManager::Button::Up;
-  const bool hasReadablePowerButton = BoardConfig::ACTIVE.input.power >= 0;
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !BoardConfig::isPaperMono() && hasReadablePowerButton) {
-    // Require the physical power button to remain down through one debounced
-    // sample, without imposing a fixed-duration hold.
-    const bool powerHeldAtFirstSample = gpio.isPowerButtonPhysicallyPressed();
-    gpio.update();
-    delay(WAKE_INPUT_SETTLE_MS);
-    gpio.update();
-    if (!powerHeldAtFirstSample || !gpio.isPowerButtonPhysicallyPressed()) {
-      powerManager.startDeepSleep(gpio);
-    }
-    wakeInputSampled = true;
-    recoveryButtonHeldAtWake = mappedInputManager.isPressed(recoveryButton);
-  }
+  const bool recoveryFirmwareMode = wakeupReason == HalGPIO::WakeupReason::PowerButton && !BoardConfig::isPaperMono() &&
+                                    mappedInputManager.isPressed(recoveryButton);
 
   halTiltSensor.begin();
   halClock.begin();
-
-  bool recoveryFirmwareMode = false;
 
 #if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
@@ -408,30 +393,8 @@ void setup() {
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
   const bool isPersistedSleepWake = isSleepWake && !APP_STATE.showBootScreen;
 
-  if (isSleepWake && !BoardConfig::isPaperMono()) {
-    bool recoveryButtonHeld = recoveryButtonHeldAtWake;
-    if (!wakeInputSampled && isPersistedSleepWake) {
-      // Commit a held recovery button through InputManager's 5 ms debounce
-      // without charging normal cover-mode wakes the legacy settling window.
-      gpio.update();
-      delay(10);
-      gpio.update();
-    } else if (!wakeInputSampled) {
-      const unsigned long settleMs = BoardConfig::isX4Pro() ? X4PRO_RECOVERY_SETTLE_MS : DEFAULT_RECOVERY_SETTLE_MS;
-      const unsigned long settleStart = millis();
-      while (millis() - settleStart < settleMs) {
-        gpio.update();
-        delay(10);
-      }
-    }
-
-    if (!wakeInputSampled) {
-      recoveryButtonHeld = mappedInputManager.isPressed(recoveryButton);
-    }
-    if (recoveryButtonHeld) {
-      recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", BoardConfig::isX4Pro() ? "DOWN" : "UP");
-    }
+  if (recoveryFirmwareMode) {
+    LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", BoardConfig::isX4Pro() ? "DOWN" : "UP");
   }
 
   SETTINGS.loadFromFile();
@@ -450,13 +413,6 @@ void setup() {
 
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      if (!wakeInputSampled && !isPersistedSleepWake) {
-        LOG_DBG("MAIN", "Verifying power button press duration");
-        if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(),
-                                          SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP)) {
-          powerManager.startDeepSleep(gpio);
-        }
-      }
       wakePowerReleasePending = true;
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:

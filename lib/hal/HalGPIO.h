@@ -72,7 +72,6 @@ class HalGPIO {
   // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;
-  bool isPowerButtonPhysicallyPressed() const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
@@ -106,10 +105,10 @@ class HalGPIO {
   bool wasTouchActivity() const;
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
-  // Verify power button was held long enough after wakeup.
+  // Verify that the physical power button remains held through input debounce.
   // Returns true if verification succeeded, false if device should return to sleep.
   // Should only be called when wakeup reason is PowerButton.
-  bool verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed);
+  bool verifyPowerButtonWakeup();
 
   // Check if USB is connected
   bool isUsbConnected() const;
