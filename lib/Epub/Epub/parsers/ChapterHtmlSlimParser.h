@@ -71,6 +71,7 @@ class ChapterHtmlSlimParser {
     CssTextDecoration textDecoration = CssTextDecoration::None;
     bool hasDirection = false;
     CssTextDirection direction = CssTextDirection::Ltr;
+    bool setsParagraphDirection = false;
     bool hasTextAlign = false;
     CssTextAlign textAlign = CssTextAlign::Left;
     bool hasSup = false, sup = false;
