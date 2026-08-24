@@ -237,7 +237,7 @@ void Epub::discoverCssFilesFromZip() {
   }
 }
 
-CssParser::ParseResult Epub::parseCssFiles() const {
+CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existingCacheStatus) const {
   // Maximum CSS file size we'll attempt to parse (uncompressed)
   // Larger files risk memory exhaustion on ESP32
   constexpr size_t MAX_CSS_FILE_SIZE = 128 * 1024;  // 128KB
@@ -250,7 +250,7 @@ CssParser::ParseResult Epub::parseCssFiles() const {
 
   LOG_DBG("EBP", "CSS files to parse: %zu", cssFiles.size());
 
-  const bool hasPartialCache = cssParser->inspectCache() == CssParser::CacheStatus::Partial;
+  const bool hasPartialCache = existingCacheStatus == CssParser::CacheStatus::Partial;
   cssParser->clear();
 
   // Some converters emit one byte-identical stylesheet per chapter (100+ .css
@@ -421,7 +421,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         } else {
           discoverCssFilesFromZip();
           bookMetadataCache.reset();
-          cssParseResult = parseCssFiles();
+          cssParseResult = parseCssFiles(cacheStatus);
         }
         bookMetadataCache.reset();
         bookMetadataCache.reset(new BookMetadataCache(cachePath));
@@ -536,7 +536,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (!skipLoadingCss) {
     // Parse CSS before reloading book.bin to leave more heap for CSS rule-table growth.
     bookMetadataCache.reset();
-    if (parseCssFiles() != CssParser::ParseResult::Error) {
+    if (parseCssFiles(cssParser->inspectCache()) != CssParser::ParseResult::Error) {
       Storage.removeDir((cachePath + "/sections").c_str());
     }
   }

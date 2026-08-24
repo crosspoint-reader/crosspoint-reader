@@ -1,0 +1,147 @@
+#include <gtest/gtest.h>
+
+#include <filesystem>
+#include <fstream>
+#include <string>
+
+#include "CssParser.h"
+
+namespace fs = std::filesystem;
+
+namespace {
+
+constexpr size_t kMaxRules = 1500;
+constexpr size_t kMaxUniqueStyles = 256;
+
+class CssParserTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    directory_ = fs::temp_directory_path() / "crosspoint_css_parser_test" / info->name();
+    fs::remove_all(directory_);
+    fs::create_directories(directory_);
+  }
+
+  void TearDown() override { fs::remove_all(directory_); }
+
+  std::string cachePath() const { return directory_.string(); }
+  fs::path cacheFile() const { return directory_ / "css_rules.cache"; }
+
+  CssParser::ParseResult loadCss(CssParser& parser, const std::string& css) const {
+    const fs::path sourcePath = directory_ / "input.css";
+    std::ofstream output(sourcePath, std::ios::binary);
+    output.write(css.data(), static_cast<std::streamsize>(css.size()));
+    output.close();
+
+    HalFile source;
+    EXPECT_TRUE(HalStorage::getInstance().openFileForRead("TST", sourcePath.string(), source));
+    return parser.loadFromStream(source);
+  }
+
+  fs::path directory_;
+};
+
+TEST_F(CssParserTest, ResolvesCaseInsensitiveCascadeAndMergesDuplicates) {
+  CssParser parser(cachePath());
+  ASSERT_EQ(loadCss(parser,
+                    "P { text-align: center; }\n"
+                    ".Note { font-weight: bold; text-align: right; }\n"
+                    "p.note { font-style: italic; text-align: justify; }\n"
+                    ".note { margin-top: 2em; }\n"),
+            CssParser::ParseResult::Complete);
+
+  EXPECT_EQ(parser.ruleCount(), 3u);
+  const CssStyle style = parser.resolveStyle("p", "NOTE");
+  EXPECT_EQ(style.textAlign, CssTextAlign::Justify);
+  EXPECT_EQ(style.fontWeight, CssFontWeight::Bold);
+  EXPECT_EQ(style.fontStyle, CssFontStyle::Italic);
+  ASSERT_TRUE(style.hasMarginTop());
+  EXPECT_FLOAT_EQ(style.marginTop.value, 2.0f);
+  EXPECT_EQ(style.marginTop.unit, CssUnit::Em);
+}
+
+TEST_F(CssParserTest, DeduplicatedStylesReachTheBoundedRuleCap) {
+  CssParser parser(cachePath());
+  std::string css;
+  for (size_t i = 0; i < kMaxRules + 20; ++i) {
+    css += ".class-" + std::to_string(i) + " { font-weight: bold; text-indent: 1.5em; }\n";
+  }
+
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::DegradedLowHeap);
+  EXPECT_EQ(parser.ruleCount(), kMaxRules);
+  EXPECT_EQ(parser.resolveStyle("div", "class-1499").fontWeight, CssFontWeight::Bold);
+  EXPECT_FALSE(parser.resolveStyle("div", "class-1500").hasFontWeight());
+}
+
+TEST_F(CssParserTest, UniqueStyleCapStopsWithoutCorruptingAcceptedRules) {
+  CssParser parser(cachePath());
+  std::string css;
+  for (size_t i = 0; i < kMaxUniqueStyles + 20; ++i) {
+    css += ".unique-" + std::to_string(i) + " { text-indent: " + std::to_string(i + 1) + "px; }\n";
+  }
+
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::DegradedLowHeap);
+  EXPECT_EQ(parser.ruleCount(), kMaxUniqueStyles);
+  EXPECT_FLOAT_EQ(parser.resolveStyle("p", "unique-255").textIndent.value, 256.0f);
+  EXPECT_FALSE(parser.resolveStyle("p", "unique-256").hasTextIndent());
+}
+
+TEST_F(CssParserTest, RepeatedOverridesReuseAnUnsharedStyleSlot) {
+  CssParser parser(cachePath());
+  std::string css;
+  for (size_t i = 0; i < kMaxUniqueStyles + 20; ++i) {
+    css += ".same { text-indent: " + std::to_string(i + 1) + "px; }\n";
+  }
+
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Complete);
+  EXPECT_EQ(parser.ruleCount(), 1u);
+  EXPECT_FLOAT_EQ(parser.resolveStyle("p", "same").textIndent.value,
+                  static_cast<float>(kMaxUniqueStyles + 20));
+}
+
+TEST_F(CssParserTest, CanonicalCacheRoundTripPreservesStyles) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer,
+                    "p { text-align: justify; margin-top: 2em; }\n"
+                    ".bold { font-weight: bolder; }\n"
+                    ".hidden { display: none; }\n"),
+            CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+  EXPECT_EQ(writer.inspectCache(), CssParser::CacheStatus::Complete);
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  EXPECT_EQ(reader.ruleCount(), writer.ruleCount());
+  EXPECT_EQ(reader.resolveStyle("span", "bold").fontWeight, CssFontWeight::Bold);
+  EXPECT_EQ(reader.resolveStyle("div", "hidden").display, CssDisplay::None);
+  const CssStyle paragraph = reader.resolveStyle("p", "");
+  EXPECT_EQ(paragraph.textAlign, CssTextAlign::Justify);
+  EXPECT_FLOAT_EQ(paragraph.marginTop.value, 2.0f);
+}
+
+TEST_F(CssParserTest, PartialCacheIsValidatedDuringInspection) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, ".a { font-weight: bold; }\n"), CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(false));
+  ASSERT_EQ(writer.inspectCache(), CssParser::CacheStatus::Partial);
+
+  const auto size = fs::file_size(cacheFile());
+  fs::resize_file(cacheFile(), size - 1);
+  EXPECT_EQ(writer.inspectCache(), CssParser::CacheStatus::Invalid);
+}
+
+TEST_F(CssParserTest, CompleteCacheDefersPayloadValidationToHydration) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, ".a { font-weight: bold; }\n"), CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+
+  const auto size = fs::file_size(cacheFile());
+  fs::resize_file(cacheFile(), size - 1);
+  EXPECT_EQ(writer.inspectCache(), CssParser::CacheStatus::Complete);
+
+  CssParser reader(cachePath());
+  EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
+  EXPECT_TRUE(reader.empty());
+}
+
+}  // namespace

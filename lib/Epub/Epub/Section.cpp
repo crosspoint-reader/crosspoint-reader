@@ -365,7 +365,15 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
     ctx->cssParser = epub->getCssParser();
     if (ctx->cssParser) {
       const CssParser::CacheLoadResult cacheResult = ctx->cssParser->loadFromCache();
-      if (cacheResult != CssParser::CacheLoadResult::Complete && cacheResult != CssParser::CacheLoadResult::Partial) {
+      if (cacheResult == CssParser::CacheLoadResult::LowMemory) {
+        LOG_ERR("SCT", "Insufficient heap to hydrate CSS; section build deferred");
+        ctx->cssParser->clear();
+        file.close();
+        Storage.remove(binTmpPath().c_str());
+        if (!ctx->reusedHtml) Storage.remove(ctx->tmpHtmlPath.c_str());
+        return false;
+      }
+      if (cacheResult == CssParser::CacheLoadResult::Invalid) {
         LOG_ERR("SCT", "Failed to load CSS from cache");
       }
     }
