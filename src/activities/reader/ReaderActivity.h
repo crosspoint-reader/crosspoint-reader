@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "EndOfBookOptions.h"
+#include "ReaderSession.h"
 #include "activities/Activity.h"
 
 class ReaderActivity : public Activity {
@@ -16,6 +17,7 @@ class ReaderActivity : public Activity {
 
   std::unique_ptr<EndOfBookOptions> endOfBookOptions;
   std::atomic<bool> endOfBookOptionsReady{false};
+  ReaderSession readerSession;
 
   explicit ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                           std::string bookPath, bool allowFastInitialRefresh);
@@ -30,6 +32,7 @@ class ReaderActivity : public Activity {
   // Whole-book progress for the reader.exit plugin event, reusing the
   // per-reader ScreenshotInfo implementations.
   int getProgressPercent() const { return getScreenshotInfo().progressPercent; }
+  virtual int getProgressBasisPoints() const { return getProgressPercent() * 100; }
 
   virtual bool handleFormatInput() { return false; }
   virtual bool pageTurn(bool isForward) = 0;
@@ -46,6 +49,8 @@ class ReaderActivity : public Activity {
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
   void clearEndOfBookOptionsIfNeeded();
   void disableFastInitialRefresh();
+  void notePageTurn(bool forward, bool succeeded);
+  void flushReaderSession();
 
  public:
   ~ReaderActivity() override = default;
@@ -55,6 +60,7 @@ class ReaderActivity : public Activity {
 
   void onEnter() override;
   void onExit() override;
+  void prepareForSleep() override;
   void loop() override;
   void render(RenderLock&& lock) override;
 
