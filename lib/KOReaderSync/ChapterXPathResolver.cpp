@@ -352,6 +352,10 @@ class XPathProgressResolver final : public Print {
     XML_SetUserData(parser, this);
     XML_SetElementHandler(parser, &XPathProgressResolver::startElement, &XPathProgressResolver::endElement);
     XML_SetCharacterDataHandler(parser, &XPathProgressResolver::characterData);
+    XML_SetCommentHandler(parser, &XPathProgressResolver::comment);
+    XML_SetProcessingInstructionHandler(parser, &XPathProgressResolver::processingInstruction);
+    XML_SetCdataSectionHandler(parser, &XPathProgressResolver::startCdataSection,
+                               &XPathProgressResolver::endCdataSection);
   }
 
   ~XPathProgressResolver() override { destroyXmlParser(parser); }
@@ -407,6 +411,26 @@ class XPathProgressResolver final : public Print {
   static void XMLCALL characterData(void* userData, const XML_Char* data, const int len) {
     auto* self = static_cast<XPathProgressResolver*>(userData);
     self->onCharacterData(data, len);
+  }
+
+  static void XMLCALL comment(void* userData, const XML_Char*) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
+  static void XMLCALL processingInstruction(void* userData, const XML_Char*, const XML_Char*) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
+  static void XMLCALL startCdataSection(void* userData) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
+  static void XMLCALL endCdataSection(void* userData) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
   }
 
   void onStartElement(const XML_Char* rawName) {
@@ -493,7 +517,7 @@ class XPathProgressResolver final : public Print {
       return;
     }
 
-    // Start a new text node on first non-empty content after any element boundary.
+    // Start a new text node on first non-empty content after any structural boundary.
     // Only counting non-empty nodes matches KOReader's text()[N] indexing behavior,
     // which skips empty text nodes created by bare <a id="anchor"/> anchors.
     if (pendingTextNode) {
@@ -516,6 +540,14 @@ class XPathProgressResolver final : public Print {
     }
 
     visibleChars = nextVisibleChars;
+  }
+
+  void onMarkupBoundary() {
+    if (!insideBody || nonVisibleDepth > 0 || (paragraphDepth <= 0 && liDepth <= 0) || stopped || pendingTextNode) {
+      return;
+    }
+
+    pendingTextNode = true;
   }
 
   XML_Parser parser = nullptr;
