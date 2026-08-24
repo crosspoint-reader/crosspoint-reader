@@ -699,7 +699,13 @@ void CssParser::processRuleBlockWithStyle(std::string_view selectorGroup, const 
         constexpr std::string_view kUnsupportedSelectorChars = "+>[:#~* ";
         if (sel.find_first_of(kUnsupportedSelectorChars) != std::string_view::npos) return;
 
-        if (ruleGrowthStopped_) return;
+        if (ruleGrowthStopped_) {
+          // Continue the cascade for stored selectors without retrying failed
+          // allocations for new rules.
+          bool exact = false;
+          const size_t matchingIndex = lowerBound(sel, {}, {}, exact);
+          if (!exact || matchingIndex >= entryCount_) return;
+        }
         const RuleInsertResult result = insertOrMerge(sel, style);
         if (result == RuleInsertResult::Limit) {
           LOG_ERR("CSS", "CSS rule store limit reached at %u rules", entryCount_);

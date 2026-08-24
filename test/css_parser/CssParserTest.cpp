@@ -73,6 +73,21 @@ TEST_F(CssParserTest, DeduplicatedStylesReachTheBoundedRuleCap) {
   EXPECT_FALSE(parser.resolveStyle("div", "class-1500").hasFontWeight());
 }
 
+TEST_F(CssParserTest, CascadeUpdatesContinueAfterRuleCap) {
+  CssParser parser(cachePath());
+  std::string css;
+  for (size_t i = 0; i < kMaxRules + 20; ++i) {
+    css += ".class-" + std::to_string(i) + " { font-weight: bold; }\n";
+  }
+  css += ".class-1499 { font-style: italic; }\n";
+
+  EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::DegradedLowHeap);
+  EXPECT_EQ(parser.ruleCount(), kMaxRules);
+  const CssStyle style = parser.resolveStyle("div", "class-1499");
+  EXPECT_EQ(style.fontWeight, CssFontWeight::Bold);
+  EXPECT_EQ(style.fontStyle, CssFontStyle::Italic);
+}
+
 TEST_F(CssParserTest, UniqueStyleCapStopsWithoutCorruptingAcceptedRules) {
   CssParser parser(cachePath());
   std::string css;
@@ -95,8 +110,7 @@ TEST_F(CssParserTest, RepeatedOverridesReuseAnUnsharedStyleSlot) {
 
   EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Complete);
   EXPECT_EQ(parser.ruleCount(), 1u);
-  EXPECT_FLOAT_EQ(parser.resolveStyle("p", "same").textIndent.value,
-                  static_cast<float>(kMaxUniqueStyles + 20));
+  EXPECT_FLOAT_EQ(parser.resolveStyle("p", "same").textIndent.value, static_cast<float>(kMaxUniqueStyles + 20));
 }
 
 TEST_F(CssParserTest, CanonicalCacheRoundTripPreservesStyles) {
