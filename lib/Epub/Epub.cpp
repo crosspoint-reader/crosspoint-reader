@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PngToBmpConverter.h>
 #include <Utf8.h>
 #include <ZipFile.h>
@@ -253,54 +254,77 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   const bool hasPartialCache = existingCacheStatus == CssParser::CacheStatus::Partial;
   cssParser->clear();
 
-  // Deduplication allocates before the per-file parsing checks below.
-  if (!cssFiles.empty()) {
-    const uint32_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
-      LOG_ERR("EBP", "Insufficient heap for CSS setup (%u bytes free, need %zu); preserving any partial cache",
-              freeHeap, MIN_HEAP_FOR_CSS_PARSING);
-      return hasPartialCache ? CssParser::ParseResult::Partial : CssParser::ParseResult::Error;
-    }
-  }
-
   // Some converters emit one byte-identical stylesheet per chapter (100+ .css
   // entries), and each parse costs a zip locate plus an SD extract round-trip.
-  // Map every CSS path to its central-directory (CRC32, compressed size) in a
-  // single scan and parse only the first of each identical pair. Rules merge
-  // into one global set, so dropping exact duplicates cannot lose styles. A
-  // path that never matches a directory entry keeps key 0 and always parses.
-  std::vector<uint64_t> dedupKeys(cssFiles.size(), 0);
+  // Match each normalized CSS path to its central-directory (CRC32,
+  // compressed size) without throwing container allocations, then parse only
+  // the first of each identical pair. If scratch allocation fails, parsing all
+  // stylesheets is slower but remains correct.
+  struct CssDedupEntry {
+    uint64_t pathHash = 0;
+    uint64_t contentKey = 0;
+    size_t pathLength = 0;
+    size_t cssIndex = 0;
+  };
+  std::unique_ptr<CssDedupEntry[]> dedupEntries;
   if (cssFiles.size() > 1) {
-    std::unordered_map<std::string, size_t> pathToIndex;
-    pathToIndex.reserve(cssFiles.size());
+    dedupEntries = makeUniqueNoThrow<CssDedupEntry[]>(cssFiles.size());
+  }
+  if (dedupEntries) {
     for (size_t i = 0; i < cssFiles.size(); i++) {
-      pathToIndex.emplace(FsHelpers::normalisePath(cssFiles[i]), i);
+      dedupEntries[i].pathHash = ZipFile::fnvHash64(cssFiles[i].data(), cssFiles[i].size());
+      dedupEntries[i].pathLength = cssFiles[i].size();
+      dedupEntries[i].cssIndex = i;
     }
+    std::sort(dedupEntries.get(), dedupEntries.get() + cssFiles.size(),
+              [](const CssDedupEntry& lhs, const CssDedupEntry& rhs) { return lhs.pathHash < rhs.pathHash; });
+
     ZipFile(filepath).enumerateFileEntries([&](std::string_view entryPath, uint32_t crc32, uint32_t compressedSize) {
       if (!FsHelpers::hasCssExtension(entryPath)) {
         return;
       }
-      const auto it = pathToIndex.find(std::string{entryPath});
-      if (it != pathToIndex.end()) {
-        dedupKeys[it->second] = (static_cast<uint64_t>(crc32) << 32) | compressedSize;
+
+      const uint64_t pathHash = ZipFile::fnvHash64(entryPath.data(), entryPath.size());
+      auto* match = std::lower_bound(
+          dedupEntries.get(), dedupEntries.get() + cssFiles.size(), pathHash,
+          [](const CssDedupEntry& candidate, const uint64_t hash) { return candidate.pathHash < hash; });
+      for (const auto* end = dedupEntries.get() + cssFiles.size(); match != end && match->pathHash == pathHash;
+           match++) {
+        if (match->pathLength == entryPath.size() && entryPath == cssFiles[match->cssIndex]) {
+          match->contentKey = (static_cast<uint64_t>(crc32) << 32) | compressedSize;
+          break;
+        }
       }
     });
+  } else if (cssFiles.size() > 1) {
+    LOG_ERR("EBP", "Insufficient heap for CSS deduplication; parsing every stylesheet");
   }
-  std::vector<uint64_t> seenKeys;
-  seenKeys.reserve(cssFiles.size());
+
   size_t skippedDuplicates = 0;
   CssParser::ParseResult parseResult = CssParser::ParseResult::Complete;
 
   // No cache yet - parse CSS files
   for (size_t cssIndex = 0; cssIndex < cssFiles.size(); cssIndex++) {
     const auto& cssPath = cssFiles[cssIndex];
-    const uint64_t dedupKey = dedupKeys[cssIndex];
+    uint64_t dedupKey = 0;
+    if (dedupEntries) {
+      auto* end = dedupEntries.get() + cssFiles.size();
+      const auto* entry = std::find_if(dedupEntries.get(), end, [cssIndex](const CssDedupEntry& candidate) {
+        return candidate.cssIndex == cssIndex;
+      });
+      if (entry != end) {
+        dedupKey = entry->contentKey;
+      }
+    }
     if (dedupKey != 0) {
-      if (std::find(seenKeys.begin(), seenKeys.end(), dedupKey) != seenKeys.end()) {
+      auto* end = dedupEntries.get() + cssFiles.size();
+      const bool seen = std::any_of(dedupEntries.get(), end, [cssIndex, dedupKey](const CssDedupEntry& candidate) {
+        return candidate.cssIndex < cssIndex && candidate.contentKey == dedupKey;
+      });
+      if (seen) {
         skippedDuplicates++;
         continue;
       }
-      seenKeys.push_back(dedupKey);
     }
     LOG_DBG("EBP", "Parsing CSS file: %s", cssPath.c_str());
 
