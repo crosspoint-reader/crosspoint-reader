@@ -253,6 +253,16 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   const bool hasPartialCache = existingCacheStatus == CssParser::CacheStatus::Partial;
   cssParser->clear();
 
+  // Deduplication allocates before the per-file parsing checks below.
+  if (!cssFiles.empty()) {
+    const uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
+      LOG_ERR("EBP", "Insufficient heap for CSS setup (%u bytes free, need %zu); preserving any partial cache",
+              freeHeap, MIN_HEAP_FOR_CSS_PARSING);
+      return hasPartialCache ? CssParser::ParseResult::Partial : CssParser::ParseResult::Error;
+    }
+  }
+
   // Some converters emit one byte-identical stylesheet per chapter (100+ .css
   // entries), and each parse costs a zip locate plus an SD extract round-trip.
   // Map every CSS path to its central-directory (CRC32, compressed size) in a

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -247,6 +248,32 @@ TEST_F(CssParserTest, CacheHydrationRejectsInvalidStyleEnumBytes) {
     std::vector<uint8_t> corruptedCache = validCache;
     ASSERT_LT(styleOffset + enumOffset, corruptedCache.size());
     corruptedCache[styleOffset + enumOffset] = 0xff;
+    writeCache(corruptedCache);
+
+    CssParser reader(cachePath());
+    EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
+    EXPECT_TRUE(reader.empty());
+  }
+}
+
+TEST_F(CssParserTest, CacheHydrationRejectsNonFiniteStyleLengths) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, ".a { margin-top: 2em; }\n"), CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+
+  const std::vector<uint8_t> validCache = readCache();
+  ASSERT_GE(validCache.size(), kCacheHeaderBytes + sizeof(uint16_t));
+  uint16_t selectorLength = 0;
+  memcpy(&selectorLength, validCache.data() + kCacheHeaderBytes, sizeof(selectorLength));
+  const size_t firstLengthOffset = kCacheHeaderBytes + sizeof(selectorLength) + selectorLength + kStyleEnumPrefixBytes;
+
+  using LengthValue = decltype(CssLength::value);
+  for (const LengthValue invalidValue :
+       {std::numeric_limits<LengthValue>::quiet_NaN(), std::numeric_limits<LengthValue>::infinity(),
+        -std::numeric_limits<LengthValue>::infinity()}) {
+    std::vector<uint8_t> corruptedCache = validCache;
+    ASSERT_LE(firstLengthOffset + sizeof(invalidValue), corruptedCache.size());
+    memcpy(corruptedCache.data() + firstLengthOffset, &invalidValue, sizeof(invalidValue));
     writeCache(corruptedCache);
 
     CssParser reader(cachePath());

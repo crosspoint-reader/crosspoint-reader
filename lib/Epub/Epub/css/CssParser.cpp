@@ -8,6 +8,7 @@
 #include <array>
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <cstring>
 #include <string_view>
 
@@ -151,7 +152,12 @@ std::string_view stripTrailingImportant(std::string_view value) {
   return value;
 }
 
-constexpr size_t STYLE_LENGTH_FIELD_COUNT = 11;
+constexpr std::array STYLE_LENGTH_FIELDS = {
+    &CssStyle::textIndent,   &CssStyle::marginTop,   &CssStyle::marginBottom,  &CssStyle::marginLeft,
+    &CssStyle::marginRight,  &CssStyle::paddingTop,  &CssStyle::paddingBottom, &CssStyle::paddingLeft,
+    &CssStyle::paddingRight, &CssStyle::imageHeight, &CssStyle::imageWidth,
+};
+constexpr size_t STYLE_LENGTH_FIELD_COUNT = STYLE_LENGTH_FIELDS.size();
 constexpr size_t STYLE_WIRE_BYTES =
     5 + STYLE_LENGTH_FIELD_COUNT * (sizeof(decltype(CssLength::value)) + 1) + 2 + sizeof(uint32_t);
 constexpr uint32_t CSS_DEFINED_BITS_MASK = (1u << 18) - 1;
@@ -169,17 +175,9 @@ void encodeStyleWire(const CssStyle& style, uint8_t (&out)[STYLE_WIRE_BYTES]) {
     offset += sizeof(length.value);
     out[offset++] = static_cast<uint8_t>(length.unit);
   };
-  putLength(style.textIndent);
-  putLength(style.marginTop);
-  putLength(style.marginBottom);
-  putLength(style.marginLeft);
-  putLength(style.marginRight);
-  putLength(style.paddingTop);
-  putLength(style.paddingBottom);
-  putLength(style.paddingLeft);
-  putLength(style.paddingRight);
-  putLength(style.imageHeight);
-  putLength(style.imageWidth);
+  for (const auto field : STYLE_LENGTH_FIELDS) {
+    putLength(style.*field);
+  }
   out[offset++] = static_cast<uint8_t>(style.display);
   out[offset++] = static_cast<uint8_t>(style.verticalAlign);
 
@@ -224,18 +222,17 @@ bool decodeStyleWire(const uint8_t (&in)[STYLE_WIRE_BYTES], CssStyle& style) {
   style.direction = static_cast<CssTextDirection>(direction);
 
   const auto getLength = [&in, &offset](CssLength& length) {
-    memcpy(&length.value, in + offset, sizeof(length.value));
+    decltype(CssLength::value) value = 0;
+    memcpy(&value, in + offset, sizeof(value));
     offset += sizeof(length.value);
     const uint8_t unit = in[offset++];
-    if (unit > static_cast<uint8_t>(CssUnit::Percent)) return false;
+    if (!std::isfinite(value) || unit > static_cast<uint8_t>(CssUnit::Percent)) return false;
+    length.value = value;
     length.unit = static_cast<CssUnit>(unit);
     return true;
   };
-  if (!getLength(style.textIndent) || !getLength(style.marginTop) || !getLength(style.marginBottom) ||
-      !getLength(style.marginLeft) || !getLength(style.marginRight) || !getLength(style.paddingTop) ||
-      !getLength(style.paddingBottom) || !getLength(style.paddingLeft) || !getLength(style.paddingRight) ||
-      !getLength(style.imageHeight) || !getLength(style.imageWidth)) {
-    return false;
+  for (const auto field : STYLE_LENGTH_FIELDS) {
+    if (!getLength(style.*field)) return false;
   }
 
   const uint8_t display = in[offset++];
