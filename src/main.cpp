@@ -38,6 +38,7 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/FrontlightSchedule.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -52,6 +53,57 @@ static unsigned long lastX4ProPowerClickAt = 0;
 namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
 constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
+
+#if FREEINK_CAP_FRONTLIGHT
+constexpr unsigned long FRONTLIGHT_SCHEDULE_POLL_MS = 10000;
+
+struct FrontlightScheduleRuntime {
+  unsigned long lastPollAt = 0;
+  uint8_t startSlot = 0;
+  uint8_t endSlot = 0;
+  uint8_t utcOffsetQ = 0;
+  bool windowActive = false;
+  bool initialized = false;
+} frontlightScheduleRuntime;
+
+void applyFrontlightScheduleIfDue() {
+  if (!Frontlight.present() || SETTINGS.frontlightScheduleEnabled == 0) {
+    frontlightScheduleRuntime.initialized = false;
+    frontlightScheduleRuntime.lastPollAt = 0;
+    return;
+  }
+
+  const unsigned long now = millis();
+  if (frontlightScheduleRuntime.lastPollAt != 0 &&
+      now - frontlightScheduleRuntime.lastPollAt < FRONTLIGHT_SCHEDULE_POLL_MS) {
+    return;
+  }
+  frontlightScheduleRuntime.lastPollAt = now;
+
+  bool shouldBeOn = false;
+  if (!FrontlightSchedule::currentState(shouldBeOn)) {
+    frontlightScheduleRuntime.initialized = false;
+    return;
+  }
+
+  const bool configChanged = frontlightScheduleRuntime.startSlot != SETTINGS.frontlightScheduleStartQ ||
+                             frontlightScheduleRuntime.endSlot != SETTINGS.frontlightScheduleEndQ ||
+                             frontlightScheduleRuntime.utcOffsetQ != SETTINGS.clockUtcOffsetQ;
+  const bool crossedBoundary =
+      frontlightScheduleRuntime.initialized && frontlightScheduleRuntime.windowActive != shouldBeOn;
+  if (!frontlightScheduleRuntime.initialized || configChanged || crossedBoundary) {
+    Frontlight.setOn(shouldBeOn);
+    SETTINGS.frontlightOn = shouldBeOn ? 1 : 0;
+    LOG_INF("LIGHT", "Scheduled frontlight %s", shouldBeOn ? "on" : "off");
+  }
+
+  frontlightScheduleRuntime.startSlot = SETTINGS.frontlightScheduleStartQ;
+  frontlightScheduleRuntime.endSlot = SETTINGS.frontlightScheduleEndQ;
+  frontlightScheduleRuntime.utcOffsetQ = SETTINGS.clockUtcOffsetQ;
+  frontlightScheduleRuntime.windowActive = shouldBeOn;
+  frontlightScheduleRuntime.initialized = true;
+}
+#endif
 }  // namespace
 
 // A wake hold must never become an in-app power-button action.  Boot may continue
@@ -408,7 +460,20 @@ void setup() {
   // Brightness and warmth are always restored. A normal wake starts with the
   // light off unless Restore Light on Wake is enabled; silent maintenance
   // reboots preserve the live state so they do not unexpectedly go dark.
-  const bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
+  bool restoreLightOn = SETTINGS.frontlightOn != 0 && (SETTINGS.frontlightRestoreOnWake != 0 || isSilentReboot);
+#if FREEINK_CAP_FRONTLIGHT
+  bool scheduledLightOn = false;
+  if (FrontlightSchedule::currentState(scheduledLightOn)) {
+    restoreLightOn = scheduledLightOn;
+    SETTINGS.frontlightOn = scheduledLightOn ? 1 : 0;
+    frontlightScheduleRuntime.startSlot = SETTINGS.frontlightScheduleStartQ;
+    frontlightScheduleRuntime.endSlot = SETTINGS.frontlightScheduleEndQ;
+    frontlightScheduleRuntime.utcOffsetQ = SETTINGS.clockUtcOffsetQ;
+    frontlightScheduleRuntime.windowActive = scheduledLightOn;
+    frontlightScheduleRuntime.initialized = true;
+    frontlightScheduleRuntime.lastPollAt = millis();
+  }
+#endif
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
 
   switch (wakeupReason) {
@@ -547,6 +612,9 @@ void loop() {
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
+#if FREEINK_CAP_FRONTLIGHT
+  applyFrontlightScheduleIfDue();
+#endif
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

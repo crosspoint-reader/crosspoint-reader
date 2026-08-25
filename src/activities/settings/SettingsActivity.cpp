@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -29,8 +30,22 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/FrontlightSchedule.h"
 
 namespace fui = freeink::ui;
+
+namespace {
+
+void formatFrontlightScheduleValue(char* buffer, const size_t bufferSize, const int slot) {
+  FrontlightSchedule::formatTimeSlot(static_cast<uint8_t>(slot), SETTINGS.clockFormat == 1, buffer, bufferSize);
+}
+
+void formatFrontlightScheduleStep(char* buffer, const size_t bufferSize, const int slots) {
+  const int minutes = slots * FrontlightSchedule::SLOT_MINUTES;
+  snprintf(buffer, bufferSize, "%02d:%02d", minutes / 60, minutes % 60);
+}
+
+}  // namespace
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -61,6 +76,13 @@ void SettingsActivity::rebuildSettingsLists() {
       if (setting.valuePtr == &CrossPointSettings::fadingFix && BoardConfig::isX4Pro()) {
         continue;
       }
+#if FREEINK_CAP_FRONTLIGHT
+      if (SETTINGS.frontlightScheduleEnabled == 0 &&
+          (setting.valuePtr == &CrossPointSettings::frontlightScheduleStartQ ||
+           setting.valuePtr == &CrossPointSettings::frontlightScheduleEndQ)) {
+        continue;
+      }
+#endif
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
       // Settings merged into "Text Settings"
@@ -259,6 +281,7 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   const auto& setting = (*currentSettings)[selectedSetting];
+  const auto selectedValuePtr = setting.valuePtr;
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
   const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
 
@@ -266,6 +289,14 @@ void SettingsActivity::toggleCurrentSetting() {
     openSleepTimeoutPicker();
     return;
   }
+
+#if FREEINK_CAP_FRONTLIGHT
+  if (setting.valuePtr == &CrossPointSettings::frontlightScheduleStartQ ||
+      setting.valuePtr == &CrossPointSettings::frontlightScheduleEndQ) {
+    openFrontlightScheduleTimePicker(setting);
+    return;
+  }
+#endif
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -382,7 +413,7 @@ void SettingsActivity::toggleCurrentSetting() {
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
   rebuildSettingsLists();
-  applyUiSettingChange(setting.valuePtr);
+  applyUiSettingChange(selectedValuePtr);
   activeNav().selected = std::min(ringPos(), settingsCount);
 }
 
@@ -424,6 +455,28 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openFrontlightScheduleTimePicker(const SettingInfo& setting) {
+  const auto valuePtr = setting.valuePtr;
+  auto picker = makeUniqueNoThrow<IntervalSelectionActivity>(
+      renderer, mappedInput,
+      valuePtr == &CrossPointSettings::frontlightScheduleStartQ ? "FrontlightScheduleStart" : "FrontlightScheduleEnd",
+      setting.nameId, SETTINGS.*valuePtr, 0, FrontlightSchedule::SLOT_COUNT - 1, 1,
+      FrontlightSchedule::SLOTS_PER_HOUR, StrId::STR_NONE_OPT, false, StrId::STR_NONE_OPT,
+      &formatFrontlightScheduleValue, &formatFrontlightScheduleStep);
+  if (!picker) {
+    LOG_ERR("SET", "Failed to allocate frontlight schedule picker");
+    return;
+  }
+
+  startActivityForResult(std::move(picker), [this, valuePtr](const ActivityResult& result) {
+    if (!result.isCancelled) {
+      SETTINGS.*valuePtr = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+      SETTINGS.saveToFile();
+    }
+    requestUpdate();
+  });
+}
+
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
@@ -455,6 +508,14 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
                static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
       return valueBuffer;
     }
+#if FREEINK_CAP_FRONTLIGHT
+    if (setting.valuePtr == &CrossPointSettings::frontlightScheduleStartQ ||
+        setting.valuePtr == &CrossPointSettings::frontlightScheduleEndQ) {
+      char valueBuffer[9];
+      formatFrontlightScheduleValue(valueBuffer, sizeof(valueBuffer), SETTINGS.*(setting.valuePtr));
+      return valueBuffer;
+    }
+#endif
     return std::to_string(SETTINGS.*(setting.valuePtr));
   }
   return "";

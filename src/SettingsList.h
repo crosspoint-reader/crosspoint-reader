@@ -17,6 +17,7 @@
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
 #include "util/DictionaryRegistry.h"
+#include "util/FrontlightSchedule.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -243,6 +244,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 #if FREEINK_CAP_FRONTLIGHT
         SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                             "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_FRONTLIGHT_SCHEDULE, &CrossPointSettings::frontlightScheduleEnabled,
+                            "frontlightScheduleEnabled", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_START, &CrossPointSettings::frontlightScheduleStartQ,
+                           {0, FrontlightSchedule::SLOT_COUNT - 1, 1}, "frontlightScheduleStartQ",
+                           StrId::STR_CAT_DISPLAY),
+        SettingInfo::Value(StrId::STR_FRONTLIGHT_SCHEDULE_END, &CrossPointSettings::frontlightScheduleEndQ,
+                           {0, FrontlightSchedule::SLOT_COUNT - 1, 1}, "frontlightScheduleEndQ",
+                           StrId::STR_CAT_DISPLAY),
 #endif
         // Night mode = inverted output polarity everywhere (ActivityManager
         // applies it to every activity), so it lives in the Display category.
