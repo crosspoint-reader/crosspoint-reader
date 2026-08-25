@@ -24,6 +24,7 @@ parser.add_argument("--additional-intervals", dest="additional_intervals", actio
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--autohint-font", dest="autohint_fonts", action="append", default=[], metavar="PATH", help="Force the FreeType auto-hinter on one face of the fontstack, named by its path. Repeatable. For stacks that mix a manually hinted face with unhinted ones, where --force-autohint would discard the hints the former does have.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
@@ -38,15 +39,24 @@ size = args.size
 font_name = args.name
 # --mono only affects 1-bit fonts; it is meaningless for 2-bit greyscale.
 useMono = args.mono and not is2Bit
-load_flags = freetype.FT_LOAD_RENDER
+base_load_flags = freetype.FT_LOAD_RENDER
 if useMono:
     # Rasterise with FreeType's native monochrome renderer (hinted, drop-out
     # controlled) instead of rendering antialiased grey and thresholding.
     # Produces crisper, evenly-weighted stems at small sizes on well-hinted
     # faces. Still 1 bit/pixel, so glyph metrics and layout are unchanged.
-    load_flags |= freetype.FT_LOAD_TARGET_MONO
+    base_load_flags |= freetype.FT_LOAD_TARGET_MONO
 if args.force_autohint:
-    load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+    base_load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+
+# Hinting is a property of each face, so the flags are per face rather than per
+# run: a stack can pair a manually hinted face with unhinted ones, and forcing
+# the auto-hinter on the former would discard the hints it does have.
+load_flags = [base_load_flags] * len(font_stack)
+for autohint_font in args.autohint_fonts:
+    if autohint_font not in args.fontstack:
+        sys.exit(f"--autohint-font {autohint_font} is not in the fontstack")
+    load_flags[args.fontstack.index(autohint_font)] |= freetype.FT_LOAD_FORCE_AUTOHINT
 
 # inclusive unicode code point intervals
 # must not overlap and be in ascending order
@@ -273,7 +283,7 @@ def load_glyph(code_point):
         if glyph_index is None:
             glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
-            face.load_glyph(glyph_index, load_flags)
+            face.load_glyph(glyph_index, load_flags[face_index])
             return face
         face_index += 1
     return None

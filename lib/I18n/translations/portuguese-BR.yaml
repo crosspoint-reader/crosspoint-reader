@@ -1,6 +1,7 @@
 _language_name: "Português (Brasil)"
 _language_code: "PT"
 _order: "5"
+_bcp47: "pt-BR"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "INICIANDO"

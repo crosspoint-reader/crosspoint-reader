@@ -1,6 +1,7 @@
 _language_name: "Slovenščina"
 _language_code: "SI"
 _order: "21"
+_bcp47: "sl"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ZAGON"

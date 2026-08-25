@@ -82,7 +82,10 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0};
+                                 .textFieldLineEndOffset = 0,
+                                 .controlRadius = 6,
+                                 .sheetRadius = 6,
+                                 .capsuleRadius = 6};
 }
 
 class LyraTheme : public BaseTheme {

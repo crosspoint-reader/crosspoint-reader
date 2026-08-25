@@ -88,6 +88,11 @@ class MappedInputManager {
   // A Home-key hold runs the configured long-press action in the reader.
   bool wasHomeKeyHold() const;
   bool wasMenuGesture() const;
+  // Bottom-edge up-swipe as the reader-menu gesture (SHOW_READER_MENU's Swipe
+  // Up option). Only meaningful on home-key boards, where Home lives on the
+  // key and the bottom edge is free; elsewhere the same swipe is the Home
+  // gesture and this returns false.
+  bool wasReaderMenuSwipeUp() const;
   // Top-edge down-swipe opens the light panel when the active board actually
   // has a frontlight. ActivityManager consumes it before activity input.
   bool wasLightPanelGesture() const;

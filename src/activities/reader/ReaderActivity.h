@@ -53,6 +53,5 @@ class ReaderActivity : public Activity {
   void render(RenderLock&& lock) override;
 
   bool isReaderActivity() const final { return true; }
-  bool appliesNightMode() const final { return true; }
   bool handleForcedRefresh() final;
 };
