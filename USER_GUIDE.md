@@ -78,7 +78,7 @@ The X4 Pro has a built-in frontlight with adjustable brightness and warmth. It i
 * **Quick toggle:** Double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
 
 > [!NOTE]
-> Frontlight brightness, warmth, and on/off state are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to control them.
+> Frontlight brightness and warmth are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to adjust them. The on/off state can also be toggled with the Power-button double-click above.
 
 ---
 
