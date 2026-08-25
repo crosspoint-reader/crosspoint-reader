@@ -342,7 +342,11 @@ class XPathParagraphResolver final : public Print {
 
 class XPathProgressResolver final : public Print {
  public:
-  explicit XPathProgressResolver(const size_t targetVisibleChar) : targetVisibleChar(targetVisibleChar) {
+  enum class BoundaryMode { Exclusive, Inclusive };
+
+  explicit XPathProgressResolver(const size_t targetVisibleChar,
+                                 const BoundaryMode boundaryMode = BoundaryMode::Exclusive)
+      : targetVisibleChar(targetVisibleChar), boundaryMode(boundaryMode) {
     parser = XML_ParserCreate(nullptr);
     if (!parser) {
       LOG_ERR("KOX", "Failed to create XML parser");
@@ -529,7 +533,9 @@ class XPathProgressResolver final : public Print {
     }
 
     const size_t nextVisibleChars = visibleChars + codepointCount;
-    if (targetVisibleChar <= nextVisibleChars) {
+    const bool targetInCurrentChunk = boundaryMode == BoundaryMode::Inclusive ? targetVisibleChar <= nextVisibleChars
+                                                                              : targetVisibleChar < nextVisibleChars;
+    if (targetInCurrentChunk) {
       const size_t delta = targetVisibleChar - visibleChars;
       const int texNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
       const size_t charOff = visibleChars - textNodeStartChars + delta;
@@ -552,6 +558,7 @@ class XPathProgressResolver final : public Print {
 
   XML_Parser parser = nullptr;
   const size_t targetVisibleChar;
+  const BoundaryMode boundaryMode;
   bool parseOk = true;
   bool insideBody = false;
   bool stopped = false;
@@ -660,7 +667,7 @@ std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epu
   const size_t targetVisibleChar =
       std::max<size_t>(1, std::min(totalVisibleChars, static_cast<size_t>(std::ceil(clamped * totalVisibleChars))));
 
-  XPathProgressResolver resolver(targetVisibleChar);
+  XPathProgressResolver resolver(targetVisibleChar, XPathProgressResolver::BoundaryMode::Inclusive);
   if (!resolver.ok()) {
     return "";
   }

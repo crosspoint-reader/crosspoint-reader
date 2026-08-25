@@ -72,6 +72,9 @@ TEST(KOReaderXPathResolver, CountsUtf8CodepointsInsteadOfBytes) {
 TEST(KOReaderXPathResolver, SplitsTextNodesAroundComments) {
   const auto epub = epubWith(kCommentBoundaryFixture);
 
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 6),
+            "/body/DocFragment[1]/body/p[1]/text()[2].0");
+  EXPECT_TRUE(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 11).empty());
   EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 7),
             "/body/DocFragment[1]/body/p[1]/text()[2].1");
 }
