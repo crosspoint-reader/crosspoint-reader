@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <map>
-#include <string>
 
 class FontDecompressor;
 class SdCardFont;
@@ -57,22 +56,20 @@ class FontCacheManager {
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
 
-  // Per-font scan accumulators. A page mixes font ids (reader font, UI font,
-  // and the SD fallback the CJK-bearing strings resolve to); prewarming only
-  // the first-recorded id would leave the other fonts to fault glyph-by-glyph
-  // during the real draw pass. Fixed-size array: a render pass touches at most
-  // a handful of font ids, and entries past the cap are simply not batched
-  // (they fall back to the per-string prewarm in GfxRenderer).
+  // A render pass touches at most a handful of font ids. Codepoints are packed
+  // with a compact font slot and resolved style, then grouped for prewarming.
   static constexpr uint8_t MAX_SCAN_FONTS = 4;
-  struct ScanEntry {
-    // Occupancy is tracked separately: font ids are FNV hashes cast to int
-    // (SdCardFontManager::computeFontId, src/fontIds.h) and are routinely
-    // negative, so no id value can serve as the "free slot" sentinel.
-    bool used = false;
-    int fontId = 0;
-    std::string text;
-    uint8_t styleMask = 0;
-  };
-  ScanEntry scanEntries_[MAX_SCAN_FONTS];
-  void resetScanEntries();
+  static constexpr uint16_t MAX_SCAN_CODEPOINTS = 512;
+  static constexpr uint8_t SCAN_STYLE_SHIFT = 21;
+  static constexpr uint8_t SCAN_FONT_SHIFT = SCAN_STYLE_SHIFT + 2;
+  static constexpr uint32_t SCAN_CODEPOINT_MASK = (1U << SCAN_STYLE_SHIFT) - 1;
+  static constexpr uint8_t SCAN_GROUP_COUNT = MAX_SCAN_FONTS * 4;
+
+  uint8_t resolveScanStyle(int fontId, EpdFontFamily::Style style) const;
+  int scanFontIds_[MAX_SCAN_FONTS] = {};
+  uint32_t scanCodepoints_[MAX_SCAN_CODEPOINTS + 1] = {};
+  uint16_t scanGroupCounts_[SCAN_GROUP_COUNT] = {};
+  uint16_t scanCodepointCount_ = 0;
+  uint8_t scanFontCount_ = 0;
+  bool scanOverflowWarned_ = false;
 };
