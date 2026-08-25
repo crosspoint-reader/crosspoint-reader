@@ -186,8 +186,13 @@ inline freeink::ui::InputSnapshot touchSnapshotFrom(const MappedInputManager& ma
   }
   if (mappedInput.wasScreenTouchDown(tx, ty)) {
     snap.touchPressed = true;
-    snap.touchX = static_cast<int16_t>(tx);
-    snap.touchY = static_cast<int16_t>(ty);
+    // wasScreenTouchDown reports the landing point for the whole tap-slop
+    // window, so overwriting a held position would pin a drag there. The two
+    // are within slop of each other, so the press hit test is unaffected.
+    if (!snap.touchHeld) {
+      snap.touchX = static_cast<int16_t>(tx);
+      snap.touchY = static_cast<int16_t>(ty);
+    }
   }
   if (mappedInput.wasScreenTapped(tx, ty)) {
     snap.touchReleased = true;
