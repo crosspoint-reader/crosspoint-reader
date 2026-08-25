@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <utility>
 
 class HalFile {
  public:
@@ -66,12 +67,32 @@ class HalStorage {
   }
 
   bool remove(const char* path) { return std::remove(path) == 0; }
-  bool rename(const char* from, const char* to) { return std::rename(from, to) == 0; }
+  bool rename(const char* from, const char* to) {
+    if (from == failedRenameFrom_ && to == failedRenameTo_) {
+      clearFailures();
+      return false;
+    }
+    return std::rename(from, to) == 0;
+  }
+
+  void failNextRename(std::string from, std::string to) {
+    failedRenameFrom_ = std::move(from);
+    failedRenameTo_ = std::move(to);
+  }
+
+  void clearFailures() {
+    failedRenameFrom_.clear();
+    failedRenameTo_.clear();
+  }
 
   bool openFileForRead(const char*, const char* path, HalFile& file) { return file.open(path, "rb"); }
   bool openFileForRead(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "rb"); }
   bool openFileForWrite(const char*, const char* path, HalFile& file) { return file.open(path, "wb"); }
   bool openFileForWrite(const char*, const std::string& path, HalFile& file) { return file.open(path.c_str(), "wb"); }
+
+ private:
+  std::string failedRenameFrom_;
+  std::string failedRenameTo_;
 };
 
 #define Storage HalStorage::getInstance()

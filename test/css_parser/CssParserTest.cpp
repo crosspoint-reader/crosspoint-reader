@@ -27,12 +27,18 @@ class CssParserTest : public ::testing::Test {
     directory_ = fs::temp_directory_path() / "crosspoint_css_parser_test" / info->name();
     fs::remove_all(directory_);
     fs::create_directories(directory_);
+    Storage.clearFailures();
   }
 
-  void TearDown() override { fs::remove_all(directory_); }
+  void TearDown() override {
+    Storage.clearFailures();
+    fs::remove_all(directory_);
+  }
 
   std::string cachePath() const { return directory_.string(); }
   fs::path cacheFile() const { return directory_ / "css_rules.cache"; }
+  fs::path cacheTempFile() const { return directory_ / "css_rules.cache.tmp"; }
+  fs::path cacheBackupFile() const { return directory_ / "css_rules.cache.bak"; }
 
   std::vector<uint8_t> readCache() const {
     std::ifstream input(cacheFile(), std::ios::binary);
@@ -195,6 +201,27 @@ TEST_F(CssParserTest, CompleteCacheDefersPayloadValidationToHydration) {
   CssParser reader(cachePath());
   EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Invalid);
   EXPECT_TRUE(reader.empty());
+}
+
+TEST_F(CssParserTest, FailedPromotionRestoresTheOnlyBackupCache) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer, ".original { font-weight: bold; }\n"), CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+  fs::rename(cacheFile(), cacheBackupFile());
+  ASSERT_FALSE(fs::exists(cacheFile()));
+  ASSERT_EQ(loadCss(writer, ".replacement { font-style: italic; }\n"), CssParser::ParseResult::Complete);
+
+  Storage.failNextRename(cacheTempFile().string(), cacheFile().string());
+  EXPECT_FALSE(writer.saveToCache(true));
+  EXPECT_TRUE(fs::exists(cacheFile()));
+  EXPECT_FALSE(fs::exists(cacheTempFile()));
+  EXPECT_FALSE(fs::exists(cacheBackupFile()));
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  EXPECT_EQ(reader.ruleCount(), 1u);
+  EXPECT_EQ(reader.resolveStyle("span", "original").fontWeight, CssFontWeight::Bold);
+  EXPECT_FALSE(reader.resolveStyle("span", "replacement").hasFontStyle());
 }
 
 TEST_F(CssParserTest, CacheHydrationRejectsInvalidStyleEnumBytes) {

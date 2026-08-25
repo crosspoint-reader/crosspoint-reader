@@ -1079,26 +1079,26 @@ bool CssParser::saveToCache(const bool complete) const {
     return false;
   }
 
-  Storage.remove(backupPath.c_str());
   const bool hadExistingCache = Storage.exists(finalPath.c_str());
-  if (hadExistingCache && !Storage.rename(finalPath.c_str(), backupPath.c_str())) {
-    LOG_ERR("CSS", "Failed to back up existing CSS cache");
-    Storage.remove(tmpPath.c_str());
-    return false;
+  if (hadExistingCache) {
+    Storage.remove(backupPath.c_str());
+    if (!Storage.rename(finalPath.c_str(), backupPath.c_str())) {
+      LOG_ERR("CSS", "Failed to back up existing CSS cache");
+      Storage.remove(tmpPath.c_str());
+      return false;
+    }
   }
 
   if (!Storage.rename(tmpPath.c_str(), finalPath.c_str())) {
     LOG_ERR("CSS", "Failed to promote temporary CSS cache");
     Storage.remove(tmpPath.c_str());
-    if (hadExistingCache) {
-      Storage.rename(backupPath.c_str(), finalPath.c_str());
+    if (Storage.exists(backupPath.c_str()) && !Storage.rename(backupPath.c_str(), finalPath.c_str())) {
+      LOG_ERR("CSS", "Failed to restore previous CSS cache");
     }
     return false;
   }
 
-  if (hadExistingCache) {
-    Storage.remove(backupPath.c_str());
-  }
+  Storage.remove(backupPath.c_str());
 
   LOG_DBG("CSS", "Saved %u rules to %s cache", ruleCount, complete ? "complete" : "partial");
   return true;
