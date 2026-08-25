@@ -332,7 +332,7 @@ families:
   - name: NotoNaskhArabicUI
     description: "Arabic naskh tuned for screen reading (Arabic)"
     scripts: [arabic]
-    intervals: arabic,latin-ext
+    intervals: arabic,ascii,latin1,punctuation
     sizes: [12, 14, 16, 18]
     styles:
       regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Regular.ttf"}
@@ -341,7 +341,7 @@ families:
   - name: NotoNaskhArabicUIBold
     description: "Noto Naskh Arabic UI at Bold weight, heavier body text (Arabic)"
     scripts: [arabic]
-    intervals: arabic,latin-ext
+    intervals: arabic,ascii,latin1,punctuation
     sizes: [12, 14, 16, 18]
     styles:
       regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
