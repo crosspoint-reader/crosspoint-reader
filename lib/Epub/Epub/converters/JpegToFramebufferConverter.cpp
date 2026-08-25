@@ -91,10 +91,29 @@ int32_t jpegSeek(JPEGFILE* pFile, int32_t pos) {
   return pos;
 }
 
-// JPEGDEC object is ~17 KB due to internal decode buffers.
-// Heap-allocate on demand so memory is only used during active decode.
+// JPEGDEC object is ~18 KB (embedded Huffman/MCU/pixel buffers) allocated as ONE
+// contiguous block, so the binding constraint is the largest free block, not total
+// free heap. Heap-allocate on demand so memory is only used during active decode.
+// Beyond the object, a decode needs only the streamed .pxc band cache (~image
+// width x ~20 rows, null-checked with a graceful no-cache fallback) and small
+// transients — hence the modest free-heap slack. A flat free-heap floor here
+// rejected decodes that actually fit (35.9 KB free vs a 36 KB guess, actual
+// peak ~30 KB) and the image got blacklisted for the session.
 constexpr size_t JPEG_DECODER_APPROX_SIZE = 20 * 1024;
-constexpr size_t MIN_FREE_HEAP_FOR_JPEG = JPEG_DECODER_APPROX_SIZE + 16 * 1024;
+constexpr size_t JPEG_DECODE_HEAP_SLACK = 6 * 1024;
+
+// True when the decoder object can be allocated and the decode has workspace.
+bool jpegHeapAvailable(const char* what) {
+  const size_t freeHeap = ESP.getFreeHeap();
+  const size_t maxBlock = ESP.getMaxAllocHeap();
+  if (maxBlock >= JPEG_DECODER_APPROX_SIZE && freeHeap >= JPEG_DECODER_APPROX_SIZE + JPEG_DECODE_HEAP_SLACK) {
+    return true;
+  }
+  LOG_ERR("JPG", "Not enough heap for JPEG %s (free=%u maxAlloc=%u; need %u contiguous, %u free)", what,
+          (unsigned)freeHeap, (unsigned)maxBlock, (unsigned)JPEG_DECODER_APPROX_SIZE,
+          (unsigned)(JPEG_DECODER_APPROX_SIZE + JPEG_DECODE_HEAP_SLACK));
+  return false;
+}
 
 // Choose JPEGDEC's built-in scale factor for coarse downscaling.
 // Returns the scale denominator (1, 2, 4, or 8) and sets jpegScaleOption.
@@ -359,11 +378,7 @@ int jpegDrawCallback(JPEGDRAW* pDraw) {
 }  // namespace
 
 bool JpegToFramebufferConverter::getDimensionsStatic(const std::string& imagePath, ImageDimensions& out) {
-  size_t freeHeap = ESP.getFreeHeap();
-  if (freeHeap < MIN_FREE_HEAP_FOR_JPEG) {
-    LOG_ERR("JPG", "Not enough heap for JPEG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_JPEG);
-    return false;
-  }
+  if (!jpegHeapAvailable("dimensions probe")) return false;
 
   std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
   if (!jpeg) {
@@ -390,11 +405,7 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
                                                      const RenderConfig& config) {
   LOG_DBG("JPG", "Decoding JPEG: %s", imagePath.c_str());
 
-  size_t freeHeap = ESP.getFreeHeap();
-  if (freeHeap < MIN_FREE_HEAP_FOR_JPEG) {
-    LOG_ERR("JPG", "Not enough heap for JPEG decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_JPEG);
-    return false;
-  }
+  if (!jpegHeapAvailable("decode")) return false;
 
   std::unique_ptr<JPEGDEC> jpeg(new (std::nothrow) JPEGDEC());
   if (!jpeg) {

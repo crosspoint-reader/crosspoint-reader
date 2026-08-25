@@ -6,3 +6,7 @@
 
 void silentRestart();          // home screen
 void silentRestartToReader();  // currently-open EPUB (APP_STATE.openEpubPath)
+// True when this boot itself came from a silent restart. Callers that restart
+// as a last-resort defrag must check this so a failure that survives the
+// restart degrades to an error instead of a reboot loop.
+bool bootWasSilentRestart();

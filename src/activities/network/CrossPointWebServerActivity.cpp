@@ -9,6 +9,7 @@
 
 #include <cstddef>
 
+#include "BleInput.h"
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
@@ -152,6 +153,12 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
   if (mode == NetworkMode::JOIN_NETWORK) {
     // STA mode - launch WiFi selection
     LOG_DBG("WEBACT", "Turning on WiFi (STA mode)...");
+    // Free the BLE stack BEFORE bringing WiFi up (matches WifiSelectionActivity):
+    // the C3 shares one radio and heap between the stacks, and the WiFi driver
+    // sizes its RX/TX buffer pools at init — initializing it with NimBLE's ~50 KB
+    // still resident leaves WiFi permanently starved even after the lifecycle
+    // stops BLE a loop later. No-op when BLE is already off.
+    bleinput::stop();
     WiFi.mode(WIFI_STA);
 
     state = WebServerActivityState::WIFI_SELECTION;
@@ -203,6 +210,13 @@ void CrossPointWebServerActivity::onWifiSelectionComplete(const bool connected) 
 void CrossPointWebServerActivity::startAccessPoint() {
   LOG_DBG("WEBACT", "Starting Access Point mode...");
   LOG_DBG("WEBACT", "Free heap before AP start: %d bytes", ESP.getFreeHeap());
+
+  // Free the BLE stack BEFORE bringing WiFi up (matches WifiSelectionActivity):
+  // the C3 shares one radio and heap between the stacks, and the WiFi driver
+  // sizes its RX/TX buffer pools at init — initializing it with NimBLE's ~50 KB
+  // still resident leaves WiFi permanently starved even after the lifecycle
+  // stops BLE a loop later. No-op when BLE is already off.
+  bleinput::stop();
 
   // Configure and start the AP
   WiFi.mode(WIFI_AP);

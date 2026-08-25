@@ -11,6 +11,7 @@
 #include <string>
 
 #include "I18nKeys.h"
+#include "MappedInputManager.h"
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
 #include "fontIds.h"
@@ -88,6 +89,16 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
   doc["frontButtonRight"] = frontButtonRight;
+  // Bluetooth — managed by BluetoothSettingsActivity, not in SettingsList.
+  doc["bluetoothEnabled"] = bluetoothEnabled;
+  JsonArray storedBleMap = doc["bleKeyMap"].to<JsonArray>();
+  for (const auto& entry : bleKeyMap) {
+    if (entry.keyKind == 0xFF || entry.button == 0xFF) continue;
+    JsonObject object = storedBleMap.add<JsonObject>();
+    object["k"] = entry.keyKind;
+    object["v"] = entry.keyValue;
+    object["b"] = entry.button;
+  }
   // Font family and size — both use dynamic getter/setters in SettingsList (the
   // option lists depend on the SD font registry), so the generic loop skips them.
   doc["fontFamily"] = fontFamily;
@@ -187,6 +198,23 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
+
+  // Bluetooth — managed by BluetoothSettingsActivity, not in SettingsList.
+  bluetoothEnabled = clamp(doc["bluetoothEnabled"] | (uint8_t)0, 2, 0);
+  std::fill(std::begin(bleKeyMap), std::end(bleKeyMap), BleKeyMapEntry{});
+  JsonArrayConst storedBleMap = doc["bleKeyMap"];
+  if (!storedBleMap.isNull()) {
+    uint8_t slot = 0;
+    for (JsonObjectConst object : storedBleMap) {
+      if (slot >= BLE_MAP_CAPACITY) break;
+      const uint8_t button = object["b"] | (uint8_t)0xFF;
+      if (button >= MappedInputManager::kButtonCount) continue;
+      bleKeyMap[slot].keyKind = object["k"] | (uint8_t)0xFF;
+      bleKeyMap[slot].keyValue = object["v"] | (uint8_t)0;
+      bleKeyMap[slot].button = button;
+      ++slot;
+    }
+  }
 
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and
   // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is

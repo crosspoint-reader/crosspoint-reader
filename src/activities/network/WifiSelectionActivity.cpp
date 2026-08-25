@@ -9,6 +9,7 @@
 
 #include <algorithm>
 
+#include "BleInput.h"
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "WifiCredentialStore.h"
@@ -187,6 +188,11 @@ void WifiSelectionActivity::startWifiScan(const bool autoScan) {
   networkStatuses.clear();
   networkRowItems.clear();
   requestUpdate();
+
+  // Free the BLE stack before bringing WiFi up: the C3 has one radio and the two
+  // stacks can't both fit in heap. Reachable from the reader via KOReader sync, where
+  // BLE is still resident; a no-op when BLE is already off (launched from Settings).
+  bleinput::stop();
 
   // Set WiFi mode to station
   WiFi.mode(WIFI_STA);
@@ -463,6 +469,7 @@ void WifiSelectionActivity::attemptConnection() {
   connectionError.clear();
   requestUpdate();
 
+  bleinput::stop();        // free the BLE stack before WiFi (shared C3 radio, tight heap)
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID

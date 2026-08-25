@@ -44,6 +44,17 @@ class Activity {
   virtual bool skipLoopDelay() { return false; }
   virtual bool preventAutoSleep() { return false; }
   virtual bool isReaderActivity() const { return false; }
+  // True if this activity needs the BLE stack resident (beyond the readers, which are
+  // covered by isReaderActivity()). The Bluetooth settings screen overrides this so
+  // pairing/scanning works there. Everywhere else BLE is torn down to free heap.
+  virtual bool keepsBluetoothAlive() const { return false; }
+  // True while the current activity is doing heap-heavy work that must finish
+  // before the BLE stack (~52 KB) may start.
+  virtual bool deferBluetoothStart() const { return false; }
+  // Ask the activity to make its next render a full ghost-cleanup (HALF) refresh rather
+  // than a fast/partial one. Used after drawing a transient popup over grayscale content
+  // (e.g. the "BT Connecting..." popup over a reader page) so it clears without ghosting.
+  virtual void requestGhostCleanup() {}
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
   virtual bool isHomeActivity() const { return false; }
