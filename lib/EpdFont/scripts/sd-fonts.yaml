@@ -338,13 +338,13 @@ families:
       regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Regular.ttf"}
       bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
 
-  - name: NotoNaskhArabicUIBold
-    description: "Noto Naskh Arabic UI at Bold weight, heavier body text (Arabic)"
+  - name: NotoNaskhArabicUISemiBold
+    description: "Noto Naskh Arabic UI at SemiBold weight, heavier body text (Arabic)"
     scripts: [arabic]
     intervals: arabic,ascii,latin1,punctuation
     sizes: [12, 14, 16, 18]
     styles:
-      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-SemiBold.ttf"}
       bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
 
   - name: NotoKufiArabic
