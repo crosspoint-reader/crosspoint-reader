@@ -33,7 +33,7 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 8;
+  static constexpr uint8_t CSS_CACHE_VERSION = 10;
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -155,4 +155,16 @@ class CssParser {
   static CssLength interpretLength(std::string_view val);
   /** Returns true only when a numeric length was parsed (e.g. 2em, 50%). False for auto/inherit/initial. */
   static bool tryInterpretLength(std::string_view val, CssLength& out);
+  /**
+   * Applies a border/border-style/border-width declaration to style. border-style and
+   * border-width are independent CSS longhands that can be declared separately (or
+   * together via the "border" shorthand) and combine with AND-of-visibility semantics —
+   * e.g. "border: none" followed by a later "border-width: 1px" must stay invisible,
+   * since border-width alone never overrides an explicit style of none. touchesStyle/
+   * touchesWidth select which axis (or axes, for the shorthand) this declaration sets;
+   * an axis that isn't touched is left as whatever a prior declaration set it to.
+   * Per-edge overrides (border-top, etc.) are not parsed — a plain "border"/
+   * "border-style"/"border-width" declaration is the common case for <hr>.
+   */
+  static void applyBorderDeclaration(std::string_view val, bool touchesStyle, bool touchesWidth, CssStyle& style);
 };

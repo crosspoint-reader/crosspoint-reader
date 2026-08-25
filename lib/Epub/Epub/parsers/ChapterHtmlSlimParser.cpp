@@ -397,7 +397,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   listItemBulletOnly = false;
 }
 
-void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
+void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle, const bool drawLine) {
   if (partWordBufferIndex > 0) {
     flushPartWordBuffer();
   }
@@ -424,14 +424,20 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   const int16_t bottomSpacing =
       static_cast<int16_t>((blockStyle.marginBottom > 0 ? blockStyle.marginBottom : defaultVerticalSpacing) +
                            (blockStyle.paddingBottom > 0 ? blockStyle.paddingBottom : 0));
-  constexpr uint8_t ruleThickness = 2;
+  // A CSS-hidden border occupies no height, matching browsers — only margin/padding remain.
+  const uint8_t ruleThickness = drawLine ? 2 : 0;
   const int16_t availableWidth =
       std::max<int16_t>(1, static_cast<int16_t>(viewportWidth - blockStyle.totalHorizontalInset()));
   const int16_t width = std::max<int16_t>(1, static_cast<int16_t>(availableWidth / 4));
   const int16_t xPos = static_cast<int16_t>(blockStyle.leftInset() + ((availableWidth - width) / 2));
   const int16_t totalHeight = static_cast<int16_t>(topSpacing + ruleThickness + bottomSpacing);
 
-  if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
+  // Gate on consumed Y rather than currentPage->elements.empty(): a run of CSS-hidden
+  // <hr>s (drawLine false) never pushes a page element but still advances
+  // currentPageNextY via margin/padding, so elements.empty() would stay true and this
+  // check would never fire — silently growing past viewportHeight until whatever real
+  // content follows gets flushed onto (or past) an already-overflowed, all-blank page.
+  if (currentPageNextY > 0 && currentPageNextY + totalHeight > viewportHeight) {
     setCurrentPageVisibleOffset(visibleTextOffset);
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
     completedPageCount++;
@@ -446,13 +452,15 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
   currentPageNextY += topSpacing;
 
-  auto pageRule = std::shared_ptr<PageHorizontalRule>(
-      new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
-  if (!pageRule) {
-    LOG_ERR("EHP", "Failed to create PageHorizontalRule");
-    return;
+  if (drawLine) {
+    auto pageRule = std::shared_ptr<PageHorizontalRule>(
+        new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
+    if (!pageRule) {
+      LOG_ERR("EHP", "Failed to create PageHorizontalRule");
+      return;
+    }
+    currentPage->elements.push_back(pageRule);
   }
-  currentPage->elements.push_back(pageRule);
   setCurrentPageVisibleOffset(visibleTextOffset);
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
@@ -1309,7 +1317,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       hrBlockStyle.textIndentDefined = false;
       hrBlockStyle.textIndent = 0;
     }
-    self->emitHorizontalRule(hrBlockStyle);
+    // A book's own CSS can define <hr> as a purely semantic marker with no visible
+    // line (e.g. "border: none"); only its margin/padding should still occupy space.
+    const bool hrDrawsLine = !cssStyle.isBorderHidden();
+    self->emitHorizontalRule(hrBlockStyle, hrDrawsLine);
     self->depth += 1;
     return;
   }
