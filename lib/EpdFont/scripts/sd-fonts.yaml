@@ -329,6 +329,33 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-BoldItalic.ttf"}
 
+  - name: NotoNaskhArabicUI
+    description: "Arabic naskh tuned for screen reading (Arabic)"
+    scripts: [arabic]
+    intervals: arabic,latin-ext
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+
+  - name: NotoNaskhArabicUIBold
+    description: "Noto Naskh Arabic UI at Bold weight, heavier body text (Arabic)"
+    scripts: [arabic]
+    intervals: arabic,latin-ext
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+
+  - name: NotoKufiArabic
+    description: "Arabic kufi-style sans-serif (Arabic, Latin)"
+    scripts: [arabic, latin]
+    intervals: arabic,latin-ext,ipa-chars
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 700}}
+
   # ── Korean ─────────────────────────────────────────────────────────────
 
   - name: Pretendard
