@@ -89,6 +89,27 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   }
 #endif
 
+  // Hold every configured power-latch pin HIGH through deep sleep. These are
+  // keep-alive enables (the X4 Pro's master peripheral rail on GPIO1, the
+  // Sticky's PWR_HOLD/PWR_LOCK): deepSleep() isolates all pads
+  // (esp_sleep_config_gpio_isolate), so a latch without an armed hold loses its
+  // output driver and floats — on the X4 Pro the latch drops as soon as
+  // external power leaves (serial/pogo adapter unplugged), and the next power-
+  // button press cold-boots instead of fast-waking. holdPowerRails() asserted
+  // the latches at boot but arms no sleep hold; arm it here instead. Skips
+  // XTEINK_C3_GPIO13: it IS power.latch0 on the C3 Xteink boards, where the
+  // block above drives it LOW on purpose (battery power-off).
+  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
+    if (pin < 0 || static_cast<gpio_num_t>(pin) == XTEINK_C3_GPIO13) continue;
+    const auto g = static_cast<gpio_num_t>(pin);
+    // Release any surviving pad hold first: a held pad silently ignores the
+    // drive below (same trap as the GPIO13 block above).
+    gpio_hold_dis(g);
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
+    gpio_hold_en(g);
+  }
+
   // Cut the gated peripheral rails (touch/SD/EPD on boards like the Sticky) and
   // hold the enables off through deep sleep — otherwise the GT911 and SD card
   // stay powered all through "off" and drain the battery. No-op on boards with
