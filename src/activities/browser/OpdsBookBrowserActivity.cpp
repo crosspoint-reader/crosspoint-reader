@@ -551,10 +551,13 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     const char* root = SETTINGS.opdsDownloadFolder;
     if (root[0] != '\0') dir = root;
   }
-  for (const auto& component : folderNames) {
-    if (component.empty()) continue;
-    dir += '/';
-    dir += component;
+  // Nested dirs follow navigation titles only when the user leaves mirroring on.
+  if (SETTINGS.opdsMirrorCatalogFolders) {
+    for (const auto& component : folderNames) {
+      if (component.empty()) continue;
+      dir += '/';
+      dir += component;
+    }
   }
 
   bool haveFolder = !dir.empty();

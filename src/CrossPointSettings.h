@@ -259,6 +259,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
+  // When non-zero, OPDS downloads append navigation folder titles under the save
+  // root (e.g. art/Book.epub). When zero, downloads stay flat under the save root.
+  // Default on. Edited from the OPDS server list; category-less SettingInfo::Toggle.
+  uint8_t opdsMirrorCatalogFolders = 1;
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
