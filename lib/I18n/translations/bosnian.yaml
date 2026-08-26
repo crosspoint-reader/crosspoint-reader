@@ -1,6 +1,7 @@
 _language_name: "Bosanski"
 _language_code: "BS"
 _order: "29"
+_bcp47: "bs"
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "POKRETANJE"
 STR_SLEEPING: "REŽIM MIROVANJA"

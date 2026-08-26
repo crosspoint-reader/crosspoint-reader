@@ -1,6 +1,7 @@
 _language_name: "Nederlands"
 _language_code: "NL"
 _order: "16"
+_bcp47: "nl"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "OPSTARTEN"

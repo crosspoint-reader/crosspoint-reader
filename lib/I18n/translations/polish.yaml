@@ -1,6 +1,7 @@
 _language_name: "Polski"
 _language_code: "PL"
 _order: "13"
+_bcp47: "pl"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "Bootowanie"

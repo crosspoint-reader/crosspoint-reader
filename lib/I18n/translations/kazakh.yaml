@@ -1,6 +1,7 @@
 _language_name: "Қазақша"
 _language_code: "KK"
 _order: "18"
+_bcp47: "kk"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ЖҮКТЕЛУДЕ"

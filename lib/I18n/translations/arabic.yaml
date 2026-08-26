@@ -1,6 +1,7 @@
 _language_name: "العربية"
 _language_code: "AR"
 _order: "28"
+_bcp47: "ar"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "جاري بدء التشغيل"

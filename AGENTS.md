@@ -817,9 +817,7 @@ Tested in all 4 orientations with 5MB+ files.
 **To add/modify translations (i18n)**:
 
 1. Edit or add YAML file: `lib/I18n/translations/<language>.yaml`
-   
-   - Each file must contain: `_language_name`, `_language_code`, `_order`, and `STR_*` keys
-   
+   - Each file must contain: `_language_name`, `_language_code`, `_order`, `_bcp47`, and `STR_*` keys
    - English (`english.yaml`) is the reference; missing keys in other languages fall back to English
 2. Run generator: `python scripts/gen_i18n.py lib/I18n/translations lib/I18n/`
 3. Generated files update: `I18nKeys.h`, `I18nStrings.h`, `I18nStrings.cpp`

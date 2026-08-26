@@ -73,6 +73,12 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   void persistLightSettings();
   void close();
 
+  // One-shot: a tile that rewrote the whole frame (night mode) re-drives it
+  // with the ghost-cleanup waveform on the next render. The "refresh" tile does
+  // not use this — it closes the panel and promotes the repaint underneath
+  // instead (GfxRenderer::promoteNextRefresh).
+  bool cleanRefreshPending = false;
+
  public:
   explicit FrontlightPanelActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
