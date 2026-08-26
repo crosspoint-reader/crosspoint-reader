@@ -5,6 +5,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -347,6 +348,10 @@ void EpubReaderActivity::loop() {
       buildTickHeapGate()) {
     RenderLock lock;
     if (section->isBuilding() && buildTickHeapGate()) {
+      // The main-loop task inherits the idle downclock (as low as 10 MHz)
+      // unless raised here; the build must run at full speed to stay ahead
+      // of normal reading pace.
+      HalPowerManager::Lock powerLock;
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
