@@ -852,8 +852,9 @@ CssParser::ParseResult CssParser::loadFromStream(HalFile& source) {
   if (inputTruncated) {
     LOG_ERR("CSS", "CSS input exceeded parser buffer; cache will remain partial");
   }
+  const bool incompleteInput = bodyDepth > 0 || inAtRule || inComment || !selector.empty();
   LOG_DBG("CSS", "Parsed %zu rules from %zu bytes", ruleCount(), totalRead);
-  return ruleGrowthStopped_ || inputTruncated ? ParseResult::Partial : ParseResult::Complete;
+  return ruleGrowthStopped_ || inputTruncated || incompleteInput ? ParseResult::Partial : ParseResult::Complete;
 }
 
 // Style resolution

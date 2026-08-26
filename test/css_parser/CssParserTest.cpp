@@ -159,6 +159,13 @@ TEST_F(CssParserTest, OversizedDeclarationMarksParsePartialAndKeepsFollowingDecl
   EXPECT_EQ(style.fontStyle, CssFontStyle::Italic);
 }
 
+TEST_F(CssParserTest, IncompleteInputMarksParsePartial) {
+  for (const char* css : {".a { font-weight: bold;", "@media screen {", "/* unfinished", ".unfinished"}) {
+    CssParser parser(cachePath());
+    EXPECT_EQ(loadCss(parser, css), CssParser::ParseResult::Partial) << css;
+  }
+}
+
 TEST_F(CssParserTest, CanonicalCacheRoundTripPreservesStyles) {
   CssParser writer(cachePath());
   ASSERT_EQ(loadCss(writer,
