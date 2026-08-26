@@ -1,5 +1,6 @@
 #include "ChapterXPathResolver.h"
 
+#include <Epub/VisibleTextUtils.h>
 #include <Logging.h>
 #include <Print.h>
 #include <Utf8.h>
@@ -55,7 +56,7 @@ std::string buildParagraphXPath(const int spineIndex, const std::vector<PathSegm
   for (const auto& segment : path) {
     xpath += "/" + segment.name + "[" + std::to_string(segment.index) + "]";
   }
-  if (textNodeIndex > 0 && charOffset > 0) {
+  if (textNodeIndex > 0) {
     xpath += "/text()[" + std::to_string(textNodeIndex) + "]." + std::to_string(charOffset);
   }
   return xpath;
@@ -155,6 +156,9 @@ class ParagraphTextCounter final : public Print {
       return;
     }
 
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
+      nonVisibleDepth++;
+    }
     if (name == "p") {
       paragraphDepth++;
     }
@@ -171,16 +175,20 @@ class ParagraphTextCounter final : public Print {
 
     if (depth == bodyDepth && name == "body") {
       insideBody = false;
+      nonVisibleDepth = 0;
       return;
     }
 
+    if (nonVisibleDepth > 0) {
+      nonVisibleDepth--;
+    }
     if (name == "p" && paragraphDepth > 0) {
       paragraphDepth--;
     }
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || paragraphDepth <= 0 || len <= 0) {
+    if (!insideBody || nonVisibleDepth > 0 || paragraphDepth <= 0 || len <= 0) {
       return;
     }
 
@@ -195,6 +203,7 @@ class ParagraphTextCounter final : public Print {
   int depth = 0;
   int bodyDepth = -1;
   int paragraphDepth = 0;
+  uint16_t nonVisibleDepth = 0;
   size_t visibleChars = 0;
 };
 
@@ -333,7 +342,11 @@ class XPathParagraphResolver final : public Print {
 
 class XPathProgressResolver final : public Print {
  public:
-  explicit XPathProgressResolver(const size_t targetVisibleChar) : targetVisibleChar(targetVisibleChar) {
+  enum class BoundaryMode { Exclusive, Inclusive };
+
+  explicit XPathProgressResolver(const size_t targetVisibleChar,
+                                 const BoundaryMode boundaryMode = BoundaryMode::Exclusive)
+      : targetVisibleChar(targetVisibleChar), boundaryMode(boundaryMode) {
     parser = XML_ParserCreate(nullptr);
     if (!parser) {
       LOG_ERR("KOX", "Failed to create XML parser");
@@ -343,6 +356,10 @@ class XPathProgressResolver final : public Print {
     XML_SetUserData(parser, this);
     XML_SetElementHandler(parser, &XPathProgressResolver::startElement, &XPathProgressResolver::endElement);
     XML_SetCharacterDataHandler(parser, &XPathProgressResolver::characterData);
+    XML_SetCommentHandler(parser, &XPathProgressResolver::comment);
+    XML_SetProcessingInstructionHandler(parser, &XPathProgressResolver::processingInstruction);
+    XML_SetCdataSectionHandler(parser, &XPathProgressResolver::startCdataSection,
+                               &XPathProgressResolver::endCdataSection);
   }
 
   ~XPathProgressResolver() override { destroyXmlParser(parser); }
@@ -400,6 +417,26 @@ class XPathProgressResolver final : public Print {
     self->onCharacterData(data, len);
   }
 
+  static void XMLCALL comment(void* userData, const XML_Char*) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
+  static void XMLCALL processingInstruction(void* userData, const XML_Char*, const XML_Char*) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
+  static void XMLCALL startCdataSection(void* userData) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
+  static void XMLCALL endCdataSection(void* userData) {
+    auto* self = static_cast<XPathProgressResolver*>(userData);
+    self->onMarkupBoundary();
+  }
+
   void onStartElement(const XML_Char* rawName) {
     const std::string name = stripPrefix(rawName);
 
@@ -418,6 +455,10 @@ class XPathProgressResolver final : public Print {
     parentStates.emplace_back();
     textNodeIndexStack.push_back(0);
     pendingTextNode = true;
+
+    if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
+      nonVisibleDepth++;
+    }
 
     if (name == "p") {
       paragraphDepth++;
@@ -442,9 +483,13 @@ class XPathProgressResolver final : public Print {
       parentStates.clear();
       path.clear();
       textNodeIndexStack.clear();
+      nonVisibleDepth = 0;
       return;
     }
 
+    if (nonVisibleDepth > 0) {
+      nonVisibleDepth--;
+    }
     if (name == "p" && paragraphDepth > 0) {
       paragraphDepth--;
     }
@@ -467,7 +512,7 @@ class XPathProgressResolver final : public Print {
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
+    if (!insideBody || nonVisibleDepth > 0 || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
       return;
     }
 
@@ -476,7 +521,7 @@ class XPathProgressResolver final : public Print {
       return;
     }
 
-    // Start a new text node on first non-empty content after any element boundary.
+    // Start a new text node on first non-empty content after any structural boundary.
     // Only counting non-empty nodes matches KOReader's text()[N] indexing behavior,
     // which skips empty text nodes created by bare <a id="anchor"/> anchors.
     if (pendingTextNode) {
@@ -488,7 +533,9 @@ class XPathProgressResolver final : public Print {
     }
 
     const size_t nextVisibleChars = visibleChars + codepointCount;
-    if (targetVisibleChar <= nextVisibleChars) {
+    const bool targetInCurrentChunk = boundaryMode == BoundaryMode::Inclusive ? targetVisibleChar <= nextVisibleChars
+                                                                              : targetVisibleChar < nextVisibleChars;
+    if (targetInCurrentChunk) {
       const size_t delta = targetVisibleChar - visibleChars;
       const int texNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
       const size_t charOff = visibleChars - textNodeStartChars + delta;
@@ -501,8 +548,17 @@ class XPathProgressResolver final : public Print {
     visibleChars = nextVisibleChars;
   }
 
+  void onMarkupBoundary() {
+    if (!insideBody || nonVisibleDepth > 0 || (paragraphDepth <= 0 && liDepth <= 0) || stopped || pendingTextNode) {
+      return;
+    }
+
+    pendingTextNode = true;
+  }
+
   XML_Parser parser = nullptr;
   const size_t targetVisibleChar;
+  const BoundaryMode boundaryMode;
   bool parseOk = true;
   bool insideBody = false;
   bool stopped = false;
@@ -511,6 +567,7 @@ class XPathProgressResolver final : public Print {
   int bodyDepth = -1;
   int paragraphDepth = 0;
   int liDepth = 0;
+  uint16_t nonVisibleDepth = 0;
   size_t visibleChars = 0;
   size_t textNodeStartChars = 0;
   std::vector<int> textNodeIndexStack;
@@ -550,6 +607,37 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
   return "";
 }
 
+std::string ChapterXPathResolver::findXPathForVisibleTextOffset(const std::shared_ptr<Epub>& epub, const int spineIndex,
+                                                                const uint32_t visibleTextOffset) {
+  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+    return "";
+  }
+
+  const auto href = epub->getSpineItem(spineIndex).href;
+  if (href.empty()) {
+    return "";
+  }
+
+  XPathProgressResolver resolver(visibleTextOffset);
+  if (!resolver.ok()) {
+    return "";
+  }
+
+  resolver.spineIndex = spineIndex;
+  if (!epub->readItemContentsToStream(href, resolver, 1024) || !resolver.finish()) {
+    return "";
+  }
+
+  if (resolver.hasMatch()) {
+    LOG_DBG("KOX", "Resolved visible offset %u in spine %d -> %s", visibleTextOffset, spineIndex,
+            resolver.getXPath().c_str());
+    return resolver.getXPath();
+  }
+
+  LOG_DBG("KOX", "Visible offset %u not found in spine %d", visibleTextOffset, spineIndex);
+  return "";
+}
+
 std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epub>& epub, const int spineIndex,
                                                        const float intraSpineProgress) {
   if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
@@ -579,7 +667,7 @@ std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epu
   const size_t targetVisibleChar =
       std::max<size_t>(1, std::min(totalVisibleChars, static_cast<size_t>(std::ceil(clamped * totalVisibleChars))));
 
-  XPathProgressResolver resolver(targetVisibleChar);
+  XPathProgressResolver resolver(targetVisibleChar, XPathProgressResolver::BoundaryMode::Inclusive);
   if (!resolver.ok()) {
     return "";
   }
