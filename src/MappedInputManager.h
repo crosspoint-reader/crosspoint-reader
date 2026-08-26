@@ -85,6 +85,12 @@ class MappedInputManager {
   // is intentionally unused. Other boards retain the bottom-edge Home gesture.
   // The reader menu remains on its existing top-edge gesture and middle tap.
   bool wasHomeGesture() const;
+  // Queue a single Home-key tap to be reported by wasHomeGesture() on a later
+  // frame. Used by the main-loop double-click arbiter when the 300 ms window
+  // expires without a second tap.
+  void queueDeferredHomeGesture();
+  // Clear any queued deferred Home-key tap (e.g. when a long-press cancels it).
+  void clearDeferredHomeGesture() const;
   // A Home-key hold runs the configured long-press action in the reader.
   bool wasHomeKeyHold() const;
   bool wasMenuGesture() const;
@@ -141,6 +147,9 @@ class MappedInputManager {
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;
   mutable unsigned long touchHeldOverrideAt = 0;
+  // Latched single Home-key tap set by queueDeferredHomeGesture() and consumed
+  // by wasHomeGesture(). Mutable so clearDeferredHomeGesture() can be const.
+  mutable bool deferredHomeGesture = false;
 #if FREEINK_CAP_TOUCH
   bool powerConfirmClickFrame = false;
 #endif

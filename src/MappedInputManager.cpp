@@ -279,8 +279,16 @@ bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); 
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 bool MappedInputManager::wasHomeGesture() const {
+  if (deferredHomeGesture) {
+    deferredHomeGesture = false;
+    return true;
+  }
   return gpio.hasHomeKey() ? gpio.wasHomeKeyTapped() : wasBottomEdgeUpSwipe();
 }
+
+void MappedInputManager::queueDeferredHomeGesture() { deferredHomeGesture = true; }
+
+void MappedInputManager::clearDeferredHomeGesture() const { deferredHomeGesture = false; }
 
 bool MappedInputManager::wasHomeKeyHold() const { return gpio.hasHomeKey() && gpio.wasHomeKeyLongPressed(); }
 

@@ -38,6 +38,7 @@
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
+#include "util/HomeTapTracker.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -53,6 +54,9 @@ namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
 constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
 }  // namespace
+
+static HomeTapTracker homeTapTracker;
+constexpr unsigned long X4PRO_HOME_DOUBLE_CLICK_MS = 300;
 
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
@@ -193,6 +197,21 @@ void silentRestartToReader() {
   ESP.restart();
 }
 
+bool toggleFrontlightByShortcut(const char* source) {
+#if FREEINK_CAP_FRONTLIGHT
+  if (!Frontlight.present()) return false;
+  const bool lightOn = !Frontlight.isOn();
+  Frontlight.setOn(lightOn);
+  SETTINGS.frontlightOn = lightOn ? 1 : 0;
+  SETTINGS.saveToFile();
+  LOG_INF("LIGHT", "Frontlight toggled %s by %s", lightOn ? "on" : "off", source);
+  return true;
+#else
+  (void)source;
+  return false;
+#endif
+}
+
 bool handleX4ProFrontlightDoubleClick() {
   if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
     return false;
@@ -210,12 +229,57 @@ bool handleX4ProFrontlightDoubleClick() {
   }
 
   lastX4ProPowerClickAt = 0;
-  const bool lightOn = !Frontlight.isOn();
-  Frontlight.setOn(lightOn);
-  SETTINGS.frontlightOn = lightOn ? 1 : 0;
-  SETTINGS.saveToFile();
-  LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
+  toggleFrontlightByShortcut("power-button double-click");
   return true;
+}
+
+// Returns true when this frame was consumed by Home double-click arbitration
+// (or a configured double-click action just ran).
+bool handleX4ProHomeDoubleClick() {
+  if (!BoardConfig::hasHomeKey()) return false;
+  if (SETTINGS.homeButtonDoubleClickAction == CrossPointSettings::HB_DBL_OFF) return false;
+
+  const bool tap = gpio.wasHomeKeyTapped();
+  if (!homeTapTracker.armed && !tap) return false;
+
+  if (!homeTapTracker.armed) {
+    // First tap arms the window. Any stale deferred gesture dies here: it can
+    // only exist if no activity ran since it was queued (e.g. the Home screen,
+    // whose isHomeActivity() bypasses wasHomeGesture()), and a fresh tap must
+    // not be preceded by an old navigation.
+    mappedInputManager.clearDeferredHomeGesture();
+    homeTapTracker.arm(millis());
+    return true;  // consume the frame
+  }
+
+  // Armed: a long-press cancels the pending single tap without running any action.
+  if (gpio.wasHomeKeyLongPressed()) {
+    homeTapTracker.disarm();
+    mappedInputManager.clearDeferredHomeGesture();
+    return true;  // consume and swallow the pending tap
+  }
+
+  const auto step = homeTapTracker.update(tap, millis(), X4PRO_HOME_DOUBLE_CLICK_MS);
+  if (step == HomeTapTracker::Step::DoubleClick) {
+    switch (SETTINGS.homeButtonDoubleClickAction) {
+      case CrossPointSettings::HB_DBL_FRONTLIGHT:
+        toggleFrontlightByShortcut("home-button double-click");
+        break;
+      case CrossPointSettings::HB_DBL_GO_HOME:
+        activityManager.goHome();
+        break;
+      default:
+        break;
+    }
+    return true;
+  }
+
+  if (step == HomeTapTracker::Step::WindowExpired) {
+    mappedInputManager.queueDeferredHomeGesture();
+    return true;  // still consumed; single click fires on a later loop pass
+  }
+
+  return true;  // armed but still inside the window
 }
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
@@ -681,6 +745,12 @@ void loop() {
   // Placed after sleep guards so we never queue a render that won't be processed.
   if (gpio.wasUsbStateChanged()) {
     activityManager.requestUpdate();
+  }
+
+  // Home-key double-click arbitration must consume frames before activities see
+  // them, otherwise a screen can act on the raw tap before the window closes.
+  if (handleX4ProHomeDoubleClick()) {
+    return;
   }
 
   const unsigned long activityStartTime = millis();

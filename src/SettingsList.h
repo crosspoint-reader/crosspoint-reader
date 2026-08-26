@@ -185,6 +185,11 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   return {VALUES, VALUES + count};
 }
 
+inline std::vector<StrId> buildHomeDoubleClickValues() {
+  static constexpr StrId VALUES[] = {StrId::STR_STATE_OFF, StrId::STR_FRONTLIGHT, StrId::STR_GO_HOME_BUTTON};
+  return {VALUES, VALUES + std::size(VALUES)};
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -327,6 +332,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
+        SettingInfo::Enum(StrId::STR_HOME_DOUBLE_CLICK, &CrossPointSettings::homeButtonDoubleClickAction,
+                          buildHomeDoubleClickValues(), "homeButtonDoubleClickAction", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
@@ -469,7 +476,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // center tap is the primary path, so the setting stays at its Tap default.
   if (!BoardConfig::hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_SHOW_READER_MENU; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_SHOW_READER_MENU || s.nameId == StrId::STR_HOME_DOUBLE_CLICK;
+                           }),
             v.end());
   }
   if (BoardConfig::hasTouch()) {
