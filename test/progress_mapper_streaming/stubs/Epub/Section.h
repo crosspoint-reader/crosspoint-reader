@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Epub.h"
-#include "GfxRenderer.h"
-
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+
+#include "Epub.h"
+#include "GfxRenderer.h"
 
 class Section {
  public:
