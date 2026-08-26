@@ -413,31 +413,27 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  const unsigned long confirmHoldMs = confirmLongPressThreshold();
+  const bool confirmLongPressed =
+      confirmHoldMs != 0 && mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, confirmHoldMs);
   const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
-  if (confirmReleased) {
+  if (confirmLongPressed) {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
-          addBookmark();
-          showBookmarkMessage = true;
-          bookmarkMessageTime = millis();
-          requestUpdate();
-          return;
-        }
+        addBookmark();
+        showBookmarkMessage = true;
+        bookmarkMessageTime = millis();
+        requestUpdate();
         break;
       case CrossPointSettings::LP_MENU_KOSYNC:
-        if (mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS && launchKOReaderSync()) return;
-        break;
-      case CrossPointSettings::LP_MENU_DICTIONARY:
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
-          openDictionaryWordSelect();
+        if (launchKOReaderSync()) {
           return;
         }
         break;
+      case CrossPointSettings::LP_MENU_DICTIONARY:
+        openDictionaryWordSelect();
+        return;
       case CrossPointSettings::LP_MENU_READER_MENU:
-        // Confirm already opens the menu on release. This option exists for
-        // boards whose capacitive Home key supplies the long-press action.
-        break;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
         break;
@@ -540,14 +536,13 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
-  const bool longPress = !fromTilt && heldMs > ReaderUtils::SKIP_HOLD_MS;
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Power) &&
       mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     return;
   }
 
+  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+  const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
     skipPages(nextTriggered ? 1 : -1);
     requestUpdate();
@@ -833,6 +828,20 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       addBookmark();
       break;
     }
+  }
+}
+
+unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
+  switch (SETTINGS.longPressMenuFunction) {
+    case CrossPointSettings::LP_MENU_BOOKMARK:
+    case CrossPointSettings::LP_MENU_DICTIONARY:
+      return ReaderUtils::BOOKMARK_HOLD_MS;
+    case CrossPointSettings::LP_MENU_KOSYNC:
+      return KOREADER_STORE.hasCredentials() ? ReaderUtils::GO_HOME_MS : 0;
+    case CrossPointSettings::LP_MENU_READER_MENU:
+    case CrossPointSettings::LP_MENU_DISABLED:
+    default:
+      return 0;
   }
 }
 

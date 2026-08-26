@@ -74,6 +74,8 @@ void ActivityManager::renderTaskLoop() {
 }
 
 void ActivityManager::loop() {
+  if (mappedInput.consumeSuppressedRelease()) return;
+
   if (currentActivity) {
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {

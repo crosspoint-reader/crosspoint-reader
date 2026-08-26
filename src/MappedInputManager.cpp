@@ -13,6 +13,13 @@
 
 namespace fui = freeink::ui;
 
+void MappedInputManager::update() const {
+  gpio.update();
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
+    if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
+  }
+}
+
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
   // setting. The reader (and its modal menus) render rotated, so navigation/labels flip there; the
@@ -313,6 +320,31 @@ bool MappedInputManager::wasReleased(const Button button) const {
   if (button == Button::Confirm && wasPowerConfirmClick()) return true;
 #endif
   return mapButton(button, &HalGPIO::wasReleased);
+}
+
+bool MappedInputManager::wasLongPressed(const Button button, const unsigned long thresholdMs) const {
+  if (!isPressed(button)) return false;
+  const uint16_t bit = 1u << static_cast<uint8_t>(button);
+  if ((longPressFiredButtons & bit) != 0 || getHeldTime() < thresholdMs) return false;
+  longPressFiredButtons |= bit;
+  suppressNextRelease(button);
+  return true;
+}
+
+void MappedInputManager::suppressNextRelease(const Button button) const {
+  suppressedReleaseButtons |= 1u << static_cast<uint8_t>(button);
+}
+
+bool MappedInputManager::consumeSuppressedRelease() const {
+  uint16_t released = 0;
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
+    const uint16_t bit = 1u << value;
+    if ((suppressedReleaseButtons & bit) != 0 && mapButton(static_cast<Button>(value), &HalGPIO::wasReleased)) {
+      released |= bit;
+    }
+  }
+  suppressedReleaseButtons &= ~released;
+  return released != 0;
 }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
