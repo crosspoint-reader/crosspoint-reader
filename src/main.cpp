@@ -233,59 +233,71 @@ bool handleX4ProFrontlightDoubleClick() {
   return true;
 }
 
-// Returns true when this frame was consumed by Home double-click arbitration
-// (or a configured double-click action just ran).
+// Intercepts Home-key events while a first tap is pending inside the
+// double-click window. Returns true when this frame carried a Home tap that
+// arbitration consumed; frames without Home events still reach activities so
+// unrelated input (page turns, touch) is never delayed by the window.
 bool handleX4ProHomeDoubleClick() {
   if (!BoardConfig::hasHomeKey()) return false;
   if (SETTINGS.homeButtonDoubleClickAction == CrossPointSettings::HB_DBL_OFF) return false;
 
   const bool tap = gpio.wasHomeKeyTapped();
-  if (!homeTapTracker.armed && !tap) return false;
-
-  if (!homeTapTracker.armed) {
-    // First tap arms the window. Any stale deferred gesture dies here: it can
-    // only exist if no activity ran since it was queued (e.g. the Home screen,
-    // whose isHomeActivity() bypasses wasHomeGesture()), and a fresh tap must
-    // not be preceded by an old navigation.
+  if (tap && !homeTapTracker.armed) {
+    // First tap: start the window and hold the frame so no screen acts on it.
+    // A fresh tap also beats any stale deferred gesture queued earlier.
     mappedInputManager.clearDeferredHomeGesture();
     homeTapTracker.arm(millis());
-    return true;  // consume the frame
-  }
-
-  // Armed: a long-press cancels the pending single tap without running any action.
-  if (gpio.wasHomeKeyLongPressed()) {
-    homeTapTracker.disarm();
-    mappedInputManager.clearDeferredHomeGesture();
-    return true;  // consume and swallow the pending tap
-  }
-
-  const auto step = homeTapTracker.update(tap, millis(), X4PRO_HOME_DOUBLE_CLICK_MS);
-  if (step == HomeTapTracker::Step::DoubleClick) {
-    switch (SETTINGS.homeButtonDoubleClickAction) {
-      case CrossPointSettings::HB_DBL_FRONTLIGHT:
-        toggleFrontlightByShortcut("home-button double-click");
-        break;
-      case CrossPointSettings::HB_DBL_GO_HOME:
-        activityManager.goHome();
-        break;
-      default:
-        break;
-    }
     return true;
   }
+  if (!homeTapTracker.armed) return false;
 
-  if (step == HomeTapTracker::Step::WindowExpired) {
-    // On the home screen no activity consumes wasHomeGesture(), so a queued
-    // gesture would leak a phantom navigation into the next non-home screen.
-    // Swallow the tap there; everywhere else deliver it late via the latch.
-    if (activityManager.isOnHomeScreen()) {
+  // A window is open. The SDK clears its one-shot edges on every update(), so
+  // an unread long-press edge would vanish — sample it even on idle frames.
+  const bool hold = gpio.wasHomeKeyLongPressed();
+
+  const auto step = homeTapTracker.update(tap, millis(), X4PRO_HOME_DOUBLE_CLICK_MS);
+  switch (step) {
+    case HomeTapTracker::Step::DoubleClick:
+      switch (SETTINGS.homeButtonDoubleClickAction) {
+        case CrossPointSettings::HB_DBL_FRONTLIGHT:
+          toggleFrontlightByShortcut("home-button double-click");
+          break;
+        case CrossPointSettings::HB_DBL_GO_HOME:
+          activityManager.goHome();
+          break;
+        default:
+          break;
+      }
       return true;
-    }
-    mappedInputManager.queueDeferredHomeGesture();
-    return true;  // still consumed; single click fires on a later loop pass
+
+    case HomeTapTracker::Step::WindowExpired:
+      // Deliver the single click late — except on the home screen, where no
+      // activity consumes wasHomeGesture() and the latch would leak a phantom
+      // navigation into the next non-home screen.
+      if (!activityManager.isOnHomeScreen()) {
+        mappedInputManager.queueDeferredHomeGesture();
+      }
+      if (tap) {
+        // A stalled loop can deliver the expiry and the next physical tap on
+        // the same frame; that tap starts a fresh window instead of being lost.
+        homeTapTracker.arm(millis());
+        return true;
+      }
+      return false;  // no Home event left this frame: the latch delivers below
+
+    case HomeTapTracker::Step::None:
+      break;
   }
 
-  return true;  // armed but still inside the window
+  if (hold) {
+    // A hold is its own gesture, never the second half of a double click.
+    // Cancel the pending tap but let the hold flow to the activity that owns
+    // the configured long-press action.
+    homeTapTracker.disarm();
+    return false;
+  }
+  // Still inside the window with no second tap yet.
+  return false;
 }
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
