@@ -35,11 +35,10 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   tokens.headerSidePadding = static_cast<int16_t>(metrics.headerSidePadding);
   tokens.headerUnderline = static_cast<uint8_t>(metrics.headerUnderlineSize);
   tokens.headerTitleAlign = static_cast<fui::TextAlign>(metrics.headerTitleAlign);
-  // Control-panel shape (sheet corners, tiles, step buttons, capsule slider),
-  // so the control center follows the theme like every list and header does.
-  tokens.controlRadius = static_cast<uint8_t>(metrics.controlRadius);
-  tokens.sheetRadius = static_cast<uint8_t>(metrics.sheetRadius);
-  tokens.capsuleRadius = static_cast<uint8_t>(metrics.capsuleRadius);
+  // Reuse each theme's existing popup shapes for control-panel chrome.
+  tokens.controlRadius = static_cast<uint8_t>(metrics.popupCornerRadius);
+  tokens.sheetRadius = static_cast<uint8_t>(metrics.popupCornerRadius);
+  tokens.capsuleRadius = static_cast<uint8_t>(metrics.optionPopupSelectionRadius);
   tokens.bodyText.bold = metrics.listTitleBold;
   return tokens;
 }

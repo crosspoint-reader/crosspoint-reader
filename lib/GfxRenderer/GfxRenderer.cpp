@@ -1673,21 +1673,21 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
-HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh(const HalDisplay::RefreshMode refreshMode) const {
-  if (!promotedRefreshPending_) return refreshMode;
-  promotedRefreshPending_ = false;
-  return promotedRefresh_;
+HalDisplay::RefreshMode GfxRenderer::applyRequestedFullRefresh(const HalDisplay::RefreshMode refreshMode) const {
+  if (!fullRefreshPending_) return refreshMode;
+  fullRefreshPending_ = false;
+  return HalDisplay::FULL_REFRESH;
 }
 
 void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
-  refreshMode = applyPromotedRefresh(refreshMode);
+  refreshMode = applyRequestedFullRefresh(refreshMode);
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
-  refreshMode = applyPromotedRefresh(refreshMode);
+  refreshMode = applyRequestedFullRefresh(refreshMode);
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {

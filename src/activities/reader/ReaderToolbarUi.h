@@ -24,7 +24,7 @@ class MappedInputManager;
 // clears the screen: the page stays visible around the chrome.
 class ReaderToolbarUi : public UiAppHost {
  public:
-  enum class Event { None, Dismiss, Tool, PrevChapter, NextChapter, Scrub, Row };
+  enum class Event { None = 0, Dismiss = 1, Tool = 2, PrevChapter = 3, NextChapter = 4, Scrub = 5, Row = 6 };
 
   struct Model {
     bool panel = false;  // false = toolbar, true = a Contents/Text/More panel
@@ -74,10 +74,8 @@ class ReaderToolbarUi : public UiAppHost {
   // viewport (measured page size, no-op detection), the top/selected fields
   // are the live state, and buildPanel() syncs it into the list each build.
   freeink::ui::ListNav& nav() { return nav_; }
-  // Rows one page holds (measured after the first render), and the first
-  // visible row.
+  // Rows one page holds, measured after the first render.
   int visibleRows() const { return nav_.pageRows(); }
-  int topIndex() const { return nav_.top; }
 
  private:
   static void screenFn(UiScreen& screen, void* user);
@@ -85,7 +83,6 @@ class ReaderToolbarUi : public UiAppHost {
   void buildToolbar(UiScreen& screen);
   void buildPanel(UiScreen& screen);
   void buildToolRow(UiScreen& screen, freeink::ui::LayoutAnchor anchor);
-  int16_t toolRowHeight(const UiScreen& screen) const;
 
   Model model_;
   Routed pending_;

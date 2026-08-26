@@ -47,10 +47,7 @@ constexpr int BRIGHTNESS_STEP = 1;
 constexpr uint8_t MIN_BRIGHTNESS = 1;
 
 uint8_t percentFromPermille(const int16_t permille) {
-  int value = (static_cast<int>(permille) * 100 + 500) / 1000;
-  if (value < 0) value = 0;
-  if (value > 100) value = 100;
-  return static_cast<uint8_t>(value);
+  return static_cast<uint8_t>(std::clamp((static_cast<int>(permille) * 100 + 500) / 1000, 0, 100));
 }
 }  // namespace
 
@@ -148,14 +145,14 @@ void FrontlightPanelActivity::runTile(const int idx) {
       SETTINGS.saveToFile();
       // Inversion rewrites every pixel; take the clean waveform so the panel
       // does not keep a ghost of the old polarity.
-      cleanRefreshPending = true;
+      renderer.requestFullRefresh();
       requestUpdate();
       break;
     case 1:  // Ghost-cleanup refresh of the whole frame
       // Refreshing with the panel still up would clean a frame the user is
       // about to dismiss anyway: drop the panel first and let the repaint of
       // the screen underneath carry the clean waveform instead.
-      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);
+      renderer.requestFullRefresh();
       close();
       break;
     case 2:  // Cycle the reading orientation
@@ -170,7 +167,7 @@ void FrontlightPanelActivity::runTile(const int idx) {
       // repeated taps stacked stale panels on screen. The screen underneath
       // repaints in the new orientation and its refresh carries the cleanup a
       // whole-frame rewrite needs.
-      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);
+      renderer.requestFullRefresh();
       close();
       break;
     case 3:  // Touch reader controls (for reading with the palm on the glass)
@@ -194,9 +191,7 @@ void FrontlightPanelActivity::runTile(const int idx) {
 }
 
 void FrontlightPanelActivity::adjustBrightness(const int delta) {
-  int next = static_cast<int>(brightness) + delta;
-  if (next < MIN_BRIGHTNESS) next = MIN_BRIGHTNESS;
-  if (next > 100) next = 100;
+  const int next = std::clamp(static_cast<int>(brightness) + delta, static_cast<int>(MIN_BRIGHTNESS), 100);
   if (next == brightness) return;
   brightness = static_cast<uint8_t>(next);
   Frontlight.setBrightness(brightness);
@@ -209,9 +204,7 @@ void FrontlightPanelActivity::adjustBrightness(const int delta) {
 }
 
 void FrontlightPanelActivity::adjustWarmth(const int delta) {
-  int next = static_cast<int>(warmth) + delta;
-  if (next < 0) next = 0;
-  if (next > 100) next = 100;
+  const int next = std::clamp(static_cast<int>(warmth) + delta, 0, 100);
   if (next == warmth) return;
   warmth = static_cast<uint8_t>(next);
   Frontlight.setWarmth(warmth);
@@ -406,10 +399,5 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   // renderUi(); nothing is hand-drawn around it any more.
   renderUi();
 
-  // A tile that rewrote the whole frame (night mode) re-drives every pixel
-  // once; ordinary repaints stay on the fast path. FULL, not HALF: HALF is the
-  // balanced-speed waveform and leaves some ghost behind, which is exactly what
-  // the tile that sets this flag is asked to remove.
-  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
-  cleanRefreshPending = false;
+  renderer.displayBuffer();
 }
