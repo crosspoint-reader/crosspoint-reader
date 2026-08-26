@@ -93,6 +93,11 @@ class ActivityManager {
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false);
 
+  // True when the top of the stack is the device home screen. Input arbiters
+  // (e.g. the Home-key double click) use this to know when no activity will
+  // ever consume a queued gesture.
+  bool isOnHomeScreen() const;
+
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);
 

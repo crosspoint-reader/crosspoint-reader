@@ -16,15 +16,18 @@ struct HomeTapTracker {
   enum class Step { None, DoubleClick, WindowExpired };
 
   // Feed one main-loop frame while a tap is pending. Returns what to do.
+  // Expiry is checked BEFORE honoring a second tap: if a loop stall delays this
+  // call past windowMs, a tap that arrives "late" must not be misread as the
+  // second click of an expired pair — it starts a fresh window instead.
   Step update(bool secondTapSeen, unsigned long now, unsigned long windowMs) {
     if (!armed) return Step::None;
-    if (secondTapSeen) {
-      disarm();
-      return Step::DoubleClick;
-    }
     if (now - armedAt >= windowMs) {
       disarm();
       return Step::WindowExpired;
+    }
+    if (secondTapSeen) {
+      disarm();
+      return Step::DoubleClick;
     }
     return Step::None;
   }

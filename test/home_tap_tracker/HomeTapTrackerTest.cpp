@@ -59,3 +59,14 @@ TEST(HomeTapTracker, WindowExpiresThenTapStartsNewCycle) {
   EXPECT_EQ(tracker.update(true, 500, 300), HomeTapTracker::Step::DoubleClick);
   EXPECT_FALSE(tracker.armed);
 }
+
+// A loop stall can delay the update() call past the window. A tap seen on that
+// frame must NOT count as the second click of the expired pair (regression:
+// secondTapSeen used to be checked before expiry).
+TEST(HomeTapTracker, LateTapAfterStallIsNotDoubleClick) {
+  HomeTapTracker tracker;
+  tracker.arm(0);
+  // Frame delayed to 350 ms with a tap present: window already over.
+  EXPECT_EQ(tracker.update(true, 350, 300), HomeTapTracker::Step::WindowExpired);
+  EXPECT_FALSE(tracker.armed);
+}

@@ -275,6 +275,12 @@ bool handleX4ProHomeDoubleClick() {
   }
 
   if (step == HomeTapTracker::Step::WindowExpired) {
+    // On the home screen no activity consumes wasHomeGesture(), so a queued
+    // gesture would leak a phantom navigation into the next non-home screen.
+    // Swallow the tap there; everywhere else deliver it late via the latch.
+    if (activityManager.isOnHomeScreen()) {
+      return true;
+    }
     mappedInputManager.queueDeferredHomeGesture();
     return true;  // still consumed; single click fires on a later loop pass
   }
