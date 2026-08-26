@@ -5,6 +5,8 @@
 
 #include <cstdint>
 
+#include "util/FrontlightSchedule.h"
+
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   // Private constructor for singleton
@@ -311,6 +313,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Restore the saved on/off state after a normal boot or wake. Brightness and
   // warmth are always remembered even when this is disabled.
   uint8_t frontlightRestoreOnWake = 1;
+  // Optional local-time frontlight window, stored in 15-minute slots.
+  uint8_t frontlightScheduleEnabled = 0;
+  uint8_t frontlightScheduleStartQ = 19 * FrontlightSchedule::SLOTS_PER_HOUR;
+  uint8_t frontlightScheduleEndQ = 7 * FrontlightSchedule::SLOTS_PER_HOUR;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.

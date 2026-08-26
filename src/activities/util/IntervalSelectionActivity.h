@@ -13,10 +13,13 @@ class GfxRenderer;
 
 class IntervalSelectionActivity final : public Activity, private UiAppHost {
  public:
+  using Formatter = void (*)(char* buffer, size_t bufferSize, int value);
+
   explicit IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* activityName,
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
                                      int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
-                                     bool readerActivity = false, StrId maxBoundaryLabelId = StrId::STR_NONE_OPT);
+                                     bool readerActivity = false, StrId maxBoundaryLabelId = StrId::STR_NONE_OPT,
+                                     Formatter valueFormatter = nullptr, Formatter stepFormatter = nullptr);
 
   void onEnter() override;
   void loop() override;
@@ -42,6 +45,8 @@ class IntervalSelectionActivity final : public Activity, private UiAppHost {
   int smallStep;
   int largeStep;
   bool readerActivity;
+  Formatter valueFormatter;
+  Formatter stepFormatter;
   ButtonNavigator buttonNavigator;
 
   // Swallow the swipe/tap fallout of a slider drag so its release can't trigger

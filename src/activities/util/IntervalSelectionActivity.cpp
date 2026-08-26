@@ -26,7 +26,8 @@ IntervalSelectionActivity::IntervalSelectionActivity(GfxRenderer& renderer, Mapp
                                                      const int initialValue, const int minValue, const int maxValue,
                                                      const int smallStep, const int largeStep,
                                                      const StrId valueFormatId, const bool readerActivity,
-                                                     const StrId maxBoundaryLabelId)
+                                                     const StrId maxBoundaryLabelId, const Formatter valueFormatter,
+                                                     const Formatter stepFormatter)
     : Activity(activityName, renderer, mappedInput),
       UiAppHost(renderer),
       titleId(titleId),
@@ -37,7 +38,9 @@ IntervalSelectionActivity::IntervalSelectionActivity(GfxRenderer& renderer, Mapp
       maxValue(maxValue),
       smallStep(smallStep),
       largeStep(largeStep),
-      readerActivity(readerActivity) {}
+      readerActivity(readerActivity),
+      valueFormatter(valueFormatter),
+      stepFormatter(stepFormatter) {}
 
 int IntervalSelectionActivity::clampedValue(const int candidate) const {
   return std::clamp(candidate, minValue, maxValue);
@@ -147,6 +150,8 @@ void IntervalSelectionActivity::loop() {
 void IntervalSelectionActivity::formatValue(char* buffer, const size_t size, const int forValue) const {
   if (maxBoundaryLabelId != StrId::STR_NONE_OPT && forValue == maxValue) {
     snprintf(buffer, size, "%s", I18N.get(maxBoundaryLabelId));
+  } else if (valueFormatter != nullptr) {
+    valueFormatter(buffer, size, forValue);
   } else if (valueFormatId != StrId::STR_NONE_OPT) {
     snprintf(buffer, size, I18N.get(valueFormatId), static_cast<unsigned int>(forValue));
   } else {
@@ -170,7 +175,9 @@ void IntervalSelectionActivity::buildIntervalScreen(UiScreen& screen) {
   int hintIndex = 0;
   for (const auto& [labelId, step] :
        {std::pair{StrId::STR_STEP_HINT_FRONT, smallStep}, std::pair{StrId::STR_STEP_HINT_SIDE, largeStep}}) {
-    if (valueFormatId != StrId::STR_NONE_OPT) {
+    if (stepFormatter != nullptr) {
+      stepFormatter(stepText, sizeof(stepText), step);
+    } else if (valueFormatId != StrId::STR_NONE_OPT) {
       snprintf(stepText, sizeof(stepText), I18N.get(valueFormatId), static_cast<unsigned int>(step));
     } else {
       snprintf(stepText, sizeof(stepText), "%d", step);
