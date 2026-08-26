@@ -674,9 +674,14 @@ class ParagraphStreamer final : public Print {
 
   void finishTagName() {
     normalizeTagName();
-    if (tagNameLen == 0 || tagNameOverflow) {
+    if (tagNameLen == 0) {
       parseValid = false;
       return;
+    }
+    if (tagNameOverflow) {
+      tagName[0] = '?';
+      tagName[1] = '\0';
+      tagNameLen = 1;
     }
     if (tagIsClose)
       onCloseTag();
@@ -690,7 +695,7 @@ class ParagraphStreamer final : public Print {
     } else if (lexerState == LEX_TAG_ATTRS) {
       endAnchorIdScan();
     }
-    if (tagSelfClosing && !tagIsClose && !tagNameOverflow) onCloseTag();
+    if (tagSelfClosing && !tagIsClose) onCloseTag();
     lexerState = LEX_DATA;
     tagNameLen = 0;
     tagNameOverflow = false;
@@ -857,6 +862,9 @@ class ParagraphStreamer final : public Print {
         } else if (c == '!') {
           lexerState = LEX_BANG;
         } else if (c == '>') {
+          parseValid = false;
+          lexerState = LEX_DATA;
+        } else if (isAttrWhitespace(c)) {
           parseValid = false;
           lexerState = LEX_DATA;
         } else {

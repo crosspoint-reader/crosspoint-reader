@@ -1,12 +1,12 @@
 #pragma once
 
-#include "Print.h"
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
+
+#include "Print.h"
 
 class Epub {
  public:

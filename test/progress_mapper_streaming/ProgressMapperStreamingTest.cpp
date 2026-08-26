@@ -1,11 +1,11 @@
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <string>
+
 #include "Epub.h"
 #include "GfxRenderer.h"
 #include "ProgressMapper.h"
-
-#include <memory>
-#include <string>
 
 namespace {
 std::shared_ptr<Epub> makeBook(const std::string& source, std::size_t fragmentSize) {
@@ -102,15 +102,15 @@ TEST(ProgressMapperStreaming, LongNamespacePrefixesDoNotOverflowLocalNames) {
   }
 }
 
-TEST(ProgressMapperStreaming, LongLocalNamesFailClosedWithoutCorruptingDepth) {
-  const std::string source =
-      "<html><body><longcustomtag>wrong</longcustomtag><div>right</div></body></html>";
-  for (const std::size_t fragmentSize : {source.size(), std::size_t{1}}) {
-    const auto result = resolve(source, "/body/DocFragment[1]/body/div[1]/text()[1].1", fragmentSize);
-    EXPECT_FALSE(result.hasVisibleTextOffset);
-    EXPECT_EQ(result.totalPages, 8);
-    EXPECT_GE(result.pageNumber, 0);
-    EXPECT_LT(result.pageNumber, result.totalPages);
+TEST(ProgressMapperStreaming, LongLocalNamesDoNotMatchOrCorruptDepth) {
+  for (const std::string& source :
+       {std::string("<html><body><longcustomtag>wrong</longcustomtag><div>right</div></body></html>"),
+        std::string("<html><body><longcustomtag/>wrong<div>right</div></body></html>")}) {
+    for (const std::size_t fragmentSize : {source.size(), std::size_t{1}}) {
+      const auto result = resolve(source, "/body/DocFragment[1]/body/div[1]/text()[1].1", fragmentSize);
+      EXPECT_TRUE(result.hasVisibleTextOffset);
+      EXPECT_EQ(result.visibleTextOffset, 6u);
+    }
   }
 }
 
@@ -152,6 +152,17 @@ TEST(ProgressMapperStreaming, UnterminatedSpecialConstructsUsePercentageFallback
 
 TEST(ProgressMapperStreaming, EmptyTagNamesUsePercentageFallback) {
   const std::string source = "<html><body><p>before</>after</p></body></html>";
+  for (const std::size_t fragmentSize : {source.size(), std::size_t{1}}) {
+    const auto result = resolve(source, "/body/DocFragment[1]/body/p[1]/text()[1].1", fragmentSize);
+    EXPECT_FALSE(result.hasVisibleTextOffset);
+    EXPECT_EQ(result.totalPages, 8);
+    EXPECT_GE(result.pageNumber, 0);
+    EXPECT_LT(result.pageNumber, result.totalPages);
+  }
+}
+
+TEST(ProgressMapperStreaming, WhitespaceAfterLtUsesPercentageFallback) {
+  const std::string source = "<html><body><p>before< span>after</span></p></body></html>";
   for (const std::size_t fragmentSize : {source.size(), std::size_t{1}}) {
     const auto result = resolve(source, "/body/DocFragment[1]/body/p[1]/text()[1].1", fragmentSize);
     EXPECT_FALSE(result.hasVisibleTextOffset);
