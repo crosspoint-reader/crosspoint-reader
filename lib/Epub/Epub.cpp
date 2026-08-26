@@ -263,7 +263,6 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   struct CssDedupEntry {
     uint64_t pathHash = 0;
     uint64_t contentKey = 0;
-    size_t pathLength = 0;
     size_t cssIndex = 0;
   };
   std::unique_ptr<CssDedupEntry[]> dedupEntries;
@@ -273,7 +272,6 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   if (dedupEntries) {
     for (size_t i = 0; i < cssFiles.size(); i++) {
       dedupEntries[i].pathHash = ZipFile::fnvHash64(cssFiles[i].data(), cssFiles[i].size());
-      dedupEntries[i].pathLength = cssFiles[i].size();
       dedupEntries[i].cssIndex = i;
     }
     std::sort(dedupEntries.get(), dedupEntries.get() + cssFiles.size(),
@@ -290,12 +288,14 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
           [](const CssDedupEntry& candidate, const uint64_t hash) { return candidate.pathHash < hash; });
       for (const auto* end = dedupEntries.get() + cssFiles.size(); match != end && match->pathHash == pathHash;
            match++) {
-        if (match->pathLength == entryPath.size() && entryPath == cssFiles[match->cssIndex]) {
+        if (entryPath == cssFiles[match->cssIndex]) {
           match->contentKey = (static_cast<uint64_t>(crc32) << 32) | compressedSize;
           break;
         }
       }
     });
+    std::sort(dedupEntries.get(), dedupEntries.get() + cssFiles.size(),
+              [](const CssDedupEntry& lhs, const CssDedupEntry& rhs) { return lhs.cssIndex < rhs.cssIndex; });
   } else if (cssFiles.size() > 1) {
     LOG_ERR("EBP", "Insufficient heap for CSS deduplication; parsing every stylesheet");
   }
@@ -306,21 +306,11 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
   // No cache yet - parse CSS files
   for (size_t cssIndex = 0; cssIndex < cssFiles.size(); cssIndex++) {
     const auto& cssPath = cssFiles[cssIndex];
-    uint64_t dedupKey = 0;
-    if (dedupEntries) {
-      auto* end = dedupEntries.get() + cssFiles.size();
-      const auto* entry = std::find_if(dedupEntries.get(), end, [cssIndex](const CssDedupEntry& candidate) {
-        return candidate.cssIndex == cssIndex;
-      });
-      if (entry != end) {
-        dedupKey = entry->contentKey;
-      }
-    }
+    const uint64_t dedupKey = dedupEntries ? dedupEntries[cssIndex].contentKey : 0;
     if (dedupKey != 0) {
-      auto* end = dedupEntries.get() + cssFiles.size();
-      const bool seen = std::any_of(dedupEntries.get(), end, [cssIndex, dedupKey](const CssDedupEntry& candidate) {
-        return candidate.cssIndex < cssIndex && candidate.contentKey == dedupKey;
-      });
+      const bool seen =
+          std::any_of(dedupEntries.get(), dedupEntries.get() + cssIndex,
+                      [dedupKey](const CssDedupEntry& candidate) { return candidate.contentKey == dedupKey; });
       if (seen) {
         skippedDuplicates++;
         continue;

@@ -45,7 +45,6 @@ class CssParser {
 
   enum class CacheLoadResult : uint8_t {
     Complete,
-    Partial,
     LowMemory,
     Invalid,
   };
@@ -102,7 +101,6 @@ class CssParser {
     entries_.reset();
     selectorPool_.reset();
     stylePool_.reset();
-    styleHashes_.reset();
     entryCount_ = entryCapacity_ = 0;
     selectorPoolSize_ = selectorPoolCapacity_ = 0;
     styleCount_ = styleCapacity_ = 0;
@@ -131,7 +129,7 @@ class CssParser {
   /**
    * Load CSS rules from a cache file.
    * Clears any existing rules before loading.
-   * @return Complete or Partial when loaded, LowMemory when it should be retried, otherwise Invalid
+   * @return Complete when loaded, LowMemory when it should be retried, otherwise Invalid
    */
   CacheLoadResult loadFromCache();
 
@@ -161,7 +159,6 @@ class CssParser {
   std::unique_ptr<SelectorEntry[]> entries_;
   std::unique_ptr<char[]> selectorPool_;
   std::unique_ptr<CssStyle[]> stylePool_;
-  std::unique_ptr<uint32_t[]> styleHashes_;
   uint16_t entryCount_ = 0;
   uint16_t entryCapacity_ = 0;
   uint32_t selectorPoolSize_ = 0;

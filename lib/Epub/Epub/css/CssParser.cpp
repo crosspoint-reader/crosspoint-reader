@@ -89,21 +89,6 @@ void forEachDelimitedToken(std::string_view s, Pred isDelimiter, F&& fn) {
   }
 }
 
-// FNV-1a per Fowler/Noll/Vo, sized to match size_t on the target. The firmware
-// runs on a 32-bit core where size_t is 32 bits, so naively using the 64-bit
-// constants would silently truncate FNV_PRIME to a non-prime and wreck hash
-// distribution. The selection below picks the canonical 32- or 64-bit
-// constants at compile time so the same source works in a 64-bit host
-// simulator. `fnv1aMix` is the per-byte mix step; callers apply any
-// byte-level transform (e.g. asciiToLower) first.
-static_assert(sizeof(size_t) == 4 || sizeof(size_t) == 8, "FNV constants are only defined for 32- or 64-bit size_t");
-constexpr size_t FNV_OFFSET_BASIS =
-    sizeof(size_t) == 8 ? static_cast<size_t>(14695981039346656037ULL) : static_cast<size_t>(2166136261U);
-constexpr size_t FNV_PRIME =
-    sizeof(size_t) == 8 ? static_cast<size_t>(1099511628211ULL) : static_cast<size_t>(16777619U);
-
-constexpr size_t fnv1aMix(size_t hash, unsigned char byte) { return (hash ^ byte) * FNV_PRIME; }
-
 // Parse the entirety of s as a number into `out`. Accepts an optional leading
 // '+' (which std::from_chars rejects by spec) so callers can pass CSS-style
 // signed numbers without manual trimming. Returns false on empty input, a
@@ -267,12 +252,6 @@ bool decodeStyleWire(const uint8_t (&in)[STYLE_WIRE_BYTES], CssStyle& style) {
   return true;
 }
 
-uint32_t hashStyleWire(const uint8_t (&wire)[STYLE_WIRE_BYTES]) {
-  size_t hash = FNV_OFFSET_BASIS;
-  for (const uint8_t byte : wire) hash = fnv1aMix(hash, byte);
-  return static_cast<uint32_t>(hash);
-}
-
 }  // anonymous namespace
 
 int CssParser::compareEntryToPieces(const SelectorEntry& entry, const std::string_view p0, const std::string_view p1,
@@ -364,15 +343,12 @@ CssParser::PoolResult CssParser::ensureStyleCapacity(const size_t needed) {
   while (capacity < needed) capacity *= 2u;
   capacity = std::min(capacity, MAX_UNIQUE_STYLES);
   auto grownStyles = makeUniqueNoThrow<CssStyle[]>(capacity);
-  auto grownHashes = makeUniqueNoThrow<uint32_t[]>(capacity);
-  if (!grownStyles || !grownHashes) {
+  if (!grownStyles) {
     LOG_ERR("CSS", "OOM: style pool (%zu styles)", capacity);
     return PoolResult::OutOfMemory;
   }
   for (size_t i = 0; i < styleCount_; ++i) grownStyles[i] = stylePool_[i];
-  if (styleCount_ > 0) memcpy(grownHashes.get(), styleHashes_.get(), styleCount_ * sizeof(uint32_t));
   stylePool_ = std::move(grownStyles);
-  styleHashes_ = std::move(grownHashes);
   styleCapacity_ = static_cast<uint16_t>(capacity);
   return PoolResult::Ready;
 }
@@ -380,9 +356,7 @@ CssParser::PoolResult CssParser::ensureStyleCapacity(const size_t needed) {
 CssParser::PoolResult CssParser::internStyle(const CssStyle& style, uint16_t& indexOut) {
   uint8_t wire[STYLE_WIRE_BYTES];
   encodeStyleWire(style, wire);
-  const uint32_t hash = hashStyleWire(wire);
   for (uint16_t i = 0; i < styleCount_; ++i) {
-    if (styleHashes_[i] != hash) continue;
     uint8_t existingWire[STYLE_WIRE_BYTES];
     encodeStyleWire(stylePool_[i], existingWire);
     if (memcmp(existingWire, wire, STYLE_WIRE_BYTES) == 0) {
@@ -394,7 +368,6 @@ CssParser::PoolResult CssParser::internStyle(const CssStyle& style, uint16_t& in
   const PoolResult capacityResult = ensureStyleCapacity(static_cast<size_t>(styleCount_) + 1);
   if (capacityResult != PoolResult::Ready) return capacityResult;
   stylePool_[styleCount_] = style;
-  styleHashes_[styleCount_] = hash;
   indexOut = styleCount_++;
   return PoolResult::Ready;
 }
@@ -415,10 +388,7 @@ CssParser::RuleInsertResult CssParser::insertOrMerge(const std::string_view sele
       }
     }
     if (!styleIsShared) {
-      uint8_t wire[STYLE_WIRE_BYTES];
-      encodeStyleWire(merged, wire);
       stylePool_[currentStyleIndex] = merged;
-      styleHashes_[currentStyleIndex] = hashStyleWire(wire);
       return RuleInsertResult::Merged;
     }
 
@@ -1161,25 +1131,16 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
     return CacheLoadResult::LowMemory;
   }
 
-  auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
-    return static_cast<size_t>(file.available()) >= neededBytes;
-  };
-
   // Read each rule
   for (uint16_t i = 0; i < ruleCount; ++i) {
     // Read selector string
     uint16_t selectorLen = 0;
-    if (!hasRemainingBytes(sizeof(selectorLen))) {
-      clear();
-      return CacheLoadResult::Invalid;
-    }
     if (file.read(&selectorLen, sizeof(selectorLen)) != sizeof(selectorLen)) {
       clear();
       return CacheLoadResult::Invalid;
     }
 
-    if (selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH ||
-        !hasRemainingBytes(static_cast<size_t>(selectorLen) + STYLE_WIRE_BYTES)) {
+    if (selectorLen == 0 || selectorLen > MAX_SELECTOR_LENGTH) {
       LOG_DBG("CSS", "Invalid selector length in cache: %u", selectorLen);
       clear();
       return CacheLoadResult::Invalid;
@@ -1225,5 +1186,5 @@ CssParser::CacheLoadResult CssParser::loadFromCache() {
 
   const bool partial = (flags & CSS_CACHE_FLAG_PARTIAL) != 0;
   LOG_DBG("CSS", "Loaded %u rules from %s cache", ruleCount, partial ? "partial" : "complete");
-  return partial ? CacheLoadResult::Partial : CacheLoadResult::Complete;
+  return CacheLoadResult::Complete;
 }
