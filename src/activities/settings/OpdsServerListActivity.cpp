@@ -45,10 +45,10 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends three virtual items: "Add Server", "Download folder"
-  // and "Filename format".
+  // Settings mode appends four virtual items: "Add Server", "Download folder",
+  // "Filename format" and "Sync on startup".
   if (!pickerMode) {
-    count += 3;
+    count += 4;
   }
   return count;
 }
@@ -101,6 +101,11 @@ void OpdsServerListActivity::rebuildRowItems() {
     format.label = tr(STR_OPDS_FILENAME_FORMAT);
     format.actionValue = static_cast<int16_t>(serverCount + 2);
     rowItems_.push_back(format);  // subtitle refreshed per render below
+
+    fui::ListItem startupSync;
+    startupSync.label = tr(STR_OPDS_SYNC_ON_STARTUP);
+    startupSync.actionValue = static_cast<int16_t>(serverCount + 3);
+    rowItems_.push_back(startupSync);  // subtitle refreshed per render below
   }
 }
 
@@ -141,7 +146,8 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder],
+  // [Filename format], [Sync on startup].
   if (nav.selected == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -167,6 +173,18 @@ void OpdsServerListActivity::handleSelection() {
     optionPopup.show(StrId::STR_OPDS_FILENAME_FORMAT, formatLabels, static_cast<int>(OpdsFilenameFormat::Count),
                      SETTINGS.opdsFilenameFormat, [this](int idx) {
                        SETTINGS.opdsFilenameFormat = static_cast<uint8_t>(idx);
+                       SETTINGS.saveToFile();
+                     });
+    requestUpdate();
+    return;
+  }
+
+  // "Sync on startup": plain on/off, same popup shape as the format picker.
+  if (nav.selected == serverCount + 3) {
+    static const StrId toggleLabels[] = {StrId::STR_STATE_OFF, StrId::STR_STATE_ON};
+    optionPopup.show(StrId::STR_OPDS_SYNC_ON_STARTUP, toggleLabels, 2, SETTINGS.opdsSyncOnStartup ? 1 : 0,
+                     [this](int idx) {
+                       SETTINGS.opdsSyncOnStartup = static_cast<uint8_t>(idx);
                        SETTINGS.saveToFile();
                      });
     requestUpdate();
@@ -215,6 +233,7 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
     rowItems_[serverCount + 1].subtitle =
         SETTINGS.opdsDownloadFolder[0] ? SETTINGS.opdsDownloadFolder : tr(STR_OPDS_SD_ROOT);
     rowItems_[serverCount + 2].subtitle = I18N.get(opdsFormatLabel(SETTINGS.opdsFilenameFormat));
+    rowItems_[serverCount + 3].subtitle = SETTINGS.opdsSyncOnStartup ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
   }
 
   fui::ListProps props;

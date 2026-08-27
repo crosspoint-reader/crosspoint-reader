@@ -33,6 +33,7 @@
 #include "SdCardFontSystem.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/browser/OpdsStartupSyncActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -504,6 +505,11 @@ void setup() {
   } else if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
+  } else if (resume == BootResume::Splash && !isSleepWake && OpdsStartupSyncActivity::shouldRun()) {
+    // Opt-in OPDS catalog sync, cold boots only: a sleep wake must stay instant,
+    // and the sync's own teardown reboot comes back as BootResume::Silent, so it
+    // cannot re-enter itself. It ends by going home.
+    activityManager.replaceActivity(std::make_unique<OpdsStartupSyncActivity>(renderer, mappedInputManager));
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);

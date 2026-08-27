@@ -3,13 +3,13 @@
 #include <Arduino.h>
 #include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
-#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
 
-#include "CrossPointSettings.h"
+#include <cstdio>
+
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -19,9 +19,8 @@
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
+#include "network/OpdsBatchDownload.h"
 #include "util/BookCacheUtils.h"
-#include "util/OpdsFilename.h"
-#include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
 namespace fui = freeink::ui;
@@ -47,6 +46,7 @@ void OpdsBookBrowserActivity::onEnter() {
 
   state = BrowserState::CHECK_WIFI;
   entries.clear();
+  batchActive = false;
   navigationHistory.clear();
   searchTemplate = "";
   currentPath = "";
@@ -78,15 +78,21 @@ void OpdsBookBrowserActivity::onExit() {
 }
 
 void OpdsBookBrowserActivity::activateSelected() {
-  if (entries.empty() || selectorIndex < 0 || selectorIndex >= static_cast<int>(entries.size())) return;
-  const auto& entry = entries[selectorIndex];
+  if (selectorIndex < 0 || selectorIndex >= rowCount()) return;
+  if (isDownloadAllRow(selectorIndex)) {
+    downloadAllNew();
+    return;
+  }
+  const int entryIndex = entryIndexFromRow(selectorIndex);
+  if (entryIndex < 0 || entryIndex >= static_cast<int>(entries.size())) return;
+  const auto& entry = entries[entryIndex];
   entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
 }
 
 void OpdsBookBrowserActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(user);
   if (self->state != BrowserState::BROWSING) return;
-  if (event.value < 0 || event.value >= static_cast<int16_t>(self->entries.size())) return;
+  if (event.value < 0 || event.value >= static_cast<int16_t>(self->rowCount())) return;
   self->selectorIndex = event.value;
   // The tapped row leaves the screen either way (new feed or download view);
   // a lingering tap flash would gray an unrelated row on the next list.
@@ -162,31 +168,32 @@ void OpdsBookBrowserActivity::loop() {
       if (state != BrowserState::BROWSING) return;
     }
 
-    if (!entries.empty()) {
+    if (!rowItems.empty()) {
+      const size_t rows = rowItems.size();
       // Swipes scroll the viewport; the selection stays put (it may scroll
       // off-screen) and button navigation pulls the view back to it.
       const auto swipe = mappedInput.wasSwipe();
       if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
         const int delta = swipe == MappedInputManager::SwipeDir::Up ? listNav.visibleRows : -listNav.visibleRows;
-        if (listNav.scrollBy(delta, static_cast<int>(entries.size()))) requestUpdate();
+        if (listNav.scrollBy(delta, static_cast<int>(rows))) requestUpdate();
         return;
       }
 
-      const auto moveSelection = [this](const int index) {
+      const auto moveSelection = [this, rows](const int index) {
         selectorIndex = index;
         listNav.selected = index;
-        listNav.follow(static_cast<int>(entries.size()));
+        listNav.follow(static_cast<int>(rows));
         requestUpdate();
       };
       buttonNavigator.onNextRelease(
-          [this, &moveSelection] { moveSelection(ButtonNavigator::nextIndex(selectorIndex, entries.size())); });
+          [this, rows, &moveSelection] { moveSelection(ButtonNavigator::nextIndex(selectorIndex, rows)); });
       buttonNavigator.onPreviousRelease(
-          [this, &moveSelection] { moveSelection(ButtonNavigator::previousIndex(selectorIndex, entries.size())); });
-      buttonNavigator.onNextContinuous([this, &moveSelection] {
-        moveSelection(ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), listNav.visibleRows));
+          [this, rows, &moveSelection] { moveSelection(ButtonNavigator::previousIndex(selectorIndex, rows)); });
+      buttonNavigator.onNextContinuous([this, rows, &moveSelection] {
+        moveSelection(ButtonNavigator::nextPageIndex(selectorIndex, rows, listNav.visibleRows));
       });
-      buttonNavigator.onPreviousContinuous([this, &moveSelection] {
-        moveSelection(ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), listNav.visibleRows));
+      buttonNavigator.onPreviousContinuous([this, rows, &moveSelection] {
+        moveSelection(ButtonNavigator::previousPageIndex(selectorIndex, rows, listNav.visibleRows));
       });
     }
   }
@@ -234,7 +241,7 @@ void OpdsBookBrowserActivity::screenHeader(UiScreen& screen, const bool withSear
 void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
   screenHeader(screen, true);
 
-  if (entries.empty()) {
+  if (rowItems.empty()) {
     screen.centeredText(tr(STR_NO_ENTRIES), screen.theme().bodyText);
     return;
   }
@@ -259,7 +266,7 @@ void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
     rowHeight = static_cast<int16_t>(UITheme::getInstance().getMetrics().listWithSubtitleRowHeight);
     props.rowHeight = rowHeight;
   }
-  listNav.syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, static_cast<int>(entries.size()), props);
+  listNav.syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, static_cast<int>(rowItems.size()), props);
   screen.list(props);
 }
 
@@ -274,12 +281,21 @@ void OpdsBookBrowserActivity::buildDownloadScreen(UiScreen& screen) {
   const int16_t gap = theme.spaceMd;
   const int16_t barH = 16;
   const int16_t btnH = theme.rowHeight;
-  const int16_t blockH = static_cast<int16_t>(lh * 2 + barH + btnH + gap * 3);
+  const int16_t lines = batchActive ? 3 : 2;
+  const int16_t blockH = static_cast<int16_t>(lh * lines + barH + btnH + gap * (lines + 1));
   const fui::Rect body = screen.body();
   if (body.height > blockH) screen.spacer(static_cast<int16_t>((body.height - blockH) / 2));
 
-  screen.target().text(screen.takeTop(lh, gap), tr(STR_DOWNLOADING), centered);
+  screen.target().text(screen.takeTop(lh, gap), batchActive ? tr(STR_OPDS_DOWNLOAD_ALL_NEW) : tr(STR_DOWNLOADING),
+                       centered);
   screen.target().text(screen.takeTop(lh, gap), statusMessage.c_str(), centered);
+  if (batchActive) {
+    // "3 / 12" — books written so far out of acquisition entries examined.
+    // Stack buffer: the block is rebuilt on every progress repaint.
+    char counters[24];
+    snprintf(counters, sizeof(counters), "%d / %d", batchStatus.downloaded, batchStatus.examined);
+    screen.target().text(screen.takeTop(lh, gap), counters, centered);
+  }
 
   const fui::Rect bar = screen.takeTop(barH, gap).inset(fui::Insets{0, 50, 0, 50});
   if (downloadTotal > 0) {
@@ -326,8 +342,10 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   MappedInputManager::Labels labels;
   switch (state) {
     case BrowserState::BROWSING: {
-      const char* confirmLabel =
-          (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+      const int entryIndex = entryIndexFromRow(selectorIndex);
+      const bool onBook = entryIndex >= 0 && entryIndex < static_cast<int>(entries.size()) &&
+                          entries[entryIndex].type == OpdsEntryType::BOOK;
+      const char* confirmLabel = isDownloadAllRow(selectorIndex) || onBook ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
       const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
       labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
       break;
@@ -404,12 +422,27 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   requestUpdate();
 }
 
+bool OpdsBookBrowserActivity::hasBookEntry() const {
+  for (const auto& entry : entries) {
+    if (entry.type == OpdsEntryType::BOOK) return true;
+  }
+  return false;
+}
+
 // Derives rowItems from entries. Called whenever entries changes
 // (fetchFeed()/releaseEntries()) so buildBrowsingScreen() reuses the cached
 // rows on every repaint instead of rebuilding them per render.
 void OpdsBookBrowserActivity::rebuildRowItems() {
+  showDownloadAllRow = hasBookEntry();
+
   rowItems.clear();
-  rowItems.reserve(entries.size());
+  rowItems.reserve(entries.size() + (showDownloadAllRow ? 1 : 0));
+  if (showDownloadAllRow) {
+    fui::ListItem batch;
+    batch.label = tr(STR_OPDS_DOWNLOAD_ALL_NEW);
+    batch.actionValue = 0;
+    rowItems.push_back(batch);
+  }
   for (const auto& entry : entries) {
     fui::ListItem item;
     item.label = entry.title.c_str();
@@ -468,26 +501,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
-    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
-    // existing caller checks exists() before mkdir. On real failure, fall back
-    // to SD root so the download is never lost.
-    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
-  }
-
-  // downloadToFile() needs a std::string, and titles are unbounded (a fixed
-  // char[] would truncate). Cold path (a multi-second download follows), so one
-  // reserve'd, in-place-appended owning string is the right call.
-  std::string filename;
-  filename.reserve(96);
-  if (haveFolder) filename += folder;
-  filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
+  // Same composition as the batch walk's skip check, so a file written here is
+  // recognised as already-present there.
+  const std::string filename =
+      OpdsBatchDownload::destPath(book.author, book.title, OpdsBatchDownload::ensureDownloadFolder());
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
   int lastRenderedPercent = -1;
@@ -539,6 +556,83 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     errorMessage = tr(STR_DOWNLOAD_FAILED);
   }
   requestUpdate();
+}
+
+// Pumped by OpdsBatchDownload between chunks and between books: mirrors the
+// single-download callback's input handling and repaint throttling.
+bool OpdsBookBrowserActivity::onBatchProgress(void* ctx, const OpdsBatchDownload::Status& status) {
+  auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
+  self->downloadProgress = status.bytes;
+  self->downloadTotal = status.bytesTotal;
+  if (self->statusMessage != status.title) self->statusMessage = status.title;
+
+  // The activity loop is blocked for the whole batch; pump input here so the
+  // Cancel button or a Back press can abort between chunks.
+  self->mappedInput.update();
+  if (self->mappedInput.wasReleased(MappedInputManager::Button::Back)) self->cancelDownload = true;
+  // This update() consumes the one-shot home event before the central
+  // ActivityManager dispatch can see it, so honor it here.
+  if (self->mappedInput.wasHomeGesture()) {
+    self->cancelDownload = true;
+    self->goHomeAfterCancel = true;
+  }
+  self->routeTouch(self->mappedInput);
+
+  const int percent =
+      status.bytesTotal > 0 ? static_cast<int>(static_cast<uint64_t>(status.bytes) * 100 / status.bytesTotal) : 0;
+  const unsigned long now = millis();
+  if (percent >= 100 || self->batchRenderedPercent < 0 ||
+      percent < self->batchRenderedPercent ||  // new book: the bar restarted
+      percent >= self->batchRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
+      now - self->batchProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
+    self->batchRenderedPercent = percent;
+    self->batchProgressUpdateMs = now;
+    self->requestUpdate(true);
+  }
+  return !self->cancelDownload;
+}
+
+// Downloads every book of the current catalog that is not already on the SD
+// card, following the feed's pagination. The feed the user was looking at is
+// re-fetched afterwards so the list reflects what is now on disk.
+void OpdsBookBrowserActivity::downloadAllNew() {
+  state = BrowserState::DOWNLOADING;
+  statusMessage.clear();
+  downloadProgress = downloadTotal = 0;
+  cancelDownload = false;
+  goHomeAfterCancel = false;
+  batchActive = true;
+  batchStatus = {};
+  batchRenderedPercent = -1;
+  batchProgressUpdateMs = 0;
+  requestUpdate(true);
+
+  const OpdsBatchDownload::Observer observer{this, &OpdsBookBrowserActivity::onBatchProgress};
+  const auto result = OpdsBatchDownload::run(server, currentPath, observer, batchStatus);
+  batchActive = false;
+  statusMessage.clear();
+  LOG_INF("OPDS", "Batch: %d new, %d skipped, %d failed of %d", batchStatus.downloaded, batchStatus.skipped,
+          batchStatus.failed, batchStatus.examined);
+
+  if (result == OpdsBatchDownload::Result::CANCELLED && goHomeAfterCancel) {
+    onGoHome();
+    return;
+  }
+  if (result == OpdsBatchDownload::Result::FAILED) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_DOWNLOAD_FAILED);
+    requestUpdate();
+    return;
+  }
+
+  // Re-fetch so the visible page matches what the batch just wrote (and so the
+  // walk's last page does not stay on screen).
+  state = BrowserState::LOADING;
+  statusMessage = tr(STR_LOADING);
+  releaseEntries();
+  selectorIndex = 0;
+  requestUpdate(true);
+  fetchFeed(currentPath);
 }
 
 void OpdsBookBrowserActivity::launchSearch() {
