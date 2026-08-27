@@ -5,6 +5,8 @@
 #include <Logging.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
+#include <esp_rom_crc.h>
+#include <esp_secure_boot.h>
 #include <mbedtls/sha256.h>
 #include <spi_flash_mmap.h>
 
@@ -14,6 +16,7 @@
 
 #include "FirmwareBoardTag.h"
 #include "OtaBootSwitch.h"
+#include "SignedImageValidator.h"
 
 namespace firmware_flash {
 
@@ -27,6 +30,27 @@ constexpr size_t SHA_TRAILER = 32;
 constexpr uint8_t CHECKSUM_SEED = 0xEF;
 constexpr size_t HEADER_SIZE = 24;
 constexpr size_t SEG_HEADER_SIZE = 8;
+
+// SignedImageValidator.h's constants are named/offset copies of ESP-IDF's own
+// Secure Boot V2 on-flash format (esp/rom/secure_boot.h's
+// ets_secure_boot_signature_t / ets_secure_boot_sig_block_t), kept in a
+// separate ESP-IDF-include-free header so host unit tests can exercise the
+// structural checks directly. Cross-check every one of those constants
+// against the real SDK struct here, on every ESP32 build, so the two files
+// can never silently drift apart.
+static_assert(sizeof(ets_secure_boot_sig_block_t) == signed_image::kBlockSize, "kBlockSize mismatch");
+static_assert(sizeof(ets_secure_boot_signature_t) == signed_image::kSectorSize, "kSectorSize mismatch");
+static_assert(SECURE_BOOT_NUM_BLOCKS == signed_image::kNumBlocks, "kNumBlocks mismatch");
+static_assert(CRC_SIGN_BLOCK_LEN == signed_image::kCrcCoveredLen, "kCrcCoveredLen mismatch");
+static_assert(ETS_SECURE_BOOT_V2_SIGNATURE_MAGIC == signed_image::kMagicByte, "kMagicByte mismatch");
+static_assert(ESP_SECURE_BOOT_V2_RSA == signed_image::kSchemeRsa, "kSchemeRsa mismatch");
+static_assert(ESP_SECURE_BOOT_V2_ECDSA == signed_image::kSchemeEcdsa, "kSchemeEcdsa mismatch");
+static_assert(offsetof(ets_secure_boot_sig_block_t, magic_byte) == signed_image::kOffMagic, "kOffMagic mismatch");
+static_assert(offsetof(ets_secure_boot_sig_block_t, version) == signed_image::kOffVersion, "kOffVersion mismatch");
+static_assert(offsetof(ets_secure_boot_sig_block_t, image_digest) == signed_image::kOffImageDigest,
+              "kOffImageDigest mismatch");
+static_assert(offsetof(ets_secure_boot_sig_block_t, block_crc) == signed_image::kOffBlockCrc, "kOffBlockCrc mismatch");
+static_assert(sizeof(ets_secure_boot_sig_block_t{}.image_digest) == signed_image::kDigestLen, "kDigestLen mismatch");
 }  // namespace
 
 const char* resultName(Result r) {
@@ -53,6 +77,8 @@ const char* resultName(Result r) {
       return "WRONG_BOARD";
     case Result::BAD_SIZE:
       return "BAD_SIZE";
+    case Result::BAD_SIGNATURE_BLOCK:
+      return "BAD_SIGNATURE_BLOCK";
     case Result::NO_PARTITION:
       return "NO_PARTITION";
     case Result::OOM:
@@ -107,6 +133,7 @@ Result feedHashAndChecksum(HalFile& file, size_t length, uint8_t* xorAccum, mbed
   }
   return Result::OK;
 }
+
 }  // namespace
 
 Result validateImageFile(const char* sdPath, size_t partitionSize) {
@@ -217,11 +244,24 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
 
   // pad_end is the 16-byte aligned offset at which the checksum byte sits at pad_end - 1.
   const size_t padEnd = (pos + 16) & ~static_cast<size_t>(15);
-  const size_t expectedTotal = padEnd + (hashAppended ? SHA_TRAILER : 0);
-  if (expectedTotal != fileSize) {
-    LOG_ERR("FLASH", "validate: size mismatch body+pad=%u sha=%u expected=%u actual=%u", static_cast<unsigned>(padEnd),
-            static_cast<unsigned>(hashAppended ? SHA_TRAILER : 0), static_cast<unsigned>(expectedTotal),
-            static_cast<unsigned>(fileSize));
+  const size_t unsignedTotal = padEnd + (hashAppended ? SHA_TRAILER : 0);
+
+  // A trailing Secure Boot V2 signature sector, if present, starts at the next
+  // 4 KiB flash-sector boundary after the plain image and is exactly one
+  // sector (sizeof(ets_secure_boot_signature_t)) long -- see validateImageFile()'s
+  // doc comment. Decide up front which of the two legal total lengths this
+  // file is claiming to be; anything else is rejected below without reading
+  // further.
+  const size_t sigSectorStart = signed_image::sectorStartFor(unsignedTotal);
+  const size_t signedTotal = signed_image::signedTotalFor(unsignedTotal);
+  // signedTotal is always strictly greater than unsignedTotal (the sig sector
+  // adds at least 4096 bytes even at zero alignment padding), so matching
+  // signedTotal alone unambiguously identifies the signed layout here.
+  const bool isSigned = fileSize == signedTotal;
+  if (fileSize != unsignedTotal && fileSize != signedTotal) {
+    LOG_ERR("FLASH", "validate: size mismatch body+pad=%u sha=%u unsigned_total=%u signed_total=%u actual=%u",
+            static_cast<unsigned>(padEnd), static_cast<unsigned>(hashAppended ? SHA_TRAILER : 0),
+            static_cast<unsigned>(unsignedTotal), static_cast<unsigned>(signedTotal), static_cast<unsigned>(fileSize));
     mbedtls_sha256_free(&shaCtx);
     file.close();
     return Result::BAD_SIZE;
@@ -251,8 +291,17 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
   }
 
   if (hashAppended) {
+    // Snapshot the running hash into a clone rather than finishing shaCtx
+    // itself: a trailing signature sector's embedded digest (checked below)
+    // covers the *entire* padded image, including these 32 trailer bytes, so
+    // shaCtx must stay live and accumulating past this point when isSigned.
     uint8_t computed[SHA_TRAILER];
-    mbedtls_sha256_finish(&shaCtx, computed);
+    mbedtls_sha256_context snapshot;
+    mbedtls_sha256_init(&snapshot);
+    mbedtls_sha256_clone(&snapshot, &shaCtx);
+    mbedtls_sha256_finish(&snapshot, computed);
+    mbedtls_sha256_free(&snapshot);
+
     uint8_t stored[SHA_TRAILER];
     if (file.read(stored, SHA_TRAILER) != static_cast<int>(SHA_TRAILER)) {
       mbedtls_sha256_free(&shaCtx);
@@ -265,10 +314,72 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
       file.close();
       return Result::BAD_SHA;
     }
+    mbedtls_sha256_update(&shaCtx, stored, SHA_TRAILER);
   }
 
+  if (!isSigned) {
+    mbedtls_sha256_free(&shaCtx);
+    file.close();
+    return Result::OK;
+  }
+
+  // Signed layout: read the 0xFF flash-sector-alignment padding between the
+  // plain image and the signature sector, verifying every byte and folding it
+  // into the running digest (it's inside the region the sig block's embedded
+  // digest covers).
+  size_t alignRemaining = sigSectorStart - unsignedTotal;
+  while (alignRemaining > 0) {
+    const size_t want = std::min<size_t>(CHUNK, alignRemaining);
+    if (file.read(buf.get(), want) != static_cast<int>(want)) {
+      mbedtls_sha256_free(&shaCtx);
+      file.close();
+      return Result::READ_FAIL;
+    }
+    for (size_t i = 0; i < want; i++) {
+      if (buf[i] != 0xFF) {
+        LOG_ERR("FLASH", "validate: non-0xFF alignment padding byte at offset %u",
+                static_cast<unsigned>(unsignedTotal + (alignRemaining - want) + i));
+        mbedtls_sha256_free(&shaCtx);
+        file.close();
+        return Result::BAD_SIGNATURE_BLOCK;
+      }
+    }
+    mbedtls_sha256_update(&shaCtx, buf.get(), want);
+    alignRemaining -= want;
+  }
+
+  // The image digest embedded in each signature block covers everything read
+  // so far (image + checksum pad + hash trailer + 0xFF alignment padding) --
+  // finish only now, after the alignment-padding loop above.
+  uint8_t paddedImageDigest[SHA_TRAILER];
+  mbedtls_sha256_finish(&shaCtx, paddedImageDigest);
   mbedtls_sha256_free(&shaCtx);
+
+  // Read the full signature sector (exactly sizeof(ets_secure_boot_signature_t),
+  // which equals CHUNK) and require at least one of its SECURE_BOOT_NUM_BLOCKS
+  // slots to be a structurally valid block whose embedded digest matches. Slots
+  // that don't pass the gate are simply not counted -- the same tolerant,
+  // per-slot handling ESP-IDF's own calculate_image_public_key_digests() uses
+  // -- so this doesn't assume any particular number of populated vs. unused
+  // slots.
+  static_assert(signed_image::kSectorSize == CHUNK, "sig sector no longer matches the read buffer size");
+  if (file.read(buf.get(), signed_image::kSectorSize) != static_cast<int>(signed_image::kSectorSize)) {
+    file.close();
+    return Result::READ_FAIL;
+  }
+  unsigned validBlocks = 0;
+  for (unsigned i = 0; i < signed_image::kNumBlocks; i++) {
+    const uint8_t* block = buf.get() + i * signed_image::kBlockSize;
+    const uint32_t crc = esp_rom_crc32_le(0, block, signed_image::kCrcCoveredLen);
+    if (!signed_image::isValidBlockStructure(block, crc)) continue;
+    if (!signed_image::blockDigestMatches(block, paddedImageDigest)) continue;
+    validBlocks++;
+  }
   file.close();
+  if (validBlocks == 0) {
+    LOG_ERR("FLASH", "validate: no structurally valid, digest-consistent signature block found");
+    return Result::BAD_SIGNATURE_BLOCK;
+  }
   return Result::OK;
 }
 
