@@ -7,6 +7,20 @@
 #include <cstring>
 
 namespace library {
+
+std::string joinLibraryPath(const std::string_view folder, const std::string_view name) {
+  std::string path;
+  path.reserve(folder.size() + name.size() + 1);
+  if (folder.empty()) {
+    path.push_back('/');
+  } else {
+    path.append(folder);
+    if (folder.back() != '/') path.push_back('/');
+  }
+  path.append(name);
+  return path;
+}
+
 namespace {
 
 // Letters with no canonical decomposition, plus the punctuation that would

@@ -396,6 +396,12 @@ the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" gro
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
+The record flag byte uses bits 0–2 for the file format, bits 3–4 for author
+provenance, and bit 5 to say that the displayed title came from book metadata.
+Bits 6–7 are reserved and writers leave them clear. Bit 6 was once intended to
+mean that an OPF exceeded a separate shelf-parser buffer, but that parser and
+buffer no longer exist; metadata now uses the reader's streaming XML parser.
+
 ### The name blob
 
 Per record, at `nameStart + nameOff`:
@@ -418,6 +424,12 @@ placeholder — an index that saw part of the card must not claim otherwise.
 `RANKS_DEGRADED` says the author and date orders fell back to walk order, which
 happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
 RAM.
+
+`DEDUP_DEGRADED` says a directory exceeded the fixed 1024-entry duplicate-key
+buffer, or that its fallible 8 KiB allocation failed. The walk still indexes
+every enumerated book; it only stops remembering additional identities for
+duplicate-dirent detection, so a damaged FAT may expose duplicates but cannot
+make a real book disappear.
 
 `selfSize` is the expected file size. Comparing it against the real one is a free
 truncation guard: a build cut short by a power failure cannot pass.
