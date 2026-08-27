@@ -80,6 +80,8 @@ The X4 Pro has a built-in frontlight with adjustable brightness and warmth. It i
 > [!NOTE]
 > Frontlight brightness and warmth are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to adjust them. The on/off state can also be toggled with the Power-button double-click above.
 
+If the frontlight doesn't come back on after the device wakes from sleep, check **Restore Light on Wake** in **[Display Settings](#361-display)** (on by default). Turning it off is intentional if you'd rather have the light stay off on wake and switch it on yourself each time — but it's easy to forget you changed it.
+
 ---
 
 ## 2. Power & Startup
