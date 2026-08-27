@@ -128,7 +128,7 @@ void OpdsStartupSyncActivity::runSync() {
 
 bool OpdsStartupSyncActivity::onProgress(void* ctx, const OpdsBatchDownload::Status& progress) {
   auto* self = static_cast<OpdsStartupSyncActivity*>(ctx);
-  if (self->statusMessage != progress.title) self->statusMessage = progress.title;
+  self->statusMessage = progress.title;
 
   // The activity loop is blocked for the whole sync; pump input here so Back or
   // the Cancel button can abort between chunks.

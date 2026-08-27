@@ -8,6 +8,7 @@
 #include <OpdsStream.h>
 #include <WiFi.h>
 
+#include <algorithm>
 #include <cstdio>
 
 #include "MappedInputManager.h"
@@ -423,10 +424,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 }
 
 bool OpdsBookBrowserActivity::hasBookEntry() const {
-  for (const auto& entry : entries) {
-    if (entry.type == OpdsEntryType::BOOK) return true;
-  }
-  return false;
+  return std::any_of(entries.begin(), entries.end(),
+                     [](const OpdsEntry& entry) { return entry.type == OpdsEntryType::BOOK; });
 }
 
 // Derives rowItems from entries. Called whenever entries changes
@@ -564,7 +563,7 @@ bool OpdsBookBrowserActivity::onBatchProgress(void* ctx, const OpdsBatchDownload
   auto* self = static_cast<OpdsBookBrowserActivity*>(ctx);
   self->downloadProgress = status.bytes;
   self->downloadTotal = status.bytesTotal;
-  if (self->statusMessage != status.title) self->statusMessage = status.title;
+  self->statusMessage = status.title;
 
   // The activity loop is blocked for the whole batch; pump input here so the
   // Cancel button or a Back press can abort between chunks.
