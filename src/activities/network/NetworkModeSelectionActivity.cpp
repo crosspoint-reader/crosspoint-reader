@@ -31,7 +31,7 @@ constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
     UIIcon::Library,
     UIIcon::Hotspot,
 #if FREEINK_CAP_USB_MSC
-    UIIcon::None,
+    UIIcon::Usb,
 #endif
 };
 }  // namespace
@@ -44,11 +44,6 @@ NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer
     item.label = I18N.get(menuItems[i]);
     item.subtitle = I18N.get(menuDescs[i]);
     item.icon = listIconFor(menuIcons[i], 32);  // subtitle rows carry the larger icon
-#if FREEINK_CAP_USB_MSC
-    if (menuItems[i] == StrId::STR_USB_DRIVE) {
-      item.icon = fui::bitmapFromIcon(icon_usb_32);
-    }
-#endif
     item.actionValue = static_cast<int16_t>(i);
     rowItems_[i] = item;
   }
@@ -64,17 +59,7 @@ void NetworkModeSelectionActivity::activateIndex(const int index) {
   app.clearTapFlash();
   nav.selected = index;
 
-  NetworkMode mode = NetworkMode::JOIN_NETWORK;
-  if (index == 1) {
-    mode = NetworkMode::CONNECT_CALIBRE;
-  } else if (index == 2) {
-    mode = NetworkMode::CREATE_HOTSPOT;
-#if FREEINK_CAP_USB_MSC
-  } else if (index == 3) {
-    mode = NetworkMode::USB_DRIVE;
-#endif
-  }
-  onModeSelected(mode);
+  onModeSelected(static_cast<NetworkMode>(index));
 }
 
 void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {

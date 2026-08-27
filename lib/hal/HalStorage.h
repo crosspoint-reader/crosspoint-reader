@@ -14,7 +14,6 @@ enum class UsbDriveState : uint8_t {
   Unsupported,
   WaitingForHost,
   Connected,
-  Accessed,
   Ejected,
   Disconnected,
   IoError,
@@ -23,7 +22,6 @@ enum class UsbDriveState : uint8_t {
 class HalStorage {
  public:
   HalStorage();
-  ~HalStorage();
   bool begin();
   bool ready() const;
   // USB Drive exclusively owns the SD card while active. Callers must stop
@@ -67,16 +65,10 @@ class HalStorage {
   class StorageLock;  // private class, used internally
 
  private:
-#if FREEINK_CAP_USB_MSC
-  class UsbDriveContext;
-#endif
   static HalStorage instance;
 
   bool initialized = false;
   SemaphoreHandle_t storageMutex = nullptr;
-#if FREEINK_CAP_USB_MSC
-  std::unique_ptr<UsbDriveContext> usbDriveContext;
-#endif
 };
 
 #define Storage HalStorage::getInstance()

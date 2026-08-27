@@ -229,7 +229,12 @@ void ActivityManager::goToFileTransfer() {
 
 void ActivityManager::goToUsbDrive() {
 #if FREEINK_CAP_USB_MSC
-  replaceActivity(std::make_unique<UsbDriveActivity>(renderer, mappedInput));
+  auto activity = makeUniqueNoThrow<UsbDriveActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: USB Drive activity");
+    return;
+  }
+  replaceActivity(std::move(activity));
 #else
   LOG_ERR("ACT", "USB Drive requested in a build without USB Drive capability");
 #endif

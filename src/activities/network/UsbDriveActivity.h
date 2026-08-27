@@ -3,19 +3,18 @@
 #include <HalStorage.h>
 
 #include "activities/Activity.h"
+#include "components/UiAppHost.h"
 
-class UsbDriveActivity final : public Activity {
+class UsbDriveActivity final : public Activity, private UiAppHost {
  public:
   UsbDriveActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("UsbDrive", renderer, mappedInput) {}
+      : Activity("UsbDrive", renderer, mappedInput), UiAppHost(renderer) {}
 
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override {
-    return state == State::Connected || state == State::Accessed || (!startFailed && state == State::IoError);
-  }
+  bool preventAutoSleep() override { return state == State::Connected || (!startFailed && state == State::IoError); }
   bool requiresExclusiveStorageLoop() const override { return true; }
 
  private:
@@ -25,8 +24,9 @@ class UsbDriveActivity final : public Activity {
   static constexpr unsigned long START_FAILURE_TIMEOUT_MS = 30UL * 1000UL;
   static constexpr unsigned long FORCED_DISCONNECT_TIMEOUT_MS = 1000UL;
 
+  static void driveScreen(UiScreen& screen, void* user);
+  void buildDriveScreen(UiScreen& screen) const;
   void restartToHome();
-  void renderMessage(const char* message, const char* detail = nullptr) const;
 
   State state = State::Unsupported;
   bool preparing = true;

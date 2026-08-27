@@ -8,24 +8,18 @@
 #endif
 
 #include <cassert>
-#include <new>
 
 #define SDCard SDCardManager::getInstance()
 
+namespace {
+#if FREEINK_CAP_USB_MSC
+freeink::UsbMassStorage usbMassStorage;
+#endif
+}  // namespace
+
 HalStorage HalStorage::instance;
 
-#if FREEINK_CAP_USB_MSC
-class HalStorage::UsbDriveContext {
- public:
-  freeink::UsbMassStorage massStorage;
-};
-#endif
-
-HalStorage::HalStorage()
-#if FREEINK_CAP_USB_MSC
-    : usbDriveContext(new (std::nothrow) UsbDriveContext())
-#endif
-{
+HalStorage::HalStorage() {
   // Recursive so the same task can re-enter StorageLock without self-deadlock.
   // openFileForRead/Write take the lock and then assign to a HalFile&
   // out-param; if that out-param already held an Impl, its destructor takes
@@ -35,8 +29,6 @@ HalStorage::HalStorage()
   storageMutex = xSemaphoreCreateRecursiveMutex();
   assert(storageMutex != nullptr);
 }
-
-HalStorage::~HalStorage() = default;
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
@@ -59,18 +51,13 @@ class HalStorage::StorageLock {
 bool HalStorage::beginUsbDrive() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
-  if (!usbDriveContext) {
-    LOG_ERR("USB", "USB Drive context allocation failed");
-    return false;
-  }
-
   auto* const blockDevice = SDCard.detachFilesystemForRawAccess();
   if (!blockDevice) {
     LOG_ERR("USB", "USB Drive requires a mounted SDMMC filesystem");
     return false;
   }
 
-  if (!usbDriveContext->massStorage.begin(blockDevice)) {
+  if (!usbMassStorage.begin(blockDevice)) {
     LOG_ERR("USB", "USB Drive MSC initialization failed");
     if (!SDCard.begin()) {
       LOG_ERR("USB", "Unable to remount SD card after USB Drive startup failure");
@@ -86,7 +73,7 @@ bool HalStorage::beginUsbDrive() {
 bool HalStorage::disconnectUsbDriveHost() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
-  return usbDriveContext && usbDriveContext->massStorage.disconnectHost();
+  return usbMassStorage.disconnectHost();
 #else
   return false;
 #endif
@@ -95,22 +82,19 @@ bool HalStorage::disconnectUsbDriveHost() {
 void HalStorage::endUsbDrive() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
-  if (usbDriveContext) usbDriveContext->massStorage.end();
+  usbMassStorage.end();
 #endif
 }
 
 UsbDriveState HalStorage::usbDriveState() const {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
-  if (!usbDriveContext) return UsbDriveState::Unsupported;
-
-  switch (usbDriveContext->massStorage.state()) {
+  switch (usbMassStorage.state()) {
     case freeink::UsbMassStorageState::WaitingForHost:
       return UsbDriveState::WaitingForHost;
     case freeink::UsbMassStorageState::Connected:
-      return UsbDriveState::Connected;
     case freeink::UsbMassStorageState::Accessed:
-      return UsbDriveState::Accessed;
+      return UsbDriveState::Connected;
     case freeink::UsbMassStorageState::Ejected:
       return UsbDriveState::Ejected;
     case freeink::UsbMassStorageState::Disconnected:

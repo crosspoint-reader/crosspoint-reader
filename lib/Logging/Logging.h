@@ -2,10 +2,8 @@
 
 #include <Arduino.h>
 #include <HardwareSerial.h>
-#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
 #include <HWCDC.h>
-#elif defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
-#include <USBCDC.h>
 #endif
 
 #include <string>
@@ -33,11 +31,8 @@ won't trigger deprecation warnings.
 #define LOG_LEVEL 0
 #endif
 
-#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT && ARDUINO_USB_MODE
+#if defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
 static HWCDC& logSerial = Serial;
-#define LOG_SERIAL_HAS_TX_TIMEOUT 1
-#elif defined(ARDUINO_USB_CDC_ON_BOOT) && ARDUINO_USB_CDC_ON_BOOT
-static USBCDC& logSerial = Serial;
 #define LOG_SERIAL_HAS_TX_TIMEOUT 1
 #else
 static HardwareSerial& logSerial = Serial;

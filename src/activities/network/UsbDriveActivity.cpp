@@ -7,18 +7,13 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 void UsbDriveActivity::onEnter() {
   Activity::onEnter();
-  state = State::Unsupported;
-  preparing = true;
-  startFailed = false;
-  restartRequested = false;
-  forcedDisconnectRequested = false;
-  hostWaitStartedAt = 0;
-  startFailureStartedAt = 0;
-  forcedDisconnectRequestedAt = 0;
+  resetUi();
+  app.setScreen(&UsbDriveActivity::driveScreen, this);
 
   // Show the safety instructions before giving the raw SD card to the USB host.
   requestUpdateAndWait();
@@ -47,9 +42,8 @@ void UsbDriveActivity::loop() {
   if (!startFailed) {
     const State nextState = Storage.usbDriveState();
     if (nextState != state) {
-      const bool messageChanged = state != State::Connected || nextState != State::Accessed;
       state = nextState;
-      if (messageChanged) requestUpdate();
+      requestUpdate();
     }
   }
 
@@ -99,26 +93,7 @@ void UsbDriveActivity::render(RenderLock&&) {
   const int pageWidth = renderer.getScreenWidth();
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_USB_DRIVE));
 
-  if (preparing) {
-    renderMessage(tr(STR_USB_DRIVE_PREPARING), tr(STR_USB_DRIVE_EJECT_HINT));
-  } else {
-    switch (state) {
-      case State::WaitingForHost:
-        renderMessage(tr(STR_USB_DRIVE_WAITING));
-        break;
-      case State::Connected:
-      case State::Accessed:
-        renderMessage(tr(STR_USB_DRIVE_CONNECTED), tr(STR_USB_DRIVE_EJECT_HINT));
-        break;
-      case State::IoError:
-        renderMessage(startFailed ? tr(STR_USB_DRIVE_START_ERROR) : tr(STR_USB_DRIVE_ERROR));
-        break;
-      case State::Ejected:
-      case State::Disconnected:
-      case State::Unsupported:
-        break;
-    }
-  }
+  renderUi();
 
   if (state == State::WaitingForHost || startFailed) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
@@ -127,21 +102,59 @@ void UsbDriveActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void UsbDriveActivity::renderMessage(const char* message, const char* detail) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int width = renderer.getScreenWidth() - metrics.contentSidePadding * 2;
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int messageHeight = lineHeight * 2;
-  const int detailHeight = detail ? lineHeight * 3 : 0;
-  const int totalHeight = messageHeight + (detail ? metrics.verticalSpacing + detailHeight : 0);
-  const int top = (renderer.getScreenHeight() - totalHeight) / 2;
+void UsbDriveActivity::driveScreen(UiScreen& screen, void* user) {
+  static_cast<UsbDriveActivity*>(user)->buildDriveScreen(screen);
+}
 
-  UITheme::drawCenteredWrappedText(renderer, Rect{metrics.contentSidePadding, top, width, messageHeight}, UI_10_FONT_ID,
-                                   message, 2, true, EpdFontFamily::BOLD);
+void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
+  const char* message = nullptr;
+  const char* detail = nullptr;
+  if (preparing) {
+    message = tr(STR_USB_DRIVE_PREPARING);
+    detail = tr(STR_USB_DRIVE_EJECT_HINT);
+  } else {
+    switch (state) {
+      case State::WaitingForHost:
+        message = tr(STR_USB_DRIVE_WAITING);
+        break;
+      case State::Connected:
+        message = tr(STR_USB_DRIVE_CONNECTED);
+        detail = tr(STR_USB_DRIVE_EJECT_HINT);
+        break;
+      case State::IoError:
+        message = startFailed ? tr(STR_USB_DRIVE_START_ERROR) : tr(STR_USB_DRIVE_ERROR);
+        break;
+      case State::Ejected:
+      case State::Disconnected:
+      case State::Unsupported:
+        return;
+    }
+  }
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(fui::Insets{
+      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), static_cast<int16_t>(metrics.contentSidePadding),
+      static_cast<int16_t>(metrics.buttonHintsHeight), static_cast<int16_t>(metrics.contentSidePadding)});
+
+  auto messageStyle = screen.theme().smallText;
+  messageStyle.align = fui::TextAlign::Center;
+  messageStyle.bold = true;
+  messageStyle.maxLines = 2;
+  auto detailStyle = screen.theme().smallText;
+  detailStyle.align = fui::TextAlign::Center;
+  detailStyle.maxLines = 3;
+
+  const fui::Rect body = screen.body();
+  const int16_t messageHeight = fui::measureWrappedText(screen.target(), message, messageStyle, body.width).height;
+  const int16_t detailHeight =
+      detail ? fui::measureWrappedText(screen.target(), detail, detailStyle, body.width).height : 0;
+  const int16_t gap = detail ? screen.theme().spaceMd : 0;
+  const int16_t totalHeight = static_cast<int16_t>(messageHeight + gap + detailHeight);
+  if (body.height > totalHeight) screen.spacer(static_cast<int16_t>((body.height - totalHeight) / 2));
+
+  screen.target().text(screen.takeTop(messageHeight, gap), message, messageStyle);
   if (detail) {
-    UITheme::drawCenteredWrappedText(
-        renderer, Rect{metrics.contentSidePadding, top + messageHeight + metrics.verticalSpacing, width, detailHeight},
-        UI_10_FONT_ID, detail, 3);
+    screen.target().text(screen.takeTop(detailHeight), detail, detailStyle);
   }
 }
 
