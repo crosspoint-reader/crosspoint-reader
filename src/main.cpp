@@ -37,8 +37,10 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
+#include "network/CrossPointWebServer.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
+#include "util/TaskWatchdog.h"
 
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);
@@ -57,6 +59,13 @@ constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
+
+// Debug hook: CMD:WIFI:<ssid>:<password> over serial joins WiFi and starts
+// the web server directly, bypassing on-device button navigation. Useful for
+// exercising the web server (e.g. reproducing network-related bugs) without
+// physical access to the device.
+static bool debugWifiConnecting = false;
+static std::unique_ptr<CrossPointWebServer> debugWebServer;
 
 // Fonts
 EpdFont notoserif14RegularFont(&notoserif_14_regular);
@@ -576,14 +585,56 @@ void loop() {
         uint8_t* buf = display.getFrameBuffer();
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
+      } else if (cmd.startsWith("WIFI:")) {
+        const String rest = cmd.substring(5);
+        const int sep = rest.indexOf(':');
+        if (sep < 0) {
+          LOG_ERR("DEBUGHOOK", "Usage: CMD:WIFI:<ssid>:<password>");
+        } else {
+          const String ssid = rest.substring(0, sep);
+          const String password = rest.substring(sep + 1);
+          LOG_INF("DEBUGHOOK", "Connecting to WiFi SSID '%s'", ssid.c_str());
+          powerManager.setPowerSaving(false);  // avoid WiFi init during clock-scaled low-power mode
+          WiFi.mode(WIFI_STA);
+          WiFi.begin(ssid.c_str(), password.c_str());
+          debugWifiConnecting = true;
+        }
       }
+    }
+  }
+
+  // Debug hook: poll WiFi connection state and start the web server once
+  // joined, then pump handleClient() every loop tick.
+  if (debugWifiConnecting) {
+    if (WiFi.status() == WL_CONNECTED) {
+      debugWifiConnecting = false;
+      LOG_INF("DEBUGHOOK", "WiFi connected, IP=%s", WiFi.localIP().toString().c_str());
+      debugWebServer.reset(new CrossPointWebServer());
+      debugWebServer->begin();
+      LOG_INF("DEBUGHOOK", "Web server running: %d", debugWebServer->isRunning());
+    } else {
+      static unsigned long lastWifiLog = 0;
+      if (millis() - lastWifiLog > 2000) {
+        lastWifiLog = millis();
+        LOG_DBG("DEBUGHOOK", "WiFi status: %d", WiFi.status());
+      }
+    }
+  }
+  if (debugWebServer && debugWebServer->isRunning()) {
+    // Mirror CrossPointWebServerActivity::loop()'s watchdog-safe burst
+    // handling so this debug hook doesn't trip the watchdog on its own.
+    resetTaskWatchdogIfSubscribed();
+    for (int i = 0; i < 500 && debugWebServer->isRunning(); i++) {
+      debugWebServer->handleClient();
+      if ((i & 0x1F) == 0x1F) resetTaskWatchdogIfSubscribed();
+      if ((i & 0x3F) == 0x3F) yield();
     }
   }
 
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || halTiltSensor.hadActivity() ||
-      activityManager.preventAutoSleep()) {
+      activityManager.preventAutoSleep() || (debugWebServer && debugWebServer->isRunning())) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
