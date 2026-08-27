@@ -47,15 +47,13 @@ const char* matchMethodName(const DocumentMatchMethod method) {
 }
 
 void syncTimeWithNTP() {
-  // Stop SNTP if already running (can't reconfigure while running)
-  if (esp_sntp_enabled()) {
-    esp_sntp_stop();
+  // Reuse an active SNTP session. Stopping it from this activity task can call
+  // into lwIP timer cancellation without the TCP/IP core lock and panic.
+  if (!esp_sntp_enabled()) {
+    esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
+    esp_sntp_setservername(0, "pool.ntp.org");
+    esp_sntp_init();
   }
-
-  // Configure SNTP
-  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-  esp_sntp_setservername(0, "pool.ntp.org");
-  esp_sntp_init();
 
   // Wait for time to sync (with timeout)
   int retry = 0;
@@ -149,6 +147,12 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   }
 
   LOG_DBG("KOSync", "WiFi connected, starting sync");
+
+  // Keep the station fully awake for the short sync transaction. The web server
+  // does the same because ESP32 modem sleep can introduce multi-second network
+  // stalls that surface as HTTP timeouts. WiFi is torn down when this activity exits.
+  WiFi.setSleep(false);
+  LOG_DBG("KOSync", "WiFi sleep disabled for sync");
 
   {
     RenderLock lock(*this);
