@@ -241,3 +241,12 @@ TEST(SurnameKey, EmptyStaysEmpty) { EXPECT_EQ(library::surnameKey(""), ""); }
 TEST(SurnameKey, HarmonisedDisplayNameKeepsAGroupTogether) {
   EXPECT_NE(library::surnameKey("Victor Hugo"), library::surnameKey("Hugo Victor"));
 }
+
+TEST(LibraryPath, RootDoesNotGainASecondSeparator) {
+  EXPECT_EQ(library::joinLibraryPath("/", "book.epub"), "/book.epub");
+  EXPECT_EQ(library::joinLibraryPath("", "book.epub"), "/book.epub");
+}
+
+TEST(LibraryPath, NestedFolderGetsOneSeparator) {
+  EXPECT_EQ(library::joinLibraryPath("/Books", "book.epub"), "/Books/book.epub");
+}

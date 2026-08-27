@@ -52,6 +52,7 @@ enum ClixFlags : uint8_t {
   CLIX_FLAG_RANKS_DEGRADED = 1 << 1,
   CLIX_FLAG_ENRICH_COMPLETE = 1 << 2,
   CLIX_FLAG_BOOKS_AT_ROOT = 1 << 3,
+  CLIX_FLAG_DEDUP_DEGRADED = 1 << 4,
 };
 
 enum ClixFormat : uint8_t {
@@ -65,6 +66,10 @@ enum ClixFormat : uint8_t {
 // Where a record's author came from. Surfaced in the Details row so the screen
 // never silently claims a folder name is an author.
 enum ClixAuthorProvenance : uint8_t {
+  // Legacy. A parent folder used to become the author when nothing else
+  // named one; that rule is gone (no reader parses its way to an author), and
+  // nothing writes this any more. The value stays so indexes written by an
+  // older build still decode.
   CLIX_AUTHOR_FROM_FOLDER = 0,
   CLIX_AUTHOR_FROM_CACHE = 1,
   CLIX_AUTHOR_FROM_OPF = 2,
@@ -119,7 +124,7 @@ struct ClixRecord {
   uint8_t nameLen;
   uint8_t foldLen;
   uint8_t authorKeyLen;
-  uint8_t flags;  // b0-2 format, b3-4 author provenance, b5 titleFromOpf, b6 opfTooLarge
+  uint8_t flags;  // b0-2 format, b3-4 author provenance, b5 titleFromBook; b6-7 reserved
   char fold[CLIX_FOLD_BYTES];
   char authorKey[CLIX_AUTHOR_KEY_BYTES];
 };
@@ -139,12 +144,10 @@ inline ClixFormat recordFormat(const ClixRecord& r) { return static_cast<ClixFor
 inline ClixAuthorProvenance recordAuthorProvenance(const ClixRecord& r) {
   return static_cast<ClixAuthorProvenance>((r.flags >> 3) & 0x03);
 }
-inline bool recordTitleFromOpf(const ClixRecord& r) { return (r.flags & (1 << 5)) != 0; }
-inline bool recordOpfTooLarge(const ClixRecord& r) { return (r.flags & (1 << 6)) != 0; }
-inline uint8_t makeRecordFlags(const ClixFormat format, const ClixAuthorProvenance provenance, const bool titleFromOpf,
-                               const bool opfTooLarge) {
-  return static_cast<uint8_t>((format & 0x07) | ((provenance & 0x03) << 3) | (titleFromOpf ? (1 << 5) : 0) |
-                              (opfTooLarge ? (1 << 6) : 0));
+inline bool recordTitleFromBook(const ClixRecord& r) { return (r.flags & (1 << 5)) != 0; }
+inline uint8_t makeRecordFlags(const ClixFormat format, const ClixAuthorProvenance provenance,
+                               const bool titleFromBook) {
+  return static_cast<uint8_t>((format & 0x07) | ((provenance & 0x03) << 3) | (titleFromBook ? (1 << 5) : 0));
 }
 
 inline uint32_t alignUp(const uint32_t value) { return (value + CLIX_ALIGN - 1) / CLIX_ALIGN * CLIX_ALIGN; }

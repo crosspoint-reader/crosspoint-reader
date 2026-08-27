@@ -132,6 +132,34 @@ uint32_t utf8NextCodepoint(const unsigned char** string) {
   return cp;
 }
 
+bool utf8AppendNumericCharRef(const std::string& body, std::string& out) {
+  if (body.size() < 2 || body[0] != '#') return false;
+  const bool hex = body[1] == 'x' || body[1] == 'X';
+  size_t d = hex ? 2 : 1;
+  if (d >= body.size()) return false;
+  uint32_t cp = 0;
+  for (; d < body.size(); d++) {
+    const char c = body[d];
+    uint32_t v;
+    if (c >= '0' && c <= '9') {
+      v = static_cast<uint32_t>(c - '0');
+    } else if (hex && c >= 'a' && c <= 'f') {
+      v = static_cast<uint32_t>(c - 'a' + 10);
+    } else if (hex && c >= 'A' && c <= 'F') {
+      v = static_cast<uint32_t>(c - 'A' + 10);
+    } else {
+      return false;
+    }
+    cp = cp * (hex ? 16u : 10u) + v;
+    // Checked per digit, so an arbitrarily long digit run rejects here instead
+    // of wrapping the accumulator back into the valid range.
+    if (cp > 0x10FFFF) return false;
+  }
+  if (cp == 0 || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
+  utf8AppendCodepoint(cp, out);
+  return true;
+}
+
 void utf8AppendCodepoint(uint32_t cp, std::string& out) {
   if (cp < 0x80) {
     out += static_cast<char>(cp);

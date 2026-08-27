@@ -36,6 +36,11 @@ namespace library {
 // record's fixed field; measured to collide 0 times over a 69-book library.
 inline constexpr size_t AUTHOR_KEY_MAX_BYTES = 12;
 
+// Join an indexed folder with its basename using exactly one separator. The
+// root folder is stored as "/"; treating it like a normal directory would
+// reconstruct "//book.epub", which hashes differently and may not open.
+std::string joinLibraryPath(std::string_view folder, std::string_view name);
+
 // Casefold and strip diacritics for matching and sorting.
 //
 // Maps a handful of letters that have no canonical decomposition, decomposes the
