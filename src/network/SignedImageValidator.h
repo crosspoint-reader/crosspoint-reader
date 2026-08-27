@@ -33,14 +33,14 @@ namespace signed_image {
 //   uint32_t block_crc;         offset 1196
 //   uint8_t  _padding[16];
 // } == 1216 bytes total.
-inline constexpr size_t kBlockSize = 1216;          // sizeof(ets_secure_boot_sig_block_t)
-inline constexpr size_t kSectorSize = 4096;          // sizeof(ets_secure_boot_signature_t) / SIG_BLOCK_PADDING
-inline constexpr unsigned kNumBlocks = 3;            // SECURE_BOOT_NUM_BLOCKS
-inline constexpr size_t kCrcCoveredLen = 1196;       // CRC_SIGN_BLOCK_LEN
-inline constexpr size_t kDigestLen = 32;             // ESP_SECURE_BOOT_KEY_DIGEST_SHA_256_LEN / SHA-256 length
-inline constexpr uint8_t kMagicByte = 0xE7;          // ETS_SECURE_BOOT_V2_SIGNATURE_MAGIC
-inline constexpr uint8_t kSchemeRsa = 2;             // ESP_SECURE_BOOT_V2_RSA
-inline constexpr uint8_t kSchemeEcdsa = 3;           // ESP_SECURE_BOOT_V2_ECDSA
+inline constexpr size_t kBlockSize = 1216;      // sizeof(ets_secure_boot_sig_block_t)
+inline constexpr size_t kSectorSize = 4096;     // sizeof(ets_secure_boot_signature_t) / SIG_BLOCK_PADDING
+inline constexpr unsigned kNumBlocks = 3;       // SECURE_BOOT_NUM_BLOCKS
+inline constexpr size_t kCrcCoveredLen = 1196;  // CRC_SIGN_BLOCK_LEN
+inline constexpr size_t kDigestLen = 32;        // ESP_SECURE_BOOT_KEY_DIGEST_SHA_256_LEN / SHA-256 length
+inline constexpr uint8_t kMagicByte = 0xE7;     // ETS_SECURE_BOOT_V2_SIGNATURE_MAGIC
+inline constexpr uint8_t kSchemeRsa = 2;        // ESP_SECURE_BOOT_V2_RSA
+inline constexpr uint8_t kSchemeEcdsa = 3;      // ESP_SECURE_BOOT_V2_ECDSA
 inline constexpr size_t kOffMagic = 0;
 inline constexpr size_t kOffVersion = 1;
 inline constexpr size_t kOffImageDigest = 4;
@@ -71,9 +71,7 @@ inline bool blockDigestMatches(const uint8_t* block, const uint8_t* expectedDige
 // optional 32-byte hash trailer -- i.e. what validateImageFile() computes as
 // `unsignedTotal`), returns the offset at which a trailing Secure Boot V2
 // signature sector would start: the next kSectorSize-aligned boundary.
-inline size_t sectorStartFor(size_t unsignedTotal) {
-  return (unsignedTotal + (kSectorSize - 1)) & ~(kSectorSize - 1);
-}
+inline size_t sectorStartFor(size_t unsignedTotal) { return (unsignedTotal + (kSectorSize - 1)) & ~(kSectorSize - 1); }
 
 // The one legal total file length for the "plain image + one signature
 // sector" layout, given the plain-image length.

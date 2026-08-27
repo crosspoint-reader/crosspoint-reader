@@ -31,8 +31,8 @@ uint32_t crc32(const uint8_t* data, size_t len) {
 // real cryptographic key material, throwaway or otherwise, is needed to
 // exercise this logic.
 std::array<uint8_t, signed_image::kBlockSize> makeBlock(uint8_t magic, uint8_t version,
-                                                         const uint8_t digest[signed_image::kDigestLen],
-                                                         bool correctCrc) {
+                                                        const uint8_t digest[signed_image::kDigestLen],
+                                                        bool correctCrc) {
   std::array<uint8_t, signed_image::kBlockSize> block{};
   block[signed_image::kOffMagic] = magic;
   block[signed_image::kOffVersion] = version;
@@ -47,12 +47,10 @@ std::array<uint8_t, signed_image::kBlockSize> makeBlock(uint8_t magic, uint8_t v
   return block;
 }
 
-constexpr uint8_t kDigestA[signed_image::kDigestLen] = {1, 2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13,
-                                                        14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25,
-                                                        26, 27, 28, 29, 30, 31, 32};
-constexpr uint8_t kDigestB[signed_image::kDigestLen] = {32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20,
-                                                        19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9,  8,
-                                                        7,  6,  5,  4,  3,  2,  1};
+constexpr uint8_t kDigestA[signed_image::kDigestLen] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16,
+                                                        17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32};
+constexpr uint8_t kDigestB[signed_image::kDigestLen] = {32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17,
+                                                        16, 15, 14, 13, 12, 11, 10, 9,  8,  7,  6,  5,  4,  3,  2,  1};
 
 }  // namespace
 
@@ -139,7 +137,8 @@ TEST(SignedImageValidator, MultipleValidBlocksWithDifferentKeysAllCount) {
   unsigned validCount = 0;
   for (const auto* block : {&block0, &block1}) {
     const uint32_t crc = crc32(block->data(), signed_image::kCrcCoveredLen);
-    if (signed_image::isValidBlockStructure(block->data(), crc) && signed_image::blockDigestMatches(block->data(), kDigestA)) {
+    if (signed_image::isValidBlockStructure(block->data(), crc) &&
+        signed_image::blockDigestMatches(block->data(), kDigestA)) {
       validCount++;
     }
   }
