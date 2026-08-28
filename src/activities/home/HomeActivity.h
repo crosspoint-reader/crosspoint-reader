@@ -27,6 +27,8 @@ class HomeActivity final : public Activity {
   int coverRectY = 0;
   int coverRectW = 0;
   int coverRectH = 0;
+  // Orientation the snapshot was captured at; valid while coverBufferStored.
+  GfxRenderer::Orientation coverBufferOrientation = GfxRenderer::Orientation::Portrait;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
   const bool cleanInitialRefresh;

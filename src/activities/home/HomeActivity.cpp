@@ -151,6 +151,7 @@ bool HomeActivity::storeCoverBuffer() {
     coverBufferSize = 0;
     return false;
   }
+  coverBufferOrientation = renderer.getOrientation();
   return true;
 }
 
@@ -285,6 +286,24 @@ void HomeActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
+  const int tileY = metrics.homeTopPadding;
+  const int tileHeight = metrics.homeCoverTileHeight;
+
+  // The snapshot holds raw panel bytes for the region the tile mapped to, so it
+  // goes stale once that mapping moves. coverRect* still holds the rect it was
+  // captured at.
+  if (coverBufferStored && (coverBufferOrientation != renderer.getOrientation() || coverRectY != tileY ||
+                            coverRectW != pageWidth || coverRectH != tileHeight)) {
+    freeCoverBuffer();
+    coverRendered = false;
+  }
+
+  // Region storeCoverBuffer snapshots: the tile, not the whole framebuffer.
+  coverRectX = 0;
+  coverRectY = tileY;
+  coverRectW = pageWidth;
+  coverRectH = tileHeight;
+
   renderer.clearScreen();
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
@@ -294,16 +313,8 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding - metrics.topPadding},
                  metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
 
-  // Record the tile rect so storeCoverBuffer (called from the theme) knows
-  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
-  // instead of the 48 KB full framebuffer the previous bind captured.
-  coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
-  coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
-
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
+  GUI.drawRecentBookCover(renderer, Rect{coverRectX, coverRectY, coverRectW, coverRectH}, recentBooks, selectorIndex,
+                          coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
