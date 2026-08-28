@@ -109,6 +109,7 @@ void UsbDriveActivity::driveScreen(UiScreen& screen, void* user) {
 void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
   const char* message = nullptr;
   const char* detail = nullptr;
+  const char* secondaryDetail = nullptr;
   if (preparing) {
     message = tr(STR_USB_DRIVE_PREPARING);
     detail = tr(STR_USB_DRIVE_EJECT_HINT);
@@ -119,7 +120,8 @@ void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
         break;
       case State::Connected:
         message = tr(STR_USB_DRIVE_CONNECTED);
-        detail = tr(STR_USB_DRIVE_EJECT_HINT);
+        detail = tr(STR_USB_DRIVE_CONNECT_DELAY);
+        secondaryDetail = tr(STR_USB_DRIVE_EJECT_HINT);
         break;
       case State::IoError:
         message = startFailed ? tr(STR_USB_DRIVE_START_ERROR) : tr(STR_USB_DRIVE_ERROR);
@@ -148,13 +150,20 @@ void UsbDriveActivity::buildDriveScreen(UiScreen& screen) const {
   const int16_t messageHeight = fui::measureWrappedText(screen.target(), message, messageStyle, body.width).height;
   const int16_t detailHeight =
       detail ? fui::measureWrappedText(screen.target(), detail, detailStyle, body.width).height : 0;
+  const int16_t secondaryDetailHeight =
+      secondaryDetail ? fui::measureWrappedText(screen.target(), secondaryDetail, detailStyle, body.width).height : 0;
   const int16_t gap = detail ? screen.theme().spaceMd : 0;
-  const int16_t totalHeight = static_cast<int16_t>(messageHeight + gap + detailHeight);
+  const int16_t secondaryGap = secondaryDetail ? screen.theme().spaceMd : 0;
+  const int16_t totalHeight =
+      static_cast<int16_t>(messageHeight + gap + detailHeight + secondaryGap + secondaryDetailHeight);
   if (body.height > totalHeight) screen.spacer(static_cast<int16_t>((body.height - totalHeight) / 2));
 
   screen.target().text(screen.takeTop(messageHeight, gap), message, messageStyle);
   if (detail) {
-    screen.target().text(screen.takeTop(detailHeight), detail, detailStyle);
+    screen.target().text(screen.takeTop(detailHeight, secondaryGap), detail, detailStyle);
+  }
+  if (secondaryDetail) {
+    screen.target().text(screen.takeTop(secondaryDetailHeight), secondaryDetail, detailStyle);
   }
 }
 
