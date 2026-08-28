@@ -1702,7 +1702,7 @@ void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
 
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
-  if (dst == nullptr || w <= 0 || h <= 0) return 0;
+  if (dst == nullptr || w <= 0 || h <= 0 || !frameBuffer) return 0;
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
   if (!mem.valid) return 0;
@@ -1720,7 +1720,7 @@ size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* d
 }
 
 void GfxRenderer::writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src) {
-  if (src == nullptr || w <= 0 || h <= 0) return;
+  if (src == nullptr || w <= 0 || h <= 0 || !frameBuffer) return;
 
   const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, w, h, panelWidth, panelHeight);
   if (!mem.valid) return;
