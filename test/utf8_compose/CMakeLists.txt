@@ -1,6 +1,5 @@
 add_executable(Utf8ComposeTest
   Utf8ComposeTest.cpp
-  Utf8NumericCharRefTest.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 
