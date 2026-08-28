@@ -413,11 +413,15 @@ the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" gro
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
-The record flag byte uses bits 0–2 for the file format, bits 3–4 for author
-provenance, and bit 5 to say that the displayed title came from book metadata.
-Bits 6–7 are reserved and writers leave them clear. Bit 6 was once intended to
-mean that an OPF exceeded a separate shelf-parser buffer, but that parser and
-buffer no longer exist; metadata now uses the reader's streaming XML parser.
+Twelve bytes of each record are reserved and written as zero: two u16 at offsets
+8 and 10, and the flag byte at offset 19. The u16 pair held per-record inverse
+ranks for the author and date orders; the permutation sections carry that
+ordering and nothing read the ranks back. The flag byte packed a file format,
+an author provenance and a title-origin bit, none of which any screen read.
+They are reserved rather than reclaimed so the record stays 128 bytes and the
+layout is unchanged — a reader built before or after this change sees the same
+file. A screen that needs one of them can claim the bytes back and bump
+`CLIX_FORMAT_VERSION` then.
 
 ### The name blob
 

@@ -162,14 +162,6 @@ bool installNewIndex() {
   return true;
 }
 
-ClixFormat formatForName(const std::string& name) {
-  if (FsHelpers::checkFileExtension(name, ".epub")) return CLIX_FORMAT_EPUB;
-  if (FsHelpers::checkFileExtension(name, ".txt")) return CLIX_FORMAT_TXT;
-  if (FsHelpers::checkFileExtension(name, ".md")) return CLIX_FORMAT_MD;
-  if (FsHelpers::checkFileExtension(name, ".xtc")) return CLIX_FORMAT_XTC;
-  return CLIX_FORMAT_OTHER;
-}
-
 bool isBookName(const std::string& name) {
   return FsHelpers::checkFileExtension(name, ".epub") || FsHelpers::checkFileExtension(name, ".txt") ||
          FsHelpers::checkFileExtension(name, ".md") || FsHelpers::checkFileExtension(name, ".xtc");
@@ -271,17 +263,13 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   std::string author;
   bool titleFromBook = false;
   bool authorFromBook = false;
-  // Which of the two metadata paths supplied the author, so the record can say so
-  // rather than claiming the cache for everything.
-  bool authorFromOpf = false;
 
   // Prefer the reader's existing cache. For an unopened book, loadMetadata()
   // reuses the same EPUB parser but stops before the manifest, so this never
   // builds spine, TOC, CSS, cover, or section caches during the library walk.
   if (st.readMetadata && FsHelpers::hasEpubExtension(name)) {
     Epub epub(fullPath, CACHE_DIR);
-    Epub::MetadataSource source = Epub::MetadataSource::NONE;
-    if (epub.loadMetadata(&source)) {
+    if (epub.loadMetadata()) {
       if (!epub.getTitle().empty()) {
         title = epub.getTitle();
         titleFromBook = true;
@@ -289,7 +277,6 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
       if (!epub.getAuthor().empty()) {
         author = epub.getAuthor();
         authorFromBook = true;
-        authorFromOpf = source == Epub::MetadataSource::PACKAGE_DOCUMENT;
       }
     }
     if (!titleFromBook && !authorFromBook) LOG_DBG("LIBIDX", "no metadata for %s", fullPath.c_str());
@@ -301,19 +288,12 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   if (!author.empty() && fold(author) == "unknown") {
     author.clear();
     authorFromBook = false;
-    authorFromOpf = false;
   }
 
   if (titleFromBook || authorFromBook) st.enriched++;
 
   // An absent author is a fact, not a gap to fill: the row joins the Unknown
   // group rather than borrowing a name from its surroundings.
-  // Provenance separates the two metadata paths. A book that told us nothing is
-  // UNKNOWN, which is now the only way to reach that value.
-  ClixAuthorProvenance provenance = authorFromOpf    ? CLIX_AUTHOR_FROM_OPF
-                                    : authorFromBook ? CLIX_AUTHOR_FROM_CACHE
-                                                     : CLIX_AUTHOR_UNKNOWN;
-
   const std::string folded = fold(title, true);
   const std::string key = authorKey(author);
 
@@ -345,7 +325,7 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   if (entry.titleLen > 0) memcpy(entry.title, shownTitle.data(), entry.titleLen);
   entry.record.foldLen = static_cast<uint8_t>(std::min(folded.size(), CLIX_FOLD_BYTES));
   entry.record.authorKeyLen = static_cast<uint8_t>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES));
-  entry.record.flags = makeRecordFlags(formatForName(name), provenance, titleFromBook);
+  entry.record.flags = 0;
   memcpy(entry.record.fold, folded.data(), entry.record.foldLen);
   memcpy(entry.record.authorKey, key.data(), entry.record.authorKeyLen);
   memcpy(entry.name, name.data(), entry.record.nameLen);
@@ -643,7 +623,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     return true;
   };
 
-  // Header placeholder; rewritten below once authorRank/dateRank are known.
+  // Header placeholder; rewritten below once the sorts have run.
   put(&header, sizeof(header));
   padTo(header.folderStart);
 
@@ -685,24 +665,16 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   }
 
   // Author order has to be known BEFORE the records are written, because each
-  // record carries its own authorRank. So: read the keys, sort, invert, then
-  // write. Books with no key sort last in both directions, which is why
-  // knownAuthorCount is recorded rather than a second array being stored.
+  // permutation section is written from it. Books with no key sort last in both
+  // directions, which is why knownAuthorCount is recorded rather than a second
+  // array being stored.
   // Capped like the title sort. Uncapped, the author and date arrays alone peaked
   // near 209 KB at the 4096-record ceiling — on a device with under 200 KB free,
   // which makes the cap the difference between a degraded order and no device.
   const bool rankable = n <= LIBRARY_MAX_SORTED;
   auto authorSort = rankable ? makeUniqueNoThrow<SortKey[]>(n == 0 ? 1 : n) : nullptr;
-  auto authorRankOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
-  // The pair degrades together. Consumers test one pointer each, so a key
-  // array without its rank array would feed zeroed keys to the spelling vote
-  // and zeroed ordinals to the permutation section.
-  if (!authorSort || !authorRankOf) {
-    authorSort.reset();
-    authorRankOf.reset();
-  }
   uint16_t known = 0;
-  if (authorSort && authorRankOf) {
+  if (authorSort) {
     for (uint16_t i = 0; i < n; i++) {
       serviceBuilder(serviceUnits);
       ClixRecord r{};
@@ -723,16 +695,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
         std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
         delay(1);
       }
-      for (uint16_t k = 0; k < n; k++) {
-        serviceBuilder(serviceUnits);
-        authorRankOf[authorSort[k].ordinal] = k;
-      }
     }
   } else {
-    for (uint16_t i = 0; i < n; i++) {
-      serviceBuilder(serviceUnits);
-      if (authorRankOf) authorRankOf[i] = i;
-    }
     stats.ranksDegraded = true;
   }
   header.knownAuthorCount = known;
@@ -862,7 +826,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // by surname, as a library would. Keying off the canonical name rather than the
   // raw one is what keeps a group whole: all of a group's books resolve to the
   // same string, so they cannot split across two places.
-  if (!ioFailed && authorSort && authorRankOf && canonicalFrom && n > 1) {
+  if (!ioFailed && authorSort && canonicalFrom && n > 1) {
     for (uint16_t i = 0; i < n; i++) {
       serviceBuilder(serviceUnits);
       // canonicalFrom holds TITLE-order positions, and the staging file is keyed
@@ -895,10 +859,6 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       delay(1);
       std::sort(authorSort.get(), authorSort.get() + n, sortKeyLess);
       delay(1);
-      for (uint16_t k = 0; k < n; k++) {
-        serviceBuilder(serviceUnits);
-        authorRankOf[authorSort[k].ordinal] = k;
-      }
     }
   }
 
@@ -919,8 +879,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
             static_cast<unsigned>(LIBRARY_MAX_SORTED));
     stats.ranksDegraded = true;
   }
-  auto dateRankOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
-  if (!ioFailed && dateSort && dateRankOf) {
+  if (!ioFailed && dateSort) {
     for (uint16_t i = 0; i < n; i++) {
       serviceBuilder(serviceUnits);
       ClixRecord r{};
@@ -937,10 +896,6 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
         delay(1);
         std::sort(dateSort.get(), dateSort.get() + n, sortKeyLess);
         delay(1);
-      }
-      for (uint16_t k = 0; k < n; k++) {
-        serviceBuilder(serviceUnits);
-        dateRankOf[dateSort[k].ordinal] = k;
       }
     }
   } else {
@@ -996,8 +951,6 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     if (!fetch(order[from], canonical)) break;
     nameCursor += blobBytesFor(entry, canonical);
     if (resolvedFirstSeen) entry.record.firstSeen = resolvedFirstSeen[order[i]];
-    entry.record.dateRank = dateRankOf ? dateRankOf[i] : i;
-    entry.record.authorRank = authorRankOf ? authorRankOf[i] : i;
     put(&entry.record, sizeof(ClixRecord));
   }
   padTo(header.permStart);

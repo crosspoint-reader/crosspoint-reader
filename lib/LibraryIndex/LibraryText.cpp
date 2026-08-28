@@ -241,25 +241,12 @@ std::string cleanPersonName(const std::string_view author) {
 }
 
 std::string authorKey(const std::string_view author) {
-  // Drop bracketed spans ("George Sand [Sand, George]") and everything after
-  // a multi-author separator.
-  std::string cleaned;
-  cleaned.reserve(author.size());
-  int depth = 0;
-  for (const char c : author) {
-    if (c == '[' || c == '(') {
-      depth++;
-      continue;
-    }
-    if (c == ']' || c == ')') {
-      if (depth > 0) depth--;
-      continue;
-    }
-    if (c == ';') break;
-    if (depth == 0) cleaned.push_back(c);
-  }
-
-  const std::string folded = fold(cleaned);
+  // The same cleanup the display name gets: bracketed spans dropped
+  // ("George Sand [Sand, George]") and everything after a multi-author
+  // separator cut. cleanPersonName also turns "Austen, Jane" round, which makes
+  // no difference here — the tokens are sorted below, so word order is already
+  // irrelevant to the key.
+  const std::string folded = fold(cleanPersonName(author));
 
   constexpr size_t MAX_TOKENS = 12;
   std::string_view tokens[MAX_TOKENS];
@@ -330,30 +317,19 @@ std::string surnameKey(const std::string_view displayAuthor) {
   const std::string folded = fold(displayAuthor);
   if (folded.empty()) return {};
 
-  size_t lastStart = std::string::npos;
-  size_t lastEnd = folded.size();
-  size_t i = folded.size();
-  while (i > 0) {
-    i--;
-    if (folded[i] != ' ') {
-      if (lastStart == std::string::npos) lastEnd = i + 1;
-      lastStart = i;
-    } else if (lastStart != std::string::npos) {
-      break;
-    }
-  }
-  if (lastStart == std::string::npos) return {};
+  // fold() defers its spaces, so the result has no leading, trailing or repeated
+  // space. The last one is therefore the separator before the surname, and a name
+  // with no space at all is its own key.
+  const size_t sep = folded.rfind(' ');
+  if (sep == std::string::npos) return folded;
 
   std::string key;
-  key.reserve(folded.size() + 1);
-  key.append(folded, lastStart, lastEnd - lastStart);
+  key.reserve(folded.size());
+  key.append(folded.substr(sep + 1));
   // The given names follow, so two people sharing a surname stay in a stable,
   // readable order rather than whichever the disk walk happened to produce.
-  if (lastStart > 0) {
-    key.push_back(' ');
-    key.append(folded, 0, lastStart);
-    while (!key.empty() && key.back() == ' ') key.pop_back();
-  }
+  key.push_back(' ');
+  key.append(folded.substr(0, sep));
   return key;
 }
 

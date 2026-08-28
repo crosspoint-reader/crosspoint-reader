@@ -595,13 +595,11 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::loadMetadata(MetadataSource* source) {
-  if (source) *source = MetadataSource::NONE;
+bool Epub::loadMetadata() {
   fallbackMetadata.reset();
 
   bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   if (bookMetadataCache && bookMetadataCache->load()) {
-    if (source) *source = MetadataSource::CACHE;
     return true;
   }
   if (!bookMetadataCache) {
@@ -629,7 +627,6 @@ bool Epub::loadMetadata(MetadataSource* source) {
     return false;
   }
 
-  if (source) *source = MetadataSource::PACKAGE_DOCUMENT;
   return true;
 }
 

@@ -40,8 +40,6 @@ class Epub {
   CssParser::ParseResult parseCssFiles(CssParser::CacheStatus existingCacheStatus) const;
 
  public:
-  enum class MetadataSource { NONE, CACHE, PACKAGE_DOCUMENT };
-
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
     // create a cache key based on the filepath
     cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
@@ -49,7 +47,7 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
-  bool loadMetadata(MetadataSource* source = nullptr);
+  bool loadMetadata();
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;
