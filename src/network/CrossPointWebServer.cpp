@@ -1120,17 +1120,17 @@ void CrossPointWebServer::handleDelete() const {
     bool success = false;
     HalFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
-      // For folders, ensure empty before removing
+      // For folders, ensure empty before removing unless recursive deletion is enabled
       HalFile entry = f.openNextFile();
-      if (entry) {
-        entry.close();
-        f.close();
+      bool isEmpty = !entry;
+      if (entry) entry.close();
+      f.close();
+      if (!isEmpty && !SETTINGS.deleteFilesRecursive) {
         failedItems += itemPath + " (folder not empty); ";
         allSuccess = false;
         continue;
       }
-      f.close();
-      success = Storage.rmdir(itemPath.c_str());
+      success = isEmpty ? Storage.rmdir(itemPath.c_str()) : Storage.removeDir(itemPath.c_str());
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
