@@ -361,6 +361,7 @@ void setup() {
 
   const auto wakeupReason = gpio.getWakeupReason();
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {
+    LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
     powerManager.startDeepSleep(gpio);
   }
 
@@ -425,9 +426,12 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-#if FREEINK_DEVICE_PAPERMONO
-      // There is no armable GPIO wake because the button is behind the PMIC.
-      // Sleeping here would strand the device in a USB-replug boot loop.
+#if FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4
+      // Paper Mono: no armable GPIO wake (button is behind the PMIC), so sleeping
+      // here strands it in a USB-replug boot loop.
+      // EEGO A4: its post-flash reset reads as POWERON (native-USB), so a flash
+      // would otherwise be misclassified as a USB-power cold boot and sleep. Boot
+      // through instead.
       break;
 #else
       powerManager.startDeepSleep(gpio);
@@ -653,6 +657,7 @@ void loop() {
 
   if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
       gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+    LOG_DBG("MAIN", "Power button held %lums, sleeping", gpio.getPowerButtonHeldTime());
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
