@@ -117,8 +117,11 @@ static_assert(sizeof(ClixHeader) == 64, "ClixHeader must be exactly 64 bytes");
 struct ClixRecord {
   uint32_t nameOff;   // from nameStart, into the display-name blob
   uint32_t fileSize;  // captured while the dirent was open; part of the identity
-  uint16_t authorRank;
-  uint16_t dateRank;
+  // Reserved. Per-record inverse ranks used to live here; the authorOrder and
+  // dateOrder permutation sections carry that ordering and no reader ever read
+  // these back. Kept as padding so the record stays 128 bytes.
+  uint16_t reserved0;
+  uint16_t reserved1;
   uint16_t firstSeen;
   uint16_t folderId;
   uint8_t nameLen;
