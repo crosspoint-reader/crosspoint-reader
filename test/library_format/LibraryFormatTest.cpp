@@ -173,22 +173,6 @@ TEST(LibraryHeaderFlags, DedupDegradationIsPersistedWithoutChangingTheLayout) {
   EXPECT_EQ(sizeof(ClixHeader), 64u);
 }
 
-TEST(LibraryRecordFlags, PackAndUnpackRoundTrip) {
-  for (const uint8_t fmt : {CLIX_FORMAT_EPUB, CLIX_FORMAT_TXT, CLIX_FORMAT_XTC, CLIX_FORMAT_OTHER}) {
-    for (const uint8_t prov :
-         {CLIX_AUTHOR_FROM_FOLDER, CLIX_AUTHOR_FROM_CACHE, CLIX_AUTHOR_FROM_OPF, CLIX_AUTHOR_UNKNOWN}) {
-      for (const bool fromBook : {false, true}) {
-        ClixRecord r{};
-        r.flags = makeRecordFlags(static_cast<ClixFormat>(fmt), static_cast<ClixAuthorProvenance>(prov), fromBook);
-        EXPECT_EQ(recordFormat(r), fmt);
-        EXPECT_EQ(recordAuthorProvenance(r), prov);
-        EXPECT_EQ(recordTitleFromBook(r), fromBook);
-        EXPECT_EQ(r.flags & 0xC0, 0);
-      }
-    }
-  }
-}
-
 TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
   // Guards the packing itself: if a compiler ever inserts padding, these field
   // offsets move and the on-disk format silently forks.

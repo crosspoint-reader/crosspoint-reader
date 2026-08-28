@@ -55,27 +55,6 @@ enum ClixFlags : uint8_t {
   CLIX_FLAG_DEDUP_DEGRADED = 1 << 4,
 };
 
-enum ClixFormat : uint8_t {
-  CLIX_FORMAT_EPUB = 0,
-  CLIX_FORMAT_TXT = 1,
-  CLIX_FORMAT_MD = 2,
-  CLIX_FORMAT_XTC = 3,
-  CLIX_FORMAT_OTHER = 4,
-};
-
-// Where a record's author came from. Surfaced in the Details row so the screen
-// never silently claims a folder name is an author.
-enum ClixAuthorProvenance : uint8_t {
-  // Legacy. A parent folder used to become the author when nothing else
-  // named one; that rule is gone (no reader parses its way to an author), and
-  // nothing writes this any more. The value stays so indexes written by an
-  // older build still decode.
-  CLIX_AUTHOR_FROM_FOLDER = 0,
-  CLIX_AUTHOR_FROM_CACHE = 1,
-  CLIX_AUTHOR_FROM_OPF = 2,
-  CLIX_AUTHOR_UNKNOWN = 3,
-};
-
 #pragma pack(push, 1)
 
 struct ClixHeader {
@@ -127,7 +106,9 @@ struct ClixRecord {
   uint8_t nameLen;
   uint8_t foldLen;
   uint8_t authorKeyLen;
-  uint8_t flags;  // b0-2 format, b3-4 author provenance, b5 titleFromBook; b6-7 reserved
+  // Reserved. Held a packed book format, author provenance and title origin;
+  // nothing ever read them back. Written as 0 until a screen needs one of them.
+  uint8_t flags;
   char fold[CLIX_FOLD_BYTES];
   char authorKey[CLIX_AUTHOR_KEY_BYTES];
 };
@@ -140,18 +121,6 @@ struct ClixFolderHeader {
 static_assert(sizeof(ClixFolderHeader) == 1, "ClixFolderHeader must be 1 byte");
 
 #pragma pack(pop)
-
-// Record field accessors. The packing means the flags byte carries three things,
-// so nobody outside this header should be shifting bits by hand.
-inline ClixFormat recordFormat(const ClixRecord& r) { return static_cast<ClixFormat>(r.flags & 0x07); }
-inline ClixAuthorProvenance recordAuthorProvenance(const ClixRecord& r) {
-  return static_cast<ClixAuthorProvenance>((r.flags >> 3) & 0x03);
-}
-inline bool recordTitleFromBook(const ClixRecord& r) { return (r.flags & (1 << 5)) != 0; }
-inline uint8_t makeRecordFlags(const ClixFormat format, const ClixAuthorProvenance provenance,
-                               const bool titleFromBook) {
-  return static_cast<uint8_t>((format & 0x07) | ((provenance & 0x03) << 3) | (titleFromBook ? (1 << 5) : 0));
-}
 
 inline uint32_t alignUp(const uint32_t value) { return (value + CLIX_ALIGN - 1) / CLIX_ALIGN * CLIX_ALIGN; }
 
