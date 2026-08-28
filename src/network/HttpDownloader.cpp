@@ -53,8 +53,14 @@ bool isRedirect(int status) {
 // likely to be hit the longer a transfer takes, so small feeds mostly get
 // away with it while a large category consistently doesn't.
 struct WifiPowerSaveGuard {
-  WifiPowerSaveGuard() { esp_wifi_set_ps(WIFI_PS_NONE); }
-  ~WifiPowerSaveGuard() { esp_wifi_set_ps(WIFI_PS_MIN_MODEM); }
+  WifiPowerSaveGuard() {
+    esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (err != ESP_OK) LOG_ERR("HTTP", "Failed to disable WiFi power-save: %d", err);
+  }
+  ~WifiPowerSaveGuard() {
+    esp_err_t err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+    if (err != ESP_OK) LOG_ERR("HTTP", "Failed to restore WiFi power-save: %d", err);
+  }
 };
 
 #if defined(FREEINK_NET_WOLFSSL)
