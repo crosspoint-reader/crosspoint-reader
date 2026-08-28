@@ -187,7 +187,34 @@ typedef struct {
   const uint16_t* glyphToGroup;               ///< Per-glyph group ID (nullptr for contiguous-group fonts)
   const EpdKernClassEntry* kernLeftClasses;   ///< Sorted left-side class map (nullptr if none)
   const EpdKernClassEntry* kernRightClasses;  ///< Sorted right-side class map (nullptr if none)
-  const int8_t* kernMatrix;              ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels
+  /// Split form of the two class maps, used by the built-in fonts instead of the packed
+  /// EpdKernClassEntry arrays above (which are left null for them). Same total size — 2 + 1 bytes
+  /// per entry either way — but measurably faster: the class lookups are ~96% of getKerning(),
+  /// and splitting them measured -13 to -14% on that path. Two reasons. The binary search only
+  /// ever reads codepoints, so keeping the classId payload out of the searched array shrinks its
+  /// footprint by a third; and a uint16 array is naturally aligned where a 3-byte packed struct
+  /// leaves two of every three codepoint reads unaligned.
+  ///
+  /// SD-card fonts keep the packed form: the .cpfont format stores it verbatim and maps it in
+  /// place (see the static_asserts in SdCardFont.cpp). Whichever pointer is non-null selects the
+  /// representation, so the two coexist with one branch.
+  const uint16_t* kernLeftCodepoints;   ///< nullptr when this font uses the packed form
+  const uint8_t* kernLeftClassIds;      ///< parallel to kernLeftCodepoints
+  const uint16_t* kernRightCodepoints;  ///< nullptr when this font uses the packed form
+  const uint8_t* kernRightClassIds;     ///< parallel to kernRightCodepoints
+  const int8_t* kernMatrix;             ///< Flat leftClassCount x rightClassCount matrix, 4.4 fixed-point in pixels
+  /// Sparse (CSR) kerning — the built-in fonts use this instead of `kernMatrix`, which is left
+  /// null for them. Measured across the built-in set, 86.6% of the dense matrix entries are zero,
+  /// so storing only the non-zero ones is roughly a quarter of the size. Values are identical, so
+  /// layout and pagination are unaffected. SD-card fonts keep the dense matrix, same reason as
+  /// the class maps above.
+  ///
+  /// kernRowOffsets has kernLeftClassCount + 1 entries; row `l` occupies
+  /// [kernRowOffsets[l], kernRowOffsets[l+1]) in the other two arrays, sorted ascending by
+  /// column so the lookup can scan it and stop early.
+  const uint16_t* kernRowOffsets;        ///< nullptr when this font uses the dense matrix
+  const uint8_t* kernSparseCols;         ///< 0-based right class of each stored entry
+  const int8_t* kernSparseValues;        ///< 4.4 fixed-point value of each stored entry
   uint16_t kernLeftEntryCount;           ///< Entries in kernLeftClasses
   uint16_t kernRightEntryCount;          ///< Entries in kernRightClasses
   uint8_t kernLeftClassCount;            ///< Number of distinct left classes (matrix rows)

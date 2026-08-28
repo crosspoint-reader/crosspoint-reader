@@ -149,6 +149,7 @@ class OptionPopup {
     // tracks the live orientation and uiScale fonts; a target held across
     // show() would stale-bind both after a rotation or scale change.
     fui::GfxRendererTarget target = makeUiTarget(renderer);
+    const fui::ThemeTokens& theme = refreshSharedUiThemeTokens(target);
     // Frame stores a const DeviceContext&; keep it in a local that outlives
     // the frame (a deviceContext() temporary would dangle).
     const fui::DeviceContext device = target.deviceContext();
@@ -190,10 +191,13 @@ class OptionPopup {
     const int16_t innerPadding = static_cast<int16_t>(metrics.optionPopupInnerPadding);
     props.padding = fui::Insets{innerPadding, innerPadding, innerPadding, innerPadding};
     props.gap = static_cast<int16_t>(metrics.optionPopupItemSpacing);
-    // defaultPopupStyles() (the fallback fui::optionDialog uses when styles is
-    // left unset) has no border, so the dialog frame drawn by the old
-    // BaseTheme::drawOptionPopup outline is opted back in explicitly here,
-    // reusing the same per-theme frame metrics that code used.
+    // Rounded invert-fill themes use a black pill, not the default gray focus cursor.
+    if (theme.listSelectionStyle == fui::SelectionStyle::InvertFill && theme.listRowRadius > 0) {
+      props.buttonStyles = fui::defaultButtonStyles();
+      props.buttonStyles.focused = props.buttonStyles.selected;
+      fui::setStyleRadius(props.buttonStyles, theme.listRowRadius);
+    }
+    // defaultPopupStyles() has no border, so opt in using the per-theme frame metrics.
     props.styles = fui::defaultPopupStyles();
     props.styles.normal.border = fui::Paint::solid(fui::Color::Black);
     props.styles.normal.borderWidth = static_cast<uint8_t>(metrics.popupFrameThickness);
@@ -224,6 +228,13 @@ class OptionPopup {
   }
 
   bool isActive() const { return active; }
+
+  // Close without firing the callback (the surface under the popup is going
+  // away, e.g. its host screen closes from outside the popup's own input).
+  void dismiss() {
+    active = false;
+    onSelectCallback = nullptr;
+  }
 
  private:
   // The dialog has no scrolling, so options past MAX_OPTIONS would render off
