@@ -65,7 +65,7 @@ TEST(UrlOrigin, CrossOriginComparesUnequal) {
 // disagree with the std::string-returning implementation it replaced, across
 // every case above plus a few more edge shapes.
 TEST(UrlOrigin, MatchesReferenceImplementationAcrossShapes) {
-  const char* const cases[] = {
+  constexpr const char* const cases[] = {
       "https://github.com/owner/repo/releases/download/v1/firmware.bin",
       "https://objects.githubusercontent.com/github-production-release-asset/1/firmware.bin?X-Amz=abc",
       "http://192.168.1.50:8080/opds/root.xml",
