@@ -7,12 +7,12 @@
 // what the fixed 128-byte record stride buys — record k is always at
 // recordStart + 128k, so no offset table has to be loaded to find it.
 
+#include <HalStorage.h>
+
 #include <cstdint>
 #include <string>
 
 #include "LibraryFormat.h"
-
-class HalFile;
 
 namespace library {
 
@@ -66,7 +66,7 @@ class LibraryIndexFile {
  private:
   bool readAt(uint32_t offset, void* dst, size_t len);
 
-  HalFile* file = nullptr;  // heap-held: HalFile is only forward-declared here
+  HalFile file;
   ClixHeader head{};
   bool opened = false;
   ClixValidity lastValidity = ClixValidity::BadMagic;
