@@ -185,6 +185,13 @@ void SettingsActivity::activateIndex(const int index) {
   // a lingering tap flash would gray an unrelated element.
   app.clearTapFlash();
   toggleCurrentSetting();
+  // Tap-first: a tapped row is not a cursor position. Leaving it focused
+  // (inverted) after the tap meant the row stayed black once its sub-screen or
+  // popup closed, and Back then had to clear that focus before a second Back
+  // left Settings. Hand the focus back to the tab band; the viewport stays put.
+  if (mappedInput.hasTouch()) {
+    activeNav().selected = 0;
+  }
 }
 
 void SettingsActivity::onExit() {

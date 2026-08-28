@@ -126,8 +126,8 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   // Pill shape and label size are theme-driven. Label-hugging (Lyra): small
   // text so the pill wraps a compact label, kept tight horizontally so wide
   // labels (e.g. "Controls") still fit their slot at large UI scales.
-  // Full-slot (RoundedRaff): the pill fills its slot like the legacy
-  // drawTabBar (slot minus a 4px frame, 8px clearance above the divider) with
+  // Full-slot (RoundedRaff): the pill fills its slot like the legacy layout
+  // (slot minus a 4px frame, 8px clearance above the divider) with
   // body-size labels; zero horizontal contentInset disables the tabBar's
   // label-width shrink.
   const bool tabsFocused = ringPos() == 0;

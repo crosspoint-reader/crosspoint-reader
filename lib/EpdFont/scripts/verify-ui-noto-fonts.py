@@ -41,15 +41,23 @@ ARABIC_CODEPOINTS = tuple(
     for codepoint in range(first, last + 1)
 )
 
+# The trailing flag mirrors --autohint-font in convert-builtin-fonts.sh: a face
+# is checked against the same rasterisation the converter gives it.
 FACES = (
-    ("Hebrew medium", "NotoSansHebrew", "Regular", "UIMedium", HEBREW_CODEPOINTS),
-    ("Hebrew bold", "NotoSansHebrew", "Bold", "UIBold", HEBREW_CODEPOINTS),
-    ("Arabic medium", "NotoSansArabic", "Regular", "UIMedium", ARABIC_CODEPOINTS),
-    ("Arabic bold", "NotoSansArabic", "Bold", "UIBold", ARABIC_CODEPOINTS),
+    ("Hebrew medium", "NotoSansHebrew", "Regular", "UIMedium", HEBREW_CODEPOINTS, True),
+    ("Hebrew bold", "NotoSansHebrew", "Bold", "UIBold", HEBREW_CODEPOINTS, True),
+    ("Arabic medium", "NotoSansArabic", "Regular", "UIMedium", ARABIC_CODEPOINTS, False),
+    ("Arabic bold", "NotoSansArabic", "Bold", "UIBold", ARABIC_CODEPOINTS, False),
 )
 
 
-def ink_pixels(path: Path, codepoints: tuple[int, ...], size: int, monochrome: bool) -> tuple[int, set[int]]:
+def ink_pixels(
+    path: Path,
+    codepoints: tuple[int, ...],
+    size: int,
+    monochrome: bool,
+    autohint: bool = False,
+) -> tuple[int, set[int]]:
     face = freetype.Face(str(path))
     face.set_char_size(size << 6, size << 6, 150, 150)
     ink = 0
@@ -62,6 +70,8 @@ def ink_pixels(path: Path, codepoints: tuple[int, ...], size: int, monochrome: b
         flags = freetype.FT_LOAD_RENDER
         if monochrome:
             flags |= freetype.FT_LOAD_TARGET_MONO
+        if autohint:
+            flags |= freetype.FT_LOAD_FORCE_AUTOHINT
         face.load_char(chr(codepoint), flags)
         bitmap = face.glyph.bitmap
         pitch = abs(bitmap.pitch)
@@ -157,7 +167,7 @@ def generated_header_ink(
 
 
 def main() -> None:
-    for label, family, reference_style, optical_style, codepoints in FACES:
+    for label, family, reference_style, optical_style, codepoints, autohint in FACES:
         family_dir = SOURCE_DIR / family
         reference_path = family_dir / f"{family}-{reference_style}.ttf"
         optical_path = family_dir / f"{family}-{optical_style}.ttf"
@@ -165,7 +175,7 @@ def main() -> None:
         ratios = []
         for size in SIZES:
             reference_ink, reference_coverage = ink_pixels(reference_path, codepoints, size, False)
-            optical_ink, optical_coverage = ink_pixels(optical_path, codepoints, size, True)
+            optical_ink, optical_coverage = ink_pixels(optical_path, codepoints, size, True, autohint)
             if optical_coverage != reference_coverage:
                 missing = sorted(reference_coverage - optical_coverage)
                 raise RuntimeError(f"{label} is missing glyphs: {[f'U+{cp:04X}' for cp in missing]}")

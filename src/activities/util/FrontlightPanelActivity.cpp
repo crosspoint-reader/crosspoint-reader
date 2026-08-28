@@ -3,12 +3,16 @@
 #include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <iterator>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
@@ -22,8 +26,25 @@ constexpr fui::ActionId ACTION_WARMTH = 2;
 constexpr fui::ActionId ACTION_TOGGLE = 3;
 constexpr fui::ActionId ACTION_BRIGHTNESS_STEP = 4;
 constexpr fui::ActionId ACTION_WARMTH_STEP = 5;
-constexpr int BUTTON_BRIGHTNESS_STEP = 5;
-constexpr int FINE_STEP = 1;
+constexpr fui::ActionId ACTION_TILE = 6;  // value = tile index
+
+// iOS-style geometry. The panel is a card hanging from the top of the screen:
+// a grabber, full-width slider pills, then a 2-column tile grid. The chrome
+// itself is fui::sheet / fui::sliderRow / fui::tileGrid; these constants only
+// size the bands, and computePanelBottom() mirrors them.
+constexpr int16_t kPanelSideMargin = 16;
+constexpr int16_t kGrabberHeight = 5;     // fui::SheetProps default, mirrored here
+constexpr int16_t kSliderRowHeight = 56;  // the pill itself (finger-sized)
+constexpr int16_t kTileHeight = 84;
+constexpr int16_t kTileGap = 16;
+constexpr int kTileCols = 2;
+// One percent per press, on the -/+ buttons and on the physical Left/Right keys
+// alike (both repeat while held), so a level can be set exactly.
+constexpr int BRIGHTNESS_STEP = 1;
+// The dimmest setting is 1%, not 0: turning the light off is what the lamp
+// button next to the slider is for, so a 0% "on" level would only be a second,
+// worse way to reach the same place.
+constexpr uint8_t MIN_BRIGHTNESS = 1;
 
 uint8_t percentFromPermille(const int16_t permille) {
   int value = (static_cast<int>(permille) * 100 + 500) / 1000;
@@ -39,10 +60,19 @@ FrontlightPanelActivity::FrontlightPanelActivity(GfxRenderer& renderer, MappedIn
 void FrontlightPanelActivity::onEnter() {
   Activity::onEnter();
 
-  brightness = Frontlight.brightness();
+  // A stored 0% predates the 1% floor (or came from the web settings): show it
+  // as the floor rather than a level the slider can no longer produce. onExit
+  // persists that, which is the intent — 0 is not a brightness any more.
+  brightness = std::max(MIN_BRIGHTNESS, Frontlight.brightness());
   warmth = Frontlight.warmth();
   lightOn = Frontlight.isOn();
   lightOnChanged = false;
+
+  // Seed the touch tile's restore mode from the live setting, so toggling off
+  // and back on within this session returns to the mode the user had.
+  if (SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF) {
+    touchModeRestore = SETTINGS.touchReaderControls;
+  }
 
   resetUi();
   app.on(ACTION_BRIGHTNESS, &FrontlightPanelActivity::onBrightnessEvent, this);
@@ -50,11 +80,12 @@ void FrontlightPanelActivity::onEnter() {
   app.on(ACTION_TOGGLE, &FrontlightPanelActivity::onToggleEvent, this);
   app.on(ACTION_BRIGHTNESS_STEP, &FrontlightPanelActivity::onBrightnessStepEvent, this);
   app.on(ACTION_WARMTH_STEP, &FrontlightPanelActivity::onWarmthStepEvent, this);
+  app.on(ACTION_TILE, &FrontlightPanelActivity::onTileEvent, this);
   app.setScreen(&FrontlightPanelActivity::panelScreen, this);
   requestUpdate();
 }
 
-void FrontlightPanelActivity::onExit() {
+void FrontlightPanelActivity::persistLightSettings() {
   // brightness/warmth are always restored unconditionally on boot (see
   // main.cpp), so they never diverge from SETTINGS at onEnter() — comparing
   // against SETTINGS here only fires on a genuine user change. lightOn has
@@ -68,13 +99,17 @@ void FrontlightPanelActivity::onExit() {
     if (lightOnChanged) SETTINGS.frontlightOn = lightOn ? 1 : 0;
     SETTINGS.saveToFile();
   }
+}
+
+void FrontlightPanelActivity::onExit() {
+  persistLightSettings();
   Activity::onExit();
 }
 
 void FrontlightPanelActivity::onBrightnessEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<FrontlightPanelActivity*>(user);
   if (event.dragPermille < 0) return;
-  self->brightness = percentFromPermille(event.dragPermille);
+  self->brightness = std::max(MIN_BRIGHTNESS, percentFromPermille(event.dragPermille));
   Frontlight.setBrightness(self->brightness);
   if (!self->lightOn) {
     self->lightOn = true;
@@ -95,16 +130,72 @@ void FrontlightPanelActivity::onToggleEvent(const fui::ActionEvent&, void* user)
 }
 
 void FrontlightPanelActivity::onBrightnessStepEvent(const fui::ActionEvent& event, void* user) {
-  static_cast<FrontlightPanelActivity*>(user)->adjustBrightness(event.value * FINE_STEP);
+  static_cast<FrontlightPanelActivity*>(user)->adjustBrightness(event.value);
 }
 
 void FrontlightPanelActivity::onWarmthStepEvent(const fui::ActionEvent& event, void* user) {
-  static_cast<FrontlightPanelActivity*>(user)->adjustWarmth(event.value * FINE_STEP);
+  static_cast<FrontlightPanelActivity*>(user)->adjustWarmth(event.value);
+}
+
+void FrontlightPanelActivity::onTileEvent(const fui::ActionEvent& event, void* user) {
+  static_cast<FrontlightPanelActivity*>(user)->runTile(event.value);
+}
+
+void FrontlightPanelActivity::runTile(const int idx) {
+  switch (idx) {
+    case 0:  // Night mode (inverted output polarity, applied to the whole UI)
+      SETTINGS.screenInverted = SETTINGS.screenInverted ? 0 : 1;
+      SETTINGS.saveToFile();
+      // Inversion rewrites every pixel; take the clean waveform so the panel
+      // does not keep a ghost of the old polarity.
+      cleanRefreshPending = true;
+      requestUpdate();
+      break;
+    case 1:  // Ghost-cleanup refresh of the whole frame
+      // Refreshing with the panel still up would clean a frame the user is
+      // about to dismiss anyway: drop the panel first and let the repaint of
+      // the screen underneath carry the clean waveform instead.
+      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);
+      close();
+      break;
+    case 2:  // Cycle the reading orientation
+      SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);
+      SETTINGS.saveToFile();
+      // Nothing else would turn the renderer: ActivityManager::Pop restores the
+      // activity underneath without calling onEnter(), so its
+      // applyInitialOrientation() never runs. Apply it here instead.
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      // Close rather than redraw in place: the turned panel lays out against
+      // the new frame while the old panel's pixels sit in the old frame, so
+      // repeated taps stacked stale panels on screen. The screen underneath
+      // repaints in the new orientation and its refresh carries the cleanup a
+      // whole-frame rewrite needs.
+      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);
+      close();
+      break;
+    case 3:  // Touch reader controls (for reading with the palm on the glass)
+      // Toggles the existing Settings -> Controls option, nothing lower-level:
+      // that setting only governs the reader's tap/swipe handling, so the
+      // panel's own gestures (including the swipe that reopens it) keep
+      // working while it is off. Off remembers the mode (Tap/Swipe/Inverted
+      // Tap) so toggling back does not stomp the user's choice.
+      if (SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF) {
+        touchModeRestore = SETTINGS.touchReaderControls;
+        SETTINGS.touchReaderControls = CrossPointSettings::TOUCH_READER_OFF;
+      } else {
+        SETTINGS.touchReaderControls = touchModeRestore;
+      }
+      SETTINGS.saveToFile();
+      requestUpdate();
+      break;
+    default:
+      break;
+  }
 }
 
 void FrontlightPanelActivity::adjustBrightness(const int delta) {
   int next = static_cast<int>(brightness) + delta;
-  if (next < 0) next = 0;
+  if (next < MIN_BRIGHTNESS) next = MIN_BRIGHTNESS;
   if (next > 100) next = 100;
   if (next == brightness) return;
   brightness = static_cast<uint8_t>(next);
@@ -149,7 +240,12 @@ void FrontlightPanelActivity::loop() {
       if (touch.event.dragPermille >= 0) draggingSlider = true;
       return;
     }
-    if (touch.snap.touchReleased && !draggingSlider && touch.snap.touchY >= panelBottom) {
+    // panelBottom > 0 guards the frame the sheet opens in: the release that
+    // opened it (a status-bar tap) is still in the input snapshot when the panel
+    // runs its first loop(), and panelBottom is only known once render() has
+    // measured the layout — so at 0 that release read as "tapped below the
+    // sheet" and closed it again before it was ever drawn.
+    if (touch.snap.touchReleased && !draggingSlider && panelBottom > 0 && touch.snap.touchY >= panelBottom) {
       close();
       return;
     }
@@ -169,23 +265,31 @@ void FrontlightPanelActivity::loop() {
   }
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left},
-                                       [this] { adjustBrightness(-BUTTON_BRIGHTNESS_STEP); });
+                                       [this] { adjustBrightness(-BRIGHTNESS_STEP); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
-                                       [this] { adjustBrightness(BUTTON_BRIGHTNESS_STEP); });
+                                       [this] { adjustBrightness(BRIGHTNESS_STEP); });
 }
 
 int FrontlightPanelActivity::computePanelBottom() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
   const auto tokens = uiThemeTokens(uiTarget);
-  const int16_t lineHeight = uiTarget.lineHeight(tokens.bodyText.font);
-  int y = metrics.topPadding + metrics.headerHeight;
-  y += tokens.spaceLg;
-  y += tokens.rowHeight + tokens.spaceSm;
-  y += tokens.rowHeight + tokens.spaceLg;
-  if (Frontlight.hasColorTemperature()) {
-    y += lineHeight + tokens.spaceSm + tokens.rowHeight + tokens.spaceLg;
+  const int16_t lineHeight = uiTarget.lineHeight(tokens.smallText.font);
+  int y = tokens.spaceLg + tokens.spaceMd;  // top padding
+  if (Frontlight.present()) {
+    // Screen::sliderRow reserves caption + spaceMd + control band, then a
+    // spaceMd gap; addSliderRow() adds one more spaceMd of air after each row.
+    y += lineHeight + tokens.spaceMd + kSliderRowHeight + 2 * tokens.spaceMd;  // brightness
+    if (Frontlight.hasColorTemperature()) {
+      y += lineHeight + tokens.spaceMd + kSliderRowHeight + 2 * tokens.spaceMd;  // warmth
+    }
+    y += tokens.spaceSm;
   }
-  y += tokens.spaceLg;
+  // Tiles are touch targets, so a buttons-only board gets no grid and the
+  // sheet is exactly the frontlight controls.
+  const int tileCount = mappedInput.hasTouch() ? kTileCount : 0;
+  y += fui::tileGridHeight(static_cast<uint16_t>(tileCount), kTileCols, kTileHeight, kTileGap);
+  // The sheet's grabber band: content margin + grabber + air to the edge.
+  // buildPanelScreen() feeds the same theme spacings into SheetProps.
+  y += tokens.spaceLg + kGrabberHeight + tokens.spaceLg + tokens.spaceMd;
   return y;
 }
 
@@ -193,83 +297,119 @@ void FrontlightPanelActivity::panelScreen(UiScreen& screen, void* user) {
   static_cast<FrontlightPanelActivity*>(user)->buildPanelScreen(screen);
 }
 
-void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto& theme = screen.theme();
-  const int16_t bottomInset = static_cast<int16_t>(renderer.getScreenHeight() - panelBottom);
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0, bottomInset, 0});
+void FrontlightPanelActivity::addSliderRow(UiScreen& screen, const char* label, const uint8_t value,
+                                           const fui::ActionId sliderAction, const fui::ActionId stepAction,
+                                           const bool showToggle) {
+  // Live percentage readout. The row draws before this call returns
+  // (immediate mode), so borrowing a stack buffer is safe.
+  char pct[8];
+  snprintf(pct, sizeof(pct), "%u%%", static_cast<unsigned>(value));
 
-  const int16_t lineHeight = screen.target().lineHeight(theme.bodyText.font);
-  const int16_t rowHeight = theme.rowHeight;
-  const fui::Insets sideInset{0, static_cast<int16_t>(theme.spaceLg * 2), 0, static_cast<int16_t>(theme.spaceLg * 2)};
-  char line[48];
-
-  screen.spacer(theme.spaceLg);
-
-  const fui::Rect headerRow = screen.takeTop(rowHeight, theme.spaceSm).inset(sideInset);
-  snprintf(line, sizeof(line), "%s  %u%%", tr(STR_BRIGHTNESS), static_cast<unsigned>(brightness));
-  const fui::BitmapRef sunIcon = fui::bitmapFromIcon(lightOn ? icon_sun_filled_32 : icon_sun_32);
-  const int16_t iconWidth = static_cast<int16_t>(sunIcon.width);
-  const int16_t iconHeight = static_cast<int16_t>(sunIcon.height);
-  const int16_t controlWidth = static_cast<int16_t>(iconWidth + theme.spaceLg * 2);
-  const fui::Rect sunHit{static_cast<int16_t>(headerRow.right() - controlWidth), headerRow.y, controlWidth, rowHeight};
-  const fui::Rect sunRect{static_cast<int16_t>(sunHit.x + (controlWidth - iconWidth) / 2),
-                          static_cast<int16_t>(headerRow.y + (rowHeight - iconHeight) / 2), iconWidth, iconHeight};
-  const fui::Rect labelRect{headerRow.x, static_cast<int16_t>(headerRow.y + (rowHeight - lineHeight) / 2),
-                            static_cast<int16_t>(headerRow.width - controlWidth - theme.spaceMd), lineHeight};
-  screen.target().text(labelRect, line, theme.bodyText);
-  screen.frame().hit(sunHit, ACTION_TOGGLE);
-  screen.target().bitmap(sunRect, sunIcon, fui::BitmapMode::Center);
-
-  addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset), brightness, ACTION_BRIGHTNESS,
-                ACTION_BRIGHTNESS_STEP);
-
-  if (Frontlight.hasColorTemperature()) {
-    snprintf(line, sizeof(line), "%s  %u%%", tr(STR_WARMTH), static_cast<unsigned>(warmth));
-    screen.target().text(screen.takeTop(lineHeight, theme.spaceSm).inset(sideInset), line, theme.bodyText);
-    addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset), warmth, ACTION_WARMTH,
-                  ACTION_WARMTH_STEP);
+  // rowProps is a member (fui::SliderRowProps embeds a 324-byte StyleSet, well
+  // past the 256-byte budget a local gets — AGENTS.md). Every field that
+  // varies between the two rows is reassigned here; the rest keep their
+  // constructed defaults, which already match the panel's card language.
+  rowProps.label = label;
+  rowProps.value = pct;
+  rowProps.sliderValue = value;
+  rowProps.sliderAction = sliderAction;
+  rowProps.decrement = stepAction;
+  rowProps.increment = stepAction;
+  rowProps.decrementValue = -BRIGHTNESS_STEP;
+  rowProps.incrementValue = BRIGHTNESS_STEP;
+  if (showToggle) {
+    // Lamp on/off after the +: the sliders set the level, this kills the light
+    // outright. Filled glyph = on, outline = off.
+    rowProps.toggleAction = ACTION_TOGGLE;
+    rowProps.toggleIcon = fui::bitmapFromIcon(lightOn ? icon_sun_filled_32 : icon_sun_32);
+  } else {
+    rowProps.toggleAction = fui::NO_ACTION;
+    rowProps.toggleIcon = fui::BitmapRef{};
   }
-
-  screen.spacer(theme.spaceLg);
+  screen.sliderRow(rowProps, kSliderRowHeight);
+  // The wrapper's own trailing gap is one spaceMd; double it so the rows
+  // breathe — a control band this tall reads cramped at the list cadence.
+  screen.spacer(screen.theme().spaceMd);
 }
 
-void FrontlightPanelActivity::addStepSlider(UiScreen& screen, const fui::Rect& row, const uint8_t value,
-                                            const fui::ActionId sliderAction, const fui::ActionId stepAction) {
+void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
   const auto& theme = screen.theme();
-  const int16_t stepWidth = row.height;
-  const fui::Rect minusHit{row.x, row.y, stepWidth, row.height};
-  const fui::Rect plusHit{static_cast<int16_t>(row.right() - stepWidth), row.y, stepWidth, row.height};
 
-  fui::TextStyle glyph = theme.bodyText;
-  glyph.align = fui::TextAlign::Center;
-  const int16_t lineHeight = screen.target().lineHeight(glyph.font);
-  const int16_t glyphY = static_cast<int16_t>(row.y + (row.height - lineHeight) / 2);
-  screen.target().text(fui::Rect{minusHit.x, glyphY, stepWidth, lineHeight}, "-", glyph);
-  screen.target().text(fui::Rect{plusHit.x, glyphY, stepWidth, lineHeight}, "+", glyph);
-  screen.frame().hit(minusHit, stepAction, -1, fui::InputTouch);
-  screen.frame().hit(plusHit, stepAction, 1, fui::InputTouch);
+  // Sheet chrome first: the card body, the 2px rule along its bottom edge, and
+  // the grabber on the edge the sheet is dragged from. Screen::sheet() also
+  // clamps the content area to the sheet, so every band below lays out inside
+  // it. (No header: the panel is a floating card, and its own grabber says
+  // what it is.)
+  fui::SheetProps sheetProps;
+  // A roomy band above the bottom rule: the grabber gets a full spaceLg of
+  // air on both sides so the last row of content never crowds the sheet edge.
+  sheetProps.grabberMargin = theme.spaceLg;
+  sheetProps.grabberInset = static_cast<int16_t>(theme.spaceLg + theme.spaceMd);
+  screen.sheet(sheetProps, static_cast<int16_t>(panelBottom));
+  screen.insetContent(fui::Insets{0, kPanelSideMargin, 0, kPanelSideMargin});
 
-  fui::SliderProps props;
-  props.value = value;
-  props.max = 100;
-  props.action = sliderAction;
-  props.inputMask = fui::InputTouch | fui::InputDrag;
-  const int16_t sideGap = static_cast<int16_t>(stepWidth + theme.spaceSm);
-  fui::slider(screen.frame(), row.inset(fui::Insets{0, sideGap, 0, sideGap}), props);
+  // The sheet hangs from the very top of the screen, so its content needs a
+  // real top inset of its own — nothing above it reserves space the way a
+  // header band did.
+  screen.spacer(static_cast<int16_t>(theme.spaceLg + theme.spaceMd));
+
+  if (Frontlight.present()) {
+    addSliderRow(screen, tr(STR_BRIGHTNESS), brightness, ACTION_BRIGHTNESS, ACTION_BRIGHTNESS_STEP,
+                 /*showToggle=*/true);
+    if (Frontlight.hasColorTemperature()) {
+      addSliderRow(screen, tr(STR_WARMTH), warmth, ACTION_WARMTH, ACTION_WARMTH_STEP, /*showToggle=*/false);
+    }
+    screen.spacer(theme.spaceSm);
+  }
+
+  // Quick-setting tiles. Two columns of finger-sized cards; a tile whose
+  // setting is currently on draws filled (StateChecked -> selected style).
+  // Touch boards only — the tiles are touch targets.
+  if (mappedInput.hasTouch()) {
+    static constexpr StrId kOrientNames[4] = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW,
+                                              StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW};
+    // The orientation tile is labelled with just the current mode ("Portrait"):
+    // the mode names say what the tile is about on their own.
+    const char* orientLabel = I18N.get(kOrientNames[SETTINGS.orientation % 4]);
+    // "Touch On" / "Touch Off", from the existing state strings: the label
+    // names the current state of the touch-reader-controls setting.
+    const bool touchOn = SETTINGS.touchReaderControls != CrossPointSettings::TOUCH_READER_OFF;
+    char touchLabel[48];
+    snprintf(touchLabel, sizeof(touchLabel), "%s %s", tr(STR_TOUCH_TOGGLE),
+             I18N.get(touchOn ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF));
+
+    const char* labels[kTileCount] = {tr(STR_NIGHT_MODE), tr(STR_FORCE_REFRESH), orientLabel, touchLabel};
+    const fui::State states[kTileCount] = {SETTINGS.screenInverted ? fui::StateChecked : fui::StateNormal,
+                                           fui::StateNormal, fui::StateNormal,
+                                           // Filled when touch reader controls are OFF — the non-default,
+                                           // attention-worthy state.
+                                           touchOn ? fui::StateNormal : fui::StateChecked};
+
+    for (int id = 0; id < kTileCount; ++id) {
+      gridItems[id].label = labels[id];
+      gridItems[id].value = static_cast<int16_t>(id);
+      gridItems[id].state = states[id];
+    }
+    gridProps.items = gridItems;
+    gridProps.count = static_cast<uint16_t>(kTileCount);
+    gridProps.action = ACTION_TILE;
+    gridProps.tileHeight = kTileHeight;
+    gridProps.gap = kTileGap;
+    screen.tileGrid(gridProps);
+  }
 }
 
 void FrontlightPanelActivity::render(RenderLock&&) {
   panelBottom = computePanelBottom();
-  const int pageWidth = renderer.getScreenWidth();
-  renderer.fillRect(0, 0, pageWidth, panelBottom, false);
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FRONTLIGHT));
-
+  // fui::sheet draws the card body, its bottom rule, and the grabber during
+  // renderUi(); nothing is hand-drawn around it any more.
   renderUi();
 
-  renderer.fillRect(0, panelBottom - 2, pageWidth, 2, true);
-  renderer.displayBuffer();
+  // A tile that rewrote the whole frame (night mode) re-drives every pixel
+  // once; ordinary repaints stay on the fast path. FULL, not HALF: HALF is the
+  // balanced-speed waveform and leaves some ghost behind, which is exactly what
+  // the tile that sets this flag is asked to remove.
+  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  cleanRefreshPending = false;
 }

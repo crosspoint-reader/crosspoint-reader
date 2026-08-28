@@ -44,6 +44,7 @@ DocumentMatchMethod alternateMatchMethod(const DocumentMatchMethod method) {
 const char* matchMethodName(const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? "filename" : "binary";
 }
+
 }  // namespace
 
 KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -122,6 +123,12 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   }
 
   LOG_DBG("KOSync", "WiFi connected, starting sync");
+
+  // Keep the station fully awake for the short sync transaction. The web server
+  // does the same because ESP32 modem sleep can introduce multi-second network
+  // stalls that surface as HTTP timeouts. WiFi is torn down when this activity exits.
+  WiFi.setSleep(false);
+  LOG_DBG("KOSync", "WiFi sleep disabled for sync");
 
   {
     RenderLock lock(*this);
