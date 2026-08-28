@@ -115,6 +115,14 @@ TEST(LibraryAuthorKey, SecondaryAuthorsAndBracketsDropped) {
   EXPECT_EQ(authorKey("George Sand [Sand, George]"), authorKey("George Sand"));
 }
 
+TEST(LibraryAuthorKey, FilesystemUnderscoreStandsInForAFullStop) {
+  // The one input where the key's cleanup and cleanPersonName's differ before
+  // folding: an underscore the filesystem took instead of a full stop. Both
+  // reduce to the same initial, which fold() then drops as a one-letter token.
+  EXPECT_EQ(authorKey("Herbert G_ Wells"), authorKey("Herbert Wells"));
+  EXPECT_EQ(authorKey("Wells_ Herbert"), authorKey("Herbert Wells"));
+}
+
 TEST(LibraryAuthorKey, DistinctPeopleDoNotCollide) {
   EXPECT_NE(authorKey("Mary Wollstonecraft"), authorKey("Charlotte Bronte"));
   EXPECT_NE(authorKey("Victor Hugo"), authorKey("Jules Verne"));

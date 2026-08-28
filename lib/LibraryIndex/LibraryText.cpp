@@ -241,25 +241,12 @@ std::string cleanPersonName(const std::string_view author) {
 }
 
 std::string authorKey(const std::string_view author) {
-  // Drop bracketed spans ("George Sand [Sand, George]") and everything after
-  // a multi-author separator.
-  std::string cleaned;
-  cleaned.reserve(author.size());
-  int depth = 0;
-  for (const char c : author) {
-    if (c == '[' || c == '(') {
-      depth++;
-      continue;
-    }
-    if (c == ']' || c == ')') {
-      if (depth > 0) depth--;
-      continue;
-    }
-    if (c == ';') break;
-    if (depth == 0) cleaned.push_back(c);
-  }
-
-  const std::string folded = fold(cleaned);
+  // The same cleanup the display name gets: bracketed spans dropped
+  // ("George Sand [Sand, George]") and everything after a multi-author
+  // separator cut. cleanPersonName also turns "Austen, Jane" round, which makes
+  // no difference here — the tokens are sorted below, so word order is already
+  // irrelevant to the key.
+  const std::string folded = fold(cleanPersonName(author));
 
   constexpr size_t MAX_TOKENS = 12;
   std::string_view tokens[MAX_TOKENS];
