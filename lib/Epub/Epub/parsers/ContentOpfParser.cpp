@@ -130,9 +130,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   if (self->metadataOnly && self->metadataComplete) {
     return;
   }
-  if (self->metadataOnly &&
-      (xmlLocalNameEquals(name, "manifest") || xmlLocalNameEquals(name, "spine") ||
-       xmlLocalNameEquals(name, "guide"))) {
+  if (self->metadataOnly && (xmlLocalNameEquals(name, "manifest") || xmlLocalNameEquals(name, "spine") ||
+                             xmlLocalNameEquals(name, "guide"))) {
     self->metadataComplete = true;
     return;
   }
