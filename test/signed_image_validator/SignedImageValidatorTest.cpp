@@ -33,7 +33,12 @@ uint32_t crc32(const uint8_t* data, size_t len) {
 std::array<uint8_t, signed_image::kBlockSize> makeBlock(uint8_t magic, uint8_t version,
                                                         const uint8_t digest[signed_image::kDigestLen],
                                                         bool correctCrc) {
-  std::array<uint8_t, signed_image::kBlockSize> block{};
+  // Static rather than a local: at 1216 bytes this exceeds the project's
+  // stack-safety convention for embedded code. This is host test code with no
+  // such constraint, but keeping the pattern consistent costs nothing --
+  // filled fresh on every call and copied out by the return below, so reuse
+  // across calls is safe (single-threaded test binary, no concurrent callers).
+  static std::array<uint8_t, signed_image::kBlockSize> block{};
   block[signed_image::kOffMagic] = magic;
   block[signed_image::kOffVersion] = version;
   std::memcpy(block.data() + signed_image::kOffImageDigest, digest, signed_image::kDigestLen);

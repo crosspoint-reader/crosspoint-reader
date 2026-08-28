@@ -364,6 +364,7 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
   // slots.
   static_assert(signed_image::kSectorSize == CHUNK, "sig sector no longer matches the read buffer size");
   if (file.read(buf.get(), signed_image::kSectorSize) != static_cast<int>(signed_image::kSectorSize)) {
+    LOG_ERR("FLASH", "validate: signature sector read failed (%zu bytes)", signed_image::kSectorSize);
     file.close();
     return Result::READ_FAIL;
   }
