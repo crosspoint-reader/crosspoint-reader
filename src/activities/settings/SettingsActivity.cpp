@@ -20,6 +20,7 @@
 #include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
+#include "SettingsExtension.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
@@ -43,6 +44,15 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings.clear();
   controlsSettings.clear();
   systemSettings.clear();
+
+  // Extra tabs from the active provider, if any (see SettingsExtension.h).
+  // Rebuilt every call, same cadence as the font/dictionary rescans below,
+  // so a provider whose categories change (e.g. after sign-in) stays current.
+  if (const auto provider = getSettingsExtensionProvider()) {
+    extraCategories = provider();
+  } else {
+    extraCategories.clear();
+  }
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -99,20 +109,28 @@ void SettingsActivity::rebuildSettingsLists() {
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
+  // A shrunk provider result (e.g. after sign-out) can leave the previously
+  // selected tab past the end; fall back to the last tab that still exists.
+  selectedCategoryIndex = std::min(selectedCategoryIndex, categoryCount + static_cast<int>(extraCategories.size()) - 1);
+
   // Update currentSettings pointer and count for the active category
-  switch (selectedCategoryIndex) {
-    case 0:
-      currentSettings = &displaySettings;
-      break;
-    case 1:
-      currentSettings = &readerSettings;
-      break;
-    case 2:
-      currentSettings = &controlsSettings;
-      break;
-    case 3:
-      currentSettings = &systemSettings;
-      break;
+  if (selectedCategoryIndex < categoryCount) {
+    switch (selectedCategoryIndex) {
+      case 0:
+        currentSettings = &displaySettings;
+        break;
+      case 1:
+        currentSettings = &readerSettings;
+        break;
+      case 2:
+        currentSettings = &controlsSettings;
+        break;
+      case 3:
+        currentSettings = &systemSettings;
+        break;
+    }
+  } else {
+    currentSettings = &extraCategories[selectedCategoryIndex - categoryCount].settings;
   }
   settingsCount = static_cast<int>(currentSettings->size());
   rebuildRowItems();
@@ -134,19 +152,23 @@ void SettingsActivity::onEnter() {
 
 void SettingsActivity::selectCategory(const int categoryIndex) {
   selectedCategoryIndex = categoryIndex;
-  switch (selectedCategoryIndex) {
-    case 0:
-      currentSettings = &displaySettings;
-      break;
-    case 1:
-      currentSettings = &readerSettings;
-      break;
-    case 2:
-      currentSettings = &controlsSettings;
-      break;
-    case 3:
-      currentSettings = &systemSettings;
-      break;
+  if (selectedCategoryIndex < categoryCount) {
+    switch (selectedCategoryIndex) {
+      case 0:
+        currentSettings = &displaySettings;
+        break;
+      case 1:
+        currentSettings = &readerSettings;
+        break;
+      case 2:
+        currentSettings = &controlsSettings;
+        break;
+      case 3:
+        currentSettings = &systemSettings;
+        break;
+    }
+  } else {
+    currentSettings = &extraCategories[selectedCategoryIndex - categoryCount].settings;
   }
   settingsCount = static_cast<int>(currentSettings->size());
   activeNav().top = 0;  // category switches start the list at the top (no per-tab memory here)
@@ -164,7 +186,7 @@ void SettingsActivity::rebuildRowItems() {
   rowItems_.reserve(settings.size());
   for (size_t i = 0; i < settings.size(); i++) {
     fui::ListItem item;
-    item.label = I18N.get(settings[i].nameId);
+    item.label = settings[i].customLabel.empty() ? I18N.get(settings[i].nameId) : settings[i].customLabel.c_str();
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
@@ -272,6 +294,8 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+  } else if (setting.type == SettingType::TOGGLE && setting.valueGetter && setting.valueSetter) {
+    setting.valueSetter(!setting.valueGetter());
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (setting.enumValues.size() > 2) {
@@ -317,6 +341,13 @@ void SettingsActivity::toggleCurrentSetting() {
       SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
     } else {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
+    }
+  } else if (setting.type == SettingType::VALUE && setting.valueGetter && setting.valueSetter) {
+    const uint8_t currentValue = setting.valueGetter();
+    if (currentValue + setting.valueRange.step > setting.valueRange.max) {
+      setting.valueSetter(setting.valueRange.min);
+    } else {
+      setting.valueSetter(currentValue + setting.valueRange.step);
     }
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
@@ -374,6 +405,12 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::None:
         // Do nothing
         break;
+      case SettingAction::Extension:
+        if (setting.actionHandler) {
+          setting.actionHandler();
+        }
+        rebuildSettingsLists();
+        break;
     }
     return;  // Results will be handled in the result handler, so we can return early here
   } else {
@@ -429,6 +466,9 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
   }
+  if (setting.type == SettingType::TOGGLE && setting.valueGetter) {
+    return setting.valueGetter() ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+  }
   if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     // Guard like the valueGetter branch below: a corrupt/migrated settings
     // byte must not index past the enum table.
@@ -457,6 +497,9 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
       return valueBuffer;
     }
     return std::to_string(SETTINGS.*(setting.valuePtr));
+  }
+  if (setting.type == SettingType::VALUE && setting.valueGetter) {
+    return std::to_string(setting.valueGetter());
   }
   return "";
 }
