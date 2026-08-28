@@ -313,9 +313,8 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
-    const uint8_t totalValues = setting.enumStringValues.empty()
-                                    ? static_cast<uint8_t>(setting.enumValues.size())
-                                    : static_cast<uint8_t>(setting.enumStringValues.size());
+    const size_t totalValues =
+        setting.enumStringValues.empty() ? setting.enumValues.size() : setting.enumStringValues.size();
     const uint8_t cur = setting.valueGetter();
     if (totalValues > 2) {
       const auto valueSetter = setting.valueSetter;
@@ -335,7 +334,7 @@ void SettingsActivity::toggleCurrentSetting() {
       return;
     }
     if (totalValues > 0) {
-      setting.valueSetter((cur + 1) % totalValues);
+      setting.valueSetter(static_cast<uint8_t>((cur + 1) % totalValues));
     }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
