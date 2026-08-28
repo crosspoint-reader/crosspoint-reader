@@ -242,8 +242,8 @@ void SettingsActivity::stepTab(const int direction) {
   // Ring position 0 stays on the tab bar; a row selection collapses to the
   // new category's first row (per-tab memory is deliberately not kept here).
   const bool onTabBar = ringPos() == 0;
-  selectedCategoryIndex = direction > 0 ? ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount)
-                                        : ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+  selectedCategoryIndex = direction > 0 ? ButtonNavigator::nextIndex(selectedCategoryIndex, tabCount())
+                                        : ButtonNavigator::previousIndex(selectedCategoryIndex, tabCount());
   selectCategory(selectedCategoryIndex);
   activeNav().selected = onTabBar ? 0 : 1;
   requestUpdate();
@@ -333,7 +333,9 @@ void SettingsActivity::toggleCurrentSetting() {
       requestUpdate();
       return;
     }
-    setting.valueSetter((cur + 1) % totalValues);
+    if (totalValues > 0) {
+      setting.valueSetter((cur + 1) % totalValues);
+    }
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     const int8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
