@@ -1,8 +1,10 @@
 name: "Reopen On Reply"
 
-# Makes good on the promise in the automatic closing message. `no-response` is
-# the guard rather than `needs-info`: it is applied only by the stale workflow,
-# so a comment can never reopen an issue that was closed deliberately.
+# Makes good on the promise in the automatic closing message. `no-response-closed`
+# is the guard rather than `needs-info` or `no-response`: the stale workflow stamps
+# it only when *it* closes the issue, so a comment can never reopen an issue that a
+# maintainer closed deliberately. `!issue.pull_request` keeps this to issues —
+# `issue_comment` also fires on pull request comments.
 
 on:
   issue_comment:
@@ -15,8 +17,9 @@ jobs:
   reopen:
     if: >
       github.event.issue.state == 'closed' &&
+      !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
-      contains(github.event.issue.labels.*.name, 'no-response')
+      contains(github.event.issue.labels.*.name, 'no-response-closed')
     runs-on: ubuntu-latest
     steps:
       - name: Reopen and clear the waiting labels
@@ -26,4 +29,5 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           gh issue reopen "$ISSUE" --repo "$REPO"
-          gh issue edit "$ISSUE" --repo "$REPO" --remove-label no-response --remove-label needs-info
+          gh issue edit "$ISSUE" --repo "$REPO" \
+            --remove-label no-response-closed --remove-label no-response --remove-label needs-info

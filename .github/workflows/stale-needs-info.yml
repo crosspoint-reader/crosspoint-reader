@@ -3,8 +3,9 @@ name: "Close Unanswered Reports"
 # Only issues someone with triage rights has explicitly marked `needs-info`
 # enter this flow.
 # After 14 quiet days they gain `no-response`, and 7 days later they close.
-# `no-response` is also what marks a close as automatic, so the reopen-on-reply
-# workflow can tell it apart from a deliberate one.
+# The close also stamps `no-response-closed` — applied only by this action at
+# close time, so the reopen-on-reply workflow can tell an automatic close apart
+# from a deliberate one (a maintainer closing by hand never carries it).
 
 on:
   schedule:
@@ -24,6 +25,7 @@ jobs:
           days-before-stale: 14
           days-before-close: 7
           stale-issue-label: no-response
+          close-issue-label: no-response-closed
           exempt-issue-labels: accepted,good-first-issue
           stale-issue-message: >
             This report is still missing the details needed to act on it. It will
