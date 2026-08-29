@@ -240,6 +240,12 @@ void FrontlightPanelActivity::loop() {
       if (touch.event.dragPermille >= 0) draggingSlider = true;
       return;
     }
+    // Swipe up dismisses the sheet, the way it was pulled down from the top
+    // edge. draggingSlider keeps a fast slider flick from closing it.
+    if (!draggingSlider && mappedInput.wasSwipe() == MappedInputManager::SwipeDir::Up) {
+      close();
+      return;
+    }
     // panelBottom > 0 guards the frame the sheet opens in: the release that
     // opened it (a status-bar tap) is still in the input snapshot when the panel
     // runs its first loop(), and panelBottom is only known once render() has
