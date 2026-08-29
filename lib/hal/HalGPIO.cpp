@@ -201,7 +201,8 @@ void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
 bool HalGPIO::hasEdgeSideButtons() const {
   return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
          BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
-         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Pro;
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Pro ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Classic;
 }
 
 bool HalGPIO::isXteinkDevice() const {
