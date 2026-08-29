@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -263,8 +264,11 @@ void FrontlightPanelActivity::loop() {
 
 int FrontlightPanelActivity::computePanelBottom() const {
   const auto tokens = uiThemeTokens(uiTarget);
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int16_t lineHeight = uiTarget.lineHeight(tokens.smallText.font);
-  int y = tokens.spaceLg + tokens.spaceMd;  // top padding
+  // Slim battery band + the air around it (mirrors buildPanelScreen).
+  const int y0 = std::max<int>(metrics.batteryHeight, lineHeight);
+  int y = tokens.spaceMd + y0 + tokens.spaceMd;
   if (Frontlight.present()) {
     // Screen::sliderRow reserves caption + spaceMd + control band, then a
     // spaceMd gap; addSliderRow() adds one more spaceMd of air after each row.
@@ -339,10 +343,36 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
   screen.sheet(sheetProps, static_cast<int16_t>(panelBottom));
   screen.insetContent(fui::Insets{0, kPanelSideMargin, 0, kPanelSideMargin});
 
-  // The sheet hangs from the very top of the screen, so its content needs a
-  // real top inset of its own — nothing above it reserves space the way a
-  // header band did.
-  screen.spacer(static_cast<int16_t>(theme.spaceLg + theme.spaceMd));
+  // Slim status band: just the battery in the top-right corner, so the
+  // indicator stays visible while the panel is open. No title, no full
+  // header band -- the glyph/percent height plus theme air is enough.
+  {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    screen.spacer(theme.spaceMd);
+    const int16_t bandH = std::max<int16_t>(static_cast<int16_t>(metrics.batteryHeight),
+                                            screen.target().lineHeight(theme.smallText.font));
+    const fui::Rect band = screen.takeTop(bandH, theme.spaceMd);
+    const uint16_t percent = powerManager.getBatteryPercentage();
+    const bool showPercent = SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+    char percentText[8];
+    snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percent));
+    constexpr int16_t kBatteryNubWidth = 2;  // glyph terminal nub past glyphWidth
+    constexpr int16_t kBatteryGap = 4;       // BaseTheme::batteryPercentSpacing
+    const int16_t labelW =
+        showPercent ? screen.target().measureText(theme.smallText.font, percentText, theme.smallText).width : 0;
+    const int16_t reserve =
+        static_cast<int16_t>(metrics.batteryWidth + kBatteryNubWidth + (showPercent ? labelW + kBatteryGap : 0));
+    fui::BatteryIndicatorProps battery;
+    battery.percent = static_cast<uint8_t>(percent > 100 ? 100 : percent);
+    battery.charging = gpio.isUsbConnected();
+    battery.label = showPercent ? percentText : nullptr;
+    battery.text = theme.smallText;
+    battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
+    battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
+    battery.gap = kBatteryGap;
+    fui::batteryIndicator(screen.frame(),
+                          fui::Rect{static_cast<int16_t>(band.right() - reserve), band.y, reserve, bandH}, battery);
+  }
 
   if (Frontlight.present()) {
     addSliderRow(screen, tr(STR_BRIGHTNESS), brightness, ACTION_BRIGHTNESS, ACTION_BRIGHTNESS_STEP,
@@ -394,7 +424,7 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   panelBottom = computePanelBottom();
 
   // fui::sheet draws the card body, its bottom rule, and the grabber during
-  // renderUi(); nothing is hand-drawn around it any more.
+  // renderUi(); the battery band at the card's top is part of the screen build.
   renderUi();
 
   // A tile that rewrote the whole frame (night mode) re-drives every pixel
