@@ -1,6 +1,6 @@
-#include "SystemTimePlausibility.h"
-
 #include <gtest/gtest.h>
+
+#include "SystemTimePlausibility.h"
 
 namespace {
 
@@ -19,9 +19,7 @@ TEST(SystemTimePlausibility, RejectsAnythingBeforeTheThreshold) {
   EXPECT_FALSE(isPlausibleEpoch(MIN_PLAUSIBLE_EPOCH - 1));
 }
 
-TEST(SystemTimePlausibility, AcceptsTheThresholdItself) {
-  EXPECT_TRUE(isPlausibleEpoch(MIN_PLAUSIBLE_EPOCH));
-}
+TEST(SystemTimePlausibility, AcceptsTheThresholdItself) { EXPECT_TRUE(isPlausibleEpoch(MIN_PLAUSIBLE_EPOCH)); }
 
 TEST(SystemTimePlausibility, AcceptsAnOrdinaryPresentDayReading) {
   // 2026-01-01T00:00:00Z -- a normal synced clock must not trigger a resync.
