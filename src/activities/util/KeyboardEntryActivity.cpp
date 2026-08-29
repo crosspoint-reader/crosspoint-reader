@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <utility>
 
 #include "MappedInputManager.h"
 #include "activities/util/PasswordMasking.h"
@@ -353,7 +354,7 @@ std::string KeyboardEntryActivity::displayTextForCurrentState() const {
   } else {
     revealPos = (text.length() > 0 && cursorPos > 0) ? cursorPos - 1 : std::string::npos;
   }
-  return maskPasswordText(displayText, revealPos);
+  return maskPasswordText(std::move(displayText), revealPos);
 }
 
 int KeyboardEntryActivity::measureRange(std::string& s, const int start, const int end) const {

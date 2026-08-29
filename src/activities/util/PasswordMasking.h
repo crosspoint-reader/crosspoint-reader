@@ -11,12 +11,15 @@
 // Every byte becomes '*' except the one at revealPos, which is left visible so
 // the character just typed can be confirmed. Pass std::string::npos to reveal
 // nothing. revealPos is a byte offset, matching the caller's cursor bookkeeping.
-inline std::string maskPasswordText(const std::string& text, const size_t revealPos) {
-  std::string masked = text;
-  for (size_t i = 0; i < masked.length(); i++) {
+//
+// Takes its argument by value so the caller can move an existing buffer in and
+// the masking happens in place -- displayTextForCurrentState() already owns a
+// copy, and a render-path helper should not add a second allocation to it.
+inline std::string maskPasswordText(std::string text, const size_t revealPos) {
+  for (size_t i = 0; i < text.length(); i++) {
     if (i != revealPos) {
-      masked[i] = '*';
+      text[i] = '*';
     }
   }
-  return masked;
+  return text;
 }
