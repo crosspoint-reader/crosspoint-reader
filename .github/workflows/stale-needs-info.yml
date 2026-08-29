@@ -1,0 +1,37 @@
+name: "Close Unanswered Reports"
+
+# Only issues someone with triage rights has explicitly marked `needs-info`
+# enter this flow.
+# After 14 quiet days they gain `no-response`, and 7 days later they close.
+# `no-response` is also what marks a close as automatic, so the reopen-on-reply
+# workflow can tell it apart from a deliberate one.
+
+on:
+  schedule:
+    - cron: "30 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v11
+        with:
+          only-labels: needs-info
+          days-before-stale: 14
+          days-before-close: 7
+          stale-issue-label: no-response
+          exempt-issue-labels: accepted,good-first-issue
+          stale-issue-message: >
+            This report is still missing the details needed to act on it. It will
+            close in 7 days without a reply — commenting removes this label and
+            keeps it open.
+          close-issue-message: >
+            Closing because the missing details never arrived. This is not a
+            rejection: comment with them and the issue reopens automatically.
+          # PRs are handled by review, not by this schedule.
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
