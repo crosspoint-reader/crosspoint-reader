@@ -1010,10 +1010,10 @@ void EpubReaderActivity::startAutomaticProgressCheck() {
   automaticCheck_.start(epub->getPath());
 }
 
-void EpubReaderActivity::pollAutomaticProgressCheck() {
+bool EpubReaderActivity::pollAutomaticProgressCheck() {
   const auto status = automaticCheck_.status();
   if (status == AutomaticProgressCheck::Status::RUNNING || status == AutomaticProgressCheck::Status::IDLE) {
-    return;
+    return false;
   }
 
   if (status == AutomaticProgressCheck::Status::DONE_OK) {
@@ -1036,12 +1036,13 @@ void EpubReaderActivity::pollAutomaticProgressCheck() {
       // the already-fetched remote position; skip the network round-trip.
       launchKOReaderSync(KOReaderSyncActivity::Mode::AUTO_PULL, KOReaderSyncActivity::CompletionTarget::READER, remote,
                          remotePosition);
-      return;
+      return true;
     }
   } else {
     LOG_DBG("KOSync", "Automatic check: no remote progress or error (%d)", static_cast<int>(automaticCheck_.error()));
   }
   automaticCheck_.reset();
+  return false;
 }
 
 CrossPointPosition EpubReaderActivity::mapRemoteProgress(const KOReaderProgress& progress) {

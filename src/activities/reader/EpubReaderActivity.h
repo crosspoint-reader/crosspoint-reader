@@ -175,7 +175,9 @@ class EpubReaderActivity final : public ReaderActivity {
   // background task while the reader stays responsive; the result is validated
   // against the current position before any prompt is shown.
   void startAutomaticProgressCheck();
-  void pollAutomaticProgressCheck();
+  // Returns true when it launched the result screen and replaced this reader;
+  // the caller (loop) must return immediately, as epub/section are released.
+  bool pollAutomaticProgressCheck();
   CrossPointPosition mapRemoteProgress(const KOReaderProgress& progress);
 
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
