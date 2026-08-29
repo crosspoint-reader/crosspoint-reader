@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "MappedInputManager.h"
+#include "activities/util/KeyboardExtension.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -133,6 +134,14 @@ void KeyboardEntryActivity::onEnter() {
   shifted = false;
   symbols = false;
   urlPanel = false;
+  // URL entry keeps its own EN-arranged layers; an extra script layer would
+  // have nothing useful to contribute to a host or port.
+  extensionLayer = false;
+  if (inputType != InputType::Url && extensionLayerAvailable()) {
+    if (const KeyboardExtensionDefaultPredicate preferred = getKeyboardExtensionDefaultPredicate()) {
+      extensionLayer = preferred();
+    }
+  }
   cursorMode = false;
   togglePos = false;
   passwordVisible = false;
@@ -154,7 +163,20 @@ void KeyboardEntryActivity::onEnter() {
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
+bool KeyboardEntryActivity::extensionLayerAvailable() const {
+  const KeyboardExtensionLayerProvider provider = getKeyboardExtensionLayerProvider();
+  return provider != nullptr && provider(shifted) != nullptr;
+}
+
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
+  // Downstream extra layer, when one is installed and accepts this state. A
+  // provider that declines (nullptr) falls through to the built-in layers, so
+  // the keyboard can never be left with no layout to draw.
+  if (extensionLayer) {
+    if (const KeyboardExtensionLayerProvider provider = getKeyboardExtensionLayerProvider()) {
+      if (const fui::KeyboardLayout* layer = provider(shifted)) return *layer;
+    }
+  }
   if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
   if (inputType == InputType::Url) {
     if (urlPanel) return URL_SNIPPET_LAYOUT;
@@ -275,6 +297,17 @@ bool KeyboardEntryActivity::activateValue(const int16_t value, const bool longPr
       hintVisible = false;
       if (urlPanel) {
         urlPanel = false;
+      } else if (extensionLayer) {
+        // Third stop of the cycle: back to letters.
+        extensionLayer = false;
+        symbols = false;
+        shifted = false;
+      } else if (symbols && extensionLayerAvailable()) {
+        // abc -> ?123 -> extra layer -> abc. Without a provider this branch is
+        // dead and the cycle stays the built-in abc <-> ?123.
+        symbols = false;
+        extensionLayer = true;
+        shifted = false;
       } else {
         symbols = !symbols;
         shifted = false;
@@ -946,10 +979,20 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.keyAction = ACTION_KEY;  // one action id; loop() dispatches on key value
   props.okLabel = tr(STR_OK_BUTTON);
   props.shiftLabel = tr(STR_KEY_SHIFT);
-  // Match the label to the layer the mode key leads back from: the symbols
-  // layer and the URL snippet panel both label it "abc" in the static tables.
-  props.modeLabel =
-      (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
+  // The mode key names the layer it leads to. A downstream extra layer adds a
+  // third stop to the cycle, so the label follows it; with no provider
+  // installed this collapses to the built-in symbols/URL behaviour.
+  if (extensionLayer) {
+    // The extra layer's Mode key leads back to letters.
+    props.modeLabel = tr(STR_KEY_MODE_ABC);
+  } else if (symbols && extensionLayerAvailable()) {
+    // Next stop is the downstream layer, which only it can name. Unset leaves
+    // the table's own label in place.
+    props.modeLabel = getKeyboardExtensionLabelProvider() != nullptr ? getKeyboardExtensionLabelProvider()() : nullptr;
+  } else {
+    props.modeLabel =
+        (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
+  }
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;

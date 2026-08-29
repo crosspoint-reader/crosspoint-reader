@@ -48,6 +48,9 @@ class KeyboardEntryActivity : public Activity {
   bool shifted = false;
   bool symbols = false;
   bool urlPanel = false;  // URL snippet panel replaces the letter layer
+  // Downstream-supplied extra layer (see activities/util/KeyboardExtension.h). Always
+  // false when no provider is installed, which is CrossPoint's own default.
+  bool extensionLayer = false;
 
   // Key hit rects registered by the keyboard component during render();
   // loop() routes touch snapshots against them. 5-row EN layout registers 41
@@ -107,6 +110,9 @@ class KeyboardEntryActivity : public Activity {
   // one byte so an oversized glyph cannot stall the wrap loop.
   int lineBreakEnd(std::string& s, int start, int maxWidth) const;
 
+  // True when a downstream provider is installed AND offers a layer for the
+  // current shift state. Always false in a stock CrossPoint build.
+  bool extensionLayerAvailable() const;
   const freeink::ui::KeyboardLayout& currentLayout() const;
   const freeink::ui::KeyboardKey* selectedKey() const;
   int selectedLogicalIndex() const;
