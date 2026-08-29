@@ -5,6 +5,20 @@
 #include "activities/settings/SettingsExtension.h"
 #include "activities/settings/SettingsTypes.h"
 
+// SettingsTypes.h only forward-declares Activity, so the test completes it with
+// a stand-in that records what a handler did to it. That the header needs no
+// more than this is the point: the handler takes the host by reference and
+// never needs Activity's rendering dependencies.
+class Activity {
+ public:
+  int childActivitiesOpened = 0;
+  const char* lastChildOpened = nullptr;
+  void openChild(const char* name) {
+    childActivitiesOpened++;
+    lastChildOpened = name;
+  }
+};
+
 namespace {
 
 // The provider is process-global state; every test starts and ends with it
@@ -29,7 +43,8 @@ std::vector<SettingsExtensionCategory> SyntheticProvider() {
   category.settings.push_back(SettingInfo::DynamicValue(
       StrId::STR_TEST_ROW_B, [] { return valueState; }, [](uint8_t v) { valueState = v; },
       SettingInfo::ValueRange{0, 10, 5}));
-  category.settings.push_back(SettingInfo::ExtensionAction([] { toggleState = !toggleState; }).withLabel("Do Thing"));
+  category.settings.push_back(
+      SettingInfo::ExtensionAction([](Activity&) { toggleState = !toggleState; }).withLabel("Do Thing"));
 
   SettingsExtensionCategory second;
   second.label = "Second";
@@ -118,15 +133,44 @@ TEST(SettingInfoDynamicValue, StepsAndWrapsOnOverflow) {
 
 TEST(SettingInfoExtensionAction, DispatchesToHandler) {
   int callCount = 0;
-  auto setting = SettingInfo::ExtensionAction([&] { callCount++; });
+  auto setting = SettingInfo::ExtensionAction([&](Activity&) { callCount++; });
 
   EXPECT_EQ(setting.type, SettingType::ACTION);
   EXPECT_EQ(setting.action, SettingAction::Extension);
   ASSERT_TRUE(static_cast<bool>(setting.actionHandler));
 
-  setting.actionHandler();
-  setting.actionHandler();
+  Activity host;
+  setting.actionHandler(host);
+  setting.actionHandler(host);
   EXPECT_EQ(callCount, 2);
+}
+
+// The reason the handler takes a host at all: an extension row that navigates.
+// Without this an extension could only mutate settings, never contribute a row
+// that opens a screen -- which is most of what a real integration wants.
+TEST(SettingInfoExtensionAction, HandlerCanOpenAChildActivity) {
+  auto setting = SettingInfo::ExtensionAction([](Activity& host) { host.openChild("ChildScreen"); });
+  ASSERT_TRUE(static_cast<bool>(setting.actionHandler));
+
+  Activity host;
+  setting.actionHandler(host);
+
+  EXPECT_EQ(host.childActivitiesOpened, 1);
+  EXPECT_STREQ(host.lastChildOpened, "ChildScreen");
+}
+
+// The host is passed by reference, so a handler acts on the activity that
+// dispatched it rather than a copy -- SettingsActivity passes *this.
+TEST(SettingInfoExtensionAction, HandlerReceivesTheDispatchingHostByReference) {
+  Activity* seen = nullptr;
+  auto setting = SettingInfo::ExtensionAction([&](Activity& host) { seen = &host; });
+
+  Activity first;
+  Activity second;
+  setting.actionHandler(first);
+  EXPECT_EQ(seen, &first);
+  setting.actionHandler(second);
+  EXPECT_EQ(seen, &second);
 }
 
 TEST(SettingInfoWithLabel, DefaultsEmptyAndOverridesWhenSet) {

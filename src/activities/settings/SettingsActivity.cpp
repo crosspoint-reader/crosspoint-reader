@@ -408,7 +408,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Extension:
         if (setting.actionHandler) {
-          setting.actionHandler();
+          // Pass the host so the handler can open a child activity; this
+          // activity outlives the call.
+          setting.actionHandler(*this);
         }
         rebuildSettingsLists();
         break;

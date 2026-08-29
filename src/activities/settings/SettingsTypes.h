@@ -14,6 +14,12 @@
 // built on it -- can be included and unit tested without pulling in
 // GfxRenderer/MappedInputManager/UiTabListActivity.
 
+// Forward declaration only: an extension's action handler receives the hosting
+// activity so it can open a child screen, but this header stays free of
+// Activity's rendering dependencies -- the handler takes it by reference and
+// never needs the definition here.
+class Activity;
+
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
 enum class SettingAction {
@@ -70,7 +76,11 @@ struct SettingInfo {
   std::string customLabel;
 
   // Invoked for SettingType::ACTION rows whose action is SettingAction::Extension.
-  std::function<void()> actionHandler;
+  // Receives the hosting activity, so a handler can open a child screen with
+  // startActivityForResult() the same way the built-in ACTION cases do -- an
+  // extension row that could only mutate a setting would not be able to
+  // contribute anything that navigates.
+  std::function<void(Activity&)> actionHandler;
 
   SettingInfo& withObfuscated() {
     obfuscated = true;
@@ -199,7 +209,7 @@ struct SettingInfo {
 
   // ACTION row dispatched via a caller-supplied handler rather than a
   // SettingAction case (see SettingAction::Extension).
-  static SettingInfo ExtensionAction(std::function<void()> handler) {
+  static SettingInfo ExtensionAction(std::function<void(Activity&)> handler) {
     SettingInfo s;
     s.type = SettingType::ACTION;
     s.action = SettingAction::Extension;
