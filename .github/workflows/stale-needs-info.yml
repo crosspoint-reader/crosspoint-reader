@@ -19,6 +19,19 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
+      # actions/stale cannot apply a label that does not exist, so provision the
+      # three lifecycle labels first. --force makes this idempotent.
+      - name: Ensure the lifecycle labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh label create needs-info --repo "$REPO" --force \
+            --color d4c5f9 --description "Incomplete report: missing the details needed to act"
+          gh label create no-response --repo "$REPO" --force \
+            --color fbca04 --description "Waiting on the reporter for more information"
+          gh label create no-response-closed --repo "$REPO" --force \
+            --color ededed --description "Closed automatically after no reply"
       - uses: actions/stale@v11
         with:
           only-labels: needs-info
