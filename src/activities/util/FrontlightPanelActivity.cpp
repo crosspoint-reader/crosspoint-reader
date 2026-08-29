@@ -12,7 +12,6 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
@@ -161,17 +160,9 @@ void FrontlightPanelActivity::runTile(const int idx) {
     case 2:  // Cycle the reading orientation
       SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);
       SETTINGS.saveToFile();
-      // Nothing else would turn the renderer: ActivityManager::Pop restores the
-      // activity underneath without calling onEnter(), so its
-      // applyInitialOrientation() never runs. Apply it here instead.
-      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-      // Close rather than redraw in place: the turned panel lays out against
-      // the new frame while the old panel's pixels sit in the old frame, so
-      // repeated taps stacked stale panels on screen. The screen underneath
-      // repaints in the new orientation and its refresh carries the cleanup a
-      // whole-frame rewrite needs.
-      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);
-      close();
+      // Only the setting changes: turning the renderer cropped the portrait-only
+      // screens the panel opens over. The reader reflows on its next loop().
+      requestUpdate();
       break;
     case 3:  // Touch reader controls (for reading with the palm on the glass)
       // Toggles the existing Settings -> Controls option, nothing lower-level:
