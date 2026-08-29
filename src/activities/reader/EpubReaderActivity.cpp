@@ -1346,6 +1346,11 @@ void EpubReaderActivity::renderBook() {
     currentPageVisibleOffset = p->visibleTextOffset;
     currentPageFootnotes = std::move(p->footnotes);
 
+    // The overlay and non-tiled grayscale renderer share the renderer's single
+    // stored-BW slot. Release the old page snapshot before renderContents()
+    // needs that slot, then snapshot the newly rendered page below.
+    discardOverlayPage();
+
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
@@ -1380,7 +1385,6 @@ void EpubReaderActivity::renderBook() {
   if (overlay != Overlay::None && usesToolbarMenu()) {
     // The page just re-rendered under the overlay: refresh the snapshot that
     // backs panel->toolbar restores (any previous copy is stale).
-    discardOverlayPage();
     overlayPageStored = renderer.storeBwBuffer();
     renderOverlay();
     // An open option picker rides on top of the freshly drawn panel.
