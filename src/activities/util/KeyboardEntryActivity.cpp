@@ -111,16 +111,19 @@ const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
 const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
 
 fui::KeyboardLayoutId layoutForLanguage(const Language language) {
-  switch (language) {
-    case Language::FR:
-      return fui::KeyboardLayoutId::AzertyFr;
-    case Language::DE:
-      return fui::KeyboardLayoutId::QwertzDe;
-    case Language::ES:
-      return fui::KeyboardLayoutId::SpanishEs;
-    default:
-      return fui::KeyboardLayoutId::QwertyEn;
-  }
+  // Keyed on the language code rather than the enumerator. Language is
+  // generated from whichever translation files a build actually ships (see
+  // scripts/gen_i18n.py), so naming Language::FR/DE/ES here fails to compile
+  // for any build whose translation set omits them -- including a downstream
+  // integration shipping a reduced set, which is precisely who the extension
+  // point above is for. Codes come from the same generated table, so this
+  // resolves the same three layouts whenever those languages are present and
+  // degrades to QWERTY when they are not.
+  const char* code = LANGUAGE_CODES[static_cast<uint8_t>(language)];
+  if (strcmp(code, "fr") == 0) return fui::KeyboardLayoutId::AzertyFr;
+  if (strcmp(code, "de") == 0) return fui::KeyboardLayoutId::QwertzDe;
+  if (strcmp(code, "es") == 0) return fui::KeyboardLayoutId::SpanishEs;
+  return fui::KeyboardLayoutId::QwertyEn;
 }
 
 }  // namespace
