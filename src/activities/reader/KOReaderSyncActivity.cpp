@@ -55,7 +55,9 @@ KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputMan
                                            const std::string& epubPath, const CrossPointPosition& localPosition,
                                            SavedProgressPosition localKoPos, std::string localChapterName,
                                            std::optional<uint16_t> currentParagraphIndex, Mode mode,
-                                           CompletionTarget completionTarget)
+                                           CompletionTarget completionTarget,
+                                           std::optional<KOReaderProgress> prefetchedRemoteProgress,
+                                           std::optional<CrossPointPosition> prefetchedRemotePosition)
     : Activity("KOReaderSync", renderer, mappedInput),
       UiAppHost(renderer),
       epubPath(epubPath),
@@ -68,7 +70,13 @@ KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputMan
       remotePosition{},
       localProgress(std::move(localKoPos)),
       mode(mode),
-      completionTarget(completionTarget) {}
+      completionTarget(completionTarget) {
+  if (prefetchedRemoteProgress.has_value() && prefetchedRemotePosition.has_value()) {
+    remoteProgress = std::move(*prefetchedRemoteProgress);
+    remotePosition = *prefetchedRemotePosition;
+    prefetchedResult = true;
+  }
+}
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
@@ -566,6 +574,20 @@ void KOReaderSyncActivity::onEnter() {
     }
     state = NO_CREDENTIALS;
     requestUpdate();
+    return;
+  }
+
+  // A background automatic check already fetched the remote progress; skip the
+  // network and go straight to the result screen.
+  if (prefetchedResult) {
+    hasRemoteProgress = true;
+    ensureEpubLoaded();  // needed for the chapter title in the result screen
+    {
+      RenderLock lock(*this);
+      state = SHOWING_RESULT;
+      selectedOption = 0;  // Resume remotely by default.
+    }
+    requestUpdate(true);
     return;
   }
 

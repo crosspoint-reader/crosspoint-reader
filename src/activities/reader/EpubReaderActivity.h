@@ -39,10 +39,6 @@ class EpubReaderActivity final : public ReaderActivity {
   bool pendingSyncSaveError = false;
   bool automaticProgressCheckPending = false;
   AutomaticProgressCheck automaticCheck_;
-  bool syncPromptActive = false;
-  CrossPointPosition syncPromptRemotePosition;
-  unsigned long syncPromptShownAt = 0;
-  static constexpr unsigned long SYNC_PROMPT_TIMEOUT_MS = 10000;
   // Consecutive page-load failures. Each failure drops the section and rebuilds on the next render,
   // which recovers a transiently corrupt cache; capped so a persistently bad page can't spin forever.
   uint8_t pageLoadRetryCount = 0;
@@ -164,7 +160,9 @@ class EpubReaderActivity final : public ReaderActivity {
   // because no KOReader credentials are stored.
   bool launchKOReaderSync(
       KOReaderSyncActivity::Mode mode = KOReaderSyncActivity::Mode::MANUAL,
-      KOReaderSyncActivity::CompletionTarget completionTarget = KOReaderSyncActivity::CompletionTarget::READER);
+      KOReaderSyncActivity::CompletionTarget completionTarget = KOReaderSyncActivity::CompletionTarget::READER,
+      std::optional<KOReaderProgress> prefetchedRemoteProgress = std::nullopt,
+      std::optional<CrossPointPosition> prefetchedRemotePosition = std::nullopt);
   bool tryAutomaticProgressUpload(KOReaderSyncActivity::CompletionTarget completionTarget);
   void leaveReader(KOReaderSyncActivity::CompletionTarget completionTarget);
   void leaveToHome() override { leaveReader(KOReaderSyncActivity::CompletionTarget::HOME); }
@@ -179,10 +177,6 @@ class EpubReaderActivity final : public ReaderActivity {
   void startAutomaticProgressCheck();
   void pollAutomaticProgressCheck();
   CrossPointPosition mapRemoteProgress(const KOReaderProgress& progress);
-  void showSyncPrompt(const CrossPointPosition& remotePosition);
-  void dismissSyncPrompt();
-  void applyRemotePosition(const CrossPointPosition& position);
-  void renderSyncPrompt();
 
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();

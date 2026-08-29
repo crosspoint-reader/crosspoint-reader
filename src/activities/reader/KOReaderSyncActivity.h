@@ -40,7 +40,9 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
                                 const CrossPointPosition& localPosition, SavedProgressPosition localKoPos,
                                 std::string localChapterName,
                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt, Mode mode = Mode::MANUAL,
-                                CompletionTarget completionTarget = CompletionTarget::READER);
+                                CompletionTarget completionTarget = CompletionTarget::READER,
+                                std::optional<KOReaderProgress> prefetchedRemoteProgress = std::nullopt,
+                                std::optional<CrossPointPosition> prefetchedRemotePosition = std::nullopt);
 
   void onEnter() override;
   void onExit() override;
@@ -87,6 +89,9 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   SavedProgressPosition localProgress;
   Mode mode;
   CompletionTarget completionTarget;
+  // When true, the remote progress was already fetched by a background check;
+  // onEnter() skips the network and goes straight to the result screen.
+  bool prefetchedResult = false;
 
   // Selection in result screen (0=Apply, 1=Upload)
   int selectedOption = 0;

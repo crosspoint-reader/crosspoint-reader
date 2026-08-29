@@ -352,21 +352,6 @@ void EpubReaderActivity::loop() {
   }
   pollAutomaticProgressCheck();
 
-  // A pending sync prompt owns Confirm/Back. It stays non-blocking: page turns
-  // below still work and the banner simply rides along until dismissed.
-  if (syncPromptActive) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      applyRemotePosition(syncPromptRemotePosition);
-      dismissSyncPrompt();
-      return;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        (millis() - syncPromptShownAt) >= SYNC_PROMPT_TIMEOUT_MS) {
-      dismissSyncPrompt();
-      return;
-    }
-  }
-
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (section && !section->isBuilding() && !RenderLock::peek() && renderer.hasFrameBuffer() &&
       lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
@@ -935,7 +920,9 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
 }
 
 bool EpubReaderActivity::launchKOReaderSync(const KOReaderSyncActivity::Mode mode,
-                                            const KOReaderSyncActivity::CompletionTarget completionTarget) {
+                                            const KOReaderSyncActivity::CompletionTarget completionTarget,
+                                            std::optional<KOReaderProgress> prefetchedRemoteProgress,
+                                            std::optional<CrossPointPosition> prefetchedRemotePosition) {
   if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
   // Synchronize the complete snapshot and teardown with the render task. The
@@ -1012,14 +999,14 @@ bool EpubReaderActivity::launchKOReaderSync(const KOReaderSyncActivity::Mode mod
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
       renderer, mappedInput, savedEpubPath, releasedPosition, std::move(localKoPos), std::move(localChapterName),
-      paragraphIndex, mode, completionTarget));
+      paragraphIndex, mode, completionTarget, std::move(prefetchedRemoteProgress), prefetchedRemotePosition));
   return true;  // acted: launched the sync activity
 }
 
 void EpubReaderActivity::startAutomaticProgressCheck() {
   if (!KOREADER_STORE.getAutomaticProgressCheck()) return;
   if (!epub) return;
-  if (automaticCheck_.isRunning() || syncPromptActive) return;
+  if (automaticCheck_.isRunning()) return;
   automaticCheck_.start(epub->getPath());
 }
 
@@ -1043,7 +1030,13 @@ void EpubReaderActivity::pollAutomaticProgressCheck() {
     LOG_DBG("KOSync", "Automatic check decision: local=%d/%d remote=%d/%d order=%d", current.spineIndex,
             current.pageNumber, remotePosition.spineIndex, remotePosition.pageNumber, static_cast<int>(order));
     if (order == MappedProgressPositionOrder::REMOTE_AHEAD) {
-      showSyncPrompt(remotePosition);
+      const KOReaderProgress remote = automaticCheck_.remoteProgress();
+      automaticCheck_.reset();
+      // Reuse the manual sync's familiar result screen ("Progress found!") with
+      // the already-fetched remote position; skip the network round-trip.
+      launchKOReaderSync(KOReaderSyncActivity::Mode::AUTO_PULL, KOReaderSyncActivity::CompletionTarget::READER, remote,
+                         remotePosition);
+      return;
     }
   } else {
     LOG_DBG("KOSync", "Automatic check: no remote progress or error (%d)", static_cast<int>(automaticCheck_.error()));
@@ -1062,64 +1055,6 @@ CrossPointPosition EpubReaderActivity::mapRemoteProgress(const KOReaderProgress&
     }
   }
   return mapped;
-}
-
-void EpubReaderActivity::showSyncPrompt(const CrossPointPosition& remotePosition) {
-  syncPromptRemotePosition = remotePosition;
-  syncPromptShownAt = millis();
-  syncPromptActive = true;
-  requestUpdate();
-}
-
-void EpubReaderActivity::dismissSyncPrompt() {
-  syncPromptActive = false;
-  requestUpdate();
-}
-
-void EpubReaderActivity::applyRemotePosition(const CrossPointPosition& position) {
-  {
-    RenderLock lock;
-    clearDeferredReposition();
-    if (position.hasVisibleTextOffset && position.spineIndex >= 0 && position.spineIndex < epub->getSpineItemsCount()) {
-      if (section && currentSpineIndex == position.spineIndex) {
-        const auto page = section->getPageForVisibleTextOffset(position.visibleTextOffset);
-        section->currentPage = page.value_or(std::max(0, position.pageNumber));
-      } else {
-        currentSpineIndex = position.spineIndex;
-        pendingOffsetJump = position.visibleTextOffset;
-        section.reset();
-      }
-    } else {
-      currentSpineIndex = position.spineIndex;
-      nextPageNumber = position.pageNumber;
-      section.reset();
-    }
-    saveProgress(position.spineIndex, position.pageNumber, position.totalPages);
-  }
-  requestUpdate();
-}
-
-void EpubReaderActivity::renderSyncPrompt() {
-  if (!syncPromptActive) return;
-
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const int bannerHeight = metrics.headerHeight + 4;
-  const int y = screen.y + screen.height - bannerHeight - metrics.buttonHintsHeight;
-
-  char message[64];
-  snprintf(message, sizeof(message), tr(STR_RESUME_AT_PAGE_FORMAT), syncPromptRemotePosition.pageNumber + 1);
-
-  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, message, EpdFontFamily::BOLD);
-  const int bannerWidth = std::min(screen.width, textWidth + 24);
-  const int x = screen.x + (screen.width - bannerWidth) / 2;
-  renderer.fillRect(x, y, bannerWidth, bannerHeight, true);
-  renderer.drawText(UI_10_FONT_ID, x + (bannerWidth - textWidth) / 2, y + bannerHeight / 2 + 4, message, false,
-                    EpdFontFamily::BOLD);
-
-  const auto labels = mappedInput.mapLabels(tr(STR_RESUME), tr(STR_NO), "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer(xteinkClassPanel() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
 }
 
 void EpubReaderActivity::applyInitialOrientation() {
@@ -1592,8 +1527,6 @@ void EpubReaderActivity::renderBook() {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
   initialRenderCompleted.store(true, std::memory_order_release);
-
-  renderSyncPrompt();
 
   // Toolbar menu: overlay the toolbar / panel on top of the freshly rendered page.
   if (overlay != Overlay::None && usesToolbarMenu()) {
