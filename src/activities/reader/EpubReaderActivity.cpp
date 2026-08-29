@@ -237,6 +237,11 @@ bool EpubReaderActivity::loadBook() {
   return true;
 }
 
+bool EpubReaderActivity::openShortcutMenu() {
+  openReaderMenu();
+  return true;
+}
+
 void EpubReaderActivity::openReaderMenu() {
   pendingManualTurn = 0;
   if (usesToolbarMenu()) {

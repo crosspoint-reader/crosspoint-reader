@@ -94,6 +94,20 @@ class ActivityManager {
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false);
 
+  // True when the top of the stack is the device home screen. Input arbiters
+  // (e.g. the Home-key double click) use this to know when no activity will
+  // ever consume a queued gesture.
+  bool isOnHomeScreen() const;
+
+  // Run the current activity's contextual menu on behalf of a global shortcut.
+  // False when no activity is up, a transition is pending, or the screen has
+  // no menu (see Activity::openShortcutMenu).
+  bool openShortcutMenuOnCurrent();
+  // Launch the reader's KOReader sync (progress push/pull) when invoked from a
+  // global shortcut (e.g. capacitive Home-key action). Returns false when the
+  // current screen is not a reader (the shortcut then does nothing).
+  bool launchKOReaderSyncOnCurrent();
+
   // This will move current activity to stack instead of deleting it
   void pushActivity(std::unique_ptr<Activity>&& activity);
 

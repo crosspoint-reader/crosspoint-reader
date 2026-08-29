@@ -288,6 +288,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
+- **Home Button Tap / Double-click / Long-press** (Xteink X4 Pro with capacitive Home key): Each Home-key gesture can be bound to an action. Available actions: Off, Frontlight, Go Home, Reader Menu, Sleep, Screenshot, Go Back, and **Sync Progress** (KOReader sync). **Sync Progress** pushes/pulls reading progress to the configured KOReader sync server and only works while reading — set up credentials first under **Settings → System → KOReader Sync**. If no book is open, the gesture does nothing.
 - **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
 
 - **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:

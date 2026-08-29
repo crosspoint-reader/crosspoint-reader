@@ -185,6 +185,13 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   return {VALUES, VALUES + count};
 }
 
+inline std::vector<StrId> buildHomeButtonValues() {
+  static constexpr StrId VALUES[] = {StrId::STR_STATE_OFF,   StrId::STR_FRONTLIGHT, StrId::STR_GO_HOME_BUTTON,
+                                     StrId::STR_READER_MENU, StrId::STR_SLEEP,      StrId::STR_SCREENSHOT_BUTTON,
+                                     StrId::STR_GO_BACK,     StrId::STR_KOSYNC};
+  return {VALUES, VALUES + std::size(VALUES)};
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -330,6 +337,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
+        SettingInfo::Enum(StrId::STR_HOME_BUTTON_TAP, &CrossPointSettings::homeButtonTapAction, buildHomeButtonValues(),
+                          "homeButtonTapAction", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_HOME_BUTTON_DOUBLE_CLICK, &CrossPointSettings::homeButtonDoubleClickAction,
+                          buildHomeButtonValues(), "homeButtonDoubleClickAction", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_HOME_LONG_PRESS, &CrossPointSettings::homeButtonLongPressAction,
+                          buildHomeButtonValues(), "homeButtonLongPressAction", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
@@ -445,6 +458,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
+    // The Long-press Menu function opens on a long-press of the physical Confirm
+    // (menu) button (EpubReaderActivity confirm-hold path). Boards without a Confirm
+    // button — e.g. X4 Pro, which is touch + capacitive Home key only — have no menu
+    // button, so the control is unreachable (its Home-key hold path is shadowed by the
+    // Home long-press action) and would be a dead setting. Hide it there; it stays
+    // visible wherever a Confirm button exists or is synthesized (synthesizeConfirm).
+    if (BoardConfig::ACTIVE.input.confirm == BoardConfig::PIN_UNASSIGNED &&
+        !BoardConfig::ACTIVE.touch.synthesizeConfirm) {
+      v.erase(std::remove_if(v.begin(), v.end(),
+                             [](const SettingInfo& s) { return s.nameId == StrId::STR_LONG_PRESS_MENU; }),
+              v.end());
+    }
     // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
     if (halTiltSensor.isAvailable()) {
       // Insert after the short power button setting (end of Controls section)
@@ -472,7 +497,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // center tap is the primary path, so the setting stays at its Tap default.
   if (!BoardConfig::hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_SHOW_READER_MENU; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_SHOW_READER_MENU || s.nameId == StrId::STR_HOME_BUTTON_TAP ||
+                                    s.nameId == StrId::STR_HOME_BUTTON_DOUBLE_CLICK ||
+                                    s.nameId == StrId::STR_HOME_LONG_PRESS;
+                           }),
             v.end());
   }
   if (BoardConfig::hasTouch()) {

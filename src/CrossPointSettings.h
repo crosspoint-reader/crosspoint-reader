@@ -141,6 +141,24 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SHORT_PWRBTN_COUNT
   };
 
+  // Capacitive Home-key actions (boards with BoardConfig::hasHomeKey()). One
+  // shared catalog for tap / double click / long press. Persisted as uint8_t;
+  // APPEND-ONLY: values 0-2 (Off/Frontlight/Go Home) shipped in the
+  // double-click-only version, so stored 0/1/2 must keep that meaning. Values
+  // 3-6 (Reader Menu/Sleep/Screenshot/Go Back) were appended later; older
+  // saved configurations keep their meaning because nothing was renumbered.
+  enum HOME_BUTTON_ACTION {
+    HOME_ACT_OFF = 0,
+    HOME_ACT_FRONTLIGHT = 1,
+    HOME_ACT_GO_HOME = 2,
+    HOME_ACT_READER_MENU = 3,
+    HOME_ACT_SLEEP = 4,
+    HOME_ACT_SCREENSHOT = 5,
+    HOME_ACT_GO_BACK = 6,  // pop one activity level (falls to Home at the top)
+    HOME_ACT_KOSYNC = 7,   // push/pull reading progress to the configured KOReader sync server (reader only)
+    HOME_BUTTON_ACTION_COUNT
+  };
+
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
   // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
@@ -309,6 +327,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // up-swipe). Only surfaced on home-key boards, where Home is the capacitive
   // key and the bottom edge is free; elsewhere it stays at the Tap default.
   uint8_t showReaderMenu = READER_MENU_TAP;
+  // Capacitive Home-key actions (boards with BoardConfig::hasHomeKey()).
+  // OFF on the tap makes a single tap a no-op; the arbiter is fully bypassed
+  // (zero-latency legacy routing) only when BOTH tap and double-click are OFF.
+  // OFF on double click / long press just makes that gesture do nothing.
+  // Tap defaults to GO_BACK so a single press climbs one menu level, like
+  // the X4's back swipe (the old GO_HOME exit-to-main-menu stays selectable).
+  uint8_t homeButtonTapAction = HOME_ACT_GO_BACK;
+  uint8_t homeButtonDoubleClickAction = HOME_ACT_FRONTLIGHT;
+  uint8_t homeButtonLongPressAction = HOME_ACT_READER_MENU;
   // Frontlight quick-panel state. Category-less SettingsList entries persist
   // these without adding them to the regular Settings screen.
   uint8_t frontlightBrightness = 60;

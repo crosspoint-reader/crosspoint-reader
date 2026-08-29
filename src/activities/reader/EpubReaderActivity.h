@@ -145,8 +145,13 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string moreRowName(int row) const;
   std::string moreRowValue(int row) const;
   void activateMoreRow(int row);
+  // Activity override: the reader's contextual menu is what a Home-key
+  // long press opens (CrossInk-style configurable long-press action).
+  bool openShortcutMenu() override;
   void openDictionaryWordSelect();
-  bool launchKOReaderSync();
+  // Activity override: launch the KOReader progress push/pull when invoked from
+  // a global shortcut (e.g. capacitive Home-key action). No-op outside the reader.
+  bool launchKOReaderSync() override;
   unsigned long confirmLongPressThreshold() const;
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();

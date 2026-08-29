@@ -50,6 +50,12 @@ class Activity {
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
   virtual bool isHomeActivity() const { return false; }
+
+  // Open the activity's contextual menu on behalf of a global button shortcut
+  // (e.g. the capacitive Home-key long press). Returns false when this screen
+  // has no menu; the shortcut then does nothing instead of falling through.
+  virtual bool openShortcutMenu() { return false; }
+  virtual bool launchKOReaderSync() { return false; }  // Home-key shortcut: no-op outside the reader
   virtual bool handleHomeGesture() { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 

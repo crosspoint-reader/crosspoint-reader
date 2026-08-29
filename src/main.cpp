@@ -39,6 +39,7 @@
 #include "images/LoadingIcon.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
+#include "util/HomeTapTracker.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -54,6 +55,9 @@ namespace {
 constexpr unsigned long X4PRO_POWER_DOUBLE_CLICK_MS = 500;
 constexpr unsigned long X4PRO_POWER_CLICK_MAX_HOLD_MS = 300;
 }  // namespace
+
+static HomeTapTracker homeTapTracker;
+constexpr unsigned long X4PRO_HOME_DOUBLE_CLICK_MS = 300;
 
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
@@ -205,6 +209,67 @@ void restartToHomeAfterStorageHandoff() {
   ESP.restart();
 }
 
+bool toggleFrontlightByShortcut(std::string_view source) {
+#if FREEINK_CAP_FRONTLIGHT
+  if (!Frontlight.present()) return false;
+  const bool lightOn = !Frontlight.isOn();
+  Frontlight.setOn(lightOn);
+  SETTINGS.frontlightOn = lightOn ? 1 : 0;
+  SETTINGS.saveToFile();
+  LOG_INF("LIGHT", "Frontlight toggled %s by %.*s", lightOn ? "on" : "off", (int)source.length(), source.data());
+  return true;
+#else
+  (void)source;
+  return false;
+#endif
+}
+
+// Run a configured capacitive Home-key action.
+// Returns true when the gesture was consumed/acknowledged (always, for any
+// recognized action enum value). The return signals "the Home event was
+// handled, stop dispatching it elsewhere" — NOT "the underlying effect ran":
+// HOME_ACT_OFF is a deliberate no-op yet returns true (the tap was still
+// consumed), and HOME_ACT_FRONTLIGHT may skip when Frontlight.present()==false.
+// Reader-only actions (Reader Menu) no-op outside the reader; Sleep and
+// Screenshot are global. GO_HOME uses goHome() so the home screen re-renders.
+void enterDeepSleep(bool fromTimeout);
+
+bool executeHomeButtonAction(uint8_t action) {
+  switch (action) {
+    case CrossPointSettings::HOME_ACT_OFF:
+      return true;  // deliberately nothing
+    case CrossPointSettings::HOME_ACT_FRONTLIGHT:
+      toggleFrontlightByShortcut("home-button");
+      return true;
+    case CrossPointSettings::HOME_ACT_GO_HOME:
+      activityManager.goHome();
+      return true;
+    case CrossPointSettings::HOME_ACT_READER_MENU:
+      return activityManager.openShortcutMenuOnCurrent();
+    case CrossPointSettings::HOME_ACT_SLEEP:
+      LOG_INF("MAIN", "Sleep triggered by Home-key shortcut");
+      enterDeepSleep(false);
+      return true;
+    case CrossPointSettings::HOME_ACT_SCREENSHOT: {
+      RenderLock lock;
+      ScreenshotUtil::takeScreenshot(renderer);
+      return true;
+    }
+    case CrossPointSettings::HOME_ACT_GO_BACK:
+      // Climb one activity level; at the top of the stack this falls back to
+      // the home screen (mirroring the X4's left-edge back swipe).
+      activityManager.popActivity();
+      return true;
+    case CrossPointSettings::HOME_ACT_KOSYNC:
+      // Push/pull reading progress to the configured KOReader sync server. Like
+      // Reader Menu, this is reader-only: outside the reader it no-ops (returns
+      // false), so the Home gesture is simply consumed without effect.
+      return activityManager.launchKOReaderSyncOnCurrent();
+    default:
+      return false;
+  }
+}
+
 bool handleX4ProFrontlightDoubleClick() {
   if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
     return false;
@@ -222,12 +287,77 @@ bool handleX4ProFrontlightDoubleClick() {
   }
 
   lastX4ProPowerClickAt = 0;
-  const bool lightOn = !Frontlight.isOn();
-  Frontlight.setOn(lightOn);
-  SETTINGS.frontlightOn = lightOn ? 1 : 0;
-  SETTINGS.saveToFile();
-  LOG_INF("LIGHT", "Frontlight toggled %s by power-button double-click", lightOn ? "on" : "off");
+  toggleFrontlightByShortcut("power-button double-click");
   return true;
+}
+
+// Intercepts Home-key events before activities see them. Returns true when
+// this frame carried a Home event that shortcut handling consumed; frames
+// without Home events still reach activities so unrelated input (page turns,
+// touch) is never delayed by the arbitration window.
+bool handleX4ProHomeDoubleClick() {
+  if (!BoardConfig::hasHomeKey()) return false;
+
+  // Long-press ownership: when a long-press action is configured, the main
+  // loop owns ALL Home-key holds (the reader's own longPressMenuFunction path
+  // is bypassed because the one-shot edge is consumed here). Setting the
+  // action to Off restores the legacy behavior where the reader handles holds.
+  const bool hold = gpio.wasHomeKeyLongPressed();
+  if (hold) {
+    if (SETTINGS.homeButtonLongPressAction != CrossPointSettings::HOME_ACT_OFF) {
+      homeTapTracker.disarm();  // a hold is never the second half of a double click
+      executeHomeButtonAction(SETTINGS.homeButtonLongPressAction);
+      return true;
+    }
+    homeTapTracker.disarm();  // legacy path: let the reader act on the hold
+    return false;
+  }
+
+  const bool tapArmed = SETTINGS.homeButtonTapAction != CrossPointSettings::HOME_ACT_OFF ||
+                        SETTINGS.homeButtonDoubleClickAction != CrossPointSettings::HOME_ACT_OFF;
+  if (!tapArmed) {
+    // Disabled mid-window (settings can change under us, e.g. via the web API):
+    // drop the armed state so re-enabling later cannot expire a stale window
+    // into an unexpected deferred Home gesture.
+    homeTapTracker.disarm();
+    return false;  // both tap gestures off: zero-latency clicks
+  }
+
+  const bool tap = gpio.wasHomeKeyTapped();
+  if (tap && !homeTapTracker.armed) {
+    // First tap: start the window and hold the frame so no screen acts on it.
+    homeTapTracker.arm(millis());
+    return true;
+  }
+  if (!homeTapTracker.armed) return false;
+
+  const auto step = homeTapTracker.update(tap, millis(), X4PRO_HOME_DOUBLE_CLICK_MS);
+  switch (step) {
+    case HomeTapTracker::Step::DoubleClick:
+      executeHomeButtonAction(SETTINGS.homeButtonDoubleClickAction);
+      return true;
+
+    case HomeTapTracker::Step::WindowExpired:
+      // Deliver the single click late, honoring the configured tap action.
+      // The device home screen consumes no action (and would leak the latch
+      // into the next screen), so it stays off-limits to the deferred tap.
+      // OFF taps are swallowed everywhere.
+      if (SETTINGS.homeButtonTapAction != CrossPointSettings::HOME_ACT_OFF && !activityManager.isOnHomeScreen()) {
+        executeHomeButtonAction(SETTINGS.homeButtonTapAction);
+      }
+      if (tap) {
+        // A stalled loop can deliver the expiry and the next physical tap on
+        // the same frame; that tap starts a fresh window instead of being lost.
+        homeTapTracker.arm(millis());
+        return true;
+      }
+      return false;  // no Home event left this frame: the action already ran
+
+    case HomeTapTracker::Step::None:
+      break;
+  }
+  // Still inside the window with no second tap yet.
+  return false;
 }
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
@@ -723,6 +853,12 @@ void loop() {
   // Placed after sleep guards so we never queue a render that won't be processed.
   if (gpio.wasUsbStateChanged()) {
     activityManager.requestUpdate();
+  }
+
+  // Home-key double-click arbitration must consume frames before activities see
+  // them, otherwise a screen can act on the raw tap before the window closes.
+  if (handleX4ProHomeDoubleClick()) {
+    return;
   }
 
   const unsigned long activityStartTime = millis();
