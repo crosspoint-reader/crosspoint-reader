@@ -92,6 +92,11 @@ void AutomaticProgressCheck::taskTrampoline(void* arg) {
 }
 
 void AutomaticProgressCheck::run() {
+  // Load saved WiFi credentials from SD before the headless connect attempt.
+  // (WifiSelectionActivity does this in onEnter(); a background check runs
+  // without that activity, so it must load them itself.)
+  WIFI_STORE.loadFromFile();
+
   if (!connectHeadless()) {
     LOG_DBG("KOSync", "Automatic check: WiFi unavailable");
     error_ = KOReaderSyncClient::NETWORK_ERROR;
