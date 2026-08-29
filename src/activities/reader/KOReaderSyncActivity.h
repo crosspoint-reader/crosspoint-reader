@@ -39,8 +39,7 @@ class KOReaderSyncActivity final : public Activity, private UiAppHost {
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 const CrossPointPosition& localPosition, SavedProgressPosition localKoPos,
                                 std::string localChapterName,
-                                std::optional<uint16_t> currentParagraphIndex = std::nullopt,
-                                Mode mode = Mode::MANUAL,
+                                std::optional<uint16_t> currentParagraphIndex = std::nullopt, Mode mode = Mode::MANUAL,
                                 CompletionTarget completionTarget = CompletionTarget::READER);
 
   void onEnter() override;

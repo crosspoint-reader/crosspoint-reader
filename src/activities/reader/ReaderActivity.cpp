@@ -86,7 +86,9 @@ bool ReaderActivity::handleBackNavigation() {
   return ReaderUtils::handleBackNavigation(
       mappedInput, activityManager, bookPath.c_str(),
       {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->leaveToHome(); }},
-      {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->leaveToFileBrowser(static_cast<ReaderActivity*>(ctx)->bookPath); }});
+      {this, [](void* ctx) {
+         static_cast<ReaderActivity*>(ctx)->leaveToFileBrowser(static_cast<ReaderActivity*>(ctx)->bookPath);
+       }});
 }
 
 void ReaderActivity::clearEndOfBookOptionsIfNeeded() {
