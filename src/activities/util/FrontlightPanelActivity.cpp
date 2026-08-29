@@ -428,9 +428,10 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   renderUi();
 
   // A tile that rewrote the whole frame (night mode) re-drives every pixel
-  // once; ordinary repaints stay on the fast path. FULL, not HALF: HALF is the
-  // balanced-speed waveform and leaves some ghost behind, which is exactly what
-  // the tile that sets this flag is asked to remove.
-  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  // once; ordinary repaints stay on the fast path. HALF: strong enough to
+  // flip the whole frame's polarity without the FULL waveform's blackout
+  // flash. Any faint residue clears with the panel's dedicated refresh tile
+  // or the next scheduled clean refresh.
+  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   cleanRefreshPending = false;
 }
