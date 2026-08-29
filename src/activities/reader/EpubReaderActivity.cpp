@@ -30,6 +30,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "MappedProgressPositionPolicy.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "ReaderActivity.h"
@@ -341,16 +342,27 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Wait until the first reader render has loaded the current section. This gives
-  // ProgressMapper an accurate local page count while keeping the sync trigger out
-  // of the render task, where replacing the current activity would be unsafe.
-  // A non-zero cached total means a settings-change pagination remap is still
-  // pending. Do not tear the section down for sync until that semantic resume
-  // position has either been applied or explicitly consumed.
+  // Wait until the first reader render has loaded the current section, then kick
+  // off the automatic progress check. The fetch runs in a background task so page
+  // turns keep working; pollAutomaticProgressCheck() consumes the result later.
   if (automaticProgressCheckPending && initialRenderCompleted.load(std::memory_order_acquire) && section &&
       cachedChapterTotalPageCount == 0) {
     automaticProgressCheckPending = false;
-    if (KOREADER_STORE.getAutomaticProgressCheck() && launchKOReaderSync(KOReaderSyncActivity::Mode::AUTO_PULL)) {
+    startAutomaticProgressCheck();
+  }
+  pollAutomaticProgressCheck();
+
+  // A pending sync prompt owns Confirm/Back. It stays non-blocking: page turns
+  // below still work and the banner simply rides along until dismissed.
+  if (syncPromptActive) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      applyRemotePosition(syncPromptRemotePosition);
+      dismissSyncPrompt();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+        (millis() - syncPromptShownAt) >= SYNC_PROMPT_TIMEOUT_MS) {
+      dismissSyncPrompt();
       return;
     }
   }
@@ -1004,6 +1016,112 @@ bool EpubReaderActivity::launchKOReaderSync(const KOReaderSyncActivity::Mode mod
   return true;  // acted: launched the sync activity
 }
 
+void EpubReaderActivity::startAutomaticProgressCheck() {
+  if (!KOREADER_STORE.getAutomaticProgressCheck()) return;
+  if (!epub) return;
+  if (automaticCheck_.isRunning() || syncPromptActive) return;
+  automaticCheck_.start(epub->getPath());
+}
+
+void EpubReaderActivity::pollAutomaticProgressCheck() {
+  const auto status = automaticCheck_.status();
+  if (status == AutomaticProgressCheck::Status::RUNNING || status == AutomaticProgressCheck::Status::IDLE) {
+    return;
+  }
+
+  if (status == AutomaticProgressCheck::Status::DONE_OK) {
+    CrossPointPosition remotePosition;
+    {
+      // The mapping decompresses chapter data from the Epub; hold the render
+      // lock so a concurrent page render can't race the Epub/Section access.
+      RenderLock lock(*this);
+      remotePosition = mapRemoteProgress(automaticCheck_.remoteProgress());
+    }
+    const CrossPointPosition current = getCurrentPosition();
+    const auto order = MappedProgressPositionPolicy::compare(current.spineIndex, current.pageNumber,
+                                                             remotePosition.spineIndex, remotePosition.pageNumber);
+    LOG_DBG("KOSync", "Automatic check decision: local=%d/%d remote=%d/%d order=%d", current.spineIndex,
+            current.pageNumber, remotePosition.spineIndex, remotePosition.pageNumber, static_cast<int>(order));
+    if (order == MappedProgressPositionOrder::REMOTE_AHEAD) {
+      showSyncPrompt(remotePosition);
+    }
+  } else {
+    LOG_DBG("KOSync", "Automatic check: no remote progress or error (%d)", static_cast<int>(automaticCheck_.error()));
+  }
+  automaticCheck_.reset();
+}
+
+CrossPointPosition EpubReaderActivity::mapRemoteProgress(const KOReaderProgress& progress) {
+  const int totalPagesInSpine = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  const SavedProgressPosition koPos = {progress.progress, progress.percentage};
+  CrossPointPosition mapped = ProgressMapper::toCrossPoint(epub, koPos, renderer, currentSpineIndex, totalPagesInSpine);
+  if (!mapped.hasVisibleTextOffset && progress.position.has_value()) {
+    const bool sameXPath = progress.position->xpath == progress.progress;
+    if (const auto richMapped = ProgressMapper::fromRichPosition(epub, *progress.position, renderer, sameXPath)) {
+      mapped = *richMapped;
+    }
+  }
+  return mapped;
+}
+
+void EpubReaderActivity::showSyncPrompt(const CrossPointPosition& remotePosition) {
+  syncPromptRemotePosition = remotePosition;
+  syncPromptShownAt = millis();
+  syncPromptActive = true;
+  requestUpdate();
+}
+
+void EpubReaderActivity::dismissSyncPrompt() {
+  syncPromptActive = false;
+  requestUpdate();
+}
+
+void EpubReaderActivity::applyRemotePosition(const CrossPointPosition& position) {
+  {
+    RenderLock lock;
+    clearDeferredReposition();
+    if (position.hasVisibleTextOffset && position.spineIndex >= 0 && position.spineIndex < epub->getSpineItemsCount()) {
+      if (section && currentSpineIndex == position.spineIndex) {
+        const auto page = section->getPageForVisibleTextOffset(position.visibleTextOffset);
+        section->currentPage = page.value_or(std::max(0, position.pageNumber));
+      } else {
+        currentSpineIndex = position.spineIndex;
+        pendingOffsetJump = position.visibleTextOffset;
+        section.reset();
+      }
+    } else {
+      currentSpineIndex = position.spineIndex;
+      nextPageNumber = position.pageNumber;
+      section.reset();
+    }
+    saveProgress(position.spineIndex, position.pageNumber, position.totalPages);
+  }
+  requestUpdate();
+}
+
+void EpubReaderActivity::renderSyncPrompt() {
+  if (!syncPromptActive) return;
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int bannerHeight = metrics.headerHeight + 4;
+  const int y = screen.y + screen.height - bannerHeight - metrics.buttonHintsHeight;
+
+  char message[64];
+  snprintf(message, sizeof(message), tr(STR_RESUME_AT_PAGE_FORMAT), syncPromptRemotePosition.pageNumber + 1);
+
+  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, message, EpdFontFamily::BOLD);
+  const int bannerWidth = std::min(screen.width, textWidth + 24);
+  const int x = screen.x + (screen.width - bannerWidth) / 2;
+  renderer.fillRect(x, y, bannerWidth, bannerHeight, true);
+  renderer.drawText(UI_10_FONT_ID, x + (bannerWidth - textWidth) / 2, y + bannerHeight / 2 + 4, message, false,
+                    EpdFontFamily::BOLD);
+
+  const auto labels = mappedInput.mapLabels(tr(STR_RESUME), tr(STR_NO), "", "");
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  renderer.displayBuffer(xteinkClassPanel() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+}
+
 void EpubReaderActivity::applyInitialOrientation() {
   ReaderActivity::applyInitialOrientation();
   appliedOrientation = SETTINGS.orientation;
@@ -1474,6 +1592,8 @@ void EpubReaderActivity::renderBook() {
     GUI.drawPopup(renderer, tr(STR_DICT_NO_DICT_SET));
   }
   initialRenderCompleted.store(true, std::memory_order_release);
+
+  renderSyncPrompt();
 
   // Toolbar menu: overlay the toolbar / panel on top of the freshly rendered page.
   if (overlay != Overlay::None && usesToolbarMenu()) {

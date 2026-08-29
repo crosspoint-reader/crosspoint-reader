@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 
+#include "AutomaticProgressCheck.h"
 #include "BookmarkEntry.h"
 #include "EpubReaderMenuActivity.h"
 #include "KOReaderSyncActivity.h"
@@ -37,6 +38,11 @@ class EpubReaderActivity final : public ReaderActivity {
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
   bool automaticProgressCheckPending = false;
+  AutomaticProgressCheck automaticCheck_;
+  bool syncPromptActive = false;
+  CrossPointPosition syncPromptRemotePosition;
+  unsigned long syncPromptShownAt = 0;
+  static constexpr unsigned long SYNC_PROMPT_TIMEOUT_MS = 10000;
   // Consecutive page-load failures. Each failure drops the section and rebuilds on the next render,
   // which recovers a transiently corrupt cache; capped so a persistently bad page can't spin forever.
   uint8_t pageLoadRetryCount = 0;
@@ -166,6 +172,18 @@ class EpubReaderActivity final : public ReaderActivity {
     leaveReader(KOReaderSyncActivity::CompletionTarget::FILE_BROWSER);
   }
   unsigned long confirmLongPressThreshold() const;
+
+  // Non-blocking automatic progress check (pull): the network fetch runs in a
+  // background task while the reader stays responsive; the result is validated
+  // against the current position before any prompt is shown.
+  void startAutomaticProgressCheck();
+  void pollAutomaticProgressCheck();
+  CrossPointPosition mapRemoteProgress(const KOReaderProgress& progress);
+  void showSyncPrompt(const CrossPointPosition& remotePosition);
+  void dismissSyncPrompt();
+  void applyRemotePosition(const CrossPointPosition& position);
+  void renderSyncPrompt();
+
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
   void addBookmark();
