@@ -616,7 +616,10 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 }
 
 uint8_t ParsedText::addLinkTarget(const char* href) {
-  if (!href || href[0] == '\0' || linkTargets.size() >= UINT8_MAX) return 0;
+  if (!href || href[0] == '\0' || strnlen(href, FOOTNOTE_HREF_LEN) >= FOOTNOTE_HREF_LEN ||
+      linkTargets.size() >= UINT8_MAX) {
+    return 0;
+  }
   linkTargets.emplace_back(href);
   return static_cast<uint8_t>(linkTargets.size());
 }
@@ -1561,20 +1564,19 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     size_t spanIndex = 0;
     while (spanIndex < lineLinkIdsSeen.size() && lineLinkIdsSeen[spanIndex] != linkId) spanIndex++;
     int width = willReorder ? reorderedWidthsScratch[i] : wordWidths[lastBreakAt + i];
-    if ((lineWordStyles[i] & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) width = (width + 1) / 2;
     const int right = lineXPos[i] + width;
     const int topLift =
         (lineWordStyles[i] & EpdFontFamily::SUP) != 0 ? renderer.getFontAscenderSize(fontId) * 2 / 5 : 0;
 
     if (spanIndex == lineLinkIdsSeen.size()) {
-      TextBlock::LinkSpan span{};
+      lineLinks.emplace_back();
+      auto& span = lineLinks.back();
       strncpy(span.href, linkTargets[linkId - 1].c_str(), sizeof(span.href) - 1);
       span.href[sizeof(span.href) - 1] = '\0';
       span.x = lineXPos[i];
       span.width = static_cast<int16_t>(width);
       span.topLift = static_cast<int16_t>(topLift);
       lineLinkIdsSeen.push_back(linkId);
-      lineLinks.push_back(span);
     } else {
       auto& span = lineLinks[spanIndex];
       const int left = std::min<int>(span.x, lineXPos[i]);

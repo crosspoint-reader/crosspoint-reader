@@ -102,13 +102,13 @@ class Page {
         links.size() >= MAX_LINKS_PER_PAGE) {
       return false;
     }
-    PageLink link;
+    links.emplace_back();
+    auto& link = links.back();
     strcpy(link.href, href);
     link.x = x;
     link.y = y;
     link.width = width;
     link.height = height;
-    links.push_back(link);
     return true;
   }
 
