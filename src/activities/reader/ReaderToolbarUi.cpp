@@ -36,6 +36,8 @@ constexpr int kToolCount = 3;
 // Bottom sheet height for the panels. ListNav fits whole rows in the remaining
 // list area; any spare pixels stay between the list and the switcher.
 constexpr int kPanelHeightPercent = 62;
+// Cap the sheet may grow to when rounding the list area up to a whole row.
+constexpr int kPanelHeightMaxPercent = 72;
 }  // namespace
 
 ReaderToolbarUi::ReaderToolbarUi(GfxRenderer& renderer) : UiAppHost(renderer) {}
@@ -97,12 +99,16 @@ void ReaderToolbarUi::screenFn(UiScreen& screen, void* user) {
 // the active one inside an outline pill (the theme's control radius). Each
 // slot is registered as one tap target, so the row stays light (no filled
 // tiles, no labels -- the glyphs carry the meaning).
-void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anchor) {
+void ReaderToolbarUi::buildToolRow(UiScreen& screen, const fui::LayoutAnchor anchor, const int16_t sideInset) {
   const auto& tokens = screen.theme();
   const fui::BitmapRef icons[kToolCount] = {fui::bitmapFromIcon(icon_reader_contents_24),
                                             fui::bitmapFromIcon(icon_reader_text_24),
                                             fui::bitmapFromIcon(icon_reader_more_24)};
-  const fui::Rect row = screen.take(anchor, kToolRowH);
+  // sideInset absorbs the difference between the two hosts' content bands
+  // (the toolbar's is spaceLg-inset, the panel's is full width): the slots
+  // must land on the same x either way, or the icons jump when a tap swaps
+  // the toolbar for a panel.
+  const fui::Rect row = screen.take(anchor, kToolRowH).inset(fui::Insets{0, sideInset, 0, sideInset});
   const int16_t slotW = static_cast<int16_t>(row.width / kToolCount);
   // Theme radius as-is (the frontlight panel pattern); the fill clamps to
   // the shape's own height so round themes cannot overshoot.
@@ -200,7 +206,7 @@ void ReaderToolbarUi::buildToolbar(UiScreen& screen) {
     if (model_.pageInfo) screen.target().text(line, model_.pageInfo, infoStyle);
   }
 
-  buildToolRow(screen, fui::LayoutAnchor::Top);
+  buildToolRow(screen, fui::LayoutAnchor::Top, 0);  // content band already spaceLg-inset
 }
 
 void ReaderToolbarUi::buildPanel(UiScreen& screen) {
@@ -214,15 +220,37 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   sheetProps.grabberMargin = tokens.spaceLg;
   sheetProps.grabberInset = static_cast<int16_t>(tokens.spaceLg + tokens.spaceMd);
 
+  // Size the sheet to an exact number of list rows instead of a fixed screen
+  // share: a percentage leaves up to a row's height of dead space above the
+  // switcher, and a short list (Text, More) leaves empty row slots. Chrome =
+  // everything in the sheet that is not the list; the row count starts from
+  // the target share, grows one row when that still fits the cap, and shrinks
+  // to the item count when the list is shorter than the space.
   const int16_t titleH = screen.target().lineHeight(tokens.titleText.font);
-  screen.sheet(sheetProps, static_cast<int16_t>((safe.height * kPanelHeightPercent) / 100));
-  screen.insetContent(fui::Insets{0, tokens.spaceLg, 0, tokens.spaceLg});
+  const int16_t rowH =
+      model_.denseRows ? static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight) : tokens.rowHeight;
+  const int16_t rowStride = static_cast<int16_t>(rowH + tokens.listRowGap);
+  const int16_t grabberBand =
+      static_cast<int16_t>(sheetProps.grabberMargin + sheetProps.grabberHeight + sheetProps.grabberInset);
+  const int16_t chrome = static_cast<int16_t>(grabberBand + titleH + tokens.spaceMd + tokens.spaceSm +
+                                              std::max(0, model_.bottomReserve) + kToolRowH + tokens.spaceSm);
+  const int16_t target = static_cast<int16_t>((safe.height * kPanelHeightPercent) / 100);
+  const int16_t cap = static_cast<int16_t>((safe.height * kPanelHeightMaxPercent) / 100);
+  int sheetRows = (target - chrome + tokens.listRowGap) / rowStride;
+  if (static_cast<int16_t>(chrome + (sheetRows + 1) * rowStride - tokens.listRowGap) <= cap) ++sheetRows;
+  if (model_.itemCount > 0 && sheetRows > model_.itemCount) sheetRows = model_.itemCount;
+  if (sheetRows < 1) sheetRows = 1;
+  screen.sheet(sheetProps, static_cast<int16_t>(chrome + sheetRows * rowStride - tokens.listRowGap));
+  // No blanket side inset: Screen::list() draws in the content band, and the
+  // scroll track must reach the sheet's edge like a full-screen list's does.
+  // The title insets itself; the rows inset via rowInset below.
 
   // Title line: panel name left, page position right when the list spans pages.
   {
     fui::TextStyle titleStyle = tokens.titleText;
     titleStyle.bold = true;
-    const fui::Rect line = screen.takeTop(titleH, tokens.spaceMd);
+    const fui::Rect line =
+        screen.takeTop(titleH, tokens.spaceMd).inset(fui::Insets{0, tokens.spaceLg, 0, tokens.spaceLg});
     screen.target().text(line, model_.panelTitle, titleStyle);
     // Filled in below once the viewport is known; reserve the rect now.
     pageIndicatorRect_ = line;
@@ -231,14 +259,22 @@ void ReaderToolbarUi::buildPanel(UiScreen& screen) {
   // Switcher row along the sheet's bottom edge (above the button-hint row on
   // button boards); the list takes what is left.
   screen.spacer(static_cast<int16_t>(tokens.spaceSm + std::max(0, model_.bottomReserve)), fui::LayoutAnchor::Bottom);
-  buildToolRow(screen, fui::LayoutAnchor::Bottom);
+  buildToolRow(screen, fui::LayoutAnchor::Bottom, tokens.spaceLg);  // full-width band
   screen.spacer(tokens.spaceSm, fui::LayoutAnchor::Bottom);
 
   listProps_.count = static_cast<uint16_t>(std::max(0, model_.itemCount));
   listProps_.action = ACTION_ROW;
   listProps_.inputMask = fui::InputTouch;  // physical buttons stay with the reader
-  listProps_.rowHeight =
-      model_.denseRows ? static_cast<int16_t>(UITheme::getInstance().getMetrics().listRowHeight) : tokens.rowHeight;
+  listProps_.rowHeight = rowH;
+  // The label column starts flush with the panel title (no list-side padding
+  // on top of the sheet's own inset). Body-size text: small reads condensed
+  // and the taller row doubles as the tap target.
+  listProps_.labelText = tokens.bodyText;
+  listProps_.sidePadding = 0;
+  // The list band spans the sheet's full width -- the scroll track hugs the
+  // panel edge (theme bezel inset included) exactly like a full-screen list.
+  // rowInset pulls the rows back to the title's spaceLg alignment.
+  listProps_.rowInset = tokens.spaceLg;
   const fui::Rect listRect = screen.body();
   const int count = std::max(0, model_.itemCount);
   // The nav owns selection + viewport (same fui::ListNav idiom as the list

@@ -1385,10 +1385,12 @@ void EpubReaderActivity::renderBook() {
     renderOverlay();
     // An open option picker rides on top of the freshly drawn panel.
     if (overlayPopup.isActive()) overlayPopup.render(renderer);
-    // HALF on the Xteink grayscale panels: the page render above just ran the
-    // anti-aliasing waveform, and a FAST differential leaves the covered text
-    // ghosting gray through the chrome background (see openOverlay).
-    renderer.displayBuffer(xteinkClassPanel() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+    // FAST, same as openOverlay: HALF's inverting pass flashes the sheet
+    // (white, in night mode) on every repaint under an open panel. Any AA
+    // residue a FAST differential leaves under the chrome has not shown in
+    // practice; restore a HALF cleanup here if text ever visibly ghosts
+    // through the sheet (see #2190 for the mechanism).
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
 }
 
