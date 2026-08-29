@@ -1,8 +1,8 @@
-#include "activities/util/PasswordMasking.h"
-
 #include <gtest/gtest.h>
 
 #include <string>
+
+#include "activities/util/PasswordMasking.h"
 
 namespace {
 
