@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <UrlOrigin.h>
 #include <base64.h>
 
 #include <functional>
@@ -49,6 +50,13 @@ bool isRedirect(int status) {
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
                                          const std::string& password, Sink& sink) {
   std::string url = startUrl;
+  const std::string_view startOrigin = urlOrigin(startUrl);
+  // Unlike runGet(), each hop here builds a fresh SecureHttpClient, so
+  // Authorization isn't "carried over" by a reused handle -- but nothing
+  // stops it from being unconditionally re-added on every hop regardless of
+  // which host that hop's url now points at. Latches permanently once any
+  // hop lands off the original origin, same rule as runGet() below.
+  bool crossOriginSeen = false;
 
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
@@ -62,7 +70,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // append a second User-Agent header, which strict servers reject (aiohttp
     // answers 400 "Duplicate 'User-Agent' header found").
     http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
-    if (!username.empty() && !password.empty()) {
+    if (!crossOriginSeen && !username.empty() && !password.empty()) {
       const std::string credentials = username + ":" + password;
       const String encoded = base64::encode(credentials.c_str());
       http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
@@ -91,6 +99,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
         return HttpDownloader::HTTP_ERROR;
       }
+      if (urlOrigin(url) != startOrigin) crossOriginSeen = true;
       continue;
     }
     if (status != 200) {
@@ -117,6 +126,16 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
 // large/slow files and surfaces a short read directly.
 HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
                                      Sink& sink) {
+  // Allocated up front so the redirect loop below can reuse it for the
+  // origin check without a fresh heap allocation right before a TLS
+  // handshake (see the comment at that call site). Otherwise unused until
+  // the body-read loop after the redirect loop.
+  auto buf = makeUniqueNoThrow<char[]>(READ_CHUNK);
+  if (!buf) {
+    LOG_ERR("HTTP", "OOM: %u byte read buffer", (unsigned)READ_CHUNK);
+    return HttpDownloader::HTTP_ERROR;
+  }
+
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.buffer_size = HTTP_RX_BUF;
@@ -158,6 +177,31 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   int status = esp_http_client_get_status_code(client);
   for (int hop = 0; isRedirect(status) && hop < MAX_REDIRECTS; ++hop) {
     if (esp_http_client_set_redirection(client) != ESP_OK) break;
+
+    // esp_http_client_set_redirection() only refuses an HTTPS-to-HTTP
+    // downgrade; it does not refuse a same-scheme redirect to a different
+    // host. Authorization stays on this reused client handle across the hop
+    // unless explicitly dropped, so a compromised or malicious server could
+    // otherwise redirect to attacker infrastructure and receive the
+    // configured credentials. Strips once the origin changes; it does not
+    // come back even if a later hop redirects back to the original origin.
+    {
+      // Reuses `buf` (allocated above, READ_CHUNK bytes, idle until the
+      // body-read loop after this one) instead of a fresh heap allocation
+      // here. This runs right before esp_http_client_open() below
+      // re-establishes the TLS connection to the redirect target -- on a
+      // CDN hop, that connection needs a large contiguous block for RSA
+      // signature verification (crt_bundle_attach), so an extra alloc/free
+      // cycle in this exact window is itself a fragmentation risk, not just
+      // a cost.
+      const bool sameOrigin =
+          esp_http_client_get_url(client, buf.get(), READ_CHUNK) == ESP_OK && urlOrigin(buf.get()) == urlOrigin(url);
+      if (!sameOrigin) {
+        LOG_DBG("HTTP", "redirect changed origin -- dropping Authorization header");
+        esp_http_client_delete_header(client, "Authorization");
+      }
+    }
+
     esp_http_client_close(client);
     err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
@@ -178,13 +222,6 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   // fetch_headers returns 0 for a chunked response (no Content-Length); leave
   // total at 0 so progress stays silent and the size check is skipped.
   sink.total = contentLength > 0 ? static_cast<size_t>(contentLength) : 0;
-
-  auto buf = makeUniqueNoThrow<char[]>(READ_CHUNK);
-  if (!buf) {
-    LOG_ERR("HTTP", "OOM: %u byte read buffer", (unsigned)READ_CHUNK);
-    esp_http_client_cleanup(client);
-    return HttpDownloader::HTTP_ERROR;
-  }
 
   while (true) {
     if (sink.cancelFlag && *sink.cancelFlag) {
