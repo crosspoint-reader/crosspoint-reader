@@ -524,7 +524,11 @@ void WifiSelectionActivity::checkConnectionStatus() {
     // Skipped once the clock is already valid, so this costs the SNTP wait only
     // after a cold boot rather than on every connect.
     if (!HalClock::isSystemTimeValid()) {
-      HalClock::quickSyncSystemTime();
+      // Best-effort, and deliberately not fatal: the helper logs its own
+      // failure, and a network that answered DHCP but not NTP is still a
+      // usable connection. Failing Wi-Fi setup over it would be worse than
+      // leaving HTTPS in the state it would have been in anyway.
+      (void)HalClock::quickSyncSystemTime();
     }
 
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
