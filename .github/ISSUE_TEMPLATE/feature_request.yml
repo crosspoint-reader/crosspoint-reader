@@ -26,7 +26,7 @@ body:
           required: true
         - label: This is **not** a new theme or theming change (themes are temporarily closed pending the move to SD-loaded themes).
           required: true
-        - label: This is **not** a new external network connector (sync engine, cloud storage, remote file access, OPDS extensions beyond what exists, or any new "talk to a server" feature).
+        - label: This is **not** a new external network connector (sync engine, cloud storage, remote file access, or any new "talk to a server" feature). Improvements to the existing OPDS support are in scope and do not count as a new connector.
           required: true
         - label: This is **not** an interactive app (game, calculator, notepad), writing/authoring tool, RSS/news/browser feature, media playback feature, or PDF rendering.
           required: true
