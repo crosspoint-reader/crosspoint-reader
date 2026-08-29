@@ -21,11 +21,11 @@
 class AutomaticProgressCheck {
  public:
   enum class Status : uint8_t {
-    IDLE,           // no check started
-    RUNNING,        // network fetch in flight
-    DONE_OK,        // remote progress fetched
-    DONE_NOT_FOUND, // server has no progress for this document
-    DONE_ERROR,     // network / auth / other failure
+    IDLE,            // no check started
+    RUNNING,         // network fetch in flight
+    DONE_OK,         // remote progress fetched
+    DONE_NOT_FOUND,  // server has no progress for this document
+    DONE_ERROR,      // network / auth / other failure
   };
 
   AutomaticProgressCheck() = default;

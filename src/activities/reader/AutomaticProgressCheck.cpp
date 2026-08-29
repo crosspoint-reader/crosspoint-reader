@@ -1,10 +1,9 @@
 #include "AutomaticProgressCheck.h"
 
+#include <Logging.h>
 #include <WiFi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-
-#include <Logging.h>
 
 #include <algorithm>
 
@@ -42,8 +41,8 @@ bool connectHeadless() {
       WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
     }
 
-    const uint32_t attemptTimeoutMs = std::min<uint32_t>(
-        static_cast<uint32_t>(remaining), AutomaticWifiConnectionPolicy::FALLBACK_ATTEMPT_TIMEOUT_MS);
+    const uint32_t attemptTimeoutMs = std::min<uint32_t>(static_cast<uint32_t>(remaining),
+                                                         AutomaticWifiConnectionPolicy::FALLBACK_ATTEMPT_TIMEOUT_MS);
     const uint32_t attemptStartedAt = millis();
     while (millis() - attemptStartedAt < attemptTimeoutMs) {
       if (WiFi.status() == WL_CONNECTED) {
