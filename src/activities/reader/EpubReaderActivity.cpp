@@ -350,7 +350,9 @@ void EpubReaderActivity::loop() {
     automaticProgressCheckPending = false;
     startAutomaticProgressCheck();
   }
-  pollAutomaticProgressCheck();
+  if (pollAutomaticProgressCheck()) {
+    return;  // the reader was replaced; epub/section are released
+  }
 
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
   if (section && !section->isBuilding() && !RenderLock::peek() && renderer.hasFrameBuffer() &&
