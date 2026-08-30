@@ -64,10 +64,14 @@ Result validateImageFile(const char* sdPath, size_t partitionSize);
 
 const char* resultName(Result r);
 
-// Returns the chip_id (esp_image_header_t offset 12) of the currently-running
-// image, or 0xFFFF if it cannot be read. Because the running slot booted
-// successfully, its chip_id is authoritative for the current CPU, so a
-// candidate image must match it to be safe to flash.
-uint16_t runningPartitionChipId();
+// The esp_chip_id_t this firmware was built for, or
+// firmware_identity::CHIP_ID_UNKNOWN when no identity source is available.
+//
+// Taken from the build target (CONFIG_IDF_FIRMWARE_CHIP_ID), which is the same
+// constant the bootloader checks every image against on every boot -- so the
+// pre-flight guard predicts the boot-time verdict rather than re-deriving it
+// from storage. Never read back out of flash: a candidate image is compared
+// against what this build IS, not against what some partition currently holds.
+uint16_t deviceChipId();
 
 }  // namespace firmware_flash

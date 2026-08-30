@@ -3,9 +3,12 @@
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <esp_app_format.h>
+#include <esp_chip_info.h>
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <mbedtls/sha256.h>
+#include <sdkconfig.h>
 #include <spi_flash_mmap.h>
 
 #include <algorithm>
@@ -13,6 +16,7 @@
 #include <memory>
 
 #include "FirmwareBoardTag.h"
+#include "FirmwareImageIdentity.h"
 #include "OtaBootSwitch.h"
 
 namespace firmware_flash {
@@ -25,8 +29,38 @@ constexpr size_t BLK = 64 * 1024;           // 64 KiB block-erase granularity
 constexpr size_t CHUNK = 4096;
 constexpr size_t SHA_TRAILER = 32;
 constexpr uint8_t CHECKSUM_SEED = 0xEF;
-constexpr size_t HEADER_SIZE = 24;
+constexpr size_t HEADER_SIZE = firmware_identity::IMAGE_HEADER_SIZE;
 constexpr size_t SEG_HEADER_SIZE = 8;
+
+// The pure seam mirrors esp_chip_id_t / esp_chip_model_t so the host tests can
+// run without ESP-IDF. Pin both tables to the real enums here, where the SDK
+// headers are in scope, so a future SDK renumbering breaks the build instead of
+// silently mislabelling a chip.
+static_assert(firmware_identity::CHIP_ID_UNKNOWN == ESP_CHIP_ID_INVALID, "chip id sentinel drift");
+static_assert(firmware_identity::CHIP_ID_ESP32 == ESP_CHIP_ID_ESP32, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32S2 == ESP_CHIP_ID_ESP32S2, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32S3 == ESP_CHIP_ID_ESP32S3, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32C3 == ESP_CHIP_ID_ESP32C3, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32C2 == ESP_CHIP_ID_ESP32C2, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32C6 == ESP_CHIP_ID_ESP32C6, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32H2 == ESP_CHIP_ID_ESP32H2, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32P4 == ESP_CHIP_ID_ESP32P4, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32C61 == ESP_CHIP_ID_ESP32C61, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32C5 == ESP_CHIP_ID_ESP32C5, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32H21 == ESP_CHIP_ID_ESP32H21, "chip id drift");
+static_assert(firmware_identity::CHIP_ID_ESP32H4 == ESP_CHIP_ID_ESP32H4, "chip id drift");
+static_assert(firmware_identity::MODEL_ESP32 == CHIP_ESP32, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32S2 == CHIP_ESP32S2, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32S3 == CHIP_ESP32S3, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32C3 == CHIP_ESP32C3, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32C2 == CHIP_ESP32C2, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32C6 == CHIP_ESP32C6, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32H2 == CHIP_ESP32H2, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32P4 == CHIP_ESP32P4, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32C61 == CHIP_ESP32C61, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32C5 == CHIP_ESP32C5, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32H21 == CHIP_ESP32H21, "chip model drift");
+static_assert(firmware_identity::MODEL_ESP32H4 == CHIP_ESP32H4, "chip model drift");
 }  // namespace
 
 const char* resultName(Result r) {
@@ -69,20 +103,29 @@ const char* resultName(Result r) {
   return "?";
 }
 
-uint16_t runningPartitionChipId() {
-  // esp_partition_read hits SPI flash; cache the running slot's chip_id so we
-  // only pay that cost once per boot. The running image is immutable at
-  // runtime, so a function-local static is safe here.
-  static uint16_t cached = [] {
-    const esp_partition_t* run = esp_ota_get_running_partition();
-    if (!run) return static_cast<uint16_t>(0xFFFF);
-    uint16_t id = 0xFFFF;
-    // chip_id sits at offset 12 of esp_image_header_t. memcpy target is a
-    // uint16_t local, so RISC-V alignment is guaranteed.
-    if (esp_partition_read(run, 12, &id, sizeof(id)) != ESP_OK) return static_cast<uint16_t>(0xFFFF);
-    return id;
-  }();
-  return cached;
+uint16_t deviceChipId() {
+#ifdef CONFIG_IDF_FIRMWARE_CHIP_ID
+  // The build target's own chip id, resolved at compile time. This is the exact
+  // constant bootloader_common_check_chip_id() compares every image's header
+  // against on every boot, so the guard below predicts the bootloader's verdict
+  // instead of re-deriving device identity from storage.
+  static constexpr uint16_t BUILD_TARGET_CHIP_ID = static_cast<uint16_t>(CONFIG_IDF_FIRMWARE_CHIP_ID);
+  static_assert(BUILD_TARGET_CHIP_ID != firmware_identity::CHIP_ID_UNKNOWN,
+                "CONFIG_IDF_FIRMWARE_CHIP_ID is the invalid-chip sentinel");
+  return BUILD_TARGET_CHIP_ID;
+#else
+  // No build-target constant: ask the silicon. esp_chip_info() reports an
+  // esp_chip_model_t, a different enum from esp_chip_id_t, so it goes through
+  // the explicit mapping -- a cast already mislabels ESP32 (model 1, id
+  // 0x0000) and nothing guarantees the rest keep agreeing.
+  esp_chip_info_t info = {};
+  esp_chip_info(&info);
+  const uint16_t id = firmware_identity::chipIdForModel(static_cast<int>(info.model));
+  if (id == firmware_identity::CHIP_ID_UNKNOWN) {
+    LOG_ERR("FLASH", "unmapped chip model %d; chip guard disabled", static_cast<int>(info.model));
+  }
+  return id;
+#endif
 }
 
 namespace {
@@ -141,15 +184,31 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
     return Result::BAD_MAGIC;
   }
   // Reject an image built for a different MCU family before it can brick the
-  // device. chip_id lives at esp_image_header_t offset 12; compare it against
-  // the running slot's own chip_id (self-describing, no chip enumeration).
-  uint16_t imageChip;
-  std::memcpy(&imageChip, header + 12, sizeof(imageChip));
-  const uint16_t deviceChip = runningPartitionChipId();
-  if (deviceChip != 0xFFFF && imageChip != deviceChip) {
-    LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+  // device. Both sides go through firmware_identity so this path and the OTA
+  // path cannot drift apart.
+  uint16_t imageChip = 0;
+  if (!firmware_identity::readImageChipId(header, HEADER_SIZE, imageChip)) {
+    // Unreachable while HEADER_SIZE covers the field, but an unread chip id is
+    // reported as a read failure rather than defaulting to a value: 0x0000 is
+    // ESP32's real chip id, so a zeroed local is not a usable "unknown".
+    LOG_ERR("FLASH", "validate: chip id not readable from header");
     file.close();
-    return Result::BAD_CHIP;
+    return Result::READ_FAIL;
+  }
+  const uint16_t deviceChip = deviceChipId();
+  switch (firmware_identity::compareChipId(imageChip, deviceChip)) {
+    case firmware_identity::ChipVerdict::Mismatch:
+      LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+      file.close();
+      return Result::BAD_CHIP;
+    case firmware_identity::ChipVerdict::UnknownDeviceIdentity:
+      // Fail open: refusing here would leave a device whose identity source is
+      // broken unable to install any image at all. The bootloader still checks
+      // chip_id on boot, and the board-tag scan below is unaffected.
+      LOG_ERR("FLASH", "validate: device chip id unknown; chip guard skipped (image=0x%04X)", imageChip);
+      break;
+    case firmware_identity::ChipVerdict::Match:
+      break;
   }
   const uint8_t segCount = header[1];
   const bool hashAppended = header[23] != 0;
