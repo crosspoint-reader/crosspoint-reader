@@ -249,8 +249,11 @@ void EpubReaderActivity::openReaderMenu() {
     panelHoldJumped = false;
     panelCursorShown = !mappedInput.hasTouch();
     if (!ensureToolbarUi()) {
-      // Nothing to draw the menu with; leave the page as it is rather than aborting.
+      // Nothing to draw the menu with; repaint the page rather than aborting --
+      // openReaderMenu() can run right after a child activity returned, so the
+      // framebuffer may still hold that child's screen.
       overlay = Overlay::None;
+      requestUpdate();
       return;
     }
     toolbarUi->begin();
