@@ -245,6 +245,10 @@ fui::BitmapRef SettingsActivity::categoryIcon(const int index, const bool large)
   return fui::bitmapFromIcon(*BUILT_IN[index][large ? 1 : 0]);
 }
 
+// The one place the category grid's sizing is decided. SettingsCategoryGridLayout
+// carries no layout defaults of its own, so every field has to be set here, from
+// the active theme's tokens -- that is what keeps the grid on the UI scale
+// instead of on a constant baked into a shared header.
 grid::Metrics SettingsActivity::landingMetrics(const UiScreen& screen) const {
   const auto& tokens = screen.theme();
   grid::Metrics m;

@@ -46,15 +46,31 @@ struct Insets {
 
 // Sizing inputs, supplied by the activity from the active theme so the grid
 // tracks UI scale; nothing here assumes a panel size or an orientation.
+//
+// Deliberately carries NO layout defaults. Every field is a theme token the
+// caller reads off the active UITheme at the activity boundary (see
+// SettingsActivity::landingMetrics), so a fixed value here would be positioning
+// hardcoded into a shared UI header -- and a caller that default-constructed
+// Metrics would silently lay the grid out at that fixed scale instead of the
+// theme's. A zero-initialised Metrics is therefore not usable: plan() and
+// columnsForWidth() reject it, so forgetting to populate one renders nothing
+// rather than something plausible but off-scale.
 struct Metrics {
-  int gap = 12;  // space between cards, split between their hit zones
+  int gap = 0;  // space between cards, split between their hit zones
   // Card width the column count aims for: the band's width is divided by this
   // and rounded to the nearest whole number of columns.
-  int targetCellWidth = 240;
-  int minCellWidth = 96;
-  int minCellHeight = 44;  // FreeInkUI's minimum touch target
-  int maxCellHeight = 0;   // 0 = cards fill the band's height
-  int maxColumns = 3;
+  int targetCellWidth = 0;
+  int minCellWidth = 0;
+  int minCellHeight = 0;
+  int maxCellHeight = 0;  // 0 = cards fill the band's height
+  int maxColumns = 0;
+
+  // gap and maxCellHeight are excluded: 0 is a meaningful value for both (no
+  // gutter, and no height ceiling). The four below have no sensible zero, so
+  // all-zero is exactly the never-populated case.
+  [[nodiscard]] constexpr bool populated() const {
+    return targetCellWidth > 0 && minCellWidth > 0 && minCellHeight > 0 && maxColumns > 0;
+  }
 };
 
 struct Plan {
@@ -74,9 +90,7 @@ struct Plan {
   [[nodiscard]] constexpr int gridHeight() const { return rows * cellHeight + gap * (rows - 1); }
 };
 
-constexpr int ceilDiv(const int value, const int divisor) {
-  return divisor <= 0 ? 0 : (value + divisor - 1) / divisor;
-}
+constexpr int ceilDiv(const int value, const int divisor) { return divisor <= 0 ? 0 : (value + divisor - 1) / divisor; }
 
 // Extent of one lane when `total` is split into `lanes` lanes separated by
 // `gap`. Floors, so lanes * extent plus the gaps never exceeds total.
@@ -86,15 +100,13 @@ constexpr int laneExtent(const int total, const int lanes, const int gap) {
 
 // Self-inverse: applied twice it returns the original column, so one function
 // maps logical to visual (render) and visual to logical (hit-test).
-constexpr int mirroredColumn(const int col, const int columns, const bool rtl) {
-  return rtl ? columns - 1 - col : col;
-}
+constexpr int mirroredColumn(const int col, const int columns, const bool rtl) { return rtl ? columns - 1 - col : col; }
 
 // Number of columns the band's width asks for, before the height check in
 // plan() gets a say. Rounds to the nearest whole number of target-width cards,
 // then gives up columns until each one clears minCellWidth.
 inline int columnsForWidth(const int bandWidth, const int count, const Metrics& m) {
-  if (bandWidth <= 0 || count <= 0) return 0;
+  if (bandWidth <= 0 || count <= 0 || !m.populated()) return 0;
   const int gap = m.gap > 0 ? m.gap : 0;
   const int target = m.targetCellWidth > 0 ? m.targetCellWidth : 1;
   int columns = (bandWidth + target / 2) / target;
@@ -110,7 +122,7 @@ inline int columnsForWidth(const int bandWidth, const int count, const Metrics& 
 // orientation-agnostic: it only ever sees the band it is given.
 inline Plan plan(const Rect& band, const int count, const Metrics& m) {
   Plan p;
-  if (count <= 0 || band.width <= 0 || band.height <= 0) return p;
+  if (count <= 0 || band.width <= 0 || band.height <= 0 || !m.populated()) return p;
 
   const int gap = m.gap > 0 ? m.gap : 0;
   const int maxColumns = m.maxColumns < count ? m.maxColumns : count;
