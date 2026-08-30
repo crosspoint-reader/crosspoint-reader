@@ -116,6 +116,19 @@ class CssParser {
   CacheStatus inspectCache() const;
 
   /**
+   * Whether section caches built against the previous CSS rule set must be dropped.
+   *
+   * Section files store styles already resolved against the rule set that was loaded when
+   * they were laid out, and their header carries no CSS identity to check later. They stay
+   * valid only while the cache file behind them is the one still on disk.
+   *
+   * @param statusBefore  inspectCache() result taken before any rebuild attempt
+   * @param loadResult    loadFromCache() result (Invalid when it was never called)
+   * @param parseResult   parseCssFiles() result (Error when it never ran)
+   */
+  static bool sectionCacheIsStale(CacheStatus statusBefore, CacheLoadResult loadResult, ParseResult parseResult);
+
+  /**
    * Delete CSS rules cache file exists
    */
   void deleteCache() const;
