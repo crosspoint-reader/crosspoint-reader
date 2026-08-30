@@ -36,6 +36,8 @@ class ReaderActivity : public Activity {
   virtual void onEndOfBookRendered() {}
 
   bool handleBackNavigation();
+  /** True while the end-of-book suggestion menu is on screen and owning input. */
+  bool endOfBookMenuActive() const;
   bool handleEndOfBookMenu(bool suppressConfirmRelease = false);
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
   void clearEndOfBookOptionsIfNeeded();

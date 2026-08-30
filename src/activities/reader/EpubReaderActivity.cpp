@@ -403,6 +403,35 @@ void EpubReaderActivity::loop() {
 
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
 
+  if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showBookmarkMessage = false;
+    requestUpdate();
+  }
+
+  if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
+    showDictionaryMessage = false;
+    requestUpdate();
+  }
+
+  // The toolbar reader menu owns all input while shown, ahead of the automatic page turn
+  // below: the More panel's rate popup switches automatic turning on and leaves the panel
+  // open, so the timer must neither flip the page under it nor eat the panel's next
+  // Confirm/Back release.
+  if (overlay != Overlay::None) {
+    if (usesToolbarMenu()) {
+      // Hold the interval at zero elapsed so closing the panel starts a fresh one.
+      lastPageTurnTime = millis();
+      handleOverlayInput();
+      return;
+    }
+    // The style was switched off while an overlay was up (Settings reached via
+    // the More panel); fall back to the clean page.
+    overlay = Overlay::None;
+    discardOverlayPage();
+    requestUpdate();
+    return;
+  }
+
   if (automaticPageTurnActive) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
         mappedInput.wasReleased(MappedInputManager::Button::Back) ||
@@ -429,33 +458,21 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
-    showBookmarkMessage = false;
-    requestUpdate();
-  }
-
-  if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
-    showDictionaryMessage = false;
-    requestUpdate();
-  }
-
-  // The toolbar reader menu owns all input while shown.
-  if (overlay != Overlay::None) {
-    if (usesToolbarMenu()) {
-      handleOverlayInput();
-      return;
-    }
-    // The style was switched off while an overlay was up (Settings reached via
-    // the More panel); fall back to the clean page.
-    overlay = Overlay::None;
-    discardOverlayPage();
-    requestUpdate();
+  // While the end-of-book suggestion menu is up it owns Confirm/Back/navigation, so it
+  // gets this tick's input first and the long-press shortcuts below stay inert behind it
+  // -- a hold there must not drop a bookmark onto the suggestion screen or paint the
+  // dictionary word picker over it. Anything the menu does not handle (long-press Back to
+  // the file browser, say) still falls through to the regular handlers.
+  if (handleEndOfBookMenu()) {
     return;
   }
+  const bool endOfBookMenuOpen = endOfBookMenuActive();
 
   const unsigned long confirmHoldMs = confirmLongPressThreshold();
-  const bool confirmLongPressed =
-      confirmHoldMs != 0 && mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, confirmHoldMs);
+  // wasLongPressed() suppresses the release that follows it, so leave it unpolled while
+  // the end-of-book menu owns Confirm -- otherwise the menu never sees that release.
+  const bool confirmLongPressed = !endOfBookMenuOpen && confirmHoldMs != 0 &&
+                                  mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, confirmHoldMs);
   const bool confirmReleased = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   if (confirmLongPressed) {
     switch (SETTINGS.longPressMenuFunction) {
@@ -483,7 +500,7 @@ void EpubReaderActivity::loop() {
   // Home-key boards have no front Confirm button, so a Home-key hold runs the
   // same user-selected long-press action. The SDK emits this event once per
   // hold and suppresses the short Home tap for the same contact.
-  if (mappedInput.wasHomeKeyHold()) {
+  if (mappedInput.wasHomeKeyHold() && !endOfBookMenuOpen) {
     switch (SETTINGS.longPressMenuFunction) {
       case CrossPointSettings::LP_MENU_BOOKMARK:
         if (!showBookmarkMessage) {
@@ -512,10 +529,6 @@ void EpubReaderActivity::loop() {
       default:
         break;
     }
-  }
-
-  if (handleEndOfBookMenu()) {
-    return;
   }
 
   if (confirmReleased || ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
