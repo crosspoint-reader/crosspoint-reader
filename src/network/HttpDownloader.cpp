@@ -65,14 +65,27 @@ struct WifiPowerSaveGuard {
 
 #if defined(FREEINK_NET_WOLFSSL)
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
-                                         const std::string& password, Sink& sink) {
+                                         const std::string& password, Sink& sink, const char* caPem) {
   WifiPowerSaveGuard psGuard;
   std::string url = startUrl;
 
+  // Verified mode: a CA bundle means the caller wants real TLS peer
+  // verification, so plaintext http is refused up front rather than depending
+  // on every caller to only ever pass https URLs.
+  if (caPem != nullptr && url.rfind("https://", 0) != 0) {
+    LOG_ERR("HTTP", "refusing non-https URL in verified mode");
+    return HttpDownloader::HTTP_ERROR;
+  }
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    http.setInsecure();
+    if (caPem != nullptr) {
+      // Peer verification against the caller's anchors. Hostname checking and
+      // fail-closed CA loading live in SecureClient (freeink-sdk).
+      http.setCACert(caPem);
+    } else {
+      http.setInsecure();
+    }
     if (!http.begin(url)) {
       LOG_ERR("HTTP", "wolfSSL bad URL: %s", url.c_str());
       return HttpDownloader::HTTP_ERROR;
@@ -108,6 +121,11 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       const std::string location = http.getHeader("location");
       if (location.empty() || !freeink::SecureHttpClient::resolveUrl(url, location, url)) {
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
+        return HttpDownloader::HTTP_ERROR;
+      }
+      if (caPem != nullptr && url.rfind("https://", 0) != 0) {
+        // Verified mode never follows an https -> http downgrade.
+        LOG_ERR("HTTP", "refusing redirect downgrade to non-https");
         return HttpDownloader::HTTP_ERROR;
       }
       continue;
@@ -241,9 +259,9 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 // mbedTLS path fails to connect or stalls mid-stream. Plain-http URLs still use a
 // WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
-                                           const std::string& password, Sink& sink) {
+                                           const std::string& password, Sink& sink, const char* caPem) {
 #if defined(FREEINK_NET_WOLFSSL)
-  return runGetWolf(url, username, password, sink);
+  return runGetWolf(url, username, password, sink, caPem);
 #else
   return runGet(url, username, password, sink);
 #endif
@@ -251,15 +269,15 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const char* caPem) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
-  return runGetSecure(url, username, password, sink) == OK;
+  return runGetSecure(url, username, password, sink, caPem) == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const char* caPem) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   outContent.clear();  // start clean; the sink appends, so don't carry prior content
   Sink sink;
@@ -267,15 +285,15 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
     outContent.append(reinterpret_cast<const char*>(data), len);
     return true;
   };
-  return runGetSecure(url, username, password, sink) == OK;
+  return runGetSecure(url, username, password, sink, caPem) == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
-                              const std::string& password) {
+                              const std::string& password, const char* caPem) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   Sink sink;
   sink.write = onData;
-  return runGetSecure(url, username, password, sink) == OK;
+  return runGetSecure(url, username, password, sink, caPem) == OK;
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
@@ -297,7 +315,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
 
-  const DownloadError result = runGetSecure(url, username, password, sink);
+  const DownloadError result = runGetSecure(url, username, password, sink, nullptr);
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();

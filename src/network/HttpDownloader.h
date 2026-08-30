@@ -27,16 +27,16 @@ class HttpDownloader {
    * Fetch text content from a URL with optional credentials.
    */
   static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const char* caPem = nullptr);
 
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const char* caPem = nullptr);
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", const char* caPem = nullptr);
 
   /**
    * Download a file to the SD card with optional credentials.
