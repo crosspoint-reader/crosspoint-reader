@@ -20,6 +20,13 @@
 // never needs the definition here.
 class Activity;
 
+// Forward declaration only, for SettingsExtensionCategory::icon below: a
+// pointer to an incomplete type keeps this header free of the assets library
+// (and of any include path the host tests would have to reproduce).
+namespace freeink {
+struct Icon;
+}
+
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
 enum class SettingAction {
@@ -230,6 +237,11 @@ struct SettingInfo {
 struct SettingsExtensionCategory {
   std::string label;  // pre-localized by the provider; shown as the tab title
   std::vector<SettingInfo> settings;
+  // Card artwork on the touch category landing screen (see
+  // SettingsCategoryGridLayout.h). Optional: nullptr draws the generic
+  // extra-category icon, so a provider that only wants rows supplies nothing.
+  // Ignored by the tab band, which is text-only.
+  const freeink::Icon* icon = nullptr;
 };
 
 // Index arithmetic for a tab band made of built-in categories followed by an

@@ -29,10 +29,19 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
+#include "components/icons/settingsCategoryIcons.h"
 #include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
 namespace fui = freeink::ui;
+namespace grid = SettingsCategoryGridLayout;
+
+// CrossPoint has no RTL layout direction today (only RTL *text*, handled by the
+// renderer), so the grid is always laid out left-to-right. The parameter stays
+// in the geometry because mirroring is a call-site decision, not a different
+// computation: SettingsCategoryGridLayout::mirroredColumn is self-inverse, so
+// flipping this one constant mirrors the cards and their hit zones together.
+static constexpr bool LANDING_RTL = false;
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -145,6 +154,17 @@ void SettingsActivity::rebuildSettingsLists() {
 void SettingsActivity::onEnter() {
   UiTabListActivity::onEnter();
 
+  // Touch hardware opens on the category landing screen instead of the tab
+  // band; X3/X4 (no touch controller) take neither branch and keep the band.
+  categoryLanding = mappedInput.hasTouch();
+  onCategoryLanding = categoryLanding;
+  landingSelected = 0;
+  landingFocusVisible = false;
+  if (categoryLanding) {
+    app.on(ACTION_CATEGORY_CARD, &SettingsActivity::categoryCardTrampoline, this);
+    app.on(ACTION_CATEGORY_BACK, &SettingsActivity::categoryBackTrampoline, this);
+  }
+
   // Reset selection to first category (ring position 0, the tab bar, comes
   // from the base's per-tab nav reset)
   selectedCategoryIndex = 0;
@@ -198,6 +218,156 @@ void SettingsActivity::rebuildRowItems() {
   }
 }
 
+// --- Category landing screen (touch boards) ---------------------------------
+// Everything below reads the same model the tab band reads: tabCount() and
+// tabLabel() (which already fold in the extension provider's categories) and
+// selectCategory(), which points currentSettings at one of the four built-in
+// lists or at an extension category's rows. No category, row, or action is
+// declared a second time for the touch presentation.
+
+fui::BitmapRef SettingsActivity::categoryIcon(const int index, const bool large) const {
+  // One row per built-in category, in categoryNames order, {24px, 32px}. The
+  // array is dimensioned by categoryCount, so a fifth built-in tab cannot be
+  // added without giving it a card.
+  static const freeink::Icon* const BUILT_IN[categoryCount][2] = {
+      {&icon_settings_display_24, &icon_settings_display_32},
+      {&icon_settings_reader_24, &icon_settings_reader_32},
+      {&icon_settings_controls_24, &icon_settings_controls_32},
+      {&icon_settings_system_24, &icon_settings_system_32},
+  };
+  const auto range = tabRange();
+  if (range.isExtension(index)) {
+    // A provider that supplies no icon of its own gets the generic card.
+    const freeink::Icon* provided = extraCategories[range.extraIndex(index)].icon;
+    return fui::bitmapFromIcon(provided ? *provided : (large ? icon_settings_extra_32 : icon_settings_extra_24));
+  }
+  if (index < 0 || index >= categoryCount) return {};
+  return fui::bitmapFromIcon(*BUILT_IN[index][large ? 1 : 0]);
+}
+
+grid::Metrics SettingsActivity::landingMetrics(const UiScreen& screen) const {
+  const auto& tokens = screen.theme();
+  grid::Metrics m;
+  // An even gap so the two neighbours' half-gutter hit zones tile exactly.
+  m.gap = tokens.spaceMd > 0 ? static_cast<int>(tokens.spaceMd) & ~1 : 8;
+  // Card sizing rides the theme's touch metrics, so it follows UI scale rather
+  // than any assumed panel size.
+  m.targetCellWidth = tokens.rowHeight * 5;
+  m.minCellWidth = tokens.minTouchSize * 2;
+  m.minCellHeight = tokens.minTouchSize;
+  // Without a ceiling, four categories on a tall portrait band become
+  // full-height slabs holding one small icon each.
+  m.maxCellHeight = tokens.rowHeight * 4;
+  m.maxColumns = 3;
+  return m;
+}
+
+void SettingsActivity::buildCategoryLanding(UiScreen& screen) {
+  const int count = tabCount();
+  if (count <= 0) return;
+  if (landingSelected >= count) landingSelected = count - 1;
+  if (landingSelected < 0) landingSelected = 0;
+
+  // screen.body() is what is left after setContentMargin() reserved the header
+  // and the button-hint bands, so the grid never has to know the panel size or
+  // the orientation -- it lays out inside whatever band it is handed.
+  const fui::Rect body = screen.body();
+  const grid::Plan layout =
+      grid::plan(grid::Rect{body.x, body.y, body.width, body.height}, count, landingMetrics(screen));
+  if (!layout.valid()) return;
+
+  const grid::Insets pad = grid::cellHitPadding(layout);
+  const bool large = layout.cellHeight >= 64;
+  const auto& tokens = screen.theme();
+  for (int i = 0; i < count; i++) {
+    const grid::Rect cell = grid::cellRect(layout, i, LANDING_RTL);
+    fui::ButtonProps card;
+    card.label = tabLabel(i);
+    card.icon = categoryIcon(i, large);
+    card.action = ACTION_CATEGORY_CARD;
+    card.value = static_cast<int16_t>(i);
+    card.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+    card.text = tokens.bodyText;
+    // The SDK's 1-bit card treatment: an outlined card that fills solid when
+    // focused, never a dithered gray that an e-ink panel smears.
+    card.styles = fui::tileGridStyles(tokens.listRowRadius);
+    card.radius = tokens.listRowRadius;
+    card.gap = tokens.spaceMd;
+    card.state = (landingFocusVisible && landingSelected == i) ? fui::StateFocused : fui::StateNormal;
+    // The layout owns the geometry. minTouchSize is off because its centered
+    // growth would overlap a neighbour; hitPadding applies exactly the
+    // half-gutter split the plan computed, which is what hitTest() models.
+    card.minTouchSize = 0;
+    card.hitPadding = fui::Insets{static_cast<int16_t>(pad.top), static_cast<int16_t>(pad.right),
+                                  static_cast<int16_t>(pad.bottom), static_cast<int16_t>(pad.left)};
+    fui::button(screen.frame(),
+                fui::Rect{static_cast<int16_t>(cell.x), static_cast<int16_t>(cell.y), static_cast<int16_t>(cell.width),
+                          static_cast<int16_t>(cell.height)},
+                card);
+  }
+}
+
+// The band the tab bar used, holding one row: a back chevron plus the category
+// name. It is also ring position 0's home, so the ring walk and its Confirm
+// keep the meaning they have on the tab band -- "leave the rows".
+void SettingsActivity::buildCategoryBackRow(UiScreen& screen) {
+  const auto& tokens = screen.theme();
+  fui::ButtonProps back;
+  back.label = tabLabel(selectedCategoryIndex);
+  back.icon = fui::bitmapFromIcon(icon_settings_back_24);
+  back.action = ACTION_CATEGORY_BACK;
+  back.inputMask = fui::InputTouch;
+  back.text = tokens.bodyText;
+  back.styles = tokens.button;
+  back.radius = tokens.listRowRadius;
+  back.state = ringPos() == 0 ? fui::StateFocused : fui::StateNormal;
+  fui::button(screen.frame(), screen.takeTop(tokens.rowHeight, tokens.spaceSm), back);
+}
+
+void SettingsActivity::openCategoryFromLanding(const int index) {
+  if (index < 0 || index >= tabCount()) return;
+  // The card repaints as a whole screen; a lingering flash would gray a row.
+  app.clearTapFlash();
+  onCategoryLanding = false;
+  selectCategory(index);
+  // Ring 0 is the back row: the drill-down opens with no row focused, the way
+  // a tapped tab does.
+  activeNav().selected = 0;
+  requestUpdate();
+}
+
+void SettingsActivity::returnToCategoryLanding() {
+  app.clearTapFlash();
+  onCategoryLanding = true;
+  landingSelected = selectedCategoryIndex;  // come back to the card just left
+  landingFocusVisible = false;
+  requestUpdate();
+}
+
+void SettingsActivity::moveLandingSelectionTo(const int index) {
+  {
+    // Same nav-vs-render race UiListActivity::moveSelectionTo guards: the
+    // render task reads this while building the cards.
+    RenderLock lock(*this);
+    landingSelected = index;
+    landingFocusVisible = true;
+  }
+  requestUpdate();
+}
+
+void SettingsActivity::categoryCardTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<SettingsActivity*>(user);
+  if (self->optionPopup.isActive()) return;
+  self->openCategoryFromLanding(event.value);
+}
+
+void SettingsActivity::categoryBackTrampoline(const fui::ActionEvent& event, void* user) {
+  (void)event;
+  auto* self = static_cast<SettingsActivity*>(user);
+  if (self->optionPopup.isActive()) return;
+  self->returnToCategoryLanding();
+}
+
 void SettingsActivity::onTabAction(const int index) {
   if (optionPopup.isActive()) return;
   selectCategory(index);
@@ -246,6 +416,12 @@ bool SettingsActivity::handleCustomInput() {
 }
 
 void SettingsActivity::stepTab(const int direction) {
+  if (categoryLanding) {
+    // No band to step through: the hold (and Confirm on ring 0, the back row)
+    // goes up a level to the landing screen instead.
+    returnToCategoryLanding();
+    return;
+  }
   // Ring position 0 stays on the tab bar; a row selection collapses to the
   // new category's first row (per-tab memory is deliberately not kept here).
   const bool onTabBar = ringPos() == 0;
@@ -256,7 +432,38 @@ void SettingsActivity::stepTab(const int direction) {
   requestUpdate();
 }
 
+void SettingsActivity::navigateButtons() {
+  if (!onCategoryLanding) {
+    UiTabListActivity::navigateButtons();
+    return;
+  }
+  // The landing screen is a grid, not a list: the buttons walk the cards in
+  // reading order and there is no viewport to pull along.
+  const int count = tabCount();
+  buttonNavigator.onNextRelease(
+      [this, count] { moveLandingSelectionTo(ButtonNavigator::nextIndex(landingSelected, count)); });
+  buttonNavigator.onPreviousRelease(
+      [this, count] { moveLandingSelectionTo(ButtonNavigator::previousIndex(landingSelected, count)); });
+  buttonNavigator.onNextContinuous(
+      [this, count] { moveLandingSelectionTo(ButtonNavigator::nextIndex(landingSelected, count)); });
+  buttonNavigator.onPreviousContinuous(
+      [this, count] { moveLandingSelectionTo(ButtonNavigator::previousIndex(landingSelected, count)); });
+}
+
 bool SettingsActivity::handleButtons() {
+  if (onCategoryLanding) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+      openCategoryFromLanding(landingSelected);
+      return true;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      SETTINGS.saveToFile();
+      onGoHome();
+      return true;
+    }
+    return false;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ringPos() == 0) {
       stepTab(1);
@@ -271,6 +478,10 @@ bool SettingsActivity::handleButtons() {
     if (ringPos() > 0) {
       activeNav().selected = 0;
       requestUpdate();
+    } else if (categoryLanding) {
+      // The rows are a drill-down here, so Back climbs to the landing screen;
+      // a second Back, from there, is the one that leaves Settings.
+      returnToCategoryLanding();
     } else {
       SETTINGS.saveToFile();
       onGoHome();
@@ -528,7 +739,17 @@ void SettingsActivity::buildScreen(UiScreen& screen) {
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
 
-  buildTabBar(screen);
+  if (onCategoryLanding) {
+    buildCategoryLanding(screen);
+    return;
+  }
+  // Touch boards reached the rows through a card, so the band that carried the
+  // tabs carries the way back instead; everyone else keeps the tab band.
+  if (categoryLanding) {
+    buildCategoryBackRow(screen);
+  } else {
+    buildTabBar(screen);
+  }
 
   // rowItems_ (label/actionValue) was built by rebuildRowItems() when the
   // category was last selected/rebuilt; only the live value text needs
@@ -578,12 +799,21 @@ void SettingsActivity::render(RenderLock&&) {
   const int ring = ringPos();
   // On the tab band Confirm runs stepTab(1), so the hint has to name the tab
   // that lands on: same wrap over the whole band (extension tabs included) and
-  // same label source as the band itself.
-  const auto confirmLabel = (ring == 0) ? tabLabel(ButtonNavigator::nextIndex(selectedCategoryIndex, tabCount()))
-                                        : (ring > 0 && ring <= settingsCount &&
-                                                   (*currentSettings)[ring - 1].nameId == StrId::STR_TIME_TO_SLEEP
-                                               ? tr(STR_SELECT)
-                                               : tr(STR_TOGGLE));
+  // same label source as the band itself. With the band replaced by the
+  // landing screen, Confirm opens the focused card (landing) or leaves the
+  // rows via the back row (ring 0).
+  const char* confirmLabel;
+  if (onCategoryLanding) {
+    confirmLabel = tr(STR_SELECT);
+  } else if (ring == 0) {
+    confirmLabel =
+        categoryLanding ? tr(STR_BACK) : tabLabel(ButtonNavigator::nextIndex(selectedCategoryIndex, tabCount()));
+  } else {
+    confirmLabel =
+        (ring > 0 && ring <= settingsCount && (*currentSettings)[ring - 1].nameId == StrId::STR_TIME_TO_SLEEP)
+            ? tr(STR_SELECT)
+            : tr(STR_TOGGLE);
+  }
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

@@ -1,0 +1,17 @@
+# Manifest for src/components/icons/settingsCategoryIcons.h — regenerate from the
+# repository root with:
+#   python3 freeink-sdk/libs/assets/Icons/tools/gen_icons.py \
+#     --manifest src/components/icons/settingsCategoryIcons.manifest \
+#     --svgdir freeink-sdk/libs/assets/Icons/lucide/icons \
+#     --sizes 24,32 --out src/components/icons/settingsCategoryIcons.h
+# then run ./bin/clang-format-fix on the output.
+#
+# Cards on the Settings category landing screen (touch boards), one per
+# built-in category, plus the generic card an extension-contributed category
+# falls back to when its provider supplies no icon of its own.
+settings-display = monitor
+settings-reader = book-open
+settings-controls = sliders-horizontal
+settings-system = cog
+settings-extra = layout-grid
+settings-back = chevron-left

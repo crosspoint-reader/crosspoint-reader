@@ -84,6 +84,12 @@ See [`FileBrowserActivity`](../../src/activities/home/FileBrowserActivity.cpp)'s
 - `TextStyle.maxLines` defaults to 1 and truncates with an ellipsis. Set `maxLines` explicitly on any dialog headline or message that can wrap.
 - Everything stays allocation-free in steady state. A local `std::vector` inside `buildScreen()` is **not** allocation-free even with `reserve()` first: it starts at zero capacity on every call, `reserve()` allocates, and the destructor frees that storage before the call returns — real allocator work and fragmentation risk on every repaint (cursor move, tap flash, ...), not just on data changes. Build `ListItem` rows into activity-owned storage instead, reserved once when the underlying data loads (`onEnter()`/a `load*()` — see the skeleton above and `FileBrowserActivity::rebuildRowItems()`), and reused unchanged by every `buildScreen()` call. Use a fixed-capacity array (e.g. `ListItem rows[MAX]`, as `OptionPopup` and `KOReaderSyncActivity`'s action rows do) when the count is small and bounded. Do not hold FUI `props` across renders — only the row storage they point into.
 
+### Grid screens: one pure geometry function, no second hit-test
+
+A screen laid out as a grid of cards (rather than a list) must keep its geometry in a header-only, renderer-free namespace and use it for *both* jobs: the draw rect handed to `fui::button()` **and** the hit model. Registering a rect that a separate routine re-derives from coordinates is how a card ends up drawn in one place and tapped in another.
+
+[`SettingsCategoryGridLayout.h`](../../src/activities/settings/SettingsCategoryGridLayout.h) is the reference: `plan()` sizes the grid inside whatever content band `screen.body()` returns (so it is orientation-agnostic and never reads a panel size), `cellRect()` is the only thing that positions a card, `cellHitPadding()` splits the gutter between neighbours into `ButtonProps::hitPadding`, and `hitTest()` is written in terms of those two rather than restating the arithmetic. Set `minTouchSize = 0` on such a card: the SDK's centered growth would overlap a neighbour, and the padding already covers the gutter. The whole namespace is host-testable — see `test/settings_category_grid/`.
+
 ### Component inventory
 
 All under `freeink-sdk/libs/ui/FreeInkUI/include/components/`:
