@@ -434,6 +434,8 @@ STR_VALIDATING_FIRMWARE: "جاري التحقق من البرنامج الثاب
 STR_INVALID_FIRMWARE: "ملف برنامج ثابت غير صالح"
 STR_FIRMWARE_TOO_LARGE: "البرنامج الثابت أكبر من القسم المخصص له"
 STR_FIRMWARE_TOO_SMALL: "ملف البرنامج الثابت صغير جدا"
+STR_FIRMWARE_WRONG_DEVICE: "البرنامج الثابت مخصص لجهاز آخر"
+STR_FIRMWARE_WRONG_CHIP: "البرنامج الثابت مخصص لشريحة أخرى"
 STR_FIRMWARE_UPDATE_PROMPT: "تحديث البرنامج الثابت؟"
 STR_FIRMWARE_FILE_OPEN_FAILED: "تعذر فتح الملف"
 STR_FIRMWARE_WRITE_FAILED: "فشلت كتابة البرنامج الثابت"
