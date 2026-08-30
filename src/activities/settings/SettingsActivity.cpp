@@ -57,8 +57,9 @@ void SettingsActivity::rebuildSettingsLists() {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       // The sunlight fading fix is a grayscale-waveform compensation that does
-      // not apply on the X4 Pro (plain OTP waveform, no custom grayscale LUT).
-      if (setting.valuePtr == &CrossPointSettings::fadingFix && BoardConfig::isX4Pro()) {
+      // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
+      if (setting.valuePtr == &CrossPointSettings::fadingFix &&
+          (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
         continue;
       }
       displaySettings.push_back(setting);
@@ -185,6 +186,13 @@ void SettingsActivity::activateIndex(const int index) {
   // a lingering tap flash would gray an unrelated element.
   app.clearTapFlash();
   toggleCurrentSetting();
+  // Tap-first: a tapped row is not a cursor position. Leaving it focused
+  // (inverted) after the tap meant the row stayed black once its sub-screen or
+  // popup closed, and Back then had to clear that focus before a second Back
+  // left Settings. Hand the focus back to the tab band; the viewport stays put.
+  if (mappedInput.hasTouch()) {
+    activeNav().selected = 0;
+  }
 }
 
 void SettingsActivity::onExit() {

@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <map>
-#include <string>
 
 class FontDecompressor;
 class SdCardFont;
@@ -56,7 +55,21 @@ class FontCacheManager {
 
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
-  std::string scanText_;
-  uint32_t scanStyleCounts_[4] = {};
-  int scanFontId_ = -1;
+
+  // A render pass touches at most a handful of font ids. Codepoints are packed
+  // with a compact font slot and resolved style, then grouped for prewarming.
+  static constexpr uint8_t MAX_SCAN_FONTS = 4;
+  static constexpr uint16_t MAX_SCAN_CODEPOINTS = 512;
+  static constexpr uint8_t SCAN_STYLE_SHIFT = 21;
+  static constexpr uint8_t SCAN_FONT_SHIFT = SCAN_STYLE_SHIFT + 2;
+  static constexpr uint32_t SCAN_CODEPOINT_MASK = (1U << SCAN_STYLE_SHIFT) - 1;
+  static constexpr uint8_t SCAN_GROUP_COUNT = MAX_SCAN_FONTS * 4;
+
+  uint8_t resolveScanStyle(int fontId, EpdFontFamily::Style style) const;
+  int scanFontIds_[MAX_SCAN_FONTS] = {};
+  uint32_t scanCodepoints_[MAX_SCAN_CODEPOINTS + 1] = {};
+  uint16_t scanGroupCounts_[SCAN_GROUP_COUNT] = {};
+  uint16_t scanCodepointCount_ = 0;
+  uint8_t scanFontCount_ = 0;
+  bool scanOverflowWarned_ = false;
 };

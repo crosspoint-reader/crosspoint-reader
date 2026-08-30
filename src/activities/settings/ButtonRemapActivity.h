@@ -1,17 +1,16 @@
 #pragma once
 
-#include <functional>
 #include <string>
 
 #include "activities/Activity.h"
+#include "components/UiAppHost.h"
 
-class ButtonRemapActivity final : public Activity {
+class ButtonRemapActivity final : public Activity, private UiAppHost {
  public:
   explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("ButtonRemap", renderer, mappedInput) {}
+      : Activity("ButtonRemap", renderer, mappedInput), UiAppHost(renderer) {}
 
   void onEnter() override;
-  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
 
@@ -25,7 +24,10 @@ class ButtonRemapActivity final : public Activity {
   // Error banner timing (used when reassigning duplicate buttons).
   unsigned long errorUntil = 0;
   std::string errorMessage;
+  freeink::ui::ListItem rowItems[4]{};
 
+  static void screenTrampoline(UiScreen& screen, void* user);
+  void buildScreen(UiScreen& screen);
   // Commit temporary mapping to settings.
   void applyTempMapping();
   // Returns false if a hardware button is already assigned to a different role.

@@ -6,7 +6,8 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 namespace {
 // UI steps correspond to logical roles in order: Back, Confirm, Left, Right.
@@ -28,10 +29,13 @@ void ButtonRemapActivity::onEnter() {
   tempMapping[3] = kUnassigned;
   errorMessage.clear();
   errorUntil = 0;
+  for (uint8_t i = 0; i < kRoleCount; ++i) {
+    rowItems[i].label = getRoleName(i);
+  }
+  resetUi();
+  app.setScreen(&ButtonRemapActivity::screenTrampoline, this);
   requestUpdate();
 }
-
-void ButtonRemapActivity::onExit() { Activity::onExit(); }
 
 void ButtonRemapActivity::loop() {
   // Clear any temporary warning after its timeout.
@@ -115,15 +119,7 @@ void ButtonRemapActivity::render(RenderLock&&) {
                     tr(STR_REMAP_PROMPT));
 
   int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  GUI.drawList(
-      renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,
-      [&](int index) { return getRoleName(static_cast<uint8_t>(index)); }, nullptr, nullptr,
-      [&](int index) {
-        uint8_t assignedButton = tempMapping[static_cast<uint8_t>(index)];
-        return (assignedButton == kUnassigned) ? tr(STR_UNASSIGNED) : getHardwareName(assignedButton);
-      },
-      true);
+  renderUi();
 
   // Temporary warning banner for duplicates.
   if (!errorMessage.empty()) {
@@ -147,6 +143,41 @@ void ButtonRemapActivity::render(RenderLock&&) {
                       labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
                       labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
   renderer.displayBuffer();
+}
+
+void ButtonRemapActivity::screenTrampoline(UiScreen& screen, void* user) {
+  static_cast<ButtonRemapActivity*>(user)->buildScreen(screen);
+}
+
+void ButtonRemapActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(safe.y + topOffset),
+                  static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width) + metrics.verticalSpacing),
+                  static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.verticalSpacing),
+                  static_cast<int16_t>(safe.x + metrics.verticalSpacing)});
+
+  for (uint8_t i = 0; i < kRoleCount; ++i) {
+    const uint8_t assignedButton = tempMapping[i];
+    rowItems[i].value = assignedButton == kUnassigned ? tr(STR_UNASSIGNED) : getHardwareName(assignedButton);
+  }
+
+  fui::ListProps props;
+  props.items = rowItems;
+  props.count = kRoleCount;
+  props.selectedIndex = currentStep;
+  props.inputMask = fui::InputNone;
+  props.scrollIndicator = false;
+  if (!mappedInput.hasTouch()) {
+    props.rowHeight = static_cast<int16_t>(metrics.listRowHeight);
+  }
+  // Label at the value's font size: both sides of the row read as one unit.
+  // maxLines=2 also marks the style caller-owned (see textStyleUnset).
+  props.labelText = screen.theme().smallText;
+  props.labelText.maxLines = 2;
+  screen.list(props);
 }
 
 void ButtonRemapActivity::applyTempMapping() {

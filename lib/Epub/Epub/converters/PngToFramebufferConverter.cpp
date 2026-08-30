@@ -44,6 +44,7 @@ struct PngContext {
 
   uint8_t* grayLineBuffer{nullptr};
   uint8_t* alphaLineBuffer{nullptr};
+  uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
 };
 
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
@@ -215,6 +216,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   PngContext* ctx = reinterpret_cast<PngContext*>(pDraw->pUser);
   if (!ctx || !ctx->config || !ctx->renderer || !ctx->grayLineBuffer) return 0;
 
+  ImageToFramebufferDecoder::yieldDuringDecode(ctx->lastYieldMs);
+
   int srcY = pDraw->y;
   int srcWidth = ctx->srcWidth;
   if (srcY < ctx->cropTop || srcY >= ctx->cropTop + ctx->visibleHeight) return 1;
@@ -332,10 +335,7 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
     return false;
   }
 
-  out.width = png->getWidth();
-  out.height = png->getHeight();
-
-  return true;
+  return validateAndStoreDimensions(png->getWidth(), png->getHeight(), out, "PNG");
 }
 
 bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath, GfxRenderer& renderer,
@@ -370,13 +370,12 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
 
-  if (!validateImageDimensions(png->getWidth(), png->getHeight(), "PNG")) {
-    return false;
-  }
+  ImageDimensions sourceDimensions;
+  if (!validateAndStoreDimensions(png->getWidth(), png->getHeight(), sourceDimensions, "PNG")) return false;
 
   // Calculate output dimensions
-  ctx.srcWidth = png->getWidth();
-  ctx.srcHeight = png->getHeight();
+  ctx.srcWidth = sourceDimensions.width;
+  ctx.srcHeight = sourceDimensions.height;
   ctx.cropLeft = static_cast<int>(ctx.srcWidth * std::clamp(config.sourceCropX, 0.0f, 0.99f) / 2.0f);
   ctx.cropTop = static_cast<int>(ctx.srcHeight * std::clamp(config.sourceCropY, 0.0f, 0.99f) / 2.0f);
   ctx.visibleWidth = ctx.srcWidth - 2 * ctx.cropLeft;
@@ -463,6 +462,7 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   }
 
   unsigned long decodeStart = millis();
+  ctx.lastYieldMs = decodeStart;
   rc = png->decode(&ctx, 0);
   unsigned long decodeTime = millis() - decodeStart;
 

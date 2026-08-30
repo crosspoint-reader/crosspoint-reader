@@ -8,6 +8,9 @@
 #include <WiFi.h>
 #include <esp_rom_crc.h>
 
+#include <algorithm>
+#include <cstring>
+
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -23,12 +26,43 @@ FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputMan
     : UiListActivity("FontDownload", renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
 
 void FontDownloadActivity::activateIndex(const int index) {
-  if (state_ != FAMILY_LIST) return;
-  nav.selected = index;
-  // Activation starts a download or opens the delete prompt; a lingering
-  // flash would gray an unrelated row.
-  app.clearTapFlash();
-  activateSelected();  // ends with requestUpdateAndWait itself
+  switch (state_) {
+    case GROUP_LIST:
+      app.clearTapFlash();
+      enterGroup(index);
+      requestUpdate();
+      return;
+    case FAMILY_LIST:
+      nav.selected = index;
+      // Activation starts a download or opens the delete prompt; a lingering
+      // flash would gray an unrelated row.
+      app.clearTapFlash();
+      activateSelected();  // ends with requestUpdateAndWait itself
+      return;
+    case WIFI_SELECTION:
+    case LOADING_MANIFEST:
+    case DOWNLOADING:
+    case COMPLETE:
+    case ERROR:
+      return;
+  }
+}
+
+fui::ListNav& FontDownloadActivity::activeNav() { return state_ == GROUP_LIST ? groupNav_ : nav; }
+
+void FontDownloadActivity::onBackButton() {
+  if (state_ != FAMILY_LIST || !hasGroupScreen()) {
+    finish();
+    return;
+  }
+
+  closeRouting();
+  {
+    RenderLock lock(*this);
+    state_ = GROUP_LIST;
+    rowsDirty_ = true;
+  }
+  requestUpdate();
 }
 
 // --- Lifecycle ---
@@ -70,11 +104,18 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
+  if (!hasGroupScreen()) buildFilteredIndices(0);
+
   {
     RenderLock lock(*this);
-    state_ = FAMILY_LIST;
     rowsDirty_ = true;  // families_ just loaded
-    nav.selected = 0;
+    if (hasGroupScreen()) {
+      groupNav_.reset();
+      state_ = GROUP_LIST;
+    } else {
+      nav.reset();
+      state_ = FAMILY_LIST;
+    }
   }
 }
 
@@ -122,10 +163,31 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
   baseUrl_ = doc["baseUrl"] | "";
   families_.clear();
+  scriptGroupLabels_.clear();
+  filteredIndices_.clear();
   fontInstaller_.refreshRegistry();
+
+  JsonArray groupsArr = doc["scriptGroups"].as<JsonArray>();
+  const size_t groupCount = std::min(groupsArr.size(), MAX_SCRIPT_GROUPS);
+  scriptGroupLabels_.reserve(groupCount);
+  if (groupsArr.size() > MAX_SCRIPT_GROUPS) {
+    LOG_ERR("FONT", "Manifest declares more than %zu script groups; extra groups ignored", MAX_SCRIPT_GROUPS);
+  }
+  for (size_t groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+    JsonObject groupObj = groupsArr[groupIndex].as<JsonObject>();
+    const char* tag = groupObj["tag"] | "";
+    const char* label = groupObj["label"] | "";
+    if (*tag == '\0' || *label == '\0') {
+      LOG_ERR("FONT", "Malformed script group at index %zu", groupIndex);
+      errorMessage_ = "Invalid font manifest";
+      return false;
+    }
+    scriptGroupLabels_.push_back(label);
+  }
 
   JsonArray familiesArr = doc["families"].as<JsonArray>();
   families_.reserve(familiesArr.size());
+  filteredIndices_.reserve(familiesArr.size());
 
   for (JsonObject fObj : familiesArr) {
     ManifestFamily family;
@@ -134,6 +196,19 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
     for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
       family.styles.push_back(s.as<std::string>());
+    }
+
+    for (JsonVariant script : fObj["scripts"].as<JsonArray>()) {
+      const char* familyTag = script.as<const char*>();
+      if (!familyTag) continue;
+      for (size_t groupIndex = 0; groupIndex < scriptGroupLabels_.size(); groupIndex++) {
+        JsonObject groupObj = groupsArr[groupIndex].as<JsonObject>();
+        const char* groupTag = groupObj["tag"] | "";
+        if (std::strcmp(familyTag, groupTag) == 0) {
+          family.scriptMask |= uint32_t{1} << groupIndex;
+          break;
+        }
+      }
     }
 
     family.totalSize = 0;
@@ -180,7 +255,11 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     families_.push_back(std::move(family));
   }
 
-  LOG_DBG("FONT", "Manifest loaded: %zu families", families_.size());
+  const size_t rowCapacity = std::max(families_.size() + 2, scriptGroupLabels_.size() + 1);
+  rowLabels_.reserve(rowCapacity);
+  rowItems_.reserve(rowCapacity);
+
+  LOG_DBG("FONT", "Manifest loaded: %zu families, %zu script groups", families_.size(), scriptGroupLabels_.size());
   return true;
 }
 
@@ -188,9 +267,9 @@ bool FontDownloadActivity::fetchAndParseManifest() {
 
 void FontDownloadActivity::downloadAll() {
   cancelRequested_ = false;
-  for (size_t i = 0; i < families_.size(); i++) {
-    if (families_[i].installed) continue;
-    downloadFamily(families_[i]);
+  for (const int familyIndex : filteredIndices_) {
+    if (families_[familyIndex].installed) continue;
+    downloadFamily(families_[familyIndex]);
     if (state_ == ERROR || cancelRequested_) return;
   }
 
@@ -202,9 +281,9 @@ void FontDownloadActivity::downloadAll() {
 
 void FontDownloadActivity::updateAll() {
   cancelRequested_ = false;
-  for (size_t i = 0; i < families_.size(); i++) {
-    if (!families_[i].hasUpdate) continue;
-    downloadFamily(families_[i]);
+  for (const int familyIndex : filteredIndices_) {
+    if (!families_[familyIndex].hasUpdate) continue;
+    downloadFamily(families_[familyIndex]);
     if (state_ == ERROR || cancelRequested_) return;
   }
 
@@ -215,15 +294,15 @@ void FontDownloadActivity::updateAll() {
 }
 
 bool FontDownloadActivity::showDownloadAllRow() const {
-  for (const auto& f : families_) {
-    if (!f.installed) return true;
+  for (const int familyIndex : filteredIndices_) {
+    if (!families_[familyIndex].installed) return true;
   }
   return false;
 }
 
 bool FontDownloadActivity::showUpdateAllRow() const {
-  for (const auto& f : families_) {
-    if (f.hasUpdate) return true;
+  for (const int familyIndex : filteredIndices_) {
+    if (families_[familyIndex].hasUpdate) return true;
   }
   return false;
 }
@@ -239,21 +318,80 @@ bool FontDownloadActivity::isUpdateAllRow(int index) const {
 }
 
 int FontDownloadActivity::listItemCount() const {
-  return families_.empty() ? 0 : static_cast<int>(families_.size()) + specialRowCount();
+  return filteredIndices_.empty() ? 0 : static_cast<int>(filteredIndices_.size()) + specialRowCount();
+}
+
+int FontDownloadActivity::listCount() const {
+  switch (state_) {
+    case GROUP_LIST:
+      return groupListItemCount();
+    case FAMILY_LIST:
+      return listItemCount();
+    case WIFI_SELECTION:
+    case LOADING_MANIFEST:
+    case DOWNLOADING:
+    case COMPLETE:
+    case ERROR:
+      return 0;
+  }
+  return 0;
+}
+
+int FontDownloadActivity::familyIndexFromList(const int listIndex) const {
+  const int filteredIndex = listIndex - specialRowCount();
+  if (filteredIndex < 0 || filteredIndex >= static_cast<int>(filteredIndices_.size())) return -1;
+  return filteredIndices_[filteredIndex];
+}
+
+int FontDownloadActivity::groupMemberCount(const int scriptGroupIndex) const {
+  if (scriptGroupIndex < 0 || scriptGroupIndex >= static_cast<int>(scriptGroupLabels_.size())) return 0;
+  const uint32_t groupBit = uint32_t{1} << scriptGroupIndex;
+  int count = 0;
+  for (const auto& family : families_) {
+    if (family.scriptMask & groupBit) count++;
+  }
+  return count;
+}
+
+void FontDownloadActivity::buildFilteredIndices(const int groupListIndex) {
+  filteredIndices_.clear();
+  filteredIndices_.reserve(families_.size());
+  if (groupListIndex <= 0) {
+    for (int familyIndex = 0; familyIndex < static_cast<int>(families_.size()); familyIndex++) {
+      filteredIndices_.push_back(familyIndex);
+    }
+    return;
+  }
+
+  const uint32_t groupBit = uint32_t{1} << (groupListIndex - 1);
+  for (int familyIndex = 0; familyIndex < static_cast<int>(families_.size()); familyIndex++) {
+    if (families_[familyIndex].scriptMask & groupBit) filteredIndices_.push_back(familyIndex);
+  }
+}
+
+void FontDownloadActivity::enterGroup(const int groupListIndex) {
+  closeRouting();
+  buildFilteredIndices(groupListIndex);
+  {
+    RenderLock lock(*this);
+    nav.reset();
+    state_ = FAMILY_LIST;
+    rowsDirty_ = true;
+  }
 }
 
 size_t FontDownloadActivity::totalDownloadSize() const {
   size_t total = 0;
-  for (const auto& f : families_) {
-    if (!f.installed) total += f.totalSize;
+  for (const int familyIndex : filteredIndices_) {
+    if (!families_[familyIndex].installed) total += families_[familyIndex].totalSize;
   }
   return total;
 }
 
 size_t FontDownloadActivity::totalUpdateSize() const {
   size_t total = 0;
-  for (const auto& f : families_) {
-    if (f.hasUpdate) total += f.totalSize;
+  for (const int familyIndex : filteredIndices_) {
+    if (families_[familyIndex].hasUpdate) total += families_[familyIndex].totalSize;
   }
   return total;
 }
@@ -423,7 +561,12 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
     return;
   }
 
-  auto& family = families_[familyIndexFromList(nav.selected)];
+  const int familyIndex = familyIndexFromList(nav.selected);
+  if (familyIndex < 0) {
+    requestUpdate();
+    return;
+  }
+  auto& family = families_[familyIndex];
 
   if (fontInstaller_.deleteFamily(family.name.c_str()) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
@@ -450,19 +593,19 @@ bool FontDownloadActivity::isSelectedFamilyDeletable() const {
 }
 
 void FontDownloadActivity::activateSelected() {
-  if (families_.empty()) return;
+  if (filteredIndices_.empty()) return;
   if (isDownloadAllRow(nav.selected)) {
     currentFileIndex_ = 0;
     currentFileTotal_ = 0;
-    for (const auto& f : families_) {
-      if (!f.installed) currentFileTotal_ += f.files.size();
+    for (const int familyIndex : filteredIndices_) {
+      if (!families_[familyIndex].installed) currentFileTotal_ += families_[familyIndex].files.size();
     }
     downloadAll();
   } else if (isUpdateAllRow(nav.selected)) {
     currentFileIndex_ = 0;
     currentFileTotal_ = 0;
-    for (const auto& f : families_) {
-      if (f.hasUpdate) currentFileTotal_ += f.files.size();
+    for (const int familyIndex : filteredIndices_) {
+      if (families_[familyIndex].hasUpdate) currentFileTotal_ += families_[familyIndex].files.size();
     }
     updateAll();
   } else {
@@ -490,7 +633,7 @@ void FontDownloadActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  if (families_.empty()) {
+  if (state_ == FAMILY_LIST && filteredIndices_.empty()) {
     screen.centeredText(tr(STR_NO_FONTS_AVAILABLE), screen.theme().bodyText);
     return;
   }
@@ -506,13 +649,46 @@ void FontDownloadActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the status and the row edge
-  syncListViewport(screen, props, /*hasSubtitle=*/true);
+  syncListViewport(screen, props, /*hasSubtitle=*/state_ == FAMILY_LIST);
   screen.list(props);
 }
 
-// Rebuilds rowLabels_/rowItems_ from families_. Only called when rowsDirty_ is
-// set (families_/state_ changed since the last build), never on every repaint.
 void FontDownloadActivity::rebuildRowItems() {
+  switch (state_) {
+    case GROUP_LIST:
+      rebuildGroupRowItems();
+      return;
+    case FAMILY_LIST:
+      rebuildFamilyRowItems();
+      return;
+    case WIFI_SELECTION:
+    case LOADING_MANIFEST:
+    case DOWNLOADING:
+    case COMPLETE:
+    case ERROR:
+      rowLabels_.clear();
+      rowItems_.clear();
+      return;
+  }
+}
+
+void FontDownloadActivity::rebuildGroupRowItems() {
+  const int listSize = groupListItemCount();
+  rowLabels_.assign(listSize, std::string());
+  rowItems_.clear();
+  rowItems_.reserve(listSize);
+  for (int rowIndex = 0; rowIndex < listSize; rowIndex++) {
+    fui::ListItem item;
+    item.label = rowIndex == 0 ? tr(STR_ALL_FONTS) : scriptGroupLabels_[rowIndex - 1].c_str();
+    const int memberCount = rowIndex == 0 ? static_cast<int>(families_.size()) : groupMemberCount(rowIndex - 1);
+    rowLabels_[rowIndex] = std::to_string(memberCount);
+    item.value = rowLabels_[rowIndex].c_str();
+    item.actionValue = static_cast<int16_t>(rowIndex);
+    rowItems_.push_back(item);
+  }
+}
+
+void FontDownloadActivity::rebuildFamilyRowItems() {
   const int listSize = listItemCount();
   rowLabels_.assign(listSize, std::string());
   rowItems_.clear();
@@ -546,9 +722,9 @@ void FontDownloadActivity::rebuildRowItems() {
 // --- Input handling ---
 
 bool FontDownloadActivity::handleCustomInput() {
-  if (state_ == FAMILY_LIST) {
+  if (state_ == GROUP_LIST || state_ == FAMILY_LIST) {
     // The base list protocol (Back/Confirm, touch routing, swipe scroll,
-    // button navigation) handles this state.
+    // button navigation) handles both list states.
     return false;
   }
 
@@ -628,7 +804,15 @@ void FontDownloadActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_BROWSER));
+  const char* headerSubtitle = nullptr;
+  if (state_ == FAMILY_LIST && hasGroupScreen()) {
+    const int scriptGroupIndex = groupNav_.selected - 1;
+    headerSubtitle = scriptGroupIndex >= 0 && scriptGroupIndex < static_cast<int>(scriptGroupLabels_.size())
+                         ? scriptGroupLabels_[scriptGroupIndex].c_str()
+                         : tr(STR_ALL_FONTS);
+  }
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_BROWSER),
+                 headerSubtitle);
 
   const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const auto contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
@@ -636,15 +820,20 @@ void FontDownloadActivity::render(RenderLock&&) {
 
   if (state_ == LOADING_MANIFEST) {
     renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
+  } else if (state_ == GROUP_LIST) {
+    renderUi();
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == FAMILY_LIST) {
     renderUi();
 
-    const char* confirmLabel = families_.empty()              ? ""
+    const bool hasVisibleFamilies = !filteredIndices_.empty();
+    const char* confirmLabel = !hasVisibleFamilies            ? ""
                                : isSelectedFamilyDeletable()  ? tr(STR_DELETE)
                                : isUpdateAllRow(nav.selected) ? tr(STR_UPDATE)
                                                               : tr(STR_DOWNLOAD);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, families_.empty() ? "" : tr(STR_DIR_UP),
-                                              families_.empty() ? "" : tr(STR_DIR_DOWN));
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, hasVisibleFamilies ? tr(STR_DIR_UP) : "",
+                                              hasVisibleFamilies ? tr(STR_DIR_DOWN) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state_ == DOWNLOADING) {
     const auto& family = families_[downloadingFamilyIndex_];

@@ -1,5 +1,7 @@
 #include "FirmwareBoardTag.h"
 
+#include <BoardConfig.h>
+
 #include <cstring>
 
 // The board name derives from the FREEINK_DEVICE_* build flags so every env
@@ -8,6 +10,8 @@
 // the release asset suffixes (firmware-<name>.bin; plain firmware.bin for x4).
 #if FREEINK_DEVICE_X4PRO
 #define CROSSPOINT_BOARD_NAME "x4pro"
+#elif FREEINK_DEVICE_X4CLASSIC
+#define CROSSPOINT_BOARD_NAME "x4c"
 #elif FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
 #define CROSSPOINT_BOARD_NAME "x4"
 #elif FREEINK_DEVICE_PAPERMONO

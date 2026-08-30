@@ -10,11 +10,26 @@
 
 class HalFile;
 
+enum class UsbDriveState : uint8_t {
+  Unsupported,
+  WaitingForHost,
+  Connected,
+  Ejected,
+  Disconnected,
+  IoError,
+};
+
 class HalStorage {
  public:
   HalStorage();
   bool begin();
   bool ready() const;
+  // USB Drive exclusively owns the SD card while active. Callers must stop
+  // all filesystem work before beginUsbDrive(), then reboot after endUsbDrive().
+  bool beginUsbDrive();
+  bool disconnectUsbDriveHost();
+  void endUsbDrive();
+  UsbDriveState usbDriveState() const;
   std::vector<String> listFiles(const char* path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on failure.
   String readFile(const char* path);
@@ -85,6 +100,7 @@ class HalFile : public Print {
   size_t position() const;
   int read(void* buf, size_t count);
   int read();  // read a single byte
+  size_t write(const uint8_t* buf, size_t count) override;
   size_t write(const void* buf, size_t count);
   size_t write(uint8_t b) override;
   bool rename(const char* newPath);

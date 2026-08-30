@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <string>
 
 #include "I18nKeys.h"
@@ -329,6 +330,10 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
+    case REFRESH_NEVER:
+      // Effectively disables the periodic full refresh; the page counter
+      // counts down from here and never reaches the threshold in practice.
+      return std::numeric_limits<int>::max();
   }
 }
 

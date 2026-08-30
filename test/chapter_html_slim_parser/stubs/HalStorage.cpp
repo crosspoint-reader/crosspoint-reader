@@ -47,6 +47,13 @@ bool HalFile::seek(size_t pos) {
   return true;
 }
 
+bool HalFile::seekCur(int64_t offset) {
+  if (!impl_ || !impl_->open) return false;
+  impl_->stream.seekg(static_cast<std::streamoff>(offset), std::ios::cur);
+  impl_->stream.seekp(static_cast<std::streamoff>(offset), std::ios::cur);
+  return true;
+}
+
 int HalFile::read(void* buf, size_t count) {
   if (!impl_ || !impl_->open) return 0;
   impl_->stream.read(static_cast<char*>(buf), static_cast<std::streamsize>(count));
@@ -77,6 +84,8 @@ bool HalStorage::exists(const char* path) {
 }
 
 bool HalStorage::remove(const char* path) { return std::remove(path) == 0; }
+
+bool HalStorage::rename(const char* oldPath, const char* newPath) { return std::rename(oldPath, newPath) == 0; }
 
 bool HalStorage::openFileForRead(const char* /*moduleName*/, const std::string& path, HalFile& file) {
   auto impl = std::make_unique<HalFile::Impl>();

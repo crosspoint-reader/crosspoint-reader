@@ -9,8 +9,8 @@
 #define NOTOSANS_14_FONT_ID (-1589315735)
 #define NOTOSANS_16_FONT_ID (1669013660)
 #define NOTOSANS_18_FONT_ID (37077304)
-#define UI_10_FONT_ID (22918846)
-#define UI_12_FONT_ID (1635686837)
+#define UI_10_FONT_ID (982653217)
+#define UI_12_FONT_ID (-22104740)
 #define SMALL_FONT_ID (674098198)
 
 // Font ID 0 is reserved as the "not found" sentinel.

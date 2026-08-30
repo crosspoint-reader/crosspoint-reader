@@ -33,6 +33,7 @@ class HalFile : public Print {
   int available() const;
   size_t position() const;
   bool seek(size_t pos);
+  bool seekCur(int64_t offset);
   int read(void* buf, size_t count);
   size_t write(const void* buf, size_t count);
   size_t write(uint8_t b) override;
@@ -54,6 +55,7 @@ class HalStorage {
 
   bool exists(const char* path);
   bool remove(const char* path);
+  bool rename(const char* oldPath, const char* newPath);
   bool openFileForRead(const char* moduleName, const std::string& path, HalFile& file);
   bool openFileForWrite(const char* moduleName, const std::string& path, HalFile& file);
 };
