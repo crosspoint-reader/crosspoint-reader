@@ -30,6 +30,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "util/ButtonNavigator.h"
 
 namespace fui = freeink::ui;
 
@@ -53,6 +54,11 @@ void SettingsActivity::rebuildSettingsLists() {
   } else {
     extraCategories.clear();
   }
+  // The base sized one nav slot per tab in onEnter(), before this first ran and
+  // before any later rebuild changed the provider's category count. activeNav()
+  // indexes that vector by tab, so it has to follow the range here; surviving
+  // tabs keep their selection and viewport.
+  tabRange().sizeTabState(tabNavs);
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -110,10 +116,10 @@ void SettingsActivity::rebuildSettingsLists() {
 
   // A shrunk provider result (e.g. after sign-out) can leave the previously
   // selected tab past the end; fall back to the last tab that still exists.
-  selectedCategoryIndex = std::min(selectedCategoryIndex, categoryCount + static_cast<int>(extraCategories.size()) - 1);
+  selectedCategoryIndex = tabRange().clamp(selectedCategoryIndex);
 
   // Update currentSettings pointer and count for the active category
-  if (selectedCategoryIndex < categoryCount) {
+  if (!tabRange().isExtension(selectedCategoryIndex)) {
     switch (selectedCategoryIndex) {
       case 0:
         currentSettings = &displaySettings;
@@ -129,7 +135,7 @@ void SettingsActivity::rebuildSettingsLists() {
         break;
     }
   } else {
-    currentSettings = &extraCategories[selectedCategoryIndex - categoryCount].settings;
+    currentSettings = &extraCategories[tabRange().extraIndex(selectedCategoryIndex)].settings;
   }
   settingsCount = static_cast<int>(currentSettings->size());
   rebuildRowItems();
@@ -151,7 +157,7 @@ void SettingsActivity::onEnter() {
 
 void SettingsActivity::selectCategory(const int categoryIndex) {
   selectedCategoryIndex = categoryIndex;
-  if (selectedCategoryIndex < categoryCount) {
+  if (!tabRange().isExtension(selectedCategoryIndex)) {
     switch (selectedCategoryIndex) {
       case 0:
         currentSettings = &displaySettings;
@@ -167,7 +173,7 @@ void SettingsActivity::selectCategory(const int categoryIndex) {
         break;
     }
   } else {
-    currentSettings = &extraCategories[selectedCategoryIndex - categoryCount].settings;
+    currentSettings = &extraCategories[tabRange().extraIndex(selectedCategoryIndex)].settings;
   }
   settingsCount = static_cast<int>(currentSettings->size());
   activeNav().top = 0;  // category switches start the list at the top (no per-tab memory here)
@@ -411,7 +417,12 @@ void SettingsActivity::toggleCurrentSetting() {
           // activity outlives the call.
           setting.actionHandler(*this);
         }
-        rebuildSettingsLists();
+        // A handler that opened a screen has changed nothing yet -- the child
+        // is only queued -- so the rebuild is chained onto its result handler
+        // and runs once the child returns. A handler that opened nothing gets
+        // the rebuild immediately. Either way the host stays ignorant of what
+        // the action actually did.
+        runAfterExtensionAction(resultHandler, [this] { rebuildSettingsLists(); });
         break;
     }
     return;  // Results will be handled in the result handler, so we can return early here
@@ -560,10 +571,14 @@ void SettingsActivity::render(RenderLock&&) {
   renderUi();
 
   const int ring = ringPos();
-  const auto confirmLabel =
-      (ring == 0) ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-                  : (ring > 0 && (*currentSettings)[ring - 1].nameId == StrId::STR_TIME_TO_SLEEP ? tr(STR_SELECT)
-                                                                                                 : tr(STR_TOGGLE));
+  // On the tab band Confirm runs stepTab(1), so the hint has to name the tab
+  // that lands on: same wrap over the whole band (extension tabs included) and
+  // same label source as the band itself.
+  const auto confirmLabel = (ring == 0) ? tabLabel(ButtonNavigator::nextIndex(selectedCategoryIndex, tabCount()))
+                                        : (ring > 0 && ring <= settingsCount &&
+                                                   (*currentSettings)[ring - 1].nameId == StrId::STR_TIME_TO_SLEEP
+                                               ? tr(STR_SELECT)
+                                               : tr(STR_TOGGLE));
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

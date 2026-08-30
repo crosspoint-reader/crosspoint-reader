@@ -10,6 +10,9 @@ enum class StrId {
   STR_NONE_OPT,
   STR_TEST_ROW_A,
   STR_TEST_ROW_B,
+  // Stands in for any built-in row the host special-cases by nameId
+  // (SettingsActivity does exactly this for STR_TIME_TO_SLEEP).
+  STR_TEST_HOST_SPECIAL_CASED,
 };
 
 class I18n {

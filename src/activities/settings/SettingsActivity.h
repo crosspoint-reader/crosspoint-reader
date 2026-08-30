@@ -43,13 +43,20 @@ class SettingsActivity final : public UiTabListActivity {
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
 
+  // The tab band as it stands right now: the built-in categories followed by
+  // however many the active provider returned on the last rebuild. Recomputed
+  // per call rather than cached, because the provider's count can change
+  // between rebuilds and a cached copy is what goes stale.
+  SettingsTabRange tabRange() const { return {categoryCount, static_cast<int>(extraCategories.size())}; }
+
   // --- UiTabListActivity contract ---
   int listCount() const override { return settingsCount; }
-  int tabCount() const override { return categoryCount + static_cast<int>(extraCategories.size()); }
+  int tabCount() const override { return tabRange().count(); }
   int activeTab() const override { return selectedCategoryIndex; }
   const char* tabLabel(int index) const override {
-    return index < categoryCount ? I18N.get(categoryNames[index])
-                                 : extraCategories[index - categoryCount].label.c_str();
+    const auto range = tabRange();
+    return range.isExtension(index) ? extraCategories[range.extraIndex(index)].label.c_str()
+                                    : I18N.get(categoryNames[index]);
   }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
