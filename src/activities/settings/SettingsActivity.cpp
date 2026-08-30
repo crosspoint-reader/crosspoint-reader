@@ -422,7 +422,11 @@ void SettingsActivity::toggleCurrentSetting() {
         // and runs once the child returns. A handler that opened nothing gets
         // the rebuild immediately. Either way the host stays ignorant of what
         // the action actually did.
-        runAfterExtensionAction(resultHandler, [this] { rebuildSettingsLists(); });
+        // Activity::resultHandler, not the local `resultHandler` lambda above:
+        // startActivityForResult() stores the handler on the activity itself, and
+        // ActivityManager clears it once consumed, so the member is null exactly
+        // when the action opened no screen.
+        runAfterExtensionAction(Activity::resultHandler, [this] { rebuildSettingsLists(); });
         break;
     }
     return;  // Results will be handled in the result handler, so we can return early here
