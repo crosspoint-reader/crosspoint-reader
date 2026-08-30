@@ -11,12 +11,11 @@ enum class MappedProgressPositionOrder : uint8_t {
 
 class MappedProgressPositionPolicy {
  public:
-  // Positions whose content offsets differ by at most this many visible
-  // characters are treated as the same spot. Resolving a remote XPath lands a
-  // few characters off the locally-tracked offset; without this margin that
-  // sub-page drift reads as "one page ahead" and triggers a spurious prompt.
-  static constexpr int64_t CONTENT_TOLERANCE_CHARS = 200;
-
+  // Positions on the same spine and within one page of each other are treated
+  // as the same reading spot. The resume path can roll back by one page at a
+  // page boundary (the same physical offset restores to the previous page), so
+  // a strict page compare would flag that rollback as "remote ahead" and show
+  // a spurious prompt.
   static MappedProgressPositionOrder compare(const int localSpineIndex, const int localPage, const int remoteSpineIndex,
                                              const int remotePage) {
     if (localSpineIndex < 0 || localPage < 0 || remoteSpineIndex < 0 || remotePage < 0) {
@@ -26,35 +25,10 @@ class MappedProgressPositionPolicy {
       return localSpineIndex > remoteSpineIndex ? MappedProgressPositionOrder::LOCAL_AHEAD
                                                 : MappedProgressPositionOrder::REMOTE_AHEAD;
     }
-    if (localPage != remotePage) {
-      return localPage > remotePage ? MappedProgressPositionOrder::LOCAL_AHEAD
-                                    : MappedProgressPositionOrder::REMOTE_AHEAD;
-    }
-    return MappedProgressPositionOrder::SAME_PAGE;
-  }
-
-  // Content-aware comparison. When both sides carry a visible-text offset (the
-  // authoritative position), compare those with CONTENT_TOLERANCE_CHARS of
-  // slack instead of layout-dependent page numbers; otherwise fall back to the
-  // strict page compare above.
-  static MappedProgressPositionOrder compareContent(const int localSpineIndex, const int localPage,
-                                                    const uint32_t localOffset, const bool localHasOffset,
-                                                    const int remoteSpineIndex, const int remotePage,
-                                                    const uint32_t remoteOffset, const bool remoteHasOffset) {
-    if (localHasOffset && remoteHasOffset) {
-      if (localSpineIndex != remoteSpineIndex) {
-        return localSpineIndex > remoteSpineIndex ? MappedProgressPositionOrder::LOCAL_AHEAD
-                                                  : MappedProgressPositionOrder::REMOTE_AHEAD;
-      }
-      const int64_t delta = static_cast<int64_t>(localOffset) - static_cast<int64_t>(remoteOffset);
-      if (delta > CONTENT_TOLERANCE_CHARS) {
-        return MappedProgressPositionOrder::LOCAL_AHEAD;
-      }
-      if (delta < -CONTENT_TOLERANCE_CHARS) {
-        return MappedProgressPositionOrder::REMOTE_AHEAD;
-      }
+    const int pageDelta = localPage - remotePage;
+    if (pageDelta >= -1 && pageDelta <= 1) {
       return MappedProgressPositionOrder::SAME_PAGE;
     }
-    return compare(localSpineIndex, localPage, remoteSpineIndex, remotePage);
+    return pageDelta > 0 ? MappedProgressPositionOrder::LOCAL_AHEAD : MappedProgressPositionOrder::REMOTE_AHEAD;
   }
 };

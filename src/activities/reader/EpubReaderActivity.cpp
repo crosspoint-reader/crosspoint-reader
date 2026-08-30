@@ -1027,10 +1027,8 @@ bool EpubReaderActivity::pollAutomaticProgressCheck() {
       remotePosition = mapRemoteProgress(automaticCheck_.remoteProgress());
     }
     const CrossPointPosition current = getCurrentPosition();
-    const auto order = MappedProgressPositionPolicy::compareContent(
-        current.spineIndex, current.pageNumber, current.visibleTextOffset, current.hasVisibleTextOffset,
-        remotePosition.spineIndex, remotePosition.pageNumber, remotePosition.visibleTextOffset,
-        remotePosition.hasVisibleTextOffset);
+    const auto order = MappedProgressPositionPolicy::compare(current.spineIndex, current.pageNumber,
+                                                             remotePosition.spineIndex, remotePosition.pageNumber);
     LOG_DBG("KOSync", "Automatic check decision: local=%d/%d remote=%d/%d order=%d", current.spineIndex,
             current.pageNumber, remotePosition.spineIndex, remotePosition.pageNumber, static_cast<int>(order));
     if (order == MappedProgressPositionOrder::REMOTE_AHEAD) {
