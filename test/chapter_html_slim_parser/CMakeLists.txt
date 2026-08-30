@@ -2,7 +2,6 @@ add_executable(ChapterHtmlSlimParserTest
   ChapterHtmlSlimParserTest.cpp
   GfxRendererTestDouble.cpp
   PageBlockTestDoubles.cpp
-  stubs/HalStorage.cpp
   ${REPO_ROOT}/lib/Epub/Epub/parsers/ChapterHtmlSlimParser.cpp
   ${REPO_ROOT}/lib/Epub/Epub/ParsedText.cpp
   ${REPO_ROOT}/lib/Epub/Epub/blocks/TextBlock.cpp
@@ -24,7 +23,7 @@ add_executable(ChapterHtmlSlimParserTest
 )
 
 target_include_directories(ChapterHtmlSlimParserTest PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/stubs  # HalStorage/HalDisplay/Logging/Arduino/Print/WString doubles - must win over any real lib/hal path
+  ${CMAKE_CURRENT_SOURCE_DIR}/stubs  # HAL/Arduino/Logging doubles - must win over any real lib/hal path
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${REPO_ROOT}/lib/Epub
   ${REPO_ROOT}/lib/EpdFont
