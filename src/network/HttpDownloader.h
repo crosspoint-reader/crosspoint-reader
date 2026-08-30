@@ -27,16 +27,29 @@ class HttpDownloader {
    * Fetch text content from a URL with optional credentials.
    */
   static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
-                       const std::string& password = "", const char* caPem = nullptr);
+                       const std::string& password = "");
 
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "", const char* caPem = nullptr);
+                       const std::string& password = "");
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "", const char* caPem = nullptr);
+                       const std::string& password = "");
+
+  /**
+   * Like fetchUrl(), but authenticates the peer instead of merely encrypting to
+   * it: the URL must be https, redirects may not downgrade to plaintext, and
+   * caPem supplies the trust anchors the chain is verified against.
+   *
+   * A separate entry point rather than an optional argument on fetchUrl(): a
+   * caller that means "verified" and passes no usable anchors must fail, not
+   * silently fetch unverified, and an omitted trailing default makes those two
+   * intentions indistinguishable at the call site.
+   */
+  static bool fetchUrlVerified(const std::string& url, const DataCallback& onData, const char* caPem,
+                               const std::string& username = "", const std::string& password = "");
 
   /**
    * Download a file to the SD card with optional credentials.

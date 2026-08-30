@@ -41,13 +41,13 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
              board_tag::boardName());
   }
   releaseParser.setFirmwareAssetName(assetName);
-  const bool ok = HttpDownloader::fetchUrl(
+  const bool ok = HttpDownloader::fetchUrlVerified(
       latestReleaseUrl,
       [&releaseParser](const uint8_t* data, size_t len) {
         releaseParser.feed(reinterpret_cast<const char*>(data), len);
         return true;
       },
-      "", "", ota_ca::kGithubOtaCaAnchors);
+      ota_ca::kGithubOtaCaAnchors);
   if (!ok) {
     LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
@@ -163,7 +163,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   // the inactive OTA slot, but esp_ota_abort() below means it never becomes
   // the boot target.
   board_tag::Scanner tagScanner;
-  const bool fetchOk = HttpDownloader::fetchUrl(
+  const bool fetchOk = HttpDownloader::fetchUrlVerified(
       otaUrl,
       [&](const uint8_t* data, size_t len) {
         if (hdrLen < sizeof(hdr)) {
@@ -204,7 +204,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
         }
         return true;
       },
-      "", "", ota_ca::kGithubOtaCaAnchors);
+      ota_ca::kGithubOtaCaAnchors);
 
   /* Return back to default power saving for WiFi in case of failing */
   esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
