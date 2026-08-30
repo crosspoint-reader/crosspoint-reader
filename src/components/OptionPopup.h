@@ -152,7 +152,7 @@ class OptionPopup {
     const fui::ThemeTokens& theme = refreshSharedUiThemeTokens(target);
     // Frame stores a const DeviceContext&; keep it in a local that outlives
     // the frame (a deviceContext() temporary would dangle).
-    const fui::DeviceContext device = target.deviceContext();
+    const fui::DeviceContext device = uiDeviceContext(renderer, target);
     // Routing happens on the loop task against the member buffer; the frame
     // itself never dispatches, so it gets an empty snapshot.
     const fui::InputSnapshot noInput{};

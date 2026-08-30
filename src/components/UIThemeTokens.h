@@ -1,5 +1,4 @@
 #pragma once
-#include <BoardConfig.h>
 #include <FreeInkUIGfxRenderer.h>
 
 #include "UITheme.h"
@@ -21,13 +20,8 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   tokens.listSelectionStyle = static_cast<fui::SelectionStyle>(metrics.listSelectionStyle);
   tokens.listScrollWidth = static_cast<int16_t>(metrics.listScrollWidth);
   tokens.listScrollSide = static_cast<uint8_t>(metrics.listScrollSide);
-  // The scroll track hugs the band edge; on boards whose panel sits recessed
-  // behind the bezel the edge columns are covered, so push the indicator
-  // inward past the covered side. Bezel truth is per-board data
-  // (BoardConfig::ViewableInsets); lists render in the portrait UI frame, so
-  // the panel-native portrait insets apply directly.
-  const auto& vi = BoardConfig::ACTIVE.viewableInsets;
-  tokens.listScrollInset = static_cast<int16_t>(metrics.listScrollSide == 1 ? vi.left : vi.right);
+  // The scroll track hugs the edge of DeviceContext's already-safe content area.
+  tokens.listScrollInset = 0;
   // Screen::header()/status() band height. Without this the SDK's
   // line-height-derived default applies and fui-drawn headers (OPDS) come out
   // a different height than every GUI.drawHeader band.

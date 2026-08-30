@@ -5,7 +5,7 @@
 namespace fui = freeink::ui;
 
 UiAppHost::UiAppHost(const GfxRenderer& renderer)
-    : uiTarget(makeUiTarget(renderer)), app(uiTarget, uiTarget.deviceContext()) {}
+    : uiTarget(makeUiTarget(renderer)), app(uiTarget, uiDeviceContext(renderer, uiTarget)), uiRenderer(renderer) {}
 
 void UiAppHost::resetUi() {
   uiReady = false;
@@ -13,9 +13,17 @@ void UiAppHost::resetUi() {
 }
 
 void UiAppHost::renderUi() {
-  app.setDevice(uiTarget.deviceContext());
+  app.setDevice(uiDeviceContext(uiRenderer, uiTarget));
   app.render();
   uiReady = true;
+}
+
+fui::Insets UiAppHost::contentMargins(const GfxRenderer& renderer, const Rect& bounds) {
+  const Rect content = UITheme::getContentArea(renderer);
+  return fui::Insets{static_cast<int16_t>(bounds.y - content.y),
+                     static_cast<int16_t>(content.x + content.width - bounds.x - bounds.width),
+                     static_cast<int16_t>(content.y + content.height - bounds.y - bounds.height),
+                     static_cast<int16_t>(bounds.x - content.x)};
 }
 
 UiAppHost::TouchRoute UiAppHost::routeTouch(const MappedInputManager& input, const bool withLongPress,

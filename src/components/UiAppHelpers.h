@@ -71,6 +71,16 @@ inline freeink::ui::GfxRendererTarget makeUiTarget(const GfxRenderer& renderer) 
   return target;
 }
 
+inline freeink::ui::DeviceContext uiDeviceContext(const GfxRenderer& renderer,
+                                                  const freeink::ui::GfxRendererTarget& target) {
+  auto device = target.deviceContext();
+  int top, right, bottom, left;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  device.safeArea = freeink::ui::Insets{static_cast<int16_t>(top), static_cast<int16_t>(right),
+                                        static_cast<int16_t>(bottom), static_cast<int16_t>(left)};
+  return device;
+}
+
 // Tap release with coords, plus the raw release the tap classifier never
 // reports (swipe end, drag-off) delivered off-target: nothing dispatches,
 // but routing drops its pressed-element state instead of ghosting it onto

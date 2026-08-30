@@ -278,6 +278,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   namespace fui = freeink::ui;
   const auto spec = uiScaleSpec();
   fui::GfxRendererFrame<1> ui(renderer, spec.smallFontId, spec.bodyFontId, spec.titleFontId);
+  ui.device = uiDeviceContext(renderer, ui.target);
   // Refresh the app-wide shared tokens instead of copying ~1.5KB of
   // ThemeTokens onto this render-path stack frame; the values derived here
   // are identical to what every FreeInkApp screen derives. Goes through the
@@ -290,8 +291,15 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // subtitles.
   ui.target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const fui::Rect band{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
-                       static_cast<int16_t>(rect.height)};
+  // Accept full-screen or already-safe bounds and apply the device safe area once.
+  const fui::Rect safe = ui.frame.safeRect();
+  const int left = std::max(rect.x, static_cast<int>(safe.x));
+  const int top = std::max(rect.y, static_cast<int>(safe.y));
+  const int right = std::min(rect.x + rect.width, static_cast<int>(safe.right()));
+  const int bottom = std::min(rect.y + rect.height, static_cast<int>(safe.bottom()));
+  const fui::Rect band{static_cast<int16_t>(left), static_cast<int16_t>(top),
+                       static_cast<int16_t>(std::max(0, right - left)),
+                       static_cast<int16_t>(std::max(0, bottom - top))};
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;

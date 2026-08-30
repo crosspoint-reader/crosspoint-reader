@@ -896,12 +896,11 @@ void WifiSelectionActivity::buildListScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content below the header + MAC sub-band, above the legend line.
-  screen.setContentMargin(fui::Insets{
-      static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
-                           metrics.verticalSpacing),
-      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.verticalSpacing * 2),
-      static_cast<int16_t>(safe.x)});
+  auto margins = contentMargins(renderer, safe);
+  margins.top +=
+      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing);
+  margins.bottom += static_cast<int16_t>(metrics.verticalSpacing * 2);
+  screen.setContentMargin(margins);
 
   if (state == WifiSelectionState::SAVE_PROMPT || state == WifiSelectionState::FORGET_PROMPT) {
     buildPromptDialog(screen);

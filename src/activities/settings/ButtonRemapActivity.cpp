@@ -153,11 +153,12 @@ void ButtonRemapActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(safe.y + topOffset),
-                  static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width) + metrics.verticalSpacing),
-                  static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.verticalSpacing),
-                  static_cast<int16_t>(safe.x + metrics.verticalSpacing)});
+  auto margins = contentMargins(renderer, safe);
+  margins.top += static_cast<int16_t>(topOffset);
+  margins.right += static_cast<int16_t>(metrics.verticalSpacing);
+  margins.bottom += static_cast<int16_t>(metrics.verticalSpacing);
+  margins.left += static_cast<int16_t>(metrics.verticalSpacing);
+  screen.setContentMargin(margins);
 
   for (uint8_t i = 0; i < kRoleCount; ++i) {
     const uint8_t assignedButton = tempMapping[i];

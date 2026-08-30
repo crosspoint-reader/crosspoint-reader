@@ -8,6 +8,7 @@
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
 
 namespace fui = freeink::ui;
 
@@ -93,7 +94,7 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
                        // SETTINGS.orientation stays unchanged so the reader's
                        // result handler still detects the change and reflows.
                        ReaderUtils::applyOrientation(renderer, pendingOrientation);
-                       app.setDevice(uiTarget.deviceContext());  // hit rects follow the new frame
+                       app.setDevice(uiDeviceContext(renderer, uiTarget));  // hit rects follow the new frame
                        requestUpdate(true);
                      });
     requestUpdate();
@@ -152,10 +153,9 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content: the safe area minus the header band GUI.drawHeader paints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
-                                      static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
-                                      static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)),
-                                      static_cast<int16_t>(safe.x)});
+  auto margins = contentMargins(renderer, safe);
+  margins.top += static_cast<int16_t>(metrics.topPadding + metrics.headerHeight);
+  screen.setContentMargin(margins);
 
   // Progress summary where the old sub-header band sat.
   std::string progressLine;

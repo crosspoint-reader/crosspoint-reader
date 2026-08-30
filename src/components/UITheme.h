@@ -20,6 +20,8 @@ class UITheme {
 
   const ThemeMetrics& getMetrics() const;
   const BaseTheme& getTheme() const { return *currentTheme; }
+  // Drawable bounds for legacy layouts that do not use FreeInkUI's device-safe frame.
+  static Rect getContentArea(const GfxRenderer& renderer);
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,

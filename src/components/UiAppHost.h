@@ -6,6 +6,7 @@
 
 class GfxRenderer;
 class MappedInputManager;
+struct Rect;
 
 // Owns the FreeInkApp hosting protocol every FUI screen shares, list-shaped or
 // not: the font-bound render target, the app, and the uiReady handshake that
@@ -43,6 +44,9 @@ class UiAppHost {
   // should paint; chrome before, hints after.
   void renderUi();
 
+  // Converts absolute firmware bounds to margins inside FreeInkUI's device-safe frame.
+  static freeink::ui::Insets contentMargins(const GfxRenderer& renderer, const Rect& bounds);
+
   // What loop-task routing saw this pass. `routed` is true when the gate was
   // open and the snapshot carried relevant touch input — the invalidated()
   // repaint check belongs behind it, so a pending render requested elsewhere
@@ -72,6 +76,7 @@ class UiAppHost {
   UiApp app;
 
  private:
+  const GfxRenderer& uiRenderer;
   // Opened by the render task after publication and closed on lifecycle/state
   // resets; read by the loop task (route*).
   std::atomic<bool> uiReady{false};

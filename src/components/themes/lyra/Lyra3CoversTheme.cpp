@@ -34,7 +34,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
            i < std::min(static_cast<int>(recentBooks.size()), Lyra3CoversMetrics::values.homeRecentBooksCount); i++) {
         std::string coverPath = recentBooks[i].coverBmpPath;
         bool hasCover = true;
-        int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
+        int tileX = rect.x + Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
         if (coverPath.empty()) {
           hasCover = false;
         } else {
@@ -84,7 +84,7 @@ void Lyra3CoversTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
          i++) {
       bool bookSelected = (selectorIndex == i);
 
-      int tileX = Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
+      int tileX = rect.x + Lyra3CoversMetrics::values.contentSidePadding + tileWidth * i;
 
       const int maxLineWidth = tileWidth - 2 * hPaddingInSelection;
 
