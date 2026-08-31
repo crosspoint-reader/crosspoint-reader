@@ -5,65 +5,36 @@
 
 #include <cstdint>
 
-// Which keyboard layouts the language key cycles through.
-//
-// The set is a bit mask in CrossPointSettings::keyboardLayouts. Zero means
-// unconfigured and resolves to the UI language's layout plus English, so a user
-// who never opens the setting gets a plain two-way toggle.
 namespace keyboard_layouts {
 
-// Every layout the SDK ships, in the order the language key cycles them and the
-// settings screen lists them. Rows are named after their language, so adding a
-// layout needs no new i18n key.
 struct LayoutInfo {
   freeink::ui::KeyboardLayoutId id;
-  // Position in the persisted mask -- a storage format: append only, never
-  // reuse or renumber. Not derived from the enum, whose order is the SDK's
-  // business: a layout inserted mid-enum would reinterpret every saved mask.
-  uint8_t bitIndex;
   Language language;
-  // Latin layouts can type a Wi-Fi passphrase or a URL; the others cannot, as
-  // the symbol layers hold only digits and punctuation. One always stays on.
-  bool latin;
 };
 
+// Table position is the persisted bit assignment. Keep existing rows in place
+// and append new layouts so SDK enum changes cannot reinterpret saved masks.
 inline constexpr LayoutInfo ALL[] = {
-    {freeink::ui::KeyboardLayoutId::QwertyEn, 0, Language::EN, true},
-    {freeink::ui::KeyboardLayoutId::AzertyFr, 1, Language::FR, true},
-    {freeink::ui::KeyboardLayoutId::QwertzDe, 2, Language::DE, true},
-    {freeink::ui::KeyboardLayoutId::SpanishEs, 3, Language::ES, true},
-    {freeink::ui::KeyboardLayoutId::CyrillicRu, 4, Language::RU, false},
-    {freeink::ui::KeyboardLayoutId::CyrillicUk, 5, Language::UK, false},
-    {freeink::ui::KeyboardLayoutId::CyrillicBe, 6, Language::BE, false},
-    {freeink::ui::KeyboardLayoutId::CyrillicKk, 7, Language::KK, false},
-    {freeink::ui::KeyboardLayoutId::HebrewIl, 8, Language::HE, false},
+    {freeink::ui::KeyboardLayoutId::QwertyEn, Language::EN},
+    {freeink::ui::KeyboardLayoutId::AzertyFr, Language::FR},
+    {freeink::ui::KeyboardLayoutId::QwertzDe, Language::DE},
+    {freeink::ui::KeyboardLayoutId::SpanishEs, Language::ES},
+    {freeink::ui::KeyboardLayoutId::CyrillicRu, Language::RU},
+    {freeink::ui::KeyboardLayoutId::CyrillicUk, Language::UK},
+    {freeink::ui::KeyboardLayoutId::CyrillicBe, Language::BE},
+    {freeink::ui::KeyboardLayoutId::CyrillicKk, Language::KK},
+    {freeink::ui::KeyboardLayoutId::HebrewIl, Language::HE},
 };
 inline constexpr uint8_t COUNT = sizeof(ALL) / sizeof(ALL[0]);
+static_assert(COUNT <= 16, "keyboard layout mask is uint16_t");
 
-// Mask bit of a table row. Named bitAt rather than bit: Arduino.h defines a
-// bit(b) macro that would swallow the call.
-inline constexpr uint16_t bitAt(const uint8_t i) { return static_cast<uint16_t>(1u << ALL[i].bitIndex); }
+inline constexpr uint16_t bitAt(const uint8_t i) { return static_cast<uint16_t>(1u << i); }
+// Symbol layers have no Latin letters, so credentials and URLs require at
+// least one of these layouts to remain enabled.
+inline constexpr uint16_t LATIN_BITS = bitAt(0) | bitAt(1) | bitAt(2) | bitAt(3);
 
-// Mask bit of a layout, or 0 for an id the table does not list -- keeping it
-// out of every test rather than aliasing onto another layout's bit.
-uint16_t layoutBit(freeink::ui::KeyboardLayoutId id);
-
-// The configured set, or the derived default when nothing is configured. Never
-// empty, and always holds a Latin layout.
 uint16_t enabled();
-
-// Whether `mask` holds a Latin layout.
-bool hasLatin(uint16_t mask);
-
-// How many layouts are enabled. One means the language key has nowhere to go.
-uint8_t enabledCount();
-
-// The layout a keyboard opens on: the UI language's, or an enabled one when the
-// user has switched that off.
-freeink::ui::KeyboardLayoutId startingLayout(Language language);
-
-// The next enabled layout after `current`, wrapping around. Returns `current`
-// when it is the only one enabled.
+freeink::ui::KeyboardLayoutId startingLayout();
 freeink::ui::KeyboardLayoutId next(freeink::ui::KeyboardLayoutId current);
 
 }  // namespace keyboard_layouts

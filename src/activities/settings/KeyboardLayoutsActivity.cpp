@@ -12,13 +12,10 @@ namespace fui = freeink::ui;
 
 void KeyboardLayoutsActivity::onEnter() {
   UiListActivity::onEnter();
-  // The effective set, not the raw setting: an unconfigured mask shows as the
-  // derived default rather than as nothing ticked.
   workingMask = keyboard_layouts::enabled();
   edited = false;
 
-  // Labels never change while the screen is open; only the ON/OFF value does.
-  for (int i = 0; i < totalItems; ++i) {
+  for (int i = 0; i < keyboard_layouts::COUNT; ++i) {
     rowItems[i].label = I18N.getLanguageName(keyboard_layouts::ALL[i].language);
     rowItems[i].actionValue = static_cast<int16_t>(i);
   }
@@ -37,10 +34,8 @@ const char* KeyboardLayoutsActivity::headerTitle() const { return tr(STR_KEYBOAR
 bool KeyboardLayoutsActivity::isLocked(const uint8_t i) const {
   const uint16_t bit = keyboard_layouts::bitAt(i);
   if (!(workingMask & bit)) return false;
-  // An empty set leaves the keyboard with no letters, a Latin-free one cannot
-  // type a Wi-Fi passphrase.
   const uint16_t without = static_cast<uint16_t>(workingMask & ~bit);
-  return without == 0 || !keyboard_layouts::hasLatin(without);
+  return (without & keyboard_layouts::LATIN_BITS) == 0;
 }
 
 void KeyboardLayoutsActivity::activateIndex(const int index) {
@@ -49,16 +44,13 @@ void KeyboardLayoutsActivity::activateIndex(const int index) {
   // gray an unrelated row on the repaint below.
   app.clearTapFlash();
 
-  // Locked rows stay on. Repaint anyway -- the tap moved nav.selected and
-  // clearTapFlash() suppressed the list's own repaint.
   if (isLocked(static_cast<uint8_t>(index))) {
     requestUpdate();
     return;
   }
 
   const uint16_t bit = keyboard_layouts::bitAt(static_cast<uint8_t>(index));
-  const bool wasOn = (workingMask & bit) != 0;
-  workingMask = static_cast<uint16_t>(wasOn ? (workingMask & ~bit) : (workingMask | bit));
+  workingMask = static_cast<uint16_t>(workingMask ^ bit);
   edited = true;
   requestUpdate();
 }
@@ -73,10 +65,7 @@ void KeyboardLayoutsActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  // tr() returns a pointer into the I18n table, so nothing is stored here.
-  // A locked row reads "Default" rather than "On": it does not respond to a
-  // tap, and an ON that refuses to turn off reads as a bug.
-  for (int i = 0; i < totalItems; ++i) {
+  for (int i = 0; i < keyboard_layouts::COUNT; ++i) {
     const uint8_t row = static_cast<uint8_t>(i);
     if (isLocked(row)) {
       rowItems[i].value = tr(STR_DEFAULT_VALUE);
@@ -87,7 +76,7 @@ void KeyboardLayoutsActivity::buildScreen(UiScreen& screen) {
 
   fui::ListProps props;
   props.items = rowItems;
-  props.count = static_cast<uint16_t>(totalItems);
+  props.count = keyboard_layouts::COUNT;
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   syncListViewport(screen, props);

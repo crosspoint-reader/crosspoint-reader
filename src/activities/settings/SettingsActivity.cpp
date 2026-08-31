@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -374,11 +375,11 @@ void SettingsActivity::toggleCurrentSetting() {
                                });
         break;
       case SettingAction::KeyboardLayouts:
-        // No-op handler: KeyboardLayoutsActivity owns the write and makes it only
-        // when the selection changed. The shared handler saves unconditionally,
-        // putting a settings write behind every visit.
-        startActivityForResult(std::make_unique<KeyboardLayoutsActivity>(renderer, mappedInput),
-                               [](const ActivityResult&) {});
+        if (auto activity = makeUniqueNoThrow<KeyboardLayoutsActivity>(renderer, mappedInput)) {
+          startActivityForResult(std::move(activity), nullptr);
+        } else {
+          LOG_ERR("SETTINGS", "OOM: KeyboardLayoutsActivity");
+        }
         break;
       case SettingAction::None:
         // Do nothing
