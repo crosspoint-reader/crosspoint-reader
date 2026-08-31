@@ -938,11 +938,6 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // layer and the URL snippet panel both label it "abc" in the static tables.
   props.modeLabel =
       (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
-  // Names the layout in use, the way a phone's space bar does — not the one the
-  // next press leads to. No tr(): these are language codes, not words. Set even
-  // when showLangKey is false, since the non-Latin tables carry the key anyway
-  // and label it "EN" until this overrides them.
-  props.langLabel = keyboard_layouts::codeFor(layoutId);
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;

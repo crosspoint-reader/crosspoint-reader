@@ -21,7 +21,6 @@ struct LayoutInfo {
   // reuse or renumber. Not derived from the enum, whose order is the SDK's
   // business: a layout inserted mid-enum would reinterpret every saved mask.
   uint8_t bitIndex;
-  const char* code;  // ISO 639-3, shown on the language key: "ENG", "RUS", ...
   Language language;
   // Latin layouts can type a Wi-Fi passphrase or a URL; the others cannot, as
   // the symbol layers hold only digits and punctuation. One always stays on.
@@ -29,15 +28,15 @@ struct LayoutInfo {
 };
 
 inline constexpr LayoutInfo ALL[] = {
-    {freeink::ui::KeyboardLayoutId::QwertyEn, 0, "ENG", Language::EN, true},
-    {freeink::ui::KeyboardLayoutId::AzertyFr, 1, "FRA", Language::FR, true},
-    {freeink::ui::KeyboardLayoutId::QwertzDe, 2, "DEU", Language::DE, true},
-    {freeink::ui::KeyboardLayoutId::SpanishEs, 3, "SPA", Language::ES, true},
-    {freeink::ui::KeyboardLayoutId::CyrillicRu, 4, "RUS", Language::RU, false},
-    {freeink::ui::KeyboardLayoutId::CyrillicUk, 5, "UKR", Language::UK, false},
-    {freeink::ui::KeyboardLayoutId::CyrillicBe, 6, "BEL", Language::BE, false},
-    {freeink::ui::KeyboardLayoutId::CyrillicKk, 7, "KAZ", Language::KK, false},
-    {freeink::ui::KeyboardLayoutId::HebrewIl, 8, "HEB", Language::HE, false},
+    {freeink::ui::KeyboardLayoutId::QwertyEn, 0, Language::EN, true},
+    {freeink::ui::KeyboardLayoutId::AzertyFr, 1, Language::FR, true},
+    {freeink::ui::KeyboardLayoutId::QwertzDe, 2, Language::DE, true},
+    {freeink::ui::KeyboardLayoutId::SpanishEs, 3, Language::ES, true},
+    {freeink::ui::KeyboardLayoutId::CyrillicRu, 4, Language::RU, false},
+    {freeink::ui::KeyboardLayoutId::CyrillicUk, 5, Language::UK, false},
+    {freeink::ui::KeyboardLayoutId::CyrillicBe, 6, Language::BE, false},
+    {freeink::ui::KeyboardLayoutId::CyrillicKk, 7, Language::KK, false},
+    {freeink::ui::KeyboardLayoutId::HebrewIl, 8, Language::HE, false},
 };
 inline constexpr uint8_t COUNT = sizeof(ALL) / sizeof(ALL[0]);
 
@@ -66,8 +65,5 @@ freeink::ui::KeyboardLayoutId startingLayout(Language language);
 // The next enabled layout after `current`, wrapping around. Returns `current`
 // when it is the only one enabled.
 freeink::ui::KeyboardLayoutId next(freeink::ui::KeyboardLayoutId current);
-
-// ISO 639-3 code for the language key's label.
-const char* codeFor(freeink::ui::KeyboardLayoutId id);
 
 }  // namespace keyboard_layouts
