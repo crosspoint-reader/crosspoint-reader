@@ -5,7 +5,6 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
-#include <esp_sntp.h>
 #include <esp_wifi.h>
 
 #include <algorithm>
@@ -46,31 +45,6 @@ const char* matchMethodName(const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? "filename" : "binary";
 }
 
-void syncTimeWithNTP() {
-  // Stop SNTP if already running (can't reconfigure while running)
-  if (esp_sntp_enabled()) {
-    esp_sntp_stop();
-  }
-
-  // Configure SNTP
-  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-  esp_sntp_setservername(0, "pool.ntp.org");
-  esp_sntp_init();
-
-  // Wait for time to sync (with timeout)
-  int retry = 0;
-  const int maxRetries = 50;  // 5 seconds max
-  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && retry < maxRetries) {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    retry++;
-  }
-
-  if (retry < maxRetries) {
-    LOG_DBG("KOSync", "NTP time synced");
-  } else {
-    LOG_DBG("KOSync", "NTP sync timeout, using fallback");
-  }
-}
 }  // namespace
 
 KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -150,22 +124,20 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 
   LOG_DBG("KOSync", "WiFi connected, starting sync");
 
+  // Keep the station fully awake for the short sync transaction. The web server
+  // does the same because ESP32 modem sleep can introduce multi-second network
+  // stalls that surface as HTTP timeouts. WiFi is torn down when this activity exits.
+  WiFi.setSleep(false);
+  LOG_DBG("KOSync", "WiFi sleep disabled for sync");
+
   {
     RenderLock lock(*this);
     state = SYNCING;
-    statusMessage = tr(STR_SYNCING_TIME);
-  }
-  requestUpdate(true);
-
-  // Sync time with NTP before making API requests
-  syncTimeWithNTP();
-
-  {
-    RenderLock lock(*this);
     statusMessage = tr(STR_CALC_HASH);
   }
   requestUpdate(true);
 
+  // KOSync requests from CrossPoint do not include a client timestamp.
   performSync();
 }
 
@@ -469,8 +441,8 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
   // Side padding is 0 here (like the other FreeInkApp screens): the action list
   // supplies its own theme side padding, and the raw comparison text is indented
   // to line up with the list rows below (see labelIndent).
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   if (state == SHOWING_RESULT) {

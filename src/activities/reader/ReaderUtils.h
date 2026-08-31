@@ -55,16 +55,16 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   const bool swapFront = input.isNavDirectionSwapped();
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
+  const auto pageButtonTriggered = [&](const MappedInputManager::Button button) {
+    if (usePress) return input.wasPressed(button);
+    return input.wasLongPressed(button, SKIP_HOLD_MS) || input.wasReleased(button);
+  };
   const bool prev =
-      tiltPrev ||
-      (usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) || input.wasPressed(prevButton))
-                : (input.wasReleased(MappedInputManager::Button::PageBack) || input.wasReleased(prevButton)));
+      tiltPrev || (pageButtonTriggered(MappedInputManager::Button::PageBack) || pageButtonTriggered(prevButton));
   const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                          input.wasReleased(MappedInputManager::Button::Power);
-  const bool next = tiltNext || (usePress ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn ||
-                                             input.wasPressed(nextButton))
-                                          : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
-                                             input.wasReleased(nextButton)));
+  const bool next = tiltNext || pageButtonTriggered(MappedInputManager::Button::PageForward) || powerTurn ||
+                    pageButtonTriggered(nextButton);
   return {prev, next, tiltPrev || tiltNext};
 }
 
@@ -122,12 +122,12 @@ inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInpu
 
 // Tap in the center third of the screen: the tap path into the reader menu on
 // every touch board. The page-turn tap zones are the outer horizontal thirds,
-// so the centered rectangle remains free in tap mode. The opt-out is only
-// surfaced on home-key boards (SettingsList), where the menu stays reachable
-// through the key's long-press function.
+// so the centered rectangle remains free in tap mode. The Off/Swipe Up
+// alternatives are only surfaced on home-key boards (SettingsList), where the
+// menu stays reachable through the key's long-press function.
 inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager& input) {
   if (!input.hasTouch()) return false;
-  if (!SETTINGS.tapForReaderMenu) return false;
+  if (SETTINGS.showReaderMenu != CrossPointSettings::READER_MENU_TAP) return false;
   int x = 0;
   int y = 0;
   if (!input.wasScreenTapped(x, y)) return false;
@@ -146,7 +146,14 @@ inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager
 // reachable via the Confirm button.
 inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input) {
   if (!SETTINGS.touchReaderControls) return false;
-  return (input.hasTouch() && input.wasMenuGesture()) || isTouchMenuTap(renderer, input);
+  if (!input.hasTouch()) return false;
+  if (input.wasMenuGesture()) return true;
+  // Bottom-edge up-swipe variant: only selectable on home-key boards, where
+  // Home is the capacitive key and the bottom edge is otherwise unused.
+  if (SETTINGS.showReaderMenu == CrossPointSettings::READER_MENU_SWIPE_UP && input.wasReaderMenuSwipeUp()) {
+    return true;
+  }
+  return isTouchMenuTap(renderer, input);
 }
 
 // One helper, blocking or deferred: the async form starts the refresh and
@@ -241,7 +248,9 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
     return false;
   }
 
-  if (!mappedInput.wasReleased(MappedInputManager::Button::Back)) return false;
+  const bool backTriggered = mappedInput.wasLongPressed(MappedInputManager::Button::Back, GO_BACK_OR_HOME_MS) ||
+                             mappedInput.wasReleased(MappedInputManager::Button::Back);
+  if (!backTriggered) return false;
 
   const bool longPress = mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS;
   if (longPress != SETTINGS.backShortToFileBrowser) {

@@ -196,7 +196,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   // directly) and above the caption band + button hints.
   const int tabTop = afterHeader + previewHeight;
   const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
-  screen.setContentMargin(
+  screen.setContentMarginFromScreen(
       fui::Insets{static_cast<int16_t>(tabTop), 0, static_cast<int16_t>(bottomReserved + captionHeight), 0});
 
   buildTabBar(screen);

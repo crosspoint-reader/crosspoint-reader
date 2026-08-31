@@ -26,7 +26,7 @@ import sys
 import zlib
 from pathlib import Path
 
-# Import canonical version constants from the shared file in lib/EpdFont/scripts/
+# Import canonical version constants from the shared file in lib/EpdFont/scripts/.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib" / "EpdFont" / "scripts"))
 from cpfont_version import CPFONT_VERSION, FONTS_MANIFEST_VERSION
 
@@ -44,23 +44,56 @@ CPFONT_MAGIC = b"CPFONT\x00\x00"
 
 STYLE_NAMES = {0: "regular", 1: "bold", 2: "italic", 3: "bolditalic"}
 
-# Family descriptions can be loaded from the sd-fonts.yaml config
-# (via --descriptions-from) or fall back to the family name.
+# Family descriptions and browser groups can be loaded from sd-fonts.yaml via
+# --descriptions-from. Missing metadata keeps the existing flat-list fallback.
 FAMILY_DESCRIPTIONS: dict[str, str] = {}
+FAMILY_SCRIPTS: dict[str, list[str]] = {}
+SCRIPT_GROUPS: list[tuple[str, str]] = []
 
 
-def load_descriptions_from_yaml(yaml_path: Path) -> dict[str, str]:
-    """Load family descriptions from sd-fonts.yaml config."""
+def load_catalog_from_yaml(
+    yaml_path: Path,
+) -> tuple[dict[str, str], dict[str, list[str]], list[tuple[str, str]]]:
+    """Load and validate download-catalog metadata from sd-fonts.yaml."""
     try:
         import yaml
     except ImportError:
-        print("WARNING: pyyaml not installed, cannot load descriptions from YAML", file=sys.stderr)
-        return {}
+        print("WARNING: pyyaml not installed, cannot load family metadata from YAML", file=sys.stderr)
+        return {}, {}, []
 
     with open(yaml_path) as f:
-        config = yaml.safe_load(f)
+        config = yaml.safe_load(f) or {}
 
-    return {f["name"]: f["description"] for f in config.get("families", []) if "description" in f}
+    groups = []
+    known_tags = set()
+    for group in config.get("scriptGroups", []):
+        tag = group.get("tag")
+        label = group.get("label")
+        if not isinstance(tag, str) or not tag or not isinstance(label, str) or not label:
+            raise ValueError("sd-fonts.yaml: scriptGroups entries require non-empty tag and label strings")
+        if tag in known_tags:
+            raise ValueError(f"sd-fonts.yaml: duplicate script group tag '{tag}'")
+        known_tags.add(tag)
+        groups.append((tag, label))
+
+    families = config.get("families", [])
+    descriptions = {f["name"]: f["description"] for f in families if "description" in f}
+    family_scripts = {}
+    for family in families:
+        scripts = family.get("scripts", [])
+        if not isinstance(scripts, list) or not all(isinstance(tag, str) for tag in scripts):
+            raise ValueError(f"sd-fonts.yaml: family '{family['name']}' scripts must be a list of tags")
+        if len(scripts) != len(set(scripts)):
+            raise ValueError(f"sd-fonts.yaml: family '{family['name']}' has duplicate script tags")
+        unknown_tags = set(scripts) - known_tags
+        if unknown_tags:
+            raise ValueError(
+                f"sd-fonts.yaml: family '{family['name']}' references unknown script groups: "
+                f"{', '.join(sorted(unknown_tags))}"
+            )
+        family_scripts[family["name"]] = scripts
+
+    return descriptions, family_scripts, groups
 
 
 def read_cpfont_styles(filepath: Path) -> list[str]:
@@ -152,6 +185,7 @@ def build_manifest(
 ) -> dict:
     """Build the manifest dict from discovered font families."""
     manifest_families = []
+    used_script_tags: set[str] = set()
 
     for family_name in sorted(families.keys()):
         files = families[family_name]
@@ -165,10 +199,13 @@ def build_manifest(
         if description is None:
             print(
                 f"  WARNING: no description for family '{family_name}', "
-                f"consider adding one to FAMILY_DESCRIPTIONS in {__file__}",
+                f"consider adding one to sd-fonts.yaml (--descriptions-from)",
                 file=sys.stderr,
             )
             description = family_name
+
+        scripts = FAMILY_SCRIPTS.get(family_name, [])
+        used_script_tags.update(scripts)
 
         file_entries = []
         for filepath in sorted(files, key=lambda p: p.name):
@@ -185,13 +222,24 @@ def build_manifest(
                 "name": family_name,
                 "description": description,
                 "styles": styles,
+                "scripts": scripts,
                 "files": file_entries,
             }
         )
 
+    # Top-level script-group display metadata (tag + English label), emitted in
+    # catalog order and limited to groups actually used by ≥1 family. The device
+    # is fully data-driven from this — it holds no hardcoded script list.
+    script_groups = [
+        {"tag": tag, "label": label}
+        for tag, label in SCRIPT_GROUPS
+        if tag in used_script_tags
+    ]
+
     return {
         "version": FONTS_MANIFEST_VERSION,
         "baseUrl": base_url,
+        "scriptGroups": script_groups,
         "families": manifest_families,
     }
 
@@ -232,13 +280,16 @@ def main():
     if not base_url.endswith("/"):
         base_url += "/"
 
-    # Load descriptions from YAML config if provided
-    global FAMILY_DESCRIPTIONS
+    # Load catalog metadata from YAML config if provided
+    global FAMILY_DESCRIPTIONS, FAMILY_SCRIPTS, SCRIPT_GROUPS
     if args.descriptions_from:
         desc_path = Path(args.descriptions_from)
         if desc_path.exists():
-            FAMILY_DESCRIPTIONS = load_descriptions_from_yaml(desc_path)
-            print(f"Loaded {len(FAMILY_DESCRIPTIONS)} descriptions from {desc_path}")
+            FAMILY_DESCRIPTIONS, FAMILY_SCRIPTS, SCRIPT_GROUPS = load_catalog_from_yaml(desc_path)
+            print(
+                f"Loaded {len(FAMILY_DESCRIPTIONS)} descriptions, "
+                f"{len(FAMILY_SCRIPTS)} script memberships from {desc_path}"
+            )
         else:
             print(f"WARNING: {desc_path} not found, using family names as descriptions", file=sys.stderr)
 

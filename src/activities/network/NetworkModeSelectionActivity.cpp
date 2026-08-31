@@ -11,11 +11,29 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr StrId menuItems[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS, StrId::STR_CREATE_HOTSPOT};
+    StrId::STR_JOIN_NETWORK,
+    StrId::STR_CALIBRE_WIRELESS,
+    StrId::STR_CREATE_HOTSPOT,
+#if FREEINK_CAP_USB_MSC
+    StrId::STR_USB_DRIVE,
+#endif
+};
 constexpr StrId menuDescs[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
-    StrId::STR_JOIN_DESC, StrId::STR_CALIBRE_DESC, StrId::STR_HOTSPOT_DESC};
-constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {UIIcon::Wifi, UIIcon::Library,
-                                                                             UIIcon::Hotspot};
+    StrId::STR_JOIN_DESC,
+    StrId::STR_CALIBRE_DESC,
+    StrId::STR_HOTSPOT_DESC,
+#if FREEINK_CAP_USB_MSC
+    StrId::STR_USB_DRIVE_DESC,
+#endif
+};
+constexpr UIIcon menuIcons[NetworkModeSelectionActivity::MENU_ITEM_COUNT] = {
+    UIIcon::Wifi,
+    UIIcon::Library,
+    UIIcon::Hotspot,
+#if FREEINK_CAP_USB_MSC
+    UIIcon::Usb,
+#endif
+};
 }  // namespace
 
 NetworkModeSelectionActivity::NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -41,20 +59,14 @@ void NetworkModeSelectionActivity::activateIndex(const int index) {
   app.clearTapFlash();
   nav.selected = index;
 
-  NetworkMode mode = NetworkMode::JOIN_NETWORK;
-  if (index == 1) {
-    mode = NetworkMode::CONNECT_CALIBRE;
-  } else if (index == 2) {
-    mode = NetworkMode::CREATE_HOTSPOT;
-  }
-  onModeSelected(mode);
+  onModeSelected(static_cast<NetworkMode>(index));
 }
 
 void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   // rowItems_ was built once in the constructor and is reused here on every
@@ -64,6 +76,8 @@ void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(MENU_ITEM_COUNT);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
+  props.subtitleText = screen.theme().smallText;
+  props.subtitleText.maxLines = 2;
   syncListViewport(screen, props, /*hasSubtitle=*/true);
   screen.list(props);
 }

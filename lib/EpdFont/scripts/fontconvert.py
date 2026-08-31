@@ -19,9 +19,12 @@ parser.add_argument("name", action="store", help="name of the font.")
 parser.add_argument("size", type=int, help="font size to use.")
 parser.add_argument("fontstack", action="store", nargs='+', help="list of font files, ordered by descending priority.")
 parser.add_argument("--2bit", dest="is2Bit", action="store_true", help="generate 2-bit greyscale bitmap instead of 1-bit black and white.")
+parser.add_argument("--mono", dest="mono", action="store_true", help="For 1-bit fonts, rasterise with FreeType's native monochrome renderer (hinted, drop-out controlled) instead of antialiased-greyscale then threshold. Crisper stems on well-hinted faces (e.g. Ubuntu); avoid on thin faces whose sub-pixel stems would drop out. Ignored with --2bit.")
 parser.add_argument("--additional-intervals", dest="additional_intervals", action="append", help="Additional code point intervals to export as min,max. This argument can be repeated.")
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
+parser.add_argument("--zopfli", dest="zopfli", action="store_true", help="Use Zopfli for the DEFLATE backend instead of zlib. Produces standard raw-DEFLATE streams (decoded unchanged by the on-device uzlib inflater), typically a few percent smaller than zlib -9, at the cost of much slower compression. Requires --compress and the 'zopfli' package.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
+parser.add_argument("--autohint-font", dest="autohint_fonts", action="append", default=[], metavar="PATH", help="Force the FreeType auto-hinter on one face of the fontstack, named by its path. Repeatable. For stacks that mix a manually hinted face with unhinted ones, where --force-autohint would discard the hints the former does have.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
 args = parser.parse_args()
 
@@ -34,9 +37,26 @@ font_stack = [freetype.Face(f) for f in args.fontstack]
 is2Bit = args.is2Bit
 size = args.size
 font_name = args.name
-load_flags = freetype.FT_LOAD_RENDER
+# --mono only affects 1-bit fonts; it is meaningless for 2-bit greyscale.
+useMono = args.mono and not is2Bit
+base_load_flags = freetype.FT_LOAD_RENDER
+if useMono:
+    # Rasterise with FreeType's native monochrome renderer (hinted, drop-out
+    # controlled) instead of rendering antialiased grey and thresholding.
+    # Produces crisper, evenly-weighted stems at small sizes on well-hinted
+    # faces. Still 1 bit/pixel, so glyph metrics and layout are unchanged.
+    base_load_flags |= freetype.FT_LOAD_TARGET_MONO
 if args.force_autohint:
-    load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+    base_load_flags |= freetype.FT_LOAD_FORCE_AUTOHINT
+
+# Hinting is a property of each face, so the flags are per face rather than per
+# run: a stack can pair a manually hinted face with unhinted ones, and forcing
+# the auto-hinter on the former would discard the hints it does have.
+load_flags = [base_load_flags] * len(font_stack)
+for autohint_font in args.autohint_fonts:
+    if autohint_font not in args.fontstack:
+        sys.exit(f"--autohint-font {autohint_font} is not in the fontstack")
+    load_flags[args.fontstack.index(autohint_font)] |= freetype.FT_LOAD_FORCE_AUTOHINT
 
 # inclusive unicode code point intervals
 # must not overlap and be in ascending order
@@ -172,6 +192,30 @@ def fp4_from_design_units(du, scale):
     raw = round(du * scale * 16)
     return max(-128, min(127, raw))
 
+def deflate_raw(data):
+    """Raw-DEFLATE compress `data` (no zlib/gzip wrapper), decodable on-device by uzlib via
+    inflate(wbits=-15). Uses Zopfli when --zopfli is set, else zlib -9.
+
+    Zopfli is a drop-in stronger DEFLATE encoder: the output is an ordinary DEFLATE stream, so
+    nothing on the device changes -- the same inflater decodes it at the same speed. It is only
+    much slower to compress, which is free here because this runs at font-generation time.
+
+    Zopfli's Python binding emits zlib-wrapped output, so strip the 2-byte header and 4-byte
+    adler32 trailer to recover the raw block. The round-trip check guards that wrapper format --
+    raised rather than asserted, because `python -O` strips asserts and this one decides whether
+    the font data we emit is decodable at all.
+    """
+    if args.zopfli:
+        import zopfli.zlib
+        wrapped = zopfli.zlib.compress(bytes(data))
+        raw = wrapped[2:-4]
+        if zlib.decompress(raw, -15) != bytes(data):
+            raise RuntimeError("zopfli raw-DEFLATE round-trip failed; refusing to emit undecodable font data")
+        return raw
+    compressor = zlib.compressobj(level=9, wbits=-15)
+    return compressor.compress(bytes(data)) + compressor.flush()
+
+
 def chunks(l, n):
     for i in range(0, len(l), n):
         yield l[i:i + n]
@@ -239,7 +283,7 @@ def load_glyph(code_point):
         if glyph_index is None:
             glyph_index = face.get_char_index(code_point)
         if glyph_index > 0:
-            face.load_glyph(glyph_index, load_flags)
+            face.load_glyph(glyph_index, load_flags[face_index])
             return face
         face_index += 1
     return None
@@ -275,68 +319,19 @@ for i_start, i_end in intervals:
         face = load_glyph(code_point)
         bitmap = face.glyph.bitmap
 
-        # Build out 4-bit greyscale bitmap
-        pixels4g = []
-        px = 0
-        for i, v in enumerate(bitmap.buffer):
-            y = i / bitmap.width
-            x = i % bitmap.width
-            if x % 2 == 0:
-                px = (v >> 4)
-            else:
-                px = px | (v & 0xF0)
-                pixels4g.append(px);
-                px = 0
-            # eol
-            if x == bitmap.width - 1 and bitmap.width % 2 > 0:
-                pixels4g.append(px)
-                px = 0
-
-        if is2Bit:
-            # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
-            # Downsample to 2-bit bitmap
-            pixels2b = []
-            px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
-            for y in range(bitmap.rows):
-                for x in range(bitmap.width):
-                    px = px << 2
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    bm = (bm >> ((x % 2) * 4)) & 0xF
-
-                    if bm >= 12:
-                        px += 3
-                    elif bm >= 8:
-                        px += 2
-                    elif bm >= 4:
-                        px += 1
-
-                    if (y * bitmap.width + x) % 4 == 3:
-                        pixels2b.append(px)
-                        px = 0
-            if (bitmap.width * bitmap.rows) % 4 != 0:
-                px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
-                pixels2b.append(px)
-
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixels2b[pixelPosition // 4]
-            #         bit_index = (3 - (pixelPosition % 4)) * 2
-            #         line += '#' if ((byte >> bit_index) & 3) > 0 else '.'
-            #     print(line)
-            # print('')
-        else:
-            # Downsample to 1-bit bitmap - treat any 2+ as black
+        if useMono:
+            # 1-bit + --mono: FreeType already rasterised this glyph in monochrome
+            # (FT_LOAD_TARGET_MONO), so every source pixel is a single bit in a
+            # row-padded, MSB-first buffer. Repack it into the firmware's
+            # continuous (non-row-padded) 1-bit bitstream.
             pixelsbw = []
             px = 0
-            pitch = (bitmap.width // 2) + (bitmap.width % 2)
+            src_pitch = abs(bitmap.pitch)
             for y in range(bitmap.rows):
                 for x in range(bitmap.width):
-                    px = px << 1
-                    bm = pixels4g[y * pitch + (x // 2)]
-                    px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+                    src_byte = bitmap.buffer[y * src_pitch + (x >> 3)]
+                    bit = (src_byte >> (7 - (x & 7))) & 1
+                    px = (px << 1) | bit
 
                     if (y * bitmap.width + x) % 8 == 7:
                         pixelsbw.append(px)
@@ -344,16 +339,67 @@ for i_start, i_end in intervals:
             if (bitmap.width * bitmap.rows) % 8 != 0:
                 px = px << (8 - (bitmap.width * bitmap.rows) % 8)
                 pixelsbw.append(px)
+        else:
+            # Build out 4-bit greyscale bitmap (shared by the 2-bit and the
+            # 1-bit antialiased-threshold paths below).
+            pixels4g = []
+            px = 0
+            for i, v in enumerate(bitmap.buffer):
+                y = i / bitmap.width
+                x = i % bitmap.width
+                if x % 2 == 0:
+                    px = (v >> 4)
+                else:
+                    px = px | (v & 0xF0)
+                    pixels4g.append(px)
+                    px = 0
+                # eol
+                if x == bitmap.width - 1 and bitmap.width % 2 > 0:
+                    pixels4g.append(px)
+                    px = 0
 
-            # for y in range(bitmap.rows):
-            #     line = ''
-            #     for x in range(bitmap.width):
-            #         pixelPosition = y * bitmap.width + x
-            #         byte = pixelsbw[pixelPosition // 8]
-            #         bit_index = 7 - (pixelPosition % 8)
-            #         line += '#' if (byte >> bit_index) & 1 else '.'
-            #     print(line)
-            # print('')
+            if is2Bit:
+                # 0-3 white, 4-7 light grey, 8-11 dark grey, 12-15 black
+                # Downsample to 2-bit bitmap
+                pixels2b = []
+                px = 0
+                pitch = (bitmap.width // 2) + (bitmap.width % 2)
+                for y in range(bitmap.rows):
+                    for x in range(bitmap.width):
+                        px = px << 2
+                        bm = pixels4g[y * pitch + (x // 2)]
+                        bm = (bm >> ((x % 2) * 4)) & 0xF
+
+                        if bm >= 12:
+                            px += 3
+                        elif bm >= 8:
+                            px += 2
+                        elif bm >= 4:
+                            px += 1
+
+                        if (y * bitmap.width + x) % 4 == 3:
+                            pixels2b.append(px)
+                            px = 0
+                if (bitmap.width * bitmap.rows) % 4 != 0:
+                    px = px << (4 - (bitmap.width * bitmap.rows) % 4) * 2
+                    pixels2b.append(px)
+            else:
+                # Downsample to 1-bit bitmap - treat any 2+ as black
+                pixelsbw = []
+                px = 0
+                pitch = (bitmap.width // 2) + (bitmap.width % 2)
+                for y in range(bitmap.rows):
+                    for x in range(bitmap.width):
+                        px = px << 1
+                        bm = pixels4g[y * pitch + (x // 2)]
+                        px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+
+                        if (y * bitmap.width + x) % 8 == 7:
+                            pixelsbw.append(px)
+                            px = 0
+                if (bitmap.width * bitmap.rows) % 8 != 0:
+                    px = px << (8 - (bitmap.width * bitmap.rows) % 8)
+                    pixelsbw.append(px)
 
         pixels = pixels2b if is2Bit else pixelsbw
 
@@ -903,8 +949,7 @@ if compress:
             group_aligned.extend(to_byte_aligned(packed, old_props.width, old_props.height))
 
         # Compress byte-aligned data with raw DEFLATE (no zlib/gzip header)
-        compressor = zlib.compressobj(level=9, wbits=-15)
-        compressed = compressor.compress(bytes(group_aligned)) + compressor.flush()
+        compressed = deflate_raw(group_aligned)
 
         compressed_groups.append((compressed, len(group_aligned), count, first_idx))
         compressed_bitmap_data.extend(compressed)
@@ -919,7 +964,7 @@ print(f"""/**
  * generated by fontconvert.py
  * name: {font_name}
  * size: {size}
- * mode: {'2-bit' if is2Bit else '1-bit'}{'  compressed: true' if compress else ''}
+ * mode: {'2-bit' if is2Bit else ('1-bit mono' if useMono else '1-bit')}{'  compressed: true' if compress else ''}
  * Command used: {' '.join(sys.argv)}
  */
 #pragma once
@@ -963,21 +1008,62 @@ if compress:
     print("};\n")
 
 if kern_map:
-    print(f"static const EpdKernClassEntry {font_name}KernLeftClasses[] = {{")
-    for cp, cls in kern_left_classes:
-        print(f"    {{ 0x{cp:04X}, {cls} }}, // {cp_label(cp)}")
-    print("};\n")
+    # Split class maps: codepoints in one array, class IDs in a parallel one. Same 3 bytes per
+    # entry as the packed EpdKernClassEntry, but the binary search only reads codepoints, so
+    # keeping the payload out of the searched array shrinks its footprint by a third and makes
+    # every read naturally aligned. Measured -13 to -14% on the class lookup, which is ~96% of
+    # getKerning(). SD-card fonts keep the packed form because .cpfont maps it in place.
+    for side, entries in (("Left", kern_left_classes), ("Right", kern_right_classes)):
+        print(f"static const uint16_t {font_name}Kern{side}Codepoints[] = {{")
+        for chunk in chunks([cp for cp, _ in entries], 12):
+            print("    " + ", ".join(f"0x{cp:04X}" for cp in chunk) + ",")
+        print("};\n")
+        print(f"static const uint8_t {font_name}Kern{side}ClassIds[] = {{")
+        for chunk in chunks([cls for _, cls in entries], 16):
+            print("    " + ", ".join(f"{cls:3d}" for cls in chunk) + ",")
+        print("};\n")
 
-    print(f"static const EpdKernClassEntry {font_name}KernRightClasses[] = {{")
-    for cp, cls in kern_right_classes:
-        print(f"    {{ 0x{cp:04X}, {cls} }}, // {cp_label(cp)}")
-    print("};\n")
-
-    print(f"static const int8_t {font_name}KernMatrix[] = {{")
+    # Sparse (CSR) kerning. The dense leftClass x rightClass matrix is overwhelmingly zero --
+    # measured 86.6% across the built-in set -- so storing only the non-zero entries is roughly a
+    # quarter of the size. Values are unchanged, so nothing repaginates. SD-card fonts still emit
+    # the dense matrix (fontconvert_sdcard.py): .cpfont maps it in place.
+    row_offsets = []
+    sparse_cols = []
+    sparse_vals = []
     for row in range(kern_left_class_count):
+        row_offsets.append(len(sparse_cols))
         row_start = row * kern_right_class_count
         row_vals = kern_matrix[row_start:row_start + kern_right_class_count]
-        print("    " + ", ".join(f"{v:4d}" for v in row_vals) + ",")
+        for col, v in enumerate(row_vals):
+            if v != 0:
+                sparse_cols.append(col)
+                sparse_vals.append(v)
+    row_offsets.append(len(sparse_cols))
+    if len(sparse_cols) > 0xFFFF:
+        print(f"Error: {len(sparse_cols)} kern entries exceed the uint16 row-offset range", file=sys.stderr)
+        sys.exit(1)
+    if kern_right_class_count > 256:
+        print(f"Error: {kern_right_class_count} right classes exceed the uint8 column range", file=sys.stderr)
+        sys.exit(1)
+    dense_bytes = kern_left_class_count * kern_right_class_count
+    sparse_bytes = len(row_offsets) * 2 + len(sparse_cols) * 2
+    print(f"// Kerning: {len(sparse_cols)} of {dense_bytes} entries non-zero "
+          f"({100.0 * len(sparse_cols) / dense_bytes:.1f}%), {dense_bytes} -> {sparse_bytes} bytes",
+          file=sys.stderr)
+
+    print(f"static const uint16_t {font_name}KernRowOffsets[] = {{")
+    for chunk in chunks(row_offsets, 16):
+        print("    " + ", ".join(f"{v:5d}" for v in chunk) + ",")
+    print("};\n")
+
+    print(f"static const uint8_t {font_name}KernSparseCols[] = {{")
+    for chunk in chunks(sparse_cols, 16):
+        print("    " + ", ".join(f"{v:3d}" for v in chunk) + ",")
+    print("};\n")
+
+    print(f"static const int8_t {font_name}KernSparseValues[] = {{")
+    for chunk in chunks(sparse_vals, 16):
+        print("    " + ", ".join(f"{v:4d}" for v in chunk) + ",")
     print("};\n")
 
 if ligature_pairs:
@@ -1004,17 +1090,23 @@ else:
 # glyphToGroup (not used for script-grouped fonts)
 print("    nullptr,")
 if kern_map:
-    print(f"    {font_name}KernLeftClasses,")
-    print(f"    {font_name}KernRightClasses,")
-    print(f"    {font_name}KernMatrix,")
+    print("    nullptr,  // kernLeftClasses: built-in fonts use the split arrays below")
+    print("    nullptr,  // kernRightClasses")
+    print(f"    {font_name}KernLeftCodepoints,")
+    print(f"    {font_name}KernLeftClassIds,")
+    print(f"    {font_name}KernRightCodepoints,")
+    print(f"    {font_name}KernRightClassIds,")
+    print("    nullptr,  // kernMatrix: built-in fonts use the sparse form below")
+    print(f"    {font_name}KernRowOffsets,")
+    print(f"    {font_name}KernSparseCols,")
+    print(f"    {font_name}KernSparseValues,")
     print(f"    {len(kern_left_classes)},")
     print(f"    {len(kern_right_classes)},")
     print(f"    {kern_left_class_count},")
     print(f"    {kern_right_class_count},")
 else:
-    print(f"    nullptr,")
-    print(f"    nullptr,")
-    print(f"    nullptr,")
+    for _ in range(10):
+        print("    nullptr,")
     print(f"    0,")
     print(f"    0,")
     print(f"    0,")

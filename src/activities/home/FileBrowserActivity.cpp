@@ -99,6 +99,25 @@ void FileBrowserActivity::rebuildRowItems() {
     item.actionValue = static_cast<int16_t>(i);
     rowItems.push_back(item);
   }
+
+  // One SD pass for every CJK filename in the folder; repaints then hit the
+  // resident tables instead of re-reading per-string. Getter form: no
+  // concatenated copy (a bare-new string append aborts under heap pressure).
+  // The last index covers the bottom path band: basepath (possibly a CJK
+  // folder name) draws in the same small font, so it must live in the same
+  // batch or it would evict the rows' glyphs when the heap gate disables
+  // union merging. (prewarmFallbackText appends the truncation ellipsis.)
+  struct PrewarmCtx {
+    const std::vector<std::string>* names;
+    const std::string* path;
+  } prewarmCtx{&rowNames, &basepath};
+  renderer.prewarmFallbackText(
+      uiScaleSpec().smallFontId,
+      [](const void* ctx, uint32_t i) -> const char* {
+        const auto* c = static_cast<const PrewarmCtx*>(ctx);
+        return i < c->names->size() ? (*c->names)[i].c_str() : c->path->c_str();
+      },
+      &prewarmCtx, static_cast<uint32_t>(rowNames.size()) + 1);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -403,8 +422,8 @@ std::string getFileExtension(const std::string& filename) {
 void FileBrowserActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   // Full path band at the bottom: separator on top, left-truncated so the

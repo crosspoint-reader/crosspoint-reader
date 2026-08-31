@@ -32,7 +32,7 @@ inline void buildSliderDialogScreen(UiAppHost::UiScreen& screen, const GfxRender
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content: the safe area minus the title band render() paints, dropped down
   // to where the legacy fixed layout placed the readout.
-  screen.setContentMargin(fui::Insets{
+  screen.setContentMarginFromScreen(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing * 4),
       static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
       static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height)), static_cast<int16_t>(safe.x)});

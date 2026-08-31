@@ -126,8 +126,8 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   // Pill shape and label size are theme-driven. Label-hugging (Lyra): small
   // text so the pill wraps a compact label, kept tight horizontally so wide
   // labels (e.g. "Controls") still fit their slot at large UI scales.
-  // Full-slot (RoundedRaff): the pill fills its slot like the legacy
-  // drawTabBar (slot minus a 4px frame, 8px clearance above the divider) with
+  // Full-slot (RoundedRaff): the pill fills its slot like the legacy layout
+  // (slot minus a 4px frame, 8px clearance above the divider) with
   // body-size labels; zero horizontal contentInset disables the tabBar's
   // label-width shrink.
   const bool tabsFocused = ringPos() == 0;
@@ -177,7 +177,11 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   tabStyles.focused = tabStyles.selected;
   tabStyles.active = tabStyles.selected;
   tabProps.tabStyles = tabStyles;
-  const fui::Rect tabRect = screen.takeTop(tabBand);
+  const fui::Rect contentTabRect = screen.takeTop(tabBand);
+  const fui::Rect frameRect = screen.frame().screen();
+  // Tab chrome is a full-width screen band like the legacy GUI tab bar. The
+  // remaining list content still stays inside the device safe area.
+  const fui::Rect tabRect{frameRect.x, contentTabRect.y, frameRect.width, contentTabRect.height};
   // Focused band wash is the Lyra treatment; legacy RoundedRaff keeps the
   // band plain in both states.
   if (tabsFocused && !metrics.tabPillFullSlot) {

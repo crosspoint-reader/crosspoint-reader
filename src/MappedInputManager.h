@@ -39,7 +39,7 @@ class MappedInputManager {
 
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
-  void update() const { gpio.update(); }
+  void update() const;
 #if FREEINK_CAP_TOUCH
   // X4 Pro delays a single power click until its frontlight double-click window
   // expires. The main loop supplies that one-frame event here.
@@ -47,6 +47,9 @@ class MappedInputManager {
 #endif
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
+  // One-shot threshold event while the button is down; consumes its release.
+  bool wasLongPressed(Button button, unsigned long thresholdMs) const;
+  bool consumeSuppressedRelease() const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
   bool wasScreenTapped(int& x, int& y) const;
@@ -88,6 +91,11 @@ class MappedInputManager {
   // A Home-key hold runs the configured long-press action in the reader.
   bool wasHomeKeyHold() const;
   bool wasMenuGesture() const;
+  // Bottom-edge up-swipe as the reader-menu gesture (SHOW_READER_MENU's Swipe
+  // Up option). Only meaningful on home-key boards, where Home lives on the
+  // key and the bottom edge is free; elsewhere the same swipe is the Home
+  // gesture and this returns false.
+  bool wasReaderMenuSwipeUp() const;
   // Top-edge down-swipe opens the light panel when the active board actually
   // has a frontlight. ActivityManager consumes it before activity input.
   bool wasLightPanelGesture() const;
@@ -132,10 +140,13 @@ class MappedInputManager {
   bool wasPowerConfirmClick() const;
 #endif
   void rememberTouchHeldTime() const;
+  void suppressNextRelease(Button button) const;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;
   mutable unsigned long touchHeldOverrideAt = 0;
+  mutable uint16_t longPressFiredButtons = 0;
+  mutable uint16_t suppressedReleaseButtons = 0;
 #if FREEINK_CAP_TOUCH
   bool powerConfirmClickFrame = false;
 #endif
