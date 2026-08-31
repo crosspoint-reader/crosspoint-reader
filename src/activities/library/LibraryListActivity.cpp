@@ -9,7 +9,6 @@
 
 #include <algorithm>
 #include <cstdio>
-#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -100,13 +99,12 @@ void LibraryListActivity::onEnter() {
   // Optimistic open: if an index exists, paint from it immediately and let the
   // user decide when to refresh. Only a missing or unreadable index forces the
   // walk, so entering the screen is normally instant.
-  indexReady = openIndex();
-  if (!indexReady) {
+  if (!index.open(library::libraryIndexPath())) {
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
-    indexReady = rebuildIndex() && openIndex();
+    if (rebuildIndex()) index.open(library::libraryIndexPath());
   }
-  degraded = indexReady && index.ranksDegraded();
-  if (indexReady && index.dedupDegraded()) {
+  degraded = index.isOpen() && index.ranksDegraded();
+  if (index.isOpen() && index.dedupDegraded()) {
     LOG_ERR("LIB", "index was built without duplicate detection");
   }
 
@@ -118,17 +116,7 @@ void LibraryListActivity::onEnter() {
 
 void LibraryListActivity::onExit() {
   index.close();
-  clearPageHistory();
-  filtered.reset();
-  filteredCount = 0;
-  filterFailed = false;
-  query.clear();
   Activity::onExit();
-}
-
-bool LibraryListActivity::openIndex() {
-  index.close();
-  return index.open(library::libraryIndexPath());
 }
 
 bool LibraryListActivity::rebuildIndex() {
@@ -157,7 +145,7 @@ int LibraryListActivity::selectedEntry() const {
 }
 
 void LibraryListActivity::openSelectedBook() {
-  if (!indexReady) return;
+  if (!index.isOpen()) return;
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedEntry())));
   if (ordinal == 0xFFFF) return;
 
@@ -173,7 +161,6 @@ void LibraryListActivity::openSelectedBook() {
   // Release the index handle first: on hardware only one reader can hold a file
   // open at a time, and the reader is about to open files of its own.
   index.close();
-  indexReady = false;
   onSelectBook(path);
 }
 
@@ -209,9 +196,7 @@ void LibraryListActivity::openSearch() {
 
 void LibraryListActivity::applySortOrder(const library::SortOrder order) {
   sortOrder = order;
-  // A new order invalidates every remembered page boundary: the same ordinal is
-  // now somewhere else entirely. It also invalidates the filter, which holds
-  // POSITIONS in the old order.
+  // The filter holds positions in the old order, so it must be rebuilt.
   applyFilter();
   // The order changed under the ring; the strip keeps the focus it had, any
   // row selection collapses to the first row of the new order.
@@ -292,9 +277,6 @@ void LibraryListActivity::applyFilter() {
   filtered.reset();
   filteredCount = 0;
   filterFailed = false;
-  // Cleared even on the empty-query path: dropping a filter changes the list
-  // just as much as applying one.
-  clearPageHistory();
   if (query.empty()) return;
 
   // Folded the same way the stored folds were, articles removed included —
@@ -412,7 +394,6 @@ void LibraryListActivity::jumpToLetter(const char letter) {
       auto& nav = activeNav();
       nav.selected = entry + 1;
       nav.top = entry;
-      clearPageHistory();
       return;
     }
   }
@@ -666,7 +647,7 @@ bool LibraryListActivity::handleButtons() {
       nav.selected--;
       requestUpdate();
     } else if (nav.top > 0) {
-      previousPage(/*selectLast=*/true);
+      previousPage();
     }
     return true;
   }
@@ -674,10 +655,10 @@ bool LibraryListActivity::handleButtons() {
     if (tabsFocused()) {
       nav.selected = 1;
       requestUpdate();
-    } else if (nav.selected - 1 < nav.top + nav.visibleRows - 1 && nav.selected - 1 < count - 1) {
+    } else if (nav.selected - 1 < nav.top + nav.pageRows() - 1 && nav.selected - 1 < count - 1) {
       nav.selected++;
       requestUpdate();
-    } else if (nav.top + nav.visibleRows < count) {
+    } else if (nav.top + nav.pageRows() < count) {
       nextPage();
     }
     return true;
@@ -780,107 +761,39 @@ void LibraryListActivity::buildSortTabs(UiScreen& screen) {
   }
 }
 
-// The list itself. Only the visible window is materialized — strings and
-// ListItems for at most one page — and the window is laid out with the same
-// accumulation the widget uses (uniform rows, shorter section headings), so
-// the page the reader sees is exactly the page navigation counts. The widget
-// then receives the window as a list that fits whole: count = what was built,
-// topIndex = 0, and the true position stays in the ring's ListNav.
 void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = rowCount();
-  // Sorted by author, the permutation already places one author's books
-  // consecutively, so grouping costs one heading per run and no extra pass.
-  // The author then appears once above the run instead of under every title,
-  // which is what makes the shelf answer "what else has this person written".
   const bool grouped = sortOrder == library::SortOrder::AuthorAsc;
 
   fui::ListProps props;
+  props.count = static_cast<uint16_t>(count);
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;
   props.labelText = screen.theme().bodyText;
-  // One line per title, truncated by the widget: more books on the screen,
-  // even if half a name is hidden.
   props.labelText.maxLines = 1;
-  // Author headings never carried a rule; whitespace and proximity group.
   props.headerUnderline = false;
-  // The position readout carries "where am I"; a scroll track beside it would
-  // say the same thing twice.
   props.scrollIndicator = false;
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
-    // Non-touch hardware keeps the denser per-theme row heights, as the
-    // UiListActivity viewport sync does for uniform lists.
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    rowHeight = static_cast<int16_t>(grouped ? metrics.listRowHeight : metrics.listWithSubtitleRowHeight);
-  }
-  props.rowHeight = rowHeight;
-  if (props.rowGap < 0) props.rowGap = screen.theme().listRowGap;
+  syncTabListViewport(screen, props, /*hasSubtitle=*/!grouped);
 
-  const fui::Rect band = screen.body();
-  const int16_t rowH = props.rowHeight;
-  const int16_t rowGap = props.rowGap;
-  const uint16_t visibleCap = fui::listVisibleRows(band, rowH, rowGap);
-  // Heading geometry, mirroring components/lists/list.h exactly: heading row =
-  // small line + 4, sectionGap above every non-first heading.
-  const int16_t headerLh = screen.target().lineHeight(screen.theme().smallText.font);
-  const int16_t headerH = static_cast<int16_t>(headerLh + 4);
-
-  if (nav.top < 0) nav.top = 0;
-  if (nav.top > count - 1) nav.top = count - 1;
-
-  // The window buffers are sized once per build and never grow while items
-  // hold pointers into them: c_str() stability is what makes the borrow safe.
-  const size_t cap = static_cast<size_t>(visibleCap) + 1;
+  const size_t cap = static_cast<size_t>(nav.visibleRows > 0 ? nav.visibleRows : 1);
   if (winTitles.size() < cap) winTitles.resize(cap);
   if (winAuthors.size() < cap) winAuthors.resize(cap);
   if (winHeaders.size() < cap) winHeaders.resize(cap);
   winItems.clear();
-  if (winItems.capacity() < cap * 2) winItems.reserve(cap * 2);
+  if (winItems.capacity() < cap) winItems.reserve(cap);
 
-  int16_t cursorY = 0;
   int books = 0;
   int headers = 0;
-  int selItem = -1;
-  int lastBookItem = -1;
-  const int displayEntry = nav.selected > 0 ? nav.selected - 1 : 0;
-  for (int entry = nav.top; entry < count; entry++) {
+  const int windowStart = static_cast<int>(props.topIndex);
+  for (int entry = windowStart; entry < count && books < static_cast<int>(cap); entry++) {
     std::string& title = winTitles[static_cast<size_t>(books)];
     std::string& author = winAuthors[static_cast<size_t>(books)];
     rowTextFor(entry, title, author);
 
-    // The first row of a page always carries its heading: without it a page
-    // can open on books whose author was named on the page before. Books with
-    // no author group under one heading of their own rather than running on
-    // unlabelled: the index already files them after every named author.
     const bool startsGroup = grouped && (books == 0 || author != winAuthors[static_cast<size_t>(books - 1)]);
-
-    // Fit check, mirroring the widget's own accumulation — a heading is never
-    // emitted without the book it names (the widget's height break would
-    // strand it as a trailing orphan).
-    const int itemIdx = static_cast<int>(winItems.size());
-    int16_t needed = static_cast<int16_t>(rowH);
+    fui::ListItem item;
     if (startsGroup) {
-      const int16_t pad = itemIdx != 0 ? props.sectionGap : 0;
-      needed = static_cast<int16_t>(needed + pad + headerH + rowGap);
-    }
-    const int bookItemIdx = itemIdx + (startsGroup ? 1 : 0);
-    if (cursorY + needed > band.height || books >= static_cast<int>(visibleCap) ||
-        bookItemIdx >= static_cast<int>(visibleCap)) {
-      break;
-    }
-
-    if (startsGroup) {
-      // Written surname-first, as a catalogue does: the shelf is ORDERED by
-      // surname, and printing "Becky Chambers" above a run that sits between
-      // Chattam and Melville makes the order look arbitrary. Into its OWN
-      // storage, NOT back into the author slot: the run comparison above reads
-      // the next row's author straight from the index, so "Xun, Lu" would
-      // never match "Lu Xun" and every row would start its own group.
-      // A book whose metadata named nobody is filed under one translated
-      // heading. The GROUP is the empty author key, not this label: sorting on
-      // the word itself would move these books with the interface language,
-      // and would merge them with a real author called "Unknown".
       std::string& heading = winHeaders[static_cast<size_t>(headers++)];
       heading = author.empty() ? std::string(tr(STR_LIBRARY_UNKNOWN_AUTHOR)) : author;
       if (!author.empty()) {
@@ -889,39 +802,19 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
           heading = heading.substr(lastSpace + 1) + ", " + heading.substr(0, lastSpace);
         }
       }
-      fui::ListItem header;
-      header.isHeader = true;
-      header.label = heading.c_str();
-      winItems.push_back(header);
-      const int16_t pad = itemIdx != 0 ? props.sectionGap : 0;
-      cursorY = static_cast<int16_t>(cursorY + pad + headerH + rowGap);
+      item.sectionHeading = heading.c_str();
     }
 
-    fui::ListItem item;
     item.label = title.c_str();
     if (!grouped && !author.empty()) item.subtitle = author.c_str();
     item.actionValue = static_cast<int16_t>(entry);
-    if (entry == displayEntry) selItem = static_cast<int>(winItems.size());
-    lastBookItem = static_cast<int>(winItems.size());
     winItems.push_back(item);
-    cursorY = static_cast<int16_t>(cursorY + rowH + rowGap);
     books++;
   }
 
-  // Report how much this page held, for the next input pass to page by; then
-  // put the ring back inside it. previousPage() aims past the end because a
-  // page's size is only known once built — clamp now that it has been.
-  nav.visibleRows = books > 0 ? books : 1;
-  if (nav.selected - 1 >= nav.top + nav.visibleRows) {
-    nav.selected = nav.top + nav.visibleRows;
-    selItem = lastBookItem;
-  }
-  if (nav.selected - 1 >= count) nav.selected = count;
-
   props.items = winItems.data();
-  props.count = static_cast<uint16_t>(winItems.size());
-  props.topIndex = 0;
-  props.selectedIndex = static_cast<int16_t>(selItem);
+  props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
+  props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
   screen.list(props);
 }
 
@@ -1098,49 +991,20 @@ void LibraryListActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-// Page boundaries are content-dependent in author order (headings consume band
-// height), so they cannot be computed from an index. They are therefore
-// remembered as the reader moves forward, which makes going back exact while
-// the boundary remains in the fixed recent-page history.
-void LibraryListActivity::clearPageHistory() { pageStartCount = 0; }
-
-void LibraryListActivity::rememberPageStart(const uint16_t start) {
-  if (pageStartCount < pageStarts.size()) {
-    pageStarts[pageStartCount++] = start;
-    return;
-  }
-  memmove(pageStarts.data(), pageStarts.data() + 1, (pageStarts.size() - 1) * sizeof(pageStarts[0]));
-  pageStarts.back() = start;
-}
-
 void LibraryListActivity::nextPage() {
   const int count = rowCount();
   auto& nav = activeNav();
-  const int next = nav.top + nav.visibleRows;
+  const int next = nav.top + std::max(1, nav.pageRows());
   if (next >= count) return;
-  if (pageStartCount == 0) rememberPageStart(0);
-  rememberPageStart(static_cast<uint16_t>(next));
   nav.top = next;
   nav.selected = next + 1;
   requestUpdate();
 }
 
-void LibraryListActivity::previousPage(const bool selectLast) {
+void LibraryListActivity::previousPage() {
   auto& nav = activeNav();
   if (nav.top <= 0) return;
-  if (pageStartCount > 1) {
-    pageStartCount--;
-    nav.top = pageStarts[pageStartCount - 1];
-  } else {
-    // No recorded history — the reader jumped here by some other route. Fall
-    // back to a screenful back; it may not land on a boundary this pass, but
-    // the next render re-measures and nothing is lost.
-    nav.top = std::max(0, nav.top - nav.visibleRows);
-    clearPageHistory();
-    rememberPageStart(static_cast<uint16_t>(nav.top));
-  }
-  // selectLast is only known to be right after the build that measures this
-  // page, so aim past the end and let buildRows clamp it.
-  nav.selected = (selectLast ? nav.top + nav.visibleRows - 1 : nav.top) + 1;
+  nav.top = std::max(0, nav.top - std::max(1, nav.pageRows()));
+  nav.selected = nav.top + 1;
   requestUpdate();
 }

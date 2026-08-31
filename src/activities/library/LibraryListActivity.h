@@ -2,7 +2,6 @@
 
 #include <LibraryIndexFile.h>
 
-#include <array>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -55,7 +54,6 @@ class LibraryListActivity final : public UiTabListActivity {
   static constexpr freeink::ui::ActionId ACTION_LETTER = ACTION_TAB_USER;
   static constexpr freeink::ui::ActionId ACTION_LETTER_MODE = ACTION_TAB_USER + 1;
 
-  bool openIndex();
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the
   // user asks.
@@ -71,9 +69,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // direction lives on the tab (the drawn triangle), not in a second slot.
   void flipTitleDirection();
   void nextPage();
-  void previousPage(bool selectLast = false);
-  void clearPageHistory();
-  void rememberPageStart(uint16_t start);
+  void previousPage();
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
@@ -97,9 +93,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Screen building
   void buildSortTabs(UiScreen& screen);
   int16_t sortStripHeight(UiScreen& screen) const;
-  // Materializes ListItems and their strings for the visible window only,
-  // mirroring the widget's own layout math (uniform rows, shorter author
-  // headings) so the page shown is exactly the page navigation counts.
+  // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
   void buildLetterGrid(UiScreen& screen);
   void drawPositionReadout() const;
@@ -112,7 +106,6 @@ class LibraryListActivity final : public UiTabListActivity {
 
   library::LibraryIndexFile index;
   library::SortOrder sortOrder = library::SortOrder::DateDesc;
-  bool indexReady = false;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
@@ -141,14 +134,6 @@ class LibraryListActivity final : public UiTabListActivity {
   // Xun" (surname first) from "Jane Austen" (surname last), so the reader says
   // which they mean instead of the code guessing.
   bool jumpByGivenName = false;
-
-  // First entry of each recent page visited on the way here, so going back
-  // lands on the same boundaries the reader came through. This fixed history
-  // lives in the heap-allocated activity and cannot grow until vector::push_back
-  // aborts on the C3. Older boundaries fall back to a measured-page estimate.
-  static constexpr size_t PAGE_HISTORY_CAPACITY = 128;
-  std::array<uint16_t, PAGE_HISTORY_CAPACITY> pageStarts{};
-  size_t pageStartCount = 0;
 
   // Visible-window row storage, reused across renders (buildRows). Bounded by
   // the densest page, never by the library. Headings get their own storage:
