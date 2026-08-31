@@ -12,6 +12,8 @@
 
 #include <algorithm>
 #include <cctype>
+#include <utility>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -80,6 +82,80 @@ bool isProtectedItemName(const String& name) {
     }
   }
   return false;
+}
+
+// Stack-based walk of a directory tree, clearing the book cache for each removed
+// book file along the way. Protected items (hidden/system) are left in place, which
+// leaves their ancestor directories non-empty and this call returns false.
+// Returns a flag indicating whether we were able to delete everything in the tree
+bool deleteDirRecursive(const String& rootPath) {
+  bool allRemoved = true;
+  char name[128];
+
+  // Stack of (dirPath, postOrder): postOrder=true means rmdir this path after children.
+  std::vector<std::pair<String, bool>> stack;
+  stack.reserve(16);
+  stack.push_back({rootPath, false});
+
+  while (!stack.empty()) {
+    // pop and remove if it was empty
+    auto [currentPath, postOrder] = std::move(stack.back());
+    stack.pop_back();
+
+    if (postOrder) {
+      if (!Storage.rmdir(currentPath.c_str())) {
+        allRemoved = false;
+      }
+      continue;
+    }
+
+    HalFile dir = Storage.open(currentPath.c_str());
+
+    // skip failed reads or non-directory (race condition where someone replaced it)
+    if (!dir || !dir.isDirectory()) {
+      if (dir) dir.close();
+      allRemoved = false;
+      continue;
+    }
+
+    stack.push_back({currentPath, true});
+
+    // iterate through every file in the directory,
+    // remove files if not protected,
+    // clear book cache for deleted files,
+    // push directories onto the stack
+    for (HalFile entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+      const bool isDirectory = entry.isDirectory();
+      const size_t nameLen = entry.getName(name, sizeof(name));
+      // SdFat cannot reopen or delete this path while its directory entry is open.
+      entry.close();
+      if (nameLen == 0) {
+        allRemoved = false;
+        continue;
+      }
+
+      if (isProtectedItemName(name)) {
+        allRemoved = false;
+        continue;
+      }
+
+      String entryPath = currentPath;
+      if (!entryPath.endsWith("/")) entryPath += "/";
+      entryPath += name;
+
+      if (isDirectory) {
+        stack.push_back({std::move(entryPath), false});
+      } else {
+        clearBookCache(entryPath.c_str());
+        if (!Storage.remove(entryPath.c_str())) {
+          allRemoved = false;
+        }
+      }
+    }
+    dir.close();
+  }
+
+  return allRemoved;
 }
 }  // namespace
 
@@ -1120,17 +1196,8 @@ void CrossPointWebServer::handleDelete() const {
     bool success = false;
     HalFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
-      // For folders, ensure empty before removing unless recursive deletion is enabled
-      HalFile entry = f.openNextFile();
-      bool isEmpty = !entry;
-      if (entry) entry.close();
       f.close();
-      if (!isEmpty && !SETTINGS.deleteFilesRecursive) {
-        failedItems += itemPath + " (folder not empty); ";
-        allSuccess = false;
-        continue;
-      }
-      success = isEmpty ? Storage.rmdir(itemPath.c_str()) : Storage.removeDir(itemPath.c_str());
+      success = deleteDirRecursive(itemPath);
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
