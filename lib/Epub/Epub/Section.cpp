@@ -622,7 +622,13 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
 
 bool Section::finalizeBuild() {
   // Flush the trailing page (emits the last page via the completePageFn into the LUT).
-  build_->parser->finishParse();
+  // A false return means layout dropped content (OOM); committing would persist a
+  // section cache with holes in the text, so abandon the build instead.
+  if (!build_->parser->finishParse()) {
+    LOG_ERR("SCT", "Parse finalize failed; abandoning section build");
+    abandonBuild();
+    return false;
+  }
 
   if (!build_->reusedHtml) {
     // Parse succeeded: promote the freshly unzipped HTML to the persistent cache so future

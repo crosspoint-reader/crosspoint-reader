@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MemoryManager.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
 #include <expat.h>
@@ -305,6 +306,8 @@ void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
 
 // flush the contents of partWordBuffer to currentTextBlock
 void ChapterHtmlSlimParser::flushPartWordBuffer() {
+  // Block creation failed (OOM): drop the buffered text; parseStep() is about
+  // to fail the build via layoutOom.
   if (!currentTextBlock) {
     partWordBufferIndex = 0;
     nextWordContinues = false;
@@ -392,7 +395,18 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle));
+  currentTextBlock =
+      makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle);
+  if (!currentTextBlock) {
+    // Evict rebuildable caches and retry once before failing the build.
+    freeink::MemoryManager::instance().ensureFree(4 * 1024);
+    currentTextBlock =
+        makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle);
+  }
+  if (!currentTextBlock) {
+    LOG_ERR("EHP", "OOM: ParsedText");
+    layoutOom = true;  // parseStep() turns this into ParseStatus::Error
+  }
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }
@@ -1691,6 +1705,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
 
+  // Block creation failed (OOM): nothing to soft-flush.
+  if (!self->currentTextBlock) {
+    return;
+  }
+
   // Keep token growth bounded: CSS-heavy spans can fragment text into many tiny
   // words, so flush earlier when embedded CSS is active. We still keep the
   // "exclude last line" behavior to preserve paragraph flow across chunks.
@@ -2001,6 +2020,13 @@ bool ChapterHtmlSlimParser::beginParse() {
 }
 
 ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
+  // Layout OOM latched during the previous buffer's callbacks: fail the build
+  // instead of emitting pages with silently missing text.
+  if (layoutOom || (currentTextBlock && currentTextBlock->hadDroppedWords())) {
+    LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
+    return ParseStatus::Error;
+  }
+
   void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
   if (!buf) {
     LOG_ERR("EHP", "Couldn't allocate memory for buffer");
@@ -2041,6 +2067,13 @@ void ChapterHtmlSlimParser::abortParse() {
 }
 
 bool ChapterHtmlSlimParser::finishParse() {
+  // Same check as parseStep(): drops in the final buffer would otherwise slip
+  // through because Done is returned before the next step's check runs.
+  if (layoutOom || (currentTextBlock && currentTextBlock->hadDroppedWords())) {
+    LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
+    return false;
+  }
+
   if (xmlParser_) {
     LOG_DBG("EHP", "Time to parse and build pages: %lu ms", millis() - parseStartTime_);
     destroyXmlParser(xmlParser_);
@@ -2121,6 +2154,13 @@ void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
+  }
+
+  // Latch before layout: startNewTextBlock() replaces the block right after
+  // this returns, which would otherwise lose its dropped-words flag before
+  // parseStep()/finishParse() get to check it.
+  if (currentTextBlock->hadDroppedWords()) {
+    layoutOom = true;
   }
 
   if (!currentPage) {

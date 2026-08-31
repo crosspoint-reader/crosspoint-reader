@@ -6,10 +6,12 @@
 // lookup, and the openProtectedBook() entry point the reader calls. It lives in
 // the firmware — not the SDK lib — so the portable lib carries no HAL dependency.
 
+#include <Arduino.h>
 #include <ByteSource.h>
 #include <ContentProtection.h>
 #include <Credential.h>
 #include <HalStorage.h>
+#include <Logging.h>
 #include <Memory.h>
 #include <ProtectedBook.h>
 #include <TrustedTime.h>
@@ -79,6 +81,9 @@ class ProtectedBookDecryptor : public ContentDecryptor {
 
 std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath, std::string& err) {
   err.clear();
+  // Field-report heap ledger: this is where tight-heap opens historically
+  // died; the pair below tells fragmentation (largest collapses) from a leak.
+  LOG_INF("CPRO", "open: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
   if (!Storage.exists(epubPath.c_str())) return nullptr;
 
   SdByteSource source(epubPath);
@@ -126,8 +131,18 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
     }
   }
   if (!book->openFromScan(source, crypto(), credential, std::move(scan), rightsOverride)) {
-    err = haveCredential ? ("cannot open protected content: " + book->lastError())
-                         : "no content access key on this device";
+    if (haveCredential) {
+      // Guarded concat: this path runs precisely when the heap is tight, and
+      // the temporary would abort under -fno-exceptions.
+      err = "cannot open protected content";
+      const std::string& detail = book->lastError();
+      if (!detail.empty() && heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > detail.size() + err.size() + 1024) {
+        err += ": ";
+        err += detail;
+      }
+    } else {
+      err = "no content access key on this device";
+    }
     return nullptr;
   }
   // An encryption manifest containing only font obfuscation does not require

@@ -128,6 +128,10 @@ class ChapterHtmlSlimParser {
   int currentFootnoteLinkTextLen = 0;
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
+  // Latched when a ParsedText could not be created (OOM). Together with
+  // ParsedText::hadDroppedWords() this turns layout OOM into ParseStatus::Error
+  // so the section build fails readably instead of emitting pages with holes.
+  bool layoutOom = false;
 
   // Resumable parse state. The one-shot parseAndBuildPages() drives these
   // internally; the incremental section builder drives them across render ticks
