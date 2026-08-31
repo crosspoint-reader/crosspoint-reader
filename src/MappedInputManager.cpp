@@ -404,6 +404,12 @@ MappedInputManager::Labels MappedInputManager::mapFrontLabels(const char* back, 
     return "";
   };
 
+  if (BoardConfig::isOnePage()) {
+    // OnePage physical layout from left to right: Back, Left, Right, Confirm (K1-K4)
+    return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_LEFT),
+            labelForHardware(HalGPIO::BTN_RIGHT), labelForHardware(HalGPIO::BTN_CONFIRM)};
+  }
+
   return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_CONFIRM),
           labelForHardware(HalGPIO::BTN_LEFT), labelForHardware(HalGPIO::BTN_RIGHT)};
 }
