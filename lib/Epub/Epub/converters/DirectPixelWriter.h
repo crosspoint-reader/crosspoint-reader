@@ -24,6 +24,9 @@ struct DirectPixelWriter {
   // (originY 0, clipRows panelHeight) so the clip doubles as a bounds guard.
   int originY;
   int clipRows;
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  int topReservedRows;
+#endif
 
   // Orientation is collapsed into a linear transform:
   //   phyX = phyXBase + x * phyXStepX + y * phyXStepY
@@ -39,6 +42,9 @@ struct DirectPixelWriter {
     fb = renderer.getWriteTarget();
     originY = renderer.getWriteOriginY();
     clipRows = renderer.getWriteRows();
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+    topReservedRows = renderer.getTopReservedRows();
+#endif
     mode = renderer.getRenderMode();
     displayWidthBytes = renderer.getDisplayWidthBytes();
 
@@ -97,6 +103,9 @@ struct DirectPixelWriter {
   // Call once per row before the column loop.
   // Pre-computes the Y-dependent portion so writePixel() only needs the X part.
   inline void beginRow(int logicalY) {
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+    logicalY += topReservedRows;
+#endif
     rowPhyXBase = phyXBase + logicalY * phyXStepY;
     rowPhyYBase = phyYBase + logicalY * phyYStepY;
   }
@@ -143,7 +152,7 @@ struct DirectPixelWriter {
 
   // Write a single 2-bit dithered pixel value to the framebuffer.
   // Must be called after beginRow() for the current row.
-  // No bounds checking — caller guarantees coordinates are valid.
+  // Reserved-viewport builds retain a physical-X bounds check because this path writes raw memory.
   inline void writePixel(int logicalX, uint8_t pixelValue, bool writeWhiteInBw = false) const {
     // Determine whether to draw based on render mode
     bool draw;
@@ -174,6 +183,9 @@ struct DirectPixelWriter {
     // mode) and any out-of-frame row (full-frame mode) in one branch.
     const int sy = phyY - originY;
     if (static_cast<unsigned>(sy) >= static_cast<unsigned>(clipRows)) return;
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+    if (static_cast<unsigned>(phyX) >= static_cast<unsigned>(displayWidthBytes) * 8u) return;
+#endif
 
     const uint16_t byteIndex = static_cast<uint16_t>(sy * displayWidthBytes + (phyX >> 3));
     const uint8_t bitMask = 1 << (7 - (phyX & 7));

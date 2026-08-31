@@ -121,6 +121,9 @@ class GfxRenderer {
   // per-pixel rotation, no per-pixel RMW.
   template <Color color>
   void fillRectImpl(int x, int y, int width, int height) const;
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  void paintReservedTopBand() const;
+#endif
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
@@ -183,7 +186,13 @@ class GfxRenderer {
                              uint8_t styleMask = 0x0F) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
-  void setOrientation(const Orientation o) { orientation = o; }
+  void setOrientation(const Orientation o) {
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+    orientation = getTopReservedRows() > 0 ? Portrait : o;
+#else
+    orientation = o;
+#endif
+  }
   Orientation getOrientation() const { return orientation; }
 
   // Fading fix control
@@ -192,6 +201,9 @@ class GfxRenderer {
   // Screen ops
   int getScreenWidth() const;
   int getScreenHeight() const;
+  // Logical rows reserved at the top of the portrait X3 view. This is zero
+  // in ordinary builds and on every other panel.
+  int getTopReservedRows() const;
   void tapToLogical(float nx, float ny, int& outX, int& outY) const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // One-shot: the next displayBuffer()/displayBufferAsync() call uses `mode`

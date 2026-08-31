@@ -277,34 +277,55 @@ void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, con
 }
 
 // Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
+static inline int reservedTopRowsForPanel(const uint16_t panelWidth) {
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT) != defined(CROSSPOINT_RESERVED_TOP_PANEL_WIDTH)
+#error "reserved top percentage and panel width must be configured together"
+#elif defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  static_assert(CROSSPOINT_RESERVED_TOP_PERCENT > 0 && CROSSPOINT_RESERVED_TOP_PERCENT <= 50,
+                "reserved top percentage must be between 1 and 50");
+  static_assert(CROSSPOINT_RESERVED_TOP_PANEL_WIDTH > 0, "reserved top panel width must be positive");
+  if (panelWidth != CROSSPOINT_RESERVED_TOP_PANEL_WIDTH) return 0;
+  constexpr int roundedRows = (CROSSPOINT_RESERVED_TOP_PANEL_WIDTH * CROSSPOINT_RESERVED_TOP_PERCENT + 99) / 100;
+  return (roundedRows + 7) & ~0x7;
+#else
+  (void)panelWidth;
+  return 0;
+#endif
+}
+
 // This should always be inlined for better performance
 static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
                                      int* phyY, const uint16_t panelWidth, const uint16_t panelHeight) {
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  const int safeY = y + reservedTopRowsForPanel(panelWidth);
+#else
+  const int safeY = y;
+#endif
   switch (orientation) {
     case GfxRenderer::Portrait: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees clockwise
-      *phyX = y;
+      *phyX = safeY;
       *phyY = panelHeight - 1 - x;
       break;
     }
     case GfxRenderer::LandscapeClockwise: {
       // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
       *phyX = panelWidth - 1 - x;
-      *phyY = panelHeight - 1 - y;
+      *phyY = panelHeight - 1 - safeY;
       break;
     }
     case GfxRenderer::PortraitInverted: {
       // Logical portrait (480x800) → panel (800x480)
       // Rotation: 90 degrees counter-clockwise
-      *phyX = panelWidth - 1 - y;
+      *phyX = panelWidth - 1 - safeY;
       *phyY = x;
       break;
     }
     case GfxRenderer::LandscapeCounterClockwise: {
       // Logical landscape (800x480) aligned with panel orientation
       *phyX = x;
-      *phyY = y;
+      *phyY = safeY;
       break;
     }
   }
@@ -1632,7 +1653,22 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
     return;
   }
   display.clearScreen(color);
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  paintReservedTopBand();
+#endif
 }
+
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+void GfxRenderer::paintReservedTopBand() const {
+  const int reservedRows = getTopReservedRows();
+  if (reservedRows <= 0 || !frameBuffer) return;
+
+  const int reservedBytes = reservedRows / 8;
+  for (int row = 0; row < panelHeight; ++row) {
+    memset(frameBuffer + static_cast<uint32_t>(row) * panelWidthBytes, 0x00, reservedBytes);
+  }
+}
+#endif
 
 void GfxRenderer::beginStripTarget(uint8_t* scratch, int stripY0, int stripRows) const {
   // Band is caller-guaranteed in-bounds (the reader's grayscale loop computes
@@ -1682,11 +1718,17 @@ HalDisplay::RefreshMode GfxRenderer::applyPromotedRefresh(const HalDisplay::Refr
 void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  paintReservedTopBand();
+#endif
   refreshMode = applyPromotedRefresh(refreshMode);
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  paintReservedTopBand();
+#endif
   refreshMode = applyPromotedRefresh(refreshMode);
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
@@ -1838,7 +1880,11 @@ int GfxRenderer::getScreenHeight() const {
     case Portrait:
     case PortraitInverted:
       // 800px tall in portrait logical coordinates
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+      return panelWidth - getTopReservedRows();
+#else
       return panelWidth;
+#endif
     case LandscapeClockwise:
     case LandscapeCounterClockwise:
       // 480px tall in landscape logical coordinates
@@ -1846,6 +1892,8 @@ int GfxRenderer::getScreenHeight() const {
   }
   return panelWidth;
 }
+
+int GfxRenderer::getTopReservedRows() const { return reservedTopRowsForPanel(panelWidth); }
 
 void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
   int phyX = static_cast<int>(nx * panelWidth);
@@ -1874,6 +1922,13 @@ void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
       outY = phyY;
       break;
   }
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  if (getTopReservedRows() > 0 && (orientation == Portrait || orientation == PortraitInverted)) {
+    outY -= getTopReservedRows();
+    if (outY < 0) outY = 0;
+    if (outY >= getScreenHeight()) outY = getScreenHeight() - 1;
+  }
+#endif
 }
 
 // Translate a logical rect through rotateCoordinates and take the bounding
@@ -2201,6 +2256,9 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 // void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+  paintReservedTopBand();
+#endif
   display.displayGrayscaleBase(fallback, fadingFix);
 }
 
