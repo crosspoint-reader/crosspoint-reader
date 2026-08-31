@@ -4,7 +4,6 @@
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
-#include <HalPowerManager.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -343,35 +342,18 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
   screen.sheet(sheetProps, static_cast<int16_t>(panelBottom));
   screen.insetContent(fui::Insets{0, kPanelSideMargin, 0, kPanelSideMargin});
 
-  // Slim status band: just the battery in the top-right corner, so the
-  // indicator stays visible while the panel is open. No title, no full
-  // header band -- the glyph/percent height plus theme air is enough.
+  // Reuse the exact battery renderer and header rectangle used by Home. Call
+  // the base implementation directly because RoundedRaff suppresses its
+  // untitled Home header.
   {
     const auto& metrics = UITheme::getInstance().getMetrics();
     screen.spacer(theme.spaceMd);
     const int16_t bandH = std::max<int16_t>(static_cast<int16_t>(metrics.batteryHeight),
                                             screen.target().lineHeight(theme.smallText.font));
-    const fui::Rect band = screen.takeTop(bandH, theme.spaceMd);
-    const uint16_t percent = powerManager.getBatteryPercentage();
-    const bool showPercent = SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
-    char percentText[8];
-    snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percent));
-    constexpr int16_t kBatteryNubWidth = 2;  // glyph terminal nub past glyphWidth
-    constexpr int16_t kBatteryGap = 4;       // BaseTheme::batteryPercentSpacing
-    const int16_t labelW =
-        showPercent ? screen.target().measureText(theme.smallText.font, percentText, theme.smallText).width : 0;
-    const int16_t reserve =
-        static_cast<int16_t>(metrics.batteryWidth + kBatteryNubWidth + (showPercent ? labelW + kBatteryGap : 0));
-    fui::BatteryIndicatorProps battery;
-    battery.percent = static_cast<uint8_t>(percent > 100 ? 100 : percent);
-    battery.charging = gpio.isUsbConnected();
-    battery.label = showPercent ? percentText : nullptr;
-    battery.text = theme.smallText;
-    battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
-    battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
-    battery.gap = kBatteryGap;
-    fui::batteryIndicator(screen.frame(),
-                          fui::Rect{static_cast<int16_t>(band.right() - reserve), band.y, reserve, bandH}, battery);
+    screen.takeTop(bandH, theme.spaceMd);
+    UITheme::getInstance().getTheme().BaseTheme::drawHeader(
+        renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.homeTopPadding - metrics.topPadding},
+        nullptr);
   }
 
   if (Frontlight.present()) {
