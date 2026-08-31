@@ -9,6 +9,10 @@
 
 namespace fui = freeink::ui;
 
+namespace {
+constexpr int16_t TOUCH_TAB_BAR_HEIGHT = 50;
+}
+
 UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity(name, renderer, mappedInput) {}
 
@@ -123,9 +127,8 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   tabProps.count = static_cast<uint16_t>(count);
   tabProps.action = ACTION_TAB;
   tabProps.inputMask = fui::InputTouch;
-  // Pill shape and label size are theme-driven. Label-hugging (Lyra): small
-  // text so the pill wraps a compact label, kept tight horizontally so wide
-  // labels (e.g. "Controls") still fit their slot at large UI scales.
+  // Pill shape and label size are theme-driven. Lyra uses equal-width slots
+  // with small labels so wide text (e.g. "Controls") still fits at large UI scales.
   // Full-slot (RoundedRaff): the pill fills its slot like the legacy layout
   // (slot minus a 4px frame, 8px clearance above the divider) with
   // body-size labels; zero horizontal contentInset disables the tabBar's
@@ -137,18 +140,17 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabProps.contentInset = fui::Insets{2, 0, 2, 0};
   } else {
     tabProps.text = screen.theme().smallText;
-    tabProps.layout = fui::TabBarLayout::ContentWidth;
-    tabProps.leadingInset = static_cast<int16_t>(metrics.contentSidePadding);
     tabProps.gap = static_cast<int16_t>(metrics.tabSpacing);
     // Unfocused state: no bottom inset, so the pill (and the 2px selected
     // underline drawn along its bottom edge) reaches the band's 1px divider —
     // legacy Lyra drew the underline sitting on that rule, not floating above.
-    tabProps.tabInset = tabsFocused ? fui::Insets{2, 0, 4, 0} : fui::Insets{2, 0, 0, 0};
-    tabProps.contentInset = fui::Insets{2, 8, 2, 8};
+    tabProps.tabInset = tabsFocused ? fui::Insets{2, 4, 4, 4} : fui::Insets{2, 4, 0, 4};
+    tabProps.contentInset = fui::Insets{2, 0, 2, 0};
   }
   const int16_t tabLineHeight = screen.target().lineHeight(tabProps.text.font);
-  const int16_t tabBand =
-      static_cast<int16_t>(metrics.tabBarHeight > tabLineHeight + 10 ? metrics.tabBarHeight : tabLineHeight + 10);
+  const int16_t preferredTabHeight =
+      mappedInput.hasTouch() ? TOUCH_TAB_BAR_HEIGHT : static_cast<int16_t>(metrics.tabBarHeight);
+  const int16_t tabBand = preferredTabHeight > tabLineHeight + 10 ? preferredTabHeight : tabLineHeight + 10;
   // Legacy Lyra two-state treatment: with the selection on the tab band, the
   // band fills gray and the active tab is a solid pill; with the selection
   // down in the list, the band is plain and the active tab keeps a gray box
