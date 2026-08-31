@@ -35,6 +35,12 @@ class OpdsBookBrowserActivity final : public Activity, private UiAppHost {
   std::vector<freeink::ui::ListItem> rowItems;
   void rebuildRowItems();
   std::vector<std::string> navigationHistory;
+  // Catalog subsection titles (from OPDS entry <title>), deepest last.
+  // Independent of URL shape so short-link roots still get correct paths.
+  std::vector<std::string> folderNames;
+  // Parallel to navigationHistory: +1 pushed a folder name, -1 popped (".."),
+  // 0 = pagination/search (no folder change). Used to undo on navigateBack().
+  std::vector<int8_t> folderDeltas;
   std::string currentPath;
   std::string searchTemplate;
   int selectorIndex = 0;

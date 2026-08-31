@@ -45,10 +45,10 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends three virtual items: "Add Server", "Download folder"
-  // and "Filename format".
+  // Settings mode appends four virtual items: "Add Server", "Download folder",
+  // "Filename format", and "Mirror catalog folders".
   if (!pickerMode) {
-    count += 3;
+    count += 4;
   }
   return count;
 }
@@ -101,6 +101,11 @@ void OpdsServerListActivity::rebuildRowItems() {
     format.label = tr(STR_OPDS_FILENAME_FORMAT);
     format.actionValue = static_cast<int16_t>(serverCount + 2);
     rowItems_.push_back(format);  // subtitle refreshed per render below
+
+    fui::ListItem mirror;
+    mirror.label = tr(STR_OPDS_MIRROR_FOLDERS);
+    mirror.actionValue = static_cast<int16_t>(serverCount + 3);
+    rowItems_.push_back(mirror);  // subtitle refreshed per render below
   }
 }
 
@@ -141,7 +146,8 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder],
+  // [Filename format], [Mirror catalog folders].
   if (nav.selected == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
@@ -169,6 +175,14 @@ void OpdsServerListActivity::handleSelection() {
                        SETTINGS.opdsFilenameFormat = static_cast<uint8_t>(idx);
                        SETTINGS.saveToFile();
                      });
+    requestUpdate();
+    return;
+  }
+
+  // "Mirror catalog folders": toggle nested download dirs on/off.
+  if (nav.selected == serverCount + 3) {
+    SETTINGS.opdsMirrorCatalogFolders = SETTINGS.opdsMirrorCatalogFolders ? 0 : 1;
+    SETTINGS.saveToFile();
     requestUpdate();
     return;
   }
@@ -215,6 +229,7 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
     rowItems_[serverCount + 1].subtitle =
         SETTINGS.opdsDownloadFolder[0] ? SETTINGS.opdsDownloadFolder : tr(STR_OPDS_SD_ROOT);
     rowItems_[serverCount + 2].subtitle = I18N.get(opdsFormatLabel(SETTINGS.opdsFilenameFormat));
+    rowItems_[serverCount + 3].subtitle = SETTINGS.opdsMirrorCatalogFolders ? tr(STR_YES) : tr(STR_NO);
   }
 
   fui::ListProps props;
