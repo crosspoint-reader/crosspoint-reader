@@ -2,6 +2,8 @@
 
 #include <BoardConfig.h>
 #include <esp_rom_sys.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include <string>
 
@@ -19,7 +21,40 @@ RTC_NOINIT_ATTR size_t logHead = 0;
 RTC_NOINIT_ATTR uint32_t rtcLogMagic;
 static constexpr uint32_t LOG_RTC_MAGIC = 0xDEADBEEF;
 
+// LOG_* is called from multiple FreeRTOS tasks (main loop task + ActivityManager's render task, see
+// ActivityManager::renderTaskLoop()) without any prior synchronization. Two calls racing on the same
+// logHead slot -- one preempted mid-strncpy by the other -- can leave a shorter new message's write
+// interrupted before its null-padding finishes clearing the slot, so a stale tail from the previous
+// occupant survives right after it. That produced exactly this in a real crash report:
+//   "Time = 141 ms from clearScreen to displayBuffers from clearScreen to displayBuffer"
+// (the "s from clearScreen to displayBuffer" tail is leftover from a longer earlier message in the same
+// slot, not truncation -- the message itself is far under MAX_ENTRY_LEN). This mutex serializes all
+// ring-buffer access. Never called from ISR context (grep for LOG_* inside IRAM_ATTR functions turns up
+// only HalSystem's non-IRAM checkPanic()), so a plain (non-ISR) mutex is sufficient.
+static SemaphoreHandle_t logMutex = xSemaphoreCreateMutex();
+
+namespace {
+// RAII helper; falls back to no locking if logMutex hasn't been constructed yet (only possible if some
+// other translation unit's global constructor calls a LOG_* macro before this file's own global
+// initializer has run -- C++ does not guarantee cross-TU init order).
+struct LogLock {
+  bool locked = false;
+  LogLock() {
+    if (logMutex) {
+      xSemaphoreTake(logMutex, portMAX_DELAY);
+      locked = true;
+    }
+  }
+  ~LogLock() {
+    if (locked) {
+      xSemaphoreGive(logMutex);
+    }
+  }
+};
+}  // namespace
+
 void addToLogRingBuffer(const char* message) {
+  LogLock lock;
   // Add the message to the ring buffer, overwriting old messages if necessary.
   // If the magic is wrong or logHead is out of range (RTC_NOINIT_ATTR garbage
   // on cold boot), clear the entire buffer so subsequent reads are safe.
@@ -76,6 +111,7 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
 }
 
 std::string getLastLogs() {
+  LogLock lock;
   if (rtcLogMagic != LOG_RTC_MAGIC) {
     return {};
   }
@@ -83,8 +119,18 @@ std::string getLastLogs() {
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     size_t idx = (logHead + i) % MAX_LOG_LINES;
     if (logMessages[idx][0] != '\0') {
-      const size_t len = strnlen(logMessages[idx], MAX_ENTRY_LEN);
+      size_t len = strnlen(logMessages[idx], MAX_ENTRY_LEN);
+      // logPrintf's format string ends in "\n", but if the formatted prefix+message exceeded
+      // MAX_ENTRY_LEN, vsnprintf truncates and that trailing '\n' can be the part that's cut off. If we
+      // just concatenated entries as-is, a truncated entry would run straight into the next one with no
+      // separator, looking like two log lines spliced/interleaved into one. Strip any trailing
+      // newline(s) and always append exactly one, so every stored entry lands on its own line
+      // regardless of whether it was truncated.
+      while (len > 0 && (logMessages[idx][len - 1] == '\n' || logMessages[idx][len - 1] == '\r')) {
+        len--;
+      }
       output.append(logMessages[idx], len);
+      output += '\n';
     }
   }
   return output;
@@ -97,6 +143,7 @@ std::string getLastLogs() {
 // panic-reboot path) must call clearLastLogs() after a true result to fully
 // reinitialize the ring buffer and stamp the magic before getLastLogs() is used.
 bool sanitizeLogHead() {
+  LogLock lock;
   if (rtcLogMagic != LOG_RTC_MAGIC || logHead >= MAX_LOG_LINES) {
     logHead = 0;
     return true;
@@ -105,6 +152,7 @@ bool sanitizeLogHead() {
 }
 
 void clearLastLogs() {
+  LogLock lock;
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     logMessages[i][0] = '\0';
   }
