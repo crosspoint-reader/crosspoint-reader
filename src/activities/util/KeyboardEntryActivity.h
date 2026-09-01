@@ -109,6 +109,7 @@ class KeyboardEntryActivity : public Activity {
   // Advance of s[start, end) measured in place by temporarily null-terminating
   // at `end` — avoids a substr temporary per measurement.
   int measureRange(std::string& s, int start, int end) const;
+  bool rangeIsRtl(std::string& s, int start, int end) const;
   // Largest line end in (start, s.length()] whose advance fits maxWidth.
   // Binary search over the monotonic prefix advance; always advances at least
   // one byte so an oversized glyph cannot stall the wrap loop.

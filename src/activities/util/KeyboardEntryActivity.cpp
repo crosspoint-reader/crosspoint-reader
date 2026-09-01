@@ -1,5 +1,6 @@
 #include "KeyboardEntryActivity.h"
 
+#include <BidiUtils.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 
@@ -377,6 +378,15 @@ int KeyboardEntryActivity::measureRange(std::string& s, const int start, const i
   return width;
 }
 
+bool KeyboardEntryActivity::rangeIsRtl(std::string& s, const int start, const int end) const {
+  if (end <= start) return false;
+  const char saved = s[end];
+  s[end] = '\0';
+  const bool isRtl = BidiUtils::detectParagraphLevel(s.c_str() + start, 0, end - start) != 0;
+  s[end] = saved;
+  return isRtl;
+}
+
 int KeyboardEntryActivity::lineBreakEnd(std::string& s, const int start, const int maxWidth) const {
   const int len = static_cast<int>(s.length());
   if (measureRange(s, start, len) <= maxWidth) return len;
@@ -442,6 +452,7 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
     const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
     const int textWidth = measureRange(displayText, lineStartIdx, lineEndIdx);
     const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
+    const bool isRtl = rangeIsRtl(displayText, lineStartIdx, lineEndIdx);
     lastLineStartIdx = lineStartIdx;
     lastLineEndIdx = lineEndIdx;
     lastLineStartX = lineStartX;
@@ -449,23 +460,27 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
 
     if (y >= lineY - metrics.verticalSpacing && y < lineY + lineHeight + metrics.verticalSpacing) {
       if (x <= lineStartX) {
-        position = static_cast<size_t>(lineStartIdx);
+        position = static_cast<size_t>(isRtl ? lineEndIdx : lineStartIdx);
         return true;
       }
       if (x >= lineStartX + textWidth) {
-        position = static_cast<size_t>(lineEndIdx);
+        position = static_cast<size_t>(isRtl ? lineStartIdx : lineEndIdx);
         return true;
       }
 
       int previousWidth = 0;
-      for (int i = lineStartIdx; i < lineEndIdx; i++) {
-        const int nextWidth = measureRange(displayText, lineStartIdx, i + 1);
-        const int midpoint = lineStartX + previousWidth + (nextWidth - previousWidth) / 2;
-        if (x < midpoint) {
+      for (int i = lineStartIdx; i < lineEndIdx;) {
+        const int next = static_cast<int>(utf8Next(displayText, static_cast<size_t>(i)));
+        const int nextWidth = measureRange(displayText, lineStartIdx, next);
+        const int halfAdvance = (nextWidth - previousWidth) / 2;
+        const int midpoint =
+            isRtl ? lineStartX + textWidth - previousWidth - halfAdvance : lineStartX + previousWidth + halfAdvance;
+        if ((isRtl && x >= midpoint) || (!isRtl && x < midpoint)) {
           position = static_cast<size_t>(i);
           return true;
         }
         previousWidth = nextWidth;
+        i = next;
       }
       position = static_cast<size_t>(lineEndIdx);
       return true;
@@ -482,8 +497,9 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
   const int underlineBottom = lineY + lineHeight + metrics.verticalSpacing + 8;
   if (y >= inputStartY - metrics.verticalSpacing && y < underlineBottom && x >= effectiveMargin &&
       x < effectiveMargin + maxLineWidth + toggleReserve) {
-    position = x < lastLineStartX + lastLineWidth ? static_cast<size_t>(lastLineStartIdx)
-                                                  : static_cast<size_t>(lastLineEndIdx);
+    const bool isRtl = rangeIsRtl(displayText, lastLineStartIdx, lastLineEndIdx);
+    const bool insideText = x < lastLineStartX + lastLineWidth;
+    position = static_cast<size_t>(insideText == isRtl ? lastLineEndIdx : lastLineStartIdx);
     return true;
   }
 
@@ -759,6 +775,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
     textWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
     {
+      const bool isRtl = rangeIsRtl(displayText, lineStartIdx, lineEndIdx);
+      const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
       const bool isLastLine = (lineEndIdx == static_cast<int>(displayText.length()));
       bool isCursorLine = false;
       if (!cursorDrawn && cursorPos >= lineStartIdx &&
@@ -770,25 +788,25 @@ void KeyboardEntryActivity::render(RenderLock&&) {
           beforeCursor = displayText.substr(lineStartIdx, cursorPos - lineStartIdx);
         }
         int beforeWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, beforeCursor.c_str(), EpdFontFamily::REGULAR);
+        int throughCursorWidth = beforeWidth;
         int kernOffset = 0;
         if (cursorCharBytes > 0) {
           std::string beforeAndCursor = beforeCursor + displayCursorChar;
-          int beforeAndCursorWidth =
-              renderer.getTextAdvanceX(UI_12_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
+          throughCursorWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
           int charAdvance = renderer.getTextAdvanceX(UI_12_FONT_ID, displayCursorChar, EpdFontFamily::REGULAR);
-          kernOffset = beforeAndCursorWidth - beforeWidth - charAdvance;
+          kernOffset = throughCursorWidth - beforeWidth - charAdvance;
         }
-        if (centerText) {
-          cursorPixelX = effectiveMargin + (maxLineWidth - textWidth) / 2 + beforeWidth + kernOffset;
+        if (isRtl) {
+          const int logicalWidth = cursorMode && cursorCharBytes > 0 ? throughCursorWidth : beforeWidth;
+          cursorPixelX = lineStartX + textWidth - logicalWidth;
         } else {
-          cursorPixelX = effectiveMargin + beforeWidth + kernOffset;
+          cursorPixelX = lineStartX + beforeWidth + kernOffset;
         }
         cursorLineY = inputStartY + inputHeight;
         cursorDrawn = true;
         isCursorLine = true;
       }
 
-      const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
       if (isCursorLine && cursorMode && isPassword && !passwordVisible && !togglePos) {
         // Draw text in 3 parts to avoid block cursor overflowing onto next char.
         // displayText uses '*' for all chars; actual char may be wider than '*'.
