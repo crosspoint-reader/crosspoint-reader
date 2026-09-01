@@ -41,4 +41,20 @@ class HalClock {
   // Debouncing (skip if already synced once) is enforced by the caller, not here,
   // so the HAL stays free of any app-layer settings dependency.
   bool syncFromNTP();
+
+  // True when the system clock looks like a real calendar date rather than the
+  // ESP-IDF post-boot default (epoch 0). Device-independent: works whether or
+  // not an RTC is present.
+  static bool isSystemTimeValid();
+
+  // Sets the system clock via SNTP, independent of any RTC hardware. Blocks for
+  // up to ~5s waiting for a response; requires WiFi to be connected and is a
+  // no-op returning false if it isn't.
+  //
+  // Needed because a board with no RTC, or an RTC that only surfaces hour and
+  // minute, cannot preserve the calendar date across a reboot. Without a
+  // plausible date, certificate validation fails on every HTTPS request until
+  // something sets the clock. Cheap to call whenever isSystemTimeValid() is
+  // false, and skipped entirely once it is true.
+  static bool quickSyncSystemTime();
 };

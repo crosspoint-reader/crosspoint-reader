@@ -517,6 +517,20 @@ void WifiSelectionActivity::checkConnectionStatus() {
             WiFi.RSSI());
 #endif
 
+    // The system clock must hold a plausible date for certificate validation.
+    // A board with no RTC -- or one that only surfaces hour and minute -- loses
+    // the date across every reboot, and without this every HTTPS request
+    // (catalog, update check, font download) fails until something sets it.
+    // Skipped once the clock is already valid, so this costs the SNTP wait only
+    // after a cold boot rather than on every connect.
+    if (!HalClock::isSystemTimeValid()) {
+      // Best-effort, and deliberately not fatal: the helper logs its own
+      // failure, and a network that answered DHCP but not NTP is still a
+      // usable connection. Failing Wi-Fi setup over it would be worse than
+      // leaving HTTPS in the state it would have been in anyway.
+      (void)HalClock::quickSyncSystemTime();
+    }
+
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
     // Settings > Customise Status Bar > Sync clock now.
