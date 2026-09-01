@@ -2,6 +2,7 @@
 #include <HalStorage.h>
 
 #include <algorithm>
+#include <cstring>
 #include <string>
 #include <utility>
 #include <vector>
@@ -98,13 +99,16 @@ class Page {
   }
 
   bool addLink(const char* href, int16_t x, int16_t y, int16_t width, int16_t height) {
-    if (!href || href[0] == '\0' || strlen(href) >= sizeof(PageLink::href) || width <= 0 || height <= 0 ||
-        links.size() >= MAX_LINKS_PER_PAGE) {
+    if (!href || width <= 0 || height <= 0 || links.size() >= MAX_LINKS_PER_PAGE) {
+      return false;
+    }
+    const size_t hrefLen = strnlen(href, sizeof(PageLink::href));
+    if (hrefLen == 0 || hrefLen == sizeof(PageLink::href)) {
       return false;
     }
     links.emplace_back();
     auto& link = links.back();
-    strcpy(link.href, href);
+    memcpy(link.href, href, hrefLen + 1);
     link.x = x;
     link.y = y;
     link.width = width;
