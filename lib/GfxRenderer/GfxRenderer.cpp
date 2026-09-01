@@ -1650,6 +1650,16 @@ void GfxRenderer::clearScreen(const uint8_t color) const {
   if (_stripActive) {
     // Clear only the active band's scratch, not the shared framebuffer.
     memset(_stripBuf, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
+#if defined(CROSSPOINT_RESERVED_TOP_PERCENT)
+    // Strip planes bypass the shared framebuffer, so preserve the physical
+    // black exclusion band in every controller row they will replace.
+    const int reservedBytes = getTopReservedRows() / 8;
+    if (reservedBytes > 0) {
+      for (int row = 0; row < _stripRows; ++row) {
+        memset(_stripBuf + static_cast<size_t>(row) * panelWidthBytes, 0x00, reservedBytes);
+      }
+    }
+#endif
     return;
   }
   display.clearScreen(color);
