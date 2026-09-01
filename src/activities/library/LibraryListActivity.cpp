@@ -647,7 +647,7 @@ bool LibraryListActivity::handleButtons() {
       nav.selected--;
       requestUpdate();
     } else if (nav.top > 0) {
-      previousPage();
+      previousPage(/*selectLast=*/true);
     }
     return true;
   }
@@ -785,6 +785,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
 
   int books = 0;
   int headers = 0;
+  // Capture this after syncTabListViewport(), which may clamp nav.top.
   const int windowStart = static_cast<int>(props.topIndex);
   for (int entry = windowStart; entry < count && books < static_cast<int>(cap); entry++) {
     std::string& title = winTitles[static_cast<size_t>(books)];
@@ -816,6 +817,13 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
   props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
   screen.list(props);
+  if (selectLastOnNextBuild) {
+    selectLastOnNextBuild = false;
+    if (nav.drawnRows > 0) {
+      nav.selected = nav.top + nav.drawnRows;
+      nav.rebuildNeeded = true;
+    }
+  }
 }
 
 // The A-Z grid, as components: one button per PRESENT letter (an absent letter
@@ -978,6 +986,14 @@ void LibraryListActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, headerTitle());
 
   renderUi();
+  // Layout feedback can change the selected row after measuring variable-height
+  // pages. Rebuild in the same framebuffer before its single e-ink refresh.
+  for (int pass = 0; activeNav().consumeRebuildNeeded() && pass < 8; ++pass) {
+    renderer.clearScreen();
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
+                   headerTitle());
+    renderUi();
+  }
 
   drawPositionReadout();
   // The front pair carries Left and Right here, not previous and next: it pages
@@ -996,15 +1012,18 @@ void LibraryListActivity::nextPage() {
   auto& nav = activeNav();
   const int next = nav.top + std::max(1, nav.pageRows());
   if (next >= count) return;
+  selectLastOnNextBuild = false;
   nav.top = next;
   nav.selected = next + 1;
   requestUpdate();
 }
 
-void LibraryListActivity::previousPage() {
+void LibraryListActivity::previousPage(const bool selectLast) {
   auto& nav = activeNav();
+  selectLastOnNextBuild = false;
   if (nav.top <= 0) return;
   nav.top = std::max(0, nav.top - std::max(1, nav.pageRows()));
   nav.selected = nav.top + 1;
+  selectLastOnNextBuild = selectLast;
   requestUpdate();
 }

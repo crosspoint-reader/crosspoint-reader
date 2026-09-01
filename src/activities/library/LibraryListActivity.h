@@ -69,7 +69,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // direction lives on the tab (the drawn triangle), not in a second slot.
   void flipTitleDirection();
   void nextPage();
-  void previousPage();
+  void previousPage(bool selectLast = false);
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
@@ -134,6 +134,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Xun" (surname first) from "Jane Austen" (surname last), so the reader says
   // which they mean instead of the code guessing.
   bool jumpByGivenName = false;
+  bool selectLastOnNextBuild = false;
 
   // Visible-window row storage, reused across renders (buildRows). Bounded by
   // the densest page, never by the library. Headings get their own storage:
