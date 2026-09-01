@@ -46,6 +46,9 @@ class Activity {
   // Exclusive storage activities suspend global controls and normal activity
   // transitions so no filesystem code races a raw SD-card owner.
   virtual bool requiresExclusiveStorageLoop() const { return false; }
+  // Return true when sleep has been deferred for activity-owned work. The
+  // activity must eventually call completeDeferredDeepSleep().
+  virtual bool prepareForSleep(bool fromTimeout) { return false; }
   virtual bool isReaderActivity() const { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }

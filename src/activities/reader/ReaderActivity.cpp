@@ -25,7 +25,8 @@ ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedIn
 }
 
 std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                       std::string path, const bool allowFastInitialRefresh) {
+                                                       std::string path, const bool allowFastInitialRefresh,
+                                                       const bool allowAutomaticProgressCheck) {
   // ActivityManager requires heap ownership; each branch allocates exactly one screen-lifetime object.
   std::unique_ptr<ReaderActivity> activity;
   if (FsHelpers::hasXtcExtension(path)) {
@@ -33,7 +34,8 @@ std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, Ma
   } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
     activity = makeUniqueNoThrow<TxtReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
   } else {
-    activity = makeUniqueNoThrow<EpubReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
+    activity = makeUniqueNoThrow<EpubReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh,
+                                                     allowAutomaticProgressCheck);
   }
 
   if (!activity) {
@@ -81,8 +83,12 @@ void ReaderActivity::onExit() {
 }
 
 bool ReaderActivity::handleBackNavigation() {
-  return ReaderUtils::handleBackNavigation(mappedInput, activityManager, bookPath.c_str(),
-                                           {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->onGoHome(); }});
+  return ReaderUtils::handleBackNavigation(
+      mappedInput, activityManager, bookPath.c_str(),
+      {this, [](void* ctx) { static_cast<ReaderActivity*>(ctx)->leaveToHome(); }},
+      {this, [](void* ctx) {
+         static_cast<ReaderActivity*>(ctx)->leaveToFileBrowser(static_cast<ReaderActivity*>(ctx)->bookPath);
+       }});
 }
 
 void ReaderActivity::clearEndOfBookOptionsIfNeeded() {
@@ -105,10 +111,10 @@ bool ReaderActivity::handleEndOfBookMenu(const bool suppressConfirmRelease) {
   std::string openPath;
   switch (endOfBookOptions->handleMenuInput(mappedInput, &openPath)) {
     case EndOfBookOptions::Action::OpenBook:
-      activityManager.goToReader(openPath);
+      activityManager.goToReader(openPath, false, true);
       return true;
     case EndOfBookOptions::Action::GoHome:
-      onGoHome();
+      leaveToHome();
       return true;
     case EndOfBookOptions::Action::LastPage:
       onReturnFromEndOfBook();
@@ -131,7 +137,7 @@ bool ReaderActivity::handleEndOfBookPageTurn(const bool prevTriggered, const boo
     return true;
   }
   if (nextTriggered) {
-    onGoHome();
+    leaveToHome();
   } else if (prevTriggered) {
     onReturnFromEndOfBook();
     requestUpdate();

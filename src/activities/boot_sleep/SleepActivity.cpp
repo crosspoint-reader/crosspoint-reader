@@ -489,6 +489,9 @@ void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+  if (!renderScreen) {
+    return;
+  }
 
   const bool frameWasInverted = display.isInverted();
 

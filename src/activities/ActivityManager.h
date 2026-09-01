@@ -87,8 +87,9 @@ class ActivityManager {
   void goToFileBrowser(std::string path = {});
   void goToRecentBooks();
   void goToBrowser();
-  void goToReader(std::string path, bool allowFastInitialRefresh = false);
-  void goToSleep(bool fromTimeout = false);
+  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool allowAutomaticProgressCheck = false);
+  void showSleepScreen(bool fromTimeout = false);
+  void goToSleep(bool fromTimeout = false, bool renderScreen = true);
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
@@ -103,6 +104,7 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool requiresExclusiveStorageLoop() const;
+  bool prepareForSleep(bool fromTimeout);
   bool isReaderActivity() const;
   bool handleForcedRefresh();
   bool skipLoopDelay() const;

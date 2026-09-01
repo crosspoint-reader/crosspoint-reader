@@ -9,8 +9,10 @@
 #include <optional>
 #include <vector>
 
+#include "AutomaticProgressCheck.h"
 #include "BookmarkEntry.h"
 #include "EpubReaderMenuActivity.h"
+#include "KOReaderSyncActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
 #include "ReaderToolbarUi.h"
@@ -35,6 +37,10 @@ class EpubReaderActivity final : public ReaderActivity {
   float pendingSpineProgress = 0.0f;
   bool pendingScreenshot = false;
   bool pendingSyncSaveError = false;
+  bool automaticProgressCheckPending = false;
+  AutomaticProgressCheck automaticCheck_;
+  // Consecutive page-load failures. Each failure drops the section and rebuilds on the next render,
+  // which recovers a transiently corrupt cache; capped so a persistently bad page can't spin forever.
   uint8_t pageLoadRetryCount = 0;
   static constexpr uint8_t MAX_PAGE_LOAD_RETRIES = 3;
   bool skipNextButtonCheck = false;
@@ -46,6 +52,7 @@ class EpubReaderActivity final : public ReaderActivity {
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;
+  std::atomic<bool> initialRenderCompleted{false};
   bool bookmarkRemoved = false;
   std::vector<BookmarkEntry> cachedBookmarks;
   bool recentsEntryRemoved = false;
@@ -100,6 +107,9 @@ class EpubReaderActivity final : public ReaderActivity {
   int lastSavedSpineIndex = -1;
   int lastSavedPage = -1;
   int lastSavedPageCount = -1;
+  int sessionStartSpineIndex = -1;
+  int sessionStartPage = -1;
+  bool sessionStartPositionCaptured = false;
 
   static constexpr int BUILD_PAGES_PER_CHUNK = 8;
   static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
@@ -146,8 +156,30 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string moreRowValue(int row) const;
   void activateMoreRow(int row);
   void openDictionaryWordSelect();
-  bool launchKOReaderSync();
+  // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
+  // because no KOReader credentials are stored.
+  bool launchKOReaderSync(
+      KOReaderSyncActivity::Mode mode = KOReaderSyncActivity::Mode::MANUAL,
+      KOReaderSyncActivity::CompletionTarget completionTarget = KOReaderSyncActivity::CompletionTarget::READER,
+      std::optional<KOReaderProgress> prefetchedRemoteProgress = std::nullopt,
+      std::optional<CrossPointPosition> prefetchedRemotePosition = std::nullopt);
+  bool tryAutomaticProgressUpload(KOReaderSyncActivity::CompletionTarget completionTarget);
+  void leaveReader(KOReaderSyncActivity::CompletionTarget completionTarget);
+  void leaveToHome() override { leaveReader(KOReaderSyncActivity::CompletionTarget::HOME); }
+  void leaveToFileBrowser(const std::string&) override {
+    leaveReader(KOReaderSyncActivity::CompletionTarget::FILE_BROWSER);
+  }
   unsigned long confirmLongPressThreshold() const;
+
+  // Non-blocking automatic progress check (pull): the network fetch runs in a
+  // background task while the reader stays responsive; the result is validated
+  // against the current position before any prompt is shown.
+  void startAutomaticProgressCheck();
+  // Returns true when it launched the result screen and replaced this reader;
+  // the caller (loop) must return immediately, as epub/section are released.
+  bool pollAutomaticProgressCheck();
+  CrossPointPosition mapRemoteProgress(const KOReaderProgress& progress);
+
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void loadCachedBookmarks();
   void addBookmark();
@@ -176,8 +208,9 @@ class EpubReaderActivity final : public ReaderActivity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string bookPath,
-                              bool allowFastInitialRefresh)
-      : ReaderActivity("EpubReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh) {}
+                              bool allowFastInitialRefresh, bool allowAutomaticProgressCheck = false)
+      : ReaderActivity("EpubReader", renderer, mappedInput, std::move(bookPath), allowFastInitialRefresh),
+        automaticProgressCheckPending(allowAutomaticProgressCheck) {}
   ~EpubReaderActivity() override;
 
   void loop() override;
@@ -188,6 +221,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void onReturnFromEndOfBook() override;
 
   bool skipLoopDelay() override;
+  bool prepareForSleep(bool fromTimeout) override;
+  bool handleHomeGesture() override;
 
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;

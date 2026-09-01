@@ -89,7 +89,12 @@ void ActivityManager::loop() {
     return;
   }
 
-  if (currentActivity) {
+  // A transition can be queued outside the current activity's loop (for
+  // example, prepareForSleep() queues an automatic sync). Do not run the
+  // outgoing activity again in that state: it may observe already-released
+  // resources and queue a conflicting transition before the replacement is
+  // applied.
+  if (pendingAction == PendingAction::None && currentActivity) {
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) {
         return;
@@ -262,7 +267,8 @@ void ActivityManager::goToBrowser() {
   }
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
+void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh,
+                                 const bool allowAutomaticProgressCheck) {
   if (path.empty()) {
     goToFileBrowser("/");
     return;
@@ -278,14 +284,21 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
     return;
   }
 
-  auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh);
+  auto activity = ReaderActivity::create(renderer, mappedInput, std::move(path), allowFastInitialRefresh,
+                                         allowAutomaticProgressCheck);
   if (activity) {
     replaceActivity(std::move(activity));
   }
 }
 
-void ActivityManager::goToSleep(bool fromTimeout) {
-  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
+void ActivityManager::showSleepScreen(const bool fromTimeout) {
+  RenderLock lock;
+  SleepActivity sleepScreen(renderer, mappedInput, fromTimeout);
+  sleepScreen.onEnter();
+}
+
+void ActivityManager::goToSleep(const bool fromTimeout, const bool renderScreen) {
+  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout, renderScreen));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
 
@@ -337,6 +350,15 @@ bool ActivityManager::preventAutoSleep() const { return currentActivity && curre
 
 bool ActivityManager::requiresExclusiveStorageLoop() const {
   return currentActivity && currentActivity->requiresExclusiveStorageLoop();
+}
+
+bool ActivityManager::prepareForSleep(const bool fromTimeout) {
+  if (currentActivity && currentActivity->prepareForSleep(fromTimeout)) {
+    return true;
+  }
+  return std::any_of(stackActivities.rbegin(), stackActivities.rend(), [fromTimeout](const auto& activity) {
+    return activity->isReaderActivity() && activity->prepareForSleep(fromTimeout);
+  });
 }
 
 bool ActivityManager::isReaderActivity() const {
