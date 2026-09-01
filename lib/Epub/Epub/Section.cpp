@@ -45,9 +45,10 @@ namespace {
 //      flattened paragraphs with synthetic row/cell labels.
 // v42: Closing a block strips inherited vertical margins and padding.
 // v43: Paragraph base direction excludes direction changes from inline elements.
-// v44: Supported table rows serialize a compact grid element with vertical
+// v44: Persist internal-link rectangles with each page for touch navigation.
+// v45: Supported table rows serialize a compact grid element with vertical
 //      column boundaries instead of a horizontal separator only.
-constexpr uint8_t SECTION_FILE_VERSION = 44;
+constexpr uint8_t SECTION_FILE_VERSION = 45;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
