@@ -24,6 +24,10 @@ class HalStorage {
   HalStorage();
   bool begin();
   bool ready() const;
+  // Release the mounted volume and its block device before deep sleep. Call
+  // only after all file users have stopped; existing HalFiles become invalid.
+  // A deep-sleep wake resets the MCU and mounts storage again through begin().
+  bool prepareForDeepSleep();
   // USB Drive exclusively owns the SD card while active. Callers must stop
   // all filesystem work before beginUsbDrive(), then reboot after endUsbDrive().
   bool beginUsbDrive();

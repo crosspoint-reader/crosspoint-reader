@@ -44,6 +44,28 @@ class HalStorage::StorageLock {
   ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }
 };
 
+bool HalStorage::prepareForDeepSleep() {
+#if FREEINK_SD_SDMMC
+  StorageLock lock;
+  if (!SDCard.ready()) return true;
+
+  // Sleep preparation runs after all filesystem users have stopped. Detach the
+  // volume, synchronize the device, then stop the native host before its
+  // external rail is disabled.
+  FsBlockDeviceInterface* blockDevice = SDCard.detachFilesystemForRawAccess();
+  if (!blockDevice) {
+    LOG_ERR("STORAGE", "Failed to detach SD volume before deep sleep");
+    return false;
+  }
+  const bool synced = blockDevice->syncDevice();
+  if (!synced) LOG_ERR("STORAGE", "Failed to synchronize SD device before deep sleep");
+  blockDevice->end();
+  LOG_DBG("STORAGE", "SD volume and host stopped for deep sleep");
+  return synced;
+#endif
+  return true;
+}
+
 #if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC
 #error "USB Drive requires an SDMMC-backed storage profile"
 #endif
