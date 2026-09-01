@@ -103,7 +103,12 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
       errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
     } else if (vr == firmware_flash::Result::TOO_SMALL) {
       errorMessage = tr(STR_FIRMWARE_TOO_SMALL);
-    } else if (vr == firmware_flash::Result::BAD_CHIP || vr == firmware_flash::Result::WRONG_BOARD) {
+    } else if (vr == firmware_flash::Result::BAD_CHIP) {
+      // Distinct from WRONG_BOARD: chip is the MCU family, board is which
+      // device within that family. A single message for both made field
+      // reports impossible to tell apart.
+      errorMessage = tr(STR_FIRMWARE_WRONG_CHIP);
+    } else if (vr == firmware_flash::Result::WRONG_BOARD) {
       errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
     } else {
       errorMessage = tr(STR_INVALID_FIRMWARE);
@@ -171,10 +176,14 @@ void SdFirmwareUpdateActivity::performUpdate() {
     LOG_ERR("FW", "flash failed: %s", firmware_flash::resultName(result));
     // BAD_CHIP / WRONG_BOARD here is the TOCTOU re-validation catching a
     // wrong-device image the pre-confirmation pass missed (e.g. the SD card
-    // was swapped).
-    errorMessage = result == firmware_flash::Result::BAD_CHIP || result == firmware_flash::Result::WRONG_BOARD
-                       ? tr(STR_FIRMWARE_WRONG_DEVICE)
-                       : tr(STR_FIRMWARE_WRITE_FAILED);
+    // was swapped). Reported separately so the two are distinguishable.
+    if (result == firmware_flash::Result::BAD_CHIP) {
+      errorMessage = tr(STR_FIRMWARE_WRONG_CHIP);
+    } else if (result == firmware_flash::Result::WRONG_BOARD) {
+      errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+    } else {
+      errorMessage = tr(STR_FIRMWARE_WRITE_FAILED);
+    }
     RenderLock lock(*this);
     state = State::FAILED;
     requestUpdate();
