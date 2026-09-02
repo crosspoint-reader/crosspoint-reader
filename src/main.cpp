@@ -282,6 +282,10 @@ static bool loadSleepFrameBuffer() {
 // battery, and any failure just sleeps with the previous image; the caller's
 // WiFi shutdown tears the radio down either way.
 static void deliverSleepPluginEvents() {
+  // Activity-owned state must be queued before sleep.enter and before this
+  // same-sleep drain. The hook is idempotent with ordinary activity teardown.
+  activityManager.prepareForSleep();
+
   // Sleeping straight out of a book is the common flow, but the reader's own
   // reader.exit only fires later, inside goToSleep() — after this drain. Carry
   // the book and progress on sleep.enter itself so a sync handler bound to it
@@ -300,7 +304,7 @@ static void deliverSleepPluginEvents() {
     pluginevents::drain(&renderer);
     return;
   }
-  if (!pluginevents::wantsConnect(pluginevents::Event::SleepEnter)) return;
+  if (!pluginevents::wantsConnectAny()) return;
   if (powerManager.getBatteryPercentage() < 20) return;
   const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
   if (!cred) return;

@@ -36,6 +36,7 @@ against newer firmware degrades gracefully on older firmware.
 | ----------------- | ------------------------------------------------------ | ------------------------------------ |
 | `reader.open`     | A book is opened (EPUB/TXT/XTC)                        | `book` (SD path)                     |
 | `reader.exit`     | The reader is left (home, sleep, another activity)     | `book`, `percent` (0-100 whole-book) |
+| `reader.session`  | An active-reading summary is flushed before sleep/exit | fields documented below              |
 | `book.downloaded` | An on-device catalog download completed                | `path`, `title`, `plugin`            |
 | `sleep.enter`     | The device begins entering deep sleep                  | `book`, `percent` when sleeping out of a reader, else none |
 
@@ -43,6 +44,53 @@ against newer firmware degrades gracefully on older firmware.
 book is the common flow, and the reader's own `reader.exit` fires after the
 sleep-time drain: binding a progress-sync handler to both events means the
 current position is pushed on the sleep connection, not the next one.
+
+### `reader.session` contract
+
+All values are strings in the event's `vars` object:
+
+| Variable | Meaning |
+|---|---|
+| `book` | SD path |
+| `document` | binary KOSync partial-MD5, exactly 32 lowercase hex characters |
+| `start_time` | trusted Unix epoch at the start of the first counted dwell |
+| `end_time` | compact active end, exactly `start_time + duration_seconds` |
+| `duration_seconds` | sum of counted active dwell seconds |
+| `start_progress_bp` | first counted whole-book progress, 0..10000 basis points |
+| `end_progress_bp` | monotonic-clamped final progress, 0..10000 basis points |
+| `progress_scale` | literal `10000` |
+
+Only successful ordinary forward turns count. A displayed page contributes
+when it remains visible for at least 2 seconds; one dwell is capped at 1800
+seconds. Reverse turns, chapter skips, failed turns, and shorter displays are
+excluded and re-anchor the timer. At least 10 active seconds and a trustworthy
+positive start time are required. EPUB retains basis-point precision; TXT/XTC
+may report whole-percent steps. The document hash is calculated lazily only
+when an emit-worthy summary and a subscriber both exist.
+
+`end_time` is deliberately not the wall-clock time of the last interaction.
+Idle gaps are removed, so it always equals `start_time + duration_seconds` and
+is greater than `start_time` for every emitted session. The envelope
+`event.ts` remains the actual emission time.
+
+The pre-sleep activity hook queues and resets this event immediately before
+`sleep.enter` and the sleep drain. Normal reader teardown calls the same
+idempotent flush as a fallback, so direct-from-reader sleep queues it exactly
+once and can deliver it on that same sleep.
+
+A generic consumer can expand one summary into two distinct points without
+firmware knowing the destination schema:
+
+```json
+[
+  {"time": "{event.start_time}", "progress_bp": "{event.start_progress_bp}", "duration": "{event.duration_seconds}"},
+  {"time": "{event.end_time}", "progress_bp": "{event.end_progress_bp}", "duration": "0"}
+]
+```
+
+The distinct compact timestamps avoid a uniqueness collision even when the
+two progress values are equal. Preserve at-least-once delivery and deduplicate
+replayed points by the consumer's natural document/time key.
 
 ## Declaring handlers in `device.json`
 
@@ -82,7 +130,7 @@ Optional per handler:
   succeeds, when a screen is available (sleep entry, web-server session).
 - **`connect`** — normally the drain only runs when the device is already
   online. `"connect": true` opts this handler into WiFi bring-up at **sleep
-  entry only**: if events are queued for it, battery is at least 20%, and a
+  entry only**: if any event is queued for any opted-in handler, battery is at least 20%, and a
   saved credential exists for the last-connected network, the device shows a
   popup, joins with a 10-second deadline, drains, and proceeds to sleep. A
   failed join just defers delivery; sleep is never blocked on the network.
@@ -161,11 +209,10 @@ belongs on the service's server, keyed by the id in the sidecar.
 
 ## Worked example: hands-free progress sync
 
-A sync plugin writes `{"bookfusion_id": "36835"}` to the sidecar when it
-fetches a book, and binds the same progress `request` to `reader.exit` and
-`sleep.enter` with `"connect": true`. The user reads offline for a week and
+A sync plugin writes a service id to the sidecar when it fetches a book, and
+binds a request to `reader.session` with `"connect": true`. The user reads offline for a week and
 presses sleep: the device queues the event with the current percent, joins the
 saved network for a few seconds, POSTs
-`{"id":"36835","pct":74,"ts":1734212345}` to the plugin's server, shows
+the compact active-session summary to the plugin's server, shows
 "Synced", and goes to sleep. Nothing was tapped, no browser was involved, and
 the firmware contains no mention of the service.

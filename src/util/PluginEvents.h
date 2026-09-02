@@ -41,6 +41,7 @@ namespace pluginevents {
 enum class Event : uint8_t {
   ReaderOpen,      // "reader.open"      vars: book
   ReaderExit,      // "reader.exit"      vars: book, percent
+  ReaderSession,   // "reader.session"   vars: book, document, active-session summary
   BookDownloaded,  // "book.downloaded"  vars: path, title, plugin
   SleepEnter,      // "sleep.enter"      vars: book, percent when sleeping from a reader, else none
   COUNT
@@ -65,6 +66,10 @@ bool anySubscriber(Event e);
 // delivery happens now instead of the next online session. Used by the sleep
 // path to fetch e.g. a fresh sleep image before the chip powers down.
 bool wantsConnect(Event e);
+
+// True when any queued event belongs to a handler that opted into bounded
+// sleep-time WiFi bring-up.
+bool wantsConnectAny();
 
 // Appends the event to each subscribing plugin's outbox. No-op without
 // subscribers. An outbox over the size cap is dropped wholesale first (the

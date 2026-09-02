@@ -434,7 +434,8 @@ void EpubReaderActivity::loop() {
     }
 
     if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
-      pageTurn(true);
+      const bool succeeded = pageTurn(true);
+      notePageTurn(true, succeeded);
       requestUpdate();
       return;
     }
@@ -582,7 +583,8 @@ void EpubReaderActivity::loop() {
     }
     const bool forward = pendingManualTurn > 0;
     pendingManualTurn = 0;
-    pageTurn(forward);
+    const bool succeeded = pageTurn(forward);
+    notePageTurn(forward, succeeded);
     requestUpdate();
     return;
   }
@@ -606,7 +608,8 @@ void EpubReaderActivity::loop() {
   const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
   const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    skipPages(nextTriggered ? 1 : -1);
+    const bool succeeded = skipPages(nextTriggered ? 1 : -1);
+    notePageTurn(false, succeeded);
     requestUpdate();
     return;
   }
@@ -631,9 +634,11 @@ void EpubReaderActivity::loop() {
   }
 
   if (prevTriggered) {
-    pageTurn(false);
+    const bool succeeded = pageTurn(false);
+    notePageTurn(false, succeeded);
   } else {
-    pageTurn(true);
+    const bool succeeded = pageTurn(true);
+    notePageTurn(true, succeeded);
   }
   requestUpdate();
 }
@@ -2593,6 +2598,17 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
     }
   }
   return info;
+}
+
+int EpubReaderActivity::getProgressBasisPoints() const {
+  if (isAtEndOfBook()) return 10000;
+  if (!epub || !section || epub->getBookSize() == 0) return getProgressPercent() * 100;
+  const int totalPages = section->estimatedTotalPages();
+  if (totalPages <= 0) return getProgressPercent() * 100;
+  const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(totalPages);
+  const int basisPoints =
+      static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 10000.0f + 0.5f);
+  return std::clamp(basisPoints, 0, 10000);
 }
 
 CrossPointPosition EpubReaderActivity::getCurrentPosition() const {

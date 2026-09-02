@@ -16,7 +16,8 @@
 
 namespace {
 
-constexpr const char* kEventNames[] = {"reader.open", "reader.exit", "book.downloaded", "sleep.enter"};
+constexpr const char* kEventNames[] = {"reader.open", "reader.exit", "reader.session", "book.downloaded",
+                                       "sleep.enter"};
 static_assert(sizeof(kEventNames) / sizeof(kEventNames[0]) == static_cast<size_t>(pluginevents::Event::COUNT),
               "event name table out of sync");
 
@@ -107,6 +108,21 @@ bool wantsConnect(const Event e) {
   for (const auto& sub : subscribers) {
     if (sub.name[0] == '\0' || !(sub.connectMask & eventBit(e))) continue;
     if (Storage.exists(outboxPath(sub).c_str())) return true;
+  }
+  return false;
+}
+
+bool wantsConnectAny() {
+  for (const auto& sub : subscribers) {
+    if (sub.name[0] == '\0' || sub.connectMask == 0) continue;
+    std::string raw;
+    if (!Storage.readFileToString("PEVT", outboxPath(sub), MAX_OUTBOX_BYTES + MAX_EVENT_LINE, raw)) continue;
+    for (size_t i = 0; i < static_cast<size_t>(Event::COUNT); i++) {
+      if (!(sub.connectMask & eventBit(static_cast<Event>(i)))) continue;
+      char eventField[48];
+      snprintf(eventField, sizeof(eventField), "\"e\":\"%s\"", kEventNames[i]);
+      if (raw.find(eventField) != std::string::npos) return true;
+    }
   }
   return false;
 }
