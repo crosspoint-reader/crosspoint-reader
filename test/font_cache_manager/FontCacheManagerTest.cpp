@@ -123,8 +123,7 @@ TEST(FontCacheManagerTest, PrewarmScanDoesNotAllocateHeapMemory) {
   heapAllocationCount = 0;
   countHeapAllocations = true;
   auto scope = manager.createPrewarmScope();
-  manager.recordText("Repeated text: \xC3\xA9 \xE4\xB8\xAD \xF0\x9F\x98\x80", 7,
-                     EpdFontFamily::REGULAR);
+  manager.recordText("Repeated text: \xC3\xA9 \xE4\xB8\xAD \xF0\x9F\x98\x80", 7, EpdFontFamily::REGULAR);
   scope.endScanAndPrewarm();
   countHeapAllocations = false;
 
