@@ -9,6 +9,8 @@
 #include "ClippingStore.h"
 #include "ProtectedPaths.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookDataMove.h"
+#include "util/BookmarkUtil.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -16,6 +18,16 @@ namespace {
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
 // as a fallback. The date is not critical for WebDAV Class 1 operations.
 const char* FIXED_DATE = "Thu, 01 Jan 2024 00:00:00 GMT";
+
+// Clears a book's reading cache and bookmarks before it is overwritten by a MOVE/COPY
+// destination, so a stale cache/bookmark file from a previous book doesn't linger.
+void clearStaleDestinationBookData(const std::string& path) {
+  clearBookCache(path);
+  const std::string bookmarkPath = BookmarkUtil::getBookmarkPath(path);
+  if (Storage.exists(bookmarkPath.c_str()) && !Storage.remove(bookmarkPath.c_str())) {
+    LOG_ERR("DAV", "Failed to remove stale bookmarks file at %s (non-fatal)", bookmarkPath.c_str());
+  }
+}
 }  // namespace
 
 // ── RequestHandler interface ─────────────────────────────────────────────────
@@ -562,11 +574,11 @@ void WebDAVHandler::handleMove(WebServer& s) {
     return;
   }
 
-  clearBookCache(srcPath.c_str());
   file.close();
   const bool success = ClippingStore::moveBook(srcPath.c_str(), dstPath.c_str());
 
   if (success) {
+    moveBookData(srcPath.c_str(), dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -633,6 +645,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   if (dstExists) {
+    clearStaleDestinationBookData(dstPath.c_str());
     Storage.remove(dstPath.c_str());
   }
 
