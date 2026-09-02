@@ -94,6 +94,20 @@ TEST(TextWrap, GlyphWiderThanLineStillEmitted) {
   EXPECT_EQ(out, (Lines{"W", "x", "W"}));
 }
 
+// A forced single-glyph break that consumes a whole word must swallow the
+// following space, not emit it as an empty line on the next line.
+TEST(TextWrap, ForcedBreakConsumingWordSwallowsSeparator) {
+  // 'W' has width 2; everything else width 1; line width 1.
+  auto measure = [](const std::string& s) {
+    int w = 0;
+    for (char c : s) w += (c == 'W') ? 2 : 1;
+    return w;
+  };
+  auto trunc = [&](const std::string& s) { return s; };
+  const Lines out = textwrap::wrapLines("W xy", 1, 5, measure, trunc);
+  EXPECT_EQ(out, (Lines{"W", "x", "y"}));
+}
+
 TEST(TextWrap, EmptyAndNullInputs) {
   EXPECT_TRUE(wrap("", 10, 3).empty());
   EXPECT_TRUE(wrap(nullptr, 10, 3).empty());

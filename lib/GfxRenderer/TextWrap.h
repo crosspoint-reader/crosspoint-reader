@@ -2,8 +2,11 @@
 
 #include <Utf8.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Greedy word-wrap for GfxRenderer::wrappedText(), header-only so the pure
@@ -13,6 +16,8 @@
 // Breaks on ASCII spaces; a token wider than maxWidth is hard-broken at UTF-8
 // codepoint boundaries rather than dropped (#2949). This is codepoint-level, not
 // full Unicode line-breaking/grapheme segmentation (future work).
+// Every emitted line is a contiguous slice of the input, so traversal is
+// allocation-free: the only heap use is the returned line strings.
 namespace textwrap {
 
 template <typename Measure, typename TruncateToWidth>
@@ -21,73 +26,85 @@ std::vector<std::string> wrapLines(const char* text, const int maxWidth, const i
   std::vector<std::string> lines;
   if (!text || maxWidth <= 0 || maxLines <= 0) return lines;
 
-  std::string remaining = text;
-  std::string currentLine;
+  const std::string_view in(text);
+  // No line is emptier than one codepoint, so lines can't exceed the byte count;
+  // cap the reservation so a huge maxLines on short text can't over-allocate.
+  lines.reserve(std::min(static_cast<size_t>(maxLines), in.size()));
+  std::string scratch;  // reused for width probes; capacity is retained across calls
 
-  // Longest prefix of s (>= 1 codepoint) that fits maxWidth, as a byte length on
-  // a UTF-8 boundary. Takes one codepoint even if it overflows, to make progress.
-  const auto prefixWithinWidth = [&](const std::string& s) -> size_t {
-    const char* base = s.c_str();
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(base);
+  // Width of the byte range in[start, start+len), via the reused scratch buffer.
+  const auto measureRange = [&](const size_t start, const size_t len) -> int {
+    scratch.assign(in.data() + start, len);
+    return measure(scratch);
+  };
+
+  // Longest prefix of in[start, start+len) (>= 1 codepoint) that fits maxWidth,
+  // as a byte length on a UTF-8 boundary. Takes one codepoint even if it
+  // overflows, to make progress. Walks boundaries via the lead byte only, so it
+  // never reads past the range even on truncated/invalid input.
+  const auto prefixWithinWidth = [&](const size_t start, const size_t len) -> size_t {
+    size_t consumed = 0;
     size_t lastFit = 0;
-    while (*p) {
-      const uint8_t* q = p;
-      utf8NextCodepoint(&q);
-      const size_t cand = static_cast<size_t>(reinterpret_cast<const char*>(q) - base);
-      if (measure(s.substr(0, cand)) <= maxWidth) {
+    while (consumed < len) {
+      size_t step = static_cast<size_t>(utf8CodepointLen(static_cast<uint8_t>(in[start + consumed])));
+      if (step > len - consumed) step = len - consumed;  // clamp to the range end
+      const size_t cand = consumed + step;
+      if (measureRange(start, cand) <= maxWidth) {
         lastFit = cand;
-        p = q;
+        consumed = cand;
       } else {
         break;
       }
     }
     if (lastFit == 0) {
-      const uint8_t* q = reinterpret_cast<const uint8_t*>(base);
-      utf8NextCodepoint(&q);
-      lastFit = static_cast<size_t>(reinterpret_cast<const char*>(q) - base);
+      lastFit = static_cast<size_t>(utf8CodepointLen(static_cast<uint8_t>(in[start])));
+      if (lastFit > len) lastFit = len;
     }
     return lastFit;
   };
 
-  while (!remaining.empty()) {
+  size_t pos = 0;         // start of the next unprocessed word
+  size_t lineStart = 0;   // start of the current line's committed content
+  size_t lineLen = 0;     // its byte length
+  bool haveLine = false;  // whether the current line has any content
+
+  while (pos < in.size()) {
     if (static_cast<int>(lines.size()) == maxLines - 1) {
       // Last available line: fold in the rest and ellipsize.
-      lines.push_back(truncateToWidth(currentLine.empty() ? remaining : currentLine + " " + remaining));
+      const size_t start = haveLine ? lineStart : pos;
+      scratch.assign(in.data() + start, in.size() - start);
+      lines.push_back(truncateToWidth(scratch));
       return lines;
     }
 
-    size_t spacePos = remaining.find(' ');
-    std::string word;
-    if (spacePos == std::string::npos) {
-      word = remaining;
-      remaining.clear();
-    } else {
-      word = remaining.substr(0, spacePos);
-      remaining.erase(0, spacePos + 1);
-    }
+    const size_t space = in.find(' ', pos);
+    const size_t wordEnd = (space == std::string_view::npos) ? in.size() : space;
+    const size_t candStart = haveLine ? lineStart : pos;
 
-    std::string testLine = currentLine.empty() ? word : currentLine + " " + word;
-
-    if (measure(testLine) <= maxWidth) {
-      currentLine = testLine;
-    } else if (!currentLine.empty()) {
-      // Doesn't fit: flush and re-queue `word` so it's handled fresh next line.
-      lines.push_back(currentLine);
-      currentLine.clear();
-      if (static_cast<int>(lines.size()) >= maxLines) return lines;
-      remaining = remaining.empty() ? word : word + " " + remaining;
+    if (measureRange(candStart, wordEnd - candStart) <= maxWidth) {
+      lineStart = candStart;
+      lineLen = wordEnd - candStart;
+      haveLine = true;
+      pos = (space == std::string_view::npos) ? in.size() : space + 1;  // consume word (+ space)
+    } else if (haveLine) {
+      // Doesn't fit: flush and re-examine `word` fresh on the next line.
+      lines.emplace_back(in.data() + lineStart, lineLen);
+      haveLine = false;
+      lineLen = 0;
     } else {
-      // currentLine empty, so testLine == word and word alone exceeds maxWidth:
-      // hard-break at a codepoint boundary and re-queue the rest (#2949).
-      const size_t take = prefixWithinWidth(word);
-      lines.push_back(word.substr(0, take));
-      const std::string rest = word.substr(take);
-      remaining = remaining.empty() ? rest : rest + " " + remaining;
+      // Empty line and the word alone exceeds maxWidth: hard-break at a
+      // codepoint boundary and leave the rest for the next line (#2949).
+      const size_t take = prefixWithinWidth(pos, wordEnd - pos);
+      lines.emplace_back(in.data() + pos, take);
+      pos += take;
+      // If the break consumed the whole word, step past its trailing space so
+      // the next iteration does not see it as an empty word.
+      if (pos == wordEnd && space != std::string_view::npos) ++pos;
     }
   }
 
-  if (!currentLine.empty() && static_cast<int>(lines.size()) < maxLines) {
-    lines.push_back(currentLine);
+  if (haveLine && static_cast<int>(lines.size()) < maxLines) {
+    lines.emplace_back(in.data() + lineStart, lineLen);
   }
 
   return lines;
