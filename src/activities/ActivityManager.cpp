@@ -249,7 +249,14 @@ void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
-void ActivityManager::goToLibrary() { replaceActivity(std::make_unique<LibraryListActivity>(renderer, mappedInput)); }
+void ActivityManager::goToLibrary() {
+  auto activity = makeUniqueNoThrow<LibraryListActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: library activity");
+    return;
+  }
+  replaceActivity(std::move(activity));
+}
 
 void ActivityManager::goToRecentBooks() {
   replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
