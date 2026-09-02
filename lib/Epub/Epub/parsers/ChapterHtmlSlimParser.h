@@ -47,6 +47,16 @@ class ChapterHtmlSlimParser {
   // blockStyleStack, so no snapshot of those is needed alongside the flag; see
   // materializePendingBr() for why that's safe.
   bool pendingBr = false;
+  // Set by makePages() when it withholds the "Extra paragraph spacing" half-line gap
+  // because the block it just laid out is followed by a <br>-originated block (see
+  // makePages()'s nextBlockIsBrLineBreak parameter). Left true means "a line-break
+  // <br> is still deciding what it is": if the following block turns out to stay
+  // empty (a scene break), startNewTextBlock()'s empty-block reuse path gives the
+  // withheld half-line back so the scene break renders exactly as before this
+  // suppression existed; if the block instead receives text (a genuine mid-paragraph
+  // line break), the flag is simply left to be overwritten by the next <br> and the
+  // half-line stays gone, which is the point of the suppression.
+  bool brLineBreakSpacingSuppressed = false;
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   // Ruby text state
   bool inRuby = false;
@@ -178,7 +188,13 @@ class ChapterHtmlSlimParser {
   void addTableRowSeparator();
   void materializePendingBr();
   void setCurrentPageVisibleOffset(uint32_t offset);
-  void makePages();
+  // Lays out currentTextBlock and adds it to the current page. nextBlockIsBrLineBreak
+  // is true when the caller (startNewTextBlock) is about to start a block created by a
+  // <br> that has text before it: the two blocks are consecutive lines of one paragraph,
+  // not a paragraph boundary, so the "Extra paragraph spacing" half-line gap normally
+  // added after every block is withheld (see brLineBreakSpacingSuppressed). Defaults to
+  // false so the finishParse() trailing-page call is unaffected.
+  void makePages(bool nextBlockIsBrLineBreak = false);
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);

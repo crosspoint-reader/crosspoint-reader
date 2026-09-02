@@ -404,6 +404,17 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
         // This only fires when the <br> block stayed empty (i.e. no inline text was added).
         const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression));
         incoming.marginTop = static_cast<int16_t>(incoming.marginTop + lineHeight);
+
+        // The half-line "Extra paragraph spacing" gap after the block before this <br>
+        // was withheld by makePages() on the chance this turned into a mid-paragraph line
+        // break (see brLineBreakSpacingSuppressed). It didn't: the <br> block stayed empty,
+        // confirming a scene break, so give the withheld half-line back on top of the full
+        // line above. Net effect: a scene break renders with exactly the same total gap as
+        // before this suppression existed.
+        if (brLineBreakSpacingSuppressed) {
+          incoming.marginTop = static_cast<int16_t>(incoming.marginTop + lineHeight / 2);
+          brLineBreakSpacingSuppressed = false;
+        }
       }
 
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(incoming, BlockStyle::CombineAxis::Vertical));
@@ -423,7 +434,14 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       return;
     }
 
-    makePages();
+    // blockStyle is the block about to be started. When it was created by a <br> that has
+    // text before it (fromBrElement, deferred by materializePendingBr()), the outgoing
+    // block currently being laid out and this incoming one are consecutive lines of one
+    // paragraph, so withhold the trailing "Extra paragraph spacing" gap at the boundary
+    // between them (see makePages()/brLineBreakSpacingSuppressed). Whether it stays
+    // withheld (line break) or is given back (the <br> block turns out to stay empty, a
+    // scene break) is resolved above in the empty-block reuse branch.
+    makePages(blockStyle.fromBrElement);
   }
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
@@ -729,6 +747,21 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   // Middle of skip
   if (self->skipUntilDepth < self->depth) {
+    self->depth += 1;
+    return;
+  }
+
+  // A <br> inside a pagebreak marker (Calibre commonly emits
+  // <span epub:type="pagebreak" ...><br class="calibre1"/></span>) is print-layout
+  // junk left over from the page break, not proof of real content the way any other
+  // child element is: swallow it entirely instead of letting the child-element check
+  // below disarm the capture, so it renders nothing, same as an empty marker always
+  // has. Depth still moves exactly like a normal element (in here, and back out via
+  // this <br>'s own unmodified endElement) so the marker's own closing tag keeps
+  // landing at the depth the capture-close check below expects. No pendingBr is set,
+  // so there is nothing for that endElement (or the marker's own, if real text
+  // follows and gets replayed) to materialize.
+  if (self->pagebreakCapturing && strcmp(name, "br") == 0) {
     self->depth += 1;
     return;
   }
@@ -2344,7 +2377,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
   currentPageNextY += lineHeight;
 }
 
-void ChapterHtmlSlimParser::makePages() {
+void ChapterHtmlSlimParser::makePages(const bool nextBlockIsBrLineBreak) {
   if (!currentTextBlock) {
     LOG_ERR("EHP", "!! No text block to make pages for !!");
     return;
@@ -2394,8 +2427,22 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY += blockStyle.paddingBottom;
   }
 
-  // Extra paragraph spacing if enabled (default behavior)
+  // Extra paragraph spacing if enabled (default behavior). Withheld at a <br> line-break
+  // boundary (nextBlockIsBrLineBreak): a <br> with text after it is a bare line break in
+  // browsers, not a paragraph break, so the two blocks should read as consecutive lines
+  // with no half-line gap between them. The withheld amount isn't lost: if the <br> block
+  // this boundary leads into turns out to stay empty (a scene break) after all,
+  // startNewTextBlock()'s empty-block reuse path gives it back alongside the full
+  // line-height gap it already injects for that case.
+  // Any layout boundary invalidates a previously withheld half-line: it may only be
+  // given back by the empty-block reuse that IMMEDIATELY follows the withholding
+  // boundary, never by a scene break paragraphs later.
+  brLineBreakSpacingSuppressed = false;
   if (extraParagraphSpacing) {
-    currentPageNextY += lineHeight / 2;
+    if (nextBlockIsBrLineBreak) {
+      brLineBreakSpacingSuppressed = true;
+    } else {
+      currentPageNextY += lineHeight / 2;
+    }
   }
 }
