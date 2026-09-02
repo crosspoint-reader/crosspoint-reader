@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "FontCacheManager.h"
+#include "TextWrap.h"
 
 namespace {
 
@@ -1756,66 +1757,11 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
 
 std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* text, const int maxWidth,
                                                   const int maxLines, const EpdFontFamily::Style style) const {
-  std::vector<std::string> lines;
-
-  if (!text || maxWidth <= 0 || maxLines <= 0) return lines;
-
-  std::string remaining = text;
-  std::string currentLine;
-
-  while (!remaining.empty()) {
-    if (static_cast<int>(lines.size()) == maxLines - 1) {
-      // Last available line: combine any word already started on this line with
-      // the rest of the text, then let truncatedText fit it with an ellipsis.
-      std::string lastContent = currentLine.empty() ? remaining : currentLine + " " + remaining;
-      lines.push_back(truncatedText(fontId, lastContent.c_str(), maxWidth, style));
-      return lines;
-    }
-
-    // Find next word
-    size_t spacePos = remaining.find(' ');
-    std::string word;
-
-    if (spacePos == std::string::npos) {
-      word = remaining;
-      remaining.clear();
-    } else {
-      word = remaining.substr(0, spacePos);
-      remaining.erase(0, spacePos + 1);
-    }
-
-    std::string testLine = currentLine.empty() ? word : currentLine + " " + word;
-
-    if (getTextWidth(fontId, testLine.c_str(), style) <= maxWidth) {
-      currentLine = testLine;
-    } else {
-      if (!currentLine.empty()) {
-        lines.push_back(currentLine);
-        // If the carried-over word itself exceeds maxWidth, truncate it and
-        // push it as a complete line immediately — storing it in currentLine
-        // would allow a subsequent short word to be appended after the ellipsis.
-        if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
-          lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
-          currentLine.clear();
-          if (static_cast<int>(lines.size()) >= maxLines) return lines;
-        } else {
-          currentLine = word;
-        }
-      } else {
-        // Single word wider than maxWidth: truncate and stop to avoid complicated
-        // splitting rules (different between languages). Results in an aesthetically
-        // pleasing end.
-        lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
-        return lines;
-      }
-    }
-  }
-
-  if (!currentLine.empty() && static_cast<int>(lines.size()) < maxLines) {
-    lines.push_back(currentLine);
-  }
-
-  return lines;
+  // Line-breaking logic lives in textwrap::wrapLines (header-only, unit-tested);
+  // here we bind it to this renderer's font measurement and ellipsis truncation.
+  return textwrap::wrapLines(
+      text, maxWidth, maxLines, [&](const std::string& s) { return getTextWidth(fontId, s.c_str(), style); },
+      [&](const std::string& s) { return truncatedText(fontId, s.c_str(), maxWidth, style); });
 }
 
 // Note: Internal driver treats screen in command orientation; this library exposes a logical orientation
