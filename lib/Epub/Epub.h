@@ -25,7 +25,6 @@ class Epub {
   std::string cachePath;
   // Spine and TOC cache
   std::unique_ptr<BookMetadataCache> bookMetadataCache;
-  std::unique_ptr<BookMetadataCache::BookMetadata> fallbackMetadata;
   // CSS parser for styling
   std::unique_ptr<CssParser> cssParser;
   // CSS files
@@ -47,7 +46,7 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
-  bool loadMetadata();
+  bool loadMetadata(std::string& title, std::string& author);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

@@ -26,13 +26,9 @@
 namespace library {
 
 inline constexpr char CLIX_MAGIC[4] = {'C', 'L', 'X', '1'};
-// 2: author order became surname-first.
-// 3: the name blob carries the book's own title after the author, and `name` went
-//    back to being the FILENAME — writing the title there broke opening a book,
-//    since the file path is rebuilt from that slot.
 // Bumping this is the whole migration: an index from an older version fails
-// validation and is rebuilt.
-inline constexpr uint8_t CLIX_FORMAT_VERSION = 3;
+// validation and is rebuilt. This format first lands from this branch as v1.
+inline constexpr uint8_t CLIX_FORMAT_VERSION = 1;
 
 // Bump when the fold or the article table changes. Forces fold and ranks to be
 // rebuilt while firstSeen values are preserved, so "recently added" survives.
@@ -42,17 +38,13 @@ inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_FOLD_BYTES = 96;
 inline constexpr size_t CLIX_AUTHOR_KEY_BYTES = 12;
 
-// A 2000-book card already produces a 429 KiB index; beyond this the design's
-// own measurements stop holding, so the walk stops and flags the index partial
-// rather than silently producing something it cannot page.
+// A 2000-book card already produces a 429 KiB index. This hard bound keeps every
+// record count and permutation ordinal representable by uint16_t.
 inline constexpr uint16_t CLIX_MAX_RECORDS = 4096;
 
 enum ClixFlags : uint8_t {
-  CLIX_FLAG_WALK_COMPLETE = 1 << 0,
-  CLIX_FLAG_RANKS_DEGRADED = 1 << 1,
-  CLIX_FLAG_ENRICH_COMPLETE = 1 << 2,
-  CLIX_FLAG_BOOKS_AT_ROOT = 1 << 3,
-  CLIX_FLAG_DEDUP_DEGRADED = 1 << 4,
+  CLIX_FLAG_RANKS_DEGRADED = 1 << 0,
+  CLIX_FLAG_DEDUP_DEGRADED = 1 << 1,
 };
 
 #pragma pack(push, 1)
@@ -62,20 +54,11 @@ struct ClixHeader {
   uint8_t formatVersion;
   uint8_t foldVersion;
   uint8_t flags;
-  uint8_t reserved0;
+  uint8_t padding0;
   uint16_t bookCount;
   uint16_t folderCount;
-  // Books with a resolvable author key. Author-descending reverses only this
-  // leading block, so unknown authors stay last in both directions without
-  // needing a second permutation array.
-  uint16_t knownAuthorCount;
   uint16_t nextFirstSeen;
-  // Reserved. These held enrichCursor and longestName[3], added for an
-  // incremental-enrichment pass and a layout hint that were never built — nothing
-  // has ever written or read them. Named fields that no code maintains are worse
-  // than blank space: the next reader assumes they mean something. Kept as bytes
-  // so the header stays 64 and the format version does not have to move.
-  uint8_t reserved1[8];
+  uint16_t padding1;
   uint32_t folderStart;
   uint32_t folderLen;
   uint32_t recordStart;
@@ -85,32 +68,22 @@ struct ClixHeader {
   // Expected total file size. Comparing it with the real size is a free
   // truncation guard: a build interrupted by a power cut cannot pass.
   uint32_t selfSize;
-  // Reserved; was scanSignature, intended to detect a card changing under the
-  // index and never wired to anything.
-  uint32_t reserved2;
-  uint32_t lastWalkMs;
-  uint32_t totalBookBytes;
+  uint8_t reserved[20];
 };
 static_assert(sizeof(ClixHeader) == 64, "ClixHeader must be exactly 64 bytes");
 
 struct ClixRecord {
   uint32_t nameOff;   // from nameStart, into the display-name blob
   uint32_t fileSize;  // captured while the dirent was open; part of the identity
-  // Reserved. Per-record inverse ranks used to live here; the authorOrder and
-  // dateOrder permutation sections carry that ordering and no reader ever read
-  // these back. Kept as padding so the record stays 128 bytes.
-  uint16_t reserved0;
-  uint16_t reserved1;
   uint16_t firstSeen;
   uint16_t folderId;
   uint8_t nameLen;
   uint8_t foldLen;
   uint8_t authorKeyLen;
-  // Reserved. Held a packed book format, author provenance and title origin;
-  // nothing ever read them back. Written as 0 until a screen needs one of them.
-  uint8_t flags;
+  uint8_t padding;
   char fold[CLIX_FOLD_BYTES];
   char authorKey[CLIX_AUTHOR_KEY_BYTES];
+  uint8_t reserved[4];
 };
 static_assert(sizeof(ClixRecord) == 128, "ClixRecord must be exactly 128 bytes");
 static_assert(CLIX_ALIGN % sizeof(ClixRecord) == 0, "records must tile a 512-byte sector");
@@ -182,7 +155,6 @@ inline ClixValidity validateHeader(const ClixHeader& h, const uint64_t actualFil
       expected.permStart != h.permStart || expected.nameStart != h.nameStart || expected.selfSize != h.selfSize) {
     return ClixValidity::SectionsInconsistent;
   }
-  if (h.knownAuthorCount > h.bookCount) return ClixValidity::SectionsInconsistent;
   return ClixValidity::Ok;
 }
 

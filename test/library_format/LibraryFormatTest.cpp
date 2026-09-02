@@ -18,7 +18,6 @@ ClixHeader makeHeader(const uint16_t books, const uint32_t folderBytes = 300, co
   h.foldVersion = CLIX_FOLD_VERSION;
   h.bookCount = books;
   h.folderCount = 4;
-  h.knownAuthorCount = books;
   layoutSections(h, folderBytes, nameBytes == 0 ? books * 80u : nameBytes);
   return h;
 }
@@ -143,10 +142,6 @@ TEST(LibraryFormatValidation, RejectsTamperedOffsets) {
   ClixHeader h = makeHeader(60, 116);
   h.recordStart += CLIX_ALIGN;  // plausible, aligned, and wrong
   EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::SectionsInconsistent);
-
-  h = makeHeader(60, 116);
-  h.knownAuthorCount = h.bookCount + 1;  // would page past the permutation array
-  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::SectionsInconsistent);
 }
 
 TEST(LibraryFormatValidation, RejectsAnImpossibleBookCount) {
@@ -166,7 +161,7 @@ TEST(LibraryFormatValidation, AcceptsAnEmptyLibrary) {
 
 TEST(LibraryHeaderFlags, DedupDegradationIsPersistedWithoutChangingTheLayout) {
   ClixHeader h = makeHeader(60, 116);
-  h.flags = CLIX_FLAG_WALK_COMPLETE | CLIX_FLAG_DEDUP_DEGRADED;
+  h.flags = CLIX_FLAG_DEDUP_DEGRADED;
 
   EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::Ok);
   EXPECT_NE(h.flags & CLIX_FLAG_DEDUP_DEGRADED, 0);
@@ -178,20 +173,16 @@ TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
   // offsets move and the on-disk format silently forks.
   EXPECT_EQ(offsetof(ClixRecord, nameOff), 0u);
   EXPECT_EQ(offsetof(ClixRecord, fileSize), 4u);
-  // Same offsets the retired authorRank/dateRank fields held: the bytes are
-  // reserved, not reclaimed, so the record layout is unchanged.
-  EXPECT_EQ(offsetof(ClixRecord, reserved0), 8u);
-  EXPECT_EQ(offsetof(ClixRecord, reserved1), 10u);
-  EXPECT_EQ(offsetof(ClixRecord, firstSeen), 12u);
-  EXPECT_EQ(offsetof(ClixRecord, folderId), 14u);
-  EXPECT_EQ(offsetof(ClixRecord, nameLen), 16u);
-  EXPECT_EQ(offsetof(ClixRecord, foldLen), 17u);
-  EXPECT_EQ(offsetof(ClixRecord, authorKeyLen), 18u);
-  EXPECT_EQ(offsetof(ClixRecord, flags), 19u);
-  EXPECT_EQ(offsetof(ClixRecord, fold), 20u);
-  EXPECT_EQ(offsetof(ClixRecord, authorKey), 116u);
+  EXPECT_EQ(offsetof(ClixRecord, firstSeen), 8u);
+  EXPECT_EQ(offsetof(ClixRecord, folderId), 10u);
+  EXPECT_EQ(offsetof(ClixRecord, nameLen), 12u);
+  EXPECT_EQ(offsetof(ClixRecord, foldLen), 13u);
+  EXPECT_EQ(offsetof(ClixRecord, authorKeyLen), 14u);
+  EXPECT_EQ(offsetof(ClixRecord, fold), 16u);
+  EXPECT_EQ(offsetof(ClixRecord, authorKey), 112u);
+  EXPECT_EQ(offsetof(ClixRecord, reserved), 124u);
 
   EXPECT_EQ(offsetof(ClixHeader, bookCount), 8u);
-  EXPECT_EQ(offsetof(ClixHeader, folderStart), 24u);
-  EXPECT_EQ(offsetof(ClixHeader, selfSize), 48u);
+  EXPECT_EQ(offsetof(ClixHeader, folderStart), 16u);
+  EXPECT_EQ(offsetof(ClixHeader, selfSize), 40u);
 }

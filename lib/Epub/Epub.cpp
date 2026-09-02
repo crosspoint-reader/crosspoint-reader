@@ -431,8 +431,6 @@ CssParser::ParseResult Epub::parseCssFiles(const CssParser::CacheStatus existing
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
-  fallbackMetadata.reset();
-
   // Initialize spine/TOC cache
   bookMetadataCache.reset(new BookMetadataCache(cachePath));
   // Always create CssParser - needed for inline style parsing even without CSS files
@@ -595,38 +593,34 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::loadMetadata() {
-  fallbackMetadata.reset();
+bool Epub::loadMetadata(std::string& title, std::string& author) {
+  title.clear();
+  author.clear();
 
-  bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
-  if (bookMetadataCache && bookMetadataCache->load()) {
+  auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (metadataCache && metadataCache->load()) {
+    title = metadataCache->coreMetadata.title;
+    author = metadataCache->coreMetadata.author;
     return true;
   }
-  if (!bookMetadataCache) {
+  if (!metadataCache) {
     LOG_ERR("EBP", "Could not allocate metadata cache reader");
   }
-  bookMetadataCache.reset();
-
-  fallbackMetadata = makeUniqueNoThrow<BookMetadataCache::BookMetadata>();
-  if (!fallbackMetadata) {
-    LOG_ERR("EBP", "Could not allocate package metadata");
-    return false;
-  }
+  metadataCache.reset();
 
   ZipFile zip(filepath);
   if (!zip.open()) {
     LOG_DBG("EBP", "Could not open ePub for package metadata: %s", filepath.c_str());
-    fallbackMetadata.reset();
     return false;
   }
 
-  const bool loaded = parseContentOpf(*fallbackMetadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
+  BookMetadataCache::BookMetadata metadata;
+  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
   zip.close();
-  if (!loaded) {
-    fallbackMetadata.reset();
-    return false;
-  }
+  if (!loaded) return false;
 
+  title = std::move(metadata.title);
+  author = std::move(metadata.author);
   return true;
 }
 
@@ -659,20 +653,20 @@ const std::string& Epub::getPath() const { return filepath; }
 
 const std::string& Epub::getTitle() const {
   static std::string blank;
-  if (bookMetadataCache && bookMetadataCache->isLoaded()) return bookMetadataCache->coreMetadata.title;
-  return fallbackMetadata ? fallbackMetadata->title : blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
+  return bookMetadataCache->coreMetadata.title;
 }
 
 const std::string& Epub::getAuthor() const {
   static std::string blank;
-  if (bookMetadataCache && bookMetadataCache->isLoaded()) return bookMetadataCache->coreMetadata.author;
-  return fallbackMetadata ? fallbackMetadata->author : blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
+  return bookMetadataCache->coreMetadata.author;
 }
 
 const std::string& Epub::getLanguage() const {
   static std::string blank;
-  if (bookMetadataCache && bookMetadataCache->isLoaded()) return bookMetadataCache->coreMetadata.language;
-  return fallbackMetadata ? fallbackMetadata->language : blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return blank;
+  return bookMetadataCache->coreMetadata.language;
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {

@@ -387,7 +387,7 @@ Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. On
 file describing every book on the card, so the shelf can sort and search several
 hundred titles without opening any of them.
 
-Format version 3. An index written by an older version fails validation on open
+Format version 1. An index written by another version fails validation on open
 and is rebuilt; that is the entire migration mechanism.
 
 ### Layout
@@ -413,15 +413,9 @@ the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" gro
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
-Twelve bytes of each record are reserved and written as zero: two u16 at offsets
-8 and 10, and the flag byte at offset 19. The u16 pair held per-record inverse
-ranks for the author and date orders; the permutation sections carry that
-ordering and nothing read the ranks back. The flag byte packed a file format,
-an author provenance and a title-origin bit, none of which any screen read.
-They are reserved rather than reclaimed so the record stays 128 bytes and the
-layout is unchanged — a reader built before or after this change sees the same
-file. A screen that needs one of them can claim the bytes back and bump
-`CLIX_FORMAT_VERSION` then.
+One byte aligns the folded title at offset 16, and four trailing bytes are
+reserved so the record remains exactly 128 bytes. A later format can claim those
+bytes by bumping `CLIX_FORMAT_VERSION`.
 
 ### The name blob
 
@@ -439,9 +433,6 @@ That was a real defect, and it is why title has its own field.
 
 ### Header flags
 
-`WALK_COMPLETE` is only set when the walk finished without hitting the record cap
-or being aborted, and it is written with the final header rather than the
-placeholder — an index that saw part of the card must not claim otherwise.
 `RANKS_DEGRADED` says the author and date orders fell back to walk order, which
 happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
 RAM.

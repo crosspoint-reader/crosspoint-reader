@@ -59,15 +59,7 @@ struct BuildStats {
   uint16_t enriched = 0;   // took its title or author from the book rather than the filename
   bool ranksDegraded = false;
   bool dedupDegraded = false;
-  bool booksAtRoot = false;
 };
-
-// Progress callback for observation and cancellation only. Watchdog servicing
-// belongs to the builder and does not depend on a caller providing a callback.
-// Returning false aborts the build and leaves any previous index in place. A
-// function pointer, not std::function: this runs during a blocking phase where
-// the repo's rules forbid heap churn.
-using BuildProgressFn = bool (*)(uint16_t booksSoFar, const char* currentPath, void* ctx);
 
 // Walk `rootPath`, write `/.crosspoint/library.idx`, and report what happened.
 // The previous index, including its monotonic "recently added" counter, is read
@@ -77,11 +69,9 @@ using BuildProgressFn = bool (*)(uint16_t booksSoFar, const char* currentPath, v
 // book over its filename. It reads an existing cache when available; otherwise
 // it stops the normal EPUB parser at the end of <metadata>, before the manifest,
 // without building the reader's spine, TOC, CSS, or section caches.
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false,
-                       BuildProgressFn onProgress = nullptr, void* progressCtx = nullptr);
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false);
 
-// Paths, exposed so the activity and the tests agree on them.
+// Live index path, shared by the builder and activity.
 const char* libraryIndexPath();
-const char* libraryStagePath();
 
 }  // namespace library
