@@ -131,6 +131,25 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
 
+  // Pagebreak marker capture: badly-converted epubs (Calibre) sometimes wrap real
+  // paragraph text inside a role="doc-pagebreak" / epub:type="pagebreak" element
+  // instead of leaving it empty. Rather than skip the whole subtree, its text is
+  // captured speculatively and replayed as normal content if it turns out to be
+  // more than a page-number label. Fixed-size, no heap allocation: this element
+  // should almost always be empty or hold a couple of digits.
+  static constexpr int PAGEBREAK_LABEL_SIZE = 16;
+  static constexpr int PAGEBREAK_CAPTURE_SIZE = 32;
+  bool pagebreakCapturing = false;
+  int pagebreakCaptureDepth = -1;  // depth (pre-increment) recorded at the marker's startElement
+  char pagebreakLabel[PAGEBREAK_LABEL_SIZE] = {};      // aria-label/title, truncated silently
+  char pagebreakCaptureBuffer[PAGEBREAK_CAPTURE_SIZE] = {};
+  int pagebreakCaptureLen = 0;
+  // visibleTextOffset at the moment capture began. characterData() counts visible
+  // codepoints unconditionally, ahead of the keep/drop decision, so by replay time
+  // the running counter has already moved past the captured text; replays rewind to
+  // this value first so replayed words get the marker's start offset, not its end.
+  uint32_t pagebreakCaptureStartOffset = 0;
+
   // Resumable parse state. The one-shot parseAndBuildPages() drives these
   // internally; the incremental section builder drives them across render ticks
   // so a large single chapter can yield between pages instead of blocking the UI
