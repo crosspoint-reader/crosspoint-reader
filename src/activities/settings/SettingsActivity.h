@@ -19,6 +19,7 @@ enum class SettingAction {
   OPDSBrowser,
   Network,
   ClearCache,
+  RebuildLibraryIndex,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
@@ -198,6 +199,7 @@ class SettingsActivity final : public UiTabListActivity {
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
+  void rebuildLibraryIndex();
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 

@@ -33,7 +33,7 @@ bool LibraryIndexFile::open(const char* path) {
 }
 
 void LibraryIndexFile::close() {
-  file.close();
+  if (file.isOpen()) file.close();
   opened = false;
 }
 
