@@ -39,6 +39,14 @@ class ChapterHtmlSlimParser {
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
+  // A <br> defers its block-break effect instead of applying it immediately, so a
+  // doc-pagebreak marker that turns out to hold real content (a paragraph split across
+  // a print-page boundary by a bad epub converter) can swallow it instead of it
+  // becoming a hard line break. Resolved (materialized or dropped) by
+  // materializePendingBr() before anything else can observe currentTextBlock /
+  // blockStyleStack, so no snapshot of those is needed alongside the flag; see
+  // materializePendingBr() for why that's safe.
+  bool pendingBr = false;
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   // Ruby text state
   bool inRuby = false;
@@ -168,6 +176,7 @@ class ChapterHtmlSlimParser {
   void closeTableCell();
   void finishTableRow();
   void addTableRowSeparator();
+  void materializePendingBr();
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);

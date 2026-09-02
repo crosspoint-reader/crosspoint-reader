@@ -47,7 +47,8 @@ namespace {
 // v43: Paragraph base direction excludes direction changes from inline elements.
 // v44: Persist internal-link rectangles with each page for touch navigation.
 // v45: Render pagebreak marker content unless it is just the page label.
-constexpr uint8_t SECTION_FILE_VERSION = 45;
+// v46: A <br> immediately before a pagebreak marker with replayed content no longer breaks the line.
+constexpr uint8_t SECTION_FILE_VERSION = 46;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

@@ -120,6 +120,28 @@ uint16_t parseTableSpan(const char* value) {
   return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
 }
 
+// True for an element that will start speculative pagebreak-marker capture: a
+// non-text-bearing element (span, a, div, hr, ...) carrying role="doc-pagebreak" or
+// epub:type="pagebreak". Text-bearing block elements (p, headings, li, blockquote)
+// bypass capture entirely (see the pagebreak comment in startElement). Shared between
+// the actual capture-start decision and the deferred-<br> materialization gate (which
+// must not resolve a pending <br> ahead of a marker whose drop-vs-replay fate isn't
+// decided yet), so the two conditions can never drift apart.
+bool isPagebreakMarkerCandidate(const char* name, const XML_Char** atts) {
+  if (atts == nullptr) return false;
+  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 ||
+                                strcmp(name, "li") == 0 ||
+                                (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0');
+  if (textBearingBlock) return false;
+  for (int i = 0; atts[i]; i += 2) {
+    if ((strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0) ||
+        (strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Returns true if the HTML element is a purely inline, non-navigable wrapper.
 // IDs on these elements are never meaningful navigation targets in epub content.
 // Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
@@ -411,6 +433,33 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   listItemBulletOnly = false;
 }
 
+// Applies a deferred <br>'s effect: exactly what the old immediate-materialization code
+// did (a <br> after text starts the next block with the container's vertical margins
+// stripped, matching browsers; a <br> on an empty block keeps the container margins and
+// tags the block fromBrElement so startNewTextBlock injects a full line-height gap if it
+// stays empty, the scene-break case), just executed lazily. A no-op when nothing is
+// pending.
+//
+// Safe to recompute blockStyleStack.back() / currentTextBlock->isEmpty() from live state
+// here instead of snapshotting them when the <br> fired: every site that could observe or
+// change either of those between a <br> and its resolution calls this function first (see
+// the call sites in startElement/characterData/endElement), and speculative pagebreak
+// capture never touches currentTextBlock or blockStyleStack while a <br> sits pending, so
+// by the time this runs, both are exactly what they were the instant the <br> fired.
+void ChapterHtmlSlimParser::materializePendingBr() {
+  if (!pendingBr) {
+    return;
+  }
+  pendingBr = false;
+
+  BlockStyle brStyle = blockStyleStack.back();
+  if (currentTextBlock && !currentTextBlock->isEmpty()) {
+    brStyle = brStyle.withoutTop().withoutBottom();
+  }
+  brStyle.fromBrElement = true;
+  startNewTextBlock(brStyle);
+}
+
 void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   if (partWordBufferIndex > 0) {
     flushPartWordBuffer();
@@ -690,6 +739,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // through to its normal handling below.
   if (self->pagebreakCapturing) {
     self->pagebreakCapturing = false;
+    // The <br> and this marker are one conversion artifact (a sentence split across a
+    // print-page boundary): now that a child element proves the marker holds real
+    // content, swallow any pending <br> instead of materializing it, so the restored
+    // text flows on as a single paragraph.
+    self->pendingBr = false;
     if (self->pagebreakCaptureLen > 0) {
       const uint32_t savedOffset = self->visibleTextOffset;
       self->visibleTextOffset = self->pagebreakCaptureStartOffset;
@@ -698,6 +752,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->syntheticCharacterData = false;
       self->visibleTextOffset = savedOffset;
     }
+  }
+
+  // A pending <br> materializes before this element's own content/structure, unless
+  // this element is itself about to start speculative pagebreak-marker capture, in
+  // which case the decision waits for the marker to resolve (drop vs. replay above).
+  if (!isPagebreakMarkerCandidate(name, atts)) {
+    self->materializePendingBr();
   }
 
   if (strcmp(name, "p") == 0) {
@@ -1270,31 +1331,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   // anyway), while marker-ish elements (span, a, div, hr...) capture their text
   // speculatively; endElement (or an overflow/child-element check along the way)
   // decides whether it's a droppable page label or real content.
-  if (atts != nullptr) {
-    const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 ||
-                                  strcmp(name, "li") == 0 ||
-                                  (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0');
-    for (int i = 0; !textBearingBlock && atts[i]; i += 2) {
-      if ((strcmp(atts[i], "role") == 0 && strcmp(atts[i + 1], "doc-pagebreak") == 0) ||
-          (strcmp(atts[i], "epub:type") == 0 && strcmp(atts[i + 1], "pagebreak") == 0)) {
-        self->pagebreakCapturing = true;
-        self->pagebreakCaptureDepth = self->depth;
-        self->pagebreakCaptureLen = 0;
-        self->pagebreakCaptureBuffer[0] = '\0';
-        self->pagebreakLabel[0] = '\0';
-        self->pagebreakCaptureStartOffset = self->visibleTextOffset;
-        const char* label = getAttribute(atts, "aria-label");
-        if (!label || label[0] == '\0') {
-          label = getAttribute(atts, "title");
-        }
-        if (label) {
-          strncpy(self->pagebreakLabel, label, sizeof(self->pagebreakLabel) - 1);
-          self->pagebreakLabel[sizeof(self->pagebreakLabel) - 1] = '\0';
-        }
-        self->depth += 1;
-        return;
-      }
+  if (isPagebreakMarkerCandidate(name, atts)) {
+    self->pagebreakCapturing = true;
+    self->pagebreakCaptureDepth = self->depth;
+    self->pagebreakCaptureLen = 0;
+    self->pagebreakCaptureBuffer[0] = '\0';
+    self->pagebreakLabel[0] = '\0';
+    self->pagebreakCaptureStartOffset = self->visibleTextOffset;
+    const char* label = getAttribute(atts, "aria-label");
+    if (!label || label[0] == '\0') {
+      label = getAttribute(atts, "title");
     }
+    if (label) {
+      strncpy(self->pagebreakLabel, label, sizeof(self->pagebreakLabel) - 1);
+      self->pagebreakLabel[sizeof(self->pagebreakLabel) - 1] = '\0';
+    }
+    self->depth += 1;
+    return;
   }
 
   // Detect internal <a href="..."> links (footnotes, cross-references)
@@ -1386,27 +1439,24 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
     if (strcmp(name, "br") == 0) {
       if (self->partWordBufferIndex > 0) {
-        // flush word preceding <br/> to currentTextBlock before calling startNewTextBlock
+        // flush word preceding <br/> to currentTextBlock before deferring/materializing
         self->flushPartWordBuffer();
       }
-      // A <br> after text is a line break: start the next block with the container's
-      // vertical margins stripped, matching browsers, which never apply paragraph
-      // margins at a <br>. This is what keeps <br>-per-paragraph books (common CJK
-      // web-novel formatting) from re-adding container spacing at every paragraph
-      // and collapsing page capacity.
-      // A <br> on an empty block (consecutive <br>s, or a standalone <br> between
-      // blocks) is a scene-break separator: keep the container margins so deposited
-      // vertical spacing survives. Either way the block is tagged so that if it
-      // stays empty, startNewTextBlock injects a full line-height gap when the next
-      // block opens; once text follows the tag is inert.
-      // Style comes from the block style stack, not the current block, so a closed
-      // element's style can't leak through (#2679).
-      BlockStyle brStyle = self->blockStyleStack.back();
-      if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
-        brStyle = brStyle.withoutTop().withoutBottom();
-      }
-      brStyle.fromBrElement = true;
-      self->startNewTextBlock(brStyle);
+      // A second consecutive <br> (or one that follows an already-pending one)
+      // materializes the first before deferring itself in its place.
+      self->materializePendingBr();
+      // Deferred instead of applied immediately (see materializePendingBr() for what
+      // it would do: a <br> after text is a margin-stripped line break, matching
+      // browsers; a <br> on an empty block is a scene-break separator tagged so a
+      // full line-height gap gets injected if it stays empty). Deferring lets a
+      // doc-pagebreak marker that immediately follows, and turns out to hold real
+      // content (a paragraph split across a print-page boundary by a bad epub
+      // converter), swallow the <br> instead; see the pagebreak capture
+      // start/replay/drop sites in startElement/characterData/endElement, which all
+      // resolve this flag. Every other event that could touch currentTextBlock
+      // resolves it first, so an ordinary document (no marker follows) renders
+      // byte-for-byte the same as before deferral.
+      self->pendingBr = true;
     } else {
       self->currentCssStyle = cssStyle;
       const auto accumulated = self->blockStyleStack.back().getCombinedBlockStyle(userAlignmentBlockStyle,
@@ -1558,6 +1608,13 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     return;
   }
 
+  // A pending <br> materializes before any real content that follows it, unless this
+  // chunk is captured speculatively into a pagebreak marker's buffer below (the marker
+  // might still turn out to replay as real content and swallow the <br> instead).
+  if (!self->pagebreakCapturing) {
+    self->materializePendingBr();
+  }
+
   // Capturing a pagebreak marker's text: buffer it instead of processing normally.
   // A page-number label is a handful of bytes, so an overflow alone proves this is
   // real prose that leaked into the marker. Replay everything captured so far as
@@ -1572,6 +1629,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       return;
     }
     self->pagebreakCapturing = false;
+    // The <br> and this marker are one conversion artifact: overflow proves the
+    // marker holds real content, so swallow any pending <br> instead of materializing
+    // it, letting the restored text flow on as a single paragraph.
+    self->pendingBr = false;
     if (self->pagebreakCaptureLen > 0) {
       const uint32_t savedOffset = self->visibleTextOffset;
       self->visibleTextOffset = self->pagebreakCaptureStartOffset;
@@ -1853,17 +1914,34 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     }
 
     if (!dropIt) {
+      // The <br> and this marker are one conversion artifact (a sentence split across
+      // a print-page boundary): swallow any pending <br> instead of materializing it,
+      // so the restored text flows on as a single paragraph.
+      self->pendingBr = false;
       const uint32_t savedOffset = self->visibleTextOffset;
       self->visibleTextOffset = self->pagebreakCaptureStartOffset;
       self->syntheticCharacterData = true;
       self->characterData(userData, trimmed, trimmedLen);
       self->syntheticCharacterData = false;
       self->visibleTextOffset = savedOffset;
+    } else {
+      // Empty or page-label marker: a <br> immediately before it is genuine
+      // formatting in a well-formed book, not a split-sentence artifact, so it still
+      // materializes as usual.
+      self->materializePendingBr();
     }
 
     self->pagebreakCaptureLen = 0;
     self->depth -= 1;
     return;
+  }
+
+  // A pending <br> materializes before this element's own closing effects (style
+  // pops, block-stack pop, scene-break tagging) run. Exception: a <br>'s own
+  // self-closing endElement must not immediately un-defer what its startElement just
+  // deferred.
+  if (strcmp(name, "br") != 0) {
+    self->materializePendingBr();
   }
 
   // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state
@@ -2182,6 +2260,11 @@ bool ChapterHtmlSlimParser::finishParse() {
     xmlParser_ = nullptr;
   }
   parseFile_.close();
+
+  // A trailing <br> with no further content (characterData/startElement/endElement
+  // will never come again) still needs to materialize, so it renders the same as
+  // before deferral.
+  materializePendingBr();
 
   // Process last page if there is still text
   if (currentTextBlock) {
