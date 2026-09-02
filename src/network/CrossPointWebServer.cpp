@@ -822,10 +822,12 @@ void CrossPointWebServer::handleCreateFolder() const {
     return;
   }
   if (!isSafePathComponent(folderName)) {
+    LOG_DBG("WEB", "Rejected unsafe folder name: %s", folderName.c_str());
     server->send(400, "text/plain", "Invalid folder name");
     return;
   }
   if (isProtectedItemName(folderName)) {
+    LOG_DBG("WEB", "Rejected protected folder name: %s", folderName.c_str());
     server->send(403, "text/plain", "Cannot create protected item");
     return;
   }
