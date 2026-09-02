@@ -42,6 +42,9 @@ class ReaderActivity : public Activity {
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
   void clearEndOfBookOptionsIfNeeded();
   void disableFastInitialRefresh();
+  // Flip the frontlight on/off and persist the state. Inert on boards with no
+  // frontlight. Does not repaint: the e-ink page is unchanged by a light toggle.
+  void toggleFrontlight();
 
  public:
   ~ReaderActivity() override = default;

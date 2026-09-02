@@ -490,6 +490,9 @@ void EpubReaderActivity::loop() {
       case CrossPointSettings::LP_MENU_DICTIONARY:
         openDictionaryWordSelect();
         return;
+      case CrossPointSettings::LP_MENU_TOGGLE_LIGHT:
+        toggleFrontlight();
+        break;
       case CrossPointSettings::LP_MENU_READER_MENU:
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
@@ -524,6 +527,9 @@ void EpubReaderActivity::loop() {
         } else {
           openReaderMenu();
         }
+        return;
+      case CrossPointSettings::LP_MENU_TOGGLE_LIGHT:
+        toggleFrontlight();
         return;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
@@ -633,6 +639,11 @@ void EpubReaderActivity::loop() {
                       : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
     applyOrientation(newOrientation);
     requestUpdate();
+    return;
+  }
+
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.LIGHT_TOGGLE) {
+    toggleFrontlight();
     return;
   }
 

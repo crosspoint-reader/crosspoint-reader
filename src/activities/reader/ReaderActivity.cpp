@@ -1,6 +1,7 @@
 #include "ReaderActivity.h"
 
 #include <FsHelpers.h>
+#include <HalFrontlight.h>
 #include <HalStorage.h>
 #include <Memory.h>
 
@@ -45,6 +46,16 @@ std::unique_ptr<ReaderActivity> ReaderActivity::create(GfxRenderer& renderer, Ma
 void ReaderActivity::applyInitialOrientation() { ReaderUtils::applyOrientation(renderer, SETTINGS.orientation); }
 
 void ReaderActivity::disableFastInitialRefresh() { pagesUntilFullRefresh = 0; }
+
+void ReaderActivity::toggleFrontlight() {
+  if (!Frontlight.present()) return;
+  const bool nowOn = !Frontlight.isOn();
+  Frontlight.setOn(nowOn);  // restores the remembered brightness when turning back on
+  if (SETTINGS.frontlightOn != (nowOn ? 1 : 0)) {
+    SETTINGS.frontlightOn = nowOn ? 1 : 0;
+    SETTINGS.saveToFile();
+  }
+}
 
 void ReaderActivity::onEnter() {
   Activity::onEnter();
@@ -153,6 +164,11 @@ void ReaderActivity::loop() {
   if (handleEndOfBookPageTurn(prevTriggered, nextTriggered)) return;
 
   const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+  const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.LIGHT_TOGGLE) {
+    toggleFrontlight();
+    return;
+  }
   const bool skip =
       !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && heldMs >= ReaderUtils::SKIP_HOLD_MS;
 
