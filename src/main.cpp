@@ -235,13 +235,13 @@ bool handleX4ProFrontlightDoubleClick() {
 // settings the reader does: Long-press Menu = Toggle Light on the home key, and
 // Long-press button behavior = Toggle Light on the side page-turn buttons.
 bool handleGlobalFrontlightToggle() {
-  if (!Frontlight.present() || activityManager.isReaderActivity()) {
+  if (!Frontlight.present() || activityManager.isReaderActivity() || activityManager.isFrontlightPanelActive()) {
     return false;
   }
 
   constexpr unsigned long FRONTLIGHT_TOGGLE_HOLD_MS = 700;
-  const bool homeToggle = SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_TOGGLE_LIGHT &&
-                          mappedInputManager.wasHomeKeyHold();
+  const bool homeToggle =
+      SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_TOGGLE_LIGHT && mappedInputManager.wasHomeKeyHold();
   const bool sideToggle =
       SETTINGS.longPressButtonBehavior == CrossPointSettings::LIGHT_TOGGLE &&
       (mappedInputManager.wasLongPressed(MappedInputManager::Button::Up, FRONTLIGHT_TOGGLE_HOLD_MS) ||

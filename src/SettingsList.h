@@ -204,7 +204,6 @@ inline std::vector<StrId> buildLongPressButtonBehaviorValues() {
   return values;
 }
 
-
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.

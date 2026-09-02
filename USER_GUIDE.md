@@ -78,7 +78,7 @@ The X4 Pro has a built-in frontlight with adjustable brightness and warmth. It i
 
 * **Open the frontlight panel:** Swipe down from the top edge of the screen, from almost any screen (Home, Browse Files, Reading Mode, etc.). Drag the brightness and warmth sliders to adjust the light live, or tap the sun icon to turn it on or off.
 * **Quick toggle:** Double-click the **Power** button to turn the frontlight on or off instantly, without opening the panel.
-* **Long-press toggle:** You can also bind a long-press to toggle the light in **[Controls Settings](#363-controls)** — either **Long-press Menu -> Toggle Light** (home key / Confirm) or **Long-press button behavior -> Toggle Light** (side buttons). This works from any screen, so you can switch the light on in the dark before opening a book. Toggling on restores the last brightness you used.
+* **Long-press toggle:** You can also bind a long-press to toggle the light in **[Controls Settings](#363-controls)** — either **Long-press Menu -> Toggle Light** (home key / Confirm) or **Long-press Chapter Skip -> Toggle Light** (side buttons). This works from any screen, so you can switch the light on in the dark before opening a book. Toggling on restores the last brightness you used.
 
 > [!NOTE]
 > Frontlight brightness and warmth are intentionally not listed in **[Display Settings](#361-display)** — the swipe panel is the only place to adjust them. The on/off state can also be toggled with the Power-button double-click above.

@@ -161,14 +161,17 @@ void ReaderActivity::loop() {
   prevTriggered = prevTriggered || touch.prev;
   nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) return;
-  if (handleEndOfBookPageTurn(prevTriggered, nextTriggered)) return;
 
   const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
   const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
+  // Toggle the light before end-of-book navigation claims the press.
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.LIGHT_TOGGLE) {
     toggleFrontlight();
     return;
   }
+
+  if (handleEndOfBookPageTurn(prevTriggered, nextTriggered)) return;
+
   const bool skip =
       !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && heldMs >= ReaderUtils::SKIP_HOLD_MS;
 
