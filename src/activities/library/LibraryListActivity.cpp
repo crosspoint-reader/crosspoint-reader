@@ -1,5 +1,6 @@
 #include "LibraryListActivity.h"
 
+#include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
@@ -13,40 +14,30 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/icons/search32.h"
 #include "fontIds.h"
 
 namespace fui = freeink::ui;
 
 namespace {
 constexpr int SIDE_PADDING = 12;
-// Hold threshold for the strip's secondary actions (firmware convention, cf.
-// FileBrowserActivity).
-constexpr unsigned long LONG_PRESS_MS = 1000;
 
-// Which way the Titles tab runs. One direction for the whole power-on session:
-// it survives this activity's delete-on-exit on purpose, and it is deliberately
-// not a setting — a preference the next boot can simply re-express in one hold.
-bool sTitleDescending = false;
-
-// The strip's tab order, which is also the cycle order. Both title directions
-// live on ONE tab: Z-A paid a full strip slot for a rare use, and direction is
-// state on the tab (the drawn triangle), not a place in the row. Search is not
-// a sort mode: moving onto a sort tab applies it at once; Search waits for
-// Confirm, since opening a keyboard is not something a sideways press should
-// do by itself.
+// One tab per sort order keeps the shared tab bar authoritative: selecting a
+// tab fully describes the ordering, with no second direction state.
 constexpr int RECENT_TAB = 0;
-constexpr int TITLES_TAB = 1;
-constexpr int AUTHOR_TAB = 2;
-constexpr int SEARCH_TAB = 3;
-constexpr int TAB_SLOTS = SEARCH_TAB + 1;
+constexpr int TITLE_ASC_TAB = 1;
+constexpr int TITLE_DESC_TAB = 2;
+constexpr int AUTHOR_TAB = 3;
+constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
 
-// No longer one-to-one: both title orders map to the Titles tab.
 int sortTabIndex(const library::SortOrder order) {
   switch (order) {
     case library::SortOrder::TitleAsc:
+      return TITLE_ASC_TAB;
     case library::SortOrder::TitleDesc:
-      return TITLES_TAB;
+      return TITLE_DESC_TAB;
     case library::SortOrder::AuthorAsc:
       return AUTHOR_TAB;
     case library::SortOrder::DateDesc:
@@ -56,7 +47,8 @@ int sortTabIndex(const library::SortOrder order) {
 }
 
 library::SortOrder orderForTab(const int tab) {
-  if (tab == TITLES_TAB) return sTitleDescending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
+  if (tab == TITLE_ASC_TAB) return library::SortOrder::TitleAsc;
+  if (tab == TITLE_DESC_TAB) return library::SortOrder::TitleDesc;
   if (tab == AUTHOR_TAB) return library::SortOrder::AuthorAsc;
   return library::SortOrder::DateDesc;
 }
@@ -64,9 +56,9 @@ library::SortOrder orderForTab(const int tab) {
 // The strip needs the mode alone. The header strings carry a "Library ·"
 // prefix that reads as four copies of the word once they sit side by side.
 const char* tabLabelFor(const int tab) {
-  if (tab == TITLES_TAB) return tr(STR_LIBRARY_TAB_TITLES);
+  if (tab == TITLE_ASC_TAB) return tr(STR_LIBRARY_TAB_TITLE_AZ);
+  if (tab == TITLE_DESC_TAB) return tr(STR_LIBRARY_TAB_TITLE_ZA);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  if (tab == SEARCH_TAB) return tr(STR_LIBRARY_SEARCH);
   return tr(STR_LIBRARY_TAB_RECENT);
 }
 
@@ -89,9 +81,9 @@ void LibraryListActivity::onEnter() {
   // needs the card to itself.
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
+  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
   app.on(ACTION_LETTER, &LibraryListActivity::letterActionTrampoline, this);
   app.on(ACTION_LETTER_MODE, &LibraryListActivity::letterModeActionTrampoline, this);
-  tabCursor = sortTabIndex(sortOrder);
   auto& nav = activeNav();
   nav.selected = 1;
   nav.top = 0;
@@ -167,6 +159,7 @@ void LibraryListActivity::openSelectedBook() {
 void LibraryListActivity::activateIndex(int) { openSelectedBook(); }
 
 void LibraryListActivity::openSearch() {
+  app.clearTapFlash();
   // No key filtering here on purpose. Greying out the letters that lead nowhere
   // was built, tested on device and removed: a letter you can see but cannot
   // reach reads as a broken keyboard, and the eye keeps returning to it.
@@ -179,11 +172,10 @@ void LibraryListActivity::openSearch() {
                            applyFilter();
                            auto& nav = activeNav();
                            if (!query.empty() && filteredCount == 0 && !degraded) {
-                             // Keep Search reachable when nothing matches. A
-                             // row cursor at 1 would point at no component and
-                             // trap Left/Right behind count == 0.
+                             // The tab band remains focusable when there is no
+                             // row. ScreenLeft then follows the OPDS header
+                             // action pattern and reopens Search.
                              nav.selected = 0;
-                             tabCursor = SEARCH_TAB;
                            } else {
                              // A non-empty result belongs to the list: land on
                              // its first surviving row, not on the strip.
@@ -206,40 +198,12 @@ void LibraryListActivity::applySortOrder(const library::SortOrder order) {
   requestUpdate();
 }
 
-void LibraryListActivity::cycleSortOrder(const bool forward) {
-  tabCursor = (tabCursor + (forward ? 1 : TAB_SLOTS - 1)) % TAB_SLOTS;
-  if (tabCursor == SEARCH_TAB) {
-    requestUpdate();
-    return;
-  }
-  applySortOrder(orderForTab(tabCursor));
+void LibraryListActivity::stepTab(const int direction) {
+  const int next = (activeTab() + (direction > 0 ? 1 : TAB_SLOTS - 1)) % TAB_SLOTS;
+  applySortOrder(orderForTab(next));
 }
 
-void LibraryListActivity::stepTab(const int direction) { cycleSortOrder(direction > 0); }
-
-// Direction is a flip of existing state, not a different tab: the strip keeps
-// its width and the reader keeps their place in the row of tabs. The header
-// keeps announcing the full truth ("Library · Title Z-A").
-void LibraryListActivity::flipTitleDirection() {
-  sTitleDescending = !sTitleDescending;
-  if (sortTabIndex(sortOrder) == TITLES_TAB) {
-    applySortOrder(orderForTab(TITLES_TAB));
-    requestUpdate(true);
-    return;
-  }
-  requestUpdate();
-}
-
-// Touch tap on a strip pill: the same application the button cycle does, minus
-// the travel. Taps land with the tab bar focused, like the button cycle
-// leaves it.
 void LibraryListActivity::onTabAction(const int index) {
-  tabCursor = index;
-  if (index == SEARCH_TAB) {
-    app.clearTapFlash();
-    openSearch();
-    return;
-  }
   app.clearTapFlash();
   applySortOrder(orderForTab(index));
   auto& nav = activeNav();
@@ -249,8 +213,6 @@ void LibraryListActivity::onTabAction(const int index) {
 
 int LibraryListActivity::tabCount() const { return TAB_SLOTS; }
 
-// The ACTIVE sort's tab — never Search: Search is an action on the strip, not
-// a sort, so the strip's own cursor is the only state that can sit on it.
 int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
 
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
@@ -399,22 +361,16 @@ void LibraryListActivity::jumpToLetter(const char letter) {
   }
 }
 
-// The mode line above the grid. Sorted by author the choice is which WORD the
-// letters mean; sorted by title it is the direction — the novice path to the
-// same flip the strip's hold offers.
-void LibraryListActivity::toggleLetterGridMode() {
-  if (sortOrder == library::SortOrder::AuthorAsc) {
-    jumpByGivenName = !jumpByGivenName;
-    // The letters present as first names are not those present as surnames.
-    // The cursor is on the mode line, not on a letter, so nothing needs
-    // re-seating here — Down does that when it enters the grid.
-    computeLettersPresent();
-  } else {
-    // The letter SET is direction blind (first letters do not change), so
-    // nothing needs recomputing.
-    flipTitleDirection();
-  }
+void LibraryListActivity::toggleLetterNameMode() {
+  if (sortOrder != library::SortOrder::AuthorAsc) return;
+  jumpByGivenName = !jumpByGivenName;
+  // The letters present as first names are not those present as surnames.
+  computeLettersPresent();
   requestUpdate();
+}
+
+void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent&, void* user) {
+  static_cast<LibraryListActivity*>(user)->openSearch();
 }
 
 void LibraryListActivity::letterActionTrampoline(const fui::ActionEvent& event, void* user) {
@@ -430,12 +386,11 @@ void LibraryListActivity::letterActionTrampoline(const fui::ActionEvent& event, 
 
 void LibraryListActivity::letterModeActionTrampoline(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<LibraryListActivity*>(user);
-  if (!self->letterGrid) return;
+  if (!self->letterGrid || self->sortOrder != library::SortOrder::AuthorAsc) return;
   // Tapping the already-active choice states nothing new.
-  const bool titleOrder = self->sortOrder != library::SortOrder::AuthorAsc;
-  const int active = titleOrder ? (sTitleDescending ? 1 : 0) : (self->jumpByGivenName ? 0 : 1);
+  const int active = self->jumpByGivenName ? 0 : 1;
   if (event.value == active) return;
-  self->toggleLetterGridMode();
+  self->toggleLetterNameMode();
 }
 
 // Title and author for one entry, read straight from the index. Only ever
@@ -491,12 +446,11 @@ bool LibraryListActivity::handleCustomInput() {
     }
 
     // letterCursor == -1 is the mode line above the grid, reached by pressing
-    // Up from the top row — the same idiom the sort strip uses, so there is one
-    // rule to learn rather than two.
+    // Up from the top row in Author order.
     if (letterCursor < 0) {
       if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) ||
           mappedInput.wasReleased(MappedInputManager::Button::ScreenRight)) {
-        toggleLetterGridMode();
+        toggleLetterNameMode();
       }
       if (mappedInput.wasReleased(MappedInputManager::Button::ScreenDown)) {
         // Land on a letter that exists. Dropping onto "a" when no book starts
@@ -515,8 +469,10 @@ bool LibraryListActivity::handleCustomInput() {
     if (mappedInput.wasReleased(MappedInputManager::Button::ScreenDown)) delta = LETTER_COLS;
     if (mappedInput.wasReleased(MappedInputManager::Button::ScreenUp)) {
       if (letterCursor < LETTER_COLS) {
-        letterCursor = -1;
-        requestUpdate();
+        if (sortOrder == library::SortOrder::AuthorAsc) {
+          letterCursor = -1;
+          requestUpdate();
+        }
         return true;
       }
       delta = -LETTER_COLS;
@@ -577,30 +533,8 @@ bool LibraryListActivity::handleButtons() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Dispatched on release, by held time, so one press means exactly one
-    // thing. A hold is the secondary action of the FOCUSED context.
-    if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      if (tabsFocused()) {
-        // On the Titles tab the hold flips the direction — the triangle and
-        // the header both change, so the flip explains itself. On Search it
-        // clears the filter without a trip through the keyboard.
-        if (tabCursor == TITLES_TAB) flipTitleDirection();
-        if (tabCursor == SEARCH_TAB && !query.empty()) {
-          query.clear();
-          applyFilter();
-          if (nav.selected != 0) nav.selected = 1;
-          nav.top = 0;
-          requestUpdate(true);
-        }
-      }
-      return true;
-    }
     if (tabsFocused()) {
-      if (tabCursor == SEARCH_TAB) {
-        openSearch();
-      } else {
-        openLetterGrid();
-      }
+      openLetterGrid();
       return true;
     }
     if (count > 0) openSelectedBook();
@@ -612,15 +546,18 @@ bool LibraryListActivity::handleButtons() {
   // paging is 5.
   if (mappedInput.wasReleased(MappedInputManager::Button::ScreenRight) && (tabsFocused() || count > 0)) {
     if (tabsFocused()) {
-      cycleSortOrder(/*forward=*/true);
+      stepTab(1);
     } else {
       nextPage();
     }
     return true;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) && (tabsFocused() || count > 0)) {
-    if (tabsFocused()) {
-      cycleSortOrder(/*forward=*/false);
+  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) &&
+      (searchShortcutActive() || tabsFocused() || count > 0)) {
+    if (searchShortcutActive()) {
+      openSearch();
+    } else if (tabsFocused()) {
+      stepTab(-1);
     } else {
       previousPage();
     }
@@ -640,7 +577,6 @@ bool LibraryListActivity::handleButtons() {
       // result list, where every tab press would dead-end.
       if (!degraded && count > 0) {
         nav.selected = 0;
-        tabCursor = sortTabIndex(sortOrder);
         requestUpdate();
       }
     } else if (nav.selected - 1 > nav.top) {
@@ -667,98 +603,18 @@ bool LibraryListActivity::handleButtons() {
   return false;
 }
 
+bool LibraryListActivity::searchShortcutActive() const {
+  if (letterGrid || degraded) return false;
+  if (ringPos() == 1) return true;
+  return tabsFocused() && !query.empty() && rowCount() == 0;
+}
+
 // Touch routing while the grid consumes the loop pass: the base's routing
 // never runs there, so the app's hit rects (letters, mode line) are routed
 // here instead.
 void LibraryListActivity::routeModalTouch() {
   const auto route = UiAppHost::routeTouch(mappedInput);
   if (route.routed && app.invalidated()) requestUpdate();
-}
-
-// The strip takes its height from its own label line: a fixed band clips the
-// labels as soon as the small font grows. The grid consumes the same height so
-// every mode's content starts at the same y.
-int16_t LibraryListActivity::sortStripHeight(UiScreen& screen) const {
-  return static_cast<int16_t>(screen.target().lineHeight(screen.theme().smallText.font) + 8);
-}
-
-// The sort strip: every mode visible at once, the active one underlined. On a
-// panel that refreshes whole, showing the alternatives costs nothing per frame
-// and saves a menu round-trip to discover them.
-//
-// The band is a fui::tabBar — which is what makes the pills tappable — with a
-// two-state treatment: focused, the cursor's pill inverts (the strongest
-// signal this panel has that Left and Right now belong to the strip);
-// unfocused, the active sort carries a plain underline, so the list keeps the
-// reader's attention.
-void LibraryListActivity::buildSortTabs(UiScreen& screen) {
-  fui::TabItem tabs[TAB_SLOTS];
-  for (int i = 0; i < TAB_SLOTS; i++) {
-    tabs[i].label = tabLabelFor(i);
-    tabs[i].value = static_cast<int16_t>(i);
-    // Focused, the cursor marks the pill; unfocused, the active sort does.
-    tabs[i].selected = tabsFocused() ? i == tabCursor : (i != SEARCH_TAB && sortTabIndex(sortOrder) == i);
-  }
-
-  fui::TabBarProps props;
-  props.tabs = tabs;
-  props.count = TAB_SLOTS;
-  props.action = ACTION_TAB;
-  props.inputMask = fui::InputTouch;
-  props.text = screen.theme().smallText;
-  props.tabInset = fui::Insets{2, 0, 2, 0};
-  props.contentInset = fui::Insets{2, 6, 2, 6};
-  props.minTouchSize = screen.theme().minTouchSize;
-
-  fui::StyleSet styles;
-  styles.explicitlySet = true;
-  styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
-  if (tabsFocused()) {
-    styles.selected.background = fui::Paint::solid(fui::Color::Black);
-    styles.selected.foreground = fui::Paint::solid(fui::Color::White);
-    styles.selected.radius = 4;
-  } else {
-    styles.selected.foreground = fui::Paint::solid(fui::Color::Black);
-    props.selectedUnderline = 1;
-  }
-  styles.focused = styles.selected;
-  styles.active = styles.selected;
-  props.tabStyles = styles;
-
-  const fui::Rect band = screen.takeTop(sortStripHeight(screen));
-  fui::tabBar(screen.frame(), band, props);
-
-  // The two state decorations no component slot carries, drawn on the band
-  // through the same target: the active Titles tab tells its direction as a
-  // small triangle, so direction is never hidden state; an active query
-  // filters every sort, so its tab says so with a dot.
-  const int16_t slot = static_cast<int16_t>(band.width / TAB_SLOTS);
-  const int16_t lineH = screen.target().lineHeight(props.text.font);
-  if (sortTabIndex(sortOrder) == TITLES_TAB) {
-    const int16_t w = screen.target().measureText(props.text.font, tabLabelFor(TITLES_TAB), props.text).width;
-    const int16_t x = static_cast<int16_t>(band.x + TITLES_TAB * slot + (slot - w) / 2 + w + 5);
-    const int16_t midY = static_cast<int16_t>(band.y + 2 + (lineH + 4) / 2);
-    constexpr int16_t triW = 7;
-    constexpr int16_t triH = 4;
-    const fui::Paint ink = fui::Paint::solid(fui::Color::Black);
-    if (sTitleDescending) {
-      screen.target().triangle(fui::Point{x, static_cast<int16_t>(midY - triH / 2)},
-                               fui::Point{static_cast<int16_t>(x + triW), static_cast<int16_t>(midY - triH / 2)},
-                               fui::Point{static_cast<int16_t>(x + triW / 2), static_cast<int16_t>(midY + triH / 2)},
-                               ink);
-    } else {
-      screen.target().triangle(fui::Point{static_cast<int16_t>(x + triW / 2), static_cast<int16_t>(midY - triH / 2)},
-                               fui::Point{x, static_cast<int16_t>(midY + triH / 2)},
-                               fui::Point{static_cast<int16_t>(x + triW), static_cast<int16_t>(midY + triH / 2)}, ink);
-    }
-  }
-  if (!query.empty()) {
-    const int16_t w = screen.target().measureText(props.text.font, tabLabelFor(SEARCH_TAB), props.text).width;
-    const int16_t x = static_cast<int16_t>(band.x + SEARCH_TAB * slot + (slot - w) / 2 + w + 5);
-    constexpr int16_t dotW = 5;
-    const int16_t y = static_cast<int16_t>(band.y + 2 + (lineH + 4 - dotW) / 2);
-    screen.target().fill(fui::Rect{x, y, dotW, dotW}, fui::Paint::solid(fui::Color::Black), 2);
-  }
 }
 
 void LibraryListActivity::buildRows(UiScreen& screen) {
@@ -826,67 +682,53 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   }
 }
 
-// The A-Z grid, as components: one button per PRESENT letter (an absent letter
-// is simply not drawn — its slot stays empty and nothing moves, because the
-// grid's positions come from the alphabet's index), and two mode buttons above
-// it. Buttons are what make the letters tappable.
+// One button per present letter. Author order also exposes given-name/surname
+// mode; title direction is selected by its ordinary A-Z or Z-A tab.
 void LibraryListActivity::buildLetterGrid(UiScreen& screen) {
   const fui::Rect body = screen.body();
   auto& target = screen.target();
   const int cell = (body.width - 2 * SIDE_PADDING) / LETTER_COLS;
   const int rows = (LETTER_COUNT + LETTER_COLS - 1) / LETTER_COLS;
-  const int cellH = body.height / (rows + 1);
+  const bool hasNameMode = sortOrder == library::SortOrder::AuthorAsc;
+  const int cellH = body.height / (rows + (hasNameMode ? 1 : 0));
 
-  // Both modes shown, not just the active one. Printing only the current
-  // choice hides the fact that there IS a choice — the same reason the sort
-  // strip lists every mode. Sorted by author the choice is which WORD the
-  // letters mean; sorted by title it is the direction. "A-Z"/"Z-A" are letter
-  // symbols rather than words, so they carry no translation.
-  const bool titleOrder = sortOrder != library::SortOrder::AuthorAsc;
-  const char* labels[2] = {titleOrder ? "A-Z" : tr(STR_LIBRARY_JUMP_GIVEN),
-                           titleOrder ? "Z-A" : tr(STR_LIBRARY_JUMP_SURNAME)};
-  const int active = titleOrder ? (sTitleDescending ? 1 : 0) : (jumpByGivenName ? 0 : 1);
-  // Centered — and deliberately NOT all-default: screen.button() substitutes
-  // the body font for any style that fails textStyleUnset, and these labels
-  // are measured in the small font.
-  fui::TextStyle modeText = screen.theme().smallText;
-  modeText.align = fui::TextAlign::Center;
-  const int16_t modeH = target.lineHeight(modeText.font);
-  constexpr int16_t MODE_GAP = 20;
-  int16_t labelW[2];
-  for (int i = 0; i < 2; i++) labelW[i] = target.measureText(modeText.font, labels[i], modeText).width;
-  int16_t mx = static_cast<int16_t>(body.x + (body.width - (labelW[0] + labelW[1] + MODE_GAP)) / 2);
-  const int16_t modeY = static_cast<int16_t>(body.y + 2);
+  if (hasNameMode) {
+    const char* labels[2] = {tr(STR_LIBRARY_JUMP_GIVEN), tr(STR_LIBRARY_JUMP_SURNAME)};
+    const int active = jumpByGivenName ? 0 : 1;
+    fui::TextStyle modeText = screen.theme().smallText;
+    modeText.align = fui::TextAlign::Center;
+    const int16_t modeH = target.lineHeight(modeText.font);
+    constexpr int16_t MODE_GAP = 20;
+    int16_t labelW[2];
+    for (int i = 0; i < 2; i++) labelW[i] = target.measureText(modeText.font, labels[i], modeText).width;
+    int16_t mx = static_cast<int16_t>(body.x + (body.width - (labelW[0] + labelW[1] + MODE_GAP)) / 2);
+    const int16_t modeY = static_cast<int16_t>(body.y + 2);
 
-  for (int i = 0; i < 2; i++) {
-    // Focused, the active choice inverts — the strongest signal this panel has
-    // that Left and Right are about to change it. Unfocused it keeps an
-    // underline, so the line stays quiet while the grid holds attention.
-    const bool on = i == active;
-    fui::ButtonProps mode;
-    mode.label = labels[i];
-    mode.action = ACTION_LETTER_MODE;
-    mode.value = static_cast<int16_t>(i);
-    mode.text = modeText;
-    mode.styles.explicitlySet = true;
-    mode.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
-    if (on && letterCursor < 0) {
-      mode.styles.normal.background = fui::Paint::solid(fui::Color::Black);
-      mode.styles.normal.foreground = fui::Paint::solid(fui::Color::White);
-      mode.styles.normal.radius = 4;
+    for (int i = 0; i < 2; i++) {
+      const bool on = i == active;
+      fui::ButtonProps mode;
+      mode.label = labels[i];
+      mode.action = ACTION_LETTER_MODE;
+      mode.value = static_cast<int16_t>(i);
+      mode.text = modeText;
+      mode.styles.explicitlySet = true;
+      mode.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
+      if (on && letterCursor < 0) {
+        mode.styles.normal.background = fui::Paint::solid(fui::Color::Black);
+        mode.styles.normal.foreground = fui::Paint::solid(fui::Color::White);
+        mode.styles.normal.radius = 4;
+      }
+      screen.button(mode, fui::Rect{static_cast<int16_t>(mx - 5), static_cast<int16_t>(modeY - 2),
+                                    static_cast<int16_t>(labelW[i] + 10), static_cast<int16_t>(modeH + 4)});
+      if (on && letterCursor >= 0) {
+        target.fill(fui::Rect{mx, static_cast<int16_t>(modeY + modeH + 1), labelW[i], 1},
+                    fui::Paint::solid(fui::Color::Black));
+      }
+      mx = static_cast<int16_t>(mx + labelW[i] + MODE_GAP);
     }
-    screen.button(mode, fui::Rect{static_cast<int16_t>(mx - 5), static_cast<int16_t>(modeY - 2),
-                                  static_cast<int16_t>(labelW[i] + 10), static_cast<int16_t>(modeH + 4)});
-    if (on && letterCursor >= 0) {
-      target.fill(fui::Rect{mx, static_cast<int16_t>(modeY + modeH + 1), labelW[i], 1},
-                  fui::Paint::solid(fui::Color::Black));
-    }
-    mx = static_cast<int16_t>(mx + labelW[i] + MODE_GAP);
   }
 
-  // Centre the block itself: 26 letters do not fill 5 columns evenly, and laid
-  // out from the left margin the remainder all lands on one side.
-  const int16_t top = static_cast<int16_t>(body.y + cellH / 2);
+  const int16_t top = static_cast<int16_t>(body.y + (hasNameMode ? cellH / 2 : 3));
   const int16_t originX = static_cast<int16_t>(body.x + (body.width - LETTER_COLS * cell) / 2);
   char letterLabels[LETTER_COUNT][2];
 
@@ -914,25 +756,36 @@ void LibraryListActivity::buildLetterGrid(UiScreen& screen) {
   }
 }
 
+void LibraryListActivity::buildHeader(UiScreen& screen) {
+  fui::HeaderProps header;
+  header.title = headerTitle();
+  header.borderEdges = fui::EdgeBottom;
+  if (!letterGrid && !degraded) {
+    header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
+    header.trailingAction = ACTION_SEARCH;
+    const int titleFontId = uiScaleSpec().titleFontId;
+    header.actionOffsetY =
+        static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+  }
+  screen.header(header);
+  screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().verticalSpacing));
+}
+
 void LibraryListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  // Content below the header band, above the button hints. The position
-  // readout owns the line above the hints, as the file browser's path line
-  // does; rows must not be laid out over it.
+  // The position readout owns the line above the hints; rows must not overlap
+  // it. The header itself is in the FUI layout so Search is a real action.
   const int16_t readoutReserved = static_cast<int16_t>(renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding), 0,
                                       static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
+  buildHeader(screen);
 
   if (letterGrid) {
-    screen.spacer(static_cast<int16_t>(sortStripHeight(screen) + metrics.verticalSpacing));
     buildLetterGrid(screen);
     return;
   }
 
-  if (!degraded) {
-    buildSortTabs(screen);
-    screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
-  }
+  if (!degraded) buildTabBar(screen);
   if (rowCount() == 0) {
     const char* message = tr(STR_LIBRARY_NO_RESULTS);
     if (filterFailed) {
@@ -980,31 +833,17 @@ const char* LibraryListActivity::headerTitle() const {
   return tr(STR_LIBRARY_SORT_RECENT);
 }
 
-void LibraryListActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, headerTitle());
-
-  renderUi();
-  // Layout feedback can change the selected row after measuring variable-height
-  // pages. Rebuild in the same framebuffer before its single e-ink refresh.
-  for (int pass = 0; activeNav().consumeRebuildNeeded() && pass < 8; ++pass) {
-    renderer.clearScreen();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                   headerTitle());
-    renderUi();
-  }
-
+void LibraryListActivity::drawFooter() {
   drawPositionReadout();
   // The front pair carries Left and Right here, not previous and next: it pages
   // the list, switches tabs and steps letters, none of which is one row at a
   // time. mapDirectionalLabels puts each label on whichever button actually
   // carries that screen direction.
   const char* leftLabel = letterGrid || tabsFocused() ? tr(STR_DIR_LEFT) : tr(STR_LIBRARY_PAGE_PREV);
+  if (searchShortcutActive()) leftLabel = tr(STR_SEARCH);
   const char* rightLabel = letterGrid || tabsFocused() ? tr(STR_DIR_RIGHT) : tr(STR_LIBRARY_PAGE_NEXT);
   const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_SELECT), leftLabel, rightLabel, "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
 }
 
 void LibraryListActivity::nextPage() {

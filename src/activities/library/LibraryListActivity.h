@@ -31,7 +31,6 @@ class LibraryListActivity final : public UiTabListActivity {
 
   void onEnter() override;
   void onExit() override;
-  void render(RenderLock&&) override;
 
  protected:
   // --- UiListActivity / UiTabListActivity contract ---------------------------
@@ -45,14 +44,19 @@ class LibraryListActivity final : public UiTabListActivity {
   void stepTab(int direction) override;
   bool handleCustomInput() override;
   bool handleButtons() override;
+  // The FUI screen owns the header so its Search action participates in the
+  // same touch routing as tabs and rows.
+  void drawChrome() override {}
+  void drawFooter() override;
   // Every button is dispatched in handleButtons with this screen's paging
   // semantics; the base ring walk must not run behind it.
   void navigateButtons() override {}
 
  private:
   // The screen's own actions, after the base's ACTION_ROW / ACTION_TAB.
-  static constexpr freeink::ui::ActionId ACTION_LETTER = ACTION_TAB_USER;
-  static constexpr freeink::ui::ActionId ACTION_LETTER_MODE = ACTION_TAB_USER + 1;
+  static constexpr freeink::ui::ActionId ACTION_SEARCH = ACTION_TAB_USER;
+  static constexpr freeink::ui::ActionId ACTION_LETTER = ACTION_TAB_USER + 1;
+  static constexpr freeink::ui::ActionId ACTION_LETTER_MODE = ACTION_TAB_USER + 2;
 
   // Walk the card and write a fresh index. Blocking, with a popup: at ~70 books
   // it is well under a second, and it only runs when the index is missing or the
@@ -64,10 +68,6 @@ class LibraryListActivity final : public UiTabListActivity {
   void openSearch();
   void openLetterGrid();
   void applySortOrder(library::SortOrder order);
-  void cycleSortOrder(bool forward);
-  // Swap TitleAsc/TitleDesc in place: the Titles tab keeps its slot and the
-  // direction lives on the tab (the drawn triangle), not in a second slot.
-  void flipTitleDirection();
   void nextPage();
   void previousPage(bool selectLast = false);
   // Sub-screens act on button press, so a button still held when we resume must
@@ -76,6 +76,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Touch routing while the grid consumes the loop pass, so its component hit
   // rects still dispatch.
   void routeModalTouch();
+  static void searchActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void letterActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void letterModeActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
@@ -88,31 +89,27 @@ class LibraryListActivity final : public UiTabListActivity {
   void computeLettersPresent();
   int firstPresentLetter() const;
   void jumpToLetter(char letter);
-  void toggleLetterGridMode();
+  void toggleLetterNameMode();
 
   // Screen building
-  void buildSortTabs(UiScreen& screen);
-  int16_t sortStripHeight(UiScreen& screen) const;
+  void buildHeader(UiScreen& screen);
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
   void buildLetterGrid(UiScreen& screen);
   void drawPositionReadout() const;
-  const char* headerTitle() const;
+  const char* headerTitle() const override;
 
   // Ring 0 is the strip; the selected BOOK is ring - 1, with the strip keeping
   // row 0 as the working selection exactly as the pre-ring code did.
   int selectedEntry() const;
   bool tabsFocused() const { return ringPos() == 0; }
+  bool searchShortcutActive() const;
 
   library::LibraryIndexFile index;
   library::SortOrder sortOrder = library::SortOrder::DateDesc;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
-
-  // Cursor within the strip. Separate from the active sort because the strip
-  // carries one entry that is not a sort mode: Search.
-  int tabCursor = 0;
 
   // Rows surviving the current query, as positions in the active sort order.
   // Empty query means no filtering and this owns no allocation, so the ordinary
