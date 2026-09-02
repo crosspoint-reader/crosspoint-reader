@@ -90,6 +90,12 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 45
+
+Version 45 keeps the version 44 serialized layout unchanged. It was bumped
+because internal EPUB links now preserve CSS superscript and subscript styles,
+changing their cached word-style flags and page layout.
+
 ### Version 44
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
