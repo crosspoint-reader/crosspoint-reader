@@ -101,6 +101,7 @@ void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& pr
   if (n.selected > count) n.selected = count;
   props.topIndex = static_cast<uint16_t>(n.top);
   props.selectedIndex = static_cast<int16_t>(n.selected - 1);  // -1 = tab band focused
+  props.nav = &n;
 }
 
 void UiTabListActivity::buildTabBar(UiScreen& screen) {
