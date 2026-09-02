@@ -546,7 +546,6 @@ void WebDAVHandler::handleMove(WebServer& s) {
   }
 
   if (dstExists) {
-    clearStaleDestinationBookData(dstPath.c_str());
     Storage.remove(dstPath.c_str());
   }
 
@@ -627,7 +626,6 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   if (dstExists) {
-    clearStaleDestinationBookData(dstPath.c_str());
     Storage.remove(dstPath.c_str());
   }
 
@@ -656,6 +654,10 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    // Clear any stale cache/bookmarks left at the destination path only after the copy has
+    // succeeded, unconditionally: a leftover cache/bookmarks file can exist at this path even
+    // when dstExists was false (e.g. its book was deleted directly on a PC over WebDAV/USB).
+    clearStaleDestinationBookData(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());
