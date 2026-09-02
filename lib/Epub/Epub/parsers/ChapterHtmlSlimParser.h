@@ -158,8 +158,8 @@ class ChapterHtmlSlimParser {
   static constexpr int PAGEBREAK_LABEL_SIZE = 16;
   static constexpr int PAGEBREAK_CAPTURE_SIZE = 32;
   bool pagebreakCapturing = false;
-  int pagebreakCaptureDepth = -1;  // depth (pre-increment) recorded at the marker's startElement
-  char pagebreakLabel[PAGEBREAK_LABEL_SIZE] = {};      // aria-label/title, truncated silently
+  int pagebreakCaptureDepth = -1;                  // depth (pre-increment) recorded at the marker's startElement
+  char pagebreakLabel[PAGEBREAK_LABEL_SIZE] = {};  // aria-label/title, truncated silently
   char pagebreakCaptureBuffer[PAGEBREAK_CAPTURE_SIZE] = {};
   int pagebreakCaptureLen = 0;
   // visibleTextOffset at the moment capture began. characterData() counts visible

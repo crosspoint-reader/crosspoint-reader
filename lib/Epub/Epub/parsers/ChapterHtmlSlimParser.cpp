@@ -129,8 +129,7 @@ uint16_t parseTableSpan(const char* value) {
 // decided yet), so the two conditions can never drift apart.
 bool isPagebreakMarkerCandidate(const char* name, const XML_Char** atts) {
   if (atts == nullptr) return false;
-  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 ||
-                                strcmp(name, "li") == 0 ||
+  const bool textBearingBlock = strcmp(name, "p") == 0 || strcmp(name, "blockquote") == 0 || strcmp(name, "li") == 0 ||
                                 (name[0] == 'h' && name[1] >= '1' && name[1] <= '6' && name[2] == '\0');
   if (textBearingBlock) return false;
   for (int i = 0; atts[i]; i += 2) {
