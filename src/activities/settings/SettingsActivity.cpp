@@ -414,18 +414,9 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
   }
 }
 
-// Blocking, with a popup. On a 69-book card the walk is well under a second, but
-// with book metadata on it opens every book — several seconds across a couple of
-// thousand — and it used to run with nothing on screen, so the device read as
-// frozen. Deliberately a static popup and not a live count: this panel has no
-// partial refresh, so repainting a counter once per folder would add ~185 ms per
-// folder and spend more time drawing progress than making it.
 void SettingsActivity::rebuildLibraryIndex() {
-  // Held for the whole job. The render task may still be repainting the
-  // settings list, and its SD-loaded fonts read glyph data at draw time — a
-  // second open reader while the walk holds EPUBs open, which the storage
-  // layer does not allow. The popup below is flushed to the panel first, so
-  // blocking the render task costs nothing visible.
+  // Prevent SD-backed fonts from opening a second reader while EPUB metadata is scanned.
+  // Keep the popup static because an e-ink refresh per folder would dominate the rebuild.
   RenderLock lock(*this);
   GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
 
