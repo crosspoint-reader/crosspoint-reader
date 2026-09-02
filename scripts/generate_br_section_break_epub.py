@@ -19,6 +19,11 @@ Cases covered:
   7. <li><p> with bold+italic text (bullet must be inline with text).
   8. <li><p> with nested <ul> (bullet inline, nested list indented).
   9. <li> with direct text (no <p> wrapper — baseline, already works).
+  10. <ol> numbering (items must be numbered 1. 2. 3., not bulleted).
+  11. list-style-type: none (no marker should appear before items).
+  12. Nested <ol> counters (each nesting level has its own counter).
+  13. Hanging indent with list container margin (first line hangs off the
+      list's margin-left, continuation lines indent under the marker).
 
 Visual verification instructions are embedded as the first paragraph of each
 chapter so a human tester can confirm the expected result on device.
@@ -48,6 +53,9 @@ h2   { text-align: center; margin-top: 0.5em; margin-bottom: 0.5em; }
 .list-bullet2 { margin-left: 2em; }
 .list { text-indent: 0; }
 .list-item { text-indent: 0; }
+.no-marker { list-style-type: none; }
+.hanging-indent { text-indent: -1.5em; margin-left: 1.5em; }
+.nested-list { margin-left: 2em; }
 """
 
 def xhtml(title, body):
@@ -191,6 +199,72 @@ case that already works — no &lt;p&gt; wrapper inside &lt;li&gt;.</p>
 <p>PASS: All three bullets above should be inline with their text.</p>
 """)
 
+# ---------------------------------------------------------------------------
+# Chapter 10 — <ol> numbering (issue #291: items must show 1. 2. 3.)
+# ---------------------------------------------------------------------------
+ch10 = xhtml("Ch10: ol numbering", """
+<h1>Ch 10: &lt;ol&gt; Numbering</h1>
+<p>PASS: Each item below must be numbered (1. 2. 3.), not bulleted with a dot.</p>
+<ol>
+<li>First item in an ordered list.</li>
+<li>Second item in an ordered list.</li>
+<li>Third item in an ordered list.</li>
+</ol>
+<p>PASS: All three items above must show numbers 1, 2, 3 respectively.</p>
+""")
+
+# ---------------------------------------------------------------------------
+# Chapter 11 — list-style-type: none (issue #291: no marker)
+# ---------------------------------------------------------------------------
+ch11 = xhtml("Ch11: list-style-type none", """
+<h1>Ch 11: list-style-type: none</h1>
+<p>PASS: The items below must have NO bullet or number before them. They should
+look like plain paragraphs.</p>
+<ul class="no-marker">
+<li>First item with no marker.</li>
+<li>Second item with no marker.</li>
+<li>Third item with no marker.</li>
+</ul>
+<p>PASS: None of the items above should have a bullet or number.</p>
+""")
+
+# ---------------------------------------------------------------------------
+# Chapter 12 — Nested <ol> counters (issue #291: each level has own counter)
+# ---------------------------------------------------------------------------
+ch12 = xhtml("Ch12: nested ol counters", """
+<h1>Ch 12: Nested &lt;ol&gt; Counters</h1>
+<p>PASS: The outer list must number 1, 2. The nested list inside item 2 must
+restart at 1, 2, 3 — not continue from the outer counter.</p>
+<ol>
+<li>Outer item one.</li>
+<li>Outer item two.
+<ol>
+<li>Inner item one.</li>
+<li>Inner item two.</li>
+<li>Inner item three.</li>
+</ol>
+</li>
+<li>Outer item three.</li>
+</ol>
+<p>PASS: Outer items must be 1, 2, 3. Inner items must be 1, 2, 3 (restarted).</p>
+""")
+
+# ---------------------------------------------------------------------------
+# Chapter 13 — Hanging indent with list container margin (issue #291)
+# ---------------------------------------------------------------------------
+ch13 = xhtml("Ch13: hanging indent", """
+<h1>Ch 13: Hanging Indent</h1>
+<p>PASS: The list items below must show a bullet followed by text on the same
+line. Continuation lines (when text wraps) must indent under the text, not
+under the bullet. The bullet must not be clipped off the left edge of the page.</p>
+<ul class="nested-list">
+<li><p class="hanging-indent">This is a long paragraph inside a list item with a hanging indent. The first line starts at the bullet and the text wraps to subsequent lines that should be indented to align with the start of this paragraph, not with the bullet.</p></li>
+<li><p class="hanging-indent">A second list item with the same hanging indent pattern to verify the indentation is consistent across multiple items in the same list.</p></li>
+</ul>
+<p>PASS: Bullets must be visible (not clipped). Wrapped lines must indent past
+the bullet, aligned with the first character of each paragraph.</p>
+""")
+
 CHAPTERS = [
     ("ch1", "chapter1.xhtml", "Chapter 1: Standalone br",    ch1),
     ("ch2", "chapter2.xhtml", "Chapter 2: Classed br",       ch2),
@@ -201,6 +275,10 @@ CHAPTERS = [
     ("ch7", "chapter7.xhtml", "Chapter 7: li>p bold italic", ch7),
     ("ch8", "chapter8.xhtml", "Chapter 8: li>p nested ul",   ch8),
     ("ch9", "chapter9.xhtml", "Chapter 9: li direct text",   ch9),
+    ("ch10", "chapter10.xhtml", "Chapter 10: ol numbering", ch10),
+    ("ch11", "chapter11.xhtml", "Chapter 11: list-style-type none", ch11),
+    ("ch12", "chapter12.xhtml", "Chapter 12: nested ol counters", ch12),
+    ("ch13", "chapter13.xhtml", "Chapter 13: hanging indent", ch13),
 ]
 
 def build_epub(path):
@@ -241,7 +319,7 @@ def build_epub(path):
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:identifier id="uid">test-epub-br-section-break</dc:identifier>
-    <dc:title>Test: br Section Break &amp; li/p</dc:title>
+    <dc:title>Test: br Section Break &amp; li/p &amp; List Numbering</dc:title>
     <dc:language>en</dc:language>
   </metadata>
   <manifest>

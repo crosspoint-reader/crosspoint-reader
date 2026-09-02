@@ -628,6 +628,10 @@ void CssParser::parseDeclarationIntoStyle(std::string_view decl, CssStyle& style
       style.verticalAlign = CssVerticalAlign::Sub;
       style.defined.verticalAlign = 1;
     }
+  } else if (iequalsAscii(name, "list-style-type")) {
+    const std::string_view listStyleValue = stripTrailingImportant(value);
+    style.listStyleType = iequalsAscii(listStyleValue, "none") ? CssListStyleType::None : CssListStyleType::Disc;
+    style.defined.listStyleType = 1;
   }
 }
 
