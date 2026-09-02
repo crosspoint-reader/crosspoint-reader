@@ -97,6 +97,8 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
         return freeink::ui::bitmapFromIcon(icon_library_32);
       case UIIcon::Hotspot:
         return freeink::ui::bitmapFromIcon(icon_radio_tower_32);
+      case UIIcon::Usb:
+        return freeink::ui::bitmapFromIcon(icon_usb_32);
       case UIIcon::Bookmark:
         return freeink::ui::bitmapFromIcon(icon_bookmark_32);
       default:
@@ -120,6 +122,8 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
       return freeink::ui::bitmapFromIcon(icon_library_24);
     case UIIcon::Hotspot:
       return freeink::ui::bitmapFromIcon(icon_radio_tower_24);
+    case UIIcon::Usb:
+      return freeink::ui::bitmapFromIcon(icon_usb_24);
     case UIIcon::Bookmark:
       return freeink::ui::bitmapFromIcon(icon_bookmark_24);
     default:

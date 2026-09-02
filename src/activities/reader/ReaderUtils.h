@@ -141,11 +141,9 @@ inline bool isTouchMenuTap(const GfxRenderer& renderer, const MappedInputManager
 // Reader menu opens on the menu edge-swipe or a center-third tap. On home-key
 // boards a long press of the capacitive key runs the user-selected long-press
 // function instead (SETTINGS.longPressMenuFunction), not the menu.
-// With touch reader controls Off the reading surface ignores touch entirely,
-// menu included, so a stray brush of the screen can't open it; the menu stays
-// reachable via the Confirm button.
+// Menu gestures honor showReaderMenu independently of touchReaderControls,
+// which only gates page-turn touch zones in detectTouchPageTurn().
 inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input) {
-  if (!SETTINGS.touchReaderControls) return false;
   if (!input.hasTouch()) return false;
   if (input.wasMenuGesture()) return true;
   // Bottom-edge up-swipe variant: only selectable on home-key boards, where

@@ -2,6 +2,8 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <cstring>
 
@@ -45,11 +47,9 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends four virtual items: "Add Server", "Download folder",
-  // "Filename format" and "Sync on startup".
-  if (!pickerMode) {
-    count += 4;
-  }
+  // "Add Server" is always appended; Settings mode adds three more virtual
+  // items: "Download folder", "Filename format" and "Sync on startup".
+  count += pickerMode ? 1 : 4;
   return count;
 }
 
@@ -86,12 +86,12 @@ void OpdsServerListActivity::rebuildRowItems() {
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
-  if (!pickerMode) {
-    fui::ListItem addServer;
-    addServer.label = tr(STR_ADD_SERVER);
-    addServer.actionValue = static_cast<int16_t>(serverCount);
-    rowItems_.push_back(addServer);
+  fui::ListItem addServer;
+  addServer.label = tr(STR_ADD_SERVER);
+  addServer.actionValue = static_cast<int16_t>(serverCount);
+  rowItems_.push_back(addServer);
 
+  if (!pickerMode) {
     fui::ListItem folder;
     folder.label = tr(STR_OPDS_DOWNLOAD_FOLDER);
     folder.actionValue = static_cast<int16_t>(serverCount + 1);
@@ -142,6 +142,16 @@ void OpdsServerListActivity::handleSelection() {
       if (server) {
         activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
       }
+    } else {
+      auto editor = makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, -1);
+      if (!editor) {
+        LOG_ERR("OPS", "OOM: OPDS settings activity");
+        return;
+      }
+      startActivityForResult(std::move(editor), [this](const ActivityResult&) {
+        OPDS_STORE.loadFromFile();
+        rebuildRowItems();
+      });
     }
     return;
   }
@@ -211,7 +221,7 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
   // Content below the GUI.drawHeader band, above the button hints; derived
   // from the safe area so board bezel insets apply (same as LanguageSelect).
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(
+  screen.setContentMarginFromScreen(
       fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
                   static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
                   static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.buttonHintsHeight),

@@ -31,8 +31,6 @@ class UITheme {
                                       TextVerticalAlignment verticalAlignment = TextVerticalAlignment::CENTER);
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);
-  static int getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
-                                     bool hasSubtitle, int extraReservedHeight = 0);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();

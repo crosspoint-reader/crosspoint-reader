@@ -3,10 +3,19 @@
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
 #include <SDCardManager.h>
+#if FREEINK_CAP_USB_MSC
+#include <UsbMassStorage.h>
+#endif
 
 #include <cassert>
 
 #define SDCard SDCardManager::getInstance()
+
+namespace {
+#if FREEINK_CAP_USB_MSC
+freeink::UsbMassStorage usbMassStorage;
+#endif
+}  // namespace
 
 HalStorage HalStorage::instance;
 
@@ -34,6 +43,75 @@ class HalStorage::StorageLock {
   StorageLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }
   ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }
 };
+
+void HalStorage::prepareForDeepSleep() {
+  StorageLock lock;
+  SDCard.shutdown();
+}
+
+#if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC
+#error "USB Drive requires an SDMMC-backed storage profile"
+#endif
+
+bool HalStorage::beginUsbDrive() {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  auto* const blockDevice = SDCard.detachFilesystemForRawAccess();
+  if (!blockDevice) {
+    LOG_ERR("USB", "USB Drive requires a mounted SDMMC filesystem");
+    return false;
+  }
+
+  if (!usbMassStorage.begin(blockDevice)) {
+    LOG_ERR("USB", "USB Drive MSC initialization failed");
+    if (!SDCard.begin()) {
+      LOG_ERR("USB", "Unable to remount SD card after USB Drive startup failure");
+    }
+    return false;
+  }
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool HalStorage::disconnectUsbDriveHost() {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  return usbMassStorage.disconnectHost();
+#else
+  return false;
+#endif
+}
+
+void HalStorage::endUsbDrive() {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  usbMassStorage.end();
+#endif
+}
+
+UsbDriveState HalStorage::usbDriveState() const {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  switch (usbMassStorage.state()) {
+    case freeink::UsbMassStorageState::WaitingForHost:
+      return UsbDriveState::WaitingForHost;
+    case freeink::UsbMassStorageState::Connected:
+    case freeink::UsbMassStorageState::Accessed:
+      return UsbDriveState::Connected;
+    case freeink::UsbMassStorageState::Ejected:
+      return UsbDriveState::Ejected;
+    case freeink::UsbMassStorageState::Disconnected:
+      return UsbDriveState::Disconnected;
+    case freeink::UsbMassStorageState::IoError:
+      return UsbDriveState::IoError;
+    case freeink::UsbMassStorageState::Idle:
+      break;
+  }
+#endif
+  return UsbDriveState::Unsupported;
+}
 
 #define HAL_STORAGE_WRAPPED_CALL(method, ...) \
   HalStorage::StorageLock lock;               \
