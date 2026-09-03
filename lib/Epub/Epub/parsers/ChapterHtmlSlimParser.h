@@ -105,8 +105,6 @@ class ChapterHtmlSlimParser {
   std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
   std::vector<uint32_t> tableLineVisibleOffsets;
   std::array<char, MAX_GRID_TABLE_ANCHOR_BYTES> tableRowAnchorStorage{};
-  std::array<uint16_t, MAX_GRID_TABLE_COLUMNS> tableRowAnchorOffsets{};
-  std::array<uint8_t, MAX_GRID_TABLE_COLUMNS> tableRowAnchorCellIndices{};
   size_t tableRowAnchorCount = 0;
   size_t tableRowAnchorBytes = 0;
   uint8_t tableAnchorCellPendingLine = UINT8_MAX;
@@ -154,6 +152,7 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
   void flushPartWordBuffer();
+  void compactTableRowAnchors();
   void collectPendingTableAnchor();
   void flushTableRowAnchorsForCell(size_t cellIndex);
   void flushPendingTableCellAnchors();

@@ -66,6 +66,41 @@ TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) 
   EXPECT_TRUE(parser.currentTextBlock->linkTargetMatches(linkId, expectedHref));
 }
 
+TEST_F(ChapterHtmlSlimParserTest, KeepsNestedTableAnchorsDeferredForTheirOuterCell) {
+  parser.tableDepth = 2;
+  parser.insideTableCell = true;
+  parser.pendingAnchorId = "first-anchor";
+  parser.completedPageCount = 7;
+  const XML_Char* attributes[] = {"id", "second-anchor", nullptr};
+
+  ChapterHtmlSlimParser::startElement(&parser, "aside", attributes);
+
+  EXPECT_TRUE(parser.anchorData.empty());
+  EXPECT_EQ(parser.tableRowAnchorCount, 1u);
+  EXPECT_EQ(static_cast<uint8_t>(parser.tableRowAnchorStorage[0]), 0u);
+  EXPECT_STREQ(parser.tableRowAnchorStorage.data() + 1, "first-anchor");
+  EXPECT_EQ(parser.pendingAnchorId, "second-anchor");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, ReclaimsFlushedTableAnchorStorageBeforeCollectingAnother) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  parser.pendingAnchorId.assign(ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES - 2, 'a');
+  parser.collectPendingTableAnchor();
+  ASSERT_EQ(parser.tableRowAnchorBytes, ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES);
+
+  parser.flushTableRowAnchorsForCell(0);
+  ASSERT_EQ(parser.anchorData.size(), 1u);
+  parser.pendingAnchorId = "next-anchor";
+  parser.collectPendingTableAnchor();
+
+  EXPECT_EQ(parser.anchorData.size(), 1u);
+  EXPECT_EQ(parser.tableRowAnchorCount, 1u);
+  EXPECT_EQ(static_cast<uint8_t>(parser.tableRowAnchorStorage[0]), 0u);
+  EXPECT_STREQ(parser.tableRowAnchorStorage.data() + 1, "next-anchor");
+  EXPECT_TRUE(parser.pendingAnchorId.empty());
+}
+
 INSTANTIATE_TEST_SUITE_P(CssVerticalAlign, ChapterHtmlSlimParserTest,
                          ::testing::Values("vertical-align: super", "vertical-align: sub"));
 

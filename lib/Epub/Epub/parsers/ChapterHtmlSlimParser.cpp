@@ -317,40 +317,66 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
 void ChapterHtmlSlimParser::collectPendingTableAnchor() {
   if (pendingAnchorId.empty()) return;
 
-  const size_t requiredBytes = pendingAnchorId.size() + 1;
-  if (tableRowAnchorCount >= tableRowAnchorOffsets.size() ||
-      requiredBytes > tableRowAnchorStorage.size() - tableRowAnchorBytes) {
+  if (tableRowStacked) {
+    compactTableRowAnchors();
+  }
+
+  const size_t requiredBytes = pendingAnchorId.size() + 2;
+  if (requiredBytes > tableRowAnchorStorage.size() - tableRowAnchorBytes) {
     // Keep unusually anchor-heavy rows navigable through the ordinary flow.
-    if (tableRowStacked) {
-      flushPendingAnchor();
-    } else {
+    if (!tableRowStacked) {
       fallbackTableRowToStacked();
+    } else {
+      LOG_DBG("EHP", "Dropped oversized table anchor: %.48s", pendingAnchorId.c_str());
+      pendingAnchorId.clear();
     }
     return;
   }
 
   const size_t cellIndex =
       insideTableCell ? tableRowCells.size() : (tableRowCells.empty() ? 0 : tableRowCells.size() - 1);
-  tableRowAnchorOffsets[tableRowAnchorCount] = static_cast<uint16_t>(tableRowAnchorBytes);
-  tableRowAnchorCellIndices[tableRowAnchorCount] =
-      static_cast<uint8_t>(std::min(cellIndex, static_cast<size_t>(UINT8_MAX - 1)));
-  tableRowAnchorCount++;
-  memcpy(tableRowAnchorStorage.data() + tableRowAnchorBytes, pendingAnchorId.c_str(), requiredBytes);
+  tableRowAnchorStorage[tableRowAnchorBytes] =
+      static_cast<char>(std::min(cellIndex, static_cast<size_t>(UINT8_MAX - 1)));
+  memcpy(tableRowAnchorStorage.data() + tableRowAnchorBytes + 1, pendingAnchorId.c_str(), pendingAnchorId.size() + 1);
   tableRowAnchorBytes += requiredBytes;
+  tableRowAnchorCount++;
   pendingAnchorId.clear();
   if (tableRowStacked) {
     tableAnchorCellPendingLine = static_cast<uint8_t>(cellIndex);
   }
 }
 
-void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) {
-  for (size_t i = 0; i < tableRowAnchorCount; ++i) {
-    if (tableRowAnchorCellIndices[i] != cellIndex) {
-      continue;
+void ChapterHtmlSlimParser::compactTableRowAnchors() {
+  size_t readOffset = 0;
+  size_t writeOffset = 0;
+  while (readOffset < tableRowAnchorBytes) {
+    const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[readOffset]);
+    const char* anchor = tableRowAnchorStorage.data() + readOffset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - readOffset - 1) + 2;
+    if (cellIndex != UINT8_MAX) {
+      if (writeOffset != readOffset) {
+        memmove(tableRowAnchorStorage.data() + writeOffset, tableRowAnchorStorage.data() + readOffset, recordBytes);
+      }
+      writeOffset += recordBytes;
     }
-    pendingAnchorId.assign(tableRowAnchorStorage.data() + tableRowAnchorOffsets[i]);
-    flushPendingAnchor();
-    tableRowAnchorCellIndices[i] = UINT8_MAX;
+    readOffset += recordBytes;
+  }
+  tableRowAnchorBytes = writeOffset;
+}
+
+void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) {
+  size_t offset = 0;
+  while (offset < tableRowAnchorBytes) {
+    auto& storedCellIndex = reinterpret_cast<uint8_t&>(tableRowAnchorStorage[offset]);
+    const char* anchor = tableRowAnchorStorage.data() + offset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - offset - 1) + 2;
+    if (storedCellIndex == cellIndex) {
+      pendingAnchorId.assign(anchor);
+      flushPendingAnchor();
+      storedCellIndex = UINT8_MAX;
+      tableRowAnchorCount--;
+    }
+    offset += recordBytes;
   }
 }
 
@@ -363,12 +389,16 @@ void ChapterHtmlSlimParser::flushPendingTableCellAnchors() {
 }
 
 void ChapterHtmlSlimParser::flushTableRowAnchors() {
-  for (size_t i = 0; i < tableRowAnchorCount; ++i) {
-    if (tableRowAnchorCellIndices[i] == UINT8_MAX) {
-      continue;
+  size_t offset = 0;
+  while (offset < tableRowAnchorBytes) {
+    const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[offset]);
+    const char* anchor = tableRowAnchorStorage.data() + offset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - offset - 1) + 2;
+    if (cellIndex != UINT8_MAX) {
+      pendingAnchorId.assign(anchor);
+      flushPendingAnchor();
     }
-    pendingAnchorId.assign(tableRowAnchorStorage.data() + tableRowAnchorOffsets[i]);
-    flushPendingAnchor();
+    offset += recordBytes;
   }
   tableRowAnchorCount = 0;
   tableRowAnchorBytes = 0;
@@ -571,10 +601,15 @@ void ChapterHtmlSlimParser::fallbackTableRowToStacked() {
   tableRowCells.clear();
   currentTextBlock = std::move(activeCell);
   wordsExtractedInBlock = 0;
-  for (size_t i = 0; i < tableRowAnchorCount; ++i) {
-    if (tableRowAnchorCellIndices[i] == activeCellIndex) {
-      tableRowAnchorCellIndices[i] = 0;
+  size_t anchorOffset = 0;
+  while (anchorOffset < tableRowAnchorBytes) {
+    auto& cellIndex = reinterpret_cast<uint8_t&>(tableRowAnchorStorage[anchorOffset]);
+    const char* anchor = tableRowAnchorStorage.data() + anchorOffset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - anchorOffset - 1) + 2;
+    if (cellIndex == activeCellIndex) {
+      cellIndex = 0;
     }
+    anchorOffset += recordBytes;
   }
   tableAnchorCellPendingLine = 0;
   pendingAnchorId = std::move(activeAnchor);
@@ -760,12 +795,16 @@ void ChapterHtmlSlimParser::finishTableRow() {
   };
 
   bool rowStartsToc = false;
-  for (size_t i = 0; i < tableRowAnchorCount; ++i) {
-    const char* anchor = tableRowAnchorStorage.data() + tableRowAnchorOffsets[i];
-    if (std::find(tocAnchors.begin(), tocAnchors.end(), anchor) != tocAnchors.end()) {
+  size_t anchorOffset = 0;
+  while (anchorOffset < tableRowAnchorBytes) {
+    const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[anchorOffset]);
+    const char* anchor = tableRowAnchorStorage.data() + anchorOffset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - anchorOffset - 1) + 2;
+    if (cellIndex != UINT8_MAX && std::find(tocAnchors.begin(), tocAnchors.end(), anchor) != tocAnchors.end()) {
       rowStartsToc = true;
       break;
     }
+    anchorOffset += recordBytes;
   }
   if (rowStartsToc) {
     flushTableRowAnchors();
@@ -911,7 +950,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
           // lands at page 0 (section start) instead of the footnote.
           if (!self->pendingAnchorId.empty()) {
-            if (self->tableDepth == 1) {
+            if (self->tableDepth >= 1 && self->insideTableCell) {
               self->collectPendingTableAnchor();
             } else {
               self->flushPendingAnchor();
