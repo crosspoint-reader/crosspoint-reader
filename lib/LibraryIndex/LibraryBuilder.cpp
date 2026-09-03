@@ -1177,9 +1177,10 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   Storage.remove(folderStagePath.c_str());
 
   stats.walkMs = millis() - startMs;
-  LOG_INF("LIBIDX", "%s: %u books, %u folders, %u dup dropped, %u unreadable, %ums", ok ? "built" : "FAILED",
-          static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.folders),
-          static_cast<unsigned>(stats.duplicatesDropped), static_cast<unsigned>(stats.unreadableSkipped),
+  LOG_INF("LIBIDX", "%s: %u books, %u folders, %u enriched, %u dup dropped, %u unreadable, metadata %s, %ums",
+          ok ? "built" : "FAILED", static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.folders),
+          static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.duplicatesDropped),
+          static_cast<unsigned>(stats.unreadableSkipped), readMetadata ? "on" : "off",
           static_cast<unsigned>(stats.walkMs));
   return ok;
 }

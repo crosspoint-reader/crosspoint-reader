@@ -62,7 +62,7 @@ void UiTabListActivity::moveRingTo(const int ringIndex) {
   } else {
     // Pull the viewport to the row (ring - 1); ListNav::follow reads
     // n.selected as a row index, so compute directly here.
-    const uint16_t rows = n.visibleRows > 0 ? static_cast<uint16_t>(n.visibleRows) : 1;
+    const uint16_t rows = n.pageRows() > 0 ? static_cast<uint16_t>(n.pageRows()) : 1;
     n.top = fui::listTopIndexFor(static_cast<int16_t>(ringIndex - 1), static_cast<uint16_t>(n.top < 0 ? 0 : n.top),
                                  rows, static_cast<uint16_t>(listCount()));
   }

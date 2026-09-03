@@ -112,10 +112,11 @@ bool LibraryListActivity::rebuildIndex() {
     LOG_ERR("LIB", "index build failed");
     return false;
   }
-  LOG_INF("LIB", "reconciled: %u unchanged, %u added, %u renamed, %u removed (%u dup, %u unreadable)",
+  LOG_INF("LIB", "reconciled: %u unchanged, %u added, %u renamed, %u removed, %u enriched (%u dup, %u unreadable)",
           static_cast<unsigned>(stats.unchanged), static_cast<unsigned>(stats.added),
           static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
-          static_cast<unsigned>(stats.duplicatesDropped), static_cast<unsigned>(stats.unreadableSkipped));
+          static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.duplicatesDropped),
+          static_cast<unsigned>(stats.unreadableSkipped));
   if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
   return true;
 }
