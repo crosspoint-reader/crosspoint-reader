@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <string_view>
 #include <vector>
@@ -172,6 +173,10 @@ bool hasXtcExtension(std::string_view fileName) {
 bool hasTxtExtension(std::string_view fileName) { return checkFileExtension(fileName, ".txt"); }
 
 bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension(fileName, ".md"); }
+
+bool hasPlainTextBookExtension(std::string_view fileName) {
+  return hasTxtExtension(fileName) || hasMarkdownExtension(fileName);
+}
 
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
