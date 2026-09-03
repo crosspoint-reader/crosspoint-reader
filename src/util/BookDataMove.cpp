@@ -20,7 +20,7 @@ std::string bookCachePathFor(const std::string& path) {
   if (FsHelpers::hasXtcExtension(path)) {
     return Xtc(path, "/.crosspoint").getCachePath();
   }
-  if (FsHelpers::hasTxtExtension(path)) {
+  if (FsHelpers::hasPlainTextBookExtension(path)) {
     return Txt(path, "/.crosspoint").getCachePath();
   }
   return "";
