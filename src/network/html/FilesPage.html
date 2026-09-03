@@ -1938,13 +1938,18 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
   }
 
-  // A newer hydrate() call owns the DOM: an older one still awaiting its listing must not
-  // go on to write a table it no longer represents (rapid folder clicks, Back-button mashing -
-  // scanFiles() yields during long scans, so per-folder fetch latency genuinely varies).
-  let hydrateGeneration = 0;
+  // Mirrors the loader markup the server renders inside #file-table. A full page load got it for
+  // free; in-page navigation has to put it back itself.
+  const LOADER_MARKUP = '<div class="loader-container"><span class="loader"></span></div>';
 
+  // Listing request owned by the hydrate() call that currently owns the DOM, so a newer call can
+  // supersede it. Rapid folder clicks and Back-button mashing genuinely reorder responses
+  // (scanFiles() yields during long scans), and without a full page load nothing aborts them.
+  let listingRequest = null;
+
+  // Renders the breadcrumbs and the listing for currentPath.
+  // Returns false if a newer hydrate() superseded this one before it could render.
   async function hydrate() {
-    const generation = ++hydrateGeneration;
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
@@ -1987,22 +1992,32 @@
       });
     }
 
+    // The breadcrumbs above now point at the new folder, so the outgoing listing has to go in the
+    // same frame: its rows carry absolute paths in their delete / move / rename handlers, and
+    // leaving them on screen would let the user act on the folder they just left.
+    fileTable.innerHTML = LOADER_MARKUP;
+    document.getElementById('folder-summary').textContent = '';
+
+    if (listingRequest) listingRequest.abort();
+    const request = new AbortController();
+    listingRequest = request;
+
     let files = [];
     try {
-      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
-      // A newer hydrate() may already be in flight (or done) by the time this resolves - bail
-      // rather than render a listing for a path the UI no longer points at.
-      if (generation !== hydrateGeneration) return;
+      const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now(),
+                                   { signal: request.signal });
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
       files = await response.json();
-      if (generation !== hydrateGeneration) return;
     } catch (e) {
+      // Aborted means a newer hydrate() owns the DOM and has already drawn its own loader.
+      if (request.signal.aborted) return false;
       console.error(e);
-      if (generation !== hydrateGeneration) return;
       fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
-      return;
+      return true;
+    } finally {
+      if (listingRequest === request) listingRequest = null;
     }
 
     let folderCount = 0;
@@ -2079,19 +2094,38 @@
       fileTableContent += '</table>';
       fileTable.innerHTML = fileTableContent;
     }
+    return true;
   }
 
   // Navigate to a folder without a full page reload: updates history and title, then re-hydrates the listing.
   async function navigateTo(path, { push = true } = {}) {
+    // A full page load discarded everything scoped to the folder being left. In-page navigation
+    // has to do it explicitly: an open modal still holds the paths it captured there, and the
+    // failed-upload banner retries into whatever folder is current when it is clicked.
+    closeOpenModals();
+    dismissFailedUploads();
+
+    if (push) {
+      // Remember where the user was in the folder being left. The browser cannot restore it on
+      // Back by itself: at that point the document holds only a loader, so there is nothing to
+      // scroll to yet and the offset is clamped away. On a popstate the entry has already
+      // changed, so its stored offset is the one to restore rather than to overwrite.
+      history.replaceState({ path: currentPath, scrollY: window.scrollY }, '');
+    }
+    const scrollY = push ? 0 : (history.state && history.state.scrollY) || 0;
+
     currentPath = path;
     applyPathTitle();
     if (push) {
       // Root keeps the page's canonical URL so history entries match a direct /files load.
       const url = path === '/' ? '/files' : '/files?path=' + encodeURIComponent(path);
-      history.pushState({ path: path }, '', url);
+      history.pushState({ path: path, scrollY: 0 }, '', url);
     }
-    await hydrate();
-    window.scrollTo(0, 0);
+    // Only once the listing is up, and never for a hydrate() that a newer navigation superseded -
+    // that one would pull the user out of the listing which replaced it.
+    if (await hydrate()) {
+      window.scrollTo(0, scrollY);
+    }
   }
 
   // Delegated click handler: intercepts a plain left-click on a `selector` link inside the
@@ -2989,6 +3023,23 @@
     return labels[state] || 'Normal';
   }
 
+  // Each modal owns cleanup beyond hiding itself (revoking a preview URL, clearing the paths a
+  // confirm would act on), so every close routes through this dispatch rather than just dropping
+  // the .open class.
+  function closeModalOverlay(overlay) {
+    if (overlay.id === 'uploadModal') return closeUploadModal();
+    if (overlay.id === 'folderModal') return closeFolderModal();
+    if (overlay.id === 'deleteModal') return closeDeleteModal();
+    if (overlay.id === 'renameModal') return closeRenameModal();
+    if (overlay.id === 'moveModal') return closeMoveModal();
+    if (overlay.id === 'imagePreviewModal') return closeImagePreview();
+    overlay.classList.remove('open');
+  }
+
+  function closeOpenModals() {
+    document.querySelectorAll('.modal-overlay.open').forEach(closeModalOverlay);
+  }
+
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
     // Fetch CrossPoint version once. hydrate() re-runs on every folder navigation now, and this
@@ -3004,14 +3055,7 @@
     document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
       overlay.addEventListener('click', function(e) {
         if (e.target === overlay) {
-          // Call the appropriate close function for each modal to ensure cleanup
-          if (overlay.id === 'uploadModal') return closeUploadModal();
-          if (overlay.id === 'folderModal') return closeFolderModal();
-          if (overlay.id === 'deleteModal') return closeDeleteModal();
-          if (overlay.id === 'renameModal') return closeRenameModal();
-          if (overlay.id === 'moveModal') return closeMoveModal();
-          if (overlay.id === 'imagePreviewModal') return closeImagePreview();
-          overlay.classList.remove('open');
+          closeModalOverlay(overlay);
         }
       });
     });
@@ -6230,6 +6274,10 @@ function retryAllFailedUploads() {
 
     xhr.send(formData);
   }
+  // Seed the entry the page was loaded on so a Back into it carries a scroll offset, like every
+  // entry navigateTo() pushes.
+  history.replaceState({ path: currentPath, scrollY: 0 }, '');
+
   hydrate();
 </script>
 </body>
