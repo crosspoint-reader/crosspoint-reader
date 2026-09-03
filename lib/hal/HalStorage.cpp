@@ -44,6 +44,11 @@ class HalStorage::StorageLock {
   ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }
 };
 
+void HalStorage::prepareForDeepSleep() {
+  StorageLock lock;
+  SDCard.shutdown();
+}
+
 #if FREEINK_CAP_USB_MSC && !FREEINK_SD_SDMMC
 #error "USB Drive requires an SDMMC-backed storage profile"
 #endif
