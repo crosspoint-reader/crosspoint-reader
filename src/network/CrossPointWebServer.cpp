@@ -82,21 +82,6 @@ bool isProtectedItemName(const String& name) {
   return false;
 }
 
-// Rejects path separators and parent-directory references so a single filename
-// or folder-name argument can never be used to escape the directory it is
-// placed into, independent of the normalization applied to the surrounding path.
-bool isSafePathComponent(const String& name) {
-  if (name.isEmpty()) {
-    return false;
-  }
-  if (name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) {
-    return false;
-  }
-  if (name.indexOf("..") >= 0) {
-    return false;
-  }
-  return true;
-}
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -681,7 +666,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     totalWriteTime = 0;
     writeCount = 0;
 
-    if (!isSafePathComponent(state.fileName)) {
+    if (!FsHelpers::isSafePathComponent(state.fileName)) {
       state.error = "Invalid file name";
       LOG_DBG("WEB", "[UPLOAD] Rejected unsafe filename: %s", state.fileName.c_str());
       return;
@@ -821,7 +806,7 @@ void CrossPointWebServer::handleCreateFolder() const {
     server->send(400, "text/plain", "Folder name cannot be empty");
     return;
   }
-  if (!isSafePathComponent(folderName)) {
+  if (!FsHelpers::isSafePathComponent(folderName)) {
     LOG_DBG("WEB", "Rejected unsafe folder name: %s", folderName.c_str());
     server->send(400, "text/plain", "Invalid folder name");
     return;
@@ -1638,7 +1623,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 
         if (firstColon > 0 && secondColon > 0) {
           wsUploadFileName = msg.substring(6, firstColon);
-          if (!isSafePathComponent(wsUploadFileName)) {
+          if (!FsHelpers::isSafePathComponent(wsUploadFileName)) {
             LOG_DBG("WS", "START rejected: invalid filename '%s'", wsUploadFileName.c_str());
             wsServer->sendTXT(num, "ERROR:Invalid file name");
             return;
