@@ -13,6 +13,7 @@
 #include "generated/hyph-pl.trie.h"
 #include "generated/hyph-ru.trie.h"
 #include "generated/hyph-sv.trie.h"
+#include "generated/hyph-tr.trie.h"
 #include "generated/hyph-uk.trie.h"
 
 namespace {
@@ -28,8 +29,10 @@ LanguageHyphenator swedishHyphenator(sv_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator ukrainianHyphenator(uk_patterns, isCyrillicLetter, toLowerCyrillic);
 LanguageHyphenator polishHyphenator(pl_patterns, isLatinLetter, toLowerLatin);
 LanguageHyphenator finnishHyphenator(fi_patterns, isLatinLetter, toLowerLatin);
+// Turkish needs its own lowercasing for dotted/dotless I (I -> ı, İ -> i)
+LanguageHyphenator turkishHyphenator(tr_patterns, isLatinLetter, toLowerTurkish);
 
-using EntryArray = std::array<LanguageEntry, 10>;
+using EntryArray = std::array<LanguageEntry, 11>;
 
 const EntryArray& entries() {
   static const EntryArray kEntries = {{{"english", "en", &englishHyphenator},
@@ -40,6 +43,7 @@ const EntryArray& entries() {
                                        {"italian", "it", &italianHyphenator},
                                        {"polish", "pl", &polishHyphenator},
                                        {"swedish", "sv", &swedishHyphenator},
+                                       {"turkish", "tr", &turkishHyphenator},
                                        {"ukrainian", "uk", &ukrainianHyphenator},
                                        {"finnish", "fi", &finnishHyphenator}}};
   return kEntries;
