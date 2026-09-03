@@ -22,6 +22,9 @@
 class SdCardFont {
  public:
   static constexpr uint16_t MAX_PAGE_GLYPHS = 512;
+  // prewarmStyle: the bitmap arena did not fit the largest free block.
+  // Distinct from a missed-glyph count so the caller can retry smaller.
+  static constexpr int PREWARM_ARENA_TOO_LARGE = -2;
   static constexpr uint8_t MAX_STYLES = 4;
 
   SdCardFont() = default;
@@ -223,6 +226,8 @@ class SdCardFont {
     // underuse-hysteresis signal; 0 = no bitmap built this scope (metadata-only
     // prewarm), which leaves the hysteresis counter untouched.
     uint32_t miniBitmapUsed = 0;
+    // Exact bitmap bytes per glyph of the last requested set, for the arena retry.
+    uint32_t measuredBytesPerGlyph = 0;
     uint8_t miniUnderuseRuns = 0;
     // True when the resident mini was built metadata-only (no bitmaps): it can
     // serve metadata requests but a full render request must rebuild.
