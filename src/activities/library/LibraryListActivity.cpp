@@ -61,7 +61,7 @@ const char* tabLabelFor(const int tab) {
   if (tab == TITLE_ASC_TAB) return tr(STR_LIBRARY_TAB_TITLE_AZ);
   if (tab == TITLE_DESC_TAB) return tr(STR_LIBRARY_TAB_TITLE_ZA);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  return tr(STR_LIBRARY_TAB_ADDED);
+  return tr(STR_LIBRARY_TAB_NEW);
 }
 
 }  // namespace
