@@ -912,17 +912,19 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
     int missedForStyle = prewarmStyle(si, codepoints.get(), cpCount, metadataOnly, loadKernLig);
     if (missedForStyle == PREWARM_ARENA_TOO_LARGE) {
       // The arena is one contiguous block, so a fragmented heap can fail it with
-      // ample free bytes. measuredBytesPerGlyph is exact for this set, so retry
-      // with the largest prefix the biggest free block holds rather than dropping
-      // every glyph to the per-glyph overflow ring.
+      // ample free bytes. Retry with the estimated largest prefix, backing off
+      // if variable-size glyphs made that estimate too large.
       const uint32_t perGlyph = styles_[si].measuredBytesPerGlyph > 0 ? styles_[si].measuredBytesPerGlyph : 1;
       const uint32_t maxAlloc = ESP.getMaxAllocHeap();
       const uint32_t arenaBytes = maxAlloc > PREWARM_MAX_ALLOC_RESERVE ? maxAlloc - PREWARM_MAX_ALLOC_RESERVE : 0;
       uint32_t fit = arenaBytes / perGlyph;
       if (fit > cpCount) fit = cpCount;
-      LOG_DBG("SDCF", "Arena retry: %u -> %u glyphs (%uB/glyph, maxAlloc=%u)", cpCount, fit, perGlyph, maxAlloc);
-      missedForStyle =
-          fit > 0 ? prewarmStyle(si, codepoints.get(), fit, metadataOnly, loadKernLig) : PREWARM_ARENA_TOO_LARGE;
+      while (fit > 0) {
+        LOG_DBG("SDCF", "Arena retry: %u -> %u glyphs (%uB/glyph, maxAlloc=%u)", cpCount, fit, perGlyph, maxAlloc);
+        missedForStyle = prewarmStyle(si, codepoints.get(), fit, metadataOnly, loadKernLig);
+        if (missedForStyle != PREWARM_ARENA_TOO_LARGE) break;
+        fit /= 2;
+      }
       if (missedForStyle == PREWARM_ARENA_TOO_LARGE) {
         missedForStyle = static_cast<int>(cpCount);  // nothing resident
       } else {
