@@ -1938,6 +1938,16 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
   }
 
+  // Where the user is in each folder they have visited, so Back and Forward return them there.
+  // Held in memory rather than on the history entry: an entry's state can only be rewritten with
+  // replaceState(), which browsers rate-limit, and keeping it current would mean calling it on
+  // every scroll frame. Scroll events already fire at most once per frame, so this is one Map
+  // write per frame while scrolling.
+  const scrollOffsets = new Map();
+  window.addEventListener('scroll', function() {
+    scrollOffsets.set(currentPath, window.scrollY);
+  }, { passive: true });
+
   // Mirrors the loader markup the server renders inside #file-table. A full page load got it for
   // free; in-page navigation has to put it back itself.
   const LOADER_MARKUP = '<div class="loader-container"><span class="loader"></span></div>';
@@ -2105,21 +2115,15 @@
     closeOpenModals();
     dismissFailedUploads();
 
-    if (push) {
-      // Remember where the user was in the folder being left. The browser cannot restore it on
-      // Back by itself: at that point the document holds only a loader, so there is nothing to
-      // scroll to yet and the offset is clamped away. On a popstate the entry has already
-      // changed, so its stored offset is the one to restore rather than to overwrite.
-      history.replaceState({ path: currentPath, scrollY: window.scrollY }, '');
-    }
-    const scrollY = push ? 0 : (history.state && history.state.scrollY) || 0;
+    // Entering a folder starts at the top; returning to one restores where the user was.
+    const scrollY = push ? 0 : scrollOffsets.get(path) || 0;
 
     currentPath = path;
     applyPathTitle();
     if (push) {
       // Root keeps the page's canonical URL so history entries match a direct /files load.
       const url = path === '/' ? '/files' : '/files?path=' + encodeURIComponent(path);
-      history.pushState({ path: path, scrollY: 0 }, '', url);
+      history.pushState({ path: path }, '', url);
     }
     // Only once the listing is up, and never for a hydrate() that a newer navigation superseded -
     // that one would pull the user out of the listing which replaced it.
@@ -6269,9 +6273,13 @@ function retryAllFailedUploads() {
 
     xhr.send(formData);
   }
-  // Seed the entry the page was loaded on so a Back into it carries a scroll offset, like every
-  // entry navigateTo() pushes.
-  history.replaceState({ path: currentPath, scrollY: 0 }, '');
+  // The listing arrives after the navigation, so the browser's own scroll restoration runs while
+  // the document is still just a loader: it cannot land on the right offset, and the scroll events
+  // it fires would overwrite the offset recorded for the folder being left. navigateTo() restores
+  // the remembered one once the rows are up instead.
+  if ('scrollRestoration' in history) {
+    history.scrollRestoration = 'manual';
+  }
 
   // Once, not from hydrate(): device/version don't depend on currentPath, so fetching them per
   // navigation would add a redundant /api/status round-trip to every folder click. Issued ahead of
