@@ -7,6 +7,7 @@
 #include <LibraryText.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -27,7 +28,7 @@ constexpr unsigned long LONG_PRESS_MS = 1000;
 
 // One tab per sort order keeps the shared tab bar authoritative: selecting a
 // tab fully describes the ordering, with no second direction state.
-constexpr int RECENT_TAB = 0;
+constexpr int ADDED_TAB = 0;
 constexpr int TITLE_ASC_TAB = 1;
 constexpr int TITLE_DESC_TAB = 2;
 constexpr int AUTHOR_TAB = 3;
@@ -41,17 +42,17 @@ int sortTabIndex(const library::SortOrder order) {
       return TITLE_DESC_TAB;
     case library::SortOrder::AuthorAsc:
       return AUTHOR_TAB;
-    case library::SortOrder::DateDesc:
-      return RECENT_TAB;
+    case library::SortOrder::RecentlyAdded:
+      return ADDED_TAB;
   }
-  return RECENT_TAB;
+  return ADDED_TAB;
 }
 
 library::SortOrder orderForTab(const int tab) {
   if (tab == TITLE_ASC_TAB) return library::SortOrder::TitleAsc;
   if (tab == TITLE_DESC_TAB) return library::SortOrder::TitleDesc;
   if (tab == AUTHOR_TAB) return library::SortOrder::AuthorAsc;
-  return library::SortOrder::DateDesc;
+  return library::SortOrder::RecentlyAdded;
 }
 
 // The strip needs the mode alone. The header strings carry a "Library ·"
@@ -60,19 +61,13 @@ const char* tabLabelFor(const int tab) {
   if (tab == TITLE_ASC_TAB) return tr(STR_LIBRARY_TAB_TITLE_AZ);
   if (tab == TITLE_DESC_TAB) return tr(STR_LIBRARY_TAB_TITLE_ZA);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  return tr(STR_LIBRARY_TAB_RECENT);
+  return tr(STR_LIBRARY_TAB_ADDED);
 }
-
-// 26 letters over 5 columns. A grid rather than a strip because reaching a
-// letter costs presses, and each press is a full ~185 ms panel repaint on this
-// panel: linear travel averages 13 presses, two dimensions average about 4.5.
-constexpr int LETTER_COLS = 5;
-constexpr int LETTER_COUNT = 26;
 
 }  // namespace
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiTabListActivity("Library", renderer, mappedInput) {}
+    : UiTabListActivity("Library", renderer, mappedInput, true) {}
 
 void LibraryListActivity::onEnter() {
   // One lock across the base lifecycle AND the data phase: the base onEnter
@@ -83,8 +78,6 @@ void LibraryListActivity::onEnter() {
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
-  app.on(ACTION_LETTER, &LibraryListActivity::letterActionTrampoline, this);
-  app.on(ACTION_LETTER_MODE, &LibraryListActivity::letterModeActionTrampoline, this);
   auto& nav = activeNav();
   nav.selected = 1;
   nav.top = 0;
@@ -157,37 +150,57 @@ void LibraryListActivity::openSelectedBook() {
   onSelectBook(path);
 }
 
-void LibraryListActivity::activateIndex(int) { openSelectedBook(); }
+void LibraryListActivity::activateIndex(const int index) {
+  if (groupsCollapsed) {
+    expandGroup(index);
+  } else {
+    openSelectedBook();
+  }
+}
+
+void LibraryListActivity::onRowLongPress(const int index) {
+  if (!groupsCollapsed && groupable()) {
+    collapseGroups(index);
+  } else {
+    activateIndex(index);
+  }
+}
 
 void LibraryListActivity::openSearch() {
   app.clearTapFlash();
   // No key filtering here on purpose. Greying out the letters that lead nowhere
   // was built, tested on device and removed: a letter you can see but cannot
   // reach reads as a broken keyboard, and the eye keeps returning to it.
-  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_LIBRARY_SEARCH), query,
-                                                                 48, InputType::Text),
-                         [this](const ActivityResult& result) {
-                           swallowHeldReleases();
-                           if (result.isCancelled) return;
-                           query = std::get<KeyboardResult>(result.data).text;
-                           applyFilter();
-                           auto& nav = activeNav();
-                           if (!query.empty() && filteredCount == 0 && !degraded) {
-                             // The tab band remains focusable when there is no
-                             // row. ScreenLeft then follows the OPDS header
-                             // action pattern and reopens Search.
-                             nav.selected = 0;
-                           } else {
-                             // A non-empty result belongs to the list: land on
-                             // its first surviving row, not on the strip.
-                             nav.selected = 1;
-                           }
-                           nav.top = 0;
-                           requestUpdate();
-                         });
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_LIBRARY_SEARCH), query, 48,
+                                                           InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("LIB", "OOM: search keyboard");
+    return;
+  }
+  startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
+    swallowHeldReleases();
+    if (result.isCancelled) return;
+    query = std::get<KeyboardResult>(result.data).text;
+    applyFilter();
+    auto& nav = activeNav();
+    if (!query.empty() && filteredCount == 0 && !degraded) {
+      // The tab band remains focusable when there is no
+      // row. ScreenLeft then follows the OPDS header
+      // action pattern and reopens Search.
+      nav.selected = 0;
+    } else {
+      // A non-empty result belongs to the list: land on
+      // its first surviving row, not on the strip.
+      nav.selected = 1;
+    }
+    nav.top = 0;
+    requestUpdate();
+  });
 }
 
 void LibraryListActivity::applySortOrder(const library::SortOrder order) {
+  groupsCollapsed = false;
+  groupCount = 0;
   sortOrder = order;
   // The filter holds positions in the old order, so it must be rebuilt.
   applyFilter();
@@ -221,11 +234,11 @@ int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
 
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
 
-int LibraryListActivity::rowCount() const {
+int LibraryListActivity::bookRowCount() const {
   return query.empty() ? static_cast<int>(index.bookCount()) : static_cast<int>(filteredCount);
 }
 
-int LibraryListActivity::listCount() const { return rowCount(); }
+int LibraryListActivity::listCount() const { return groupsCollapsed ? static_cast<int>(groupCount) : bookRowCount(); }
 
 // Entry position on screen to row position in the sort order. Identity while
 // unfiltered, so the shelf costs nothing when nothing is typed.
@@ -235,11 +248,98 @@ int LibraryListActivity::rowFor(const int entry) const {
   return filtered[entry];
 }
 
+bool LibraryListActivity::groupable() const {
+  return !degraded && sortOrder != library::SortOrder::RecentlyAdded && bookRowCount() > 0;
+}
+
+uint32_t LibraryListActivity::titleInitialFor(const int entry) {
+  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  library::ClixRecord record{};
+  if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) return 0;
+  return library::foldedGroupInitial(std::string_view(record.fold, record.foldLen));
+}
+
+bool LibraryListActivity::buildGroupStarts() {
+  const int count = bookRowCount();
+  if (count <= 0) return false;
+  if (groupCapacity < count) {
+    auto starts = makeUniqueNoThrow<uint16_t[]>(static_cast<size_t>(count));
+    if (!starts) {
+      LOG_ERR("LIB", "cannot allocate %u-byte group map", static_cast<unsigned>(count * sizeof(uint16_t)));
+      return false;
+    }
+    groupStarts = std::move(starts);
+    groupCapacity = static_cast<uint16_t>(count);
+  }
+
+  groupCount = 0;
+  uint32_t previousInitial = 0;
+  std::string previousAuthor;
+  std::string title;
+  std::string author;
+  previousAuthor.reserve(128);
+  title.reserve(128);
+  author.reserve(128);
+  for (int entry = 0; entry < count; entry++) {
+    bool startsGroup = entry == 0;
+    if (sortOrder == library::SortOrder::AuthorAsc) {
+      rowTextFor(entry, title, author);
+      startsGroup = startsGroup || author != previousAuthor;
+      previousAuthor = author;
+    } else {
+      const uint32_t initial = titleInitialFor(entry);
+      startsGroup = startsGroup || initial != previousInitial;
+      previousInitial = initial;
+    }
+    if (startsGroup) groupStarts[groupCount++] = static_cast<uint16_t>(entry);
+  }
+  LOG_DBG("LIB", "group map: %u groups, %u bytes", static_cast<unsigned>(groupCount),
+          static_cast<unsigned>(groupCapacity * sizeof(uint16_t)));
+  return groupCount > 0;
+}
+
+int LibraryListActivity::groupForBook(const int bookEntry) const {
+  int group = 0;
+  while (group + 1 < groupCount && groupStarts[group + 1] <= bookEntry) group++;
+  return group;
+}
+
+bool LibraryListActivity::collapseGroups(const int bookEntry) {
+  if (!groupable() || !buildGroupStarts()) return false;
+  expandedNav = activeNav();
+  groupsCollapsed = true;
+  auto& nav = activeNav();
+  nav.reset(groupForBook(bookEntry) + 1);
+  requestUpdate();
+  return true;
+}
+
+void LibraryListActivity::expandGroup(const int groupEntry) {
+  if (!groupsCollapsed || groupEntry < 0 || groupEntry >= groupCount) return;
+  const int bookEntry = groupStarts[groupEntry];
+  groupsCollapsed = false;
+  activeNav() = expandedNav;
+  auto& nav = activeNav();
+  nav.selected = bookEntry + 1;
+  nav.top = bookEntry;
+  nav.followOnBuild = true;
+  requestUpdate();
+}
+
+void LibraryListActivity::restoreExpandedList() {
+  if (!groupsCollapsed) return;
+  groupsCollapsed = false;
+  activeNav() = expandedNav;
+  requestUpdate();
+}
+
 // One pass over the sort order, keeping what matches. No index, no cache: at the
 // 4096-book format cap this is 4096 comparisons of at most 96 bytes. The result
 // array is allocated once with the exact upper bound and fails back to an
 // explicit message rather than letting vector growth abort the firmware.
 void LibraryListActivity::applyFilter() {
+  groupsCollapsed = false;
+  groupCount = 0;
   filtered.reset();
   filteredCount = 0;
   filterFailed = false;
@@ -281,120 +381,8 @@ void LibraryListActivity::applyFilter() {
   filteredCount = matchCount;
 }
 
-// Which letter a book files under, matching the column the reader is looking at:
-// the title's when sorted by title, the author's when sorted by author. Using
-// the title fold in author order sends "Emily Bronte" to wherever her book's
-// title happens to fall.
-char LibraryListActivity::letterOf(const library::ClixRecord& record) {
-  // Must be the key the rows are ORDERED by, not the text they display. The
-  // jump scans for the first row at or past the chosen letter, which is only
-  // valid while the letters ascend — and the displayed name does not always
-  // ascend with the sort. "Hugo Victor" is filed under I, because authorKey
-  // sorts a name's words so that "Victor Hugo" and "Hugo Victor" group as one
-  // person.
-  if (sortOrder == library::SortOrder::AuthorAsc) {
-    std::string author;
-    if (!index.readAuthor(record, author)) return '\0';
-    if (jumpByGivenName) {
-      const std::string folded = library::fold(author);
-      return folded.empty() ? '\0' : folded[0];
-    }
-    const std::string key = library::surnameKey(author);
-    return key.empty() ? '\0' : key[0];
-  }
-  return record.foldLen == 0 ? '\0' : record.fold[0];
-}
-
-void LibraryListActivity::computeLettersPresent() {
-  lettersPresent = 0;
-  const int total = rowCount();
-  for (int entry = 0; entry < total; entry++) {
-    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
-    library::ClixRecord record{};
-    if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) continue;
-    const char c = letterOf(record);
-    if (c >= 'a' && c <= 'z') lettersPresent |= 1u << (c - 'a');
-  }
-}
-
-int LibraryListActivity::firstPresentLetter() const {
-  for (int i = 0; i < LETTER_COUNT; i++) {
-    if (lettersPresent & (1u << i)) return i;
-  }
-  return 0;
-}
-
-void LibraryListActivity::openLetterGrid() {
-  // Only where an alphabet exists to jump through. Sorted by date there is no
-  // letter order to walk, so the press stays inert rather than opening a grid
-  // whose every choice would land somewhere arbitrary.
-  if (sortOrder == library::SortOrder::DateDesc) return;
-  jumpByGivenName = false;
-  computeLettersPresent();
-  // A shelf of digits or non-Latin titles has no grid to offer; the press
-  // stays inert rather than opening an empty screen only Back can leave.
-  if (lettersPresent == 0) return;
-  letterCursor = firstPresentLetter();
-  letterGrid = true;
-  requestUpdate();
-}
-
-// The fold has already dropped accents and leading articles, so "L'Eneide"
-// lands under I and "Éluard" under E — which is what a reader looking under a
-// letter expects, and what the raw title would get wrong.
-void LibraryListActivity::jumpToLetter(const char letter) {
-  const bool descending = sortOrder == library::SortOrder::TitleDesc;
-  const int total = rowCount();
-  for (int entry = 0; entry < total; entry++) {
-    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
-    library::ClixRecord record{};
-    if (ordinal == 0xFFFF || !index.readRecord(ordinal, record)) continue;
-    const char c = letterOf(record);
-    // The scan has to follow the direction the shelf runs in. Title Z-A
-    // descends, so "at or past" would stop on the very first row every time.
-    // Given-name order does not run alphabetically at all — the As are
-    // scattered down the whole shelf — so that one matches exactly and lands on
-    // the first such book in shelf order.
-    const bool hit = jumpByGivenName ? c == letter : descending ? c <= letter : c >= letter;
-    if (hit) {
-      auto& nav = activeNav();
-      nav.selected = entry + 1;
-      nav.top = entry;
-      return;
-    }
-  }
-}
-
-void LibraryListActivity::toggleLetterNameMode() {
-  if (sortOrder != library::SortOrder::AuthorAsc) return;
-  jumpByGivenName = !jumpByGivenName;
-  // The letters present as first names are not those present as surnames.
-  computeLettersPresent();
-  requestUpdate();
-}
-
 void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent&, void* user) {
   static_cast<LibraryListActivity*>(user)->openSearch();
-}
-
-void LibraryListActivity::letterActionTrampoline(const fui::ActionEvent& event, void* user) {
-  auto* self = static_cast<LibraryListActivity*>(user);
-  if (!self->letterGrid) return;
-  if (event.value < 0 || event.value >= LETTER_COUNT) return;
-  if (!(self->lettersPresent & (1u << event.value))) return;
-  self->jumpToLetter(static_cast<char>('a' + event.value));
-  self->letterGrid = false;
-  self->app.clearTapFlash();
-  self->requestUpdate();
-}
-
-void LibraryListActivity::letterModeActionTrampoline(const fui::ActionEvent& event, void* user) {
-  auto* self = static_cast<LibraryListActivity*>(user);
-  if (!self->letterGrid || self->sortOrder != library::SortOrder::AuthorAsc) return;
-  // Tapping the already-active choice states nothing new.
-  const int active = self->jumpByGivenName ? 0 : 1;
-  if (event.value == active) return;
-  self->toggleLetterNameMode();
 }
 
 // Title and author for one entry, read straight from the index. Only ever
@@ -429,90 +417,21 @@ bool LibraryListActivity::handleCustomInput() {
     return true;
   }
 
-  // The grid owns every button while it is open, so its block runs FIRST.
-  // Sitting below the Back handlers, its own Back would be unreachable: Back
-  // would leave the activity with the grid still on screen.
-  if (letterGrid) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      letterGrid = false;
-      requestUpdate();
-      return true;
-    }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      // Refused on a letter no book has. Jumping to where it WOULD fall is a
-      // correct answer to a question the reader did not ask.
-      if (letterCursor >= 0 && (lettersPresent & (1u << letterCursor))) {
-        jumpToLetter(static_cast<char>('a' + letterCursor));
-        letterGrid = false;
-        requestUpdate();
-      }
-      return true;
-    }
-
-    // letterCursor == -1 is the mode line above the grid, reached by pressing
-    // Up from the top row in Author order.
-    if (letterCursor < 0) {
-      if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) ||
-          mappedInput.wasReleased(MappedInputManager::Button::ScreenRight)) {
-        toggleLetterNameMode();
-      }
-      if (mappedInput.wasReleased(MappedInputManager::Button::ScreenDown)) {
-        // Land on a letter that exists. Dropping onto "a" when no book starts
-        // with one puts the cursor on a blank cell, which is the state the grid
-        // is built to never show.
-        letterCursor = firstPresentLetter();
-        requestUpdate();
-      }
-      routeModalTouch();
-      return true;
-    }
-
-    int delta = 0;
-    if (mappedInput.wasReleased(MappedInputManager::Button::ScreenRight)) delta = 1;
-    if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft)) delta = -1;
-    if (mappedInput.wasReleased(MappedInputManager::Button::ScreenDown)) delta = LETTER_COLS;
-    if (mappedInput.wasReleased(MappedInputManager::Button::ScreenUp)) {
-      if (letterCursor < LETTER_COLS) {
-        if (sortOrder == library::SortOrder::AuthorAsc) {
-          letterCursor = -1;
-          requestUpdate();
-        }
-        return true;
-      }
-      delta = -LETTER_COLS;
-    }
-    if (delta != 0) {
-      // Skip cells with nothing drawn in them — the cursor must never sit on a
-      // blank. Keeping the SAME delta is what makes this safe: stepping by one
-      // regardless of direction would make Down walk sideways and the grid stop
-      // being two-dimensional. Down still travels a whole row, it just keeps
-      // travelling until it finds a letter.
-      int next = letterCursor;
-      for (int guard = 0; guard < LETTER_COUNT; guard++) {
-        next = (next + delta + LETTER_COUNT) % LETTER_COUNT;
-        if (lettersPresent & (1u << next)) {
-          letterCursor = next;
-          break;
-        }
-      }
-      requestUpdate();
-    }
-    routeModalTouch();
-    return true;
-  }
-
   return false;
 }
 
 bool LibraryListActivity::handleButtons() {
-  const int count = rowCount();
+  const int count = listCount();
   auto& nav = activeNav();
 
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
+    lockNextConfirmRelease = true;
     if (tabsFocused()) {
       if (!degraded) openSearch();
+    } else if (!groupsCollapsed && groupable()) {
+      collapseGroups(selectedEntry());
     } else {
-      openLetterGrid();
+      activateIndex(selectedEntry());
     }
     return true;
   }
@@ -521,10 +440,12 @@ bool LibraryListActivity::handleButtons() {
   // a state the reader must be able to undo, and giving it the press they
   // would reach for anyway costs no screen space and needs no explaining.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (!query.empty()) {
+    if (groupsCollapsed) {
+      restoreExpandedList();
+    } else if (!query.empty()) {
       query.clear();
       applyFilter();
-      nav.selected = rowCount() > 0 ? 1 : 0;
+      nav.selected = bookRowCount() > 0 ? 1 : 0;
       nav.top = 0;
       requestUpdate();
     } else if (!tabsFocused() && !degraded) {
@@ -546,7 +467,7 @@ bool LibraryListActivity::handleButtons() {
       }
       return true;
     }
-    if (count > 0) openSelectedBook();
+    if (count > 0) activateIndex(selectedEntry());
     return true;
   }
 
@@ -561,7 +482,7 @@ void LibraryListActivity::navigateButtons() {
     return;
   }
 
-  const int count = rowCount();
+  const int count = listCount();
   if (count <= 0) return;
   auto& nav = activeNav();
   const auto moveToRow = [this](const int row) { moveRingTo(row + 1); };
@@ -577,28 +498,21 @@ void LibraryListActivity::navigateButtons() {
   });
 }
 
-// Touch routing while the grid consumes the loop pass: the base's routing
-// never runs there, so the app's hit rects (letters, mode line) are routed
-// here instead.
-void LibraryListActivity::routeModalTouch() {
-  const auto route = UiAppHost::routeTouch(mappedInput);
-  if (route.routed && app.invalidated()) requestUpdate();
-}
-
 void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
-  const int count = rowCount();
-  const bool grouped = sortOrder == library::SortOrder::AuthorAsc;
+  const int count = bookRowCount();
+  const bool authorGrouped = sortOrder == library::SortOrder::AuthorAsc;
+  const bool grouped = sortOrder != library::SortOrder::RecentlyAdded;
 
   fui::ListProps props;
   props.count = static_cast<uint16_t>(count);
   props.action = ACTION_ROW;
-  props.inputMask = fui::InputTouch;
+  props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 1;
   props.headerUnderline = false;
   props.scrollIndicator = false;
-  syncTabListViewport(screen, props, /*hasSubtitle=*/!grouped);
+  syncTabListViewport(screen, props, /*hasSubtitle=*/!authorGrouped);
 
   const size_t cap = static_cast<size_t>(nav.visibleRows > 0 ? nav.visibleRows : 1);
   if (winTitles.size() < cap) winTitles.resize(cap);
@@ -609,6 +523,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
 
   int books = 0;
   int headers = 0;
+  uint32_t previousInitial = 0;
   // Capture this after syncTabListViewport(), which may clamp nav.top.
   const int windowStart = static_cast<int>(props.topIndex);
   for (int entry = windowStart; entry < count && books < static_cast<int>(cap); entry++) {
@@ -616,22 +531,27 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
     std::string& author = winAuthors[static_cast<size_t>(books)];
     rowTextFor(entry, title, author);
 
-    const bool startsGroup = grouped && (books == 0 || author != winAuthors[static_cast<size_t>(books - 1)]);
+    uint32_t initial = 0;
+    bool startsGroup = false;
+    if (authorGrouped) {
+      startsGroup = books == 0 || author != winAuthors[static_cast<size_t>(books - 1)];
+    } else if (grouped) {
+      initial = titleInitialFor(entry);
+      startsGroup = books == 0 || initial != previousInitial;
+      previousInitial = initial;
+    }
     fui::ListItem item;
     if (startsGroup) {
       std::string& heading = winHeaders[static_cast<size_t>(headers++)];
-      heading = author.empty() ? std::string(tr(STR_LIBRARY_UNKNOWN_AUTHOR)) : author;
-      if (!author.empty()) {
-        const size_t lastSpace = heading.find_last_of(' ');
-        if (lastSpace != std::string::npos && lastSpace + 1 < heading.size()) {
-          heading = heading.substr(lastSpace + 1) + ", " + heading.substr(0, lastSpace);
-        }
-      }
+      if (authorGrouped)
+        formatAuthorHeading(author, heading);
+      else
+        formatInitialHeading(initial, heading);
       item.sectionHeading = heading.c_str();
     }
 
     item.label = title.c_str();
-    if (!grouped && !author.empty()) item.subtitle = author.c_str();
+    if (!authorGrouped && !author.empty()) item.subtitle = author.c_str();
     item.actionValue = static_cast<int16_t>(entry);
     winItems.push_back(item);
     books++;
@@ -643,85 +563,75 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   screen.list(props);
 }
 
-// One button per present letter. Author order also exposes given-name/surname
-// mode; title direction is selected by its ordinary A-Z or Z-A tab.
-void LibraryListActivity::buildLetterGrid(UiScreen& screen) {
-  const fui::Rect body = screen.body();
-  auto& target = screen.target();
-  const int cell = (body.width - 2 * SIDE_PADDING) / LETTER_COLS;
-  const int rows = (LETTER_COUNT + LETTER_COLS - 1) / LETTER_COLS;
-  const bool hasNameMode = sortOrder == library::SortOrder::AuthorAsc;
-  const int cellH = body.height / (rows + (hasNameMode ? 1 : 0));
+void LibraryListActivity::formatInitialHeading(uint32_t initial, std::string& out) const {
+  out.clear();
+  if (initial == 0) {
+    out.push_back('#');
+    return;
+  }
+  if (initial >= 'a' && initial <= 'z') initial -= 'a' - 'A';
+  utf8AppendCodepoint(initial, out);
+}
 
-  if (hasNameMode) {
-    const char* labels[2] = {tr(STR_LIBRARY_JUMP_GIVEN), tr(STR_LIBRARY_JUMP_SURNAME)};
-    const int active = jumpByGivenName ? 0 : 1;
-    fui::TextStyle modeText = screen.theme().smallText;
-    modeText.align = fui::TextAlign::Center;
-    const int16_t modeH = target.lineHeight(modeText.font);
-    constexpr int16_t MODE_GAP = 20;
-    int16_t labelW[2];
-    for (int i = 0; i < 2; i++) labelW[i] = target.measureText(modeText.font, labels[i], modeText).width;
-    int16_t mx = static_cast<int16_t>(body.x + (body.width - (labelW[0] + labelW[1] + MODE_GAP)) / 2);
-    const int16_t modeY = static_cast<int16_t>(body.y + 2);
+void LibraryListActivity::formatAuthorHeading(const std::string& author, std::string& out) const {
+  out = author.empty() ? std::string(tr(STR_LIBRARY_UNKNOWN_AUTHOR)) : author;
+  if (author.empty()) return;
+  const size_t lastSpace = out.find_last_of(' ');
+  if (lastSpace != std::string::npos && lastSpace + 1 < out.size()) {
+    out = out.substr(lastSpace + 1) + ", " + out.substr(0, lastSpace);
+  }
+}
 
-    for (int i = 0; i < 2; i++) {
-      const bool on = i == active;
-      fui::ButtonProps mode;
-      mode.label = labels[i];
-      mode.action = ACTION_LETTER_MODE;
-      mode.value = static_cast<int16_t>(i);
-      mode.text = modeText;
-      mode.styles.explicitlySet = true;
-      mode.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
-      if (on && letterCursor < 0) {
-        mode.styles.normal.background = fui::Paint::solid(fui::Color::Black);
-        mode.styles.normal.foreground = fui::Paint::solid(fui::Color::White);
-        mode.styles.normal.radius = 4;
-      }
-      screen.button(mode, fui::Rect{static_cast<int16_t>(mx - 5), static_cast<int16_t>(modeY - 2),
-                                    static_cast<int16_t>(labelW[i] + 10), static_cast<int16_t>(modeH + 4)});
-      if (on && letterCursor >= 0) {
-        target.fill(fui::Rect{mx, static_cast<int16_t>(modeY + modeH + 1), labelW[i], 1},
-                    fui::Paint::solid(fui::Color::Black));
-      }
-      mx = static_cast<int16_t>(mx + labelW[i] + MODE_GAP);
+void LibraryListActivity::buildGroupRows(UiScreen& screen) {
+  auto& nav = activeNav();
+  fui::ListProps props;
+  props.count = groupCount;
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch | fui::InputLongPress;
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = 1;
+  props.headerUnderline = false;
+  props.scrollIndicator = false;
+  syncTabListViewport(screen, props);
+
+  const size_t cap = static_cast<size_t>(nav.visibleRows > 0 ? nav.visibleRows : 1);
+  if (winTitles.size() < cap) winTitles.resize(cap);
+  if (winAuthors.size() < cap) winAuthors.resize(cap);
+  winItems.clear();
+  if (winItems.capacity() < cap) winItems.reserve(cap);
+
+  int rows = 0;
+  std::string ignoredTitle;
+  ignoredTitle.reserve(128);
+  const int windowStart = static_cast<int>(props.topIndex);
+  for (int entry = windowStart; entry < groupCount && rows < static_cast<int>(cap); entry++) {
+    std::string& label = winTitles[static_cast<size_t>(rows)];
+    const int bookEntry = groupStarts[entry];
+    if (sortOrder == library::SortOrder::AuthorAsc) {
+      std::string& author = winAuthors[static_cast<size_t>(rows)];
+      rowTextFor(bookEntry, ignoredTitle, author);
+      formatAuthorHeading(author, label);
+    } else {
+      formatInitialHeading(titleInitialFor(bookEntry), label);
     }
+    fui::ListItem item;
+    item.label = label.c_str();
+    item.actionValue = static_cast<int16_t>(entry);
+    winItems.push_back(item);
+    rows++;
   }
 
-  const int16_t top = static_cast<int16_t>(body.y + (hasNameMode ? cellH / 2 : 3));
-  const int16_t originX = static_cast<int16_t>(body.x + (body.width - LETTER_COLS * cell) / 2);
-  char letterLabels[LETTER_COUNT][2];
-
-  for (int i = 0; i < LETTER_COUNT; i++) {
-    if (!(lettersPresent & (1u << i))) continue;
-    const int16_t cx = static_cast<int16_t>(originX + (i % LETTER_COLS) * cell);
-    const int16_t cy = static_cast<int16_t>(top + (i / LETTER_COLS) * cellH);
-    const int16_t pillW = static_cast<int16_t>(cell - 6);
-    const int16_t pillH = static_cast<int16_t>(cellH - 6);
-    letterLabels[i][0] = static_cast<char>('A' + i);
-    letterLabels[i][1] = '\0';
-    fui::ButtonProps key;
-    key.label = letterLabels[i];
-    key.action = ACTION_LETTER;
-    key.value = static_cast<int16_t>(i);
-    key.text = screen.theme().bodyText;
-    key.styles.explicitlySet = true;
-    key.styles.normal.foreground = fui::Paint::solid(fui::Color::Black);
-    if (i == letterCursor) {
-      key.styles.normal.background = fui::Paint::solid(fui::Color::Black);
-      key.styles.normal.foreground = fui::Paint::solid(fui::Color::White);
-      key.styles.normal.radius = 4;
-    }
-    screen.button(key, fui::Rect{static_cast<int16_t>(cx + (cell - pillW) / 2), cy, pillW, pillH});
-  }
+  props.items = winItems.data();
+  props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
+  props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
+  screen.list(props);
 }
 
 void LibraryListActivity::buildHeader(UiScreen& screen) {
   fui::HeaderProps header;
   header.title = headerTitle();
   header.borderEdges = fui::EdgeBottom;
-  if (!letterGrid && !degraded) {
+  if (!groupsCollapsed && !degraded) {
     header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
     header.trailingAction = ACTION_SEARCH;
     const int titleFontId = uiScaleSpec().titleFontId;
@@ -741,13 +651,8 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
   buildHeader(screen);
 
-  if (letterGrid) {
-    buildLetterGrid(screen);
-    return;
-  }
-
   if (!degraded) buildTabBar(screen);
-  if (rowCount() == 0) {
+  if (bookRowCount() == 0) {
     const char* message = tr(STR_LIBRARY_NO_RESULTS);
     if (filterFailed) {
       message = tr(STR_LIBRARY_SEARCH_UNAVAILABLE);
@@ -757,7 +662,10 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
     screen.centeredText(message);
     return;
   }
-  buildRows(screen);
+  if (groupsCollapsed)
+    buildGroupRows(screen);
+  else
+    buildRows(screen);
 }
 
 // "12/69 books" at the bottom right: which book is selected, out of how many.
@@ -767,11 +675,12 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
 // book position is stable by construction, and it answers the question the
 // reader actually has: how far in am I, and how much is left.
 void LibraryListActivity::drawPositionReadout() const {
-  const int count = rowCount();
+  const int count = listCount();
   if (count <= 0) return;
 
   char buf[32];
-  snprintf(buf, sizeof(buf), tr(STR_LIBRARY_POSITION), selectedEntry() + 1, count);
+  const char* positionFormat = groupsCollapsed ? tr(STR_LIBRARY_GROUP_POSITION) : tr(STR_LIBRARY_POSITION);
+  snprintf(buf, sizeof(buf), positionFormat, selectedEntry() + 1, count);
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int width = renderer.getTextWidth(SMALL_FONT_ID, buf);
   const int x = renderer.getScreenWidth() - width - SIDE_PADDING;
@@ -788,26 +697,33 @@ const char* LibraryListActivity::headerTitle() const {
       return tr(STR_LIBRARY_SORT_TITLE_ZA);
     case library::SortOrder::AuthorAsc:
       return tr(STR_LIBRARY_SORT_AUTHOR);
-    case library::SortOrder::DateDesc:
-      return tr(STR_LIBRARY_SORT_RECENT);
+    case library::SortOrder::RecentlyAdded:
+      return tr(STR_LIBRARY_SORT_ADDED);
   }
-  return tr(STR_LIBRARY_SORT_RECENT);
+  return tr(STR_LIBRARY_SORT_ADDED);
+}
+
+void LibraryListActivity::drawHoldHelp() const {
+  if (mappedInput.hasTouch() || groupsCollapsed) return;
+  const char* help = nullptr;
+  if (tabsFocused() && !degraded)
+    help = tr(STR_LIBRARY_HOLD_SEARCH);
+  else if (groupable())
+    help = tr(STR_LIBRARY_HOLD_GROUPS);
+  if (!help) return;
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight;
+  GUI.drawHelpText(renderer, Rect{SIDE_PADDING, y, renderer.getScreenWidth() / 2 - SIDE_PADDING, lineHeight}, help);
 }
 
 void LibraryListActivity::drawFooter() {
   drawPositionReadout();
-  if (letterGrid) {
-    const auto labels =
-        mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    return;
-  }
+  drawHoldHelp();
 
   const char* backLabel = tabsFocused() ? tr(STR_HOME) : tr(STR_BACK);
-  const char* confirmLabel = tabsFocused() ? tr(STR_LIBRARY_LIST_HOLD_SEARCH) : tr(STR_OPEN);
-  if (!tabsFocused() && sortOrder != library::SortOrder::DateDesc) {
-    confirmLabel = tr(STR_LIBRARY_OPEN_HOLD_JUMP);
-  }
+  const char* confirmLabel = tabsFocused() || groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

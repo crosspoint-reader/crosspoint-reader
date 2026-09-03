@@ -88,6 +88,22 @@ TEST(LibraryFold, PunctuationSeparatesAndSpaceRunsCollapse) {
   EXPECT_EQ(fold("!!!"), "");
 }
 
+TEST(LibraryFold, PreservesHebrewLettersAndDropsNiqqud) {
+  EXPECT_EQ(fold("\u05E9\u05B8\u05C1\u05DC\u05D5\u05B9\u05DD"), "\u05E9\u05DC\u05D5\u05DD");
+  EXPECT_TRUE(library::matchesQuery(fold("\u05E9\u05DC\u05D5\u05DD \u05E2\u05D5\u05DC\u05DD"), fold("\u05E9\u05DC")));
+  EXPECT_FALSE(authorKey("\u05E2\u05DE\u05D5\u05E1 \u05E2\u05D5\u05D6").empty());
+}
+
+TEST(LibraryFold, GroupInitialUsesUnicodeLettersAndBucketsNumbers) {
+  EXPECT_EQ(library::foldedGroupInitial(fold("Alpha", true)), static_cast<uint32_t>('a'));
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u05E9\u05DC\u05D5\u05DD", true)), 0x05E9u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u041A\u043D\u0438\u0433\u0430", true)), 0x041Au);
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u4E66", true)), 0x4E66u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("2085", true)), 0u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("\u0662\u0660\u0668\u0665", true)), 0u);
+  EXPECT_EQ(library::foldedGroupInitial(fold("!!!", true)), 0u);
+}
+
 TEST(LibraryFold, ArticleStrippingOnlyWhenAsked) {
   EXPECT_EQ(fold("The Iliad"), "the iliad");
   EXPECT_EQ(fold("The Iliad", true), "iliad");

@@ -11,7 +11,7 @@
 //   header        64 bytes of struct, padded to 512
 //   folders       F variable-length records; the id of a folder IS its ordinal
 //   records       N x exactly 128 bytes, in folded-title order
-//   permutations  authorOrder[N] then dateOrder[N], both u16
+//   permutations  authorOrder[N] then arrivalOrder[N], both u16
 //   names         raw display basenames, no NULs, lengths held in the records
 //
 // The fixed 128-byte record stride is the load-bearing choice: record k lives at
@@ -32,7 +32,7 @@ inline constexpr uint8_t CLIX_FORMAT_VERSION = 1;
 
 // Bump when the fold or the article table changes. Forces fold and ranks to be
 // rebuilt while firstSeen values are preserved, so "recently added" survives.
-inline constexpr uint8_t CLIX_FOLD_VERSION = 1;
+inline constexpr uint8_t CLIX_FOLD_VERSION = 2;
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_FOLD_BYTES = 96;
@@ -115,7 +115,7 @@ inline uint32_t recordOffset(const ClixHeader& h, const uint16_t ordinal) {
 inline uint32_t authorOrderOffset(const ClixHeader& h, const uint16_t k) {
   return h.permStart + static_cast<uint32_t>(k) * sizeof(uint16_t);
 }
-inline uint32_t dateOrderOffset(const ClixHeader& h, const uint16_t k) {
+inline uint32_t arrivalOrderOffset(const ClixHeader& h, const uint16_t k) {
   return h.permStart + (static_cast<uint32_t>(h.bookCount) + k) * sizeof(uint16_t);
 }
 
@@ -135,12 +135,11 @@ enum class ClixValidity : uint8_t {
 // Validate a header against the real file size. Cheap enough to run on the one
 // sector already read, and strict enough that nothing downstream has to
 // re-check bounds.
-inline ClixValidity validateHeader(const ClixHeader& h, const uint64_t actualFileSize) {
+inline ClixValidity validateHeaderStructure(const ClixHeader& h, const uint64_t actualFileSize) {
   for (size_t i = 0; i < sizeof(CLIX_MAGIC); i++) {
     if (h.magic[i] != CLIX_MAGIC[i]) return ClixValidity::BadMagic;
   }
   if (h.formatVersion != CLIX_FORMAT_VERSION) return ClixValidity::UnknownFormatVersion;
-  if (h.foldVersion != CLIX_FOLD_VERSION) return ClixValidity::StaleFoldVersion;
   if (h.bookCount > CLIX_MAX_RECORDS) return ClixValidity::CountOutOfRange;
   if (actualFileSize != h.selfSize) return ClixValidity::SizeMismatch;
 
@@ -156,6 +155,12 @@ inline ClixValidity validateHeader(const ClixHeader& h, const uint64_t actualFil
     return ClixValidity::SectionsInconsistent;
   }
   return ClixValidity::Ok;
+}
+
+inline ClixValidity validateHeader(const ClixHeader& h, const uint64_t actualFileSize) {
+  const ClixValidity structure = validateHeaderStructure(h, actualFileSize);
+  if (structure != ClixValidity::Ok) return structure;
+  return h.foldVersion == CLIX_FOLD_VERSION ? ClixValidity::Ok : ClixValidity::StaleFoldVersion;
 }
 
 const char* clixValidityName(ClixValidity v);

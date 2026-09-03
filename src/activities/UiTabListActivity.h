@@ -25,7 +25,8 @@ class UiTabListActivity : public UiListActivity {
   static constexpr freeink::ui::ActionId ACTION_TAB = ACTION_USER;
   static constexpr freeink::ui::ActionId ACTION_TAB_USER = ACTION_USER + 1;
 
-  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
+  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                    bool wantsTouchLongPress = false);
 
   // --- subclass contract (in addition to UiListActivity's) ------------------
   virtual int tabCount() const = 0;

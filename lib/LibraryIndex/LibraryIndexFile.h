@@ -20,7 +20,7 @@ enum class SortOrder : uint8_t {
   TitleAsc,   // the record order itself: costs nothing
   TitleDesc,  // the record order backwards: also costs nothing
   AuthorAsc,
-  DateDesc,  // newest first — the default, so a book just copied on is row 0
+  RecentlyAdded,  // newest arrival first — the default, so a newly copied book is row 0
 };
 
 class LibraryIndexFile {
@@ -34,6 +34,9 @@ class LibraryIndexFile {
   // caused by a format bug is visible in the log rather than looking like a slow
   // first boot.
   bool open(const char* path);
+  // Accept an otherwise valid stale fold so a rebuild can preserve arrival
+  // history without exposing stale sort/search keys to the browser.
+  bool openForReconciliation(const char* path);
   void close();
   bool isOpen() const { return opened; }
 
@@ -64,6 +67,7 @@ class LibraryIndexFile {
   bool readPath(const ClixRecord& record, std::string& out);
 
  private:
+  bool openImpl(const char* path, bool acceptStaleFold);
   bool readAt(uint32_t offset, void* dst, size_t len);
 
   HalFile file;

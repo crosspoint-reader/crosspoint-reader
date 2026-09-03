@@ -43,15 +43,19 @@ std::string joinLibraryPath(std::string_view folder, std::string_view name);
 
 // Casefold and strip diacritics for matching and sorting.
 //
-// Maps a handful of letters that have no canonical decomposition, decomposes the
-// rest and drops combining marks, lowercases ASCII alphanumerics, and turns
-// everything else into a single space. Space runs collapse and the result is
-// trimmed. Apostrophes survive as ASCII '\'' so "O'Malley" and "L'\xC3\x89n\xC3\xA9ideé"
-// keep their shape.
+// Maps a handful of Latin letters that have no canonical decomposition,
+// decomposes Latin accents, lowercases ASCII, preserves Unicode letters and
+// numbers, and turns punctuation into a single space. Combining marks are
+// dropped. Apostrophes survive as ASCII '\'' so names and elisions keep their
+// shape.
 //
 // `stripArticle` additionally removes one leading article ("the ", "le ", "la ",
 // ...) — correct for sort keys and search text, wrong for anything displayed.
 std::string fold(std::string_view text, bool stripArticle = false);
+
+// First letter of an already-folded sort key, or 0 when the key starts with a
+// number/non-letter. The Library renders 0 as its shared '#' group.
+uint32_t foldedGroupInitial(std::string_view folded);
 
 // Tidy a person's name for DISPLAY, without reordering it.
 //
@@ -74,8 +78,8 @@ std::string cleanPersonName(std::string_view author);
 // Drops bracketed spans and everything after ';' (multi-author separator), folds,
 // drops single-character tokens (initials), sorts the remaining tokens and joins
 // them. "Lu, Xun", "Xun, Lu" and "Lu Xun [Xun, Lu]" all
-// collapse to one key. Truncation is on BYTES, not a token boundary: the sort
-// puts a short forename first, so a whole-token cut would reduce
+// collapse to one key. Truncation uses the longest complete UTF-8 byte prefix,
+// not a token boundary: the sort puts a short forename first, so a whole-token cut would reduce
 // "Wollstonecraft, Mary" to "alex" and merge every Alex in the library; the byte
 // cut keeps "mary wollsto", still a prefix of the full key.
 std::string authorKey(std::string_view author);

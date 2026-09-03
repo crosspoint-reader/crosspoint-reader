@@ -73,8 +73,8 @@ TEST(LibraryFormat, PermutationArraysDoNotOverlapEachOther) {
   const ClixHeader h = makeHeader(100, 116);
   EXPECT_EQ(authorOrderOffset(h, 0), h.permStart);
   EXPECT_EQ(authorOrderOffset(h, 99), h.permStart + 198u);
-  EXPECT_EQ(dateOrderOffset(h, 0), h.permStart + 200u);
-  EXPECT_GT(dateOrderOffset(h, 0), authorOrderOffset(h, h.bookCount - 1));
+  EXPECT_EQ(arrivalOrderOffset(h, 0), h.permStart + 200u);
+  EXPECT_GT(arrivalOrderOffset(h, 0), authorOrderOffset(h, h.bookCount - 1));
 }
 
 TEST(LibraryFormat, SizeArithmeticMatchesTheSpecTable) {
@@ -115,6 +115,10 @@ TEST(LibraryFormatValidation, RejectsUnknownVersionsSeparately) {
   h = makeHeader(60, 116);
   h.foldVersion = CLIX_FOLD_VERSION + 1;
   EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::StaleFoldVersion);
+  EXPECT_EQ(validateHeaderStructure(h, h.selfSize), ClixValidity::Ok);
+
+  // Reconciliation may ignore only the fold version, never damaged layout.
+  EXPECT_EQ(validateHeaderStructure(h, h.selfSize - 1), ClixValidity::SizeMismatch);
 }
 
 TEST(LibraryFormatValidation, RejectsLengthsBeyondTheFile) {

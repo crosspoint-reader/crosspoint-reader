@@ -397,7 +397,7 @@ and is rebuilt; that is the entire migration mechanism.
 | Header | 0 | 64 bytes, `ClixHeader` |
 | Folders | `folderStart` | length-prefixed paths, one per folder |
 | Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
-| Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 date order |
+| Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
 | Name blob | `nameStart` | per record: name, author, title (see below) |
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
@@ -433,7 +433,7 @@ That was a real defect, and it is why title has its own field.
 
 ### Header flags
 
-`RANKS_DEGRADED` says the author and date orders fell back to walk order, which
+`RANKS_DEGRADED` says the author and arrival orders fell back to walk order, which
 happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
 RAM.
 

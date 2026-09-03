@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -318,7 +319,8 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   const std::string& shownTitle = titleFromBook ? title : kNoTitle;
   entry.titleLen = static_cast<uint8_t>(std::min<size_t>(shownTitle.size(), STAGE_NAME_BYTES));
   if (entry.titleLen > 0) memcpy(entry.title, shownTitle.data(), entry.titleLen);
-  entry.record.foldLen = static_cast<uint8_t>(std::min(folded.size(), CLIX_FOLD_BYTES));
+  const size_t foldBytes = std::min(folded.size(), CLIX_FOLD_BYTES);
+  entry.record.foldLen = static_cast<uint8_t>(utf8SafeTruncateBuffer(folded.data(), static_cast<int>(foldBytes)));
   entry.record.authorKeyLen = static_cast<uint8_t>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES));
   memcpy(entry.record.fold, folded.data(), entry.record.foldLen);
   memcpy(entry.record.authorKey, key.data(), entry.record.authorKeyLen);
@@ -490,9 +492,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   const uint16_t n = st.books;
   uint32_t serviceUnits = 0;
 
-  auto dateOrder = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
-  if (!dateOrder) {
-    LOG_ERR("LIBIDX", "date order array alloc failed");
+  auto arrivalOrder = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
+  if (!arrivalOrder) {
+    LOG_ERR("LIBIDX", "arrival order array alloc failed");
     return false;
   }
 
@@ -795,19 +797,20 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   //
   // firstSeen values now come from the PREVIOUS index, so they are no longer a
   // dense sequence in walk order: a rebuild reuses each book's original number
-  // and only hands out new ones for books it has never seen. The date order has
+  // and only hands out new ones for books it has never seen. The arrival order has
   // to be SORTED rather than assumed, or "Recently added" silently degrades into
   // "the order the card enumerates in" — which is exactly the bug reconciliation
   // exists to prevent.
   if (rankable) {
-    for (uint16_t i = 0; i < n; i++) dateOrder[i] = i;
+    for (uint16_t i = 0; i < n; i++) arrivalOrder[i] = i;
     if (n > 1) {
       delay(1);
-      std::sort(dateOrder.get(), dateOrder.get() + n, [order, resolvedFirstSeen](const uint16_t a, const uint16_t b) {
-        const uint16_t aSeen = resolvedFirstSeen[order[a]];
-        const uint16_t bSeen = resolvedFirstSeen[order[b]];
-        return aSeen < bSeen || (aSeen == bSeen && a < b);
-      });
+      std::sort(arrivalOrder.get(), arrivalOrder.get() + n,
+                [order, resolvedFirstSeen](const uint16_t a, const uint16_t b) {
+                  const uint16_t aSeen = resolvedFirstSeen[order[a]];
+                  const uint16_t bSeen = resolvedFirstSeen[order[b]];
+                  return aSeen < bSeen || (aSeen == bSeen && a < b);
+                });
       delay(1);
     }
   } else {
@@ -815,9 +818,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     // to its position in the title-ordered record section.
     for (uint16_t i = 0; i < n; i++) {
       serviceBuilder(serviceUnits);
-      dateOrder[order[i]] = i;
+      arrivalOrder[order[i]] = i;
     }
-    LOG_INF("LIBIDX", "%u books over the %u sort cap: author and date order degraded", static_cast<unsigned>(n),
+    LOG_INF("LIBIDX", "%u books over the %u sort cap: author and arrival order degraded", static_cast<unsigned>(n),
             static_cast<unsigned>(LIBRARY_MAX_SORTED));
     stats.ranksDegraded = true;
   }
@@ -882,7 +885,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   }
   for (uint16_t k = 0; k < n; k++) {
     serviceBuilder(serviceUnits);
-    const uint16_t ordinal = dateOrder[k];
+    const uint16_t ordinal = arrivalOrder[k];
     put(&ordinal, sizeof(ordinal));
   }
   padTo(header.nameStart);
@@ -981,7 +984,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   uint16_t nextFirstSeen = 0;
   {
     LibraryIndexFile previous;
-    if (previous.open(INDEX_PATH)) {
+    if (previous.openForReconciliation(INDEX_PATH)) {
       nextFirstSeen = previous.header().nextFirstSeen;
       priorCount = previous.bookCount();
       priorList = makeUniqueNoThrow<PriorEntry[]>(priorCount == 0 ? 1 : priorCount);

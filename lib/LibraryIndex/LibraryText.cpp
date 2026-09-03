@@ -3,7 +3,6 @@
 #include <Utf8.h>
 
 #include <algorithm>
-#include <array>
 #include <cstring>
 
 namespace library {
@@ -85,6 +84,65 @@ void appendLowerAscii(const uint32_t cp, std::string& out) {
   out.push_back(static_cast<char>(cp >= 'A' && cp <= 'Z' ? cp - 'A' + 'a' : cp));
 }
 
+struct CodepointRange {
+  uint32_t first;
+  uint32_t last;
+};
+
+constexpr bool inRanges(const uint32_t cp, const CodepointRange* ranges, const size_t count) {
+  for (size_t i = 0; i < count; i++) {
+    if (cp >= ranges[i].first && cp <= ranges[i].last) return true;
+  }
+  return false;
+}
+
+// Script coverage follows the SD-font catalog. Keeping the ranges here costs a
+// few hundred flash bytes; linking libunibreak solely for its general-category
+// table would add roughly 75 KiB of tables plus the classifier code.
+constexpr CodepointRange LETTER_RANGES[] = {
+    {0x0041, 0x005A},   {0x0061, 0x007A},   {0x00C0, 0x02AF},  // Latin and IPA
+    {0x0370, 0x03FF},   {0x1F00, 0x1FFF},                      // Greek
+    {0x0400, 0x0481},   {0x048A, 0x052F},                      // Cyrillic
+    {0x0531, 0x0556},   {0x0560, 0x0588},                      // Armenian
+    {0x05D0, 0x05EA},   {0x05EF, 0x05F2},   {0xFB1D, 0xFB4F},  // Hebrew
+    {0x0620, 0x064A},   {0x066E, 0x066F},   {0x0671, 0x06D3},   {0x06D5, 0x06D5},
+    {0x06E5, 0x06E6},   {0x06EE, 0x06EF},   {0x06FA, 0x06FC},   {0x06FF, 0x06FF},
+    {0x0750, 0x077F},   {0x08A0, 0x08C9},   {0xFB50, 0xFDF9},   {0xFE70, 0xFEFC},  // Arabic
+    {0x10A0, 0x10C5},   {0x10D0, 0x10FF},   {0x1C90, 0x1CBF},   {0x2D00, 0x2D25},  // Georgian
+    {0x1200, 0x135A},   {0x1380, 0x138F},   {0x2D80, 0x2DDE},                      // Ethiopic
+    {0x13A0, 0x13F5},   {0x13F8, 0x13FD},   {0xAB70, 0xABBF},                      // Cherokee
+    {0x2D30, 0x2D67},                                                              // Tifinagh
+    {0x3041, 0x3096},   {0x30A1, 0x30FA},   {0x3105, 0x312F},   {0x31A0, 0x31BF},  // Kana/Bopomofo
+    {0x3400, 0x4DBF},   {0x4E00, 0x9FFF},   {0xF900, 0xFAFF},                      // Han
+    {0x1100, 0x11FF},   {0x3131, 0x318E},   {0xA960, 0xA97F},   {0xAC00, 0xD7FF},  // Hangul
+    {0x20000, 0x2EBEF}, {0x2F800, 0x2FA1F}, {0x30000, 0x323AF},                    // Han extensions
+};
+
+constexpr CodepointRange NUMBER_RANGES[] = {
+    {0x0030, 0x0039}, {0x0660, 0x0669}, {0x06F0, 0x06F9}, {0x0966, 0x096F}, {0xFF10, 0xFF19},
+};
+
+constexpr CodepointRange MARK_RANGES[] = {
+    {0x0483, 0x0489}, {0x0591, 0x05BD}, {0x05BF, 0x05BF}, {0x05C1, 0x05C2}, {0x05C4, 0x05C5},
+    {0x05C7, 0x05C7}, {0x0610, 0x061A}, {0x064B, 0x065F}, {0x0670, 0x0670}, {0x06D6, 0x06DC},
+    {0x06DF, 0x06E4}, {0x06E7, 0x06E8}, {0x06EA, 0x06ED}, {0x08D3, 0x08FF}, {0xFB1E, 0xFB1E},
+};
+
+bool isUnicodeNumber(const uint32_t cp) {
+  return inRanges(cp, NUMBER_RANGES, sizeof(NUMBER_RANGES) / sizeof(NUMBER_RANGES[0]));
+}
+
+bool isUnicodeMark(const uint32_t cp) {
+  return utf8IsCombiningMark(cp) || inRanges(cp, MARK_RANGES, sizeof(MARK_RANGES) / sizeof(MARK_RANGES[0]));
+}
+
+bool isUnicodeLetter(const uint32_t cp) {
+  if (isUnicodeMark(cp) || isUnicodeNumber(cp) || cp == 0x00D7 || cp == 0x00F7 || cp == 0x0374 || cp == 0x0375 ||
+      cp == 0x037E || cp == 0x0387 || cp == 0x03F6)
+    return false;
+  return inRanges(cp, LETTER_RANGES, sizeof(LETTER_RANGES) / sizeof(LETTER_RANGES[0]));
+}
+
 // Articles stripped from the head of sort and search keys. Display text never
 // goes through this.
 constexpr const char* ARTICLES[] = {"the ", "a ",   "an ", "le ",  "la ",  "les ", "l'",   "un ",
@@ -104,6 +162,13 @@ void splitTokens(std::string_view folded, std::string_view* out, size_t maxToken
     while (i < folded.size() && folded[i] != ' ') i++;
     if (i > start) out[count++] = folded.substr(start, i - start);
   }
+}
+
+bool isSingleCodepoint(const std::string_view text) {
+  if (text.empty()) return false;
+  const auto* cursor = reinterpret_cast<const unsigned char*>(text.data());
+  utf8NextCodepoint(&cursor);
+  return cursor == reinterpret_cast<const unsigned char*>(text.data() + text.size());
 }
 
 }  // namespace
@@ -131,7 +196,7 @@ std::string fold(const std::string_view text, const bool stripArticle) {
     const uint32_t cp = utf8NextCodepoint(&cursor);
     if (cp == 0) break;
 
-    if (utf8IsCombiningMark(cp)) continue;  // already-decomposed input
+    if (isUnicodeMark(cp)) continue;
 
     const char* mapped = explicitMapping(cp);
     if (mapped != nullptr) {
@@ -146,6 +211,13 @@ std::string fold(const std::string_view text, const bool stripArticle) {
       if (pendingSpace && !out.empty()) out.push_back(' ');
       pendingSpace = false;
       appendLowerAscii(base, out);
+      continue;
+    }
+
+    if (base >= 0x80 && (isUnicodeLetter(base) || isUnicodeNumber(base))) {
+      if (pendingSpace && !out.empty()) out.push_back(' ');
+      pendingSpace = false;
+      utf8AppendCodepoint(base, out);
       continue;
     }
 
@@ -164,6 +236,13 @@ std::string fold(const std::string_view text, const bool stripArticle) {
     }
   }
   return out;
+}
+
+uint32_t foldedGroupInitial(const std::string_view folded) {
+  if (folded.empty()) return 0;
+  const auto* cursor = reinterpret_cast<const unsigned char*>(folded.data());
+  const uint32_t cp = utf8NextCodepoint(&cursor);
+  return isUnicodeLetter(cp) ? cp : 0;
 }
 
 std::string cleanPersonName(const std::string_view author) {
@@ -257,7 +336,7 @@ std::string authorKey(const std::string_view author) {
   // "Herbert Wells"), so they must not change the key.
   size_t kept = 0;
   for (size_t i = 0; i < count; i++) {
-    if (tokens[i].size() > 1) tokens[kept++] = tokens[i];
+    if (!isSingleCodepoint(tokens[i])) tokens[kept++] = tokens[i];
   }
   std::sort(tokens, tokens + kept);
 
@@ -270,7 +349,9 @@ std::string authorKey(const std::string_view author) {
   // first, so a whole-token cut would reduce "Wollstonecraft, Mary" to the key
   // "alex" and merge every Alex in the library; the byte cut keeps
   // "mary wollsto", which stays a prefix of the full key and discriminates.
-  if (key.size() > AUTHOR_KEY_MAX_BYTES) key.resize(AUTHOR_KEY_MAX_BYTES);
+  if (key.size() > AUTHOR_KEY_MAX_BYTES) {
+    key.resize(static_cast<size_t>(utf8SafeTruncateBuffer(key.data(), AUTHOR_KEY_MAX_BYTES)));
+  }
   while (!key.empty() && key.back() == ' ') key.pop_back();
   return key;
 }

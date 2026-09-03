@@ -13,8 +13,9 @@ namespace {
 constexpr int16_t TOUCH_TAB_BAR_HEIGHT = 50;
 }
 
-UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiListActivity(name, renderer, mappedInput) {}
+UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                     const bool wantsTouchLongPress)
+    : UiListActivity(name, renderer, mappedInput, wantsTouchLongPress) {}
 
 void UiTabListActivity::onEnter() {
   // Size the per-tab state before the base resets activeNav() (which indexes
@@ -46,6 +47,10 @@ void UiTabListActivity::tabActionTrampoline(const fui::ActionEvent& event, void*
 
 void UiTabListActivity::onRowAction(const fui::ActionEvent& event) {
   activeNav().selected = event.value + 1;  // ring position, not row index
+  if (event.longPress) {
+    onRowLongPress(event.value);
+    return;
+  }
   activateIndex(event.value);
 }
 

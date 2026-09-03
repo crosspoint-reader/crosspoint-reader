@@ -12,7 +12,11 @@ namespace library {
 
 LibraryIndexFile::~LibraryIndexFile() { close(); }
 
-bool LibraryIndexFile::open(const char* path) {
+bool LibraryIndexFile::open(const char* path) { return openImpl(path, false); }
+
+bool LibraryIndexFile::openForReconciliation(const char* path) { return openImpl(path, true); }
+
+bool LibraryIndexFile::openImpl(const char* path, const bool acceptStaleFold) {
   close();
   if (!Storage.openFileForRead("LIBIDX", path, file)) return false;
 
@@ -22,7 +26,8 @@ bool LibraryIndexFile::open(const char* path) {
     return false;
   }
 
-  lastValidity = validateHeader(head, file.fileSize64());
+  lastValidity =
+      acceptStaleFold ? validateHeaderStructure(head, file.fileSize64()) : validateHeader(head, file.fileSize64());
   if (lastValidity != ClixValidity::Ok) {
     LOG_INF("LIBIDX", "index rejected: %s", clixValidityName(lastValidity));
     file.close();
@@ -61,12 +66,12 @@ uint16_t LibraryIndexFile::ordinalForRow(const SortOrder order, const uint16_t r
       uint16_t ordinal = NONE;
       return readAt(authorOrderOffset(head, row), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
     }
-    case SortOrder::DateDesc: {
-      // dateOrder runs oldest first, so newest-first is the same array read
+    case SortOrder::RecentlyAdded: {
+      // arrivalOrder runs oldest first, so newest-first is the same array read
       // backwards — no second array, no second sort.
       const uint16_t k = static_cast<uint16_t>(head.bookCount - 1 - row);
       uint16_t ordinal = NONE;
-      return readAt(dateOrderOffset(head, k), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
+      return readAt(arrivalOrderOffset(head, k), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
     }
   }
   return NONE;
