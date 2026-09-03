@@ -3042,11 +3042,6 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
-    // Fetch CrossPoint version once. hydrate() re-runs on every folder navigation now, and this
-    // data (device/version) doesn't depend on currentPath, so fetching it there would just add a
-    // redundant /api/status round-trip to every folder click.
-    fetchVersion();
-
     // Close modals when clicking overlay - call proper cleanup functions.
     // Bound once here, not inside hydrate(): the overlay elements live outside #file-table and
     // #directory-breadcrumbs (the only containers hydrate() rewrites), so they persist across every
@@ -6277,6 +6272,12 @@ function retryAllFailedUploads() {
   // Seed the entry the page was loaded on so a Back into it carries a scroll offset, like every
   // entry navigateTo() pushes.
   history.replaceState({ path: currentPath, scrollY: 0 }, '');
+
+  // Once, not from hydrate(): device/version don't depend on currentPath, so fetching them per
+  // navigation would add a redundant /api/status round-trip to every folder click. Issued ahead of
+  // the first listing because the device handles one request at a time and the detected device
+  // sets the upload converter's target dimensions.
+  fetchVersion();
 
   hydrate();
 </script>
