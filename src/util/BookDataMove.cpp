@@ -24,7 +24,7 @@ std::string bookCachePathFor(const std::string& path) {
 
 }  // namespace
 
-bool moveBookData(const std::string& oldPath, const std::string& newPath) {
+void moveBookData(const std::string& oldPath, const std::string& newPath) {
   const std::string oldCachePath = bookCachePathFor(oldPath);
   const std::string newCachePath = bookCachePathFor(newPath);
   const std::string oldBookmarkPath = BookmarkUtil::getBookmarkPath(oldPath);
@@ -42,12 +42,9 @@ bool moveBookData(const std::string& oldPath, const std::string& newPath) {
     LOG_ERR("BDM", "Failed to remove stale bookmarks file at %s (non-fatal)", newBookmarkPath.c_str());
   }
 
-  bool ok = true;
-
   if (!oldCachePath.empty() && !newCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
     if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
       LOG_ERR("BDM", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
-      ok = false;
     }
   }
 
@@ -55,7 +52,6 @@ bool moveBookData(const std::string& oldPath, const std::string& newPath) {
     if (!Storage.rename(oldBookmarkPath.c_str(), newBookmarkPath.c_str())) {
       LOG_ERR("BDM", "Failed to rename bookmarks file %s -> %s (non-fatal)", oldBookmarkPath.c_str(),
               newBookmarkPath.c_str());
-      ok = false;
     }
   }
 
@@ -67,5 +63,4 @@ bool moveBookData(const std::string& oldPath, const std::string& newPath) {
   } else {
     RECENT_BOOKS.updatePath(oldPath, newPath, oldCachePath, newCachePath);
   }
-  return ok;
 }

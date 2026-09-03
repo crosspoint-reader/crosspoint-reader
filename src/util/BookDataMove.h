@@ -2,9 +2,9 @@
 
 #include <string>
 
-// Migrates a book's reading data (metadata cache dir, bookmarks file, recent-books
-// entry) from oldPath to newPath after the book file itself has already been
-// renamed/moved to newPath on disk. Any stale cache/bookmarks already sitting at
-// newPath are cleared first. Each step is best-effort and logged; returns true if
-// the cache dir and bookmarks file (when present) were migrated successfully.
-bool moveBookData(const std::string& oldPath, const std::string& newPath);
+// Called after the book file itself has been moved successfully. Migrates the book's
+// reading data (metadata cache dir, bookmarks file, recent-books entry) from oldPath to
+// newPath. Any stale cache/bookmarks already sitting at newPath are cleared first.
+// Best effort: each step is independent and failures are only logged. The recent-books
+// entry always follows the new path.
+void moveBookData(const std::string& oldPath, const std::string& newPath);
