@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <string_view>
 #include <vector>
@@ -181,6 +182,19 @@ std::string extractFolderPath(const std::string& filePath) {
     return "/";
   }
   return filePath.substr(0, lastSlash);
+}
+
+bool isSafePathComponent(std::string_view name) {
+  if (name.empty()) {
+    return false;
+  }
+  if (name.find('/') != std::string_view::npos || name.find('\\') != std::string_view::npos) {
+    return false;
+  }
+  if (name == "." || name == "..") {
+    return false;
+  }
+  return true;
 }
 
 void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen) {
