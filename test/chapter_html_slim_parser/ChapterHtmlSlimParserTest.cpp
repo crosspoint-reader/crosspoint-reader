@@ -1,10 +1,9 @@
+#include <Epub/Page.h>
+#include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
 #include <memory>
 #include <string>
-
-#include <GfxRenderer.h>
-#include <Epub/Page.h>
 
 #define class struct
 #define private public
@@ -19,12 +18,10 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   std::string filepath = "unused.xhtml";
   GfxRenderer renderer;
   CssParser cssParser{"/tmp"};
-  ChapterHtmlSlimParser parser{nullptr, filepath, renderer, 0, 1.0f, false, 0, 480, 800, false, false, {}, true, "", "",
-                               0, {}, nullptr, &cssParser};
+  ChapterHtmlSlimParser parser{nullptr, filepath, renderer, 0,  1.0f, false, 0,  480,     800,       false,
+                               false,   {},       true,     "", "",   0,     {}, nullptr, &cssParser};
 
-  void SetUp() override {
-    parser.currentTextBlock = std::make_unique<ParsedText>(false);
-  }
+  void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(false); }
 };
 
 TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) {
@@ -40,8 +37,8 @@ TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) 
 
   ASSERT_EQ(parser.currentTextBlock->size(), 1u);
   const auto style = parser.currentTextBlock->getWordStyleAt(0);
-  const auto expectedStyle = std::string(verticalAlign).find("super") != std::string::npos ? EpdFontFamily::SUP
-                                                                                              : EpdFontFamily::SUB;
+  const auto expectedStyle =
+      std::string(verticalAlign).find("super") != std::string::npos ? EpdFontFamily::SUP : EpdFontFamily::SUB;
   EXPECT_NE(static_cast<uint8_t>(style) & static_cast<uint8_t>(expectedStyle), 0u);
 
   ASSERT_EQ(parser.pendingFootnotes.size(), 1u);
