@@ -1842,7 +1842,9 @@
 
 <script>
   // get current path from query parameter
-  let currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  // URLSearchParams.get() already percent-decodes; a second decode would turn a literal '%2F' into '/'
+  // and throw on a folder name containing '%'.
+  let currentPath = new URLSearchParams(window.location.search).get('path') || '/';
 
   // Base title from <title>; re-applied on every navigation so returning to the root resets it.
   const baseTitle = document.title;
@@ -2102,7 +2104,7 @@
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     const url = new URL(link.href);
-    navigateTo(decodeURIComponent(url.searchParams.get('path') || '/'));
+    navigateTo(url.searchParams.get('path') || '/');
   }
 
   // Image preview
@@ -3034,7 +3036,7 @@
     });
 
     window.addEventListener('popstate', function() {
-      const path = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+      const path = new URLSearchParams(window.location.search).get('path') || '/';
       navigateTo(path, { push: false });
     });
 
