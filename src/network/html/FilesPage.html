@@ -1842,12 +1842,15 @@
 
 <script>
   // get current path from query parameter
-  const currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+  let currentPath = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
 
-  if (currentPath !== '/') {
+  // Base title from <title>; re-applied on every navigation so returning to the root resets it.
+  const baseTitle = document.title;
+  function applyPathTitle() {
     const leaf = currentPath.split('/').filter(Boolean).pop();
-    if (leaf) document.title = leaf + ' - Files - CrossPoint Reader';
+    document.title = leaf ? leaf + ' - ' + baseTitle : baseTitle;
   }
+  applyPathTitle();
 
   // Network status monitoring
   let isNetworkOnline = navigator.onLine;
@@ -1933,26 +1936,13 @@
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)).toLocaleString() + ' ' + sizes[i];
   }
 
+  // A newer hydrate() call owns the DOM: an older one still awaiting its listing must not
+  // go on to write a table it no longer represents (rapid folder clicks, Back-button mashing -
+  // scanFiles() yields during long scans, so per-folder fetch latency genuinely varies).
+  let hydrateGeneration = 0;
+
   async function hydrate() {
-    // Fetch CrossPoint version
-    fetchVersion();
-
-    // Close modals when clicking overlay - call proper cleanup functions
-    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
-      overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) {
-          // Call the appropriate close function for each modal to ensure cleanup
-          if (overlay.id === 'uploadModal') return closeUploadModal();
-          if (overlay.id === 'folderModal') return closeFolderModal();
-          if (overlay.id === 'deleteModal') return closeDeleteModal();
-          if (overlay.id === 'renameModal') return closeRenameModal();
-          if (overlay.id === 'moveModal') return closeMoveModal();
-          if (overlay.id === 'imagePreviewModal') return closeImagePreview();
-          overlay.classList.remove('open');
-        }
-      });
-    });
-
+    const generation = ++hydrateGeneration;
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
@@ -1998,12 +1988,17 @@
     let files = [];
     try {
       const response = await fetch('/api/files?path=' + encodeURIComponent(currentPath) + '&_=' + Date.now());
+      // A newer hydrate() may already be in flight (or done) by the time this resolves - bail
+      // rather than render a listing for a path the UI no longer points at.
+      if (generation !== hydrateGeneration) return;
       if (!response.ok) {
         throw new Error('Failed to load files: ' + response.status + ' ' + response.statusText);
       }
       files = await response.json();
+      if (generation !== hydrateGeneration) return;
     } catch (e) {
       console.error(e);
+      if (generation !== hydrateGeneration) return;
       fileTable.innerHTML = '<div class="no-files">An error occurred while loading the files</div>';
       return;
     }
@@ -2082,6 +2077,32 @@
       fileTableContent += '</table>';
       fileTable.innerHTML = fileTableContent;
     }
+  }
+
+  // Navigate to a folder without a full page reload: updates history and title, then re-hydrates the listing.
+  async function navigateTo(path, { push = true } = {}) {
+    currentPath = path;
+    applyPathTitle();
+    if (push) {
+      // Root keeps the page's canonical URL so history entries match a direct /files load.
+      const url = path === '/' ? '/files' : '/files?path=' + encodeURIComponent(path);
+      history.pushState({ path: path }, '', url);
+    }
+    await hydrate();
+    window.scrollTo(0, 0);
+  }
+
+  // Delegated click handler: intercepts a plain left-click on a `selector` link inside the
+  // listener's container and routes it through navigateTo() instead of a full page load.
+  // Modifier-clicks and non-primary buttons are left alone so the browser's normal link
+  // handling (new tab, copy link, etc.) still applies.
+  function handleNavLinkClick(e, selector) {
+    const link = e.target.closest(selector);
+    if (!link) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    const url = new URL(link.href);
+    navigateTo(decodeURIComponent(url.searchParams.get('path') || '/'));
   }
 
   // Image preview
@@ -2968,12 +2989,53 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
+    // Fetch CrossPoint version once. hydrate() re-runs on every folder navigation now, and this
+    // data (device/version) doesn't depend on currentPath, so fetching it there would just add a
+    // redundant /api/status round-trip to every folder click.
+    fetchVersion();
+
+    // Close modals when clicking overlay - call proper cleanup functions.
+    // Bound once here, not inside hydrate(): the overlay elements live outside #file-table and
+    // #directory-breadcrumbs (the only containers hydrate() rewrites), so they persist across every
+    // hydrate() call. Re-adding this listener from inside hydrate() would pile up one extra
+    // listener per folder navigation, each firing the close function again on the next click.
+    document.querySelectorAll('.modal-overlay').forEach(function(overlay) {
+      overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+          // Call the appropriate close function for each modal to ensure cleanup
+          if (overlay.id === 'uploadModal') return closeUploadModal();
+          if (overlay.id === 'folderModal') return closeFolderModal();
+          if (overlay.id === 'deleteModal') return closeDeleteModal();
+          if (overlay.id === 'renameModal') return closeRenameModal();
+          if (overlay.id === 'moveModal') return closeMoveModal();
+          if (overlay.id === 'imagePreviewModal') return closeImagePreview();
+          overlay.classList.remove('open');
+        }
+      });
+    });
+
     // Delegated so it survives file-table re-renders (avoids inline onclick with untrusted names).
     document.getElementById('file-table').addEventListener('click', function(e) {
       const link = e.target.closest('.image-preview-link');
       if (!link) return;
       e.preventDefault();
       openImagePreview(link.getAttribute('href'), link.textContent);
+    });
+
+    // Folder rows and breadcrumb segments are rebuilt by hydrate() on every navigation, but their
+    // containers are static, so this delegation is set up exactly once. '.folder-link' scopes the
+    // file-table delegate to folder rows only (file links / action buttons in the same table are
+    // untouched); the breadcrumb container only ever holds breadcrumb links, so 'a' is safe there.
+    document.getElementById('file-table').addEventListener('click', function(e) {
+      handleNavLinkClick(e, '.folder-link');
+    });
+    document.getElementById('directory-breadcrumbs').addEventListener('click', function(e) {
+      handleNavLinkClick(e, 'a');
+    });
+
+    window.addEventListener('popstate', function() {
+      const path = decodeURIComponent(new URLSearchParams(window.location.search).get('path') || '/');
+      navigateTo(path, { push: false });
     });
 
     const qualitySlider = document.getElementById('qualitySlider');
