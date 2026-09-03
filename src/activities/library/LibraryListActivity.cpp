@@ -23,6 +23,7 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr int SIDE_PADDING = 12;
+constexpr unsigned long LONG_PRESS_MS = 1000;
 
 // One tab per sort order keeps the shared tab bar authoritative: selecting a
 // tab fully describes the ordering, with no second direction state.
@@ -201,6 +202,9 @@ void LibraryListActivity::applySortOrder(const library::SortOrder order) {
 void LibraryListActivity::stepTab(const int direction) {
   const int next = (activeTab() + (direction > 0 ? 1 : TAB_SLOTS - 1)) % TAB_SLOTS;
   applySortOrder(orderForTab(next));
+  // Button-driven sort changes happen only while the bar owns focus. A tab's
+  // remembered row must not pull focus back into the list after the switch.
+  activeNav().selected = 0;
 }
 
 void LibraryListActivity::onTabAction(const int index) {
@@ -497,24 +501,21 @@ bool LibraryListActivity::handleCustomInput() {
     return true;
   }
 
-  // Swipes page like the front pair: page boundaries stay exact, and the
-  // remembered path they walk stays valid.
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up && rowCount() > 0) {
-    nextPage();
-    return true;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down && rowCount() > 0) {
-    previousPage();
-    return true;
-  }
-
   return false;
 }
 
 bool LibraryListActivity::handleButtons() {
   const int count = rowCount();
   auto& nav = activeNav();
+
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
+    if (tabsFocused()) {
+      if (!degraded) openSearch();
+    } else {
+      openLetterGrid();
+    }
+    return true;
+  }
 
   // Back clears the filter before it leaves. A shelf showing 7 of 60 books is
   // a state the reader must be able to undo, and giving it the press they
@@ -523,8 +524,13 @@ bool LibraryListActivity::handleButtons() {
     if (!query.empty()) {
       query.clear();
       applyFilter();
-      if (nav.selected != 0) nav.selected = 1;
+      nav.selected = rowCount() > 0 ? 1 : 0;
       nav.top = 0;
+      requestUpdate();
+    } else if (!tabsFocused() && !degraded) {
+      // The sort bar is a separate control mode. Preserve the viewport so a
+      // short Confirm can return to the same page.
+      nav.selected = 0;
       requestUpdate();
     } else {
       onGoHome();
@@ -534,79 +540,41 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
-      openLetterGrid();
+      if (count > 0) {
+        nav.selected = std::min(nav.top + 1, count);
+        requestUpdate();
+      }
       return true;
     }
     if (count > 0) openSelectedBook();
     return true;
   }
 
-  // Left and Right page. The front pair is the only axis the reader can spare:
-  // at 69 books, stepping one row at a time is 34 presses to the middle and
-  // paging is 5.
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenRight) && (tabsFocused() || count > 0)) {
-    if (tabsFocused()) {
-      stepTab(1);
-    } else {
-      nextPage();
-    }
-    return true;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenLeft) &&
-      (searchShortcutActive() || tabsFocused() || count > 0)) {
-    if (searchShortcutActive()) {
-      openSearch();
-    } else if (tabsFocused()) {
-      stepTab(-1);
-    } else {
-      previousPage();
-    }
-    return true;
-  }
-
-  // The list PAGES, it does not scroll. On e-ink moving one row costs the same
-  // full-panel refresh as turning a whole page, so scrolling spends the panel's
-  // most expensive operation on its smallest possible result. Up and Down move
-  // within the page; at an edge they turn it and land on the far row, so the
-  // reader never loses the sense of a fixed frame.
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenUp)) {
-    if (tabsFocused()) {
-      // already at the top
-    } else if (nav.selected == 1) {
-      // Nothing to focus while the strip is hidden — or drawn above an empty
-      // result list, where every tab press would dead-end.
-      if (!degraded && count > 0) {
-        nav.selected = 0;
-        requestUpdate();
-      }
-    } else if (nav.selected - 1 > nav.top) {
-      nav.selected--;
-      requestUpdate();
-    } else if (nav.top > 0) {
-      previousPage(/*selectLast=*/true);
-    }
-    return true;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::ScreenDown) && count > 0) {
-    if (tabsFocused()) {
-      nav.selected = 1;
-      requestUpdate();
-    } else if (nav.selected - 1 < nav.top + nav.pageRows() - 1 && nav.selected - 1 < count - 1) {
-      nav.selected++;
-      requestUpdate();
-    } else if (nav.top + nav.pageRows() < count) {
-      nextPage();
-    }
-    return true;
-  }
-
   return false;
 }
 
-bool LibraryListActivity::searchShortcutActive() const {
-  if (letterGrid || degraded) return false;
-  if (ringPos() == 1) return true;
-  return tabsFocused() && !query.empty() && rowCount() == 0;
+void LibraryListActivity::navigateButtons() {
+  if (tabsFocused()) {
+    if (degraded) return;
+    buttonNavigator.onNextRelease([this] { stepTab(1); });
+    buttonNavigator.onPreviousRelease([this] { stepTab(-1); });
+    return;
+  }
+
+  const int count = rowCount();
+  if (count <= 0) return;
+  auto& nav = activeNav();
+  const auto moveToRow = [this](const int row) { moveRingTo(row + 1); };
+  buttonNavigator.onNextRelease(
+      [this, count, &moveToRow] { moveToRow(ButtonNavigator::nextIndex(selectedEntry(), count)); });
+  buttonNavigator.onPreviousRelease(
+      [this, count, &moveToRow] { moveToRow(ButtonNavigator::previousIndex(selectedEntry(), count)); });
+  buttonNavigator.onNextContinuous([this, count, &nav, &moveToRow] {
+    moveToRow(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()));
+  });
+  buttonNavigator.onPreviousContinuous([this, count, &nav, &moveToRow] {
+    moveToRow(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()));
+  });
 }
 
 // Touch routing while the grid consumes the loop pass: the base's routing
@@ -673,13 +641,6 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
   props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
   screen.list(props);
-  if (selectLastOnNextBuild) {
-    selectLastOnNextBuild = false;
-    if (nav.drawnRows > 0) {
-      nav.selected = nav.top + nav.drawnRows;
-      nav.rebuildNeeded = true;
-    }
-  }
 }
 
 // One button per present letter. Author order also exposes given-name/surname
@@ -835,34 +796,18 @@ const char* LibraryListActivity::headerTitle() const {
 
 void LibraryListActivity::drawFooter() {
   drawPositionReadout();
-  // The front pair carries Left and Right here, not previous and next: it pages
-  // the list, switches tabs and steps letters, none of which is one row at a
-  // time. mapDirectionalLabels puts each label on whichever button actually
-  // carries that screen direction.
-  const char* leftLabel = letterGrid || tabsFocused() ? tr(STR_DIR_LEFT) : tr(STR_LIBRARY_PAGE_PREV);
-  if (searchShortcutActive()) leftLabel = tr(STR_SEARCH);
-  const char* rightLabel = letterGrid || tabsFocused() ? tr(STR_DIR_RIGHT) : tr(STR_LIBRARY_PAGE_NEXT);
-  const auto labels = mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_SELECT), leftLabel, rightLabel, "", "");
+  if (letterGrid) {
+    const auto labels =
+        mappedInput.mapDirectionalLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT), "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
+
+  const char* backLabel = tabsFocused() ? tr(STR_HOME) : tr(STR_BACK);
+  const char* confirmLabel = tabsFocused() ? tr(STR_LIBRARY_LIST_HOLD_SEARCH) : tr(STR_OPEN);
+  if (!tabsFocused() && sortOrder != library::SortOrder::DateDesc) {
+    confirmLabel = tr(STR_LIBRARY_OPEN_HOLD_JUMP);
+  }
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-}
-
-void LibraryListActivity::nextPage() {
-  const int count = rowCount();
-  auto& nav = activeNav();
-  const int next = nav.top + std::max(1, nav.pageRows());
-  if (next >= count) return;
-  selectLastOnNextBuild = false;
-  nav.top = next;
-  nav.selected = next + 1;
-  requestUpdate();
-}
-
-void LibraryListActivity::previousPage(const bool selectLast) {
-  auto& nav = activeNav();
-  selectLastOnNextBuild = false;
-  if (nav.top <= 0) return;
-  nav.top = std::max(0, nav.top - std::max(1, nav.pageRows()));
-  nav.selected = nav.top + 1;
-  selectLastOnNextBuild = selectLast;
-  requestUpdate();
 }

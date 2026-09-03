@@ -44,13 +44,11 @@ class LibraryListActivity final : public UiTabListActivity {
   void stepTab(int direction) override;
   bool handleCustomInput() override;
   bool handleButtons() override;
+  void navigateButtons() override;
   // The FUI screen owns the header so its Search action participates in the
   // same touch routing as tabs and rows.
   void drawChrome() override {}
   void drawFooter() override;
-  // Every button is dispatched in handleButtons with this screen's paging
-  // semantics; the base ring walk must not run behind it.
-  void navigateButtons() override {}
 
  private:
   // The screen's own actions, after the base's ACTION_ROW / ACTION_TAB.
@@ -68,8 +66,6 @@ class LibraryListActivity final : public UiTabListActivity {
   void openSearch();
   void openLetterGrid();
   void applySortOrder(library::SortOrder order);
-  void nextPage();
-  void previousPage(bool selectLast = false);
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
@@ -103,7 +99,6 @@ class LibraryListActivity final : public UiTabListActivity {
   // row 0 as the working selection exactly as the pre-ring code did.
   int selectedEntry() const;
   bool tabsFocused() const { return ringPos() == 0; }
-  bool searchShortcutActive() const;
 
   library::LibraryIndexFile index;
   library::SortOrder sortOrder = library::SortOrder::DateDesc;
@@ -131,7 +126,6 @@ class LibraryListActivity final : public UiTabListActivity {
   // Xun" (surname first) from "Jane Austen" (surname last), so the reader says
   // which they mean instead of the code guessing.
   bool jumpByGivenName = false;
-  bool selectLastOnNextBuild = false;
 
   // Visible-window row storage, reused across renders (buildRows). Bounded by
   // the densest page, never by the library. Headings get their own storage:
