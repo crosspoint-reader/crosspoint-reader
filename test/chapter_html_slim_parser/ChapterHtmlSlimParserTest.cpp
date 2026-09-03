@@ -18,8 +18,25 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   std::string filepath = "unused.xhtml";
   GfxRenderer renderer;
   CssParser cssParser{"/tmp"};
-  ChapterHtmlSlimParser parser{nullptr, filepath, renderer, 0,  1.0f, false, 0,  480,     800,       false,
-                               false,   {},       true,     "", "",   0,     {}, nullptr, &cssParser};
+  ChapterHtmlSlimParser parser{nullptr,
+                               filepath,
+                               renderer,
+                               0,
+                               1.0f,
+                               false,
+                               0,
+                               static_cast<uint16_t>(renderer.getScreenWidth()),
+                               static_cast<uint16_t>(renderer.getScreenHeight()),
+                               false,
+                               false,
+                               {},
+                               true,
+                               "",
+                               "",
+                               0,
+                               {},
+                               nullptr,
+                               &cssParser};
 
   void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(false); }
 };

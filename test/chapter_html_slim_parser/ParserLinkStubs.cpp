@@ -37,6 +37,7 @@ ImageBlock::ImageBlock(const std::string& imagePath, const std::string& srcPath,
     : imagePath(imagePath), srcPath(srcPath), width(width), height(height) {}
 
 bool ImageDecoderFactory::isFormatSupported(const std::string&) { return false; }
+ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string&) { return nullptr; }
 bool ImageToFramebufferDecoder::validateAndStoreDimensions(int64_t, int64_t, ImageDimensions&, const char*) {
   return false;
 }
