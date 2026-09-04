@@ -22,6 +22,14 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+HomeActivity::HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                           const HomeMenuItem initialMenuItemValue, const bool cleanInitialRefreshValue)
+    : Activity("Home", renderer, mappedInput),
+      initialMenuItem(initialMenuItemValue),
+      cleanInitialRefresh(cleanInitialRefreshValue) {}
+
+HomeActivity::~HomeActivity() = default;
+
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
