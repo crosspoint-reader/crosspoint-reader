@@ -43,7 +43,8 @@ def write_bmp_file_header(f, pixel_data_offset, file_size):
 def write_bmp_dib_header(f, width, height, bpp, colors_used=0):
     f.write(struct.pack('<I', 40))  # DIB header size (BITMAPINFOHEADER)
     f.write(struct.pack('<i', width))
-    f.write(struct.pack('<i', -height))  # negative = top-down
+    top_down_height = -height
+    f.write(struct.pack('<i', top_down_height))
     f.write(struct.pack('<HH', 1, bpp))  # planes, bpp
     f.write(struct.pack('<I', 0))  # compression (BI_RGB)
     f.write(struct.pack('<I', 0))  # image size (can be 0 for BI_RGB)
