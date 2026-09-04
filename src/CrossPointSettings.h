@@ -269,6 +269,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
+  // Download every new book of the first saved OPDS server at boot (0 = off).
+  // Off by default: it costs a WiFi session and a catalog walk on every cold
+  // boot. Category-less like the two settings above, edited from the OPDS
+  // server list.
+  uint8_t opdsSyncOnStartup = 0;
   // Hide battery percentage
   uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
