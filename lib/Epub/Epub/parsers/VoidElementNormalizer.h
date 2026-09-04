@@ -41,8 +41,8 @@ inline bool isNameChar(const char c) {
 }
 
 inline bool isVoidName(const char* name, const size_t len) {
-  static const char* const kVoid[] = {"area", "base", "br",    "col",    "embed", "hr",  "img",
-                                      "link", "meta", "param", "source", "track", "wbr", "input"};
+  static constexpr const char* kVoid[] = {"area", "base", "br",    "col",    "embed", "hr",  "img",
+                                          "link", "meta", "param", "source", "track", "wbr", "input"};
   for (const char* v : kVoid) {
     if (strlen(v) != len) continue;
     size_t i = 0;
