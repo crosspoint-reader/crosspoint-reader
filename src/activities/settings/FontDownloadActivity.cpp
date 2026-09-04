@@ -1,6 +1,7 @@
 #include "FontDownloadActivity.h"
 
 #include <ArduinoJson.h>
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -426,6 +427,14 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   }
   requestUpdateAndWait();
 
+  // Rebuildable SD-font caches (glyph/kern arenas, CJK fallback tables) can
+  // hold tens of KB the TLS session needs; release them up front rather than
+  // starving the transfer. They repopulate on demand after the download.
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+    LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
+  }
+
   if (!fontInstaller_.ensureFamilyDir(family.name.c_str())) {
     RenderLock lock(*this);
     state_ = ERROR;
@@ -442,6 +451,20 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       fileTotal_ = file.size;
     }
     requestUpdateAndWait();
+
+    // Fail while failure is still clean: starting a TLS transfer under this
+    // floor ends in a mid-body MEMORY_E or an allocation abort() instead of
+    // this error screen.
+    if (ESP.getFreeHeap() < MIN_DOWNLOAD_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_DOWNLOAD_MAX_ALLOC) {
+      LOG_ERR("FONT", "Low heap for download (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+      fontInstaller_.deleteFamily(family.name.c_str());
+      family.installed = false;
+      family.hasUpdate = false;
+      RenderLock lock(*this);
+      state_ = ERROR;
+      errorMessage_ = "Not enough free memory - try again after a restart";
+      return;
+    }
 
     char destPath[128];
     FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), destPath, sizeof(destPath));
@@ -467,7 +490,11 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
           }
           requestUpdate(true);
         },
-        &cancelRequested_);
+        // Bulk font transfers follow GitHub's release-asset redirect over plain
+        // HTTP: the CRC check below (manifest fetched over TLS) covers
+        // integrity, and skipping the second TLS session keeps the C3 heap out
+        // of MEMORY_E territory.
+        &cancelRequested_, "", "", /*downgradeRedirectsToHttp=*/true);
 
     if (result == HttpDownloader::ABORTED) {
       fontInstaller_.deleteFamily(family.name.c_str());
