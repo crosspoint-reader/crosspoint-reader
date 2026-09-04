@@ -38,6 +38,14 @@ std::vector<std::string> wrapLines(const char* text, const int maxWidth, const i
     return measure(scratch);
   };
 
+  // Length of in[start, start+len) with any trailing spaces dropped, so a line
+  // that swallowed a separator run does not carry blanks that would offset a
+  // centred draw.
+  const auto trimTrailingSpaces = [&](const size_t start, size_t len) -> size_t {
+    while (len > 0 && in[start + len - 1] == ' ') --len;
+    return len;
+  };
+
   // Longest prefix of in[start, start+len) (>= 1 codepoint) that fits maxWidth,
   // as a byte length on a UTF-8 boundary. Takes one codepoint even if it
   // overflows, to make progress. Walks boundaries via the lead byte only, so it
@@ -69,6 +77,14 @@ std::vector<std::string> wrapLines(const char* text, const int maxWidth, const i
   bool haveLine = false;  // whether the current line has any content
 
   while (pos < in.size()) {
+    // Collapse a run of separators. Without this a zero-length "word" between
+    // two spaces (or at the start) would start a line, and flushing it emits an
+    // empty or whitespace-only line.
+    if (in[pos] == ' ' && !haveLine) {
+      ++pos;
+      continue;
+    }
+
     if (static_cast<int>(lines.size()) == maxLines - 1) {
       // Last available line: fold in the rest and ellipsize.
       const size_t start = haveLine ? lineStart : pos;
@@ -88,7 +104,7 @@ std::vector<std::string> wrapLines(const char* text, const int maxWidth, const i
       pos = (space == std::string_view::npos) ? in.size() : space + 1;  // consume word (+ space)
     } else if (haveLine) {
       // Doesn't fit: flush and re-examine `word` fresh on the next line.
-      lines.emplace_back(in.data() + lineStart, lineLen);
+      lines.emplace_back(in.data() + lineStart, trimTrailingSpaces(lineStart, lineLen));
       haveLine = false;
       lineLen = 0;
     } else {
@@ -104,7 +120,7 @@ std::vector<std::string> wrapLines(const char* text, const int maxWidth, const i
   }
 
   if (haveLine && static_cast<int>(lines.size()) < maxLines) {
-    lines.emplace_back(in.data() + lineStart, lineLen);
+    lines.emplace_back(in.data() + lineStart, trimTrailingSpaces(lineStart, lineLen));
   }
 
   return lines;

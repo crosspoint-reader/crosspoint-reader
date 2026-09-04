@@ -108,6 +108,20 @@ TEST(TextWrap, ForcedBreakConsumingWordSwallowsSeparator) {
   EXPECT_EQ(out, (Lines{"W", "x", "y"}));
 }
 
+// Separator runs must not start a line: a zero-length word between two spaces
+// would otherwise be flushed as an empty line.
+TEST(TextWrap, RepeatedSpacesDoNotEmitEmptyLines) {
+  EXPECT_EQ(wrap("aaaa  bbbb", 4, 5), (Lines{"aaaa", "bbbb"}));
+  EXPECT_EQ(wrap("aa   bb", 4, 5), (Lines{"aa", "bb"}));
+}
+
+TEST(TextWrap, LeadingAndTrailingSpacesAreDropped) {
+  EXPECT_EQ(wrap(" aaaa", 4, 5), (Lines{"aaaa"}));
+  EXPECT_EQ(wrap("  aaaa", 4, 5), (Lines{"aaaa"}));
+  EXPECT_EQ(wrap("aaaa ", 4, 5), (Lines{"aaaa"}));
+  EXPECT_TRUE(wrap("   ", 4, 5).empty());
+}
+
 TEST(TextWrap, EmptyAndNullInputs) {
   EXPECT_TRUE(wrap("", 10, 3).empty());
   EXPECT_TRUE(wrap(nullptr, 10, 3).empty());
