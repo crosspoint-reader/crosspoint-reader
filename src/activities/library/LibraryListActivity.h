@@ -41,6 +41,7 @@ class LibraryListActivity final : public UiTabListActivity {
   int tabCount() const override;
   int activeTab() const override;
   const char* tabLabel(int index) const override;
+  freeink::ui::TabIndicator tabIndicator(int index) const override;
   void onTabAction(int index) override;
   void stepTab(int direction) override;
   bool handleCustomInput() override;
@@ -67,6 +68,8 @@ class LibraryListActivity final : public UiTabListActivity {
   void expandGroup(int groupEntry);
   void restoreExpandedList();
   void applySortOrder(library::SortOrder order);
+  void selectTab(int index, bool toggleIfActive);
+  void toggleSortDirection();
   // Sub-screens act on button press, so a button still held when we resume must
   // not also act here. Records what to swallow on the next release.
   void swallowHeldReleases();
@@ -99,7 +102,9 @@ class LibraryListActivity final : public UiTabListActivity {
   bool tabsFocused() const { return ringPos() == 0; }
 
   library::LibraryIndexFile index;
-  library::SortOrder sortOrder = library::SortOrder::RecentlyAdded;
+  library::SortOrder sortOrder = library::SortOrder::AddedDesc;
+  // One bit per tab; only Added starts descending.
+  uint8_t descendingTabs = 1u;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;

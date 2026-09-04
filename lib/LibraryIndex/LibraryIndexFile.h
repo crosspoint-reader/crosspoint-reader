@@ -17,10 +17,12 @@
 namespace library {
 
 enum class SortOrder : uint8_t {
-  TitleAsc,   // the record order itself: costs nothing
-  TitleDesc,  // the record order backwards: also costs nothing
+  AddedAsc,
+  AddedDesc,
+  TitleAsc,
+  TitleDesc,
   AuthorAsc,
-  RecentlyAdded,  // newest arrival first — the default, so a newly copied book is row 0
+  AuthorDesc,
 };
 
 class LibraryIndexFile {

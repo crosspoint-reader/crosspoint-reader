@@ -127,6 +127,7 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabs[i].label = tabLabel(i);
     tabs[i].value = static_cast<int16_t>(i);
     tabs[i].selected = activeTab() == i;
+    tabs[i].indicator = tabIndicator(i);
   }
   fui::TabBarProps tabProps;
   tabProps.tabs = tabs;

@@ -125,27 +125,27 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library indexes every supported book on the SD card and shows its title and author without requiring you to remember its folder. Its four tabs provide different views of the same collection:
+The Library indexes every supported book on the SD card and shows its title and author without requiring you to remember its folder. Its three tabs provide different views of the same collection. An arrow beside the active tab shows the sort direction:
 
-- **Recently added** keeps books in the order in which the Library first discovered them, with the newest additions first. This is separate from **Recent Books**, which contains only books you have opened recently.
-- **Title A-Z** and **Title Z-A** group books by the first letter of the title. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
-- **Author** groups books by author.
+- **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first. This is separate from **Recent Books**, which contains only books you have opened recently.
+- **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
+- **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
 
 On a button-only device:
 
 - Use **Up/Down** or **Left/Right** to move one row at a time. Hold a direction to move a page at a time.
 - Press **Confirm** to open the selected book.
-- Press **Back** from the book list to focus the tabs. Use a direction to select another tab, then press **Confirm** to return to its list.
+- Press **Back** from the book list to focus the tabs. Use **Left/Right** to select another tab, press **Confirm** to reverse its sort direction, or press **Down** to return to the list.
 - While the tabs are focused, hold **Confirm** to open Search.
 - In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
 
-On a touch device, tap tabs, books, and the Search icon directly. Swipe to scroll. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Recently added** view is not grouped; tapping or long-pressing a book opens it.
+On a touch device, tap tabs, books, and the Search icon directly. Tap the active tab again to reverse its sort direction. Swipe to scroll. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Added** view is not grouped; tapping or long-pressing a book opens it.
 
 The index is created automatically the first time the Library is opened. To pick up later file changes or updated metadata, use **Settings → System → Rebuild library index**. The **Use book metadata** setting controls whether the index reads titles and authors stored inside books.
 
 ### 3.5 Recent Books Screen
 
-The Recent Books screen lists the books opened most recently, displaying title and author. It is a short reading-history list, not the Library's complete **Recently added** view.
+The Recent Books screen lists the books opened most recently, displaying title and author. It is a short reading-history list, not the Library's complete **Added** view.
 
 ### 3.6 File Transfer Screen
 

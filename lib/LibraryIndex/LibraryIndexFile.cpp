@@ -62,14 +62,17 @@ uint16_t LibraryIndexFile::ordinalForRow(const SortOrder order, const uint16_t r
       return row;
     case SortOrder::TitleDesc:
       return static_cast<uint16_t>(head.bookCount - 1 - row);
-    case SortOrder::AuthorAsc: {
+    case SortOrder::AuthorAsc:
+    case SortOrder::AuthorDesc: {
+      const uint16_t k = order == SortOrder::AuthorAsc ? row : static_cast<uint16_t>(head.bookCount - 1 - row);
       uint16_t ordinal = NONE;
-      return readAt(authorOrderOffset(head, row), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
+      return readAt(authorOrderOffset(head, k), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
     }
-    case SortOrder::RecentlyAdded: {
-      // arrivalOrder runs oldest first, so newest-first is the same array read
-      // backwards — no second array, no second sort.
-      const uint16_t k = static_cast<uint16_t>(head.bookCount - 1 - row);
+    case SortOrder::AddedAsc:
+    case SortOrder::AddedDesc: {
+      // arrivalOrder runs oldest first, so both directions share one on-disk
+      // permutation.
+      const uint16_t k = order == SortOrder::AddedAsc ? row : static_cast<uint16_t>(head.bookCount - 1 - row);
       uint16_t ordinal = NONE;
       return readAt(arrivalOrderOffset(head, k), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
     }

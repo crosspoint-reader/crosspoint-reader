@@ -26,42 +26,50 @@ namespace {
 constexpr int SIDE_PADDING = 12;
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
-// One tab per sort order keeps the shared tab bar authoritative: selecting a
-// tab fully describes the ordering, with no second direction state.
 constexpr int ADDED_TAB = 0;
-constexpr int TITLE_ASC_TAB = 1;
-constexpr int TITLE_DESC_TAB = 2;
-constexpr int AUTHOR_TAB = 3;
+constexpr int TITLE_TAB = 1;
+constexpr int AUTHOR_TAB = 2;
 constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
 
-int sortTabIndex(const library::SortOrder order) {
+constexpr int sortTabIndex(const library::SortOrder order) {
   switch (order) {
-    case library::SortOrder::TitleAsc:
-      return TITLE_ASC_TAB;
-    case library::SortOrder::TitleDesc:
-      return TITLE_DESC_TAB;
-    case library::SortOrder::AuthorAsc:
-      return AUTHOR_TAB;
-    case library::SortOrder::RecentlyAdded:
+    case library::SortOrder::AddedAsc:
+    case library::SortOrder::AddedDesc:
       return ADDED_TAB;
+    case library::SortOrder::TitleAsc:
+    case library::SortOrder::TitleDesc:
+      return TITLE_TAB;
+    case library::SortOrder::AuthorAsc:
+    case library::SortOrder::AuthorDesc:
+      return AUTHOR_TAB;
   }
   return ADDED_TAB;
 }
 
-library::SortOrder orderForTab(const int tab) {
-  if (tab == TITLE_ASC_TAB) return library::SortOrder::TitleAsc;
-  if (tab == TITLE_DESC_TAB) return library::SortOrder::TitleDesc;
-  if (tab == AUTHOR_TAB) return library::SortOrder::AuthorAsc;
-  return library::SortOrder::RecentlyAdded;
+constexpr bool isDescending(const library::SortOrder order) {
+  return order == library::SortOrder::AddedDesc || order == library::SortOrder::TitleDesc ||
+         order == library::SortOrder::AuthorDesc;
 }
 
-// The strip needs the mode alone. The header strings carry a "Library ·"
-// prefix that reads as four copies of the word once they sit side by side.
+constexpr bool isAddedSort(const library::SortOrder order) {
+  return order == library::SortOrder::AddedAsc || order == library::SortOrder::AddedDesc;
+}
+
+constexpr bool isAuthorSort(const library::SortOrder order) {
+  return order == library::SortOrder::AuthorAsc || order == library::SortOrder::AuthorDesc;
+}
+
+constexpr library::SortOrder orderForTab(const int tab, const uint8_t descendingTabs) {
+  const bool descending = (descendingTabs & (1u << tab)) != 0;
+  if (tab == TITLE_TAB) return descending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
+  if (tab == AUTHOR_TAB) return descending ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
+  return descending ? library::SortOrder::AddedDesc : library::SortOrder::AddedAsc;
+}
+
 const char* tabLabelFor(const int tab) {
-  if (tab == TITLE_ASC_TAB) return tr(STR_LIBRARY_TAB_TITLE_AZ);
-  if (tab == TITLE_DESC_TAB) return tr(STR_LIBRARY_TAB_TITLE_ZA);
+  if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  return tr(STR_LIBRARY_TAB_NEW);
+  return tr(STR_LIBRARY_TAB_ADDED);
 }
 
 }  // namespace
@@ -215,25 +223,37 @@ void LibraryListActivity::applySortOrder(const library::SortOrder order) {
 
 void LibraryListActivity::stepTab(const int direction) {
   const int next = (activeTab() + (direction > 0 ? 1 : TAB_SLOTS - 1)) % TAB_SLOTS;
-  applySortOrder(orderForTab(next));
-  // Button-driven sort changes happen only while the bar owns focus. A tab's
-  // remembered row must not pull focus back into the list after the switch.
-  activeNav().selected = 0;
+  selectTab(next, false);
 }
 
 void LibraryListActivity::onTabAction(const int index) {
   app.clearTapFlash();
-  applySortOrder(orderForTab(index));
+  selectTab(index, true);
+}
+
+void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
+  if (index < 0 || index >= TAB_SLOTS) return;
+  if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
+  applySortOrder(orderForTab(index, descendingTabs));
+  // Tab changes happen only while the bar owns focus. A tab's remembered row
+  // must not pull focus back into the list after the switch.
   auto& nav = activeNav();
   nav.selected = 0;
   nav.top = 0;
 }
+
+void LibraryListActivity::toggleSortDirection() { selectTab(activeTab(), true); }
 
 int LibraryListActivity::tabCount() const { return TAB_SLOTS; }
 
 int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
 
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
+
+fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
+  if (index != activeTab()) return fui::TabIndicator::None;
+  return isDescending(sortOrder) ? fui::TabIndicator::Down : fui::TabIndicator::Up;
+}
 
 int LibraryListActivity::bookRowCount() const {
   return query.empty() ? static_cast<int>(index.bookCount()) : static_cast<int>(filteredCount);
@@ -249,9 +269,7 @@ int LibraryListActivity::rowFor(const int entry) const {
   return filtered[entry];
 }
 
-bool LibraryListActivity::groupable() const {
-  return !degraded && sortOrder != library::SortOrder::RecentlyAdded && bookRowCount() > 0;
-}
+bool LibraryListActivity::groupable() const { return !degraded && !isAddedSort(sortOrder) && bookRowCount() > 0; }
 
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -283,7 +301,7 @@ bool LibraryListActivity::buildGroupStarts() {
   author.reserve(128);
   for (int entry = 0; entry < count; entry++) {
     bool startsGroup = entry == 0;
-    if (sortOrder == library::SortOrder::AuthorAsc) {
+    if (isAuthorSort(sortOrder)) {
       rowTextFor(entry, title, author);
       startsGroup = startsGroup || author != previousAuthor;
       previousAuthor = author;
@@ -462,10 +480,7 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
-      if (count > 0) {
-        nav.selected = std::min(nav.top + 1, count);
-        requestUpdate();
-      }
+      toggleSortDirection();
       return true;
     }
     if (count > 0) activateIndex(selectedEntry());
@@ -478,8 +493,17 @@ bool LibraryListActivity::handleButtons() {
 void LibraryListActivity::navigateButtons() {
   if (tabsFocused()) {
     if (degraded) return;
-    buttonNavigator.onNextRelease([this] { stepTab(1); });
-    buttonNavigator.onPreviousRelease([this] { stepTab(-1); });
+    buttonNavigator.onRelease({MappedInputManager::Button::ScreenDown}, [this] {
+      const int count = listCount();
+      if (count <= 0) return;
+      auto& nav = activeNav();
+      nav.selected = std::min(nav.top + 1, count);
+      requestUpdate();
+    });
+    buttonNavigator.onRelease({MappedInputManager::Button::ScreenRight}, [this] { stepTab(1); });
+    buttonNavigator.onRelease({MappedInputManager::Button::ScreenLeft}, [this] { stepTab(-1); });
+    buttonNavigator.onContinuous({MappedInputManager::Button::ScreenRight}, [this] { stepTab(1); });
+    buttonNavigator.onContinuous({MappedInputManager::Button::ScreenLeft}, [this] { stepTab(-1); });
     return;
   }
 
@@ -502,8 +526,8 @@ void LibraryListActivity::navigateButtons() {
 void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = bookRowCount();
-  const bool authorGrouped = sortOrder == library::SortOrder::AuthorAsc;
-  const bool grouped = sortOrder != library::SortOrder::RecentlyAdded;
+  const bool authorGrouped = isAuthorSort(sortOrder);
+  const bool grouped = !isAddedSort(sortOrder);
 
   fui::ListProps props;
   props.count = static_cast<uint16_t>(count);
@@ -608,7 +632,7 @@ void LibraryListActivity::buildGroupRows(UiScreen& screen) {
   for (int entry = windowStart; entry < groupCount && rows < static_cast<int>(cap); entry++) {
     std::string& label = winTitles[static_cast<size_t>(rows)];
     const int bookEntry = groupStarts[entry];
-    if (sortOrder == library::SortOrder::AuthorAsc) {
+    if (isAuthorSort(sortOrder)) {
       std::string& author = winAuthors[static_cast<size_t>(rows)];
       rowTextFor(bookEntry, ignoredTitle, author);
       formatAuthorHeading(author, label);
@@ -690,18 +714,7 @@ void LibraryListActivity::drawPositionReadout() const {
 }
 
 const char* LibraryListActivity::headerTitle() const {
-  if (degraded) return tr(STR_LIBRARY_TITLE_UNSORTED);
-  switch (sortOrder) {
-    case library::SortOrder::TitleAsc:
-      return tr(STR_LIBRARY_SORT_TITLE_AZ);
-    case library::SortOrder::TitleDesc:
-      return tr(STR_LIBRARY_SORT_TITLE_ZA);
-    case library::SortOrder::AuthorAsc:
-      return tr(STR_LIBRARY_SORT_AUTHOR);
-    case library::SortOrder::RecentlyAdded:
-      return tr(STR_LIBRARY_SORT_ADDED);
-  }
-  return tr(STR_LIBRARY_SORT_ADDED);
+  return degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_LIBRARY);
 }
 
 void LibraryListActivity::drawHoldHelp() const {
@@ -724,7 +737,9 @@ void LibraryListActivity::drawFooter() {
   drawHoldHelp();
 
   const char* backLabel = tabsFocused() ? tr(STR_HOME) : tr(STR_BACK);
-  const char* confirmLabel = tabsFocused() || groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
+  const auto labels = tabsFocused() ? mappedInput.mapDirectionalLabels(backLabel, tr(STR_TOGGLE), tr(STR_DIR_LEFT),
+                                                                       tr(STR_DIR_RIGHT), "", tr(STR_SELECT))
+                                    : mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
