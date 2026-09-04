@@ -9,6 +9,8 @@
 #include <functional>
 #include <string>
 
+#include "HttpVerifiedFetch.h"
+
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
 
@@ -65,14 +67,22 @@ struct WifiPowerSaveGuard {
 
 #if defined(FREEINK_NET_WOLFSSL)
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
-                                         const std::string& password, Sink& sink) {
+                                         const std::string& password, Sink& sink, const char* caPem) {
   WifiPowerSaveGuard psGuard;
   std::string url = startUrl;
 
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    http.setInsecure();
+    if (caPem != nullptr) {
+      // Chain verification against the caller's anchors. Identity checking is
+      // not covered yet: SecureClient (freeink-sdk) does not verify the
+      // hostname against the presented certificate, so this authenticates the
+      // issuing chain but not the peer it belongs to.
+      http.setCACert(caPem);
+    } else {
+      http.setInsecure();
+    }
     if (!http.begin(url)) {
       LOG_ERR("HTTP", "wolfSSL bad URL: %s", url.c_str());
       return HttpDownloader::HTTP_ERROR;
@@ -108,6 +118,11 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       const std::string location = http.getHeader("location");
       if (location.empty() || !freeink::SecureHttpClient::resolveUrl(url, location, url)) {
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
+        return HttpDownloader::HTTP_ERROR;
+      }
+      if (caPem != nullptr && !urlIsHttps(url)) {
+        // Verified mode never follows an https -> http downgrade.
+        LOG_ERR("HTTP", "refusing redirect downgrade to non-https");
         return HttpDownloader::HTTP_ERROR;
       }
       continue;
@@ -243,7 +258,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
                                            const std::string& password, Sink& sink) {
 #if defined(FREEINK_NET_WOLFSSL)
-  return runGetWolf(url, username, password, sink);
+  return runGetWolf(url, username, password, sink, nullptr);
 #else
   return runGet(url, username, password, sink);
 #endif
@@ -276,6 +291,26 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   Sink sink;
   sink.write = onData;
   return runGetSecure(url, username, password, sink) == OK;
+}
+
+bool HttpDownloader::fetchUrlVerified(const std::string& url, const DataCallback& onData, const char* caPem,
+                                      const std::string& username, const std::string& password) {
+  // Runs on every build, wolfSSL or not: on the esp_http_client path caPem is
+  // unused (esp_crt_bundle verifies the chain), but the https-only requirement
+  // still has to hold or a "verified" fetch of an http:// URL would go out in
+  // clear.
+  if (const char* refusal = verifiedFetchRefusal(url, caPem, kVerifiedFetchNeedsAnchors)) {
+    LOG_ERR("HTTP", "Refusing verified fetch: %s", refusal);
+    return false;
+  }
+  LOG_DBG("HTTP", "Fetching (verified): %s", url.c_str());
+  Sink sink;
+  sink.write = onData;
+#if defined(FREEINK_NET_WOLFSSL)
+  return runGetWolf(url, username, password, sink, caPem) == OK;
+#else
+  return runGet(url, username, password, sink) == OK;
+#endif
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,

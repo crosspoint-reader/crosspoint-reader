@@ -39,6 +39,19 @@ class HttpDownloader {
                        const std::string& password = "");
 
   /**
+   * Like fetchUrl(), but authenticates the peer instead of merely encrypting to
+   * it: the URL must be https, redirects may not downgrade to plaintext, and
+   * caPem supplies the trust anchors the chain is verified against.
+   *
+   * A separate entry point rather than an optional argument on fetchUrl(): a
+   * caller that means "verified" and passes no usable anchors must fail, not
+   * silently fetch unverified, and an omitted trailing default makes those two
+   * intentions indistinguishable at the call site.
+   */
+  static bool fetchUrlVerified(const std::string& url, const DataCallback& onData, const char* caPem,
+                               const std::string& username = "", const std::string& password = "");
+
+  /**
    * Download a file to the SD card with optional credentials.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
