@@ -4,7 +4,11 @@
 
 CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
 
-**Now running on:** ESP32C3-based Xteink [X4](https://www.xteink.com/products/xteink-x4) and [X3](https://www.xteink.com/products/xteink-x3).
+### Now running on:
+- **ESP32C3-based** Xteink X4 and X3.
+- **ESP32C3-based** Xteink X4Pro, Seeed reTerminal Sticky, M5PaperMono
+
+Check [our Devices page](https://crosspointreader.com/devices) for the full list.
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
@@ -264,21 +268,13 @@ One of the best things about open source is that anyone can take the code in a d
 
 - [papyrix-reader](https://github.com/bigbag/papyrix-reader) — Adds FB2 and MD format support. Actively maintained with Arabic script support. Custom themes via SD card.
 
-- ~~[crosspet](https://github.com/trilwu/crosspet) — A Vietnamese fork that adds a Tamagotchi-style virtual chicken that grows based on your reading milestones (pages read, streaks, care). Also: Flashcards, Weather, Pomodoro timer, and mini-games.~~ (Unmaintained)
-
-- [crosspoint-reader-cjk](https://github.com/aBER0724/crosspoint-reader-cjk) — Purpose-built for Chinese, Japanese, and Korean reading.
-
 - [inx](https://github.com/obijuankenobiii/inx) — Completely reimagines the user interface with tabbed navigation.
 
-- ~~[PlusPoint](https://github.com/ngxson/pluspoint-reader) — custom JS apps support.~~ (Unmaintained)
-
-- [crosspoint-reader-papers3](https://github.com/juicecultus/crosspoint-reader-papers3) — Crosspoint port for M5Stack Paper S3. 
-
-- [t5s3-reader](https://github.com/ShallowGreen123/t5s3-reader) — Crosspoint port for LilyGo T5 ePaper S3 / T5S3 4.7-inch e-paper device.
+- [Witch(hunt) Reader](https://github.com/jpirnay/witchhunt-reader) — Faster integration of functionality. Tracks upstream PRs and integrates the good ones ahead of the official merge. Weather information panel. Markdown support.
 
 **Note:** Many of these features will make their way into CrossPoint over time. We maintain a slower pace to ensure rock-solid stability and squash bugs before they reach your device.
 
-Want to build your own device? Be sure to check out the [de-link](https://github.com/iandchasse/de-link) project.
+Want to build your own device? Be sure to check out the [de-link](https://github.com/iandchasse/de-link) project or [OnePage Reader](https://github.com/MoveCall/onepage-reader).
 
 ---
 
