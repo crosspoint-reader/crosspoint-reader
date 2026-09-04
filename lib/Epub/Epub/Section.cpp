@@ -46,10 +46,11 @@ namespace {
 // v42: Closing a block strips inherited vertical margins and padding.
 // v43: Paragraph base direction excludes direction changes from inline elements.
 // v44: Persist internal-link rectangles with each page for touch navigation.
-// v45: Render pagebreak marker content unless it is just the page label.
-// v46: A <br> immediately before a pagebreak marker with replayed content no longer breaks the line.
-// v47: No extra paragraph spacing at a <br> line break.
-constexpr uint8_t SECTION_FILE_VERSION = 47;
+// v45: Internal EPUB links preserve CSS superscript/subscript positioning.
+// v46: Render pagebreak marker content unless it is just the page label.
+// v47: A <br> immediately before a pagebreak marker with replayed content no longer breaks the line.
+// v48: No extra paragraph spacing at a <br> line break.
+constexpr uint8_t SECTION_FILE_VERSION = 48;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
