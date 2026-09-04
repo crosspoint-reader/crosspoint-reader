@@ -69,10 +69,14 @@ bool WordStore::append(const char* text, size_t len, StoredWord& out) {
     target = &fresh;
   }
 
-  out.chunk = static_cast<uint32_t>(target - chunks_.get());
+  // Typed locals: unique_ptr<T[]>::get() is T*, but cppcheck reads the
+  // array-form template's get() as void* and flags the arithmetic below.
+  const Chunk* chunkBase = chunks_.get();
+  char* dst = target->data.get();
+  out.chunk = static_cast<uint32_t>(target - chunkBase);
   out.off = target->used;
   out.len = static_cast<uint16_t>(len);
-  memcpy(target->data.get() + target->used, text, len);
+  memcpy(dst + target->used, text, len);
   target->data[target->used + len] = '\0';
   target->used = static_cast<uint16_t>(target->used + need);
   target->live++;

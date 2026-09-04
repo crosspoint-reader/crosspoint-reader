@@ -60,7 +60,13 @@ class WordStore {
     uint16_t live = 0;
   };
 
-  const char* charsAt(const StoredWord& w) const { return chunks_[w.chunk].data.get() + w.off; }
+  const char* charsAt(const StoredWord& w) const {
+    // Bind to a typed local first: unique_ptr<char[]>::get() is char*, but
+    // cppcheck can't resolve the array-form template and reads it as void*,
+    // then flags the pointer arithmetic (arithOperationsOnVoidPointer).
+    const char* base = chunks_[w.chunk].data.get();
+    return base + w.off;
+  }
   bool ensureChunkSlot();
 
   static constexpr size_t CHUNK_SIZE = 2048;
