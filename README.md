@@ -38,7 +38,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 - **Customization**: multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
 
-- **Localization**: 24 UI languages and counting. RTL support.
+- **Localization**: 32 UI languages and counting. RTL support.
 
 ### Coming soon:
 
@@ -144,7 +144,7 @@ Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` 
 
 ### Prerequisites
 
-- [pioarduino](https://github.com/pioarduino/pioarduino) or VS Code + pioarduino plugin
+- [pioarduino PlatformIO Core](https://github.com/pioarduino/platformio-core) or [VS Code + pioarduino IDE](https://github.com/pioarduino/pioarduino-vscode-ide)
 - Python 3.8+
 - `clang-format` 21
 - USB-C cable supporting data transfer

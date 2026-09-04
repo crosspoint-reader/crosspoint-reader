@@ -25,6 +25,7 @@ enum class SettingAction {
   DownloadFonts,
   TextSettings,
   Plugins,
+  KeyboardLayouts,
 };
 
 struct SettingInfo {
@@ -177,7 +178,8 @@ class SettingsActivity final : public UiTabListActivity {
   void rebuildRowItems();
 
   static constexpr int categoryCount = 4;
-  static const StrId categoryNames[categoryCount];
+  static constexpr StrId categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
+                                                         StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
   // --- UiTabListActivity contract ---
   int listCount() const override { return settingsCount; }

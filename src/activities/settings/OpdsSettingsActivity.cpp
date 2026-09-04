@@ -167,7 +167,7 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   // Content below the GUI.drawHeader band, above the button hints; derived
   // from the safe area so board bezel insets apply (same as LanguageSelect).
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(
+  screen.setContentMarginFromScreen(
       fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
                   static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
                   static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.buttonHintsHeight),
@@ -193,6 +193,10 @@ void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the value and the row edge
+  // Label at the value's font size: both sides of the row read as one unit.
+  // maxLines=2 also marks the style caller-owned (see textStyleUnset).
+  props.labelText = screen.theme().smallText;
+  props.labelText.maxLines = 2;
   syncListViewport(screen, props);
   screen.list(props);
 }

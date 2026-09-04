@@ -384,22 +384,23 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
 }
 
 void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
-  constexpr int maxListValueWidth = 200;
+  constexpr int labelGap = 10;
+  const int contentWidth = std::max(0, rect.width - BaseMetrics::values.contentSidePadding * 2);
 
-  int currentX = rect.x + BaseMetrics::values.contentSidePadding;
-  int rightSpace = BaseMetrics::values.contentSidePadding;
+  int labelWidth = contentWidth;
   if (rightLabel) {
-    auto truncatedRightLabel =
-        renderer.truncatedText(SMALL_FONT_ID, rightLabel, maxListValueWidth, EpdFontFamily::REGULAR);
-    int rightLabelWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedRightLabel.c_str());
+    auto truncatedRightLabel = renderer.truncatedText(SMALL_FONT_ID, rightLabel, contentWidth, EpdFontFamily::REGULAR);
+    const int rightLabelWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedRightLabel.c_str());
     renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - BaseMetrics::values.contentSidePadding - rightLabelWidth,
                       rect.y + 7, truncatedRightLabel.c_str());
-    rightSpace += rightLabelWidth + 10;
+    labelWidth = std::max(0, contentWidth - rightLabelWidth - labelGap);
   }
 
-  auto truncatedLabel = renderer.truncatedText(
-      UI_12_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding - rightSpace, EpdFontFamily::REGULAR);
-  renderer.drawText(UI_12_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
+  if (labelWidth > 0) {
+    auto truncatedLabel = renderer.truncatedText(UI_12_FONT_ID, label, labelWidth, EpdFontFamily::REGULAR);
+    renderer.drawText(UI_12_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, rect.y, truncatedLabel.c_str(),
+                      true, EpdFontFamily::REGULAR);
+  }
 }
 
 // Draw the "Recent Book" cover card on the home screen

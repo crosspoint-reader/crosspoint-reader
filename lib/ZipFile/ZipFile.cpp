@@ -44,7 +44,16 @@ size_t zipFillCallback(void* vctx, const uint8_t** data) {
   if (ctx->fileRemaining == 0) return 0;
 
   const size_t toRead = ctx->fileRemaining < ctx->readBufSize ? ctx->fileRemaining : ctx->readBufSize;
-  const size_t bytesRead = ctx->file->read(ctx->readBuf, toRead);
+  const int result = ctx->file->read(ctx->readBuf, toRead);
+  // HalFile::read() returns a negative int on error. Treat it as end-of-stream
+  // rather than letting the negative-to-size_t conversion underflow fileRemaining
+  // and report a huge bytesRead, which would have the inflate library read past
+  // the end of readBuf.
+  if (result < 0) {
+    LOG_ERR("ZIP", "Failed to read compressed data: %d", result);
+    return 0;
+  }
+  const size_t bytesRead = static_cast<size_t>(result);
   ctx->fileRemaining -= bytesRead;
 
   *data = ctx->readBuf;

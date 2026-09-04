@@ -201,7 +201,8 @@ void HalGPIO::setSharedConfirmPowerShortPressEmitsPower(const bool enabled) {
 bool HalGPIO::hasEdgeSideButtons() const {
   return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||
          BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||
-         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Pro;
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Pro ||
+         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4Classic;
 }
 
 bool HalGPIO::isXteinkDevice() const {
@@ -211,7 +212,11 @@ bool HalGPIO::isXteinkDevice() const {
 }
 
 bool HalGPIO::verifyPowerButtonWakeup() {
-  if (BoardConfig::isPaperMono() || BoardConfig::ACTIVE.input.power < 0) {
+  // M5Paper v1.1: the classic ESP32's reset-to-setup() latency exceeds a normal
+  // wheel click, so a click wake is always released before this samples and
+  // verification would re-sleep on every wake. Its wheel has hard external
+  // pull-ups, so the ghost-wake debounce this implements is not needed.
+  if (BoardConfig::isPaperMono() || BoardConfig::isM5PaperV11() || BoardConfig::ACTIVE.input.power < 0) {
     return true;
   }
 
@@ -251,6 +256,18 @@ bool HalGPIO::isUsbConnected() const {
   return battery.isCharging();
 }
 
+bool HalGPIO::coldBootImpliesPowerButton() const {
+  // Xteink-style power topology: the power button energizes the rail until
+  // firmware latches it, so a no-USB POWERON can only be a still-held button
+  // boot, and plugging USB into an off device should charge-sleep, not boot.
+  // Everything else boots on any cold boot: boards with no USB detection at
+  // all (M5Paper v1.1, PaperColor, Murphy, de-link) would misread USB and
+  // post-flash boots as battery button boots, and STAT-only boards like the
+  // EEGO A4 misread them the same way once the charger terminates at 100%
+  // (STAT inactive reads as "no USB").
+  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
+}
+
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
@@ -261,7 +278,8 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
       (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
     return WakeupReason::PowerButton;
   }
-  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected) {
+  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected &&
+      coldBootImpliesPowerButton()) {
     return WakeupReason::PowerButton;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {

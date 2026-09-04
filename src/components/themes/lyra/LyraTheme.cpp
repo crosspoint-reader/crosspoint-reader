@@ -82,20 +82,22 @@ void LyraTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 }
 
 void LyraTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel) const {
-  int currentX = rect.x + LyraMetrics::values.contentSidePadding;
-  int rightSpace = LyraMetrics::values.contentSidePadding;
+  const int contentWidth = std::max(0, rect.width - LyraMetrics::values.contentSidePadding * 2);
+
+  int labelWidth = contentWidth;
   if (rightLabel) {
-    auto truncatedRightLabel =
-        renderer.truncatedText(SMALL_FONT_ID, rightLabel, maxListValueWidth, EpdFontFamily::REGULAR);
-    int rightLabelWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedRightLabel.c_str());
+    auto truncatedRightLabel = renderer.truncatedText(SMALL_FONT_ID, rightLabel, contentWidth, EpdFontFamily::REGULAR);
+    const int rightLabelWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedRightLabel.c_str());
     renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - LyraMetrics::values.contentSidePadding - rightLabelWidth,
                       rect.y + 7, truncatedRightLabel.c_str());
-    rightSpace += rightLabelWidth + hPaddingInSelection;
+    labelWidth = std::max(0, contentWidth - rightLabelWidth - hPaddingInSelection);
   }
 
-  auto truncatedLabel = renderer.truncatedText(
-      UI_10_FONT_ID, label, rect.width - LyraMetrics::values.contentSidePadding - rightSpace, EpdFontFamily::REGULAR);
-  renderer.drawText(UI_10_FONT_ID, currentX, rect.y + 6, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
+  if (labelWidth > 0) {
+    auto truncatedLabel = renderer.truncatedText(UI_10_FONT_ID, label, labelWidth, EpdFontFamily::REGULAR);
+    renderer.drawText(UI_10_FONT_ID, rect.x + LyraMetrics::values.contentSidePadding, rect.y + 6,
+                      truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
+  }
 
   renderer.drawLine(rect.x, rect.y + rect.height - 1, rect.x + rect.width - 1, rect.y + rect.height - 1, true);
 }

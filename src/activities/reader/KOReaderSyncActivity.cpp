@@ -135,21 +135,11 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   {
     RenderLock lock(*this);
     state = SYNCING;
-    statusMessage = tr(STR_SYNCING_TIME);
-  }
-  requestUpdate(true);
-
-  // Sync time with NTP before making API requests
-  if (!trustedtime::syncNow(5000)) {
-    LOG_DBG("KOSync", "NTP sync timeout, using fallback");
-  }
-
-  {
-    RenderLock lock(*this);
     statusMessage = tr(STR_CALC_HASH);
   }
   requestUpdate(true);
 
+  // KOSync requests from CrossPoint do not include a client timestamp.
   performSync();
 }
 
@@ -457,8 +447,8 @@ void KOReaderSyncActivity::buildResultScreen(UiScreen& screen) {
   // Side padding is 0 here (like the other FreeInkApp screens): the action list
   // supplies its own theme side padding, and the raw comparison text is indented
   // to line up with the list rows below (see labelIndent).
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   if (state == SHOWING_RESULT) {

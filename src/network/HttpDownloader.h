@@ -50,5 +50,5 @@ class HttpDownloader {
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      const std::vector<Header>& headers = {});
+                                      const std::vector<Header>& headers = {}, bool downgradeRedirectsToHttp = false);
 };

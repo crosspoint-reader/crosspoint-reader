@@ -5,6 +5,7 @@
 #include <Memory.h>
 #include <SecureHttpClient.h>
 #include <base64.h>
+#include <esp_wifi.h>
 
 #include <functional>
 #include <string>
@@ -31,9 +32,25 @@ bool isRedirect(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
 }
 
+// OPDS feed/book fetches can run for minutes on a large category. Modem sleep
+// powers the radio down between DTIM beacons and can stall packets mid-transfer,
+// so disable WiFi power-save for the duration of the download and restore it after.
+struct WifiPowerSaveGuard {
+  WifiPowerSaveGuard() {
+    esp_err_t err = esp_wifi_set_ps(WIFI_PS_NONE);
+    if (err != ESP_OK) LOG_ERR("HTTP", "Failed to disable WiFi power-save: %d", err);
+  }
+  ~WifiPowerSaveGuard() {
+    esp_err_t err = esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+    if (err != ESP_OK) LOG_ERR("HTTP", "Failed to restore WiFi power-save: %d", err);
+  }
+};
+
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
                                          const std::string& password,
-                                         const std::vector<HttpDownloader::Header>& headers, Sink& sink) {
+                                         const std::vector<HttpDownloader::Header>& headers, Sink& sink,
+                                         bool downgradeRedirectsToHttp) {
+  WifiPowerSaveGuard psGuard;
   std::string url = startUrl;
 
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
@@ -78,6 +95,13 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
         return HttpDownloader::HTTP_ERROR;
       }
+      // The payload is already content-encrypted for DRM books, so transport TLS
+      // on the redirect target only protects the URL token. Optionally step the
+      // followed target down to http so the bulk GET skips a second TLS session
+      // and its ~17KB record buffer -- the OOM site on low-heap C3 boards.
+      if (downgradeRedirectsToHttp && url.rfind("https://", 0) == 0) {
+        url.replace(0, 8, "http://");
+      }
       continue;
     }
     if (status != 200) {
@@ -100,8 +124,9 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
 // a WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
                                            const std::string& password,
-                                           const std::vector<HttpDownloader::Header>& headers, Sink& sink) {
-  return runGetWolf(url, username, password, headers, sink);
+                                           const std::vector<HttpDownloader::Header>& headers, Sink& sink,
+                                           bool downgradeRedirectsToHttp = false) {
+  return runGetWolf(url, username, password, headers, sink, downgradeRedirectsToHttp);
 }
 }  // namespace
 
@@ -136,7 +161,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
-                                                             const std::vector<Header>& headers) {
+                                                             const std::vector<Header>& headers,
+                                                             bool downgradeRedirectsToHttp) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   if (Storage.exists(destPath.c_str())) {
@@ -153,7 +179,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
 
-  const DownloadError result = runGetSecure(url, username, password, headers, sink);
+  const DownloadError result = runGetSecure(url, username, password, headers, sink, downgradeRedirectsToHttp);
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();
