@@ -69,7 +69,7 @@ constexpr library::SortOrder orderForTab(const int tab, const uint8_t descending
 const char* tabLabelFor(const int tab) {
   if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
-  return tr(STR_LIBRARY_TAB_ADDED);
+  return tr(STR_LIBRARY_TAB_TIME);
 }
 
 }  // namespace
@@ -86,9 +86,6 @@ void LibraryListActivity::onEnter() {
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
-  auto& nav = activeNav();
-  nav.selected = 1;
-  nav.top = 0;
 
   // Optimistic open: if an index exists, paint from it immediately and let the
   // user decide when to refresh. Only a missing or unreadable index forces the
@@ -444,7 +441,6 @@ bool LibraryListActivity::handleButtons() {
   auto& nav = activeNav();
 
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
-    lockNextConfirmRelease = true;
     if (tabsFocused()) {
       if (!degraded) openSearch();
     } else if (!groupsCollapsed && groupable()) {
