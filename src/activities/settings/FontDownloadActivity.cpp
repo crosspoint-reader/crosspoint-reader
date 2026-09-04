@@ -455,7 +455,8 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     // Fail while failure is still clean: starting a TLS transfer under this
     // floor ends in a mid-body MEMORY_E or an allocation abort() instead of
     // this error screen.
-    if (ESP.getFreeHeap() < MIN_DOWNLOAD_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_DOWNLOAD_MAX_ALLOC) {
+    if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+        ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
       LOG_ERR("FONT", "Low heap for download (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       fontInstaller_.deleteFamily(family.name.c_str());
       family.installed = false;
