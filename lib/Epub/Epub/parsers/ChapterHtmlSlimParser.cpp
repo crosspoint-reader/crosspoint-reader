@@ -2010,6 +2010,16 @@ bool ChapterHtmlSlimParser::beginParse() {
     return false;
   }
 
+  parseReadBuf_ = makeUniqueNoThrow<char[]>(PARSE_BUFFER_SIZE);
+  if (!parseReadBuf_) {
+    LOG_ERR("EHP", "OOM: %d byte read buffer", (int)PARSE_BUFFER_SIZE);
+    parseFile_.close();
+    destroyXmlParser(xmlParser_);
+    xmlParser_ = nullptr;
+    return false;
+  }
+  parseNormalizer_ = void_elements::State{};
+
   // Get file size to decide whether to show indexing popup.
   if (popupFn && parseFile_.size() >= MIN_SIZE_FOR_POPUP) {
     popupFn();
@@ -2024,13 +2034,7 @@ bool ChapterHtmlSlimParser::beginParse() {
 }
 
 ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
-  void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
-  if (!buf) {
-    LOG_ERR("EHP", "Couldn't allocate memory for buffer");
-    return ParseStatus::Error;
-  }
-
-  const size_t len = parseFile_.read(buf, PARSE_BUFFER_SIZE);
+  const size_t len = parseFile_.read(parseReadBuf_.get(), PARSE_BUFFER_SIZE);
 
   if (len == 0 && parseFile_.available() > 0) {
     LOG_ERR("EHP", "File read error");
@@ -2039,7 +2043,22 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
 
   const int done = parseFile_.available() == 0;
 
-  if (XML_ParseBuffer(xmlParser_, static_cast<int>(len), done) == XML_STATUS_ERROR) {
+  // Worst case the chunk is nothing but "<br>": one extra byte per four, plus a
+  // tag buffered during an earlier read being flushed ahead of it.
+  const size_t outCap = len + void_elements::MAX_TAG + void_elements::growthBound(len + void_elements::MAX_TAG) + 8;
+  void* const buf = XML_GetBuffer(xmlParser_, static_cast<int>(outCap));
+  if (!buf) {
+    LOG_ERR("EHP", "Couldn't allocate memory for buffer");
+    return ParseStatus::Error;
+  }
+
+  // Close unclosed HTML void elements (<br>, <hr>, <img>, ...). They are legal
+  // HTML but not well-formed XML, and expat rejects the whole document over one
+  // of them. Sideloaded books cannot be repaired any other way.
+  const size_t outLen =
+      void_elements::normalize(parseReadBuf_.get(), len, static_cast<char*>(buf), outCap, parseNormalizer_, done != 0);
+
+  if (XML_ParseBuffer(xmlParser_, static_cast<int>(outLen), done) == XML_STATUS_ERROR) {
     if (htmlEnded_) {
       LOG_DBG("EHP", "Ignoring trailing data after </html>: %s", XML_ErrorString(XML_GetErrorCode(xmlParser_)));
       return ParseStatus::Done;
@@ -2061,6 +2080,8 @@ void ChapterHtmlSlimParser::abortParse() {
   if (parseFile_.isOpen()) {
     parseFile_.close();
   }
+  parseReadBuf_.reset();
+  parseNormalizer_ = void_elements::State{};
 }
 
 bool ChapterHtmlSlimParser::finishParse() {
@@ -2070,6 +2091,8 @@ bool ChapterHtmlSlimParser::finishParse() {
     xmlParser_ = nullptr;
   }
   parseFile_.close();
+  parseReadBuf_.reset();
+  parseNormalizer_ = void_elements::State{};
 
   // Process last page if there is still text
   if (currentTextBlock) {
