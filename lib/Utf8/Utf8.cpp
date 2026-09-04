@@ -23,6 +23,14 @@ uint32_t utf8ComposePair(const uint32_t base, const uint32_t mark) {
 }
 }  // namespace
 
+uint32_t utf8DecomposedBase(const uint32_t cp) {
+  if (cp < 0x00C0) return 0;  // no precomposed Latin letter below this
+  for (const auto& e : kUtf8ComposeTable) {
+    if (e.composed == cp) return e.base;
+  }
+  return 0;
+}
+
 std::string utf8ComposeNfc(const std::string& in) {
   // Fast path: NFC composition can only change text that contains a combining
   // diacritical mark U+0300-036F (UTF-8 lead byte 0xCC or 0xCD). Plain ASCII and

@@ -25,12 +25,14 @@ class UiTabListActivity : public UiListActivity {
   static constexpr freeink::ui::ActionId ACTION_TAB = ACTION_USER;
   static constexpr freeink::ui::ActionId ACTION_TAB_USER = ACTION_USER + 1;
 
-  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
+  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                    bool wantsTouchLongPress = false);
 
   // --- subclass contract (in addition to UiListActivity's) ------------------
   virtual int tabCount() const = 0;
   virtual int activeTab() const = 0;
   virtual const char* tabLabel(int index) const = 0;
+  virtual freeink::ui::TabIndicator tabIndicator(int) const { return freeink::ui::TabIndicator::None; }
   // Touch tap on a tab pill (bounds already checked).
   virtual void onTabAction(int index) = 0;
   // Advance the active tab by direction (continuous-hold navigation; also what

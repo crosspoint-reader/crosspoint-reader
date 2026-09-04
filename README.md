@@ -22,7 +22,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 - **Tilt page turn (X3 only)**.
 
-- **Library workflow**: folder browser, hidden-file toggle, long-press delete, recent books, SD-cache management.
+- **Library workflow**: indexed title/author search, recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
 
 - **Wireless workflows**:
   
