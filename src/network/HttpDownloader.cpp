@@ -114,9 +114,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
         // Fetch the redirect target over plain HTTP. GitHub's release-asset
         // CDN serves its signed URLs on both schemes, and skipping the second
         // TLS session removes its ~17KB record buffer — the MEMORY_E /
-        // OOM-abort site on C3 heaps that sit near 45KB free. Callers opting
-        // in must verify content integrity themselves (e.g. the font
-        // manifest's per-file checksum, fetched over TLS).
+        // OOM-abort site on C3 heaps that sit near 45KB free.
         url.replace(0, 8, "http://");
       }
       continue;

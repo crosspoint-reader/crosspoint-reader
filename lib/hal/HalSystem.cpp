@@ -6,6 +6,7 @@
 #include "HalStorage.h"
 #include "Logging.h"
 #include "esp_debug_helpers.h"
+#include "esp_memory_utils.h"
 #include "esp_private/esp_cpu_internal.h"
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
@@ -59,9 +60,15 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 #else
   const uint32_t sp = (uint32_t)((XtExcFrame*)frame)->a1;
 #endif
+  constexpr uint32_t captureBytes = 1024;
+  if (!esp_stack_ptr_is_sane(sp) || sp > UINT32_MAX - captureBytes ||
+      !esp_ptr_in_dram(reinterpret_cast<const void*>(sp + captureBytes - 1))) {
+    __real_panic_print_backtrace(frame, core);
+    return;
+  }
   const int per_line = 8;
   int depth = 0;
-  for (int x = 0; x < 1024; x += per_line * sizeof(uint32_t)) {
+  for (int x = 0; x < captureBytes; x += per_line * sizeof(uint32_t)) {
     uint32_t* spp = (uint32_t*)(sp + x);
     panicStack[depth].sp = sp + x;
     for (int y = 0; y < per_line; y++) {

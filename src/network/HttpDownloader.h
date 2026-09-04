@@ -50,8 +50,7 @@ class HttpDownloader {
    *
    * downgradeRedirectsToHttp rewrites followed redirect targets from https to
    * http so the bulk transfer skips a second TLS session (and its ~17KB record
-   * buffer — the OOM site on low-heap C3 boards). Only for callers that verify
-   * content integrity themselves against a checksum obtained over TLS.
+   * buffer — the OOM site on low-heap C3 boards).
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
