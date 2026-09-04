@@ -32,6 +32,7 @@
 #include "util/PluginLocations.h"
 #include "util/QrUtils.h"
 #include "util/StringUtils.h"
+#include "util/UrlUtils.h"
 
 namespace fui = freeink::ui;
 
@@ -167,14 +168,6 @@ std::string urlEncodePath(const std::string& s) {
   return out;
 }
 
-// scheme://host[:port] of a URL, for turning server-absolute hrefs into full URLs.
-std::string originOf(const std::string& url) {
-  const size_t schemeEnd = url.find("://");
-  if (schemeEnd == std::string::npos) return url;
-  const size_t hostEnd = url.find('/', schemeEnd + 3);
-  return hostEnd == std::string::npos ? url : url.substr(0, hostEnd);
-}
-
 std::string pathOf(const std::string& url) {
   const size_t schemeEnd = url.find("://");
   if (schemeEnd == std::string::npos) return url;
@@ -193,13 +186,10 @@ std::string basename(const std::string& path) {
 // An empty list allows everything.
 bool hasAllowedExtension(const std::string& path, const std::vector<std::string>& exts) {
   if (exts.empty()) return true;
-  std::string lower = path;
-  for (auto& c : lower) c = tolower(static_cast<unsigned char>(c));
-  while (!lower.empty() && lower.back() == '/') lower.pop_back();
-  for (const auto& ext : exts) {
-    if (lower.size() >= ext.size() && lower.compare(lower.size() - ext.size(), ext.size(), ext) == 0) return true;
-  }
-  return false;
+  std::string trimmed = path;
+  while (!trimmed.empty() && trimmed.back() == '/') trimmed.pop_back();
+  return std::any_of(exts.begin(), exts.end(),
+                     [&](const std::string& ext) { return FsHelpers::checkFileExtension(trimmed, ext.c_str()); });
 }
 
 // Extracts one row per repeating item element from an XML list via expat (the
@@ -430,9 +420,7 @@ bool PluginCatalogActivity::loadManifest() {
   manifest.versionPath = browse["fields"]["version"] | "";
   manifest.pageSize = browse["page_size"] | 8;
   // Documented bounds: each row costs an Item (strings) and a screen slot.
-  manifest.pageSize = std::min(std::max(manifest.pageSize, 1), 16);
-  if (manifest.pageSize < 1) manifest.pageSize = 1;
-  if (manifest.pageSize > MAX_PAGE_SIZE) manifest.pageSize = MAX_PAGE_SIZE;
+  manifest.pageSize = std::clamp(manifest.pageSize, 1, MAX_PAGE_SIZE);
   for (JsonVariantConst l : browse["lists"].as<JsonArrayConst>()) {
     Manifest::BrowseList entry;
     entry.title = l["title"] | "";
@@ -810,7 +798,7 @@ void PluginCatalogActivity::fetchXmlList() {
     return;
   }
 
-  const std::string origin = originOf(browseCurrentUrl);
+  const std::string origin = UrlUtils::extractHost(browseCurrentUrl);
   const std::string selfPath = pathOf(browseCurrentUrl);
   auto trimSlash = [](std::string s) {
     while (s.size() > 1 && s.back() == '/') s.pop_back();
@@ -1248,9 +1236,8 @@ void PluginCatalogActivity::downloadItem(const Item& item) {
   // Optional per-book sidecar (e.g. a service book id keyed by the file's
   // path hash) so a later sync stage can associate the file with the service.
   if (!manifest.sidecarPath.empty() && !manifest.sidecarBody.empty()) {
-    Item sidecarItem = item;
     const std::string md5 = md5Hex(dest);
-    std::string path = substituted(manifest.sidecarPath, &sidecarItem);
+    std::string path = substituted(manifest.sidecarPath, &item);
     substituteAll(path, "{md5}", md5);
     // {dest} is the sanitized on-SD path of the downloaded file, so a sidecar
     // can sit next to it ("{dest}.meta.json" - the book metadata convention);
@@ -1261,7 +1248,7 @@ void PluginCatalogActivity::downloadItem(const Item& item) {
     if (path.empty() || path.find("..") != std::string::npos) {
       LOG_ERR("PCAT", "unsafe sidecar path rejected: %s", path.c_str());
     } else {
-      std::string body = substituted(manifest.sidecarBody, &sidecarItem);
+      std::string body = substituted(manifest.sidecarBody, &item);
       substituteAll(body, "{md5}", md5);
       substituteAll(body, "{dest}", dest);
       HalFile sidecar;
@@ -1507,8 +1494,7 @@ void PluginCatalogActivity::buildScreen(UiScreen& screen) {
       buildAuthScreen(screen);
       return;
     case State::DOWNLOADING:
-      catalogDownloadScreen(screen, statusMessage.c_str(), downloadProgress, 0, ACTION_CANCEL,
-                            CatalogDownloadProgressStyle::TransferredBytes);
+      catalogDownloadScreen(screen, statusMessage.c_str(), downloadProgress, 0, ACTION_CANCEL);
       return;
     case State::DONE:
       catalogCenteredBlock(screen, {{tr(STR_DOWNLOAD_COMPLETE), true}, {statusMessage.c_str()}});

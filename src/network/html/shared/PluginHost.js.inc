@@ -69,21 +69,6 @@
     relay(plugin, method, url, headers, body) {
       return this._post('/api/relay', { plugin, method, url, headers: headers || {}, body: body || '' });
     },
-    // Collect Set-Cookie values from a relay response into a Cookie header
-    // string, so a plugin can carry a session across requests. Generic — this
-    // just reads the standard header; it ascribes no meaning to the contents.
-    cookiesFrom(resp, existing) {
-      const jar = {};
-      (existing || '').split(';').forEach((p) => {
-        const i = p.indexOf('='); if (i > 0) jar[p.slice(0, i).trim()] = p.slice(i + 1).trim();
-      });
-      ((resp && resp.headers) || []).forEach(([name, value]) => {
-        if (String(name).toLowerCase() !== 'set-cookie') return;
-        const first = String(value).split(';')[0];
-        const i = first.indexOf('='); if (i > 0) jar[first.slice(0, i).trim()] = first.slice(i + 1).trim();
-      });
-      return Object.keys(jar).map((k) => k + '=' + jar[k]).join('; ');
-    },
     crypto(op, fields) { return this._post('/api/crypto', Object.assign({ op }, fields || {})); },
     async writeFile(plugin, path, dataB64) {
       // Decode base64 in the browser and POST raw bytes. The device writes the
@@ -91,9 +76,7 @@
       // device cost ~2.3x the RAM and OOM'd the credential write on low-RAM (C3)
       // boards mid-activation. The body length carries embedded NULs, so binary
       // payloads survive intact.
-      const binary = atob(dataB64 || '');
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const bytes = Uint8Array.from(atob(dataB64 || ''), (c) => c.charCodeAt(0));
       const url = '/api/plugin-fs?plugin=' + encodeURIComponent(plugin) +
         '&path=' + encodeURIComponent(path);
       const r = await fetch(url, {
@@ -152,7 +135,6 @@
           CrossPoint._pending(container, {
             name: p.name,
             relay: (m, u, h, b) => CrossPoint.relay(p.name, m, u, h, b),
-            cookiesFrom: (resp, existing) => CrossPoint.cookiesFrom(resp, existing),
             crypto: (op, f) => CrossPoint.crypto(op, f),
             writeFile: (path, d) => CrossPoint.writeFile(p.name, path, d),
             fetchToSd: (u, dest, h) => CrossPoint.fetchToSd(p.name, u, dest, h),

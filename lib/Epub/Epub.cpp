@@ -880,14 +880,10 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   const std::string path = FsHelpers::normalisePath(itemHref);
 
   if (decryptor && decryptor->isEncrypted(path)) {
-    struct PrintSink {
-      Print* output;
-    } state{&out};
     auto append = [](void* context, const uint8_t* data, size_t size) {
-      auto* target = static_cast<PrintSink*>(context);
-      return target->output->write(data, size) == size;
+      return static_cast<Print*>(context)->write(data, size) == size;
     };
-    if (!decryptor->decryptToSink(path, append, &state)) {
+    if (!decryptor->decryptToSink(path, append, &out)) {
       LOG_ERR("EBP", "content read failed for %s", path.c_str());
       return false;
     }

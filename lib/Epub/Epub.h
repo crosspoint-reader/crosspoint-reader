@@ -57,7 +57,6 @@ class Epub {
   const std::string& getPath() const;
   // Empty unless the encrypted-entry accessor failed to open.
   const std::string& getProtectionError() const { return protectionError; }
-  bool isProtected() const { return decryptor != nullptr; }
   const std::string& getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;

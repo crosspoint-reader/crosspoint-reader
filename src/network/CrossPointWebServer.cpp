@@ -1946,7 +1946,6 @@ namespace {
 // Thin std::string adapters over the Arduino base64 encoder HttpDownloader
 // already links; crypto payloads are small, so the transient String is fine.
 std::string b64encode(const uint8_t* data, size_t len) { return base64::encode(data, len).c_str(); }
-std::string b64encode(const std::string& s) { return b64encode(reinterpret_cast<const uint8_t*>(s.data()), s.size()); }
 std::string b64encode(const std::vector<uint8_t>& v) { return b64encode(v.data(), v.size()); }
 
 // A destination path is safe to write if it is absolute and has no parent refs.

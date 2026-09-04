@@ -37,11 +37,11 @@ void writeFloor(const int64_t value) {
 // SNTP sync callback (lwIP task context; Preferences/NVS is mutex-guarded).
 void onTimeSynced(struct timeval*) { note(); }
 
-void configureSntp() {
-  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-  esp_sntp_setservername(0, "pool.ntp.org");
-  esp_sntp_init();
-}
+// configTzTime() (Arduino-ESP32) stops SNTP if already running, sets the poll
+// server, inits, and pins TZ. TZ=UTC0 matches this module's epoch-based logic
+// (everything here uses time(nullptr), not localtime). The notification
+// callback set in init() is a module static and survives the stop/init cycle.
+void configureSntp() { configTzTime("UTC0", "pool.ntp.org"); }
 
 }  // namespace
 
@@ -70,8 +70,7 @@ void startSync() {
 }
 
 bool syncNow(const uint32_t timeoutMs) {
-  // SNTP cannot be reconfigured while running.
-  if (esp_sntp_enabled()) esp_sntp_stop();
+  // configureSntp() (configTzTime) restarts SNTP if already running.
   configureSntp();
   const unsigned long deadline = millis() + timeoutMs;
   while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && static_cast<long>(deadline - millis()) > 0) {

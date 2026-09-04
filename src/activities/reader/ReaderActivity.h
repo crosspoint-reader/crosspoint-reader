@@ -27,9 +27,6 @@ class ReaderActivity : public Activity {
   virtual std::string getBookTitle() const = 0;
   virtual std::string getBookAuthor() const { return ""; }
   virtual std::string getBookThumbBmpPath() const { return ""; }
-  // Whole-book progress for the reader.exit plugin event, reusing the
-  // per-reader ScreenshotInfo implementations.
-  int getProgressPercent() const { return getScreenshotInfo().progressPercent; }
 
   virtual bool handleFormatInput() { return false; }
   virtual bool pageTurn(bool isForward) = 0;

@@ -51,14 +51,14 @@ void catalogCenteredBlock(UiAppHost::UiScreen& screen, const std::initializer_li
 }
 
 void catalogDownloadScreen(UiAppHost::UiScreen& screen, const char* status, const size_t progress, const size_t total,
-                           const fui::ActionId cancelAction, const CatalogDownloadProgressStyle progressStyle) {
+                           const fui::ActionId cancelAction) {
   // Centered block: status line, item title, progress, optional cancel.
   const auto& theme = screen.theme();
   fui::TextStyle centered = theme.bodyText;
   centered.align = fui::TextAlign::Center;
   const int16_t lh = screen.target().lineHeight(centered.font);
   const int16_t gap = theme.spaceMd;
-  const bool showBytes = progressStyle == CatalogDownloadProgressStyle::TransferredBytes || total == 0;
+  const bool showBytes = total == 0;
   const int16_t progressH = showBytes ? lh : 16;
   const bool withCancel = cancelAction != fui::NO_ACTION;
   const int16_t btnH = withCancel ? theme.rowHeight : 0;

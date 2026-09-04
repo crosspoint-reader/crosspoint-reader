@@ -13,6 +13,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <MemoryManager.h>
 #include <ProtectedBook.h>
 #include <TrustedTime.h>
 #include <WolfsslCrypto.h>
@@ -69,6 +70,17 @@ class ProtectedBookDecryptor : public ContentDecryptor {
     // Reuse one open SD handle for the whole reader session rather than
     // reconstructing and reopening it per encrypted entry.
     if (!source_.ensureOpen()) return false;
+    // miniz's inflate state (allocated inside decryptEntryToSink) embeds a
+    // single ~33KB contiguous window. SD card fonts hold large resident blocks
+    // that fragment the heap below that, so the per-chapter decrypt fails and
+    // the reader shows "Invalid book / DRM protected file" (sd-plugins #14).
+    // When the largest free block is marginal, evict rebuildable caches (the
+    // SD-font mini tables, via the sinks GfxRenderer registers) to reclaim a
+    // contiguous window; fonts fault back in on the next measurement pass.
+    constexpr size_t kInflateWindow = 40 * 1024;
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < kInflateWindow) {
+      freeink::MemoryManager::instance().ensureFree(kInflateWindow);
+    }
     return book_->decryptEntryToSink(source_, crypto(), itemPath, sink, context);
   }
 
@@ -84,8 +96,8 @@ std::unique_ptr<ContentDecryptor> openProtectedBook(const std::string& epubPath,
   // Field-report heap ledger: this is where tight-heap opens historically
   // died; the pair below tells fragmentation (largest collapses) from a leak.
   LOG_INF("CPRO", "open: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
-  if (!Storage.exists(epubPath.c_str())) return nullptr;
 
+  // open() is the single existence test: a missing path fails to open.
   SdByteSource source(epubPath);
   if (!source.open()) return nullptr;
 

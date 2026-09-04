@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 #include <Logging.h>
-#include <Memory.h>
 #include <SecureHttpClient.h>
 #include <base64.h>
 #include <esp_wifi.h>
@@ -17,7 +16,6 @@ namespace {
 // (>15s) and chunked catalogs stall mid-body, so 15s killed them. 60s gives
 // slow servers room.
 constexpr int HTTP_TIMEOUT_MS = 60000;
-constexpr size_t READ_CHUNK = 1024;
 constexpr int MAX_REDIRECTS = 5;
 
 struct Sink {
@@ -46,10 +44,13 @@ struct WifiPowerSaveGuard {
   }
 };
 
-HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
-                                         const std::string& password,
-                                         const std::vector<HttpDownloader::Header>& headers, Sink& sink,
-                                         bool downgradeRedirectsToHttp) {
+// All HTTP(S) fetches go through wolfSSL (the firmware's only TLS stack: it
+// speaks TLS 1.3 and reads large bodies reliably). Plain-http URLs still use a
+// WiFiClient here, so this is safe for non-TLS targets too.
+HttpDownloader::DownloadError runGetSecure(const std::string& startUrl, const std::string& username,
+                                           const std::string& password,
+                                           const std::vector<HttpDownloader::Header>& headers, Sink& sink,
+                                           bool downgradeRedirectsToHttp = false) {
   WifiPowerSaveGuard psGuard;
   std::string url = startUrl;
 
@@ -119,15 +120,6 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
   return HttpDownloader::HTTP_ERROR;
 }
 
-// All HTTP(S) fetches go through wolfSSL (the firmware's only TLS stack: it
-// speaks TLS 1.3 and reads large bodies reliably). Plain-http URLs still use
-// a WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
-HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
-                                           const std::string& password,
-                                           const std::vector<HttpDownloader::Header>& headers, Sink& sink,
-                                           bool downgradeRedirectsToHttp = false) {
-  return runGetWolf(url, username, password, headers, sink, downgradeRedirectsToHttp);
-}
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,

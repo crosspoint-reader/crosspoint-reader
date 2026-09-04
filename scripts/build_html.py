@@ -7,8 +7,8 @@ SRC_DIR = "src"
 def resolve_includes(html: str, base_dir: str) -> str:
     """Inline <!--#include file="path" --> directives (path relative to base_dir).
 
-    Must run BEFORE minify_html, which strips all HTML comments. Supports a few
-    levels of nesting so an included file may itself include others."""
+    Must run BEFORE minify_html, which strips all HTML comments. Includes are
+    single-level (no included file includes another), so one pass suffices."""
     pattern = re.compile(r'<!--\s*#include\s+file="([^"]+)"\s*-->')
 
     def repl(match):
@@ -16,11 +16,7 @@ def resolve_includes(html: str, base_dir: str) -> str:
         with open(inc_path, "r", encoding="utf-8") as f:
             return f.read()
 
-    for _ in range(8):
-        html, count = pattern.subn(repl, html)
-        if count == 0:
-            break
-    return html
+    return pattern.sub(repl, html)
 
 def minify_html(html: str) -> str:
     # Tags where whitespace should be preserved

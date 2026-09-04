@@ -84,7 +84,7 @@ void ReaderActivity::onExit() {
 
   if (pluginevents::anySubscriber(pluginevents::Event::ReaderExit)) {
     char percent[8];
-    snprintf(percent, sizeof(percent), "%d", getProgressPercent());
+    snprintf(percent, sizeof(percent), "%d", getScreenshotInfo().progressPercent);
     const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}};
     pluginevents::emit(pluginevents::Event::ReaderExit, vars, 2);
   }
