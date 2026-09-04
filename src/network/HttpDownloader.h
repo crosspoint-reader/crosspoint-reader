@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <utility>
@@ -24,6 +25,13 @@ class HttpDownloader {
     FILE_ERROR,
     ABORTED,
   };
+
+  // Pre-flight floor for starting a TLS transfer. Below this the session or
+  // its ~17KB record buffer fails mid-stream (wolfSSL MEMORY_E) -- or an
+  // interior allocation abort()s the device. Callers should check before
+  // downloadToFile() and fail into their error UI instead.
+  static constexpr uint32_t MIN_TLS_FREE_HEAP = 40000;
+  static constexpr uint32_t MIN_TLS_MAX_ALLOC = 20000;
 
   /**
    * Fetch text content from a URL with optional credentials.
