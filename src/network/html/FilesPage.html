@@ -4132,11 +4132,11 @@ const FONT_MEDIA_TYPE_REGEX = /^(font\/|application\/font-|application\/x-font-|
 
 // Returns a Set of zip-root-relative paths of embedded font files, detected by
 // file extension and by OPF manifest media-type (catches odd extensions).
-function collectFontPaths(zip, opfContent, opfPath) {
+function collectFontPaths(zip, opfFiles) {
   const fontPaths = new Set();
   zip.forEach(p => { if (FONT_EXT_REGEX.test(p.toLowerCase())) fontPaths.add(p); });
 
-  if (opfContent && opfPath) {
+  for (const [opfPath, opfContent] of opfFiles) {
     try {
       const doc = new DOMParser().parseFromString(opfContent, 'application/xml');
       if (!doc.querySelector('parsererror')) {
@@ -5060,7 +5060,7 @@ async function convertEpubFile(file, progressCallback) {
   const entries = Object.entries(zip.files);
   const splitImages = {};
   const xhtmlFiles = {};
-  let opfPath = null, opfContent = null;
+  const opfFiles = [];
   let mainIdentifier = null;
 
   // Write mimetype FIRST per EPUB OCF spec
@@ -5154,8 +5154,7 @@ async function convertEpubFile(file, progressCallback) {
     } else if (low.match(/\.(xhtml|html|htm)$/)) {
       xhtmlFiles[path] = await safeReadText(fileObj);
     } else if (low.endsWith('.opf')) {
-      opfPath = path;
-      opfContent = await safeReadText(fileObj);
+      opfFiles.push([path, await safeReadText(fileObj)]);
     }
 
     if (progressCallback) progressCallback((i / entries.length) * 60);
@@ -5165,7 +5164,7 @@ async function convertEpubFile(file, progressCallback) {
   // Counters cover font files, @font-face rules (incl. data: URI fonts), and
   // encryption.xml shrinkage; they count uncompressed content bytes removed
   // (the final archive-size delta is reported separately by logSummary).
-  const fontPaths = collectFontPaths(zip, opfContent, opfPath);
+  const fontPaths = collectFontPaths(zip, opfFiles);
   let removedFontCount = 0;
   let removedFontBytes = 0;
   let removedFontFaceRules = 0;
@@ -5347,13 +5346,15 @@ async function convertEpubFile(file, progressCallback) {
     out.file(xhtmlPath, t, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
   }
 
-  // Extract main identifier from OPF using DOMParser with regex fallback
-  if (opfContent) {
-    mainIdentifier = extractIdentifier(opfContent);
+  // With multiple packages, each NCX can have its own identifier. Preserve
+  // those identifiers rather than assigning every NCX the last package's ID.
+  if (opfFiles.length === 1) {
+    mainIdentifier = extractIdentifier(opfFiles[0][1]);
   }
 
-  // Third pass: update OPF using fixOPF (DOMParser with regex fallback)
-  if (opfContent) {
+  // Third pass: update every package, preserving container.xml rootfile targets.
+  for (const [opfPath, opfContent] of opfFiles) {
+    if (operationCancelled) throw new Error('Cancelled by user');
     let t = opfContent;
     for (const [o, n] of Object.entries(renamed)) {
       t = t.split(o.split('/').pop()).join(n.split('/').pop());
