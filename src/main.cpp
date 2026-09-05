@@ -15,6 +15,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <TrustedTime.h>
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
@@ -31,6 +32,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "WifiCredentialStore.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -39,6 +41,7 @@
 #include "images/LoadingIcon.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
+#include "util/PluginEvents.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -130,6 +133,7 @@ RTC_NOINIT_ATTR uint32_t silentRebootTarget;
 constexpr uint32_t SILENT_REBOOT_MAGIC = 0xC1EAB007;
 constexpr uint32_t SILENT_REBOOT_TARGET_HOME = 0;
 constexpr uint32_t SILENT_REBOOT_TARGET_READER = 1;
+constexpr uint32_t SILENT_REBOOT_TARGET_JOIN_NETWORK = 2;
 
 // How the device is coming back to life, resolved once at boot. Both resume
 // flows suppress the splash and leave the panel holding its pre-boot frame; a
@@ -194,6 +198,22 @@ void silentRestartToReader() {
   ESP.restart();
 }
 
+void silentRestartToJoinNetwork() {
+  if (deepSleepInProgress) return;
+#if FREEINK_CAP_TOUCH
+  // A software reset would cycle touch/frontlight rails; those boards proceed
+  // into Join Network without the fresh-heap reboot (return, don't stop WiFi —
+  // this runs on the way *in*, unlike the exit-time silentRestart()).
+  if (BoardConfig::hasTouch()) return;
+#endif
+  silentRebootTarget = SILENT_REBOOT_TARGET_JOIN_NETWORK;
+  silentRebootMagic = SILENT_REBOOT_MAGIC;
+  LOG_DBG("MAIN", "Silent restart (target=join-network)");
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  delay(50);
+  ESP.restart();
+}
+
 void restartToHomeAfterStorageHandoff() {
   if (deepSleepInProgress) return;  // sleeping supersedes the storage handoff reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
@@ -253,10 +273,63 @@ static bool loadSleepFrameBuffer() {
   return true;
 }
 
+// Queued plugin-event delivery on the way into deep sleep. Deep sleep is a
+// chip reset, so handlers normally run on the next online session; two cases
+// deliver now instead: WiFi is already up, or a handler opted into
+// "connect": true (e.g. fetching a fresh /sleep.bmp so THIS sleep shows it —
+// the drain runs before goToSleep() renders the sleep screen). The connect
+// path is bounded (join deadline + drain event budget), skipped on low
+// battery, and any failure just sleeps with the previous image; the caller's
+// WiFi shutdown tears the radio down either way.
+static void deliverSleepPluginEvents() {
+  // Sleeping straight out of a book is the common flow, but the reader's own
+  // reader.exit only fires later, inside goToSleep() — after this drain. Carry
+  // the book and progress on sleep.enter itself so a sync handler bound to it
+  // pushes current progress on THIS connection, not the next one.
+  pluginevents::Var vars[2];
+  size_t varCount = 0;
+  char percent[8];
+  const ScreenshotInfo info = activityManager.getScreenshotInfo();
+  if (info.readerType != ScreenshotInfo::ReaderType::None && !APP_STATE.openEpubPath.empty()) {
+    snprintf(percent, sizeof(percent), "%d", info.progressPercent);
+    vars[varCount++] = {"book", APP_STATE.openEpubPath.c_str()};
+    vars[varCount++] = {"percent", percent};
+  }
+  pluginevents::emit(pluginevents::Event::SleepEnter, vars, varCount);
+  if (WiFi.status() == WL_CONNECTED) {
+    pluginevents::drain(&renderer);
+    return;
+  }
+  if (!pluginevents::wantsConnect(pluginevents::Event::SleepEnter)) return;
+  if (powerManager.getBatteryPercentage() < 20) return;
+  const auto cred = WIFI_STORE.findCredential(WIFI_STORE.getLastConnectedSsid());
+  if (!cred) return;
+
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(cred->ssid.c_str(), cred->password.c_str());
+  const unsigned long joinDeadline = millis() + 10000;
+  while (WiFi.status() != WL_CONNECTED && millis() < joinDeadline) {
+    delay(100);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    trustedtime::startSync();  // snap the clock floor while the network is up
+    pluginevents::drain(&renderer);
+  } else {
+    LOG_DBG("MAIN", "Sleep-event WiFi join timed out; deferring delivery");
+  }
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
+
+  // Sleep may end in a power-off (battery death, latch); persist the clock
+  // floor now so a later cold boot resumes from it.
+  trustedtime::note();
+
+  deliverSleepPluginEvents();
 
   const bool isQuickResumeSleep =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
@@ -365,7 +438,7 @@ void setup() {
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
   const bool isSilentReboot = (silentRebootMagic == SILENT_REBOOT_MAGIC);
   const uint32_t snapshotTarget =
-      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
+      (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_JOIN_NETWORK) ? silentRebootTarget : 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
 
@@ -429,6 +502,10 @@ void setup() {
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+  pluginevents::refreshSubscriptions();
+  // Restore the monotonic clock floor before anything reads time() (event
+  // timestamps, loan-expiry checks).
+  trustedtime::init();
 
   // Brightness and warmth are always restored. A normal wake starts with the
   // light off unless Restore Light on Wake is enabled; silent maintenance
@@ -537,6 +614,10 @@ void setup() {
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
     activityManager.goToReader(APP_STATE.openEpubPath);
+  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_JOIN_NETWORK) {
+    // Rebooted on the way *into* File Transfer > Join Network for a fresh heap;
+    // resume that flow directly instead of landing on home.
+    activityManager.goToJoinNetwork();
   } else if (resume == BootResume::Silent) {
     // target == home (or reader with no open book): land on home — don't fall
     // through to the sleep-wake "resume reader" logic, which fires on stale

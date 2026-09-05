@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <TrustedTime.h>
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -23,6 +24,7 @@
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"  // list icons for the compare rows
 #include "fontIds.h"
+#include "util/PluginHttp.h"
 
 namespace fui = freeink::ui;
 
@@ -330,6 +332,10 @@ void KOReaderSyncActivity::performUpload() {
     } else {
       LOG_ERR("KOSync", "Epub unavailable for metadata; sending filename only");
     }
+    // Plugin sidecar fields ("<book>.meta.json", written at download time via
+    // the catalog sidecar mechanism or /api/plugin-fs) ride along so a custom
+    // sync server can route progress by a service book id.
+    pluginhttp::loadConfigFile(epubPath + ".meta.json", meta.extra);
     progress.metadata = std::move(meta);
   }
 

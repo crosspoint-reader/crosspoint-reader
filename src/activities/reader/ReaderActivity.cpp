@@ -5,6 +5,7 @@
 #include <Memory.h>
 
 #include <algorithm>
+#include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -14,6 +15,7 @@
 #include "SdCardFontSystem.h"
 #include "TxtReaderActivity.h"
 #include "XtcReaderActivity.h"
+#include "util/PluginEvents.h"
 
 ReaderActivity::ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                                std::string bookPath, const bool allowFastInitialRefresh)
@@ -49,6 +51,10 @@ void ReaderActivity::disableFastInitialRefresh() { pagesUntilFullRefresh = 0; }
 void ReaderActivity::onEnter() {
   Activity::onEnter();
 
+  // Heap ledger for field crash reports: free vs largest block distinguishes a
+  // leak (free falls) from fragmentation (free stable, largest collapses).
+  LOG_INF("MEM", "reader enter: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+
   if (!Storage.exists(bookPath.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", bookPath.c_str());
     finish();
@@ -59,18 +65,29 @@ void ReaderActivity::onEnter() {
   applyInitialOrientation();
 
   if (!loadBook()) {
-    finish();
+    if (!handleLoadFailure()) finish();
     return;
   }
 
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath());
+  const pluginevents::Var openVars[] = {{"book", bookPath.c_str()}};
+  pluginevents::emit(pluginevents::Event::ReaderOpen, openVars, 1);
   requestUpdate();
 }
 
 void ReaderActivity::onExit() {
   Activity::onExit();
+
+  LOG_INF("MEM", "reader exit: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+
+  if (pluginevents::anySubscriber(pluginevents::Event::ReaderExit)) {
+    char percent[8];
+    snprintf(percent, sizeof(percent), "%d", getScreenshotInfo().progressPercent);
+    const pluginevents::Var vars[] = {{"book", bookPath.c_str()}, {"percent", percent}};
+    pluginevents::emit(pluginevents::Event::ReaderExit, vars, 2);
+  }
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   APP_STATE.readerActivityLoadCount = 0;

@@ -16,6 +16,10 @@ class HomeActivity final : public Activity {
   bool recentsLoaded = false;
   bool firstRenderDone = false;
   bool hasOpdsServers = false;
+  bool hasPlugins = false;
+  // The home "library" slot (index 2) shows Plugins when any plugin is
+  // installed, otherwise OPDS. The index converters gate on its presence.
+  bool hasLibrarySlot() const { return hasPlugins || hasOpdsServers; }
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image
@@ -62,6 +66,7 @@ class HomeActivity final : public Activity {
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
+  void onPluginsOpen();
 
   int getMenuItemCount() const;
   bool storeCoverBuffer();    // Store frame buffer for cover image

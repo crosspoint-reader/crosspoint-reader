@@ -501,7 +501,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
         // HTTP: the CRC check below (manifest fetched over TLS) covers
         // integrity, and skipping the second TLS session keeps the C3 heap out
         // of MEMORY_E territory.
-        &cancelRequested_, "", "", /*downgradeRedirectsToHttp=*/true);
+        &cancelRequested_, "", "", /*headers=*/{}, /*downgradeRedirectsToHttp=*/true);
 
     if (result == HttpDownloader::ABORTED) {
       fontInstaller_.deleteFamily(family.name.c_str());

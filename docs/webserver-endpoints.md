@@ -504,3 +504,43 @@ The final field is the WebSocket upload port.
 
 Calibre Wireless starts the same web server in STA mode and displays setup
 instructions plus WebSocket upload progress on the device screen.
+
+## Plugin Job Queue
+
+External systems trigger SD-plugin actions without the web UI. The firmware
+stores opaque `{plugin, action, args}` blobs (fixed 6-slot pool; args/result
+< 192 bytes JSON); an open page hosting the plugin executes them. See
+`docs/sd-plugins.md` for the full contract.
+
+### `POST /api/plugin-jobs`
+
+```bash
+curl -X POST http://crosspoint.local/api/plugin-jobs \
+  -d '{"plugin":"<name>","action":"<action>","args":{"path":"/Books/somefile"}}'
+# -> {"id":3}         (503 {"error":"job queue full"} when all slots busy)
+```
+
+### `GET /api/plugin-jobs/claim?plugin=<name>`
+
+Executor-side (used by the plugin host page): returns the next pending job
+`{"id":3,"action":"<action>","args":{...}}` and marks it running, or `{"id":0}`.
+
+### `POST /api/plugin-jobs/complete`
+
+Executor-side: `{"id":3,"ok":true,"result":{...}}` -> `{"ok":true}`.
+
+### `GET /api/plugin-jobs/status?id=<n>`
+
+```bash
+curl "http://crosspoint.local/api/plugin-jobs/status?id=3"
+# -> {"id":3,"state":"done","result":{"title":"...","dest":"/Books/Book.epub"}}
+```
+
+States: `pending`, `running`, `done`, `error`, `unknown` (slot recycled —
+poll promptly after completion).
+
+### `GET /plugins-run`
+
+Headless executor page: loads every plugin with its UI hidden so registered
+actions run. Keep it open (browser tab or embedded webview) while jobs are
+queued; jobs enqueued with no page open stay pending until one opens.

@@ -243,6 +243,11 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
     meta["filename"] = progress.metadata->filename;
     meta["title"] = progress.metadata->title;
     meta["authors"] = progress.metadata->authors;
+    for (const auto& kv : progress.metadata->extra) {
+      // Sidecar fields must not override the reserved keys above.
+      if (!meta[kv.first.c_str()].isNull()) continue;
+      meta[kv.first.c_str()] = kv.second;
+    }
   }
   doc["progress"] = progress.progress;
   doc["percentage"] = progress.percentage;

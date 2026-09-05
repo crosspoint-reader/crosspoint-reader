@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ArduinoJson.h>
 #include <HalStorage.h>
 #include <NetworkUdp.h>
 #include <WebServer.h>
@@ -96,6 +97,11 @@ class CrossPointWebServer {
   void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
+  // Streams an already-open file to the client in 4KB chunks, feeding the
+  // watchdog per write and aborting cleanly (rather than looping past a dead
+  // connection) if a write stalls. Caller sets headers/content-length and
+  // closes the file.
+  void streamFileToClient(HalFile& file) const;
   void handleUpload(UploadState& state) const;
   void handleUploadPost(UploadState& state) const;
   void handleCreateFolder() const;
@@ -139,4 +145,59 @@ class CrossPointWebServer {
   void handleGetWifiNetworks() const;
   void handlePostWifiNetwork();
   void handleDeleteWifiNetwork();
+
+  // Browser-side plugins: JS bundles on the SD card (/.crosspoint/plugins/<name>/)
+  // that the web UI discovers, loads, and runs. A manifest's "mount" places a
+  // plugin on the Settings or File Manager page, so plugins can extend either —
+  // e.g. a File Manager plugin that sorts EPUBs into per-author folders, or a
+  // Settings plugin that needs device capabilities a static page can't have
+  // (an outbound HTTPS relay, since the browser can't call other origins; SD
+  // read/write; crypto primitives).
+  // Reads the POST body as JSON into `out`, sending the matching 400 itself
+  // on a missing/malformed body. Returns false when it already responded.
+  bool readJsonBody(JsonDocument& out) const;
+  void handlePluginList() const;  // GET  /api/plugins   -> discovered plugins
+  void handlePluginFile() const;  // GET  /plugin?name&file -> serve SD file
+  void handleRelay();             // POST /api/relay     -> device makes an HTTP(S) call
+  void handleCrypto();            // POST /api/crypto    -> generic crypto primitive (base64 I/O)
+  void handleFetch();             // POST /api/fetch     -> device downloads a URL to SD
+  void handlePluginFs();          // POST /api/plugin-fs -> plugin writes a small file to SD
+
+  // SD-plugin job queue. External systems (a companion app, a script) enqueue
+  // {plugin, action, args}; any open page hosting the plugin (File Manager,
+  // Settings, or the headless /plugins-run page) claims and executes it, then
+  // posts the result. The firmware only stores small JSON blobs — plugin logic
+  // never runs on-device. Fixed pool inside this (heap-allocated, web-session
+  // lifetime) object: no allocation per job, oldest finished slot recycled.
+  struct PluginJob {
+    uint32_t id = 0;         // 0 = empty slot
+    uint32_t updatedAt = 0;  // millis() of last state change
+    uint8_t state = 0;
+    char plugin[24] = {0};
+    char action[24] = {0};
+    char args[192] = {0};    // JSON object, stored verbatim
+    char result[192] = {0};  // JSON object from the executor
+  };
+  static constexpr uint8_t JOB_EMPTY = 0;
+  static constexpr uint8_t JOB_PENDING = 1;
+  static constexpr uint8_t JOB_RUNNING = 2;
+  static constexpr uint8_t JOB_DONE = 3;
+  static constexpr uint8_t JOB_ERROR = 4;
+  static constexpr size_t MAX_PLUGIN_JOBS = 6;
+  static constexpr uint32_t PLUGIN_JOB_LEASE_MS = 10UL * 60 * 1000;
+  PluginJob pluginJobs[MAX_PLUGIN_JOBS];
+  uint32_t nextPluginJobId = 1;
+  PluginJob* allocPluginJob();
+  void handlePluginRunnerPage() const;  // GET /plugins-run -> headless executor page
+  void handlePluginJobSubmit();         // POST /api/plugin-jobs          -> {id}
+  void handlePluginJobClaim();          // GET  /api/plugin-jobs/claim    -> next pending job for a plugin
+  void handlePluginJobComplete();       // POST /api/plugin-jobs/complete -> executor posts the outcome
+  void handlePluginJobStatus();         // GET  /api/plugin-jobs/status   -> external caller polls
+
+  // An outbound transfer blocks the serving task for its whole duration, so
+  // the WebSocket server and discovery UDP cannot answer anyone until it
+  // finishes; their buffers are worth more as TLS headroom (4.4KB heap floor
+  // measured with them resident during a large transfer).
+  void suspendTransferServices();
+  void resumeTransferServices();
 };

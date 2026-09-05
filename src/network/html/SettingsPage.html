@@ -302,6 +302,7 @@
 
   <div id="wifi-container"></div>
   <div id="opds-container"></div>
+  <div id="plugin-container"></div>
 
   <div class="card">
     <p style="text-align: center; color: #95a5a6; margin: 0;">
@@ -823,13 +824,16 @@
     }
   }
 
+<!--#include file="shared/PluginHost.js.inc" -->
+
   // Sequential, not concurrent: the device's web server handles one client
-  // connection at a time, and three simultaneous fetches on page load can
+  // connection at a time, and simultaneous fetches on page load can
   // stall long enough inside a single response to trip the firmware watchdog.
   (async () => {
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
+    await loadPlugins('settings');
   })();
 </script>
 </body>

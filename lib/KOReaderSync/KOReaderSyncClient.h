@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 /**
  * Optional document metadata sent alongside progress sync requests.
@@ -12,6 +14,11 @@ struct KOReaderMetadata {
   std::string filename;  // e.g. "my_book.epub"
   std::string title;     // Document title from EPUB metadata
   std::string authors;   // Author(s) from EPUB metadata
+  // Free-form fields from the book's plugin sidecar ("<book>.meta.json"):
+  // e.g. a service book id a plugin recorded at download time, so a custom
+  // sync server can route progress to that service. Sent verbatim inside the
+  // metadata object; the firmware assigns no meaning to the keys.
+  std::vector<std::pair<std::string, std::string>> extra;
 };
 
 /**

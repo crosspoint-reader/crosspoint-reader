@@ -4,6 +4,20 @@ import gzip
 
 SRC_DIR = "src"
 
+def resolve_includes(html: str, base_dir: str) -> str:
+    """Inline <!--#include file="path" --> directives (path relative to base_dir).
+
+    Must run BEFORE minify_html, which strips all HTML comments. Includes are
+    single-level (no included file includes another), so one pass suffices."""
+    pattern = re.compile(r'<!--\s*#include\s+file="([^"]+)"\s*-->')
+
+    def repl(match):
+        inc_path = os.path.join(base_dir, match.group(1))
+        with open(inc_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    return pattern.sub(repl, html)
+
 def minify_html(html: str) -> str:
     # Tags where whitespace should be preserved
     preserve_tags = ['pre', 'code', 'textarea', 'script', 'style']
@@ -55,7 +69,7 @@ for root, _, files in os.walk(SRC_DIR):
 
             # Only minify HTML files; JS files are typically pre-minified (e.g., jszip.min.js)
             if file.endswith(".html"):
-                processed = minify_html(content)
+                processed = minify_html(resolve_includes(content, root))
             else:
                 processed = content
 

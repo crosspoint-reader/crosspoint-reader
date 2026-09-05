@@ -15,7 +15,7 @@
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
-#include "components/UIScale.h"
+#include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
@@ -146,8 +146,13 @@ void OpdsBookBrowserActivity::loop() {
       activateSelected();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
+    } else if (!searchTemplate.empty() && selectorIndex == 0 &&
+               mappedInput.wasReleased(MappedInputManager::Button::NavPrevious)) {
+      // The header search icon is reachable by buttons: on the top row, where
+      // previous-nav is a no-op, an Up press launches search. Return so the
+      // same press does not also fall through to list navigation below.
+      launchSearch();
+      return;
     }
 
     // Touch goes through the FreeInkApp: render() registered every tap target
@@ -208,28 +213,15 @@ void OpdsBookBrowserActivity::rootScreen(UiScreen& screen, void* user) {
   }
 }
 
-// Shared chrome for every state: reserve the firmware's button-hint band and
-// draw the themed header (padding, centering, and rule come from the theme).
+// Shared chrome for every state: header band over the button hints; browsing
+// adds the search action when the feed advertises a search template.
 void OpdsBookBrowserActivity::screenHeader(UiScreen& screen, const bool withSearch) {
-  screen.takeBottom(static_cast<int16_t>(UITheme::getInstance().getMetrics().buttonHintsHeight));
-  // Same top offset as every GUI.drawHeader caller, so the band lines up with
-  // the rest of the firmware's screens.
-  screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().topPadding));
-  fui::HeaderProps header;
-  header.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  header.borderEdges = fui::EdgeBottom;
+  const char* title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
   if (withSearch && !searchTemplate.empty()) {
-    header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
-    header.trailingAction = ACTION_SEARCH;
-    // Optically align the icon with the title glyphs: text hangs low in its
-    // line cell by the font's internal leading; drop the button to match.
-    const int titleFontId = uiScaleSpec().titleFontId;
-    header.actionOffsetY =
-        static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+    catalogScreenHeader(screen, renderer, title, fui::bitmapFromIcon(icon_search_32), ACTION_SEARCH);
+  } else {
+    catalogScreenHeader(screen, renderer, title);
   }
-  screen.header(header);
-  // Same breathing room between header and content as the legacy screens.
-  screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().verticalSpacing));
 }
 
 void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
@@ -251,73 +243,28 @@ void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the nav chevron and the row edge
   listNav.selected = selectorIndex;
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser row height
-    // instead of FreeInkUI's touch-target-sized default (see
-    // UiListActivity::syncListViewport; this screen predates that base and
-    // syncs its own viewport directly). Book rows carry an author subtitle.
-    rowHeight = static_cast<int16_t>(UITheme::getInstance().getMetrics().listWithSubtitleRowHeight);
-    props.rowHeight = rowHeight;
-  }
-  listNav.syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, static_cast<int>(entries.size()), props);
-  screen.list(props);
+  catalogListBody(screen, mappedInput, listNav, props, static_cast<int>(entries.size()), /*hasSubtitle=*/true);
 }
 
 void OpdsBookBrowserActivity::buildDownloadScreen(UiScreen& screen) {
   screenHeader(screen, false);
-
-  // Centered block: status line, book title, progress bar, cancel button.
-  const auto& theme = screen.theme();
-  fui::TextStyle centered = theme.bodyText;
-  centered.align = fui::TextAlign::Center;
-  const int16_t lh = screen.target().lineHeight(centered.font);
-  const int16_t gap = theme.spaceMd;
-  const int16_t barH = 16;
-  const int16_t btnH = theme.rowHeight;
-  const int16_t blockH = static_cast<int16_t>(lh * 2 + barH + btnH + gap * 3);
-  const fui::Rect body = screen.body();
-  if (body.height > blockH) screen.spacer(static_cast<int16_t>((body.height - blockH) / 2));
-
-  screen.target().text(screen.takeTop(lh, gap), tr(STR_DOWNLOADING), centered);
-  screen.target().text(screen.takeTop(lh, gap), statusMessage.c_str(), centered);
-
-  const fui::Rect bar = screen.takeTop(barH, gap).inset(fui::Insets{0, 50, 0, 50});
-  if (downloadTotal > 0) {
-    fui::ProgressBarProps progress;
-    progress.value = static_cast<int32_t>(downloadProgress);
-    progress.max = static_cast<int32_t>(downloadTotal);
-    progress.border = fui::Paint::solid(fui::Color::Black);
-    progress.borderWidth = 1;
-    fui::progressBar(screen.frame(), bar, progress);
-  }
-
-  const fui::Rect btnArea = screen.takeTop(btnH);
-  const int16_t btnW = static_cast<int16_t>(btnArea.width / 3);
-  fui::ButtonProps cancel;
-  cancel.label = tr(STR_CANCEL);
-  cancel.action = ACTION_CANCEL;
-  screen.button(cancel, fui::Rect{static_cast<int16_t>(btnArea.x + (btnArea.width - btnW) / 2), btnArea.y, btnW, btnH});
+  catalogDownloadScreen(screen, statusMessage.c_str(), downloadProgress, downloadTotal, ACTION_CANCEL);
 }
 
 void OpdsBookBrowserActivity::buildStatusScreen(UiScreen& screen) {
   screenHeader(screen, false);
 
-  fui::TextStyle centered = screen.theme().bodyText;
-  centered.align = fui::TextAlign::Center;
   if (state == BrowserState::ERROR) {
-    const int16_t lh = screen.target().lineHeight(centered.font);
-    const int16_t gap = screen.theme().spaceMd;
-    const bool showTapHint = mappedInput.hasTouch();
-    const int16_t blockH = static_cast<int16_t>(lh * (showTapHint ? 3 : 2) + gap * (showTapHint ? 2 : 1));
-    const fui::Rect body = screen.body();
-    if (body.height > blockH) screen.spacer(static_cast<int16_t>((body.height - blockH) / 2));
-    screen.target().text(screen.takeTop(lh, gap), tr(STR_ERROR_MSG), centered);
-    screen.target().text(screen.takeTop(lh, gap), errorMessage.c_str(), centered);
-    if (showTapHint) screen.target().text(screen.takeTop(lh), tr(STR_TAP_TO_RETRY), centered);
+    if (mappedInput.hasTouch()) {
+      catalogCenteredBlock(screen, {{tr(STR_ERROR_MSG)}, {errorMessage.c_str()}, {tr(STR_TAP_TO_RETRY)}});
+    } else {
+      catalogCenteredBlock(screen, {{tr(STR_ERROR_MSG)}, {errorMessage.c_str()}});
+    }
     return;
   }
   // CHECK_WIFI / LOADING (and the brief child-activity handoff states).
+  fui::TextStyle centered = screen.theme().bodyText;
+  centered.align = fui::TextAlign::Center;
   screen.centeredText(statusMessage.c_str(), centered);
 }
 
@@ -327,8 +274,13 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   MappedInputManager::Labels labels;
   switch (state) {
     case BrowserState::BROWSING: {
-      const char* confirmLabel =
-          (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+      // Feeds open; books and the pager rows fetch, matching the plugin catalog.
+      const char* confirmLabel = tr(STR_OPEN);
+      if (!entries.empty()) {
+        const bool onPager = (prevRowPresent && selectorIndex == 0) ||
+                             (nextRowPresent && selectorIndex == static_cast<int>(entries.size()) - 1);
+        if (onPager || entries[selectorIndex].type == OpdsEntryType::BOOK) confirmLabel = tr(STR_FETCH);
+      }
       const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
       labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
       break;
@@ -389,10 +341,12 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   entries = std::move(parser).getEntries();
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
-  if (!prevUrl.empty()) {
+  prevRowPresent = !prevUrl.empty();
+  nextRowPresent = !nextUrl.empty();
+  if (prevRowPresent) {
     entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl, ""});
   }
-  if (!nextUrl.empty()) {
+  if (nextRowPresent) {
     entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
   }
   if (feedTruncated) {

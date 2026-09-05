@@ -3,6 +3,7 @@
 #include <string>
 
 #include "OpdsFilename.h"
+#include "StringUtils.h"
 
 namespace {
 
@@ -47,6 +48,28 @@ TEST(OpdsFilename, UnknownFormatValueFallsBackToAuthorTitle) {
   // Defensive: a persisted value outside the enum still yields a valid name.
   const auto bogus = static_cast<OpdsFilenameFormat>(99);
   EXPECT_EQ(opdsBookFilename("J. Doe", "My Book", bogus), "J. Doe - My Book.epub");
+}
+
+TEST(PluginFilename, PreservesWebDavExtension) {
+  const std::string name = "Shadow Divers (Robert Kurson) (z-library.sk, 1lib.sk, z-lib.sk).epub";
+  EXPECT_EQ(StringUtils::sanitizeFilenamePreservingExtension(name), name);
+}
+
+TEST(PluginFilename, TruncatesStemBeforeExtension) {
+  const std::string name = std::string(200, 'a') + ".epub";
+  const std::string result = StringUtils::sanitizeFilenamePreservingExtension(name);
+  EXPECT_EQ(result, std::string(95, 'a') + ".epub");
+  EXPECT_EQ(result.size(), 100u);
+}
+
+TEST(PluginFilename, TruncatesUtf8StemOnCodepointBoundary) {
+  std::string title;
+  for (int i = 0; i < 20; i++) title += "\xC3\xA9";
+  title += ".epub";
+  const std::string result = StringUtils::sanitizeFilenamePreservingExtension(title, 20);
+  EXPECT_EQ(result, title.substr(0, 14) + ".epub");
+  EXPECT_EQ(result.size(), 19u);
+  EXPECT_EQ(result.substr(result.size() - 5), ".epub");
 }
 
 }  // namespace

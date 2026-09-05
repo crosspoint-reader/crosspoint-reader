@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CrossPoint Plugin Runner</title>
+  <style>
+    body { font-family: sans-serif; margin: 2em; color: #333; }
+    #plugin-container { display: none; }
+  </style>
+</head>
+<body>
+  <!-- Headless executor: loads every SD plugin with its UI hidden so that
+       actions registered via registerAction() can claim and run jobs from
+       /api/plugin-jobs. Keep this page open (a browser tab or an embedded
+       webview) while external systems enqueue work. -->
+  <h3>Plugin runner active</h3>
+  <p>Jobs enqueued via <code>/api/plugin-jobs</code> execute while this page is open.</p>
+  <div id="plugin-container"></div>
+  <script>
+<!--#include file="shared/PluginHost.js.inc" -->
+    loadPlugins(null);
+  </script>
+</body>
+</html>

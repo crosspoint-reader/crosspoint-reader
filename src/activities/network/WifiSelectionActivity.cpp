@@ -4,6 +4,7 @@
 #include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <TrustedTime.h>
 #include <WiFi.h>
 #include <esp_mac.h>
 
@@ -526,6 +527,10 @@ void WifiSelectionActivity::checkConnectionStatus() {
         SETTINGS.saveToFile();
       }
     }
+
+    // Every station join is a chance to snap the loan-clock floor to real
+    // time (non-blocking; see TrustedTime).
+    trustedtime::startSync();
 
     // Save this as the last connected network - SD card operations need lock as
     // we use SPI for both

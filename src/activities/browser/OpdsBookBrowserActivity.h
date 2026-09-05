@@ -37,6 +37,10 @@ class OpdsBookBrowserActivity final : public Activity, private UiAppHost {
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   std::string searchTemplate;
+  // Synthetic pager rows fetchFeed() bracketed the entries with; their footer
+  // hint is Fetch (a server round-trip), not Open.
+  bool prevRowPresent = false;
+  bool nextRowPresent = false;
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
