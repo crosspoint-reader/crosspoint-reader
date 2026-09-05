@@ -96,9 +96,12 @@ void LibraryListActivity::onEnter() {
   // render task's SD-loaded fonts read glyph data at draw time, and the walk
   // needs the card to itself.
   RenderLock lock(*this);
-  UiTabListActivity::onEnter();
-  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
 
+  // The index opens BEFORE the base lifecycle, because the base sizes one
+  // ListNav per tab and whether the Series tab exists depends on what the index
+  // holds. tabCount() has to be settled by then; the base treats it as fixed
+  // from that point on.
+  //
   // Optimistic open: if an index exists, paint from it immediately and let the
   // user decide when to refresh. Only a missing or unreadable index forces the
   // walk, so entering the screen is normally instant.
@@ -115,8 +118,15 @@ void LibraryListActivity::onEnter() {
     LOG_ERR("LIB", "index was built without duplicate detection");
   }
   // A rebuild with book metadata turned off drops the Series tab, and an order
-  // left pointing at it would put the shelf on a tab that is no longer there.
+  // left pointing at it would leave activeTab() past the last ListNav.
   if (isSeriesSort(sortOrder) && !index.hasSeries()) sortOrder = library::SortOrder::AddedDesc;
+  // Latched here and never recomputed: the base allocates one ListNav per tab
+  // from this and treats the count as fixed, while index.close() before opening
+  // a book would otherwise shrink it out from under that.
+  seriesTabAvailable = index.hasSeries();
+
+  UiTabListActivity::onEnter();
+  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
 
   // Entered while Confirm was still held (typical when launched from the home
   // menu): ignore its release, or we would open whatever sits at row 0.
@@ -266,7 +276,7 @@ void LibraryListActivity::toggleSortDirection() { selectTab(activeTab(), true); 
 // The Series tab is offered only when the index actually holds series. An index
 // built with book metadata off carries none, and a tab that leads to nothing but
 // ungrouped books is worse than no tab.
-int LibraryListActivity::tabCount() const { return index.hasSeries() ? TAB_SLOTS : TAB_SLOTS - 1; }
+int LibraryListActivity::tabCount() const { return seriesTabAvailable ? TAB_SLOTS : TAB_SLOTS - 1; }
 
 int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
 
