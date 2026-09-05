@@ -81,6 +81,21 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/notofonts/NotoSerif-Italic/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-BoldItalic.ttf"}
 
+  - name: NotoSerifCJKtc
+    description: "Serif for Traditional Chinese reading (Latin, CJK)"
+    scripts: [latin, cjk]
+    intervals: latin-ext,cjk,ipa-chars
+    # 8/10 aren't reading sizes; they're here so this family can also back a
+    # CJK UI language via SdCardFontSystem::setupUiFallbacks() if the user
+    # picks it as their reading font -- that path needs an exact-size file
+    # per kUiFontSizes (SdCardFontManager::findFile has no nearest-size
+    # fallback the way loadFamily's initial load does).
+    sizes: [8, 10, 12, 14, 16, 18]
+    # No italic: Noto Serif CJK ships no italic master (unusual for Han glyphs).
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Serif/OTF/TraditionalChinese/NotoSerifCJKtc-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Serif/OTF/TraditionalChinese/NotoSerifCJKtc-Bold.otf"}
+
   - name: Merriweather
     description: "Warm serif for long-form reading (Latin, Cyrillic)"
     scripts: [latin, cyrillic]
@@ -181,6 +196,22 @@ families:
       bold:       {path: "builtinFonts/source/NotoSans/NotoSans-Bold.ttf"}
       italic:     {path: "builtinFonts/source/NotoSans/NotoSans-Italic.ttf"}
       bolditalic: {path: "builtinFonts/source/NotoSans/NotoSans-BoldItalic.ttf"}
+
+  - name: NotoSansCJKtc
+    description: "Sans-serif for Traditional Chinese reading (Latin, CJK)"
+    scripts: [latin, cjk]
+    intervals: latin-ext,cjk,ipa-chars
+    # This is SdCardFontSystem's kDefaultUiCjkFamily: whenever the UI language
+    # is zh-Hant and the reading font doesn't cover CJK, this family backs the
+    # menus directly, at the exact built-in UI sizes (8/10/12, not just
+    # reading sizes) -- SdCardFontManager::findFile has no nearest-size
+    # fallback the way loadFamily's initial load does, so a missing exact
+    # size here silently drops that UI font's CJK coverage.
+    sizes: [8, 10, 12, 14, 16, 18]
+    # No italic: Noto Sans CJK ships no italic master (unusual for Han glyphs).
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Bold.otf"}
 
   - name: Inter
     description: "Modern sans-serif (Latin, Greek, Cyrillic)"

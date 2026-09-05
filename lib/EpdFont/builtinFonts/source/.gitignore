@@ -1,5 +1,8 @@
 # Ignore all font directories except those committed to the repo.
-# Fonts like NotoSansCJK are downloaded on demand by build-sd-fonts.py.
+# The full-charset Noto Sans/Serif CJK families are downloaded on demand by
+# build-sd-fonts.py for SD-card reading fonts; NotoSansCJKtcUiSubset is a
+# separate, pre-subsetted cut (see gen_cjk_ui_intervals.py) with only the
+# glyphs the built-in UI fonts need — not the same asset, don't conflate them.
 *
 !.gitignore
 !NotoSerif/
@@ -10,6 +13,8 @@
 !NotoSansArabic/**
 !NotoSansHebrew/
 !NotoSansHebrew/**
+!NotoSansCJKtcUiSubset/
+!NotoSansCJKtcUiSubset/**
 !OpenDyslexic/
 !OpenDyslexic/**
 !Ubuntu/
