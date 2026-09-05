@@ -450,13 +450,16 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // Most devices return to sleep after a USB-powered cold boot.
       LOG_DBG("MAIN", "Wakeup reason: After USB Power");
-#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4
+#if FREEINK_DEVICE_X4PRO || FREEINK_DEVICE_X4CLASSIC || FREEINK_DEVICE_PAPERMONO || FREEINK_DEVICE_EEGO_A4 || \
+    FREEINK_DEVICE_WS397
       // X4 Pro must stay awake so USB Serial/JTAG remains available after leaving
       // USB Drive and reconnecting the cable. Paper Mono has no armable GPIO wake
       // (its button is behind the PMIC). EEGO A4's post-flash reset reads as
       // POWERON (native-USB), so a flash would otherwise be misclassified as a
-      // USB-power cold boot and sleep. Sleeping any of these here would strand
-      // the device in a USB-replug boot loop (or sleep right after a flash).
+      // USB-power cold boot and sleep. The Waveshare 3.97 reads the same way (its
+      // USB detect is a PMIC register, and charge termination reads as "no USB").
+      // Sleeping any of these here would strand the device in a USB-replug boot
+      // loop (or sleep right after a flash).
       break;
 #else
       Storage.prepareForDeepSleep();
