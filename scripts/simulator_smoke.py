@@ -107,8 +107,10 @@ def smoke(binary, output, device):
         "openEpubPath": "/books/smoke.epub", "lastSleepFromReader": True,
         "readerActivityLoadCount": 0, "showBootScreen": False,
     }), encoding="utf-8")
+    # Leave the activity before QUIT: killing an active reader intentionally
+    # leaves its crash-loop guard set, so the next boot goes Home instead.
     log = run_phase(binary, output, "reading",
-                    "7000:DOWN;10000:UP;13000:DOWN;17000:QUIT",
+                    "7000:DOWN;10000:UP;13000:DOWN;17000:BACK;20000:QUIT",
                     [(6000, "page-1"), (9000, "page-2"), (12000, "page-1-back"), (16000, "page-2-again")])
     pages = {name: load_screen(output, name, size)
              for name in ("page-1", "page-2", "page-1-back", "page-2-again")}
@@ -128,6 +130,8 @@ def smoke(binary, output, device):
     spine, page, count = struct.unpack_from("<HHH", data)
     require(spine == 0 and page == 1 and count > 1, f"Wrong saved progress: {(spine, page, count)}")
 
+    state = json.loads((cache / "state.json").read_text(encoding="utf-8"))
+    require(state.get("readerActivityLoadCount") == 0, "Reader did not exit cleanly before restart")
     log = run_phase(binary, output, "reopen", "7000:QUIT", [(6000, "page-2-reopened")])
     reopened = load_screen(output, "page-2-reopened", size)
     require("Loaded cache: 0, 1" in log, "Reopen did not load the saved page")
