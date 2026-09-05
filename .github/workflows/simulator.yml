@@ -1,0 +1,88 @@
+name: Simulator smoke
+
+on:
+  pull_request:
+  push:
+    branches: [develop, 'ci/simulator-*']
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: 'Optional upstream commit SHA or refs/pull/NUMBER/head to test with this harness'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: simulator-${{ github.workflow }}-${{ github.ref }}-${{ inputs.upstream_ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Simulator ${{ matrix.device }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [x3, x4]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          path: harness
+          persist-credentials: false
+
+      - uses: actions/checkout@v6
+        with:
+          repository: ${{ inputs.upstream_ref && 'crosspoint-reader/crosspoint-reader' || github.repository }}
+          ref: ${{ inputs.upstream_ref || github.sha }}
+          path: firmware
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev libssl-dev xvfb xauth
+          python -m pip install platformio==6.1.19 PyYAML==6.0.3 Pillow==12.3.0
+
+      - name: Record provenance and install build-only configuration
+        run: |
+          mkdir -p artifacts
+          git -C harness rev-parse HEAD > artifacts/harness-sha.txt
+          git -C firmware rev-parse HEAD > artifacts/firmware-sha.txt
+          git -C firmware submodule status --recursive > artifacts/submodules.txt
+          cp harness/platformio.simulator.ini firmware/platformio.simulator.ini
+          cp harness/scripts/simulator_platform.py firmware/scripts/simulator_platform.py
+          cp harness/platformio.simulator.ini artifacts/
+
+      - name: Build simulator
+        working-directory: firmware
+        env:
+          DEVICE: ${{ matrix.device }}
+        run: |
+          set -o pipefail
+          pio run -c platformio.simulator.ini -e "simulator_$DEVICE" -j 2 2>&1 | tee ../artifacts/build.log
+
+      - name: Exercise reader and saved progress
+        env:
+          DEVICE: ${{ matrix.device }}
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          xvfb-run -a -s '-screen 0 1280x1024x24' python harness/scripts/simulator_smoke.py \
+            --binary "firmware/.pio/build/simulator_$DEVICE/program" \
+            --device "$DEVICE" --output artifacts/smoke
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: simulator-${{ matrix.device }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: error
