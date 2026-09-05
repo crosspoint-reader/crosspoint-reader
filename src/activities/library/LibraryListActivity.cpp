@@ -295,9 +295,10 @@ bool LibraryListActivity::groupable() const { return !degraded && !isAddedSort(s
 // The series a row's book belongs to, and its position within it. Returns false
 // for a standalone, which the shelf files under one heading of its own rather
 // than leaving unlabelled.
-bool LibraryListActivity::seriesFor(const int entry, std::string& name, uint16_t& position) {
+bool LibraryListActivity::seriesFor(const int entry, std::string& name, uint16_t& position, uint16_t& bookCount) {
   name.clear();
   position = library::SERIES_INDEX_NONE;
+  bookCount = 0;
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
   if (ordinal == 0xFFFF) return false;
   library::ClixSeriesRef ref{};
@@ -309,17 +310,32 @@ bool LibraryListActivity::seriesFor(const int entry, std::string& name, uint16_t
     if (!index.readSeries(ref.seriesId, cachedSeriesName, books) || cachedSeriesName.empty()) {
       cachedSeriesId = library::CLIX_SERIES_NONE;
       cachedSeriesName.clear();
+      cachedSeriesBooks = 0;
       return false;
     }
     cachedSeriesId = ref.seriesId;
+    cachedSeriesBooks = books;
   }
   name = cachedSeriesName;
   position = ref.seriesIndex;
+  bookCount = cachedSeriesBooks;
   return true;
 }
 
-void LibraryListActivity::formatSeriesHeading(const std::string& name, std::string& out) const {
-  out = name.empty() ? std::string(tr(STR_LIBRARY_STANDALONE)) : name;
+// The count comes from the series table rather than being counted here: the
+// group is contiguous in only one of the sort orders, so deriving it would mean
+// walking the permutation on every heading drawn.
+void LibraryListActivity::formatSeriesHeading(const std::string& name, const uint16_t bookCount,
+                                              std::string& out) const {
+  if (name.empty()) {
+    out = tr(STR_LIBRARY_STANDALONE);
+    return;
+  }
+  out = name;
+  if (bookCount == 0) return;
+  char suffix[16];
+  snprintf(suffix, sizeof(suffix), " (%u)", static_cast<unsigned>(bookCount));
+  out += suffix;
 }
 
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
@@ -363,7 +379,8 @@ bool LibraryListActivity::buildGroupStarts() {
       previousAuthor = author;
     } else if (isSeriesSort(sortOrder)) {
       uint16_t position = 0;
-      const bool inSeries = seriesFor(entry, series, position);
+      uint16_t seriesBooks = 0;
+      const bool inSeries = seriesFor(entry, series, position, seriesBooks);
       // The standalones form one trailing group, so the transition into them is
       // a group start even though every one of them has the same empty name.
       startsGroup = startsGroup || series != previousSeries || inSeries != hadSeries;
@@ -642,8 +659,9 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
         formatAuthorHeading(author, title);
       } else if (seriesGrouped) {
         uint16_t position = library::SERIES_INDEX_NONE;
-        seriesFor(bookEntry, author, position);
-        formatSeriesHeading(author, title);
+        uint16_t seriesBooks = 0;
+        seriesFor(bookEntry, author, position, seriesBooks);
+        formatSeriesHeading(author, seriesBooks, title);
       } else {
         formatInitialHeading(titleInitialFor(bookEntry), title);
       }
@@ -653,11 +671,12 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
       bool startsGroup = false;
       std::string series;
       uint16_t position = library::SERIES_INDEX_NONE;
+      uint16_t seriesBooks = 0;
       bool inSeries = false;
       if (authorGrouped) {
         startsGroup = rows == 0 || author != winAuthors[static_cast<size_t>(rows - 1)];
       } else if (seriesGrouped) {
-        inSeries = seriesFor(entry, series, position);
+        inSeries = seriesFor(entry, series, position, seriesBooks);
         // The standalones form one trailing group, so the transition into them
         // starts a group even though every one of them has the same empty name.
         startsGroup = rows == 0 || series != previousSeries || inSeries != hadSeries;
@@ -673,7 +692,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
         if (authorGrouped)
           formatAuthorHeading(author, heading);
         else if (seriesGrouped)
-          formatSeriesHeading(series, heading);
+          formatSeriesHeading(series, seriesBooks, heading);
         else
           formatInitialHeading(initial, heading);
         item.sectionHeading = heading.c_str();
