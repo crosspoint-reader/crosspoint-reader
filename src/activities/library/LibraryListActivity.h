@@ -91,6 +91,11 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildRows(UiScreen& screen);
   void buildGroupRows(UiScreen& screen);
   void formatInitialHeading(uint32_t initial, std::string& out) const;
+  bool seriesFor(int entry, std::string& name, uint16_t& position);
+  // Last series read, so a group's rows share one table read.
+  uint16_t cachedSeriesId = library::CLIX_SERIES_NONE;
+  std::string cachedSeriesName;
+  void formatSeriesHeading(const std::string& name, std::string& out) const;
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
   void drawHoldHelp() const;
