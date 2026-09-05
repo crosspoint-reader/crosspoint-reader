@@ -6,10 +6,12 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WiFi.h>
 #include <esp_rom_crc.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 
 #include "MappedInputManager.h"
@@ -98,6 +100,10 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   if (!fetchAndParseManifest()) {
+    // Drop whatever was parsed before the failure: it would otherwise sit in
+    // the heap behind the error screen, and leave the retry path pointing at a
+    // half-built family table.
+    clearManifest();
     {
       RenderLock lock(*this);
       state_ = ERROR;
@@ -122,6 +128,35 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
 
 // --- Manifest fetching ---
 
+void FontDownloadActivity::clearManifest() {
+  // Swap rather than clear: clear() keeps the capacity, and this runs to hand
+  // the heap back while the error screen is up. Reverse allocation order.
+  std::vector<int>().swap(filteredIndices_);
+  std::vector<ManifestFamily>().swap(families_);
+  std::vector<StrRef>().swap(scriptGroupLabels_);
+  files_.reset();
+  fileEntryCount_ = 0;
+  stringArena_.reset();
+  arenaUsed_ = 0;
+  arenaCapacity_ = 0;
+}
+
+bool FontDownloadActivity::internString(const char* text, StrRef& outRef) {
+  if (text == nullptr || *text == '\0') {
+    outRef = 0;
+    return true;
+  }
+  const size_t length = std::strlen(text) + 1;
+  if (arenaUsed_ + length > arenaCapacity_) {
+    LOG_ERR("FONT", "Manifest string arena overflow at %u/%u bytes", arenaUsed_, arenaCapacity_);
+    return false;
+  }
+  outRef = arenaUsed_;
+  std::memcpy(stringArena_.get() + arenaUsed_, text, length);
+  arenaUsed_ = static_cast<uint32_t>(arenaUsed_ + length);
+  return true;
+}
+
 bool FontDownloadActivity::fetchAndParseManifest() {
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
@@ -137,6 +172,9 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     return false;
   }
 
+  // No downgradeRedirectsToHttp here, unlike the font transfers below: this
+  // response carries the crc32 values that are the only integrity anchor for
+  // those plain-HTTP downloads.
   auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
   if (result != HttpDownloader::OK) {
     LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
@@ -155,13 +193,29 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   }
 
   JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, manifestFile);
+  DeserializationError err;
+  {
+    // "styles" is the only key the catalog never reads. Dropping it keeps the
+    // DOM about 1KB smaller while it coexists with the arena allocated below.
+    JsonDocument filter;
+    filter["version"] = true;
+    filter["baseUrl"] = true;
+    filter["scriptGroups"][0]["tag"] = true;
+    filter["scriptGroups"][0]["label"] = true;
+    filter["families"][0]["name"] = true;
+    filter["families"][0]["description"] = true;
+    filter["families"][0]["scripts"] = true;
+    filter["families"][0]["files"][0]["name"] = true;
+    filter["families"][0]["files"][0]["size"] = true;
+    filter["families"][0]["files"][0]["crc32"] = true;
+    err = deserializeJson(doc, manifestFile, DeserializationOption::Filter(filter));
+  }
   manifestFile.close();
   Storage.remove(MANIFEST_TMP);
 
   if (err) {
     LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
-    errorMessage_ = "Invalid font manifest";
+    errorMessage_ = tr(STR_INVALID_FONT_MANIFEST);
     return false;
   }
 
@@ -173,13 +227,46 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   }
 
   baseUrl_ = doc["baseUrl"] | "";
-  families_.clear();
-  scriptGroupLabels_.clear();
-  filteredIndices_.clear();
+  downloadUrl_.reserve(baseUrl_.size() + 128);
+  clearManifest();
   fontInstaller_.refreshRegistry();
 
   JsonArray groupsArr = doc["scriptGroups"].as<JsonArray>();
+  JsonArray familiesArr = doc["families"].as<JsonArray>();
+
+  // Size the arena and the file table in one pass so neither reallocates while
+  // the catalog is built: a mid-build growth would both fragment the heap and
+  // invalidate arena pointers already handed out below.
   const size_t groupCount = std::min(groupsArr.size(), MAX_SCRIPT_GROUPS);
+  size_t arenaBytes = 1;  // leading terminator makes offset 0 the empty string
+  size_t manifestFileCount = 0;
+  for (size_t groupIndex = 0; groupIndex < groupCount; groupIndex++) {
+    arenaBytes += std::strlen(groupsArr[groupIndex]["label"] | "") + 1;
+  }
+  for (JsonObject fObj : familiesArr) {
+    arenaBytes += std::strlen(fObj["name"] | "") + 1;
+    arenaBytes += std::strlen(fObj["description"] | "") + 1;
+    for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
+      arenaBytes += std::strlen(fileObj["name"] | "") + 1;
+      manifestFileCount++;
+    }
+  }
+  stringArena_ = makeUniqueNoThrow<char[]>(arenaBytes);
+  if (!stringArena_) {
+    LOG_ERR("FONT", "OOM: %zu byte string arena", arenaBytes);
+    errorMessage_ = tr(STR_MEMORY_ERROR);
+    return false;
+  }
+  stringArena_[0] = '\0';
+  arenaUsed_ = 1;
+  arenaCapacity_ = static_cast<uint32_t>(arenaBytes);
+  files_ = makeUniqueNoThrow<ManifestFile[]>(manifestFileCount);
+  if (!files_) {
+    LOG_ERR("FONT", "OOM: %zu manifest file entries", manifestFileCount);
+    errorMessage_ = tr(STR_MEMORY_ERROR);
+    return false;
+  }
+
   scriptGroupLabels_.reserve(groupCount);
   if (groupsArr.size() > MAX_SCRIPT_GROUPS) {
     LOG_ERR("FONT", "Manifest declares more than %zu script groups; extra groups ignored", MAX_SCRIPT_GROUPS);
@@ -190,23 +277,25 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     const char* label = groupObj["label"] | "";
     if (*tag == '\0' || *label == '\0') {
       LOG_ERR("FONT", "Malformed script group at index %zu", groupIndex);
-      errorMessage_ = "Invalid font manifest";
+      errorMessage_ = tr(STR_INVALID_FONT_MANIFEST);
       return false;
     }
-    scriptGroupLabels_.push_back(label);
+    StrRef labelRef = 0;
+    if (!internString(label, labelRef)) {
+      errorMessage_ = tr(STR_INVALID_FONT_MANIFEST);
+      return false;
+    }
+    scriptGroupLabels_.push_back(labelRef);
   }
 
-  JsonArray familiesArr = doc["families"].as<JsonArray>();
   families_.reserve(familiesArr.size());
   filteredIndices_.reserve(familiesArr.size());
 
   for (JsonObject fObj : familiesArr) {
     ManifestFamily family;
-    family.name = fObj["name"] | "";
-    family.description = fObj["description"] | "";
-
-    for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
-      family.styles.push_back(s.as<std::string>());
+    if (!internString(fObj["name"] | "", family.name) || !internString(fObj["description"] | "", family.description)) {
+      errorMessage_ = tr(STR_INVALID_FONT_MANIFEST);
+      return false;
     }
 
     for (JsonVariant script : fObj["scripts"].as<JsonArray>()) {
@@ -222,31 +311,36 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       }
     }
 
-    family.totalSize = 0;
+    family.fileStart = fileEntryCount_;
     for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
       ManifestFile file;
-      file.name = fileObj["name"] | "";
-      file.size = fileObj["size"] | 0;
+      if (!internString(fileObj["name"] | "", file.name)) {
+        errorMessage_ = tr(STR_INVALID_FONT_MANIFEST);
+        return false;
+      }
+      file.size = fileObj["size"] | 0u;
 
       if (!fileObj["crc32"].is<uint32_t>()) {
-        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
-        errorMessage_ = "Invalid font manifest";
+        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", str(file.name));
+        errorMessage_ = tr(STR_INVALID_FONT_MANIFEST);
         return false;
       }
       file.crc32 = fileObj["crc32"].as<uint32_t>();
 
       family.totalSize += file.size;
-      family.files.push_back(std::move(file));
+      files_[fileEntryCount_++] = file;
     }
+    family.fileCount = fileEntryCount_ - family.fileStart;
 
-    family.installed = fontInstaller_.isFamilyInstalled(family.name.c_str());
+    family.installed = fontInstaller_.isFamilyInstalled(str(family.name));
 
     // Detect updates by comparing manifest file sizes with files on disk.
     // Not a checksum, but a size mismatch reliably indicates a rebuild in practice.
     if (family.installed) {
-      for (const auto& file : family.files) {
+      for (uint32_t i = 0; i < family.fileCount; i++) {
+        const ManifestFile& file = files_[family.fileStart + i];
         char path[128];
-        FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), path, sizeof(path));
+        FontInstaller::buildFontPath(str(family.name), str(file.name), path, sizeof(path));
         HalFile f;
         if (Storage.openFileForRead("FONT", path, f)) {
           size_t actual = f.fileSize();
@@ -263,7 +357,7 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       }
     }
 
-    families_.push_back(std::move(family));
+    families_.push_back(family);
   }
 
   const size_t rowCapacity = std::max(families_.size() + 2, scriptGroupLabels_.size() + 1);
@@ -456,15 +550,15 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     return;
   }
 
-  if (!fontInstaller_.ensureFamilyDir(family.name.c_str())) {
+  if (!fontInstaller_.ensureFamilyDir(str(family.name))) {
     RenderLock lock(*this);
     state_ = ERROR;
     errorMessage_ = "Failed to create font directory";
     return;
   }
 
-  for (size_t i = 0; i < family.files.size(); i++) {
-    const auto& file = family.files[i];
+  for (uint32_t i = 0; i < family.fileCount; i++) {
+    const ManifestFile& file = files_[family.fileStart + i];
 
     {
       RenderLock lock(*this);
@@ -474,12 +568,12 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     requestUpdateAndWait();
 
     char destPath[128];
-    FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), destPath, sizeof(destPath));
+    FontInstaller::buildFontPath(str(family.name), str(file.name), destPath, sizeof(destPath));
 
-    std::string url = baseUrl_ + file.name;
+    downloadUrl_.assign(baseUrl_).append(str(file.name));
 
     auto result = HttpDownloader::downloadToFile(
-        url, destPath,
+        downloadUrl_, destPath,
         [this](size_t downloaded, size_t total) {
           fileProgress_ = downloaded;
           fileTotal_ = total;
@@ -504,7 +598,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
         &cancelRequested_, "", "", /*downgradeRedirectsToHttp=*/true);
 
     if (result == HttpDownloader::ABORTED) {
-      fontInstaller_.deleteFamily(family.name.c_str());
+      fontInstaller_.deleteFamily(str(family.name));
       family.installed = false;
       family.hasUpdate = false;
       if (goHomeRequested_) {
@@ -520,47 +614,47 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     }
 
     if (result != HttpDownloader::OK) {
-      LOG_ERR("FONT", "Download failed: %s (%d)", file.name.c_str(), result);
-      fontInstaller_.deleteFamily(family.name.c_str());
+      LOG_ERR("FONT", "Download failed: %s (%d)", str(file.name), result);
+      fontInstaller_.deleteFamily(str(family.name));
       family.installed = false;
       family.hasUpdate = false;
       RenderLock lock(*this);
       state_ = ERROR;
-      errorMessage_ = "Download failed: " + file.name;
+      errorMessage_ = std::string("Download failed: ") + str(file.name);
       return;
     }
 
     uint32_t actualCrc = 0;
     if (!computeFileCrc32(destPath, actualCrc)) {
       LOG_ERR("FONT", "Failed to open file for CRC check: %s", destPath);
-      fontInstaller_.deleteFamily(family.name.c_str());
+      fontInstaller_.deleteFamily(str(family.name));
       family.installed = false;
       family.hasUpdate = false;
       RenderLock lock(*this);
       state_ = ERROR;
-      errorMessage_ = "Failed to compute checksum: " + file.name;
+      errorMessage_ = std::string("Failed to compute checksum: ") + str(file.name);
       return;
     }
     if (actualCrc != file.crc32) {
-      LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name.c_str(), actualCrc, file.crc32);
-      fontInstaller_.deleteFamily(family.name.c_str());
+      LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", str(file.name), actualCrc, file.crc32);
+      fontInstaller_.deleteFamily(str(family.name));
       family.installed = false;
       family.hasUpdate = false;
       RenderLock lock(*this);
       state_ = ERROR;
-      errorMessage_ = "Checksum mismatch: " + file.name;
+      errorMessage_ = std::string("Checksum mismatch: ") + str(file.name);
       return;
     }
-    LOG_DBG("FONT", "Downloaded %s (size=%zu crc32=%08x)", file.name.c_str(), file.size, actualCrc);
+    LOG_DBG("FONT", "Downloaded %s (size=%u crc32=%08x)", str(file.name), file.size, actualCrc);
 
     if (!fontInstaller_.validateCpfontFile(destPath)) {
       LOG_ERR("FONT", "Invalid .cpfont: %s", destPath);
-      fontInstaller_.deleteFamily(family.name.c_str());
+      fontInstaller_.deleteFamily(str(family.name));
       family.installed = false;
       family.hasUpdate = false;
       RenderLock lock(*this);
       state_ = ERROR;
-      errorMessage_ = "Invalid font file: " + file.name;
+      errorMessage_ = std::string("Invalid font file: ") + str(file.name);
       return;
     }
     currentFileIndex_++;
@@ -584,7 +678,7 @@ void FontDownloadActivity::promptDeleteSelectedFamily() {
 
   std::string heading = tr(STR_DELETE);
   const auto& family = families_[pendingDeleteFamilyIndex];
-  std::string body = family.name;
+  std::string body = str(family.name);
   startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, body),
                          [this](const ActivityResult& result) { onDeleteConfirmationResult(result); });
 }
@@ -602,7 +696,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
   }
   auto& family = families_[familyIndex];
 
-  if (fontInstaller_.deleteFamily(family.name.c_str()) != FontInstaller::Error::OK) {
+  if (fontInstaller_.deleteFamily(str(family.name)) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
     state_ = ERROR;
     errorMessage_ = "Failed to delete font";
@@ -632,14 +726,14 @@ void FontDownloadActivity::activateSelected() {
     currentFileIndex_ = 0;
     currentFileTotal_ = 0;
     for (const int familyIndex : filteredIndices_) {
-      if (!families_[familyIndex].installed) currentFileTotal_ += families_[familyIndex].files.size();
+      if (!families_[familyIndex].installed) currentFileTotal_ += families_[familyIndex].fileCount;
     }
     downloadAll();
   } else if (isUpdateAllRow(nav.selected)) {
     currentFileIndex_ = 0;
     currentFileTotal_ = 0;
     for (const int familyIndex : filteredIndices_) {
-      if (families_[familyIndex].hasUpdate) currentFileTotal_ += families_[familyIndex].files.size();
+      if (families_[familyIndex].hasUpdate) currentFileTotal_ += families_[familyIndex].fileCount;
     }
     updateAll();
   } else {
@@ -650,7 +744,7 @@ void FontDownloadActivity::activateSelected() {
     auto& family = families_[familyIndex];
     if (!family.installed || family.hasUpdate) {
       currentFileIndex_ = 0;
-      currentFileTotal_ = family.files.size();
+      currentFileTotal_ = family.fileCount;
       downloadFamily(family);
     } else {
       promptDeleteSelectedFamily();
@@ -713,7 +807,7 @@ void FontDownloadActivity::rebuildGroupRowItems() {
   rowItems_.reserve(listSize);
   for (int rowIndex = 0; rowIndex < listSize; rowIndex++) {
     fui::ListItem item;
-    item.label = rowIndex == 0 ? tr(STR_ALL_FONTS) : scriptGroupLabels_[rowIndex - 1].c_str();
+    item.label = rowIndex == 0 ? tr(STR_ALL_FONTS) : str(scriptGroupLabels_[rowIndex - 1]);
     const int memberCount = rowIndex == 0 ? static_cast<int>(families_.size()) : groupMemberCount(rowIndex - 1);
     rowLabels_[rowIndex] = std::to_string(memberCount);
     item.value = rowLabels_[rowIndex].c_str();
@@ -737,8 +831,8 @@ void FontDownloadActivity::rebuildFamilyRowItems() {
       item.label = rowLabels_[i].c_str();
     } else {
       const auto& family = families_[familyIndexFromList(i)];
-      item.label = family.name.c_str();
-      if (!family.description.empty()) item.subtitle = family.description.c_str();
+      item.label = str(family.name);
+      if (family.description != 0) item.subtitle = str(family.description);
       if (family.hasUpdate) {
         item.value = tr(STR_UPDATE_AVAILABLE);
       } else if (family.installed) {
@@ -842,7 +936,7 @@ void FontDownloadActivity::render(RenderLock&&) {
   if (state_ == FAMILY_LIST && hasGroupScreen()) {
     const int scriptGroupIndex = groupNav_.selected - 1;
     headerSubtitle = scriptGroupIndex >= 0 && scriptGroupIndex < static_cast<int>(scriptGroupLabels_.size())
-                         ? scriptGroupLabels_[scriptGroupIndex].c_str()
+                         ? str(scriptGroupLabels_[scriptGroupIndex])
                          : tr(STR_ALL_FONTS);
   }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_BROWSER),
@@ -872,7 +966,7 @@ void FontDownloadActivity::render(RenderLock&&) {
   } else if (state_ == DOWNLOADING) {
     const auto& family = families_[downloadingFamilyIndex_];
 
-    std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + family.name + " (" +
+    std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + str(family.name) + " (" +
                              std::to_string(currentFileIndex_ + 1) + "/" + std::to_string(currentFileTotal_) + ")";
     renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, statusText.c_str());
 
