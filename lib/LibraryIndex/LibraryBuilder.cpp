@@ -34,6 +34,15 @@ constexpr size_t STAGE_NAME_BYTES = 255;
 constexpr size_t STAGE_AUTHOR_BYTES = 128;
 // A folder path is stored behind one length byte in the folder section.
 constexpr size_t FOLDER_PATH_BYTES = 255;
+
+// A book's series as the book itself names it. `index` leads so the whole struct
+// is one contiguous run with no interior padding.
+struct StagedSeries {
+  uint16_t index = SERIES_INDEX_NONE;
+  uint8_t len = 0;
+  char name[CLIX_SERIES_NAME_BYTES] = {};
+};
+
 struct StagedEntry {
   ClixRecord record;
   char name[STAGE_NAME_BYTES];
@@ -48,6 +57,10 @@ struct StagedEntry {
   // title on the other.
   uint8_t titleLen;
   char title[STAGE_NAME_BYTES];
+  // The series exactly as the book names it, before the library-wide table gives
+  // it an id. Its own struct so the series pass can seek to it and read it whole
+  // rather than pulling in the whole staged entry per book.
+  StagedSeries series;
 };
 constexpr size_t STAGE_STRIDE = sizeof(StagedEntry);
 
@@ -73,6 +86,48 @@ bool sortKeyLess(const SortKey& a, const SortKey& b) {
   const int cmp = memcmp(a.key, b.key, sizeof(a.key));
   if (cmp != 0) return cmp < 0;
   return a.ordinal < b.ordinal;
+}
+
+// How much of a folded series name places a group on the shelf. Ordering only:
+// what makes two series the SAME series is the digest below, not these bytes.
+// Unlike authorKey's 12, this key is read by the shelf rather than by a vote, so
+// a collision here is a wrong catalogue rather than a missed merge.
+constexpr size_t SERIES_KEY_NAME_BYTES = 16;
+// Digest of the whole folded name, which is what separates series the 16 bytes
+// above cannot tell apart — "A Song of Ice and Fire" from "A Song of Ice and
+// Fire: Graphic Novels", a series from its own anthology. Storing all 61 name
+// bytes instead would be the exact answer, but this array is per-book resident
+// during a rebuild and 61 bytes a book does not fit the budget.
+constexpr size_t SERIES_KEY_HASH_BYTES = 4;
+// Name and digest together decide identity; the position after them decides
+// order within the group.
+constexpr size_t SERIES_KEY_ID_BYTES = SERIES_KEY_NAME_BYTES + SERIES_KEY_HASH_BYTES;
+
+// Sort key for series order: the folded name, a digest of it, then the position.
+//
+// One memcmp orders the whole shelf — series A-Z, and inside each the books by
+// position — because the position sits in the low bytes big-endian. That means
+// no second pass groups the books; the groups fall out as runs of equal identity
+// bytes. SERIES_INDEX_NONE being 0xFFFF is what puts a book with no stated
+// position after its numbered siblings rather than before them.
+//
+// The digest has to sit BEFORE the position, not after: were it last, two series
+// sharing the 16 name bytes would interleave by position and neither would form
+// a contiguous run for the grouping pass to find.
+struct SeriesSortKey {
+  char key[SERIES_KEY_ID_BYTES + 2];
+  uint16_t ordinal;
+};
+static_assert(sizeof(SeriesSortKey) == 24, "SeriesSortKey is per-book resident cost during a rebuild");
+
+bool seriesKeyLess(const SeriesSortKey& a, const SeriesSortKey& b) {
+  const int cmp = memcmp(a.key, b.key, sizeof(a.key));
+  if (cmp != 0) return cmp < 0;
+  return a.ordinal < b.ordinal;
+}
+
+bool sameSeriesGroup(const SeriesSortKey& a, const SeriesSortKey& b) {
+  return memcmp(a.key, b.key, SERIES_KEY_ID_BYTES) == 0;
 }
 
 // Let FreeRTOS run the idle task during every long phase, including builds
@@ -259,6 +314,8 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   // and a name pulled out of one by pattern is a guess wearing a fact's clothes.
   std::string title = stemOf(name);
   std::string author;
+  std::string series;
+  uint16_t seriesIndex = SERIES_INDEX_NONE;
   bool titleFromBook = false;
   bool authorFromBook = false;
 
@@ -268,12 +325,14 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   if (st.readMetadata && FsHelpers::hasEpubExtension(name)) {
     Epub epub(fullPath, CACHE_DIR);
     std::string bookTitle;
-    if (epub.loadMetadata(bookTitle, author)) {
+    std::string seriesIndexText;
+    if (epub.loadMetadata(bookTitle, author, series, seriesIndexText)) {
       if (!bookTitle.empty()) {
         title = std::move(bookTitle);
         titleFromBook = true;
       }
       authorFromBook = !author.empty();
+      seriesIndex = parseSeriesIndex(seriesIndexText);
     }
     if (!titleFromBook && !authorFromBook) LOG_DBG("LIBIDX", "no metadata for %s", fullPath.c_str());
   }
@@ -329,6 +388,13 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   const std::string displayAuthor = cleanPersonName(author);
   entry.authorLen = static_cast<uint8_t>(std::min(displayAuthor.size(), STAGE_AUTHOR_BYTES));
   memcpy(entry.author, displayAuthor.data(), entry.authorLen);
+
+  const int seriesBytes = static_cast<int>(std::min(series.size(), CLIX_SERIES_NAME_BYTES));
+  entry.series.len = static_cast<uint8_t>(utf8SafeTruncateBuffer(series.data(), seriesBytes));
+  memcpy(entry.series.name, series.data(), entry.series.len);
+  // A position without a series is meaningless, and keeping one would let a
+  // stray group-position order the standalones against each other.
+  entry.series.index = entry.series.len > 0 ? seriesIndex : SERIES_INDEX_NONE;
 
   if (st.stage.write(reinterpret_cast<const uint8_t*>(&entry), STAGE_STRIDE) != STAGE_STRIDE) {
     LOG_ERR("LIBIDX", "record stage write failed: %s", fullPath.c_str());
@@ -487,6 +553,105 @@ uint32_t blobBytesFor(const StagedEntry& entry, const StagedEntry& canonical) {
   return entry.record.nameLen + 1u + canonical.authorLen + 1u + entry.titleLen;
 }
 
+// Group the library into series and settle the order the shelf reads them in.
+//
+// Fills `seriesOrderOf` (display row -> position in title order), `seriesIdOf`
+// (title-order position -> series id, CLIX_SERIES_NONE for a standalone) and
+// `seriesIndexOf` (its position within that series), all sized n.
+//
+// Runs BEFORE the author and arrival sorts and releases its key array on the way
+// out, so the passes never hold their arrays at once: the peak stays the largest
+// of them rather than their sum.
+//
+// Returns false only when that array cannot be allocated, which is not fatal to
+// the build. The caller then writes an index carrying no series — a shelf that
+// reads as an untagged library and is short one tab, where failing the whole
+// emit would cost the reader every other order as well.
+bool buildSeriesOrder(HalFile& stage, const uint16_t* order, const uint16_t n, uint16_t* seriesOrderOf,
+                      uint16_t* seriesIdOf, uint16_t* seriesIndexOf, uint16_t& seriesCount,
+                      uint16_t& knownSeriesCount) {
+  seriesCount = 0;
+  knownSeriesCount = 0;
+  for (uint16_t i = 0; i < n; i++) {
+    seriesIdOf[i] = CLIX_SERIES_NONE;
+    seriesIndexOf[i] = SERIES_INDEX_NONE;
+    seriesOrderOf[i] = i;
+  }
+  if (n == 0) return true;
+
+  auto keys = makeUniqueNoThrow<SeriesSortKey[]>(n);
+  if (!keys) {
+    LOG_ERR("LIBIDX", "OOM: %u series keys", static_cast<unsigned>(n));
+    return false;
+  }
+
+  for (uint16_t i = 0; i < n; i++) {
+    SeriesSortKey& key = keys[i];
+    key.ordinal = i;
+
+    StagedSeries staged;
+    stage.seekSet(static_cast<uint64_t>(order[i]) * STAGE_STRIDE + offsetof(StagedEntry, series));
+    if (stage.read(reinterpret_cast<uint8_t*>(&staged), sizeof(staged)) != static_cast<int>(sizeof(staged))) {
+      // A card that failed mid-rebuild would otherwise group this book under
+      // whatever prefix of the name did arrive. Treat it as nameless instead, so
+      // it sorts with the standalones rather than inventing a series.
+      memset(key.key, 0xFF, sizeof(key.key));
+      continue;
+    }
+
+    const size_t len = std::min<size_t>(staged.len, CLIX_SERIES_NAME_BYTES);
+    // Folding with the article stripped is what puts "The Stormlight Archive"
+    // under S, where a reader looking along a shelf expects it.
+    const std::string folded = len > 0 ? fold(std::string_view(staged.name, len), true) : std::string();
+    if (folded.empty()) {
+      // 0xFF outranks every folded byte, so standalones land after every series
+      // and knownSeriesCount is simply where they begin. A name that folds away
+      // to nothing — punctuation, or a stray space — is no name at all. That
+      // includes names written entirely in a script fold() cannot map, which are
+      // filed with the standalones, so the demotion is said out loud.
+      if (len > 0) {
+        LOG_DBG("LIBIDX", "series \"%.*s\" folds to nothing; filed standalone", static_cast<int>(len), staged.name);
+      }
+      memset(key.key, 0xFF, sizeof(key.key));
+      continue;
+    }
+
+    // Kept here so the emit pass need not seek the staging file again for a
+    // value this loop already has in hand.
+    seriesIndexOf[i] = staged.index;
+
+    memset(key.key, 0, sizeof(key.key));
+    memcpy(key.key, folded.data(), std::min(folded.size(), SERIES_KEY_NAME_BYTES));
+    // Big-endian, so the digest orders arbitrarily but only ever between names
+    // that already agree over every byte the shelf sorts on.
+    const uint32_t digest = fnv1a32(folded.data(), folded.size());
+    for (size_t b = 0; b < SERIES_KEY_HASH_BYTES; b++) {
+      const unsigned shift = 8u * static_cast<unsigned>(SERIES_KEY_HASH_BYTES - 1 - b);
+      key.key[SERIES_KEY_NAME_BYTES + b] = static_cast<char>((digest >> shift) & 0xFF);
+    }
+    // Big-endian into the tail so memcmp orders positions numerically.
+    key.key[SERIES_KEY_ID_BYTES] = static_cast<char>(staged.index >> 8);
+    key.key[SERIES_KEY_ID_BYTES + 1] = static_cast<char>(staged.index & 0xFF);
+    knownSeriesCount++;
+  }
+
+  if (n > 1) std::sort(keys.get(), keys.get() + n, seriesKeyLess);
+
+  for (uint16_t k = 0; k < n; k++) seriesOrderOf[k] = keys[k].ordinal;
+  // Ids are handed out along the sorted array, so the table can be written
+  // straight through in one pass. Each group is a run of equal identity bytes,
+  // which the digest is what makes trustworthy: on the name bytes alone two
+  // series with a shared prefix would land in one run. Id order therefore follows
+  // this key — alphabetical over the first 16 folded bytes, then digest order —
+  // which is very nearly but not exactly alphabetical, and nothing relies on it
+  // being.
+  for (uint16_t k = 0; k < knownSeriesCount; k++) {
+    if (k == 0 || !sameSeriesGroup(keys[k], keys[k - 1])) seriesCount++;
+    seriesIdOf[keys[k].ordinal] = static_cast<uint16_t>(seriesCount - 1);
+  }
+  return true;
+}
+
 bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order, const uint16_t* resolvedFirstSeen,
                BuildStats& stats) {
   const uint16_t n = st.books;
@@ -498,6 +663,50 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     return false;
   }
 
+  HalFile stage;
+  if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) return false;
+
+  // The series pass runs first, because seriesCount decides where every section
+  // after the permutations starts and layoutSections needs it below.
+  //
+  // Capped like the author sort: a library too big to rank is one whose shelf
+  // already hides its sort controls, so a library that cannot be ordered by
+  // author cannot be ordered by series either — and this array is 24 bytes a
+  // book against 14 for the others.
+  //
+  // Skipped when the walk read no metadata: series come from metadata and
+  // nowhere else, so every staged name is empty and the pass would spend n
+  // seeks, n 64-byte reads and a sort proving it.
+  auto seriesOrderOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
+  auto seriesIdOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
+  auto seriesIndexOf = makeUniqueNoThrow<uint16_t[]>(n == 0 ? 1 : n);
+  uint16_t seriesCount = 0;
+  uint16_t knownSeriesCount = 0;
+  if (seriesOrderOf && seriesIdOf && seriesIndexOf && st.readMetadata && n <= LIBRARY_MAX_SORTED) {
+    if (!buildSeriesOrder(stage, order, n, seriesOrderOf.get(), seriesIdOf.get(), seriesIndexOf.get(), seriesCount,
+                          knownSeriesCount)) {
+      seriesCount = 0;
+      knownSeriesCount = 0;
+    }
+  } else if (seriesOrderOf && seriesIdOf && seriesIndexOf) {
+    for (uint16_t i = 0; i < n; i++) {
+      seriesOrderOf[i] = i;
+      seriesIdOf[i] = CLIX_SERIES_NONE;
+      seriesIndexOf[i] = SERIES_INDEX_NONE;
+    }
+  }
+  // The three degrade together: a series order without the ids behind it would
+  // draw headings out of a table nothing filled in.
+  if (!seriesOrderOf || !seriesIdOf || !seriesIndexOf) {
+    seriesOrderOf.reset();
+    seriesIdOf.reset();
+    seriesIndexOf.reset();
+    seriesCount = 0;
+    knownSeriesCount = 0;
+  }
+  stats.series = seriesCount;
+  stats.inSeries = knownSeriesCount;
+
   ClixHeader header{};
   memcpy(header.magic, CLIX_MAGIC, sizeof(CLIX_MAGIC));
   header.formatVersion = CLIX_FORMAT_VERSION;
@@ -505,8 +714,10 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   header.bookCount = n;
   header.folderCount = st.folderId;
   header.nextFirstSeen = st.nextFirstSeen;
+  header.seriesCount = seriesCount;
+  header.knownSeriesCount = knownSeriesCount;
   // Placeholder only. Degradations are known after the sorts have run.
-  header.flags = 0;
+  header.flags = st.readMetadata ? CLIX_FLAG_USED_METADATA : 0;
   // The blob is the LAST section, so its size affects only selfSize — every
   // section offset is already fixed by the counts. Lay out with a placeholder
   // and correct selfSize once the blob has actually been written, since the
@@ -514,9 +725,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // one-spelling-per-person pass has run.
   layoutSections(header, st.folderBytes, 0);
 
-  HalFile stage;
   HalFile out;
-  if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) return false;
   if (!Storage.openFileForWrite("LIBIDX", NEW_PATH, out)) {
     stage.close();
     return false;
@@ -887,6 +1096,56 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     serviceBuilder(serviceUnits);
     const uint16_t ordinal = arrivalOrder[k];
     put(&ordinal, sizeof(ordinal));
+  }
+  for (uint16_t k = 0; k < n; k++) {
+    serviceBuilder(serviceUnits);
+    const uint16_t ordinal = seriesOrderOf ? seriesOrderOf[k] : k;
+    put(&ordinal, sizeof(ordinal));
+  }
+  padTo(header.seriesStart);
+
+  // The series table, in id order — which is the sorted order, since ids were
+  // handed out along the sorted array. Each group is a run in seriesOrderOf, so
+  // its length is its book count and its first member names it.
+  for (uint16_t k = 0; k < knownSeriesCount;) {
+    serviceBuilder(serviceUnits);
+    const uint16_t first = seriesOrderOf[k];
+    const uint16_t id = seriesIdOf[first];
+    uint16_t count = 0;
+    while (k + count < knownSeriesCount && seriesIdOf[seriesOrderOf[k + count]] == id) count++;
+
+    StagedSeries staged;
+    stage.seekSet(static_cast<uint64_t>(order[first]) * STAGE_STRIDE + offsetof(StagedEntry, series));
+    // buildSeriesOrder read these same bytes to form this group, so a failure
+    // here is the card failing mid-emit. Fail the whole emit rather than write
+    // the entry nameless: an empty name draws as a phantom heading mid-shelf for
+    // as long as the index lives, while a failed emit keeps the old index.
+    if (stage.read(reinterpret_cast<uint8_t*>(&staged), sizeof(staged)) != static_cast<int>(sizeof(staged))) {
+      LOG_ERR("LIBIDX", "series %u staged read failed mid-emit", static_cast<unsigned>(id));
+      ioFailed = true;
+      break;
+    }
+
+    ClixSeriesEntry seriesEntry{};
+    seriesEntry.bookCount = count;
+    seriesEntry.nameLen = static_cast<uint8_t>(std::min<size_t>(staged.len, CLIX_SERIES_NAME_BYTES));
+    memcpy(seriesEntry.name, staged.name, seriesEntry.nameLen);
+    put(&seriesEntry, sizeof(seriesEntry));
+    k += count;
+  }
+  padTo(header.seriesRefStart);
+
+  // References, parallel to the records, so a record and its series are found
+  // the same way.
+  for (uint16_t i = 0; i < n; i++) {
+    serviceBuilder(serviceUnits);
+    ClixSeriesRef ref{};
+    ref.seriesId = seriesIdOf ? seriesIdOf[i] : CLIX_SERIES_NONE;
+    // From the array the series pass filled, not a fresh seek: it read every
+    // book's staged series to build its keys and kept the positions it saw.
+    ref.seriesIndex =
+        seriesIndexOf && ref.seriesId != CLIX_SERIES_NONE ? seriesIndexOf[i] : static_cast<uint16_t>(SERIES_INDEX_NONE);
+    put(&ref, sizeof(ref));
   }
   padTo(header.nameStart);
 
