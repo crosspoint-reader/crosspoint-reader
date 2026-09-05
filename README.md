@@ -90,8 +90,8 @@ USB port or browser before assuming the device is locked. Only reach for the unl
 ### Web installer (specific version)
 
 1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Download the firmware file for your device from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), a local build, or a continuous-integration artifact.
-3. Go to https://crosspointreader.com/#flash-tools, select your device (X3, X4, Xteink X4Pro, Seeed reTerminal Sticky, or M5PaperMono), click "Custom .bin" and upload its firmware file.
+2. Download the firmware file for your device from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), or compile yourself.
+3. Go to https://crosspointreader.com/#flash-tools, select your device, click "Custom .bin" and upload the firmware file.
 
 ### Revert to Official Firmware
 
