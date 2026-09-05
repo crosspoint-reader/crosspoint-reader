@@ -57,6 +57,8 @@ struct BuildStats {
   uint16_t renamed = 0;    // matched a leftover entry by size alone
   uint16_t removed = 0;    // previous entry no book claimed
   uint16_t enriched = 0;   // took its title or author from the book rather than the filename
+  uint16_t series = 0;     // distinct series across the card
+  uint16_t inSeries = 0;   // books belonging to one; the rest are standalones
   bool ranksDegraded = false;
   bool dedupDegraded = false;
 };

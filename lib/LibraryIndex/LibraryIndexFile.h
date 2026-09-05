@@ -23,6 +23,8 @@ enum class SortOrder : uint8_t {
   TitleDesc,
   AuthorAsc,
   AuthorDesc,
+  SeriesAsc,
+  SeriesDesc,
 };
 
 class LibraryIndexFile {
@@ -47,6 +49,19 @@ class LibraryIndexFile {
   uint16_t bookCount() const { return opened ? head.bookCount : 0; }
   bool ranksDegraded() const { return opened && (head.flags & CLIX_FLAG_RANKS_DEGRADED) != 0; }
   bool dedupDegraded() const { return opened && (head.flags & CLIX_FLAG_DEDUP_DEGRADED) != 0; }
+  // Whether the walk that wrote this index read book metadata. What the index
+  // can hold depends on it — series come from nowhere else — so a reader whose
+  // setting now disagrees knows the shelf is out of date rather than the card
+  // untagged.
+  bool usedMetadata() const { return opened && (head.flags & CLIX_FLAG_USED_METADATA) != 0; }
+  uint16_t seriesCount() const { return opened ? head.seriesCount : 0; }
+  // Books belonging to a series, which is also where the standalone block starts
+  // in series order.
+  uint16_t knownSeriesCount() const { return opened ? head.knownSeriesCount : 0; }
+  // Whether a series order is worth offering at all. An index built before the
+  // reader turned book metadata on carries no series, and a tab that leads to
+  // nothing but ungrouped books is worse than no tab.
+  bool hasSeries() const { return opened && head.seriesCount > 0 && head.knownSeriesCount > 0; }
 
   // Record ordinal of the row at display position `row` in `order`. Returns
   // 0xFFFF when out of range, which callers treat as "no such row" rather than
@@ -67,6 +82,13 @@ class LibraryIndexFile {
 
   // Absolute path of the book, rebuilt from its folder record.
   bool readPath(const ClixRecord& record, std::string& out);
+
+  // The book's series and position. Fills `out` with CLIX_SERIES_NONE when the
+  // book belongs to none, so callers can read it unconditionally.
+  bool readSeriesRef(uint16_t ordinal, ClixSeriesRef& out);
+  // Name and on-card book count of one series. `seriesId` comes from a
+  // ClixSeriesRef; anything out of range fails rather than reading a neighbour.
+  bool readSeries(uint16_t seriesId, std::string& name, uint16_t& bookCount);
 
  private:
   bool openImpl(const char* path, bool acceptStaleFold);

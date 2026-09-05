@@ -29,7 +29,10 @@ constexpr unsigned long LONG_PRESS_MS = 1000;
 constexpr int ADDED_TAB = 0;
 constexpr int TITLE_TAB = 1;
 constexpr int AUTHOR_TAB = 2;
-constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
+// Last, so an index carrying no series simply offers one tab fewer and the other
+// three keep the positions a reader is used to.
+constexpr int SERIES_TAB = 3;
+constexpr int TAB_SLOTS = SERIES_TAB + 1;
 
 constexpr int sortTabIndex(const library::SortOrder order) {
   switch (order) {
@@ -42,13 +45,16 @@ constexpr int sortTabIndex(const library::SortOrder order) {
     case library::SortOrder::AuthorAsc:
     case library::SortOrder::AuthorDesc:
       return AUTHOR_TAB;
+    case library::SortOrder::SeriesAsc:
+    case library::SortOrder::SeriesDesc:
+      return SERIES_TAB;
   }
   return ADDED_TAB;
 }
 
 constexpr bool isDescending(const library::SortOrder order) {
   return order == library::SortOrder::AddedDesc || order == library::SortOrder::TitleDesc ||
-         order == library::SortOrder::AuthorDesc;
+         order == library::SortOrder::AuthorDesc || order == library::SortOrder::SeriesDesc;
 }
 
 constexpr bool isAddedSort(const library::SortOrder order) {
@@ -59,16 +65,22 @@ constexpr bool isAuthorSort(const library::SortOrder order) {
   return order == library::SortOrder::AuthorAsc || order == library::SortOrder::AuthorDesc;
 }
 
+constexpr bool isSeriesSort(const library::SortOrder order) {
+  return order == library::SortOrder::SeriesAsc || order == library::SortOrder::SeriesDesc;
+}
+
 constexpr library::SortOrder orderForTab(const int tab, const uint8_t descendingTabs) {
   const bool descending = (descendingTabs & (1u << tab)) != 0;
   if (tab == TITLE_TAB) return descending ? library::SortOrder::TitleDesc : library::SortOrder::TitleAsc;
   if (tab == AUTHOR_TAB) return descending ? library::SortOrder::AuthorDesc : library::SortOrder::AuthorAsc;
+  if (tab == SERIES_TAB) return descending ? library::SortOrder::SeriesDesc : library::SortOrder::SeriesAsc;
   return descending ? library::SortOrder::AddedDesc : library::SortOrder::AddedAsc;
 }
 
 const char* tabLabelFor(const int tab) {
   if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
+  if (tab == SERIES_TAB) return tr(STR_LIBRARY_TAB_SERIES);
   return tr(STR_LIBRARY_TAB_TIME);
 }
 
@@ -84,9 +96,12 @@ void LibraryListActivity::onEnter() {
   // render task's SD-loaded fonts read glyph data at draw time, and the walk
   // needs the card to itself.
   RenderLock lock(*this);
-  UiTabListActivity::onEnter();
-  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
 
+  // The index opens BEFORE the base lifecycle, because the base sizes one
+  // ListNav per tab and whether the Series tab exists depends on what the index
+  // holds. tabCount() has to be settled by then; the base treats it as fixed
+  // from that point on.
+  //
   // Optimistic open: if an index exists, paint from it immediately and let the
   // user decide when to refresh. Only a missing or unreadable index forces the
   // walk, so entering the screen is normally instant.
@@ -94,10 +109,24 @@ void LibraryListActivity::onEnter() {
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
     if (rebuildIndex()) index.open(library::libraryIndexPath());
   }
+  // Series ids are handed out afresh by every build, so a name cached against an
+  // id from the previous index would label the wrong group.
+  cachedSeriesId = library::CLIX_SERIES_NONE;
+  cachedSeriesName.clear();
   degraded = index.isOpen() && index.ranksDegraded();
   if (index.isOpen() && index.dedupDegraded()) {
     LOG_ERR("LIB", "index was built without duplicate detection");
   }
+  // A rebuild with book metadata turned off drops the Series tab, and an order
+  // left pointing at it would leave activeTab() past the last ListNav.
+  if (isSeriesSort(sortOrder) && !index.hasSeries()) sortOrder = library::SortOrder::AddedDesc;
+  // Latched here and never recomputed: the base allocates one ListNav per tab
+  // from this and treats the count as fixed, while index.close() before opening
+  // a book would otherwise shrink it out from under that.
+  seriesTabAvailable = index.hasSeries();
+
+  UiTabListActivity::onEnter();
+  app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
 
   // Entered while Confirm was still held (typical when launched from the home
   // menu): ignore its release, or we would open whatever sits at row 0.
@@ -122,6 +151,8 @@ bool LibraryListActivity::rebuildIndex() {
           static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
           static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.duplicatesDropped),
           static_cast<unsigned>(stats.unreadableSkipped));
+  LOG_INF("LIB", "series: %u books across %u series", static_cast<unsigned>(stats.inSeries),
+          static_cast<unsigned>(stats.series));
   if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
   return true;
 }
@@ -219,7 +250,8 @@ void LibraryListActivity::applySortOrder(const library::SortOrder order) {
 }
 
 void LibraryListActivity::stepTab(const int direction) {
-  const int next = (activeTab() + (direction > 0 ? 1 : TAB_SLOTS - 1)) % TAB_SLOTS;
+  const int slots = tabCount();
+  const int next = (activeTab() + (direction > 0 ? 1 : slots - 1)) % slots;
   selectTab(next, false);
 }
 
@@ -229,7 +261,7 @@ void LibraryListActivity::onTabAction(const int index) {
 }
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
-  if (index < 0 || index >= TAB_SLOTS) return;
+  if (index < 0 || index >= tabCount()) return;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   applySortOrder(orderForTab(index, descendingTabs));
   // Tab changes happen only while the bar owns focus. A tab's remembered row
@@ -241,7 +273,10 @@ void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) 
 
 void LibraryListActivity::toggleSortDirection() { selectTab(activeTab(), true); }
 
-int LibraryListActivity::tabCount() const { return TAB_SLOTS; }
+// The Series tab is offered only when the index actually holds series. An index
+// built with book metadata off carries none, and a tab that leads to nothing but
+// ungrouped books is worse than no tab.
+int LibraryListActivity::tabCount() const { return seriesTabAvailable ? TAB_SLOTS : TAB_SLOTS - 1; }
 
 int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
 
@@ -268,6 +303,52 @@ int LibraryListActivity::rowFor(const int entry) const {
 
 bool LibraryListActivity::groupable() const { return !degraded && !isAddedSort(sortOrder) && bookRowCount() > 0; }
 
+// The series a row's book belongs to, and its position within it. Returns false
+// for a standalone, which the shelf files under one heading of its own rather
+// than leaving unlabelled.
+bool LibraryListActivity::seriesFor(const int entry, std::string& name, uint16_t& position, uint16_t& bookCount) {
+  name.clear();
+  position = library::SERIES_INDEX_NONE;
+  bookCount = 0;
+  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  if (ordinal == 0xFFFF) return false;
+  library::ClixSeriesRef ref{};
+  if (!index.readSeriesRef(ordinal, ref) || ref.seriesId == library::CLIX_SERIES_NONE) return false;
+  // A series order draws its group's rows back to back, so without this the same
+  // 64-byte table entry is re-read once per book in the series.
+  if (ref.seriesId != cachedSeriesId) {
+    uint16_t books = 0;
+    if (!index.readSeries(ref.seriesId, cachedSeriesName, books) || cachedSeriesName.empty()) {
+      cachedSeriesId = library::CLIX_SERIES_NONE;
+      cachedSeriesName.clear();
+      cachedSeriesBooks = 0;
+      return false;
+    }
+    cachedSeriesId = ref.seriesId;
+    cachedSeriesBooks = books;
+  }
+  name = cachedSeriesName;
+  position = ref.seriesIndex;
+  bookCount = cachedSeriesBooks;
+  return true;
+}
+
+// The count comes from the series table rather than being counted here: the
+// group is contiguous in only one of the sort orders, so deriving it would mean
+// walking the permutation on every heading drawn.
+void LibraryListActivity::formatSeriesHeading(const std::string& name, const uint16_t bookCount,
+                                              std::string& out) const {
+  if (name.empty()) {
+    out = tr(STR_LIBRARY_STANDALONE);
+    return;
+  }
+  out = name;
+  if (bookCount == 0) return;
+  char suffix[16];
+  snprintf(suffix, sizeof(suffix), " (%u)", static_cast<unsigned>(bookCount));
+  out += suffix;
+}
+
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
   library::ClixRecord record{};
@@ -291,17 +372,31 @@ bool LibraryListActivity::buildGroupStarts() {
   groupCount = 0;
   uint32_t previousInitial = 0;
   std::string previousAuthor;
+  std::string previousSeries;
+  std::string series;
   std::string title;
   std::string author;
   previousAuthor.reserve(128);
+  previousSeries.reserve(128);
+  series.reserve(128);
   title.reserve(128);
   author.reserve(128);
+  bool hadSeries = false;
   for (int entry = 0; entry < count; entry++) {
     bool startsGroup = entry == 0;
     if (isAuthorSort(sortOrder)) {
       rowTextFor(entry, title, author);
       startsGroup = startsGroup || author != previousAuthor;
       previousAuthor = author;
+    } else if (isSeriesSort(sortOrder)) {
+      uint16_t position = 0;
+      uint16_t seriesBooks = 0;
+      const bool inSeries = seriesFor(entry, series, position, seriesBooks);
+      // The standalones form one trailing group, so the transition into them is
+      // a group start even though every one of them has the same empty name.
+      startsGroup = startsGroup || series != previousSeries || inSeries != hadSeries;
+      previousSeries = series;
+      hadSeries = inSeries;
     } else {
       const uint32_t initial = titleInitialFor(entry);
       startsGroup = startsGroup || initial != previousInitial;
@@ -376,6 +471,7 @@ void LibraryListActivity::applyFilter() {
 
   uint16_t matchCount = 0;
   std::string author;
+  std::string series;
   for (int row = 0; row < total; row++) {
     const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(row));
     library::ClixRecord record{};
@@ -391,6 +487,19 @@ void LibraryListActivity::applyFilter() {
     author.clear();
     if (index.readAuthor(record, author) && library::matchesQuery(library::fold(author), needle)) {
       matches[matchCount++] = static_cast<uint16_t>(row);
+      continue;
+    }
+    // A reader who remembers the series but not the volume searches for the
+    // series. Read only when the title and author have already missed, so the
+    // common hit still costs one record read.
+    library::ClixSeriesRef ref{};
+    if (index.readSeriesRef(ordinal, ref) && ref.seriesId != library::CLIX_SERIES_NONE) {
+      series.clear();
+      uint16_t books = 0;
+      if (index.readSeries(ref.seriesId, series, books) &&
+          library::matchesQuery(library::fold(series, /*stripArticle=*/true), needle)) {
+        matches[matchCount++] = static_cast<uint16_t>(row);
+      }
     }
   }
   filtered = std::move(matches);
@@ -523,6 +632,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = bookRowCount();
   const bool authorGrouped = isAuthorSort(sortOrder);
+  const bool seriesGrouped = isSeriesSort(sortOrder);
   const bool grouped = !isAddedSort(sortOrder);
 
   fui::ListProps props;
@@ -545,6 +655,8 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   int books = 0;
   int headers = 0;
   uint32_t previousInitial = 0;
+  std::string previousSeries;
+  bool hadSeries = false;
   // Capture this after syncTabListViewport(), which may clamp nav.top.
   const int windowStart = static_cast<int>(props.topIndex);
   for (int entry = windowStart; entry < count && books < static_cast<int>(cap); entry++) {
@@ -554,8 +666,17 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
 
     uint32_t initial = 0;
     bool startsGroup = false;
+    std::string series;
+    uint16_t position = library::SERIES_INDEX_NONE;
+    uint16_t seriesBooks = 0;
+    bool inSeries = false;
     if (authorGrouped) {
       startsGroup = books == 0 || author != winAuthors[static_cast<size_t>(books - 1)];
+    } else if (seriesGrouped) {
+      inSeries = seriesFor(entry, series, position, seriesBooks);
+      startsGroup = books == 0 || series != previousSeries || inSeries != hadSeries;
+      previousSeries = series;
+      hadSeries = inSeries;
     } else if (grouped) {
       initial = titleInitialFor(entry);
       startsGroup = books == 0 || initial != previousInitial;
@@ -566,9 +687,20 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
       std::string& heading = winHeaders[static_cast<size_t>(headers++)];
       if (authorGrouped)
         formatAuthorHeading(author, heading);
+      else if (seriesGrouped)
+        formatSeriesHeading(series, seriesBooks, heading);
       else
         formatInitialHeading(initial, heading);
       item.sectionHeading = heading.c_str();
+    }
+
+    // Under a series heading the position is what tells one book from the next,
+    // so it leads the subtitle the author would otherwise have to itself.
+    if (seriesGrouped && inSeries) {
+      char positionText[12];
+      if (library::formatSeriesIndex(position, positionText, sizeof(positionText))) {
+        author.insert(0, author.empty() ? std::string(positionText) : std::string(positionText) + " · ");
+      }
     }
 
     item.label = title.c_str();
@@ -632,6 +764,12 @@ void LibraryListActivity::buildGroupRows(UiScreen& screen) {
       std::string& author = winAuthors[static_cast<size_t>(rows)];
       rowTextFor(bookEntry, ignoredTitle, author);
       formatAuthorHeading(author, label);
+    } else if (isSeriesSort(sortOrder)) {
+      std::string& series = winAuthors[static_cast<size_t>(rows)];
+      uint16_t position = 0;
+      uint16_t seriesBooks = 0;
+      seriesFor(bookEntry, series, position, seriesBooks);
+      formatSeriesHeading(series, seriesBooks, label);
     } else {
       formatInitialHeading(titleInitialFor(bookEntry), label);
     }

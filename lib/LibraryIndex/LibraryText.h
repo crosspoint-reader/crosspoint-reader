@@ -30,6 +30,8 @@
 #include <string>
 #include <string_view>
 
+#include "LibraryFormat.h"
+
 namespace library {
 
 // Longest author key written into an index record. Sized so a key fits the
@@ -116,5 +118,21 @@ bool matchesQuery(std::string_view haystack, std::string_view needle);
 // this card and wrong for some others, which is a limit worth stating rather than
 // hiding: a single word name simply keys on itself.
 std::string surnameKey(std::string_view displayAuthor);
+
+// Encode a series position as written in a package document ("3", "3.5", "0,5")
+// into hundredths. Returns SERIES_INDEX_NONE when the text names no position.
+//
+// Tolerant on purpose: a comma is accepted as the decimal point because
+// exporters running under a European locale write one, and a series position is
+// never large enough for a comma to plausibly be a thousands separator. A third
+// decimal rounds half up. A value too large to represent is clamped rather than
+// rejected, since an absurd position still belongs after every sane one and
+// dropping it would move the book out of its series entirely.
+uint16_t parseSeriesIndex(std::string_view text);
+
+// Render a position for display, dropping trailing zeros so the shelf reads "3"
+// and "3.5" rather than "3.00" and "3.50". Writes an empty string and returns
+// false when the book has no position.
+bool formatSeriesIndex(uint16_t index, char* out, size_t outSize);
 
 }  // namespace library

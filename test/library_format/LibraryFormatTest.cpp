@@ -75,21 +75,54 @@ TEST(LibraryFormat, PermutationArraysDoNotOverlapEachOther) {
   EXPECT_EQ(authorOrderOffset(h, 99), h.permStart + 198u);
   EXPECT_EQ(arrivalOrderOffset(h, 0), h.permStart + 200u);
   EXPECT_GT(arrivalOrderOffset(h, 0), authorOrderOffset(h, h.bookCount - 1));
+  EXPECT_EQ(seriesOrderOffset(h, 0), h.permStart + 400u);
+  EXPECT_GT(seriesOrderOffset(h, 0), arrivalOrderOffset(h, h.bookCount - 1));
 }
 
 TEST(LibraryFormat, SizeArithmeticMatchesTheSpecTable) {
-  // Spec section 3.7, the 200-book row: 512 header + 1536 folders + 25600
-  // records + 1024 permutations + 16000 names.
+  // Spec section 3.7, the 200-book row, now carrying series: 512 header + 1536
+  // folders + 25600 records + 1536 permutations + 20 series entries + 800
+  // series refs + 16000 names.
   ClixHeader h{};
   memcpy(h.magic, CLIX_MAGIC, sizeof(CLIX_MAGIC));
   h.formatVersion = CLIX_FORMAT_VERSION;
   h.foldVersion = CLIX_FOLD_VERSION;
   h.bookCount = 200;
+  h.seriesCount = 20;
   layoutSections(h, 29u * 50u, 80u * 200u);
   EXPECT_EQ(h.folderStart, 512u);
   EXPECT_EQ(h.recordStart, 2048u);
   EXPECT_EQ(h.permStart, 2048u + 25600u);
-  EXPECT_EQ(h.selfSize, 44672u);
+  // Each section is rounded up to the next sector, so the series table's 1280
+  // bytes and the refs' 800 both cost a little padding.
+  EXPECT_EQ(h.seriesStart, 29184u);
+  EXPECT_EQ(h.seriesRefStart, 30720u);
+  EXPECT_EQ(h.nameStart, 31744u);
+  EXPECT_EQ(h.selfSize, 47744u);
+}
+
+TEST(LibraryFormat, SeriesSectionsAreEmptyWhenNoBookNamesASeries) {
+  ClixHeader h{};
+  h.bookCount = 10;
+  h.seriesCount = 0;
+  layoutSections(h, 0, 100);
+  // With no entries the table takes no room, so the refs follow immediately.
+  EXPECT_EQ(h.seriesRefStart, h.seriesStart);
+  EXPECT_EQ(h.seriesStart % CLIX_ALIGN, 0u);
+}
+
+TEST(LibraryFormat, SeriesEntriesTileSectorsExactly) {
+  const ClixHeader h = makeHeader(64, 116);
+  EXPECT_EQ(seriesEntryOffset(h, 0), h.seriesStart);
+  EXPECT_EQ(seriesEntryOffset(h, 1), h.seriesStart + 64u);
+  // 8 entries fill a sector, so every 8th starts on a boundary.
+  for (uint16_t k = 0; k < 32; k += 8) EXPECT_EQ(seriesEntryOffset(h, k) % CLIX_ALIGN, 0u);
+}
+
+TEST(LibraryFormat, SeriesRefsAreParallelToTheRecords) {
+  const ClixHeader h = makeHeader(64, 116);
+  EXPECT_EQ(seriesRefOffset(h, 0), h.seriesRefStart);
+  EXPECT_EQ(seriesRefOffset(h, 63), h.seriesRefStart + 63u * 4u);
 }
 
 TEST(LibraryFormatValidation, AcceptsAWellFormedHeader) {
@@ -187,6 +220,39 @@ TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
   EXPECT_EQ(offsetof(ClixRecord, reserved), 124u);
 
   EXPECT_EQ(offsetof(ClixHeader, bookCount), 8u);
+  EXPECT_EQ(offsetof(ClixHeader, seriesCount), 14u);
   EXPECT_EQ(offsetof(ClixHeader, folderStart), 16u);
-  EXPECT_EQ(offsetof(ClixHeader, selfSize), 40u);
+  EXPECT_EQ(offsetof(ClixHeader, seriesStart), 32u);
+  EXPECT_EQ(offsetof(ClixHeader, seriesRefStart), 36u);
+  EXPECT_EQ(offsetof(ClixHeader, selfSize), 48u);
+  EXPECT_EQ(offsetof(ClixHeader, knownSeriesCount), 52u);
+
+  EXPECT_EQ(offsetof(ClixSeriesEntry, bookCount), 0u);
+  EXPECT_EQ(offsetof(ClixSeriesEntry, nameLen), 2u);
+  EXPECT_EQ(offsetof(ClixSeriesEntry, name), 3u);
+  EXPECT_EQ(offsetof(ClixSeriesRef, seriesId), 0u);
+  EXPECT_EQ(offsetof(ClixSeriesRef, seriesIndex), 2u);
+}
+
+TEST(LibraryFormatValidation, RejectsMoreSeriesThanBooks) {
+  ClixHeader h = makeHeader(10, 116);
+  h.seriesCount = 11;
+  layoutSections(h, h.folderLen, h.nameLen);
+  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::CountOutOfRange);
+}
+
+TEST(LibraryFormatValidation, RejectsGroupedBooksWithoutAnySeries) {
+  ClixHeader h = makeHeader(10, 116);
+  h.seriesCount = 0;
+  h.knownSeriesCount = 4;
+  layoutSections(h, h.folderLen, h.nameLen);
+  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::CountOutOfRange);
+}
+
+TEST(LibraryFormatValidation, RejectsMoreSeriesThanGroupedBooks) {
+  ClixHeader h = makeHeader(10, 116);
+  h.seriesCount = 5;
+  h.knownSeriesCount = 4;
+  layoutSections(h, h.folderLen, h.nameLen);
+  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::CountOutOfRange);
 }

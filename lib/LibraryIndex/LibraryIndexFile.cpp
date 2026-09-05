@@ -76,8 +76,42 @@ uint16_t LibraryIndexFile::ordinalForRow(const SortOrder order, const uint16_t r
       uint16_t ordinal = NONE;
       return readAt(arrivalOrderOffset(head, k), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
     }
+    case SortOrder::SeriesAsc:
+    case SortOrder::SeriesDesc: {
+      const uint16_t k = order == SortOrder::SeriesAsc ? row : static_cast<uint16_t>(head.bookCount - 1 - row);
+      uint16_t ordinal = NONE;
+      return readAt(seriesOrderOffset(head, k), &ordinal, sizeof(ordinal)) ? ordinal : NONE;
+    }
   }
   return NONE;
+}
+
+bool LibraryIndexFile::readSeriesRef(const uint16_t ordinal, ClixSeriesRef& out) {
+  out.seriesId = CLIX_SERIES_NONE;
+  out.seriesIndex = SERIES_INDEX_NONE;
+  if (!opened || ordinal >= head.bookCount) return false;
+  if (!readAt(seriesRefOffset(head, ordinal), &out, sizeof(out))) return false;
+  // Same reasoning as the record clamp: this came off a card the user can write
+  // to. An id past the table would seek outside the series section and render
+  // whatever bytes it found as a heading.
+  if (out.seriesId >= head.seriesCount) {
+    out.seriesId = CLIX_SERIES_NONE;
+    out.seriesIndex = SERIES_INDEX_NONE;
+  }
+  return true;
+}
+
+bool LibraryIndexFile::readSeries(const uint16_t seriesId, std::string& name, uint16_t& bookCount) {
+  name.clear();
+  bookCount = 0;
+  if (!opened || seriesId >= head.seriesCount) return false;
+
+  ClixSeriesEntry entry{};
+  if (!readAt(seriesEntryOffset(head, seriesId), &entry, sizeof(entry))) return false;
+  const size_t len = std::min<size_t>(entry.nameLen, CLIX_SERIES_NAME_BYTES);
+  name.assign(entry.name, len);
+  bookCount = entry.bookCount;
+  return true;
 }
 
 bool LibraryIndexFile::readRecord(const uint16_t ordinal, ClixRecord& out) {

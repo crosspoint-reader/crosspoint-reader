@@ -387,7 +387,7 @@ Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. On
 file describing every book on the card, so the shelf can sort and search several
 hundred titles without opening any of them.
 
-Format version 1. An index written by another version fails validation on open
+Format version 2. An index written by another version fails validation on open
 and is rebuilt; that is the entire migration mechanism.
 
 ### Layout
@@ -397,7 +397,9 @@ and is rebuilt; that is the entire migration mechanism.
 | Header | 0 | 64 bytes, `ClixHeader` |
 | Folders | `folderStart` | length-prefixed paths, one per folder |
 | Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
-| Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
+| Permutations | `permStart` | `bookCount` u16 author order, then arrival order, then series order |
+| Series | `seriesStart` | `seriesCount` × 64-byte `ClixSeriesEntry` |
+| Series refs | `seriesRefStart` | `bookCount` × 4-byte `ClixSeriesRef`, parallel to the records |
 | Name blob | `nameStart` | per record: name, author, title (see below) |
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
@@ -416,6 +418,33 @@ surname, derived separately from the display name.
 One byte aligns the folded title at offset 16, and four trailing bytes are
 reserved so the record remains exactly 128 bytes. A later format can claim those
 bytes by bumping `CLIX_FORMAT_VERSION`.
+
+### Series
+
+A book's series lives outside its record, because the record is exactly full at
+128 bytes and widening it would break the tiling the whole streaming design rests
+on. Two sections carry it instead.
+
+`ClixSeriesEntry` is a fixed 64 bytes — a u16 book count, a length byte, and 61
+bytes of name — so series *s* is at `seriesStart + 64s` and eight of them tile a
+sector. The fixed stride matters here for the same reason it does for records:
+the shelf draws a heading per group, and a variable-length table like the folder
+section would make every heading a walk from the start of the section. The id of
+a series is its ordinal, and ids are handed out in sorted order.
+
+`ClixSeriesRef` is four bytes per book, parallel to the records, so a record and
+its series are found the same way. `seriesId` is `CLIX_SERIES_NONE` (0xFFFF) for
+a standalone. `seriesIndex` holds the position within the series in hundredths,
+so the fractional numbering Calibre uses for novellas — 3.5 for a between-books
+volume — sorts where it belongs; `SERIES_INDEX_NONE` (0xFFFF) means the book
+names a series but no position, and such books sort after their numbered
+siblings.
+
+The series permutation puts the grouped books first, so `knownSeriesCount` is
+where the standalones begin. Series come from book metadata and nowhere else, so
+an index built with that setting off carries none and sets no
+`CLIX_FLAG_USED_METADATA`; the shelf reads that flag to tell an untagged card
+from an index that never looked.
 
 ### The name blob
 
