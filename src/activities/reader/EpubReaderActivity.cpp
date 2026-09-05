@@ -354,25 +354,35 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
-      !partialRebuildStartFailed &&
-      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
-    RenderLock lock;
-    const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
-    if (!section->startBuild(buildSpec)) {
-      partialRebuildStartFailed = true;
-      LOG_ERR("ERS", "Failed to start deferred partial extension build");
-    } else {
-      LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
-              section->pageCount);
+  // section is owned by the RenderLock: the render task resets or replaces it on its
+  // failure/load paths while holding the lock, so even eligibility peeks must not
+  // dereference it unlocked -- a concurrent reset would leave this task reading a freed
+  // Section mid-expression. Only lock-free state is checked outside. The acquire is
+  // NON-BLOCKING: this outer gate passes on virtually every pass, and a blocking
+  // acquire that loses the peek->acquire race would park the loop task behind a whole
+  // page render, stalling input polling. Deferrable work retries next pass instead.
+  if (!RenderLock::peek() && buildViewportWidth > 0 && !partialRebuildStartFailed) {
+    RenderLock lock{RenderLock::TryAcquire{}};
+    if (lock.locked() && section && !section->isBuilding() && section->isPartial() &&
+        section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+      const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
+      if (!section->startBuild(buildSpec)) {
+        partialRebuildStartFailed = true;
+        LOG_ERR("ERS", "Failed to start deferred partial extension build");
+      } else {
+        LOG_DBG("ERS", "Reader near partial watermark (%d/%d), resuming extension build", section->currentPage,
+                section->pageCount);
+      }
     }
   }
 
-  if (section && section->isBuilding() && !RenderLock::peek() &&
-      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
-      buildTickHeapGate()) {
-    RenderLock lock;
-    if (section->isBuilding() && buildTickHeapGate()) {
+  // Same locking rule (and same non-blocking acquire) as above; the heap gate is
+  // re-checked under the lock because state can shift between gate and acquire.
+  if (!RenderLock::peek() && buildTickHeapGate()) {
+    RenderLock lock{RenderLock::TryAcquire{}};
+    if (lock.locked() && section && section->isBuilding() &&
+        (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
+        buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
