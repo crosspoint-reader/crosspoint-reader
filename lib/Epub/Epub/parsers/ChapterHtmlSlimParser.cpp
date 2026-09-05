@@ -948,7 +948,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           // Resolve the image path relative to the HTML file
           std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
 
-          if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+          // Extract every referenced image, then let the decoder factory choose a
+          // decoder from the extracted file's actual content. The in-archive path's
+          // extension is only a naming hint here: some EPUBs omit it (or get it wrong),
+          // so it must not gate extraction or the image would never render.
+          {
             // Create a unique filename for the cached image
             std::string ext;
             size_t extPos = resolvedPath.rfind('.');
@@ -1195,7 +1199,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 Storage.remove(cachedImagePath.c_str());
               }
             }
-          }  // isFormatSupported
+          }  // image extraction
         }
       }
 
