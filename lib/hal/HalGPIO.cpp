@@ -260,12 +260,14 @@ bool HalGPIO::coldBootImpliesPowerButton() const {
   // Xteink-style power topology: the power button energizes the rail until
   // firmware latches it, so a no-USB POWERON can only be a still-held button
   // boot, and plugging USB into an off device should charge-sleep, not boot.
+  // The S3 X4 Pro shares that topology but sits outside isXteinkDevice(),
+  // which covers only the C3 Xteink boards.
   // Everything else boots on any cold boot: boards with no USB detection at
   // all (M5Paper v1.1, PaperColor, Murphy, de-link) would misread USB and
   // post-flash boots as battery button boots, and STAT-only boards like the
   // EEGO A4 misread them the same way once the charger terminates at 100%
   // (STAT inactive reads as "no USB").
-  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
+  return isXteinkDevice() || BoardConfig::isX4Pro() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
