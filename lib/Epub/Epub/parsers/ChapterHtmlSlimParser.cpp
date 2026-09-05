@@ -45,10 +45,11 @@ constexpr size_t TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS = 320;
 // on resource-constrained devices (~380KB heap). TOC anchors bypass this cap.
 constexpr size_t MAX_ANCHORS_PER_CHAPTER = 1024;
 
-// Reuse serializable PageLine/PageHorizontalRule elements for a small grid.
+// Keep table layout bounded to one buffered row at a time.
 constexpr int16_t TABLE_CELL_HORIZONTAL_PADDING = 4;
 constexpr int16_t TABLE_ROW_SEPARATOR_GAP = 4;
 constexpr uint8_t TABLE_ROW_SEPARATOR_THICKNESS = 1;
+constexpr int16_t TABLE_GRID_VERTICAL_PADDING = 3;
 constexpr int16_t TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS = 3;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
@@ -313,6 +314,97 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   pendingAnchorId.clear();
 }
 
+void ChapterHtmlSlimParser::collectPendingTableAnchor() {
+  if (pendingAnchorId.empty()) return;
+
+  if (tableRowStacked) {
+    compactTableRowAnchors();
+  }
+
+  const size_t requiredBytes = pendingAnchorId.size() + 2;
+  if (requiredBytes > tableRowAnchorStorage.size() - tableRowAnchorBytes) {
+    // Keep unusually anchor-heavy rows navigable through the ordinary flow.
+    if (!tableRowStacked) {
+      fallbackTableRowToStacked();
+    } else {
+      LOG_DBG("EHP", "Dropped oversized table anchor: %.48s", pendingAnchorId.c_str());
+      pendingAnchorId.clear();
+    }
+    return;
+  }
+
+  const size_t cellIndex =
+      insideTableCell ? tableRowCells.size() : (tableRowCells.empty() ? 0 : tableRowCells.size() - 1);
+  tableRowAnchorStorage[tableRowAnchorBytes] =
+      static_cast<char>(std::min(cellIndex, static_cast<size_t>(UINT8_MAX - 1)));
+  memcpy(tableRowAnchorStorage.data() + tableRowAnchorBytes + 1, pendingAnchorId.c_str(), pendingAnchorId.size() + 1);
+  tableRowAnchorBytes += requiredBytes;
+  tableRowAnchorCount++;
+  pendingAnchorId.clear();
+  if (tableRowStacked) {
+    tableAnchorCellPendingLine = static_cast<uint8_t>(cellIndex);
+  }
+}
+
+void ChapterHtmlSlimParser::compactTableRowAnchors() {
+  size_t readOffset = 0;
+  size_t writeOffset = 0;
+  while (readOffset < tableRowAnchorBytes) {
+    const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[readOffset]);
+    const char* anchor = tableRowAnchorStorage.data() + readOffset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - readOffset - 1) + 2;
+    if (cellIndex != UINT8_MAX) {
+      if (writeOffset != readOffset) {
+        memmove(tableRowAnchorStorage.data() + writeOffset, tableRowAnchorStorage.data() + readOffset, recordBytes);
+      }
+      writeOffset += recordBytes;
+    }
+    readOffset += recordBytes;
+  }
+  tableRowAnchorBytes = writeOffset;
+}
+
+void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) {
+  size_t offset = 0;
+  while (offset < tableRowAnchorBytes) {
+    auto& storedCellIndex = reinterpret_cast<uint8_t&>(tableRowAnchorStorage[offset]);
+    const char* anchor = tableRowAnchorStorage.data() + offset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - offset - 1) + 2;
+    if (storedCellIndex == cellIndex) {
+      pendingAnchorId.assign(anchor);
+      flushPendingAnchor();
+      storedCellIndex = UINT8_MAX;
+      tableRowAnchorCount--;
+    }
+    offset += recordBytes;
+  }
+}
+
+void ChapterHtmlSlimParser::flushPendingTableCellAnchors() {
+  if (tableAnchorCellPendingLine == UINT8_MAX) {
+    return;
+  }
+  flushTableRowAnchorsForCell(tableAnchorCellPendingLine);
+  tableAnchorCellPendingLine = UINT8_MAX;
+}
+
+void ChapterHtmlSlimParser::flushTableRowAnchors() {
+  size_t offset = 0;
+  while (offset < tableRowAnchorBytes) {
+    const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[offset]);
+    const char* anchor = tableRowAnchorStorage.data() + offset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - offset - 1) + 2;
+    if (cellIndex != UINT8_MAX) {
+      pendingAnchorId.assign(anchor);
+      flushPendingAnchor();
+    }
+    offset += recordBytes;
+  }
+  tableRowAnchorCount = 0;
+  tableRowAnchorBytes = 0;
+  tableAnchorCellPendingLine = UINT8_MAX;
+}
+
 void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
   if (currentPageVisibleOffsetSet) return;
   // The first page always begins at the start of the body, even when the XHTML
@@ -492,28 +584,49 @@ void ChapterHtmlSlimParser::fallbackTableRowToStacked() {
     return;
   }
 
+  const size_t activeCellIndex = tableRowCells.size();
   auto activeCell = std::move(currentTextBlock);
+  auto activeAnchor = std::move(pendingAnchorId);
   tableRowStacked = true;
 
-  for (auto& cell : tableRowCells) {
-    currentTextBlock = std::move(cell);
+  for (size_t cellIndex = 0; cellIndex < tableRowCells.size(); ++cellIndex) {
+    tableAnchorCellPendingLine = static_cast<uint8_t>(cellIndex);
+    currentTextBlock = std::move(tableRowCells[cellIndex]);
     wordsExtractedInBlock = 0;
     if (currentTextBlock && !currentTextBlock->isEmpty()) {
       makePages();
     }
+    flushPendingTableCellAnchors();
   }
   tableRowCells.clear();
   currentTextBlock = std::move(activeCell);
   wordsExtractedInBlock = 0;
+  size_t anchorOffset = 0;
+  while (anchorOffset < tableRowAnchorBytes) {
+    auto& cellIndex = reinterpret_cast<uint8_t&>(tableRowAnchorStorage[anchorOffset]);
+    const char* anchor = tableRowAnchorStorage.data() + anchorOffset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - anchorOffset - 1) + 2;
+    if (cellIndex == activeCellIndex) {
+      cellIndex = 0;
+    }
+    anchorOffset += recordBytes;
+  }
+  tableAnchorCellPendingLine = 0;
+  pendingAnchorId = std::move(activeAnchor);
+  collectPendingTableAnchor();
 }
 
 void ChapterHtmlSlimParser::closeTableCell() {
   if (!insideTableCell) {
     return;
   }
+  collectPendingTableAnchor();
   insideTableCell = false;
 
   if (!currentTextBlock) {
+    if (tableRowStacked) {
+      flushPendingTableCellAnchors();
+    }
     return;
   }
 
@@ -527,6 +640,7 @@ void ChapterHtmlSlimParser::closeTableCell() {
     if (!currentTextBlock->isEmpty()) {
       makePages();
     }
+    flushPendingTableCellAnchors();
     currentTextBlock.reset();
     return;
   }
@@ -535,6 +649,8 @@ void ChapterHtmlSlimParser::closeTableCell() {
 }
 
 void ChapterHtmlSlimParser::addTableRowSeparator() {
+  tablePreviousRowWasGrid = false;
+  tablePreviousRowEndedWithSeparator = false;
   if (!currentPage || currentPage->elements.empty() || viewportWidth == 0 ||
       currentPageNextY + TABLE_ROW_SEPARATOR_GAP > viewportHeight) {
     return;
@@ -551,12 +667,38 @@ void ChapterHtmlSlimParser::addTableRowSeparator() {
   }
   currentPage->elements.push_back(std::move(separator));
   currentPageNextY += TABLE_ROW_SEPARATOR_GAP;
+  tablePreviousRowEndedWithSeparator = true;
+}
+
+bool ChapterHtmlSlimParser::addTableGridSegment(const uint8_t columnCount, const int16_t topY, const int16_t bottomY) {
+  if (!currentPage || viewportWidth == 0 || topY < 0 || bottomY <= topY) {
+    return false;
+  }
+
+  const uint16_t height = static_cast<uint16_t>(bottomY - topY + 1);
+  auto grid = std::shared_ptr<PageTableGridRow>(new (std::nothrow)
+                                                    PageTableGridRow(viewportWidth, height, columnCount, 0, topY));
+  if (!grid) {
+    LOG_ERR("EHP", "OOM: table grid row");
+    return false;
+  }
+  if (currentPage->elements.capacity() == currentPage->elements.size()) {
+    currentPage->elements.reserve(currentPage->elements.size() + 1);
+  }
+  currentPage->elements.push_back(std::move(grid));
+  return true;
 }
 
 void ChapterHtmlSlimParser::finishTableRow() {
   closeTableCell();
+  collectPendingTableAnchor();
+
+  if (!tableRowStacked && tableRowAnchorCount > 0) {
+    fallbackTableRowToStacked();
+  }
 
   if (tableRowCells.empty()) {
+    flushTableRowAnchors();
     if (tableRowStacked) {
       addTableRowSeparator();
     }
@@ -565,7 +707,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   const int16_t lineHeight =
-      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression));
+      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression)));
   const size_t columnCount = tableRowCells.size();
   const uint16_t cellWidth = static_cast<uint16_t>(viewportWidth / columnCount);
 
@@ -615,6 +757,59 @@ void ChapterHtmlSlimParser::finishTableRow() {
     tableLineVisibleOffsets.clear();
   };
 
+  if (maxLineCount == 0) {
+    clearLayoutLines();
+    flushTableRowAnchors();
+    addTableRowSeparator();
+    tableRowStacked = false;
+    return;
+  }
+
+  int16_t gridTopY = -1;
+  bool gridHasLines = false;
+  bool joinPreviousGrid = tablePreviousRowWasGrid;
+  bool joinPreviousSeparator = tablePreviousRowEndedWithSeparator;
+
+  const auto startGridSegment = [&](const bool omitTopPadding) {
+    gridTopY = omitTopPadding ? 0 : currentPageNextY;
+    if (!omitTopPadding && joinPreviousGrid && gridTopY > 0) {
+      gridTopY--;
+    } else if (!omitTopPadding && joinPreviousSeparator && gridTopY >= TABLE_ROW_SEPARATOR_GAP - 1) {
+      gridTopY = static_cast<int16_t>(gridTopY - (TABLE_ROW_SEPARATOR_GAP - 1));
+    }
+    joinPreviousGrid = false;
+    joinPreviousSeparator = false;
+    currentPageNextY = static_cast<int16_t>(gridTopY + (omitTopPadding ? 0 : TABLE_GRID_VERTICAL_PADDING));
+    gridHasLines = false;
+  };
+
+  const auto finishGridSegment = [&]() {
+    if (!gridHasLines) {
+      return false;
+    }
+    const int16_t bottomY = std::min<int16_t>(static_cast<int16_t>(viewportHeight - 1),
+                                              static_cast<int16_t>(currentPageNextY + TABLE_GRID_VERTICAL_PADDING - 1));
+    const bool added = addTableGridSegment(static_cast<uint8_t>(columnCount), gridTopY, bottomY);
+    currentPageNextY = static_cast<int16_t>(bottomY + 1);
+    return added;
+  };
+
+  bool rowStartsToc = false;
+  size_t anchorOffset = 0;
+  while (anchorOffset < tableRowAnchorBytes) {
+    const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[anchorOffset]);
+    const char* anchor = tableRowAnchorStorage.data() + anchorOffset + 1;
+    const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - anchorOffset - 1) + 2;
+    if (cellIndex != UINT8_MAX && std::find(tocAnchors.begin(), tocAnchors.end(), anchor) != tocAnchors.end()) {
+      rowStartsToc = true;
+      break;
+    }
+    anchorOffset += recordBytes;
+  }
+  if (rowStartsToc) {
+    flushTableRowAnchors();
+  }
+
   for (size_t lineIndex = 0; lineIndex < maxLineCount; ++lineIndex) {
     const uint32_t lineVisibleOffset =
         lineIndex < tableLineVisibleOffsets.size() ? tableLineVisibleOffsets[lineIndex] : visibleTextOffset;
@@ -627,14 +822,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
       }
     }
 
-    const bool pageFull =
-        currentPage && !currentPage->elements.empty() && currentPageNextY + rowLineHeight > viewportHeight;
-    if (!currentPage || pageFull) {
-      if (pageFull) {
-        setCurrentPageVisibleOffset(lineVisibleOffset);
-        completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
-        completedPageCount++;
-      }
+    if (!currentPage) {
       currentPage = makeUniqueNoThrow<Page>();
       if (!currentPage) {
         LOG_ERR("EHP", "OOM: page for table row");
@@ -644,12 +832,40 @@ void ChapterHtmlSlimParser::finishTableRow() {
       currentPageNextY = 0;
       currentPageVisibleOffsetSet = false;
     }
+    const int16_t prospectiveY =
+        static_cast<int16_t>(currentPageNextY + (gridTopY < 0 ? TABLE_GRID_VERTICAL_PADDING : 0));
+    const bool pageFull =
+        !currentPage->elements.empty() && prospectiveY + rowLineHeight + TABLE_GRID_VERTICAL_PADDING > viewportHeight;
+    if (pageFull) {
+      finishGridSegment();
+      gridTopY = -1;
+      setCurrentPageVisibleOffset(lineVisibleOffset);
+      completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+      completedPageCount++;
+      currentPage = makeUniqueNoThrow<Page>();
+      if (!currentPage) {
+        LOG_ERR("EHP", "OOM: page for table row");
+        clearLayoutLines();
+        return;
+      }
+      currentPageNextY = 0;
+      currentPageVisibleOffsetSet = false;
+    }
+    if (gridTopY < 0) {
+      const bool omitTopPadding = currentPage->elements.empty() &&
+                                  currentPageNextY + rowLineHeight + TABLE_GRID_VERTICAL_PADDING > viewportHeight;
+      startGridSegment(omitTopPadding);
+    }
+    if (lineIndex == 0 && !rowStartsToc) {
+      flushTableRowAnchors();
+    }
 
     const int16_t rowY = currentPageNextY;
     const size_t requiredCapacity = currentPage->elements.size() + columnCount;
     if (currentPage->elements.capacity() < requiredCapacity) {
-      const size_t linesThatFit =
-          std::max<size_t>(1, static_cast<size_t>((viewportHeight - currentPageNextY) / rowLineHeight));
+      const size_t availableHeight = static_cast<size_t>(
+          std::max<int16_t>(0, static_cast<int16_t>(viewportHeight - currentPageNextY - TABLE_GRID_VERTICAL_PADDING)));
+      const size_t linesThatFit = std::max<size_t>(1, availableHeight / rowLineHeight);
       const size_t linesToReserve = std::min(maxLineCount - lineIndex, linesThatFit);
       currentPage->elements.reserve(currentPage->elements.size() + linesToReserve * columnCount + 1);
     }
@@ -670,9 +886,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
       addLineToPage(line, lineVisibleOffset);
     }
     currentPageNextY = static_cast<int16_t>(rowY + rowLineHeight);
+    gridHasLines = true;
   }
 
-  addTableRowSeparator();
+  tablePreviousRowWasGrid = finishGridSegment();
+  tablePreviousRowEndedWithSeparator = false;
   tableRowStacked = false;
   clearLayoutLines();
 }
@@ -723,14 +941,20 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         const char* idValue = atts[i + 1];
         const bool isTocAnchor =
             std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
+        const size_t deferredAnchorCount = self->tableRowAnchorCount + (self->pendingAnchorId.empty() ? 0 : 1);
+        const bool canStoreAnchor = self->anchorData.size() + deferredAnchorCount < MAX_ANCHORS_PER_CHAPTER;
+        if (isTocAnchor || (!isNonNavigableInlineElement(name) && canStoreAnchor)) {
           // Flush a displaced anchor before overwriting. Consecutive non-block elements
           // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
           // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
           // lands at page 0 (section start) instead of the footnote.
           if (!self->pendingAnchorId.empty()) {
-            self->flushPendingAnchor();
+            if (self->tableDepth >= 1 && self->insideTableCell) {
+              self->collectPendingTableAnchor();
+            } else {
+              self->flushPendingAnchor();
+            }
           }
           self->pendingAnchorId = idValue;
         }
@@ -806,16 +1030,23 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->insideTableCell = false;
     self->tableRowStacked = false;
     self->tableRowRtl = cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl;
+    self->tablePreviousRowWasGrid = false;
+    self->tablePreviousRowEndedWithSeparator = false;
     self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
     self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS);
+    self->tableRowAnchorCount = 0;
+    self->tableRowAnchorBytes = 0;
+    self->tableAnchorCellPendingLine = UINT8_MAX;
     self->depth += 1;
     return;
   }
 
   if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
+    auto rowAnchor = std::move(self->pendingAnchorId);
     self->finishTableRow();
+    self->pendingAnchorId = std::move(rowAnchor);
     if (self->currentTextBlock && !self->currentTextBlock->isEmpty()) {
       // Text before the first row is typically a <caption>.
       self->makePages();
@@ -876,7 +1107,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->insideTableCell = true;
     self->tableCellTextBytes = 0;
     self->wordsExtractedInBlock = 0;
-    self->flushPendingAnchor();
+    self->collectPendingTableAnchor();
     self->pushTableTextStyleEntry(cssStyle);
 
     if (strcmp(name, "th") == 0 && (!cssStyle.hasFontWeight() || cssStyle.fontWeight == CssFontWeight::Bold)) {
@@ -1523,6 +1754,14 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
 
   // Collect ruby text instead of normal word processing.
   if (self->collectingRubyText) {
+    const size_t rubyBytes = static_cast<size_t>(len);
+    if (self->insideTableCell && !self->tableRowStacked) {
+      if (rubyBytes > MAX_GRID_TABLE_CELL_BYTES - std::min(self->tableCellTextBytes, MAX_GRID_TABLE_CELL_BYTES)) {
+        self->fallbackTableRowToStacked();
+      } else {
+        self->tableCellTextBytes += rubyBytes;
+      }
+    }
     self->rubyTextBuffer.append(s, len);
     return;
   }
@@ -1893,9 +2132,14 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableDepth = 0;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tablePreviousRowWasGrid = false;
+    self->tablePreviousRowEndedWithSeparator = false;
     self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
+    self->tableRowAnchorCount = 0;
+    self->tableRowAnchorBytes = 0;
+    self->tableAnchorCellPendingLine = UINT8_MAX;
     self->nextWordContinues = false;
 
     const BlockStyle flowStyle =
@@ -1980,6 +2224,8 @@ bool ChapterHtmlSlimParser::beginParse() {
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;
+  tablePreviousRowWasGrid = false;
+  tablePreviousRowEndedWithSeparator = false;
   tableRowsSpannedRemaining = 0;
   tableCellTextBytes = 0;
   tableRowCells.clear();
@@ -1987,6 +2233,9 @@ bool ChapterHtmlSlimParser::beginParse() {
     lines.clear();
   }
   tableLineVisibleOffsets.clear();
+  tableRowAnchorCount = 0;
+  tableRowAnchorBytes = 0;
+  tableAnchorCellPendingLine = UINT8_MAX;
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
@@ -2123,6 +2372,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
     currentPageNextY = 0;
     currentPageVisibleOffsetSet = false;
   }
+  flushPendingTableCellAnchors();
   setCurrentPageVisibleOffset(visibleOffset);
 
   // Track cumulative words to assign footnotes to the page containing their anchor

@@ -51,3 +51,6 @@ bool PageImage::serialize(HalFile&) { return false; }
 
 void PageHorizontalRule::render(GfxRenderer&, int, int, int) {}
 bool PageHorizontalRule::serialize(HalFile&) { return false; }
+
+void PageTableGridRow::render(GfxRenderer&, int, int, int) {}
+bool PageTableGridRow::serialize(HalFile&) { return false; }

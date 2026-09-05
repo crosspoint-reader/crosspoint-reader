@@ -92,15 +92,22 @@ class ChapterHtmlSlimParser {
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
   static constexpr size_t MAX_GRID_TABLE_CELL_WORDS = 32;
   static constexpr size_t MAX_GRID_TABLE_CELL_BYTES = 512;
+  static constexpr size_t MAX_GRID_TABLE_ANCHOR_BYTES = 256;
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
   bool tableRowRtl = false;
+  bool tablePreviousRowWasGrid = false;
+  bool tablePreviousRowEndedWithSeparator = false;
   uint16_t tableRowsSpannedRemaining = 0;
   size_t tableCellTextBytes = 0;
   std::vector<std::unique_ptr<ParsedText>> tableRowCells;
   std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
   std::vector<uint32_t> tableLineVisibleOffsets;
+  std::array<char, MAX_GRID_TABLE_ANCHOR_BYTES> tableRowAnchorStorage{};
+  size_t tableRowAnchorCount = 0;
+  size_t tableRowAnchorBytes = 0;
+  uint8_t tableAnchorCellPendingLine = UINT8_MAX;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
@@ -145,10 +152,16 @@ class ChapterHtmlSlimParser {
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
   void flushPartWordBuffer();
+  void compactTableRowAnchors();
+  void collectPendingTableAnchor();
+  void flushTableRowAnchorsForCell(size_t cellIndex);
+  void flushPendingTableCellAnchors();
+  void flushTableRowAnchors();
   void fallbackTableRowToStacked();
   void closeTableCell();
   void finishTableRow();
   void addTableRowSeparator();
+  bool addTableGridSegment(uint8_t columnCount, int16_t topY, int16_t bottomY);
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
