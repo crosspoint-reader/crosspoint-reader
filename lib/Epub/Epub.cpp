@@ -51,7 +51,8 @@ bool Epub::findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip) c
 }
 
 bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const bool writeSpineEntries,
-                           const bool metadataOnly, ZipFile* sharedZip) {
+                           const bool metadataOnly, ZipFile* sharedZip, std::string* seriesOut,
+                           std::string* seriesIndexTextOut) {
   std::string contentOpfFilePath;
   if (!findContentOpfFile(&contentOpfFilePath, sharedZip)) {
     LOG_ERR("EBP", "Could not find content.opf in zip");
@@ -89,6 +90,8 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.title = utf8ComposeNfc(opfParser.title);
   bookMetadata.author = utf8ComposeNfc(opfParser.author);
   bookMetadata.language = opfParser.language;
+  if (seriesOut != nullptr) *seriesOut = utf8ComposeNfc(opfParser.series);
+  if (seriesIndexTextOut != nullptr) *seriesIndexTextOut = opfParser.seriesIndexText;
 
   if (metadataOnly) {
     LOG_DBG("EBP", "Successfully parsed package metadata");
@@ -616,6 +619,29 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
 
   BookMetadataCache::BookMetadata metadata;
   const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
+  zip.close();
+  if (!loaded) return false;
+
+  title = std::move(metadata.title);
+  author = std::move(metadata.author);
+  return true;
+}
+
+bool Epub::loadMetadata(std::string& title, std::string& author, std::string& series, std::string& seriesIndexText) {
+  title.clear();
+  author.clear();
+  series.clear();
+  seriesIndexText.clear();
+
+  ZipFile zip(filepath);
+  if (!zip.open()) {
+    LOG_DBG("EBP", "Could not open ePub for package metadata: %s", filepath.c_str());
+    return false;
+  }
+
+  BookMetadataCache::BookMetadata metadata;
+  const bool loaded =
+      parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip, &series, &seriesIndexText);
   zip.close();
   if (!loaded) return false;
 
