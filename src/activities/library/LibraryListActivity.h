@@ -91,14 +91,8 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildRows(UiScreen& screen);
   void buildGroupRows(UiScreen& screen);
   void formatInitialHeading(uint32_t initial, std::string& out) const;
-  bool seriesFor(int entry, std::string& name, uint16_t& position);
-  // Whether this entry's index held series, latched before the base sizes its
-  // per-tab state so tabCount() cannot change afterwards.
-  bool seriesTabAvailable = false;
-  // Last series read, so a group's rows share one table read.
-  uint16_t cachedSeriesId = library::CLIX_SERIES_NONE;
-  std::string cachedSeriesName;
-  void formatSeriesHeading(const std::string& name, std::string& out) const;
+  bool seriesFor(int entry, std::string& name, uint16_t& position, uint16_t& bookCount);
+  void formatSeriesHeading(const std::string& name, uint16_t bookCount, std::string& out) const;
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
   void drawHoldHelp() const;
@@ -116,6 +110,15 @@ class LibraryListActivity final : public UiTabListActivity {
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
+
+  // Whether this entry's index held series, latched before the base sizes its
+  // per-tab state so tabCount() cannot change afterwards.
+  bool seriesTabAvailable = false;
+  // Last series read, so a group's rows share one table read rather than one
+  // each.
+  uint16_t cachedSeriesId = library::CLIX_SERIES_NONE;
+  uint16_t cachedSeriesBooks = 0;
+  std::string cachedSeriesName;
 
   // Rows surviving the current query, as positions in the active sort order.
   // Empty query means no filtering and this owns no allocation, so the ordinary
