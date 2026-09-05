@@ -1,0 +1,131 @@
+name: PR firmware links
+
+on:
+  workflow_run:
+    workflows:
+      - CI (build)
+    types:
+      - completed
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  update-comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    concurrency:
+      group: pr-firmware-links-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update firmware links comment
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const marker = '<!-- pr-firmware-artifacts -->';
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+
+            const headOwner = run.head_repository?.owner?.login;
+            if (!headOwner) {
+              core.notice(`No head repository found for ${run.head_sha}.`);
+              return;
+            }
+
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${headOwner}:${run.head_branch}`,
+              state: 'all',
+              per_page: 100,
+            });
+            const associatedPullRequest = pullRequests.find(
+              (pr) => pr.state === 'open' && pr.head.sha === run.head_sha,
+            );
+
+            if (!associatedPullRequest) {
+              core.notice(`No pull request found for ${run.head_sha}.`);
+              return;
+            }
+
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: associatedPullRequest.number,
+            });
+
+            if (pullRequest.state !== 'open' || pullRequest.head.sha !== run.head_sha) {
+              core.notice(`Skipping closed or superseded workflow run for ${run.head_sha}.`);
+              return;
+            }
+
+            const builds = [
+              { name: 'firmware.bin', device: 'X3 / X4' },
+              { name: 'firmware-sticky.bin', device: 'Sticky' },
+              { name: 'firmware-x4pro.bin', device: 'X4 Pro' },
+              { name: 'firmware-papermono.bin', device: 'Paper Mono' },
+            ];
+            const { data: artifactResponse } =
+              await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+                per_page: 100,
+              });
+            const artifacts = new Map(
+              artifactResponse.artifacts
+                .filter((artifact) => !artifact.expired)
+                .map((artifact) => [artifact.name, artifact]),
+            );
+            const missingBuilds = builds.filter((build) => !artifacts.has(build.name));
+            const shortSha = run.head_sha.slice(0, 7);
+            let body = `${marker}\n### Firmware builds\n\n`;
+
+            if (missingBuilds.length === 0) {
+              const links = builds.map(({ name, device }) => {
+                const artifact = artifacts.get(name);
+                const url = `https://github.com/${owner}/${repo}/actions/runs/${run.id}/artifacts/${artifact.id}`;
+                return `- [${device} (\`${name}\`)](${url})`;
+              });
+              body += `Automatically generated for the latest commit of this PR (\`${shortSha}\`).\n\n`;
+              body += `${links.join('\n')}\n\n`;
+              body += 'Download the file for your device, extract the `.bin` from the ZIP, then flash it with ';
+              body += '[CrossPoint Reader Flash Tools](https://crosspointreader.com/#flash-tools). ';
+              body += '**Make sure you use the correct firmware file for your device.**';
+
+              if (run.conclusion !== 'success') {
+                body += `\n\n> The firmware builds succeeded, but [another CI check finished with ${run.conclusion}](${run.html_url}).`;
+              }
+            } else {
+              const missingNames = missingBuilds.map(({ name }) => `\`${name}\``).join(', ');
+              body += `Firmware is not available for the latest commit of this PR (\`${shortSha}\`). `;
+              body += `The build did not produce ${missingNames}. [View the CI run](${run.html_url}).`;
+            }
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pullRequest.number,
+              per_page: 100,
+            });
+            const existingComment = comments.find(
+              (comment) =>
+                comment.user?.login === 'github-actions[bot]' && comment.body?.includes(marker),
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullRequest.number,
+                body,
+              });
+            }
