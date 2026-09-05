@@ -265,7 +265,12 @@ bool HalGPIO::coldBootImpliesPowerButton() const {
   // post-flash boots as battery button boots, and STAT-only boards like the
   // EEGO A4 misread them the same way once the charger terminates at 100%
   // (STAT inactive reads as "no USB").
-  return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
+  // Paper Mono: the button sits behind the PMIC and the board has no USB/charge
+  // telemetry at all (no gauge, no usbDetect pin), so isUsbConnected() is always
+  // false here. Gating it in would misread every USB/post-flash cold boot as a
+  // power-button boot and leave the display dark. Treat it like the other
+  // detection-blind boards: any cold boot is a normal boot.
+  return isXteinkDevice() || BoardConfig::isSticky();
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
