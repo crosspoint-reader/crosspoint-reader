@@ -133,6 +133,12 @@ class EpubReaderActivity final : public ReaderActivity {
   void discardOverlayPage();
   void handleOverlayInput();
   void renderOverlay();
+  // TOC index for the chapter actually on screen. A single spine item can bundle
+  // several TOC entries (e.g. Calibre's HTML splitter packs many chapters into one
+  // file, distinguished only by #anchor) so this walks forward from the spine's
+  // first TOC entry and returns the last one whose anchor page is at or before the
+  // current page, instead of always reporting that first entry.
+  int currentTocIndex() const;
   std::string currentChapterTitle() const;
   // Text panel rows (font, size, line spacing, alignment, focus reading).
   std::string textRowName(int row) const;

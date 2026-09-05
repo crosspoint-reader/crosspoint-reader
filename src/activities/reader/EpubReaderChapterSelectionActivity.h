@@ -8,7 +8,10 @@
 
 class EpubReaderChapterSelectionActivity final : public UiListActivity {
   std::shared_ptr<Epub> epub;
-  int currentSpineIndex = 0;
+  // TOC index of the chapter actually on screen, resolved by the caller (a single
+  // spine item can bundle several chapters, distinguished only by #anchor, so this
+  // is not simply derived from the spine index here).
+  int initialTocIndex = 0;
 
   // Windowed row buffers: TOC entries are SD-backed (BookMetadataCache LUT
   // reads), so only the rows around the viewport are materialized. A
@@ -37,6 +40,6 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
 
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              const std::shared_ptr<Epub>& epub, int currentSpineIndex);
+                                              const std::shared_ptr<Epub>& epub, int initialTocIndex);
   void onEnter() override;
 };
