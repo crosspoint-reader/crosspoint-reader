@@ -179,10 +179,29 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 }
 
 inline std::vector<StrId> buildLongPressMenuValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
-                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
-  const size_t count = BoardConfig::hasHomeKey() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  // Positional list: index must equal the LONG_PRESS_MENU_FUNCTION value it
+  // labels. READER_MENU (4) only works on home-key boards, and TOGGLE_LIGHT (5)
+  // needs a frontlight; gating it behind hasHomeKey keeps the list gap-free
+  // (non-home-key frontlight boards toggle the light via the side-button
+  // long-press behavior instead).
+  std::vector<StrId> values = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
+                               StrId::STR_DICTIONARY};
+  if (BoardConfig::hasHomeKey()) {
+    values.push_back(StrId::STR_READER_MENU);
+#if FREEINK_CAP_FRONTLIGHT
+    values.push_back(StrId::STR_TOGGLE_LIGHT);
+#endif
+  }
+  return values;
+}
+
+inline std::vector<StrId> buildLongPressButtonBehaviorValues() {
+  std::vector<StrId> values = {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
+                               StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION};
+#if FREEINK_CAP_FRONTLIGHT
+  values.push_back(StrId::STR_TOGGLE_LIGHT);
+#endif
+  return values;
 }
 
 // Shared settings list used by both the device settings UI and the web settings API.
@@ -314,9 +333,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, &CrossPointSettings::frontButtonFollowOrientation,
                             "frontButtonFollowOrientation", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_BEHAVIOR, &CrossPointSettings::longPressButtonBehavior,
-                          {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
-                           StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
-                          "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
+                          buildLongPressButtonBehaviorValues(), "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
 #if FREEINK_CAP_TOUCH

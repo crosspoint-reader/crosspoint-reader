@@ -490,6 +490,9 @@ void EpubReaderActivity::loop() {
       case CrossPointSettings::LP_MENU_DICTIONARY:
         openDictionaryWordSelect();
         return;
+      case CrossPointSettings::LP_MENU_TOGGLE_LIGHT:
+        toggleFrontlight();
+        break;
       case CrossPointSettings::LP_MENU_READER_MENU:
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
@@ -524,6 +527,9 @@ void EpubReaderActivity::loop() {
         } else {
           openReaderMenu();
         }
+        return;
+      case CrossPointSettings::LP_MENU_TOGGLE_LIGHT:
+        toggleFrontlight();
         return;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
@@ -610,6 +616,14 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+  const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
+  // Toggle the light before end-of-book navigation claims the press.
+  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.LIGHT_TOGGLE) {
+    toggleFrontlight();
+    return;
+  }
+
   if (handleEndOfBookPageTurn(prevTriggered, nextTriggered)) {
     return;
   }
@@ -619,8 +633,6 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
-  const bool longPress = !fromTilt && heldMs >= ReaderUtils::SKIP_HOLD_MS;
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
     skipPages(nextTriggered ? 1 : -1);
     requestUpdate();
@@ -913,6 +925,7 @@ unsigned long EpubReaderActivity::confirmLongPressThreshold() const {
   switch (SETTINGS.longPressMenuFunction) {
     case CrossPointSettings::LP_MENU_BOOKMARK:
     case CrossPointSettings::LP_MENU_DICTIONARY:
+    case CrossPointSettings::LP_MENU_TOGGLE_LIGHT:
       return ReaderUtils::BOOKMARK_HOLD_MS;
     case CrossPointSettings::LP_MENU_KOSYNC:
       return KOREADER_STORE.hasCredentials() ? ReaderUtils::GO_HOME_MS : 0;

@@ -230,6 +230,34 @@ bool handleX4ProFrontlightDoubleClick() {
   return true;
 }
 
+// Long-press frontlight toggle on every screen except the reader, which runs
+// its own copy (skipping it here avoids a double toggle). Honors the same two
+// settings the reader does: Long-press Menu = Toggle Light on the home key, and
+// Long-press button behavior = Toggle Light on the side page-turn buttons.
+bool handleGlobalFrontlightToggle() {
+  if (!Frontlight.present() || activityManager.isReaderActivity() || activityManager.isFrontlightPanelActive()) {
+    return false;
+  }
+
+  constexpr unsigned long FRONTLIGHT_TOGGLE_HOLD_MS = 700;
+  const bool homeToggle =
+      SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_TOGGLE_LIGHT && mappedInputManager.wasHomeKeyHold();
+  const bool sideToggle =
+      SETTINGS.longPressButtonBehavior == CrossPointSettings::LIGHT_TOGGLE &&
+      (mappedInputManager.wasLongPressed(MappedInputManager::Button::Up, FRONTLIGHT_TOGGLE_HOLD_MS) ||
+       mappedInputManager.wasLongPressed(MappedInputManager::Button::Down, FRONTLIGHT_TOGGLE_HOLD_MS));
+  if (!homeToggle && !sideToggle) {
+    return false;
+  }
+
+  const bool lightOn = !Frontlight.isOn();
+  Frontlight.setOn(lightOn);
+  SETTINGS.frontlightOn = lightOn ? 1 : 0;
+  SETTINGS.saveToFile();
+  LOG_INF("LIGHT", "Frontlight toggled %s by long-press", lightOn ? "on" : "off");
+  return true;
+}
+
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
 
 static void saveSleepFrameBuffer() {
@@ -670,6 +698,10 @@ void loop() {
   // Consume the second X4 Pro power-button release so it does not also run a
   // configured short-power action after toggling the frontlight.
   if (handleX4ProFrontlightDoubleClick()) {
+    return;
+  }
+
+  if (handleGlobalFrontlightToggle()) {
     return;
   }
 

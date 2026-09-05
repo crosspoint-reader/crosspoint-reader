@@ -345,6 +345,10 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
+bool ActivityManager::isFrontlightPanelActive() const {
+  return currentActivity && currentActivity->name == "FrontlightPanel";
+}
+
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
