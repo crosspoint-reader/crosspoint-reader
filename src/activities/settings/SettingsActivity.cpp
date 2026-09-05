@@ -434,10 +434,11 @@ void SettingsActivity::rebuildLibraryIndex() {
   library::BuildStats stats;
   const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
   if (ok) {
-    LOG_INF("LIB", "rebuild: %u books (%u new, %u renamed, %u removed, %u enriched) in %ums",
+    LOG_INF("LIB", "rebuild: %u books (%u new, %u renamed, %u removed, %u enriched, %u in %u series) in %ums",
             static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.added),
             static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
-            static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.walkMs));
+            static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.inSeries),
+            static_cast<unsigned>(stats.series), static_cast<unsigned>(stats.walkMs));
     if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
   } else {
     LOG_ERR("LIB", "index rebuild failed");
