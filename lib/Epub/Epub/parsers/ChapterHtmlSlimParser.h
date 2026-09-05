@@ -39,6 +39,24 @@ class ChapterHtmlSlimParser {
   char partWordBuffer[MAX_WORD_SIZE + 1] = {};
   int partWordBufferIndex = 0;
   bool nextWordContinues = false;  // true when next flushed word attaches to previous (inline element boundary)
+  // A <br> defers its block-break effect instead of applying it immediately, so a
+  // doc-pagebreak marker that turns out to hold real content (a paragraph split across
+  // a print-page boundary by a bad epub converter) can swallow it instead of it
+  // becoming a hard line break. Resolved (materialized or dropped) by
+  // materializePendingBr() before anything else can observe currentTextBlock /
+  // blockStyleStack, so no snapshot of those is needed alongside the flag; see
+  // materializePendingBr() for why that's safe.
+  bool pendingBr = false;
+  // Set by makePages() when it withholds the "Extra paragraph spacing" half-line gap
+  // because the block it just laid out is followed by a <br>-originated block (see
+  // makePages()'s nextBlockIsBrLineBreak parameter). Left true means "a line-break
+  // <br> is still deciding what it is": if the following block turns out to stay
+  // empty (a scene break), startNewTextBlock()'s empty-block reuse path gives the
+  // withheld half-line back so the scene break renders exactly as before this
+  // suppression existed; if the block instead receives text (a genuine mid-paragraph
+  // line break), the flag is simply left to be overwritten by the next <br> and the
+  // half-line stays gone, which is the point of the suppression.
+  bool brLineBreakSpacingSuppressed = false;
   std::unique_ptr<ParsedText> currentTextBlock = nullptr;
   // Ruby text state
   bool inRuby = false;
@@ -131,6 +149,25 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
 
+  // Pagebreak marker capture: badly-converted epubs (Calibre) sometimes wrap real
+  // paragraph text inside a role="doc-pagebreak" / epub:type="pagebreak" element
+  // instead of leaving it empty. Rather than skip the whole subtree, its text is
+  // captured speculatively and replayed as normal content if it turns out to be
+  // more than a page-number label. Fixed-size, no heap allocation: this element
+  // should almost always be empty or hold a couple of digits.
+  static constexpr int PAGEBREAK_LABEL_SIZE = 16;
+  static constexpr int PAGEBREAK_CAPTURE_SIZE = 32;
+  bool pagebreakCapturing = false;
+  int pagebreakCaptureDepth = -1;                  // depth (pre-increment) recorded at the marker's startElement
+  char pagebreakLabel[PAGEBREAK_LABEL_SIZE] = {};  // aria-label/title, truncated silently
+  char pagebreakCaptureBuffer[PAGEBREAK_CAPTURE_SIZE] = {};
+  int pagebreakCaptureLen = 0;
+  // visibleTextOffset at the moment capture began. characterData() counts visible
+  // codepoints unconditionally, ahead of the keep/drop decision, so by replay time
+  // the running counter has already moved past the captured text; replays rewind to
+  // this value first so replayed words get the marker's start offset, not its end.
+  uint32_t pagebreakCaptureStartOffset = 0;
+
   // Resumable parse state. The one-shot parseAndBuildPages() drives these
   // internally; the incremental section builder drives them across render ticks
   // so a large single chapter can yield between pages instead of blocking the UI
@@ -149,8 +186,15 @@ class ChapterHtmlSlimParser {
   void closeTableCell();
   void finishTableRow();
   void addTableRowSeparator();
+  void materializePendingBr();
   void setCurrentPageVisibleOffset(uint32_t offset);
-  void makePages();
+  // Lays out currentTextBlock and adds it to the current page. nextBlockIsBrLineBreak
+  // is true when the caller (startNewTextBlock) is about to start a block created by a
+  // <br> that has text before it: the two blocks are consecutive lines of one paragraph,
+  // not a paragraph boundary, so the "Extra paragraph spacing" half-line gap normally
+  // added after every block is withheld (see brLineBreakSpacingSuppressed). Defaults to
+  // false so the finishParse() trailing-page call is unaffected.
+  void makePages(bool nextBlockIsBrLineBreak = false);
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
