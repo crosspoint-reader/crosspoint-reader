@@ -25,13 +25,15 @@ uint32_t utf8ComposePair(const uint32_t base, const uint32_t mark) {
 
 std::string utf8ComposeNfc(const std::string& in) {
   // Fast path: NFC composition can only change text that contains a combining
-  // diacritical mark U+0300-036F (UTF-8 lead byte 0xCC or 0xCD). Plain ASCII and
+  // diacritical mark U+0300-036F (UTF-8 lead byte 0xCC or 0xCD) or conjoining
+  // Hangul jamo (lead byte 0xE1 for U+1000-1FFF). Plain ASCII and
   // already-precomposed (NFC) text -- the vast majority of words -- have none, so
-  // return them untouched without walking codepoints or allocating. A 0xCD that is
-  // actually a non-combining codepoint just falls through to the full pass below.
+  // return them untouched without walking codepoints or allocating. A 0xCD or
+  // 0xE1 that is actually a non-composing codepoint (e.g. Georgian, Cherokee)
+  // just falls through to the full pass below.
   bool maybeHasMarks = false;
   for (const unsigned char c : in) {
-    if (c == 0xCC || c == 0xCD) {
+    if (c == 0xCC || c == 0xCD || c == 0xE1) {
       maybeHasMarks = true;
       break;
     }
@@ -59,7 +61,23 @@ std::string utf8ComposeNfc(const std::string& in) {
       }
       utf8AppendCodepoint(cp, out);
     } else {
-      if (haveBase) utf8AppendCodepoint(base, out);
+      // Hangul LV / LVT composition (Unicode 3.12, pure arithmetic — no
+      // tables): a modern leading consonant followed by a medial vowel
+      // composes to an LV syllable in the U+AC00 block; an LV syllable
+      // followed by a trailing consonant extends to LVT. macOS stores
+      // filenames in NFD, so Korean names arrive as conjoining jamo, which
+      // the fonts (precomposed syllables only) would miss entirely.
+      if (haveBase) {
+        if (base >= 0x1100 && base <= 0x1112 && cp >= 0x1161 && cp <= 0x1175) {
+          base = 0xAC00 + (base - 0x1100) * 588 + (cp - 0x1161) * 28;
+          continue;
+        }
+        if (base >= 0xAC00 && base <= 0xD7A3 && (base - 0xAC00) % 28 == 0 && cp >= 0x11A8 && cp <= 0x11C2) {
+          base += cp - 0x11A7;
+          continue;
+        }
+        utf8AppendCodepoint(base, out);
+      }
       base = cp;
       haveBase = true;
     }
