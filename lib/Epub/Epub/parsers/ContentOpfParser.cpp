@@ -196,18 +196,21 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       }
     }
 
-    // Record index entry for fast lookup later
-    if (self->tempItemStore) {
-      ItemIndexEntry entry;
-      entry.idHash = fnvHash(itemId);
-      entry.idLen = static_cast<uint16_t>(itemId.size());
-      entry.fileOffset = static_cast<uint32_t>(self->tempItemStore.position());
-      self->itemIndex.push_back(entry);
-    }
+    // This lookup feeds the spine, not cover/image discovery below. Some
+    // malformed books reference a raw image as a page; never send it to the
+    // chapter XML parser. XHTML cover wrappers remain readable spine entries.
+    if (!startsWithImageMediaType(mediaType)) {
+      if (self->tempItemStore) {
+        ItemIndexEntry entry;
+        entry.idHash = fnvHash(itemId);
+        entry.idLen = static_cast<uint16_t>(itemId.size());
+        entry.fileOffset = static_cast<uint32_t>(self->tempItemStore.position());
+        self->itemIndex.push_back(entry);
+      }
 
-    // Write items down to SD card
-    serialization::writeString(self->tempItemStore, itemId);
-    serialization::writeString(self->tempItemStore, href);
+      serialization::writeString(self->tempItemStore, itemId);
+      serialization::writeString(self->tempItemStore, href);
+    }
 
     if (itemId == self->coverItemId) {
       // Some EPUBs set meta name="cover" to an XHTML wrapper item.
