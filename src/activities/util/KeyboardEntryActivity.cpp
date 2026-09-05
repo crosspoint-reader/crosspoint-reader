@@ -1,6 +1,7 @@
 #include "KeyboardEntryActivity.h"
 
 #include <BidiUtils.h>
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 
@@ -206,6 +207,33 @@ void KeyboardEntryActivity::moveSelectionCol(const int delta) {
   const int cols = layout.rows[selRow].count;
   if (cols <= 0) return;
   selCol = (selCol + delta + cols) % cols;
+}
+
+// True when the board wires Left/Right keys. Boards without them (three side
+// keys + BOOT, e.g. the Waveshare 3.97) have no second axis for the key grid.
+bool KeyboardEntryActivity::hasHorizontalKeys() {
+  return BoardConfig::ACTIVE.input.left != BoardConfig::PIN_UNASSIGNED ||
+         BoardConfig::ACTIVE.input.right != BoardConfig::PIN_UNASSIGNED;
+}
+
+// Walk the whole grid in reading order: step along the row, and roll into the
+// neighbouring row's near edge at either end. Keeps every key reachable from one
+// button pair. Traversal is linear, so a far key costs proportionally many
+// presses — add auto-repeat here if that becomes the complaint.
+void KeyboardEntryActivity::moveSelectionLinear(const int delta) {
+  const fui::KeyboardLayout& layout = currentLayout();
+  if (layout.rowCount == 0 || selRow < 0 || selRow >= layout.rowCount) return;
+  const int cols = layout.rows[selRow].count;
+  if (cols <= 0) return;
+  const int next = selCol + delta;
+  if (next >= 0 && next < cols) {
+    selCol = next;
+    return;
+  }
+  selRow = (selRow + delta + layout.rowCount) % layout.rowCount;
+  const int newCols = layout.rows[selRow].count;
+  selCol = delta > 0 ? 0 : (newCols > 0 ? newCols - 1 : 0);
+  clampSelection();
 }
 
 bool KeyboardEntryActivity::syncSelectionToValue(const int16_t value) {
@@ -584,7 +612,7 @@ void KeyboardEntryActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     if (upHeld && !upLongHandled && !cursorMode) {
-      moveSelectionRow(-1);
+      hasHorizontalKeys() ? moveSelectionRow(-1) : moveSelectionLinear(-1);
       requestUpdate();
     }
     upHeld = false;
@@ -607,7 +635,7 @@ void KeyboardEntryActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     if (downHeld && !downLongHandled && !cursorMode) {
-      moveSelectionRow(1);
+      hasHorizontalKeys() ? moveSelectionRow(1) : moveSelectionLinear(1);
       requestUpdate();
     }
     downHeld = false;
