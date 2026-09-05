@@ -128,6 +128,8 @@ class EpubReaderActivity final : public ReaderActivity {
   void openReaderMenu();
   // Toolbar reader menu (see Overlay above).
   bool usesToolbarMenu() const;
+  /** Allocates toolbarUi on first use. False when the heap could not spare it. */
+  bool ensureToolbarUi();
   void openOverlay(Overlay target);
   void closeOverlayToPage();
   void discardOverlayPage();

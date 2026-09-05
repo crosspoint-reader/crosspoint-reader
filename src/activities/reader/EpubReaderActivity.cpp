@@ -248,7 +248,14 @@ void EpubReaderActivity::openReaderMenu() {
     focusedTool = 0;
     panelHoldJumped = false;
     panelCursorShown = !mappedInput.hasTouch();
-    if (!toolbarUi) toolbarUi = std::make_unique<ReaderToolbarUi>(renderer);
+    if (!ensureToolbarUi()) {
+      // Nothing to draw the menu with; repaint the page rather than aborting --
+      // openReaderMenu() can run right after a child activity returned, so the
+      // framebuffer may still hold that child's screen.
+      overlay = Overlay::None;
+      requestUpdate();
+      return;
+    }
     toolbarUi->begin();
     discardOverlayPage();
     requestUpdate();
@@ -1848,10 +1855,24 @@ void EpubReaderActivity::discardOverlayPage() {
   overlayPageStored = false;
 }
 
+bool EpubReaderActivity::ensureToolbarUi() {
+  // ~2 KB claimed only while the menu is open, which is peak heap pressure with an EPUB
+  // section resident. A throwing new would abort() here rather than return null.
+  if (!toolbarUi) {
+    toolbarUi = makeUniqueNoThrow<ReaderToolbarUi>(renderer);
+    if (!toolbarUi) LOG_ERR("EPUBREADER", "OOM: ReaderToolbarUi");
+  }
+  return toolbarUi != nullptr;
+}
+
 void EpubReaderActivity::openOverlay(Overlay target) {
   const Overlay previous = overlay;
   overlay = target;
-  if (!toolbarUi) toolbarUi = std::make_unique<ReaderToolbarUi>(renderer);
+  if (!ensureToolbarUi()) {
+    // Nothing to draw the panel with; stay on the page instead of resetting the device.
+    overlay = previous;
+    return;
+  }
   if (previous == Overlay::None) toolbarUi->begin();
   // Buttons show a cursor from the start; touch boards only once a button moves it.
   panelCursorShown = !mappedInput.hasTouch();
