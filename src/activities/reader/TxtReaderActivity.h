@@ -33,7 +33,8 @@ class TxtReaderActivity final : public ReaderActivity {
 
   void renderPage(GfxRenderer& renderer);
   void initializeReader(GfxRenderer& renderer);
-  bool loadPageAtOffset(GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines, size_t& nextOffset);
+  bool loadPageAtOffset(const GfxRenderer& renderer, size_t offset, std::vector<std::string>& outLines,
+                        size_t& nextOffset);
   void buildPageIndex(GfxRenderer& renderer);
   bool loadPageIndexCache();
   void savePageIndexCache() const;
