@@ -1597,6 +1597,7 @@
           <span id="convertSizeSummary">📏 Max 480×800px</span>
           <span>📦 85% JPEG</span>
           <span>🔧 Fix SVG</span>
+          <span id="fixCssSummary">🔗 Fix CSS</span>
         </div>
         <!-- Advanced Settings Content -->
         <div class="advanced-settings-content" id="advancedSettingsContent">
@@ -1678,6 +1679,19 @@
                 <button class="overlap-btn" data-value="10" onclick="setOverlap(10)">10%</button>
                 <button class="overlap-btn" data-value="15" onclick="setOverlap(15)">15%</button>
               </div>
+            </div>
+          </div>
+          <!-- Fix advanced CSS selectors -->
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">🔗 Fix CSS styles</div>
+              <div class="setting-desc">Rewrite unsupported CSS selectors into classes</div>
+            </div>
+            <div class="setting-controls">
+              <label class="toggle-switch">
+                <input type="checkbox" id="fixCssSelectorsToggle" checked onchange="updateQualitySettings()">
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           <!-- Conversion Log Export -->
@@ -2282,9 +2296,17 @@
     updateQualitySettings();
   }
 
+  function updateSettingsDisplay() {
+    const fixCssSummary = document.getElementById('fixCssSummary');
+    if (fixCssSummary) {
+      fixCssSummary.style.display = ENABLE_FIX_CSS_SELECTORS ? '' : 'none';
+    }
+  }
+
   function updateQualitySettings() {
     const quality = document.getElementById('qualitySlider').value;
     const autoCropToggle = document.getElementById('autoCropToggle');
+    const fixCssSelectorsToggle = document.getElementById('fixCssSelectorsToggle');
 
     // Update displays (if element exists)
     const qualityDisplay = document.getElementById('qualityDisplaySimple');
@@ -2296,6 +2318,9 @@
     JPEG_QUALITY = parseInt(quality, 10);
     ENABLE_GRAYSCALE = true; // Always grayscale for e-ink
     ENABLE_AUTO_CROP = autoCropToggle ? autoCropToggle.checked : false;
+    ENABLE_FIX_CSS_SELECTORS = fixCssSelectorsToggle ? fixCssSelectorsToggle.checked : DEFAULT_ENABLE_FIX_CSS_SELECTORS;
+    
+    updateSettingsDisplay();
     if (isImagePickerVisible()) {
       renderImageGrid();
     }
@@ -3297,6 +3322,7 @@ const DEFAULT_MAX_HEIGHT = DEVICE_PROFILES[DEFAULT_DEVICE].height;
 const DEFAULT_JPEG_QUALITY = 85;
 const DEFAULT_ENABLE_GRAYSCALE = true;
 const DEFAULT_ENABLE_AUTO_CROP = false;
+const DEFAULT_ENABLE_FIX_CSS_SELECTORS = true;
 // Auto-crop is opt-in because sparse title/logo pages can be zoomed aggressively.
 const CROP_WHITE_THRESHOLD = 245;
 const CROP_BACKGROUND_TOLERANCE = 28;
@@ -3319,6 +3345,7 @@ let ENABLE_GRAYSCALE = DEFAULT_ENABLE_GRAYSCALE;
 let ENABLE_AUTO_CROP = DEFAULT_ENABLE_AUTO_CROP;
 let HANDEDNESS = 'right'; // 'right' = clockwise (right-handed), 'left' = counter-clockwise (left-handed)
 let OVERLAP_PERCENT = 5; // Minimum overlap percentage for splits (5%, 10%, 15%)
+let ENABLE_FIX_CSS_SELECTORS = DEFAULT_ENABLE_FIX_CSS_SELECTORS;
 const UPLOAD_SETTINGS_STORAGE_KEY = 'crosspoint.files.uploadSettings.v1';
 const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
   convertBeforeUpload: false,
@@ -3328,6 +3355,7 @@ const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
   deviceTarget: 'auto',
   handedness: 'right',
   overlap: 5,
+  fixCssSelectors: DEFAULT_ENABLE_FIX_CSS_SELECTORS,
   exportLog: false
 });
 let suppressUploadSettingsSave = false;
@@ -3341,6 +3369,7 @@ function getCurrentUploadSettings() {
     deviceTarget: DEVICE_TARGET,
     handedness: HANDEDNESS,
     overlap: OVERLAP_PERCENT,
+    fixCssSelectors: ENABLE_FIX_CSS_SELECTORS,
     exportLog: !!document.getElementById('export-log-checkbox')?.checked
   };
 }
@@ -3352,6 +3381,7 @@ function applyUploadSettings(settings = {}) {
     document.getElementById('convertBeforeUpload').checked = !!merged.convertBeforeUpload;
     document.getElementById('renameFromMetadataToggle').checked = !!merged.renameFromMetadata;
     document.getElementById('autoCropToggle').checked = !!merged.autoCrop;
+    document.getElementById('fixCssSelectorsToggle').checked = !!merged.fixCssSelectors;
     document.getElementById('export-log-checkbox').checked = !!merged.exportLog;
     document.getElementById('rememberUploadSettings').checked = !!settings.rememberSettings;
 
@@ -3360,6 +3390,7 @@ function applyUploadSettings(settings = {}) {
     setHandedness(merged.handedness === 'left' ? 'left' : 'right');
     setOverlap([5, 10, 15].includes(Number(merged.overlap)) ? Number(merged.overlap) : 5);
     toggleConvertOptions();
+    updateQualitySettings();
   } finally {
     suppressUploadSettingsSave = false;
   }
@@ -5036,6 +5067,67 @@ async function processImage(data, imageState = 0, imagePath = '') {
   });
 }
 
+// Strip CSS comments
+function stripCssComments(css) {
+  return css.replace(/\/\*[\s\S]*?\*\//g, '');
+}
+
+function shouldRewriteSelector(selector) {
+  const s = selector.trim();
+  if (!s || s.startsWith('@')) return false;
+  return /[+>\[#~*]/.test(s) || /\S\s+\S/.test(s) || /\.\S+\.\S+/.test(s);
+}
+
+// Rewrites unsupported CSS selectors to classes
+function rewriteCssSelectors(css, cssRules, cssClassIndex) {
+  let count = 0;
+  const rewritten = css.replace(/([^{}]+)\{/g, (match, selector) => {
+    if (!shouldRewriteSelector(selector)) return match;
+    const normalizedSelector = selector.trim();
+    if (!cssRules[normalizedSelector]) {
+      cssRules[normalizedSelector] = `.cp-fix-${cssClassIndex++}`;
+    }
+    count++;
+    return `${cssRules[normalizedSelector]} {`;
+  });
+  return { rewritten, count, cssClassIndex };
+}
+
+// Optimize CSS for CrossPoint
+function optimizeCss(path, css, renamed, cssRules, cssClassIndex) {
+  let t = css;
+
+  // Replace original paths with renamed paths
+  for (const [o, n] of Object.entries(renamed)) {
+    t = t.split(o.split('/').pop()).join(n.split('/').pop());
+  }
+
+  // Strip font face rules
+  const ff = stripFontFaceRules(t);
+  const fontFace = { count: 0, bytes: 0 };
+  if (ff.count) {
+    fontFace.count = ff.count;
+    fontFace.bytes = new TextEncoder().encode(t).length - new TextEncoder().encode(ff.css).length;
+    t = ff.css;
+    logFix('@font-face', `${ff.count} rule(s) removed from ${escapeHtml(path.split('/').pop())}`);
+  }
+
+  // Strip comments
+  t = stripCssComments(t);
+
+  // Rewrite unsupported CSS selectors to classes
+  let rewrite = { count: 0, cssClassIndex };
+  if (ENABLE_FIX_CSS_SELECTORS) {
+    const r = rewriteCssSelectors(t, cssRules, cssClassIndex);
+    rewrite.count = r.count;
+    rewrite.cssClassIndex = r.cssClassIndex;
+    t = r.rewritten;
+    logFix('CSS selectors', `${r.count} selector(s) rewritten to class(es) from ${escapeHtml(path.split('/').pop())}`);
+  }
+
+  return { optimizedCss: t, fontFace, rewrite };
+}
+
 // Convert EPUB file - returns converted blob
 async function convertEpubFile(file, progressCallback) {
   const startTime = Date.now();
@@ -5059,9 +5151,13 @@ async function convertEpubFile(file, progressCallback) {
   const out = new JSZip();
   const entries = Object.entries(zip.files);
   const splitImages = {};
+  const cssFiles = {};
   const xhtmlFiles = {};
+  const cssRules = {};
   let opfPath = null, opfContent = null;
   let mainIdentifier = null;
+  let rewrittenCssSelectors = 0;
+  let cssClassIndex = 0;
 
   // Write mimetype FIRST per EPUB OCF spec
   if (zip.files['mimetype']) {
@@ -5153,6 +5249,8 @@ async function convertEpubFile(file, progressCallback) {
       }
     } else if (low.match(/\.(xhtml|html|htm)$/)) {
       xhtmlFiles[path] = await safeReadText(fileObj);
+    } else if (low.match(/\.(css)$/)) {
+      cssFiles[path] = await safeReadText(fileObj);
     } else if (low.endsWith('.opf')) {
       opfPath = path;
       opfContent = await safeReadText(fileObj);
@@ -5170,7 +5268,20 @@ async function convertEpubFile(file, progressCallback) {
   let removedFontBytes = 0;
   let removedFontFaceRules = 0;
 
-  // Second pass: update XHTML using DOMParser
+  // Second pass: process CSS files
+  for (const [cssPath, content] of Object.entries(cssFiles)) {
+    const { optimizedCss, fontFace, rewrite } = optimizeCss(cssPath, content, renamed, cssRules, cssClassIndex);
+
+    removedFontFaceRules += fontFace.count;
+    removedFontBytes += fontFace.bytes;
+    rewrittenCssSelectors += rewrite.count;
+    cssClassIndex = rewrite.cssClassIndex;
+
+    const data = new TextEncoder().encode(optimizedCss);
+    out.file(cssPath, data, { compression: 'DEFLATE', compressionOptions: { level: 8 }, createFolders: false });
+  }
+
+  // Third pass: update XHTML using DOMParser
   for (const [xhtmlPath, content] of Object.entries(xhtmlFiles)) {
     if (operationCancelled) throw new Error('Cancelled by user');
     let t = content;
@@ -5186,6 +5297,19 @@ async function convertEpubFile(file, progressCallback) {
 
     const r2 = fixSvgWrappedImages(t);
     if (r2.fixed) { t = r2.c; logFix(`SVG images (${r2.count})`, xhtmlPath.split('/').pop()); }
+
+    // Apply CSS fixes to inline <style> blocks
+    const inlineCssRules = {};
+    t = t.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (m, open, css, close) => {
+      const { optimizedCss, fontFace, rewrite } = optimizeCss(xhtmlPath, css, renamed, inlineCssRules, cssClassIndex);
+
+      removedFontFaceRules += fontFace.count;
+      removedFontBytes += fontFace.bytes;
+      rewrittenCssSelectors += rewrite.count;
+      cssClassIndex = rewrite.cssClassIndex;
+
+      return open + optimizedCss + close;
+    });
 
     // Use DOMParser for all img modifications: remove width/height and handle split images
     try {
@@ -5319,6 +5443,25 @@ async function convertEpubFile(file, progressCallback) {
           }
         }
 
+        // Apply CSS rewrite rules to XHTML nodes
+        let addedClasses = 0;
+        for (const [selector, className] of Object.entries({ ...inlineCssRules, ...cssRules })) {
+          try {
+            const nodes = doc.querySelectorAll(selector);
+            const classToken = className.replace(/^\./, '');
+            for (const node of nodes) {
+              node.classList.add(classToken);
+            }
+            addedClasses += nodes.length;
+          } catch (e) {
+            console.warn(`CSS selector query failed: ${selector}\n${e.message}`);
+          }
+        }
+        if (addedClasses > 0) {
+          modified = true;
+          logFix('CSS selectors', `added ${addedClasses} class override(s) to ${escapeHtml(xhtmlPath.split('/').pop())}`);
+        }
+
         // Only serialize if we made changes
         if (modified) {
           t = safeSerialize(doc, content);
@@ -5327,17 +5470,6 @@ async function convertEpubFile(file, progressCallback) {
     } catch (e) {
       console.warn('DOMParser error for', xhtmlPath, e.message);
     }
-
-    // Strip @font-face rules from inline <style> blocks — embedded font files
-    // are removed, so leftover rules would reference missing resources
-    t = t.replace(/(<style\b[^>]*>)([\s\S]*?)(<\/style>)/gi, (m, open, css, close) => {
-      const ff = stripFontFaceRules(css);
-      if (!ff.count) return m;
-      removedFontFaceRules += ff.count;
-      removedFontBytes += new TextEncoder().encode(css).length - new TextEncoder().encode(ff.css).length;
-      logFix('@font-face', `${ff.count} rule(s) removed from ${escapeHtml(xhtmlPath.split('/').pop())}`);
-      return open + ff.css + close;
-    });
 
     // Inject universal image constraint — prevents overflow on e-ink displays
     if (t.includes('</head>')) {
@@ -5352,7 +5484,7 @@ async function convertEpubFile(file, progressCallback) {
     mainIdentifier = extractIdentifier(opfContent);
   }
 
-  // Third pass: update OPF using fixOPF (DOMParser with regex fallback)
+  // Fourth pass: update OPF using fixOPF (DOMParser with regex fallback)
   if (opfContent) {
     let t = opfContent;
     for (const [o, n] of Object.entries(renamed)) {
@@ -5369,7 +5501,7 @@ async function convertEpubFile(file, progressCallback) {
     if (operationCancelled) throw new Error('Cancelled by user');
     if (fileObj.dir || path === 'mimetype') continue;
     const low = path.toLowerCase();
-    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/) || low.match(/\.(xhtml|html|htm)$/) || low.endsWith('.opf')) continue;
+    if (low.match(/\.(png|gif|webp|bmp|jpg|jpeg)$/) || low.match(/\.(xhtml|html|htm)$/) || low.endsWith('.css') || low.endsWith('.opf')) continue;
 
     if (fontPaths.has(path)) {
       const fontData = await fileObj.async('arraybuffer');
@@ -5380,20 +5512,7 @@ async function convertEpubFile(file, progressCallback) {
     }
 
     let data = await fileObj.async('arraybuffer');
-    if (low.endsWith('.css')) {
-      let t = await safeReadText(fileObj);
-      for (const [o, n] of Object.entries(renamed)) {
-        t = t.split(o.split('/').pop()).join(n.split('/').pop());
-      }
-      const ff = stripFontFaceRules(t);
-      if (ff.count) {
-        removedFontFaceRules += ff.count;
-        removedFontBytes += new TextEncoder().encode(t).length - new TextEncoder().encode(ff.css).length;
-        t = ff.css;
-        logFix('@font-face', `${ff.count} rule(s) removed from ${escapeHtml(path.split('/').pop())}`);
-      }
-      data = new TextEncoder().encode(t);
-    } else if (path === 'META-INF/encryption.xml' && fontPaths.size) {
+    if (path === 'META-INF/encryption.xml' && fontPaths.size) {
       const t = await safeReadText(fileObj);
       const enc = stripFontEncryptionEntries(t, fontPaths);
       if (enc.dropFile) {
