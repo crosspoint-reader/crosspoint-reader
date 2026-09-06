@@ -87,7 +87,7 @@ STR_CALIBRE_INSTRUCTION_3: "3) Desde Calibre, seleccione \"Enviar a dispositivo\
 STR_CALIBRE_INSTRUCTION_4: "\"Permanezca en esta pantalla mientras se envía\""
 STR_CAT_DISPLAY: "Pantalla"
 STR_CAT_READER: "Lector"
-STR_CAT_CONTROLS: "Mandos"
+STR_CAT_CONTROLS: "Controles"
 STR_CAT_SYSTEM: "Sistema"
 STR_SLEEP_SCREEN: "Fondo de pantalla de suspensión"
 STR_TOUCH_TOGGLE: "Táctil"
