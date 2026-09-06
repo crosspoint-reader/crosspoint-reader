@@ -5445,16 +5445,18 @@ async function convertEpubFile(file, progressCallback) {
 
         // Apply CSS rewrite rules to XHTML nodes
         let addedClasses = 0;
-        for (const [selector, className] of Object.entries({ ...inlineCssRules, ...cssRules })) {
-          try {
-            const nodes = doc.querySelectorAll(selector);
-            const classToken = className.replace(/^\./, '');
-            for (const node of nodes) {
-              node.classList.add(classToken);
+        for (const rules of [inlineCssRules, cssRules]) {
+          for (const [selector, className] of Object.entries(rules)) {
+            try {
+              const nodes = doc.querySelectorAll(selector);
+              const classToken = className.replace(/^\./, '');
+              for (const node of nodes) {
+                node.classList.add(classToken);
+              }
+              addedClasses += nodes.length;
+            } catch (e) {
+              console.warn(`CSS selector query failed: ${selector}\n${e.message}`);
             }
-            addedClasses += nodes.length;
-          } catch (e) {
-            console.warn(`CSS selector query failed: ${selector}\n${e.message}`);
           }
         }
         if (addedClasses > 0) {
