@@ -371,7 +371,9 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
       lo = 0;  // unreadable sample: abandon the descent and scan from the start
       break;
     }
-    if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+    // Equal headwords may begin before this sample boundary. Keep the search
+    // strictly below the target so locate() can inspect the full equal run.
+    if (StringUtils::asciiCaseCmp(wordBuf, target) < 0) {
       lo = mid;
     } else {
       hi = mid - 1;
@@ -386,7 +388,8 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
 DictLocation Dictionary::locate(LookupSession& session, const char* target, std::string* matchedHeadwordOut) {
   DictLocation result;
 
-  // Bisect the sampled offsets to the last sample whose headword <= target.
+  // Bisect to the last sample strictly before the target so a case-insensitive
+  // equal run crossing a sample boundary is scanned from its beginning.
   const uint32_t startByte = bisectSamples(session.qidx, session.idx, session.sampleCount, target);
 
   // Linear scan from the sampled entry: headword NUL, BE32 offset, BE32 size.
