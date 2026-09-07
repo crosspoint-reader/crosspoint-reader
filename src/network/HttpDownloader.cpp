@@ -67,7 +67,8 @@ struct WifiPowerSaveGuard {
 
 #if defined(FREEINK_NET_WOLFSSL)
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
-                                         const std::string& password, Sink& sink, const char* caPem) {
+                                         const std::string& password, Sink& sink, bool downgradeRedirectsToHttp,
+                                         const char* caPem) {
   WifiPowerSaveGuard psGuard;
   std::string url = startUrl;
 
@@ -120,10 +121,24 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
         return HttpDownloader::HTTP_ERROR;
       }
-      if (caPem != nullptr && !urlIsHttps(url)) {
-        // Verified mode never follows an https -> http downgrade.
-        LOG_ERR("HTTP", "refusing redirect downgrade to non-https");
-        return HttpDownloader::HTTP_ERROR;
+      if (caPem != nullptr) {
+        // Verified mode never follows an https -> http downgrade, and never
+        // performs one. Pinned anchors mean every hop is authenticated, which
+        // plaintext cannot be -- so this takes precedence over
+        // downgradeRedirectsToHttp rather than sitting alongside it. A caller
+        // asking for both is asking for a contradiction, and verification is
+        // the half worth keeping.
+        if (!urlIsHttps(url)) {
+          LOG_ERR("HTTP", "refusing redirect downgrade to non-https");
+          return HttpDownloader::HTTP_ERROR;
+        }
+      } else if (downgradeRedirectsToHttp && url.rfind("https://", 0) == 0) {
+        // Unverified mode keeps upstream's optimisation: fetch the redirect
+        // target over plain HTTP. GitHub's release-asset CDN serves its signed
+        // URLs on both schemes, and skipping the second TLS session removes its
+        // ~17KB record buffer -- the MEMORY_E / OOM-abort site on C3 heaps that
+        // sit near 45KB free.
+        url.replace(0, 8, "http://");
       }
       continue;
     }
@@ -256,10 +271,14 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
 // mbedTLS path fails to connect or stalls mid-stream. Plain-http URLs still use a
 // WiFiClient inside runGetWolf, so this is safe for non-TLS targets too.
 HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::string& username,
-                                           const std::string& password, Sink& sink) {
+                                           const std::string& password, Sink& sink,
+                                           bool downgradeRedirectsToHttp = false) {
 #if defined(FREEINK_NET_WOLFSSL)
-  return runGetWolf(url, username, password, sink, nullptr);
+  return runGetWolf(url, username, password, sink, downgradeRedirectsToHttp, nullptr);
 #else
+  // esp_http_client follows redirects internally; the downgrade only exists on
+  // the wolfSSL path, where the manual hop loop exposes the Location URL.
+  (void)downgradeRedirectsToHttp;
   return runGet(url, username, password, sink);
 #endif
 }
@@ -307,7 +326,8 @@ bool HttpDownloader::fetchUrlVerified(const std::string& url, const DataCallback
   Sink sink;
   sink.write = onData;
 #if defined(FREEINK_NET_WOLFSSL)
-  return runGetWolf(url, username, password, sink, caPem) == OK;
+  // Never the downgrade, whatever else is configured: this is the verified path.
+  return runGetWolf(url, username, password, sink, /*downgradeRedirectsToHttp=*/false, caPem) == OK;
 #else
   return runGet(url, username, password, sink) == OK;
 #endif
@@ -315,7 +335,8 @@ bool HttpDownloader::fetchUrlVerified(const std::string& url, const DataCallback
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
-                                                             const std::string& username, const std::string& password) {
+                                                             const std::string& username, const std::string& password,
+                                                             bool downgradeRedirectsToHttp) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   if (Storage.exists(destPath.c_str())) {
@@ -332,7 +353,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
 
-  const DownloadError result = runGetSecure(url, username, password, sink);
+  const DownloadError result = runGetSecure(url, username, password, sink, downgradeRedirectsToHttp);
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();

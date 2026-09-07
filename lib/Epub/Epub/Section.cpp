@@ -43,7 +43,11 @@ namespace {
 // v40: Ruby groups remain intact when a large text block is soft-flushed.
 // v41: Simple HTML table rows are laid out as positioned columns instead of
 //      flattened paragraphs with synthetic row/cell labels.
-constexpr uint8_t SECTION_FILE_VERSION = 41;
+// v42: Closing a block strips inherited vertical margins and padding.
+// v43: Paragraph base direction excludes direction changes from inline elements.
+// v44: Persist internal-link rectangles with each page for touch navigation.
+// v45: Internal EPUB links preserve CSS superscript/subscript positioning.
+constexpr uint8_t SECTION_FILE_VERSION = 45;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

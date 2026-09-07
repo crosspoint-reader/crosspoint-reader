@@ -68,6 +68,12 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
+      - name: Install cppcheck runtime dependency
+        run: |
+          # pioarduino's Linux cppcheck binary links against libpcre.so.3.
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpcre3
+
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
 

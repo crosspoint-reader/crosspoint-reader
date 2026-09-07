@@ -32,10 +32,11 @@ constexpr StrId STYLE_ROW_NAME_IDS[] = {StrId::STR_FOCUS_READING, StrId::STR_HYP
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
     const auto& families = registry->getFamilies();
-    for (int i = 0; i < static_cast<int>(families.size()); i++) {
-      if (families[i].name == sdFontFamilyName) {
-        return CrossPointSettings::BUILTIN_FONT_COUNT + i;
-      }
+    const auto family = std::find_if(families.begin(), families.end(), [sdFontFamilyName](const auto& candidate) {
+      return candidate.name == sdFontFamilyName;
+    });
+    if (family != families.end()) {
+      return CrossPointSettings::BUILTIN_FONT_COUNT + static_cast<int>(family - families.begin());
     }
   }
 
@@ -196,7 +197,7 @@ void TextSettingsActivity::buildScreen(UiScreen& screen) {
   // directly) and above the caption band + button hints.
   const int tabTop = afterHeader + previewHeight;
   const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
-  screen.setContentMargin(
+  screen.setContentMarginFromScreen(
       fui::Insets{static_cast<int16_t>(tabTop), 0, static_cast<int16_t>(bottomReserved + captionHeight), 0});
 
   buildTabBar(screen);

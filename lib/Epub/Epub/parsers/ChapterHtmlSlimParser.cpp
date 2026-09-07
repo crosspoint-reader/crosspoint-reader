@@ -171,6 +171,17 @@ void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, c
   }
 }
 
+void ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css) {
+  if (!css.hasVerticalAlign()) return;
+  if (css.verticalAlign == CssVerticalAlign::Super) {
+    entry.hasSup = true;
+    entry.sup = true;
+  } else if (css.verticalAlign == CssVerticalAlign::Sub) {
+    entry.hasSub = true;
+    entry.sub = true;
+  }
+}
+
 void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
   if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
       !cssStyle.hasDirection() && !cssStyle.hasTextAlign()) {
@@ -189,6 +200,7 @@ void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
   }
   applyTextDecorationToEntry(entry, cssStyle);
   applyDirectionToEntry(entry, cssStyle);
+  entry.setsParagraphDirection = true;
   if (cssStyle.hasTextAlign()) {
     entry.hasTextAlign = true;
     entry.textAlign = cssStyle.textAlign;
@@ -223,8 +235,15 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   effectiveItalic = currentCssStyle.hasFontStyle() && currentCssStyle.fontStyle == CssFontStyle::Italic;
   effectiveTextDecoration =
       currentCssStyle.hasTextDecoration() ? currentCssStyle.textDecoration : CssTextDecoration::None;
-  effectiveDirectionDefined = currentCssStyle.hasDirection();
-  effectiveDirection = currentCssStyle.direction;
+  bool paragraphDirectionDefined = false;
+  bool paragraphIsRtl = false;
+  if (!blockStyleStack.empty()) {
+    const auto& blockStyle = blockStyleStack.back();
+    paragraphDirectionDefined = blockStyle.directionDefined;
+    paragraphIsRtl = blockStyle.isRtl;
+  }
+  effectiveDirectionDefined = paragraphDirectionDefined;
+  effectiveDirection = paragraphIsRtl ? CssTextDirection::Rtl : CssTextDirection::Ltr;
   effectiveTextAlignDefined = currentCssStyle.hasTextAlign();
   effectiveTextAlign = currentCssStyle.textAlign;
   effectiveSup = false;
@@ -246,6 +265,10 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasDirection) {
       effectiveDirectionDefined = true;
       effectiveDirection = entry.direction;
+      if (entry.setsParagraphDirection) {
+        paragraphDirectionDefined = true;
+        paragraphIsRtl = entry.direction == CssTextDirection::Rtl;
+      }
     }
     if (entry.hasTextAlign) {
       effectiveTextAlignDefined = true;
@@ -261,17 +284,12 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     }
   }
 
-  // Keep inherited direction in the active empty text block so upcoming block starts
-  // can inherit from non-block ancestors such as <html dir="rtl"> / <body dir="rtl">.
+  // Keep flow direction in the active empty text block. Inline direction remains
+  // available for CSS inheritance without replacing the paragraph's base direction.
   if (currentTextBlock && currentTextBlock->isEmpty()) {
     auto& style = currentTextBlock->getBlockStyle();
-    if (effectiveDirectionDefined) {
-      style.directionDefined = true;
-      style.isRtl = (effectiveDirection == CssTextDirection::Rtl);
-    } else {
-      style.directionDefined = false;
-      style.isRtl = false;
-    }
+    style.directionDefined = paragraphDirectionDefined;
+    style.isRtl = paragraphIsRtl;
   }
 }
 
@@ -337,7 +355,14 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fallbackTableRowToStacked();
   }
 
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset);
+  uint8_t linkId = 0;
+  if (insideFootnoteLink) {
+    if (!currentTextBlock->linkTargetMatches(currentFootnoteLinkId, currentFootnote.href)) {
+      currentFootnoteLinkId = currentTextBlock->addLinkTarget(currentFootnote.href);
+    }
+    linkId = currentFootnoteLinkId;
+  }
+  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset, linkId);
   if (insideTableCell && !tableRowStacked) {
     tableCellTextBytes += wordBytes;
     if (currentTextBlock->size() > MAX_GRID_TABLE_CELL_WORDS) {
@@ -1271,8 +1296,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       self->insideFootnoteLink = true;
       self->footnoteLinkDepth = self->depth;
-      strncpy(self->currentFootnote.href, href, sizeof(self->currentFootnote.href) - 1);
-      self->currentFootnote.href[sizeof(self->currentFootnote.href) - 1] = '\0';
+      self->currentFootnoteLinkId = self->currentTextBlock ? self->currentTextBlock->addLinkTarget(href) : 0;
+      self->currentFootnote.href[0] = '\0';
+      if (self->currentFootnoteLinkId != 0) strcpy(self->currentFootnote.href, href);
       self->currentFootnote.number[0] = '\0';
       self->currentFootnoteLinkTextLen = 0;
 
@@ -1282,6 +1308,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasTextDecoration = true;
       entry.textDecoration = CssTextDecoration::Underline;
       applyDirectionToEntry(entry, cssStyle);
+      applyVerticalAlignToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
 
@@ -1435,7 +1462,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
-    // Handle span and other inline elements for CSS styling
+    // Handle span and other inline elements for CSS styling.
     const bool inheritedTableTextAlign = self->tableDepth >= 1 && cssStyle.hasTextAlign();
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration() ||
         cssStyle.hasDirection() || cssStyle.hasVerticalAlign() || inheritedTableTextAlign) {
@@ -1456,19 +1483,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       }
       applyTextDecorationToEntry(entry, cssStyle);
       applyDirectionToEntry(entry, cssStyle);
+      entry.setsParagraphDirection = strcmp(name, "html") == 0 || strcmp(name, "body") == 0;
       if (inheritedTableTextAlign) {
         entry.hasTextAlign = true;
         entry.textAlign = cssStyle.textAlign;
       }
-      if (cssStyle.hasVerticalAlign()) {
-        if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
-          entry.hasSup = true;
-          entry.sup = true;
-        } else if (cssStyle.verticalAlign == CssVerticalAlign::Sub) {
-          entry.hasSub = true;
-          entry.sub = true;
-        }
-      }
+      applyVerticalAlignToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
     }
@@ -1846,6 +1866,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->pendingFootnotes.push_back({wordIndex, entry});
     }
     self->insideFootnoteLink = false;
+    self->currentFootnoteLinkId = 0;
   }
 
   // Leaving skip
@@ -1921,7 +1942,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->blockStyleStack.pop_back();
       // Start a new text block with the parent style to prevent subsequent bare text
       // from inheriting the closed block style (e.g. alignment or margins).
-      self->startNewTextBlock(self->blockStyleStack.back());
+      // Vertical margins and paddings are stripped
+      self->startNewTextBlock(self->blockStyleStack.back().withoutTop().withoutBottom());
+      self->updateEffectiveInlineStyle();
     }
 
     // </li> closes: if the bullet never got inline text (empty <li> or <li> with only
@@ -2113,6 +2136,15 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
+  const int rubyShift = line->getRubyShift(renderer.getFontAscenderSize(fontId));
+  const int baseLineHeight = renderer.getLineHeight(fontId, lineCompression);
+  for (const auto& link : line->takeLinkSpans()) {
+    if (!currentPage->addLink(link.href, static_cast<int16_t>(xOffset + link.x),
+                              static_cast<int16_t>(currentPageNextY + rubyShift - link.topLift), link.width,
+                              static_cast<int16_t>(baseLineHeight + link.topLift))) {
+      LOG_DBG("EHP", "Dropped page link: %.48s", link.href);
+    }
+  }
   currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
   currentPageNextY += lineHeight;
 }
