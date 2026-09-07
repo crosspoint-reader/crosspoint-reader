@@ -17,6 +17,7 @@
 
 #include "FirmwareBoardTag.h"
 #include "FirmwareFlasher.h"
+#include "FirmwareImageIdentity.h"
 
 namespace {
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
@@ -134,54 +135,89 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     return INTERNAL_UPDATE_ERROR;
   }
 
-  esp_ota_handle_t otaHandle = 0;
-  esp_err_t esp_err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle);
-  if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_ota_begin failed: %s", esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
-  }
-
   /* For better timing and connectivity, we disable power saving for WiFi */
   esp_wifi_set_ps(WIFI_PS_NONE);
 
   processedSize = 0;
   int lastReportedPct = -1;
   bool flashOk = true;
+  // esp_ota_begin() erases the whole destination partition, so it is deferred
+  // until the image header has arrived and been accepted. Erasing first would
+  // destroy the fallback slot on behalf of an image we then refuse.
+  esp_ota_handle_t otaHandle = 0;
+  bool otaBegun = false;
+  bool beginFailed = false;
   // The image streams in chunks; only the first bytes carry the header. Buffer
-  // the first 14 bytes so we can read chip_id (esp_image_header_t offset 12)
-  // and reject a wrong-MCU image before it overwrites the OTA partition.
-  uint8_t hdr[14];
-  size_t hdrLen = 0;
+  // a whole esp_image_header_t, then flush it into the partition once the
+  // compatibility decision has passed.
+  uint8_t header[firmware_identity::IMAGE_HEADER_SIZE];
+  size_t headerLen = 0;
   bool wrongChip = false;
   // All S3 boards share a chip_id, so also scan the stream for the embedded
   // board tag (FirmwareBoardTag.h). An untagged image passes; a tag naming a
-  // different board aborts the download. The wrong image may partially land in
-  // the inactive OTA slot, but esp_ota_abort() below means it never becomes
-  // the boot target.
+  // different board aborts the download. Unlike chip_id the tag lives in the
+  // image body and cannot be known up front, so a wrong-board image may
+  // partially land in the inactive OTA slot -- esp_ota_abort() below means it
+  // never becomes the boot target.
   board_tag::Scanner tagScanner;
-  const bool fetchOk = HttpDownloader::fetchUrl(otaUrl, [&](const uint8_t* data, size_t len) {
-    if (hdrLen < sizeof(hdr)) {
-      const size_t take = std::min(len, sizeof(hdr) - hdrLen);
-      std::memcpy(hdr + hdrLen, data, take);
-      hdrLen += take;
-      if (hdrLen == sizeof(hdr)) {
-        uint16_t imageChip;
-        std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
-        const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
-        if (deviceChip != 0xFFFF && imageChip != deviceChip) {
-          LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
-          wrongChip = true;
-          return false;  // abort the transfer
-        }
-      }
-    }
+  const bool fetchOk = HttpDownloader::fetchUrl(otaUrl, [&](const uint8_t* data, const size_t len) {
+    // Every byte must reach the scanner in stream order, including the header
+    // bytes buffered below, or a tag straddling that boundary is missed.
     tagScanner.feed(data, len);
     if (tagScanner.mismatch()) {
       LOG_ERR("OTA", "wrong board: image=%s device=%.*s", tagScanner.foundName(),
               static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
       return false;  // abort the transfer
     }
-    if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
+
+    size_t consumed = 0;
+    if (!otaBegun) {
+      const size_t take = std::min(len, sizeof(header) - headerLen);
+      std::memcpy(header + headerLen, data, take);
+      headerLen += take;
+      consumed = take;
+      if (headerLen < sizeof(header)) {
+        processedSize += len;
+        return true;  // still collecting the header; nothing erased yet
+      }
+
+      uint16_t imageChip = 0;
+      if (!firmware_identity::readImageChipId(header, headerLen, imageChip)) {
+        // A partial header yields no chip id at all rather than a zero, which
+        // would read as a valid ESP32 id.
+        LOG_ERR("OTA", "image header too short for chip id");
+        beginFailed = true;
+        return false;  // abort the transfer
+      }
+      const uint16_t deviceChip = firmware_flash::deviceChipId();
+      const auto verdict = firmware_identity::compareChipId(imageChip, deviceChip);
+      if (verdict == firmware_identity::ChipVerdict::Mismatch) {
+        LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+        wrongChip = true;
+        return false;  // abort the transfer, partition still intact
+      }
+      if (verdict == firmware_identity::ChipVerdict::UnknownDeviceIdentity) {
+        // Fail open: a device whose identity source is broken must still be
+        // updatable. The bootloader re-checks chip_id on every boot.
+        LOG_ERR("OTA", "device chip id unknown; chip guard skipped (image=0x%04X)", imageChip);
+      }
+
+      const esp_err_t beginErr = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle);
+      if (beginErr != ESP_OK) {
+        LOG_ERR("OTA", "esp_ota_begin failed: %s", esp_err_to_name(beginErr));
+        beginFailed = true;
+        return false;  // abort the transfer
+      }
+      otaBegun = true;
+
+      if (esp_ota_write(otaHandle, header, headerLen) != ESP_OK) {
+        flashOk = false;
+        return false;  // abort the transfer
+      }
+    }
+
+    const size_t bodyLen = len - consumed;
+    if (bodyLen > 0 && esp_ota_write(otaHandle, data + consumed, bodyLen) != ESP_OK) {
       flashOk = false;
       return false;  // abort the transfer
     }
@@ -202,19 +238,31 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   /* Return back to default power saving for WiFi in case of failing */
   esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
 
+  // esp_ota_abort() is only valid on a handle esp_ota_begin() actually opened;
+  // a chip rejection now happens before that, leaving nothing to abort.
   if (wrongChip || tagScanner.mismatch()) {
     LOG_ERR("OTA", "Firmware install aborted: wrong device");
-    esp_ota_abort(otaHandle);
+    if (otaBegun) esp_ota_abort(otaHandle);
     return WRONG_DEVICE_ERROR;
+  }
+
+  if (beginFailed) {
+    if (otaBegun) esp_ota_abort(otaHandle);
+    return INTERNAL_UPDATE_ERROR;
   }
 
   if (!fetchOk || !flashOk) {
     LOG_ERR("OTA", "Firmware install failed (%s)", flashOk ? "download" : "flash write");
-    esp_ota_abort(otaHandle);
+    if (otaBegun) esp_ota_abort(otaHandle);
     return flashOk ? HTTP_ERROR : INTERNAL_UPDATE_ERROR;
   }
 
-  esp_err = esp_ota_end(otaHandle);  // verifies the written image
+  if (!otaBegun) {
+    LOG_ERR("OTA", "transfer ended before a complete image header (%u bytes)", static_cast<unsigned>(headerLen));
+    return HTTP_ERROR;
+  }
+
+  esp_err_t esp_err = esp_ota_end(otaHandle);  // verifies the written image
   if (esp_err != ESP_OK) {
     LOG_ERR("OTA", "esp_ota_end failed: %s", esp_err_to_name(esp_err));
     return INTERNAL_UPDATE_ERROR;
