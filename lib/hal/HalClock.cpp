@@ -5,6 +5,8 @@
 #include <esp_sntp.h>
 #include <time.h>
 
+#include "SystemTimePlausibility.h"
+
 HalClock halClock;  // Singleton instance
 
 void HalClock::begin() {
@@ -103,6 +105,30 @@ bool HalClock::syncFromNTP() {
         return true;
       }
       return false;
+    }
+    delay(100);
+  }
+
+  LOG_ERR("CLK", "NTP sync timed out");
+  return false;
+}
+
+bool HalClock::isSystemTimeValid() { return isPlausibleEpoch(time(nullptr)); }
+
+bool HalClock::quickSyncSystemTime() {
+  if (WiFi.status() != WL_CONNECTED) {
+    LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
+    return false;
+  }
+
+  LOG_INF("CLK", "Starting NTP sync...");
+  configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
+
+  // Wait for SNTP sync to complete (up to 5 seconds).
+  constexpr int maxAttempts = 50;
+  for (int i = 0; i < maxAttempts; i++) {
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+      return true;
     }
     delay(100);
   }
