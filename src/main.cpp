@@ -116,13 +116,13 @@ EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
-EpdFont ui10MediumFont(&ubuntu_10_medium);
+EpdFont ui10RegularFont(&ubuntu_10_regular);
 EpdFont ui10BoldFont(&ubuntu_10_bold);
-EpdFontFamily ui10FontFamily(&ui10MediumFont, &ui10BoldFont);
+EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
 
-EpdFont ui12MediumFont(&ubuntu_12_medium);
+EpdFont ui12RegularFont(&ubuntu_12_regular);
 EpdFont ui12BoldFont(&ubuntu_12_bold);
-EpdFontFamily ui12FontFamily(&ui12MediumFont, &ui12BoldFont);
+EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
@@ -289,6 +289,7 @@ void enterDeepSleep(bool fromTimeout = false) {
 
   halTiltSensor.deepSleep();
   display.deepSleep();
+  Storage.prepareForDeepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
@@ -372,10 +373,11 @@ void setup() {
   powerManager.begin();
 
   const auto wakeupReason = gpio.getWakeupReason();
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton && !gpio.verifyPowerButtonWakeup()) {
-    LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
-    powerManager.startDeepSleep(gpio);
-  }
+  // Sample the wake hold now — a click wake is released within milliseconds of
+  // boot — but defer the sleep-or-boot decision until SETTINGS is loaded below:
+  // click-to-wake is a setting, and an X4 battery power-off cuts all power, so
+  // only SD state survives to the next boot.
+  const bool wakeHoldVerified = wakeupReason != HalGPIO::WakeupReason::PowerButton || gpio.verifyPowerButtonWakeup();
 
   // X4 Pro and X4 Classic both map BTN_UP to GPIO0 — an ESP32-S3 boot strap — so
   // gate recovery on the non-strap Down key (GPIO7) to avoid a stuck-in-recovery loop.
@@ -436,6 +438,13 @@ void setup() {
 
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
+      // With Short Power Button Press = Sleep, a single click wakes on any
+      // device; otherwise the button must still be held (ghost-wake debounce).
+      if (!wakeHoldVerified && SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::SLEEP) {
+        LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
+        Storage.prepareForDeepSleep();
+        powerManager.startDeepSleep(gpio);
+      }
       wakePowerReleasePending = true;
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
@@ -450,6 +459,7 @@ void setup() {
       // the device in a USB-replug boot loop (or sleep right after a flash).
       break;
 #else
+      Storage.prepareForDeepSleep();
       powerManager.startDeepSleep(gpio);
       break;
 #endif
@@ -724,7 +734,11 @@ void loop() {
 
   // Refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
-  if (gpio.wasUsbStateChanged()) {
+  // Not while reading: there a repaint is a full page re-render (visible
+  // flash, the AA pass re-running, and a frontlight dip under the refresh
+  // load); the reader's status bar picks the charging state up on the next
+  // page turn instead.
+  if (gpio.wasUsbStateChanged() && !activityManager.isReaderActivity()) {
     activityManager.requestUpdate();
   }
 

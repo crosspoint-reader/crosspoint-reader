@@ -531,6 +531,20 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Link taps take priority over the reader-menu and page-turn zones.
+  if (!atEndOfBook && !currentPageLinks.empty() && SETTINGS.touchReaderControls && mappedInput.hasTouch()) {
+    int touchX = 0;
+    int touchY = 0;
+    if (mappedInput.wasScreenTapped(touchX, touchY)) {
+      const auto* link = EpubReaderUtils::linkAtPoint(currentPageLinks, touchX, touchY, currentPageLinkMarginLeft,
+                                                      currentPageLinkMarginTop);
+      if (link) {
+        navigateToHref(link->href, true);
+        return;
+      }
+    }
+  }
+
   if (confirmReleased || ReaderUtils::isTouchMenuGesture(renderer, mappedInput)) {
     // Toolbar style: the page is on screen and in the framebuffer, so paint the
     // toolbar over it (one refresh) instead of pushing a full-screen menu.
@@ -1086,6 +1100,7 @@ bool EpubReaderActivity::skipLoopDelay() {
 }
 
 void EpubReaderActivity::renderBook() {
+  currentPageLinks.clear();
   if (!epub) return;
 
   const auto showPendingSyncSaveError = [this]() {
@@ -1358,6 +1373,14 @@ void EpubReaderActivity::renderBook() {
 
     currentPageVisibleOffset = p->visibleTextOffset;
     currentPageFootnotes = std::move(p->footnotes);
+    currentPageLinks = std::move(p->links);
+    currentPageLinkMarginLeft = orientedMarginLeft;
+    currentPageLinkMarginTop = orientedMarginTop;
+
+    // The overlay and non-tiled grayscale renderer share the renderer's single
+    // stored-BW slot. Release the old page snapshot before renderContents()
+    // needs that slot, then snapshot the newly rendered page below.
+    discardOverlayPage();
 
     const auto start = millis();
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
@@ -1393,15 +1416,16 @@ void EpubReaderActivity::renderBook() {
   if (overlay != Overlay::None && usesToolbarMenu()) {
     // The page just re-rendered under the overlay: refresh the snapshot that
     // backs panel->toolbar restores (any previous copy is stale).
-    discardOverlayPage();
     overlayPageStored = renderer.storeBwBuffer();
     renderOverlay();
     // An open option picker rides on top of the freshly drawn panel.
     if (overlayPopup.isActive()) overlayPopup.render(renderer);
-    // HALF on the Xteink grayscale panels: the page render above just ran the
-    // anti-aliasing waveform, and a FAST differential leaves the covered text
-    // ghosting gray through the chrome background (see openOverlay).
-    renderer.displayBuffer(xteinkClassPanel() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+    // FAST, same as openOverlay: HALF's inverting pass flashes the sheet
+    // (white, in night mode) on every repaint under an open panel. Any AA
+    // residue a FAST differential leaves under the chrome has not shown in
+    // practice; restore a HALF cleanup here if text ever visibly ghosts
+    // through the sheet (see #2190 for the mechanism).
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
 }
 
@@ -1730,7 +1754,9 @@ static_assert(std::size(kAlignIds) == CrossPointSettings::PARAGRAPH_ALIGNMENT_CO
 }  // namespace
 
 bool EpubReaderActivity::usesToolbarMenu() const {
-  return SETTINGS.readerMenuStyle == CrossPointSettings::READER_MENU_TOOLBAR;
+  // Touch-first chrome: button boards always get the classic list menu, even
+  // if a settings file (e.g. an SD card moved from a touch board) says Toolbar.
+  return mappedInput.hasTouch() && SETTINGS.readerMenuStyle == CrossPointSettings::READER_MENU_TOOLBAR;
 }
 
 std::string EpubReaderActivity::currentChapterTitle() const {

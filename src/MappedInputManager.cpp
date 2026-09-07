@@ -21,11 +21,10 @@ void MappedInputManager::update() const {
 }
 
 bool MappedInputManager::isNavDirectionSwapped() const {
-  // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
-  // setting. The reader (and its modal menus) render rotated, so navigation/labels flip there; the
-  // home and settings UI render in portrait, so they never flip even when a rotated reader is configured.
+  // Touch boards always follow the rendered orientation; button-only boards keep the user toggle.
+  // Home and settings render in portrait, so neither path swaps them.
   const auto orientation = renderer.getOrientation();
-  return SETTINGS.frontButtonFollowOrientation &&
+  return (gpio.hasTouch() || SETTINGS.frontButtonFollowOrientation) &&
          (orientation == GfxRenderer::PortraitInverted || orientation == GfxRenderer::LandscapeCounterClockwise);
 }
 
@@ -90,9 +89,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(HalGPIO::BTN_UP);
+          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(HalGPIO::BTN_DOWN);
+          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
@@ -101,16 +100,16 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(HalGPIO::BTN_DOWN);
+          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(HalGPIO::BTN_UP);
+          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
       }
     case Button::NavNext:
       // Logical "next item" navigation: side Down + front Right, with the control axis flipped in
-      // INVERTED / LANDSCAPE_CCW (frontButtonFollowOrientation) so it matches the rotated hint labels.
+      // INVERTED / LANDSCAPE_CCW under the live orientation policy, matching the rotated hint labels.
       return isNavDirectionSwapped() ? (mapButton(Button::Up, fn) || mapButton(Button::Left, fn))
                                      : (mapButton(Button::Down, fn) || mapButton(Button::Right, fn));
     case Button::NavPrevious:

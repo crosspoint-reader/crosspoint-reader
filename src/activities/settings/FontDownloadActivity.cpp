@@ -1,6 +1,7 @@
 #include "FontDownloadActivity.h"
 
 #include <ArduinoJson.h>
+#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -125,6 +126,16 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
   static constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
+
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+  }
+  if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+      ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
+    LOG_ERR("FONT", "Low heap for manifest (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    errorMessage_ = tr(STR_MEMORY_ERROR);
+    return false;
+  }
 
   auto result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
   if (result != HttpDownloader::OK) {
@@ -426,6 +437,25 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   }
   requestUpdateAndWait();
 
+  // Rebuildable SD-font caches (glyph/kern arenas, CJK fallback tables) can
+  // hold tens of KB the TLS session needs; release them up front rather than
+  // starving the transfer. They repopulate on demand after the download.
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+    LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
+  }
+
+  // Check before touching the family directory so a failed update leaves the
+  // installed family unchanged.
+  if (ESP.getFreeHeap() < HttpDownloader::MIN_TLS_FREE_HEAP ||
+      ESP.getMaxAllocHeap() < HttpDownloader::MIN_TLS_MAX_ALLOC) {
+    LOG_ERR("FONT", "Low heap for download (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    RenderLock lock(*this);
+    state_ = ERROR;
+    errorMessage_ = tr(STR_MEMORY_ERROR);
+    return;
+  }
+
   if (!fontInstaller_.ensureFamilyDir(family.name.c_str())) {
     RenderLock lock(*this);
     state_ = ERROR;
@@ -467,7 +497,11 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
           }
           requestUpdate(true);
         },
-        &cancelRequested_);
+        // Bulk font transfers follow GitHub's release-asset redirect over plain
+        // HTTP: the CRC check below (manifest fetched over TLS) covers
+        // integrity, and skipping the second TLS session keeps the C3 heap out
+        // of MEMORY_E territory.
+        &cancelRequested_, "", "", /*downgradeRedirectsToHttp=*/true);
 
     if (result == HttpDownloader::ABORTED) {
       fontInstaller_.deleteFamily(family.name.c_str());
@@ -629,8 +663,8 @@ void FontDownloadActivity::activateSelected() {
 void FontDownloadActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Content below the GUI.drawHeader band, above the button hints.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   if (state_ == FAMILY_LIST && filteredIndices_.empty()) {

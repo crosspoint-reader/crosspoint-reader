@@ -462,8 +462,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 
   std::vector<SettingInfo> v = baseList;
   if (!BoardConfig::hasTouch()) {
+    // The toolbar reader menu is touch-first chrome: button boards keep the
+    // classic list menu, so the style choice is hidden along with the touch
+    // controls.
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_READER_CONTROLS; }),
+                           [](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
+                                    s.nameId == StrId::STR_READER_MENU_STYLE;
+                           }),
             v.end());
   }
   // The reader-menu gesture choice only makes sense where the menu stays

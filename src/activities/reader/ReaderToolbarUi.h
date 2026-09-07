@@ -82,7 +82,7 @@ class ReaderToolbarUi : public UiAppHost {
   static void onAction(const freeink::ui::ActionEvent& event, void* user);
   void buildToolbar(UiScreen& screen);
   void buildPanel(UiScreen& screen);
-  void buildToolRow(UiScreen& screen, freeink::ui::LayoutAnchor anchor);
+  void buildToolRow(UiScreen& screen, freeink::ui::LayoutAnchor anchor, int16_t sideInset);
 
   Model model_;
   Routed pending_;

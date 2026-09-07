@@ -1,15 +1,5 @@
-// Tests for ChapterHtmlSlimParser's HTML->layout pipeline, run entirely on
-// the host. See test/chapter_html_slim_parser/stubs/ for the HAL/Arduino
-// doubles and TestFont.h for the deterministic fixed-width test font; the
-// parser, CSS resolver, word layout, and text-block packing under test are
-// all the real production code from lib/Epub.
-//
-// GitHub issue #291: <li> items in an <ol> should be numbered ("1.", "2.",
-// ...) instead of always getting the unordered-list bullet, and
-// list-style-type: none should suppress the marker entirely.
-
+#include <Epub/Page.h>
 #include <GfxRenderer.h>
-#include <HalDisplay.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -22,11 +12,77 @@
 #include <utility>
 #include <vector>
 
-#include "Epub/Page.h"
-#include "Epub/blocks/TextBlock.h"
-#include "Epub/css/CssParser.h"
+#define class struct
+#define private public
 #include "Epub/parsers/ChapterHtmlSlimParser.h"
-#include "TestFont.h"
+#undef private
+#undef class
+
+namespace {
+
+class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
+ protected:
+  std::string filepath = "unused.xhtml";
+  GfxRenderer renderer;
+  CssParser cssParser{"/tmp"};
+  ChapterHtmlSlimParser parser{nullptr,
+                               filepath,
+                               renderer,
+                               0,
+                               1.0f,
+                               false,
+                               0,
+                               static_cast<uint16_t>(renderer.getScreenWidth()),
+                               static_cast<uint16_t>(renderer.getScreenHeight()),
+                               false,
+                               false,
+                               {},
+                               true,
+                               "",
+                               "",
+                               0,
+                               {},
+                               nullptr,
+                               &cssParser};
+
+  void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(false); }
+};
+
+TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) {
+  const char* verticalAlign = GetParam();
+  const char* expectedHref = "#note-target";
+  const XML_Char* attributes[] = {"href", expectedHref, "style", verticalAlign, nullptr};
+
+  ChapterHtmlSlimParser::startElement(&parser, "a", attributes);
+  const uint8_t linkId = parser.currentFootnoteLinkId;
+  ASSERT_NE(linkId, 0u);
+  ChapterHtmlSlimParser::characterData(&parser, "1", 1);
+  ChapterHtmlSlimParser::endElement(&parser, "a");
+
+  ASSERT_EQ(parser.currentTextBlock->size(), 1u);
+  const auto style = parser.currentTextBlock->getWordStyleAt(0);
+  const auto expectedStyle =
+      std::string(verticalAlign).find("super") != std::string::npos ? EpdFontFamily::SUP : EpdFontFamily::SUB;
+  EXPECT_NE(static_cast<uint8_t>(style) & static_cast<uint8_t>(expectedStyle), 0u);
+
+  ASSERT_EQ(parser.pendingFootnotes.size(), 1u);
+  const FootnoteEntry& footnote = parser.pendingFootnotes.front().second;
+  EXPECT_STREQ(footnote.href, expectedHref);
+  ASSERT_EQ(parser.currentTextBlock->wordLinkIds.size(), 1u);
+  EXPECT_EQ(parser.currentTextBlock->wordLinkIds.front(), linkId);
+  EXPECT_TRUE(parser.currentTextBlock->linkTargetMatches(linkId, expectedHref));
+}
+
+INSTANTIATE_TEST_SUITE_P(CssVerticalAlign, ChapterHtmlSlimParserTest,
+                         ::testing::Values("vertical-align: super", "vertical-align: sub"));
+
+}  // namespace
+
+// End-to-end list-layout coverage: run the real parser + TextBlock layout
+// pipeline over full HTML fixtures and inspect the produced pages. GitHub
+// issue #291: <li> items in an <ol> must be numbered ("1.", "2.", ...) instead
+// of always getting the unordered-list bullet, and list-style-type: none must
+// suppress the marker entirely.
 
 namespace {
 
@@ -65,9 +121,7 @@ using Line = std::vector<std::pair<std::string, EpdFontFamily::Style>>;
 // parseHtmlIntoLines() (word/style assertions) and any test that also needs
 // to inspect a line's resolved BlockStyle (e.g. hanging-indent geometry).
 std::vector<std::unique_ptr<Page>> parseHtmlIntoPages(const std::string& html, const std::string& css = "") {
-  HalDisplay halDisplay;
-  GfxRenderer renderer(halDisplay);
-  renderer.insertFont(kFontId, testfont::makeTestFontFamily());
+  GfxRenderer renderer;
 
   const std::string filepath = writeFixture(html);
 
@@ -278,6 +332,9 @@ TEST(ChapterHtmlSlimParserListTest, ClassBasedListStyleTypeNoneOnOrderedListSupp
 // contribution, leftInset()+textIndent goes negative and the first line's
 // glyphs render off the left edge of the page, with continuation lines
 // sitting almost flush against the margin instead of hanging-indented.
+// Pixel units keep the arithmetic exact regardless of the stub renderer's
+// fixed font metrics (insets stay under the 2em horizontal clamp; text-indent
+// is not clamped).
 TEST(ChapterHtmlSlimParserListTest, ListContainerMarginCounterbalancesHangingIndent) {
   const auto styles = parseHtmlIntoBlockStyles(
       "<html><body>"
@@ -286,14 +343,14 @@ TEST(ChapterHtmlSlimParserListTest, ListContainerMarginCounterbalancesHangingInd
       "<li><p class=\"list-item1\">Have Paper, Will Prototype by Bill Lucas.</p></li>"
       "</ul>"
       "</body></html>",
-      ".list-simple1 { margin-top: 1em; padding-left: 1.4em; margin-left: 0.1em; margin-bottom: 1em; "
-      "margin-right: 0.1em; text-align: left; list-style-type: none; }"
-      ".list-item1 { margin-top: 0.1em; margin-bottom: 0.1em; margin-right: 0em; margin-left: 0.1em; "
-      "text-indent: -1.5em; }");
+      ".list-simple1 { margin-top: 2px; padding-left: 20px; margin-left: 2px; margin-bottom: 2px; "
+      "margin-right: 2px; text-align: left; list-style-type: none; }"
+      ".list-item1 { margin-top: 1px; margin-bottom: 1px; margin-right: 0px; margin-left: 0px; "
+      "text-indent: -22px; }");
 
   ASSERT_FALSE(styles.empty());
   const auto& firstLine = styles.front();
-  // The <ul>'s own padding-left (1.4em) + margin-left (0.1em) must still be
+  // The <ul>'s own padding-left (20px) + margin-left (2px) must still be
   // present on the <li>/<p> block instead of being silently dropped.
   EXPECT_GT(firstLine.leftInset(), 0);
   EXPECT_TRUE(firstLine.textIndentDefined);
