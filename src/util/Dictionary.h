@@ -23,7 +23,8 @@ struct DictLocation {
 // <stem>.dict.dz, and an optional <stem>.syn synonym index. Lookups
 // binary-search a lazily built sampled-offset sidecar (<stem>.qidx, byte offset
 // of every SAMPLE_INTERVAL-th .idx entry), then linear-scan from the preceding
-// sample. A present .syn gets a parallel <stem>.sidx sidecar;
+// sample, or sample 0 when the target is at or before the first sample. A
+// present .syn gets a parallel <stem>.sidx sidecar;
 // its entries carry an ordinal (the N-th .idx entry) resolved back to a byte
 // offset via the same fixed-interval .qidx samples. Everything streams from SD;
 // no index is held in RAM.
@@ -146,8 +147,9 @@ class Dictionary {
 
   // Bisect a sampled-offset sidecar (.qidx over .idx, .sidx over .syn) to the
   // byte offset of the last sampled entry whose word is strictly before target,
-  // so an equal run crossing a sample boundary is scanned from its start. Returns
-  // 0 — scan source from the start — when sampleCount is 0 or a sample is
+  // so an equal run crossing a sample boundary is scanned from its start. Uses
+  // sample 0 when the target is at or before the first sampled word. Returns 0
+  // — scan source from the start — when sampleCount is 0 or a sample is
   // unreadable. Clobbers wordBuf.
   uint32_t bisectSamples(HalFile& sidecar, HalFile& source, uint32_t sampleCount, const char* target);
 
