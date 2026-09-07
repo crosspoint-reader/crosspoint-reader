@@ -389,8 +389,9 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
   // Bisect the sampled offsets to the last sample whose headword <= target.
   const uint32_t startByte = bisectSamples(session.qidx, session.idx, session.sampleCount, target);
 
-  // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
-  // BE32 size. The index is sorted, so stop at the first headword > target.
+  // Linear scan from the sampled entry: headword NUL, BE32 offset, BE32 size.
+  // Keep the first case-insensitive match as a fallback, but prefer an exact
+  // spelling within the adjacent equal run (for example "husk" over "Husk").
   if (!session.idx.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
@@ -407,11 +408,15 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
     if (cmp == 0) {
-      result.offset = readBe32(suffix);
-      result.size = readBe32(suffix + 4);
-      result.found = true;
-      if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-      return result;
+      const bool exact = strcmp(wordBuf, target) == 0;
+      if (!result.found || exact) {
+        result.offset = readBe32(suffix);
+        result.size = readBe32(suffix + 4);
+        result.found = true;
+        if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
+      }
+      if (exact) return result;
+      continue;
     }
     if (cmp > 0) break;
   }
