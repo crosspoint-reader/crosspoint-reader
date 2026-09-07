@@ -25,5 +25,7 @@ class SleepActivity final : public Activity {
   void renderTransparentCustomSleepScreen() const;
   void renderBlankSleepScreen() const;
 
+  bool useOriginalThresholds() const;
+
   bool fromTimeout = false;
 };

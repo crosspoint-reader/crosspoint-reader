@@ -593,7 +593,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   // This takes priority over the /sleep folder.
   HalFile file;
   if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
+    Bitmap bitmap(file, true, useOriginalThresholds());
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap, false, true);
@@ -613,7 +613,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (Storage.openFileForRead("SLP", selectedPath, randFile)) {
       LOG_DBG("SLP", "Randomly loading: %s", selectedPath.c_str());
       delay(100);
-      Bitmap bitmap(randFile, true);
+      Bitmap bitmap(randFile, true, useOriginalThresholds());
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         renderBitmapSleepScreen(bitmap, false, true);
         randFile.close();
@@ -887,10 +887,7 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    // figure out which cover image renderBitmapSleepScreen will need. The othre conditions in that
-    // method (hasGreyscale and !preserveBackground) are known to be true when rendering a cover.
-    absoluteLut = renderer.supportsAbsoluteGrayscale() &&
-                  SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+    absoluteLut = useOriginalThresholds();
 
     if (!lastEpub.generateCoverBmp(cropped, absoluteLut)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
@@ -904,7 +901,7 @@ void SleepActivity::renderCoverSleepScreen() const {
 
   HalFile file;
   if (Storage.openFileForRead("SLP", coverBmpPath, file)) {
-    Bitmap bitmap(file);
+    Bitmap bitmap(file);  // dithering and original thresholds not needed as ignored for true 2 bit BMP
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
       renderBitmapSleepScreen(bitmap, false, absoluteLut);
@@ -930,4 +927,10 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+bool SleepActivity::useOriginalThresholds() const {
+  // figure out whether the bitmap draw or creation needs the original thresholds:
+  return renderer.supportsAbsoluteGrayscale() &&
+         SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
 }
