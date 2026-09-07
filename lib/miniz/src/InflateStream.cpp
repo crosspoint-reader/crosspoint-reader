@@ -1,8 +1,8 @@
 #include "InflateStream.h"
 
 #include <BuildScratch.h>
+#include <HalMemory.h>
 #include <Logging.h>
-#include <esp_heap_caps.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -15,9 +15,10 @@ constexpr size_t WINDOW_SIZE = TINFL_LZ_DICT_SIZE;
 // tinfl_decompressor holds mz_uint32 arrays; 8 keeps the window aligned too.
 constexpr size_t STATE_ALIGNED = (sizeof(tinfl_decompressor) + 7) & ~size_t{7};
 void logAllocationFailure(const char* allocation, size_t bytes) {
+  const auto heap = HalMemory::getDefaultHeap();
+  const auto psram = HalMemory::getPsramHeap();
   LOG_ERR("ZIP", "Inflate %s OOM (%zu bytes): heap %zu free/%zu max, PSRAM %zu free/%zu total", allocation, bytes,
-          heap_caps_get_free_size(MALLOC_CAP_DEFAULT), heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT),
-          heap_caps_get_free_size(MALLOC_CAP_SPIRAM), heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+          heap.freeBytes, heap.largestBlockBytes, psram.freeBytes, psram.totalBytes);
 }
 }  // namespace
 

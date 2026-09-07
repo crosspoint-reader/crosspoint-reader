@@ -1,6 +1,7 @@
 #include <BuildScratch.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdlib>
 #include <cstring>
@@ -53,10 +54,13 @@ constexpr size_t OUTPUT_SIZE = (sizeof(LINE) - 1) * 4000;
 
 class InflateStreamTest : public ::testing::Test {
  protected:
+  alignas(8) inline static std::array<uint8_t, 48000> framebuffer{};
+
   void SetUp() override {
     allocationAttempts = 0;
     liveAllocations = 0;
     failOnAttempt = 0;
+    framebuffer.fill(0);
   }
   void TearDown() override {
     EXPECT_EQ(liveAllocations, 0u);
@@ -79,7 +83,6 @@ class InflateStreamTest : public ::testing::Test {
 };
 
 TEST_F(InflateStreamTest, BorrowedFramebufferDecodesAcrossWindowWrapsWithoutHeap) {
-  alignas(8) std::array<uint8_t, 48000> framebuffer{};
   buildscratch::lend(framebuffer.data(), framebuffer.size());
   failOnAttempt = 1;
   for (int pass = 0; pass < 3; ++pass) {
@@ -113,7 +116,6 @@ TEST_F(InflateStreamTest, WindowAllocationFailureImmediatelyReleasesState) {
 }
 
 TEST_F(InflateStreamTest, OccupiedScratchIsNotOverwrittenOnHeapFailure) {
-  alignas(8) std::array<uint8_t, 48000> framebuffer{};
   buildscratch::lend(framebuffer.data(), framebuffer.size());
   ASSERT_EQ(buildscratch::claim(framebuffer.size()), framebuffer.data());
   framebuffer.fill(0xa5);
