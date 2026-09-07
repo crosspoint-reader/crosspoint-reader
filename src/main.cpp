@@ -354,6 +354,12 @@ void setup() {
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
 #endif
+  // loop()'s serial CMD handler reads with readStringUntil('\n'), whose default
+  // 1000ms Stream timeout would stall the entire loop for a full second on any
+  // stray RX byte that isn't followed by a newline (a serial monitor attaching
+  // and toggling DTR/RTS is enough). A real "CMD:...\n" line is already in
+  // flight when available() fires, so a short timeout serves it fine.
+  logSerial.setTimeout(20);
 #endif
 
   HalSystem::begin();
