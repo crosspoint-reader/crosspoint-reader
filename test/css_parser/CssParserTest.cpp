@@ -186,6 +186,24 @@ TEST_F(CssParserTest, CanonicalCacheRoundTripPreservesStyles) {
   EXPECT_FLOAT_EQ(paragraph.marginTop.value, 2.0f);
 }
 
+TEST_F(CssParserTest, CacheRoundTripPreservesListStyleType) {
+  CssParser writer(cachePath());
+  ASSERT_EQ(loadCss(writer,
+                    ".plain { list-style-type: none; }\n"
+                    ".dotted { list-style-type: disc; }\n"),
+            CssParser::ParseResult::Complete);
+  ASSERT_TRUE(writer.saveToCache(true));
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoadResult::Complete);
+  const CssStyle plain = reader.resolveStyle("ul", "plain");
+  EXPECT_TRUE(plain.hasListStyleType());
+  EXPECT_EQ(plain.listStyleType, CssListStyleType::None);
+  const CssStyle dotted = reader.resolveStyle("ul", "dotted");
+  EXPECT_TRUE(dotted.hasListStyleType());
+  EXPECT_EQ(dotted.listStyleType, CssListStyleType::Disc);
+}
+
 TEST_F(CssParserTest, PartialCacheIsValidatedDuringInspection) {
   CssParser writer(cachePath());
   ASSERT_EQ(loadCss(writer, ".a { font-weight: bold; }\n"), CssParser::ParseResult::Complete);
@@ -249,6 +267,7 @@ TEST_F(CssParserTest, CacheHydrationRejectsInvalidStyleEnumBytes) {
   }
   enumOffsets.push_back(kStyleEnumPrefixBytes + kStyleLengthFieldCount * kStyleLengthBytes);
   enumOffsets.push_back(kStyleEnumPrefixBytes + kStyleLengthFieldCount * kStyleLengthBytes + 1);
+  enumOffsets.push_back(kStyleEnumPrefixBytes + kStyleLengthFieldCount * kStyleLengthBytes + 2);
 
   for (const size_t enumOffset : enumOffsets) {
     SCOPED_TRACE(enumOffset);
