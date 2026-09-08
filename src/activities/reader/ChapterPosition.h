@@ -17,14 +17,3 @@ struct ChapterPosition {
     return hasTotal() ? static_cast<float>(pageIndex) / static_cast<float>(totalPages) : 0.0f;
   }
 };
-
-constexpr int clampPercent(int percent) {
-  if (percent < 0) return 0;
-  if (percent > 100) return 100;
-  return percent;
-}
-
-// Whole percent for a 0..1 book fraction, rounded half up.
-constexpr int bookFractionToPercent(float bookFraction) {
-  return clampPercent(static_cast<int>(bookFraction * 100.0f + 0.5f));
-}

@@ -56,6 +56,16 @@ constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
 
+int clampPercent(int percent) {
+  if (percent < 0) {
+    return 0;
+  }
+  if (percent > 100) {
+    return 100;
+  }
+  return percent;
+}
+
 constexpr char READ_FOLDER[] = "/read";
 
 bool isInReadFolder(const std::string& path) {
@@ -234,7 +244,10 @@ ChapterPosition EpubReaderActivity::chapterPosition() const {
 
 int EpubReaderActivity::bookPercentFor(const ChapterPosition& position) const {
   if (!epub || epub->getBookSize() == 0 || !position.hasTotal()) return 0;
-  return bookFractionToPercent(epub->calculateProgress(currentSpineIndex, position.chapterFraction()));
+  // The page index can run past the chapter's estimated total while it is still
+  // building, so the fraction is clamped before the cast.
+  const float fraction = epub->calculateProgress(currentSpineIndex, position.chapterFraction());
+  return static_cast<int>(std::clamp(fraction, 0.0f, 1.0f) * 100.0f + 0.5f);
 }
 
 void EpubReaderActivity::openReaderMenu() {

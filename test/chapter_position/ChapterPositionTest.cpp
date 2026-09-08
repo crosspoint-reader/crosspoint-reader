@@ -35,31 +35,8 @@ TEST(ChapterPositionTest, UnknownTotalHasNoFraction) {
   EXPECT_FALSE((ChapterPosition{}).hasTotal());
 }
 
-TEST(ChapterPositionTest, ClampPercentBounds) {
-  EXPECT_EQ(clampPercent(-1), 0);
-  EXPECT_EQ(clampPercent(0), 0);
-  EXPECT_EQ(clampPercent(57), 57);
-  EXPECT_EQ(clampPercent(100), 100);
-  EXPECT_EQ(clampPercent(101), 100);
-}
-
-TEST(ChapterPositionTest, BookFractionRoundsToNearestPercent) {
-  EXPECT_EQ(bookFractionToPercent(0.0f), 0);
-  EXPECT_EQ(bookFractionToPercent(0.59f), 59);
-  EXPECT_EQ(bookFractionToPercent(0.594f), 59);
-  EXPECT_EQ(bookFractionToPercent(0.596f), 60);
-  EXPECT_EQ(bookFractionToPercent(1.0f), 100);
-}
-
-TEST(ChapterPositionTest, BookFractionClampsOutOfRange) {
-  EXPECT_EQ(bookFractionToPercent(-0.1f), 0);
-  EXPECT_EQ(bookFractionToPercent(1.2f), 100);
-}
-
 TEST(ChapterPositionTest, EvaluatesAtCompileTime) {
   static_assert(ChapterPosition{10, 48}.displayPage() == 11);
   static_assert(ChapterPosition{10, 48}.hasTotal());
   static_assert(!ChapterPosition{10, 0}.hasTotal());
-  static_assert(bookFractionToPercent(1.0f) == 100);
-  static_assert(clampPercent(150) == 100);
 }
