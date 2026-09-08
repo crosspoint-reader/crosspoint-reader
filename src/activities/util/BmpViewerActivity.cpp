@@ -163,7 +163,7 @@ void BmpViewerActivity::onEnter() {
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       // Single pass for non-grayscale images
 
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 
     } else {
       // Handle file parsing error
