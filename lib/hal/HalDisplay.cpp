@@ -77,7 +77,7 @@ void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
-bool HalDisplay::supportsAsyncGrayscaleBase() const { return !gpio.deviceIsX3() && einkDisplay.supportsAsyncRefresh(); }
+bool HalDisplay::supportsAsyncGrayscaleBase() const { return einkDisplay.supportsAsyncGrayscaleBase(); }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
