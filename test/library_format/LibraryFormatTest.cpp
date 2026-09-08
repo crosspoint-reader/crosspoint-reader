@@ -30,6 +30,7 @@ TEST(LibraryFormat, StructSizesAreFrozen) {
   EXPECT_EQ(sizeof(ClixHeader), 64u);
   EXPECT_EQ(sizeof(ClixRecord), 128u);
   EXPECT_EQ(sizeof(ClixFolderHeader), 1u);
+  EXPECT_EQ(CLIX_FORMAT_VERSION, 2u);
 }
 
 TEST(LibraryFormat, RecordsTileSectorsExactly) {
@@ -154,6 +155,12 @@ TEST(LibraryFormatValidation, RejectsAnImpossibleBookCount) {
   EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::CountOutOfRange);
 }
 
+TEST(LibraryFormatValidation, RejectsInvalidMetadataMode) {
+  ClixHeader h = makeHeader(60, 116);
+  h.metadataEnabled = 2;
+  EXPECT_EQ(validateHeader(h, h.selfSize), ClixValidity::SectionsInconsistent);
+}
+
 TEST(LibraryFormatValidation, AcceptsAnEmptyLibrary) {
   // A card with no books must produce a valid index, not a rebuild every boot.
   ClixHeader h = makeHeader(0, 0, 1);
@@ -182,10 +189,12 @@ TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
   EXPECT_EQ(offsetof(ClixRecord, nameLen), 12u);
   EXPECT_EQ(offsetof(ClixRecord, foldLen), 13u);
   EXPECT_EQ(offsetof(ClixRecord, authorKeyLen), 14u);
+  EXPECT_EQ(offsetof(ClixRecord, metadataStatus), 15u);
   EXPECT_EQ(offsetof(ClixRecord, fold), 16u);
   EXPECT_EQ(offsetof(ClixRecord, authorKey), 112u);
-  EXPECT_EQ(offsetof(ClixRecord, reserved), 124u);
+  EXPECT_EQ(offsetof(ClixRecord, modificationTime), 124u);
 
+  EXPECT_EQ(offsetof(ClixHeader, metadataEnabled), 7u);
   EXPECT_EQ(offsetof(ClixHeader, bookCount), 8u);
   EXPECT_EQ(offsetof(ClixHeader, folderStart), 16u);
   EXPECT_EQ(offsetof(ClixHeader, selfSize), 40u);

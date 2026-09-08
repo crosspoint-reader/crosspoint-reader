@@ -384,10 +384,10 @@ if (parsedSize != fileSize) {
 ## CLX1 — library index (`.crosspoint/library.idx`)
 
 Written by `lib/LibraryIndex/LibraryBuilder.cpp`, read by `LibraryIndexFile`. One
-file describing every book on the card, so the shelf can sort and search several
-hundred titles without opening any of them.
+file describing every book on the card, so the shelf can sort and search
+thousands of titles without opening any of them.
 
-Format version 1. An index written by another version fails validation on open
+Format version 2. An index written by another version fails validation on open
 and is rebuilt; that is the entire migration mechanism.
 
 ### Layout
@@ -398,7 +398,7 @@ and is rebuilt; that is the entire migration mechanism.
 | Folders | `folderStart` | length-prefixed paths, one per folder |
 | Records | `recordStart` | `bookCount` × 128-byte `ClixRecord` |
 | Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
-| Name blob | `nameStart` | per record: name, author, title (see below) |
+| Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author (see below) |
 
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
@@ -413,29 +413,56 @@ the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" gro
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
 
-One byte aligns the folded title at offset 16, and four trailing bytes are
-reserved so the record remains exactly 128 bytes. A later format can claim those
-bytes by bumping `CLIX_FORMAT_VERSION`.
+The byte before the folded title records metadata extraction status: not
+attempted, extracted, or failed. The final four bytes contain the packed FAT
+modification date and time returned by SdFat. A zero timestamp is not trusted.
+These fields occupy the alignment and reserved bytes from version 1, so the
+record remains exactly 128 bytes.
+
+The header records whether EPUB metadata extraction was enabled for the build.
+This prevents a metadata-disabled rebuild from making filename fallbacks look
+fresh to a later metadata-enabled build.
 
 ### The name blob
 
 Per record, at `nameStart + nameOff`:
 
 ```text
+[u64 pathHash]    FNV-1a fingerprint of the complete path
 [nameLen bytes]  filename, without the directory
 [u8][author]     display author, one spelling chosen per authorKey across the library
 [u8][title]      the book's own title, or length 0 if it never gave one
+[u8][source]     cleaned author spelling before the library-wide spelling vote
 ```
 
-The filename must stay first and stay the filename: `readPath` rebuilds a book's
-path from it, so writing the display title there makes the book impossible to open.
-That was a real defect, and it is why title has its own field.
+The filename must stay the first textual field and stay the filename: `readPath`
+rebuilds a book's path from it, so writing the display title there makes the book
+impossible to open. That was a real defect, and it is why title has its own field.
+
+The source author is separate from the displayed canonical author so a later
+rebuild can repeat the spelling vote after books are added or removed. Existing
+display reads still stop at the author or title fields and retain their offsets.
+
+### Freshness and unchanged rebuilds
+
+Reconciliation treats the persisted 64-bit complete-path fingerprint as the
+book identity. Metadata is reused only when the fingerprint, size, nonzero FAT
+timestamp, fold version, metadata mode, and expected extraction status agree.
+EPUBs with a zero timestamp or a previous extraction failure are parsed again.
+
+If every current record reuses metadata, the old and new counts agree, and no
+unreadable entry was seen, the staging files are discarded and the live index is
+left byte-for-byte unchanged. A normal rebuild action is therefore a freshness
+check, not a forced metadata reread.
 
 ### Header flags
 
-`RANKS_DEGRADED` says the author and arrival orders fell back to walk order, which
-happens past `LIBRARY_MAX_SORTED` books, where the sort arrays would not fit in
-RAM.
+`RANKS_DEGRADED` says one or more orders fell back to walk order because a
+checked sort allocation failed. Title and author each use a phase-local
+`SortKey[bookCount]` allocation (14 bytes per book, 57,344 bytes at the 4,096-book
+format ceiling); the first array is released before the second is requested.
+Sorting is therefore best effort through the full format limit rather than
+being disabled at an arbitrary library size.
 
 `DEDUP_DEGRADED` says a directory exceeded the fixed 1024-entry duplicate-key
 buffer, or that its fallible 8 KiB allocation failed. The walk still indexes

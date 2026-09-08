@@ -36,8 +36,9 @@ constexpr size_t STAGE_AUTHOR_BYTES = 128;
 constexpr size_t FOLDER_PATH_BYTES = 255;
 struct StagedEntry {
   ClixRecord record;
+  uint64_t pathHash;
   char name[STAGE_NAME_BYTES];
-  // Display spelling as this one filename gave it. The spelling actually shown
+  // Cleaned source spelling from this book. The spelling actually shown
   // is chosen later, across every book by the same person.
   uint8_t authorLen;
   char author[STAGE_AUTHOR_BYTES];
@@ -104,6 +105,10 @@ bool recoverInterruptedInstall() {
     LOG_ERR("LIBIDX", "cannot remove stale backup; rebuild deferred");
     return false;
   }
+  if (candidate.ioFailed()) {
+    LOG_ERR("LIBIDX", "cannot read live index during recovery");
+    return false;
+  }
   candidate.close();
 
   if (candidate.open(BACKUP_PATH)) {
@@ -114,6 +119,10 @@ bool recoverInterruptedInstall() {
     }
     LOG_INF("LIBIDX", "restored previous index after interrupted install");
     return true;
+  }
+  if (candidate.ioFailed()) {
+    LOG_ERR("LIBIDX", "cannot read backup index during recovery");
+    return false;
   }
   candidate.close();
 
@@ -178,19 +187,31 @@ std::string stemOf(const std::string& name) {
   return (dot == std::string::npos || dot == 0) ? name : name.substr(0, dot);
 }
 
-// One book as the PREVIOUS index knew it, kept only long enough to recognise the
-// same book in the new walk.
-//
-// The name is held as a 32-bit hash rather than as text: 512 real names are
-// ~40 KB, the hashes are 6 KB, and the size check beside it makes a hash
-// collision harmless. Identity is (name, size) — a name whose size changed is a
-// different file, and gets re-read.
 struct PriorEntry {
-  uint32_t nameHash;
-  uint32_t size;
+  uint64_t pathHash;
+  uint32_t fileSize;
   uint16_t firstSeen;
-  bool matched;
+  uint16_t ordinalAndMatched;
 };
+static_assert(sizeof(PriorEntry) == 16, "prior reconciliation entries must stay at 16 bytes");
+
+constexpr uint16_t PRIOR_MATCHED = 0x8000;
+constexpr uint16_t PRIOR_ORDINAL_MASK = 0x7FFF;
+static_assert(CLIX_MAX_RECORDS <= PRIOR_MATCHED, "prior ordinal must fit below the matched bit");
+
+uint16_t priorOrdinal(const PriorEntry& entry) { return entry.ordinalAndMatched & PRIOR_ORDINAL_MASK; }
+
+bool priorMatched(const PriorEntry& entry) { return (entry.ordinalAndMatched & PRIOR_MATCHED) != 0; }
+
+void markPriorMatched(PriorEntry& entry) { entry.ordinalAndMatched |= PRIOR_MATCHED; }
+
+bool priorPathLess(const PriorEntry& a, const PriorEntry& b) {
+  return a.pathHash < b.pathHash || (a.pathHash == b.pathHash && priorOrdinal(a) < priorOrdinal(b));
+}
+
+bool priorSizeLess(const PriorEntry& a, const PriorEntry& b) {
+  return a.fileSize < b.fileSize || (a.fileSize == b.fileSize && priorOrdinal(a) < priorOrdinal(b));
+}
 
 uint32_t fnv1a32(const char* data, const size_t len) {
   uint32_t hash = 2166136261u;
@@ -201,8 +222,17 @@ uint32_t fnv1a32(const char* data, const size_t len) {
   return hash;
 }
 
-// Sentinel written into a staged record whose book matched nothing by (name,
-// size). A second pass decides whether it is a rename or genuinely new.
+uint64_t fnv1a64(const char* data, const size_t len) {
+  uint64_t hash = 14695981039346656037ULL;
+  for (size_t i = 0; i < len; i++) {
+    hash ^= static_cast<unsigned char>(data[i]);
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
+
+// Sentinel written into a staged record whose book matched no previous path. A
+// second pass decides whether it is a rename or genuinely new.
 constexpr uint16_t FIRST_SEEN_UNRESOLVED = 0xFFFF;
 
 // State threaded through the recursive walk. Passed by reference rather than
@@ -221,6 +251,8 @@ struct WalkState {
   bool dedupDegraded = false;
   bool failed = false;
   bool readMetadata = false;
+  LibraryIndexFile* previous = nullptr;
+  BuildStats* stats = nullptr;
   uint16_t enriched = 0;
   HalFile folders;  // folder section, staged separately then copied in
   // Books the previous index knew. Empty on a first build, in which case every
@@ -236,21 +268,24 @@ struct WalkState {
 // because the two branches have different value categories.
 const std::string kNoTitle;
 
-// Find the previous record for this exact file. Linear because the array is at
-// most a few hundred entries and this runs once per book during a walk that is
-// already dominated by SD seeks.
-int findPrior(WalkState& st, const uint32_t nameHash, const uint32_t size) {
-  for (uint16_t i = 0; i < st.priorCount; i++) {
-    serviceBuilder(st.serviceUnits);
-    if (!st.prior[i].matched && st.prior[i].nameHash == nameHash && st.prior[i].size == size) return i;
+int findPrior(WalkState& st, const uint64_t pathHash) {
+  serviceBuilder(st.serviceUnits);
+  if (st.priorCount == 0) return -1;
+  PriorEntry* const end = st.prior + st.priorCount;
+  PriorEntry* candidate = std::lower_bound(
+      st.prior, end, pathHash, [](const PriorEntry& entry, const uint64_t hash) { return entry.pathHash < hash; });
+  while (candidate != end && candidate->pathHash == pathHash) {
+    if (!priorMatched(*candidate)) return static_cast<int>(candidate - st.prior);
+    ++candidate;
   }
   return -1;
 }
 
 // parentBasename and depth are gone with the folder-as-author rule they served:
 // nothing about a book's surroundings names its author any more.
-bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize, const uint16_t folderId,
-                 const std::string& fullPath) {
+[[gnu::noinline]] bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize,
+                                   const uint16_t folderId, const std::string& fullPath,
+                                   const uint32_t modificationTime) {
   StagedEntry& entry = *st.stagedEntry;
   memset(&entry, 0, sizeof(entry));
   // The filename is a fallback for the title and nothing else: no parsing, and
@@ -261,18 +296,60 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   bool titleFromBook = false;
   bool authorFromBook = false;
 
+  entry.pathHash = fnv1a64(fullPath.data(), fullPath.size());
+  const int priorIndex = findPrior(st, entry.pathHash);
+
+  const bool extractionExpected = st.readMetadata && FsHelpers::hasEpubExtension(name);
+  const uint8_t expectedStatus = extractionExpected ? CLIX_METADATA_EXTRACTED : CLIX_METADATA_NOT_ATTEMPTED;
+  bool reuseMetadata = false;
+  ClixRecord priorRecord{};
+  if (priorIndex >= 0) {
+    if (!st.previous->readRecord(priorOrdinal(st.prior[priorIndex]), priorRecord)) {
+      st.failed = true;
+      return false;
+    }
+    reuseMetadata =
+        st.prior[priorIndex].fileSize == fileSize && modificationTime != 0 &&
+        priorRecord.modificationTime == modificationTime && st.previous->header().foldVersion == CLIX_FOLD_VERSION &&
+        st.previous->header().metadataEnabled == st.readMetadata && priorRecord.metadataStatus == expectedStatus;
+  }
+
+  if (reuseMetadata) {
+    if (!st.previous->readSourceAuthor(priorRecord, author)) {
+      st.failed = true;
+      return false;
+    }
+    const bool hasBookTitle = st.previous->readTitle(priorRecord, title);
+    if (!hasBookTitle && st.previous->ioFailed()) {
+      st.failed = true;
+      return false;
+    }
+    entry.record = priorRecord;
+    authorFromBook = !author.empty();
+    if (hasBookTitle) {
+      titleFromBook = true;
+    } else {
+      title = stemOf(name);
+    }
+    st.stats->metadataReused++;
+  }
+
   // Prefer the reader's existing cache. For an unopened book, loadMetadata()
   // reuses the same EPUB parser but stops before the manifest, so this never
   // builds spine, TOC, CSS, cover, or section caches during the library walk.
-  if (st.readMetadata && FsHelpers::hasEpubExtension(name)) {
+  if (!reuseMetadata && extractionExpected) {
+    st.stats->parsed++;
     Epub epub(fullPath, CACHE_DIR);
     std::string bookTitle;
     if (epub.loadMetadata(bookTitle, author)) {
+      entry.record.metadataStatus = CLIX_METADATA_EXTRACTED;
       if (!bookTitle.empty()) {
         title = std::move(bookTitle);
         titleFromBook = true;
       }
       authorFromBook = !author.empty();
+    } else {
+      entry.record.metadataStatus = CLIX_METADATA_FAILED;
     }
     if (!titleFromBook && !authorFromBook) LOG_DBG("LIBIDX", "no metadata for %s", fullPath.c_str());
   }
@@ -289,17 +366,17 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
 
   // An absent author is a fact, not a gap to fill: the row joins the Unknown
   // group rather than borrowing a name from its surroundings.
-  const std::string folded = fold(title, true);
-  const std::string key = authorKey(author);
+  const std::string folded = reuseMetadata ? std::string() : fold(title, true);
+  const std::string key = reuseMetadata ? std::string() : authorKey(author);
 
   entry.record.fileSize = fileSize;
+  entry.record.modificationTime = modificationTime;
 
   // Reuse the arrival order this book already had. Without this every rebuild
   // renumbers the whole library in disk-walk order, and "Recently added" silently
   // becomes "whatever order the card enumerates in".
-  const int priorIndex = findPrior(st, fnv1a32(name.data(), name.size()), fileSize);
   if (priorIndex >= 0) {
-    st.prior[priorIndex].matched = true;
+    markPriorMatched(st.prior[priorIndex]);
     entry.record.firstSeen = st.prior[priorIndex].firstSeen;
     st.reused++;
   } else {
@@ -317,11 +394,13 @@ bool stageRecord(WalkState& st, const std::string& name, const uint32_t fileSize
   const std::string& shownTitle = titleFromBook ? title : kNoTitle;
   entry.titleLen = static_cast<uint8_t>(std::min<size_t>(shownTitle.size(), STAGE_NAME_BYTES));
   if (entry.titleLen > 0) memcpy(entry.title, shownTitle.data(), entry.titleLen);
-  const size_t foldBytes = std::min(folded.size(), CLIX_FOLD_BYTES);
-  entry.record.foldLen = static_cast<uint8_t>(utf8SafeTruncateBuffer(folded.data(), static_cast<int>(foldBytes)));
-  entry.record.authorKeyLen = static_cast<uint8_t>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES));
-  memcpy(entry.record.fold, folded.data(), entry.record.foldLen);
-  memcpy(entry.record.authorKey, key.data(), entry.record.authorKeyLen);
+  if (!reuseMetadata) {
+    const size_t foldBytes = std::min(folded.size(), CLIX_FOLD_BYTES);
+    entry.record.foldLen = static_cast<uint8_t>(utf8SafeTruncateBuffer(folded.data(), static_cast<int>(foldBytes)));
+    entry.record.authorKeyLen = static_cast<uint8_t>(std::min(key.size(), CLIX_AUTHOR_KEY_BYTES));
+    memcpy(entry.record.fold, folded.data(), entry.record.foldLen);
+    memcpy(entry.record.authorKey, key.data(), entry.record.authorKeyLen);
+  }
   memcpy(entry.name, name.data(), entry.record.nameLen);
 
   const std::string displayAuthor = cleanPersonName(author);
@@ -378,6 +457,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     entry.getName(st.nameBuf, NAME_BUF_SIZE);
     const bool isDir = entry.isDirectory();
     const uint32_t size = isDir ? 0 : static_cast<uint32_t>(entry.fileSize());
+    const uint32_t modificationTime = isDir ? 0 : entry.modificationTime();
     entry.close();
 
     if (st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
@@ -405,20 +485,15 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     }
     const uint64_t key = (static_cast<uint64_t>(fnv1a32(name.data(), name.size())) << 32) | size;
     if (st.dedupKeys != nullptr) {
-      bool duplicate = false;
-      for (uint16_t i = 0; i < seenCount; i++) {
-        serviceBuilder(st.serviceUnits);
-        if (st.dedupKeys[i] == key) {
-          duplicate = true;
-          break;
-        }
-      }
-      if (duplicate) {
+      uint64_t* const slot = std::lower_bound(st.dedupKeys, st.dedupKeys + seenCount, key);
+      if (slot != st.dedupKeys + seenCount && *slot == key) {
         st.duplicatesDropped++;
         continue;
       }
       if (seenCount < LIBRARY_MAX_DEDUP_KEYS) {
-        st.dedupKeys[seenCount++] = key;
+        memmove(slot + 1, slot, static_cast<size_t>(st.dedupKeys + seenCount - slot) * sizeof(*slot));
+        *slot = key;
+        seenCount++;
       } else if (!st.dedupDegraded) {
         LOG_INF("LIBIDX", "duplicate detection capped at %u entries in %s",
                 static_cast<unsigned>(LIBRARY_MAX_DEDUP_KEYS), path.c_str());
@@ -442,7 +517,7 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       st.folderId++;
       folderEmitted = true;
     }
-    if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name))) break;
+    if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name), modificationTime)) break;
   }
   dir.close();
 
@@ -481,11 +556,12 @@ void walk(WalkState& st, const std::string& path, const int depth) {
 // Shared by the offset and write passes so the name-blob layout has one source of
 // truth.
 uint32_t blobBytesFor(const StagedEntry& entry, const StagedEntry& canonical) {
-  return entry.record.nameLen + 1u + canonical.authorLen + 1u + entry.titleLen;
+  return sizeof(entry.pathHash) + entry.record.nameLen + 1u + canonical.authorLen + 1u + entry.titleLen + 1u +
+         entry.authorLen;
 }
 
 bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order, const uint16_t* resolvedFirstSeen,
-               BuildStats& stats) {
+               const bool coreSortsAvailable, BuildStats& stats) {
   const uint16_t n = st.books;
   uint32_t serviceUnits = 0;
 
@@ -502,6 +578,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   header.bookCount = n;
   header.folderCount = st.folderId;
   header.nextFirstSeen = st.nextFirstSeen;
+  header.metadataEnabled = st.readMetadata;
   // Placeholder only. Degradations are known after the sorts have run.
   header.flags = 0;
   // The blob is the LAST section, so its size affects only selfSize — every
@@ -528,7 +605,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // what was intended rather than what landed.
   const auto put = [&out, &ioFailed](const void* data, const size_t len) {
     if (ioFailed) return;
-    if (out.write(static_cast<const uint8_t*>(data), len) != static_cast<int>(len)) ioFailed = true;
+    if (out.write(static_cast<const uint8_t*>(data), len) != len) ioFailed = true;
   };
   const auto padTo = [&out, &ioFailed, &serviceUnits](const uint32_t target) {
     if (ioFailed) return;
@@ -537,7 +614,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       serviceBuilder(serviceUnits);
       const uint32_t gap = target - static_cast<uint32_t>(out.position());
       const size_t want = std::min<uint32_t>(gap, sizeof(zeros));
-      if (out.write(zeros, want) != static_cast<int>(want)) {
+      if (out.write(zeros, want) != want) {
         ioFailed = true;
         return;
       }
@@ -596,10 +673,14 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
   // Author order has to be known BEFORE the records are written because its
   // permutation section is emitted first.
-  // Capped like the title sort: the 14-byte author keys do not fit at the
-  // 4096-record ceiling, so larger libraries keep walk order instead.
-  const bool rankable = n <= LIBRARY_MAX_SORTED;
-  auto authorSort = rankable ? makeUniqueNoThrow<SortKey[]>(n == 0 ? 1 : n) : nullptr;
+  // The title key array is already gone before this phase. At the 4096-record
+  // ceiling this checked, phase-local allocation is 57,344 bytes.
+  const bool rankable = coreSortsAvailable;
+  if (rankable && n > 1) {
+    LOG_DBG("LIBIDX", "author sort alloc: %u bytes, heap %u, max block %u", static_cast<unsigned>(n * sizeof(SortKey)),
+            static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()));
+  }
+  auto authorSort = rankable && n > 1 ? makeUniqueNoThrow<SortKey[]>(n) : nullptr;
   if (authorSort) {
     for (uint16_t i = 0; i < n; i++) {
       serviceBuilder(serviceUnits);
@@ -621,7 +702,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
         delay(1);
       }
     }
-  } else {
+  } else if (n > 1) {
     stats.ranksDegraded = true;
   }
 
@@ -817,8 +898,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
       serviceBuilder(serviceUnits);
       arrivalOrder[order[i]] = i;
     }
-    LOG_INF("LIBIDX", "%u books over the %u sort cap: author and arrival order degraded", static_cast<unsigned>(n),
-            static_cast<unsigned>(LIBRARY_MAX_SORTED));
+    LOG_INF("LIBIDX", "%u books: sort allocation unavailable; index kept in walk order", static_cast<unsigned>(n));
     stats.ranksDegraded = true;
   }
 
@@ -861,9 +941,9 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     serviceBuilder(serviceUnits);
     if (!fetch(order[i], entry)) break;
     entry.record.nameOff = nameCursor;
-    // The blob holds the basename, then one length byte, then the chosen author
-    // spelling, then the title. Keeping them adjacent means no second offset has
-    // to live in the record, which is exactly full at 128 bytes.
+    // The blob holds the path hash, basename, chosen author spelling, title, and
+    // source author spelling used by later rebuilds.
+    // Keeping them adjacent means no second offset has to live in the record.
     const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
     if (!fetch(order[from], canonical)) break;
     nameCursor += blobBytesFor(entry, canonical);
@@ -888,6 +968,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   for (uint16_t i = 0; i < n; i++) {
     serviceBuilder(serviceUnits);
     if (!fetch(order[i], entry)) break;
+    put(&entry.pathHash, sizeof(entry.pathHash));
     put(entry.name, entry.record.nameLen);
 
     const uint16_t from = canonicalFrom ? canonicalFrom[i] : i;
@@ -896,6 +977,8 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     if (canonical.authorLen > 0) put(canonical.author, canonical.authorLen);
     put(&entry.titleLen, 1);
     if (entry.titleLen > 0) put(entry.title, entry.titleLen);
+    put(&entry.authorLen, 1);
+    if (entry.authorLen > 0) put(entry.author, entry.authorLen);
     blobWritten += blobBytesFor(entry, canonical);
   }
   header.nameLen = blobWritten;
@@ -910,21 +993,25 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   header.flags =
       (stats.ranksDegraded ? CLIX_FLAG_RANKS_DEGRADED : 0) | (stats.dedupDegraded ? CLIX_FLAG_DEDUP_DEGRADED : 0);
 
-  out.seekSet(0);
-  put(&header, sizeof(header));
+  if (!out.seekSet(0)) {
+    ioFailed = true;
+  } else {
+    put(&header, sizeof(header));
+  }
   // The file is only as long as it claims if every write landed. A full card
   // fails them silently, and the result passes the header check while carrying
   // zeros — an index that looks valid and is not.
   const bool sizeMatches = written == header.selfSize;
-  out.close();
+  const bool closed = out.close();
 
-  if (ioFailed || !sizeMatches) {
-    LOG_ERR("LIBIDX", "emit incomplete (I/O %s, size %u vs %u) — keeping the old index", ioFailed ? "failed" : "ok",
-            static_cast<unsigned>(written), static_cast<unsigned>(header.selfSize));
+  if (ioFailed || !sizeMatches || !closed) {
+    LOG_ERR("LIBIDX", "emit incomplete (I/O %s, close %s, size %u vs %u) — keeping the old index",
+            ioFailed ? "failed" : "ok", closed ? "ok" : "failed", static_cast<unsigned>(written),
+            static_cast<unsigned>(header.selfSize));
     // Leave the previous index alone. A shelf that is a rebuild out of date is
     // worth incomparably more than none at all, and a full card is exactly when
     // the reader can least afford to lose it.
-    Storage.remove(NEW_PATH);
+    if (closed) Storage.remove(NEW_PATH);
     return false;
   }
 
@@ -972,33 +1059,39 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   }
 
   // Load what the previous index knew, so the walk can recognise the same books.
-  // Failure here is not fatal: the build simply treats every book as new.
+  // An obsolete format starts fresh; I/O, record, and allocation failures stop
+  // the rebuild so the previous index remains untouched.
   std::unique_ptr<PriorEntry[]> priorList;
   uint16_t priorCount = 0;
   uint16_t nextFirstSeen = 0;
-  {
-    LibraryIndexFile previous;
+  LibraryIndexFile previous;
+  if (Storage.exists(INDEX_PATH)) {
     if (previous.openForReconciliation(INDEX_PATH)) {
       nextFirstSeen = previous.header().nextFirstSeen;
       priorCount = previous.bookCount();
       priorList = makeUniqueNoThrow<PriorEntry[]>(priorCount == 0 ? 1 : priorCount);
-      if (priorList) {
-        uint16_t kept = 0;
-        for (uint16_t i = 0; i < priorCount; i++) {
-          serviceBuilder(serviceUnits);
-          ClixRecord r{};
-          std::string name;
-          if (!previous.readRecord(i, r) || !previous.readName(r, name)) continue;
-          priorList[kept].nameHash = fnv1a32(name.data(), name.size());
-          priorList[kept].size = r.fileSize;
-          priorList[kept].firstSeen = r.firstSeen;
-          priorList[kept].matched = false;
-          kept++;
-        }
-        priorCount = kept;
-      } else {
-        priorCount = 0;
+      if (!priorList) {
+        LOG_ERR("LIBIDX", "prior index array alloc failed");
+        return false;
       }
+
+      for (uint16_t i = 0; i < priorCount; i++) {
+        serviceBuilder(serviceUnits);
+        ClixRecord r{};
+        uint64_t pathHash = 0;
+        if (!previous.readRecord(i, r) || !previous.readPathHash(r, pathHash)) {
+          LOG_ERR("LIBIDX", "prior index read failed at record %u", static_cast<unsigned>(i));
+          return false;
+        }
+        priorList[i].pathHash = pathHash;
+        priorList[i].fileSize = r.fileSize;
+        priorList[i].firstSeen = r.firstSeen;
+        priorList[i].ordinalAndMatched = i;
+      }
+      std::sort(priorList.get(), priorList.get() + priorCount, priorPathLess);
+    } else if (previous.ioFailed()) {
+      LOG_ERR("LIBIDX", "cannot read previous index; rebuild deferred");
+      return false;
     }
   }
 
@@ -1011,6 +1104,8 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   st.prior = priorList.get();
   st.priorCount = priorList ? priorCount : 0;
   st.readMetadata = readMetadata;
+  st.previous = previous.isOpen() ? &previous : nullptr;
+  st.stats = &stats;
 
   if (!Storage.openFileForWrite("LIBIDX", STAGE_PATH, st.stage) ||
       !Storage.openFileForWrite("LIBIDX", folderStagePath, st.folders)) {
@@ -1021,14 +1116,34 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   }
 
   walk(st, rootPath, 0);
-  st.stage.close();
-  st.folders.close();
+  const bool stageClosed = st.stage.close();
+  const bool foldersClosed = st.folders.close();
 
-  if (st.failed) {
+  if (st.failed || !stageClosed || !foldersClosed) {
     LOG_ERR("LIBIDX", "staging failed; keeping the previous index");
     Storage.remove(STAGE_PATH);
     Storage.remove(folderStagePath.c_str());
     return false;
+  }
+
+  stats.books = st.books;
+  stats.folders = st.folderId;
+  stats.duplicatesDropped = st.duplicatesDropped;
+  stats.unreadableSkipped = st.unreadableSkipped;
+  stats.dedupDegraded = st.dedupDegraded;
+  stats.unchanged = st.reused;
+  stats.enriched = st.enriched;
+
+  if (previous.isOpen() && st.books == priorCount && st.reused == priorCount && stats.metadataReused == priorCount &&
+      st.unreadableSkipped == 0) {
+    previous.close();
+    Storage.remove(STAGE_PATH);
+    Storage.remove(folderStagePath.c_str());
+    stats.walkMs = millis() - startMs;
+    LOG_INF("LIBIDX", "unchanged: %u reused, %u parsed, no replacement, %ums",
+            static_cast<unsigned>(stats.metadataReused), static_cast<unsigned>(stats.parsed),
+            static_cast<unsigned>(stats.walkMs));
+    return true;
   }
 
   // --- second pass: renames, then genuinely new books ----------------------
@@ -1038,7 +1153,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   // patch it empties it, and every record read afterwards comes back blank.
   // Two bytes per book is a cheaper price than that failure mode.
   //
-  // A book that matched nothing by (name, size) is either renamed or new. Match
+  // A book that matched no previous path is either renamed or new. Match
   // it against the leftover previous entries by SIZE alone: across a real
   // library, two different books sharing a byte-exact size is implausible, and
   // being wrong only costs one book its place in "Recently added" and one
@@ -1053,6 +1168,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     return false;
   }
   if (st.books > 0) {
+    if (priorList) std::sort(priorList.get(), priorList.get() + priorCount, priorSizeLess);
     // A stage that cannot be read back fails the BUILD, it does not degrade.
     // The fallback would be firstSeen == 0 for every affected book — wrong in
     // "Recently added" today, and read back as prior truth by the next rebuild,
@@ -1079,43 +1195,55 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
         resolvedFirstSeen[i] = r.firstSeen;
         continue;
       }
-      int renamed = -1;
-      for (uint16_t q = 0; q < priorCount; q++) {
-        serviceBuilder(serviceUnits);
-        if (priorList && !priorList[q].matched && priorList[q].size == r.fileSize) {
-          renamed = q;
-          break;
+      PriorEntry* renamed = nullptr;
+      if (priorList) {
+        PriorEntry* candidate =
+            std::lower_bound(priorList.get(), priorList.get() + priorCount, r.fileSize,
+                             [](const PriorEntry& entry, const uint32_t size) { return entry.fileSize < size; });
+        while (candidate != priorList.get() + priorCount && candidate->fileSize == r.fileSize) {
+          if (!priorMatched(*candidate)) {
+            renamed = candidate;
+            break;
+          }
+          ++candidate;
         }
       }
-      if (renamed >= 0) {
-        priorList[renamed].matched = true;
-        resolvedFirstSeen[i] = priorList[renamed].firstSeen;
+      if (renamed) {
+        markPriorMatched(*renamed);
+        resolvedFirstSeen[i] = renamed->firstSeen;
         stats.renamed++;
       } else {
         resolvedFirstSeen[i] = st.nextFirstSeen++;
         stats.added++;
       }
     }
-    read.close();
+    if (!read.close()) {
+      LOG_ERR("LIBIDX", "firstSeen reconciliation: stage close failed");
+      Storage.remove(STAGE_PATH);
+      Storage.remove(folderStagePath.c_str());
+      return false;
+    }
     for (uint16_t q = 0; q < priorCount; q++) {
       serviceBuilder(serviceUnits);
-      if (priorList && !priorList[q].matched) stats.removed++;
+      if (priorList && !priorMatched(priorList[q])) stats.removed++;
     }
   }
 
-  stats.books = st.books;
-  stats.folders = st.folderId;
-  stats.duplicatesDropped = st.duplicatesDropped;
-  stats.unreadableSkipped = st.unreadableSkipped;
-  stats.dedupDegraded = st.dedupDegraded;
-  stats.unchanged = st.reused;
-  stats.enriched = st.enriched;
-
   // --- title order -----------------------------------------------------------
-  // Read the staged fold prefixes back and sort ordinals. Only 14 bytes per book
-  // stays resident, and past the cap the index is still complete — just in walk
-  // order, which the header records so the screen can say so.
-  const bool sortable = st.books <= LIBRARY_MAX_SORTED;
+  // The walk-only allocations are released before the largest temporary block.
+  previous.close();
+  st.previous = nullptr;
+  st.prior = nullptr;
+  st.nameBuf = nullptr;
+  st.stagedEntry = nullptr;
+  st.dedupKeys = nullptr;
+  priorList.reset();
+  nameBuf.reset();
+  stagedEntry.reset();
+  dedupKeys.reset();
+
+  // Read the staged fold prefixes back and sort ordinals. The checked 14-byte
+  // key allocation reaches 57,344 bytes at the 4,096-record format ceiling.
   auto order = makeUniqueNoThrow<uint16_t[]>(st.books == 0 ? 1 : st.books);
   if (!order) {
     LOG_ERR("LIBIDX", "order array alloc failed (%u books)", static_cast<unsigned>(st.books));
@@ -1128,10 +1256,20 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     order[i] = i;
   }
 
-  if (sortable && st.books > 1) {
+  bool coreSortsAvailable = true;
+  if (st.books > 1) {
+    LOG_DBG("LIBIDX", "title sort alloc: %u bytes, heap %u, max block %u",
+            static_cast<unsigned>(st.books * sizeof(SortKey)), static_cast<unsigned>(ESP.getFreeHeap()),
+            static_cast<unsigned>(ESP.getMaxAllocHeap()));
     auto keys = makeUniqueNoThrow<SortKey[]>(st.books);
-    HalFile stage;
-    if (keys && Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) {
+    if (keys) {
+      HalFile stage;
+      if (!Storage.openFileForRead("LIBIDX", STAGE_PATH, stage)) {
+        LOG_ERR("LIBIDX", "title sort: cannot reopen the record stage");
+        Storage.remove(STAGE_PATH);
+        Storage.remove(folderStagePath.c_str());
+        return false;
+      }
       for (uint16_t i = 0; i < st.books; i++) {
         serviceBuilder(serviceUnits);
         ClixRecord r{};
@@ -1148,7 +1286,12 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
         memcpy(keys[i].key, r.fold, std::min<size_t>(r.foldLen, sizeof(keys[i].key)));
         keys[i].ordinal = i;
       }
-      stage.close();
+      if (!stage.close()) {
+        LOG_ERR("LIBIDX", "title sort: stage close failed");
+        Storage.remove(STAGE_PATH);
+        Storage.remove(folderStagePath.c_str());
+        return false;
+      }
       delay(1);
       std::sort(keys.get(), keys.get() + st.books, sortKeyLess);
       delay(1);
@@ -1158,24 +1301,24 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
       }
     } else {
       stats.ranksDegraded = true;
-      LOG_ERR("LIBIDX", "sort skipped: key array alloc or stage reopen failed");
+      coreSortsAvailable = false;
+      LOG_ERR("LIBIDX", "sort skipped: key array alloc failed");
     }
-  } else if (!sortable) {
-    stats.ranksDegraded = true;
-    LOG_INF("LIBIDX", "%u books exceeds sort cap %u; index built in walk order", static_cast<unsigned>(st.books),
-            static_cast<unsigned>(LIBRARY_MAX_SORTED));
   }
 
-  const bool ok = emitIndex(folderStagePath.c_str(), st, order.get(), resolvedFirstSeen.get(), stats);
+  const bool ok =
+      emitIndex(folderStagePath.c_str(), st, order.get(), resolvedFirstSeen.get(), coreSortsAvailable, stats);
   Storage.remove(STAGE_PATH);
   Storage.remove(folderStagePath.c_str());
 
   stats.walkMs = millis() - startMs;
-  LOG_INF("LIBIDX", "%s: %u books, %u folders, %u enriched, %u dup dropped, %u unreadable, metadata %s, %ums",
+  stats.indexReplaced = ok;
+  LOG_INF("LIBIDX",
+          "%s: %u books, %u folders, %u parsed, %u metadata reused, replaced %u, %u dup dropped, %u unreadable, %ums",
           ok ? "built" : "FAILED", static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.folders),
-          static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.duplicatesDropped),
-          static_cast<unsigned>(stats.unreadableSkipped), readMetadata ? "on" : "off",
-          static_cast<unsigned>(stats.walkMs));
+          static_cast<unsigned>(stats.parsed), static_cast<unsigned>(stats.metadataReused),
+          static_cast<unsigned>(stats.indexReplaced), static_cast<unsigned>(stats.duplicatesDropped),
+          static_cast<unsigned>(stats.unreadableSkipped), static_cast<unsigned>(stats.walkMs));
   return ok;
 }
 

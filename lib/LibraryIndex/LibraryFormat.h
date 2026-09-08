@@ -12,7 +12,7 @@
 //   folders       F variable-length records; the id of a folder IS its ordinal
 //   records       N x exactly 128 bytes, in folded-title order
 //   permutations  authorOrder[N] then arrivalOrder[N], both u16
-//   names         raw display basenames, no NULs, lengths held in the records
+//   names         path hash, filename, display author, title, and source author blobs
 //
 // The fixed 128-byte record stride is the load-bearing choice: record k lives at
 // recordStart + 128k, so paging is O(1) in every sort order with no offset
@@ -27,8 +27,8 @@ namespace library {
 
 inline constexpr char CLIX_MAGIC[4] = {'C', 'L', 'X', '1'};
 // Bumping this is the whole migration: an index from an older version fails
-// validation and is rebuilt. This format first lands from this branch as v1.
-inline constexpr uint8_t CLIX_FORMAT_VERSION = 1;
+// validation and is rebuilt. No previous development format is accepted.
+inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
 
 // Bump when the fold or the article table changes. Forces fold and ranks to be
 // rebuilt while firstSeen values are preserved, so "recently added" survives.
@@ -47,6 +47,12 @@ enum ClixFlags : uint8_t {
   CLIX_FLAG_DEDUP_DEGRADED = 1 << 1,
 };
 
+enum ClixMetadataStatus : uint8_t {
+  CLIX_METADATA_NOT_ATTEMPTED = 0,
+  CLIX_METADATA_EXTRACTED = 1,
+  CLIX_METADATA_FAILED = 2,
+};
+
 #pragma pack(push, 1)
 
 struct ClixHeader {
@@ -54,7 +60,7 @@ struct ClixHeader {
   uint8_t formatVersion;
   uint8_t foldVersion;
   uint8_t flags;
-  uint8_t padding0;
+  uint8_t metadataEnabled;
   uint16_t bookCount;
   uint16_t folderCount;
   uint16_t nextFirstSeen;
@@ -73,17 +79,17 @@ struct ClixHeader {
 static_assert(sizeof(ClixHeader) == 64, "ClixHeader must be exactly 64 bytes");
 
 struct ClixRecord {
-  uint32_t nameOff;   // from nameStart, into the display-name blob
+  uint32_t nameOff;   // from nameStart, into the per-record name blob
   uint32_t fileSize;  // captured while the dirent was open; part of the identity
   uint16_t firstSeen;
   uint16_t folderId;
   uint8_t nameLen;
   uint8_t foldLen;
   uint8_t authorKeyLen;
-  uint8_t padding;
+  uint8_t metadataStatus;
   char fold[CLIX_FOLD_BYTES];
   char authorKey[CLIX_AUTHOR_KEY_BYTES];
-  uint8_t reserved[4];
+  uint32_t modificationTime;
 };
 static_assert(sizeof(ClixRecord) == 128, "ClixRecord must be exactly 128 bytes");
 static_assert(CLIX_ALIGN % sizeof(ClixRecord) == 0, "records must tile a 512-byte sector");
@@ -141,6 +147,7 @@ inline ClixValidity validateHeaderStructure(const ClixHeader& h, const uint64_t 
   }
   if (h.formatVersion != CLIX_FORMAT_VERSION) return ClixValidity::UnknownFormatVersion;
   if (h.bookCount > CLIX_MAX_RECORDS) return ClixValidity::CountOutOfRange;
+  if (h.metadataEnabled > 1) return ClixValidity::SectionsInconsistent;
   if (actualFileSize != h.selfSize) return ClixValidity::SizeMismatch;
 
   // Both lengths are attacker-controlled bytes. Capped against the real file

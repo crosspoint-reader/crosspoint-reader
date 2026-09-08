@@ -2,15 +2,14 @@
 
 // Builds the CLX1 index by walking the SD card once.
 //
-// M1 derives everything from paths and filenames; reading titles and authors out
-// of the EPUBs themselves is M2 (LibraryEnrich), which rewrites records in place
-// and never re-walks.
+// The walk derives filename fallbacks and can read title and author metadata from
+// EPUBs. Fresh metadata is reused from the previous index.
 //
 // Shape of the build, and why:
 //
 //   * ONE walk. Records go straight into a staging file in discovery order, so
-//     nothing proportional to the library stays resident. Only a small sort array
-//     does, and it is capped.
+//     nothing proportional to the library stays resident. Phase-local sort arrays
+//     are fallible and released before the next large allocation.
 //   * Duplicate directory entries are dropped. A damaged FAT can hand the same
 //     file out twice — measured on a real card: 6 of 75 entries were duplicate
 //     dirents resolving to one inode — and without this the shelf shows phantom
@@ -33,12 +32,6 @@ namespace library {
 // and an uncapped walk would never return.
 inline constexpr int LIBRARY_MAX_DEPTH = 5;
 
-// Books held in the in-RAM sort array. 14 bytes each, so this is 7 KB — one
-// bounded allocation, in the band the codebase allows without a heap gate.
-// Beyond it the index is still built and still complete, but in walk order with
-// CLIX_FLAG_RANKS_DEGRADED set, which the screen reports rather than hides.
-inline constexpr uint16_t LIBRARY_MAX_SORTED = 512;
-
 // Duplicate identities remembered while one directory is enumerated. The
 // fixed, fallible allocation is 8 KiB at this cap; unlike std::vector it cannot
 // grow into abort() when a damaged or unusually flat directory is scanned.
@@ -52,11 +45,14 @@ struct BuildStats {
   uint32_t walkMs = 0;
   // Reconciliation against the previous index. Their sum over a rebuild with no
   // card changes should be: unchanged == books, everything else zero.
-  uint16_t unchanged = 0;  // same (name, size): keeps its place in "Recently added"
+  uint16_t unchanged = 0;  // same full path: keeps its place in "Recently added"
   uint16_t added = 0;      // matched nothing, not even by size
   uint16_t renamed = 0;    // matched a leftover entry by size alone
   uint16_t removed = 0;    // previous entry no book claimed
   uint16_t enriched = 0;   // took its title or author from the book rather than the filename
+  uint16_t parsed = 0;     // EPUB metadata reads performed by this build
+  uint16_t metadataReused = 0;
+  bool indexReplaced = false;
   bool ranksDegraded = false;
   bool dedupDegraded = false;
 };
