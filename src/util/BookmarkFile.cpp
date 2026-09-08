@@ -14,8 +14,17 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
   // serializer stay instantiated once, in PersistableStore.cpp.
   const std::string path = BookmarkUtil::getBookmarkPath(bookPath);
   JsonDocument doc;
+  bool migrating = false;
   if (!PersistableStoreBase::readDocFromFile(path.c_str(), doc)) {
-    return false;
+    // One-time fallback: this book's bookmarks may still live under the old,
+    // collision-prone sanitized-path scheme (see getLegacyBookmarkPath()).
+    // Load from there if so, then re-save below under the new path so this
+    // fallback is only paid once per book.
+    const std::string legacyPath = BookmarkUtil::getLegacyBookmarkPath(bookPath);
+    if (!PersistableStoreBase::readDocFromFile(legacyPath.c_str(), doc)) {
+      return false;
+    }
+    migrating = true;
   }
 
   JsonArray arr = doc["bookmarks"].as<JsonArray>();
@@ -36,6 +45,16 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
   }
 
   LOG_DBG("BKM", "Loaded %zu bookmarks from file", bookmarks.size());
+
+  if (migrating) {
+    LOG_INF("BKM", "Migrating legacy bookmark file to hash-based path");
+    if (save(bookPath, bookmarks)) {
+      Storage.remove(BookmarkUtil::getLegacyBookmarkPath(bookPath).c_str());
+    } else {
+      LOG_ERR("BKM", "Failed to save migrated bookmarks -- leaving legacy file in place");
+    }
+  }
+
   return true;
 }
 

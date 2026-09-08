@@ -1,11 +1,16 @@
 #include "BookmarkUtil.h"
 
 #include <algorithm>
+#include <functional>
 #include <string>
 
 std::string BookmarkUtil::getBookmarksDir() { return "/.crosspoint/bookmarks/"; }
 
 std::string BookmarkUtil::getBookmarkPath(const std::string& bookPath) {
+  return getBookmarksDir() + std::to_string(std::hash<std::string>{}(bookPath)) + ".json";
+}
+
+std::string BookmarkUtil::getLegacyBookmarkPath(const std::string& bookPath) {
   // remove leading slash and replace internal slashes to create a flat filename
   std::string bookName = std::string(bookPath).erase(0, 1);
   std::replace(bookName.begin(), bookName.end(), '/', '_');
