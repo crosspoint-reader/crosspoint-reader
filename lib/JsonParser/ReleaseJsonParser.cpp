@@ -15,13 +15,20 @@ void safeCopy(char* dst, size_t dstSize, const char* src, size_t srcLen) {
 
 ReleaseJsonParser::ReleaseJsonParser()
     : parser(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
-                           sOnArrayStart, sOnArrayEnd}) {
+                           sOnArrayStart, sOnArrayEnd}),
+      firmwareAssetSuffixMatch(false) {
   safeCopy(firmwareAssetName, sizeof(firmwareAssetName), "firmware.bin", sizeof("firmware.bin") - 1);
   reset();
 }
 
 void ReleaseJsonParser::setFirmwareAssetName(const char* name) {
   safeCopy(firmwareAssetName, sizeof(firmwareAssetName), name, strlen(name));
+  firmwareAssetSuffixMatch = false;
+}
+
+void ReleaseJsonParser::setFirmwareAssetSuffix(const char* suffix) {
+  safeCopy(firmwareAssetName, sizeof(firmwareAssetName), suffix, strlen(suffix));
+  firmwareAssetSuffixMatch = true;
 }
 
 void ReleaseJsonParser::reset() {
@@ -49,7 +56,14 @@ const char* ReleaseJsonParser::getFirmwareUrl() const { return firmwareUrl; }
 size_t ReleaseJsonParser::getFirmwareSize() const { return firmwareSize; }
 
 void ReleaseJsonParser::commitAsset() {
-  if (strcmp(currentAssetName, firmwareAssetName) == 0) {
+  static constexpr char VERSIONED_PREFIX[] = "crosspoint-";
+  const size_t nameLen = strlen(currentAssetName);
+  const size_t matchLen = strlen(firmwareAssetName);
+  const bool exactMatch = !firmwareAssetSuffixMatch && strcmp(currentAssetName, firmwareAssetName) == 0;
+  const bool suffixMatch = firmwareAssetSuffixMatch && nameLen > sizeof(VERSIONED_PREFIX) - 1 + matchLen &&
+                           memcmp(currentAssetName, VERSIONED_PREFIX, sizeof(VERSIONED_PREFIX) - 1) == 0 &&
+                           memcmp(currentAssetName + nameLen - matchLen, firmwareAssetName, matchLen) == 0;
+  if (exactMatch || suffixMatch) {
     memcpy(firmwareUrl, currentAssetUrl, sizeof(firmwareUrl));
     firmwareSize = currentAssetSize;
     firmwareFound = true;

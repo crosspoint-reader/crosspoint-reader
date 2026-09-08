@@ -31,15 +31,15 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   // OOM there aborts. fetchUrl handles the verified-https GET, redirects, and
   // User-Agent (see HttpDownloader).
   ReleaseJsonParser releaseParser;
-  // Each board updates from its own release asset: plain firmware.bin for the
-  // C3 X4/X3 binary (pre-existing releases), firmware-<board>.bin otherwise.
+  // Each board updates from crosspoint-<version>-<device>.bin. The combined
+  // C3 image uses x3-x4; other asset suffixes match their firmware board tag.
   const bool isX4 = board_tag::boardNameLen() == 2 && memcmp(board_tag::boardName(), "x4", 2) == 0;
-  char assetName[48] = "firmware.bin";
+  char assetSuffix[24] = "-x3-x4.bin";
   if (!isX4) {
-    snprintf(assetName, sizeof(assetName), "firmware-%.*s.bin", static_cast<int>(board_tag::boardNameLen()),
+    snprintf(assetSuffix, sizeof(assetSuffix), "-%.*s.bin", static_cast<int>(board_tag::boardNameLen()),
              board_tag::boardName());
   }
-  releaseParser.setFirmwareAssetName(assetName);
+  releaseParser.setFirmwareAssetSuffix(assetSuffix);
   const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
     releaseParser.feed(reinterpret_cast<const char*>(data), len);
     return true;
@@ -58,7 +58,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   }
 
   if (!releaseParser.foundFirmware()) {
-    LOG_INF("OTA", "No %s asset in latest release", assetName);
+    LOG_INF("OTA", "No crosspoint-<version>%s asset in latest release", assetSuffix);
     return NO_UPDATE;
   }
 

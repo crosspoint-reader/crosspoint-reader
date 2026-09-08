@@ -1,14 +1,11 @@
 name: Compile Release
 
-# Builds every board's release firmware on tag push, with the .bin named
-# exactly as OtaUpdater requests it from the GitHub release: plain
-# firmware.bin for the C3 X4/X3 binary, firmware-<board>.bin for every other
-# board. Attach the artifacts' .bin files to the release as-is.
+# Build and attach firmware only after a release is published. The release tag
+# supplies both the source revision and the version in each asset name.
 
 on:
-  push:
-    tags:
-      - '*'
+  release:
+    types: [published]
 
 permissions:
   contents: read
@@ -21,17 +18,26 @@ jobs:
       matrix:
         include:
           - pio_env: gh_release
-            asset: firmware.bin
+            device: x3-x4
           - pio_env: sticky-gh_release
-            asset: firmware-sticky.bin
+            device: sticky
           - pio_env: x4pro-gh_release
-            asset: firmware-x4pro.bin
+            device: x4pro
           - pio_env: papermono-gh_release
-            asset: firmware-papermono.bin
+            device: papermono
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.release.tag_name }}
           submodules: recursive
+
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          configured_version="$(sed -n 's/^version = //p' platformio.ini | head -n1)"
+          test "$version" = "$configured_version"
 
       - uses: actions/setup-python@v6
         with:
@@ -54,30 +60,50 @@ jobs:
             "cryptography>=45.0.3" "certifi>=2025.8.3" "ecdsa>=0.19.1" "bitstring>=4.3.1" \
             "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
-
       - name: Build CrossPoint
         run: pio run -e ${{ matrix.pio_env }} -j1
 
-      - name: Name release asset
+      - name: Prepare firmware asset
+        id: asset
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          if [ "${{ matrix.asset }}" != "firmware.bin" ]; then
-            cp ".pio/build/${{ matrix.pio_env }}/firmware.bin" \
-              ".pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}"
-          fi
+          version="${RELEASE_TAG#v}"
+          asset="crosspoint-${version}-${{ matrix.device }}.bin"
+          cp ".pio/build/${{ matrix.pio_env }}/firmware.bin" "$asset"
+          echo "name=$asset" >> "$GITHUB_OUTPUT"
 
-      - name: Upload Artifacts
+      - name: Stage firmware asset
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.asset }}
-          path: |
-            .pio/build/${{ matrix.pio_env }}/bootloader.bin
-            .pio/build/${{ matrix.pio_env }}/${{ matrix.asset }}
-            .pio/build/${{ matrix.pio_env }}/firmware.elf
-            .pio/build/${{ matrix.pio_env }}/firmware.map
-            .pio/build/${{ matrix.pio_env }}/partitions.bin
+          name: ${{ steps.asset.outputs.name }}
+          path: ${{ steps.asset.outputs.name }}
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  publish-release:
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download firmware assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: crosspoint-*.bin
+          merge-multiple: true
+
+      - name: Attach firmware assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          for device in x3-x4 sticky x4pro papermono; do
+            test -f "dist/crosspoint-${version}-${device}.bin"
+          done
+          test "$(find dist -maxdepth 1 -type f -name 'crosspoint-*.bin' | wc -l)" -eq 4
+          gh release upload "$RELEASE_TAG" dist/crosspoint-*.bin \
+            --repo "$GITHUB_REPOSITORY" --clobber

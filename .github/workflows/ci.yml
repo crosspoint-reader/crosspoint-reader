@@ -83,9 +83,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Artifact names match the release asset names OtaUpdater requests:
-        # plain firmware.bin for the C3 X4/X3 binary, firmware-<board>.bin for
-        # the S3 boards.
+        # Short board-specific names keep pull-request artifacts easy to identify.
+        # The release workflow applies the published crosspoint-<version>-<device>.bin names.
         include:
           - env: default
             asset: firmware.bin
