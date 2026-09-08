@@ -88,6 +88,37 @@ TEST_F(LibraryBuilderTest, FolderHeavyUnchangedReconciliationIoScalesLinearly) {
   EXPECT_LT(largeIo, smallIo * 3u);
 }
 
+TEST_F(LibraryBuilderTest, DirectoryEntriesAreEnumeratedOnce) {
+  fake::add("/folder/c.txt");
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+
+  EXPECT_EQ(fake::directoryEntriesByPath["/a.epub"], 1u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/b.epub"], 1u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/folder"], 1u);
+  EXPECT_EQ(fake::directoryEntriesByPath["/folder/c.txt"], 1u);
+}
+
+TEST_F(LibraryBuilderTest, StagingAndIndexWritesAreBatched) {
+  fake::reset();
+  for (unsigned i = 0; i < 128; i++) fake::add("/book" + numbered("", i) + ".txt");
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+
+  EXPECT_LT(fake::writesByPath["/.crosspoint/library.stage"], 64u);
+  EXPECT_LT(fake::writesByPath["/.crosspoint/library.new"], 32u);
+}
+
+TEST_F(LibraryBuilderTest, ParentDuplicateTrackingSurvivesDirectoryRecursion) {
+  fake::add("/folder/c.txt");
+  fake::duplicateDirectoryEntry("/a.epub");
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+
+  EXPECT_EQ(stats.books, 3);
+  EXPECT_EQ(stats.duplicatesDropped, 1);
+}
+
 TEST_F(LibraryBuilderTest, TimestampAndSizeChangesParseOnlyTheChangedBook) {
   initial();
   fake::files["/a.epub"]->time++;
@@ -250,6 +281,10 @@ TEST_F(LibraryBuilderTest, ReadWriteCloseAndAllocationFailuresRetainPreviousInde
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
   fake::failWrite = -1;
 
+  fake::failWritePath = "/.crosspoint/library.new";
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_EQ(fake::files[INDEX]->bytes, old);
+
   fake::failClosePath = "/.crosspoint/library.new";
   EXPECT_FALSE(buildLibraryIndex("/", stats, true));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
@@ -317,11 +352,9 @@ TEST_F(LibraryBuilderTest, LibrariesPastOldGateAndAtFormatCeilingKeepAllOrders) 
     ASSERT_TRUE(index.open(INDEX));
     for (uint16_t row = 0; row < count; row++) {
       EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, row), "/book" + numbered("", row) + ".epub") << count << ':' << row;
-      EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, row),
-                "/book" + numbered("", count - 1 - row) + ".epub")
+      EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, row), "/book" + numbered("", count - 1 - row) + ".epub")
           << count << ':' << row;
-      EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, row),
-                "/book" + numbered("", authorOrder[row]) + ".epub")
+      EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, row), "/book" + numbered("", authorOrder[row]) + ".epub")
           << count << ':' << row;
     }
   }
@@ -330,7 +363,7 @@ TEST_F(LibraryBuilderTest, LibrariesPastOldGateAndAtFormatCeilingKeepAllOrders) 
 TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   fake::reset();
   for (unsigned i = 0; i < 513; i++) fake::add("/book" + numbered("", i) + ".txt");
-  fake::failAlloc = 5;
+  fake::failAlloc = 6;
 
   ASSERT_TRUE(buildLibraryIndex("/", stats, false));
   EXPECT_TRUE(fake::failureTriggered);

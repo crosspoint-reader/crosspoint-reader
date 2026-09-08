@@ -1,6 +1,7 @@
 #include "LibraryBuilder.h"
 
 #include <Arduino.h>
+#include <BufferedFile.h>
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
@@ -23,6 +24,7 @@ constexpr char NEW_PATH[] = "/.crosspoint/library.new";
 constexpr char BACKUP_PATH[] = "/.crosspoint/library.bak";
 constexpr char STAGE_PATH[] = "/.crosspoint/library.stage";
 constexpr char CACHE_DIR[] = "/.crosspoint";
+constexpr size_t LIBRARY_IO_BUFFER_SIZE = 4096;
 
 // Matches lib/FileIndex's buffer so a name this walk accepts is one the file
 // browser could also show.
@@ -239,6 +241,7 @@ constexpr uint16_t FIRST_SEEN_UNRESOLVED = 0xFFFF;
 // captured, so the walk stays a plain function and its stack frame stays small.
 struct WalkState {
   HalFile stage;
+  serialization::BufferedFileWriter* stageOut = nullptr;
   char* nameBuf = nullptr;
   StagedEntry* stagedEntry = nullptr;
   uint16_t books = 0;
@@ -248,6 +251,7 @@ struct WalkState {
   uint16_t duplicatesDropped = 0;
   uint16_t unreadableSkipped = 0;
   uint64_t* dedupKeys = nullptr;
+  uint16_t activeDedupCount = 0;
   bool dedupDegraded = false;
   bool failed = false;
   bool readMetadata = false;
@@ -407,17 +411,22 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   entry.authorLen = static_cast<uint8_t>(std::min(displayAuthor.size(), STAGE_AUTHOR_BYTES));
   memcpy(entry.author, displayAuthor.data(), entry.authorLen);
 
-  if (st.stage.write(reinterpret_cast<const uint8_t*>(&entry), STAGE_STRIDE) != STAGE_STRIDE) {
-    LOG_ERR("LIBIDX", "record stage write failed: %s", fullPath.c_str());
-    st.failed = true;
-    return false;
-  }
+  st.stageOut->write(&entry, STAGE_STRIDE);
   st.books++;
   return true;
 }
 
+struct DedupFrame {
+  WalkState& state;
+  uint16_t base;
+  ~DedupFrame() { state.activeDedupCount = base; }
+};
+
 void walk(WalkState& st, const std::string& path, const int depth) {
   if (st.failed || depth > LIBRARY_MAX_DEPTH || st.books >= CLIX_MAX_RECORDS) return;
+
+  const uint16_t dedupBase = st.activeDedupCount;
+  const DedupFrame dedupFrame{st, dedupBase};
 
   HalFile dir = Storage.open(path.c_str());
   if (!dir || !dir.isDirectory()) {
@@ -442,8 +451,6 @@ void walk(WalkState& st, const std::string& path, const int depth) {
   // implausible where a bare hash collision is merely unlikely, and the cost of
   // being wrong is a real book silently missing from the shelf — the failure
   // hardest to notice and hardest to explain.
-  uint16_t seenCount = 0;
-
   bool folderEmitted = false;
   uint16_t myFolderId = 0;
 
@@ -463,7 +470,20 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     if (st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
     const std::string name(st.nameBuf);
 
-    if (isDir) continue;
+    if (isDir) {
+      const size_t resumePosition = dir.position();
+      dir.close();
+      walk(st, joinLibraryPath(path, name), depth + 1);
+      if (st.failed || st.books >= CLIX_MAX_RECORDS) return;
+
+      dir = Storage.open(path.c_str());
+      if (!dir || !dir.isDirectory() || !dir.seekSet(resumePosition)) {
+        if (dir) dir.close();
+        st.unreadableSkipped++;
+        return;
+      }
+      continue;
+    }
     if (!isBookName(name)) continue;
 
     // A zero-length book is a dangling directory entry: the name enumerates but
@@ -485,15 +505,16 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     }
     const uint64_t key = (static_cast<uint64_t>(fnv1a32(name.data(), name.size())) << 32) | size;
     if (st.dedupKeys != nullptr) {
-      uint64_t* const slot = std::lower_bound(st.dedupKeys, st.dedupKeys + seenCount, key);
-      if (slot != st.dedupKeys + seenCount && *slot == key) {
+      uint64_t* const end = st.dedupKeys + st.activeDedupCount;
+      uint64_t* const slot = std::lower_bound(st.dedupKeys + dedupBase, end, key);
+      if (slot != end && *slot == key) {
         st.duplicatesDropped++;
         continue;
       }
-      if (seenCount < LIBRARY_MAX_DEDUP_KEYS) {
-        memmove(slot + 1, slot, static_cast<size_t>(st.dedupKeys + seenCount - slot) * sizeof(*slot));
+      if (st.activeDedupCount < LIBRARY_MAX_DEDUP_KEYS) {
+        memmove(slot + 1, slot, static_cast<size_t>(end - slot) * sizeof(*slot));
         *slot = key;
-        seenCount++;
+        st.activeDedupCount++;
       } else if (!st.dedupDegraded) {
         LOG_INF("LIBIDX", "duplicate detection capped at %u entries in %s",
                 static_cast<unsigned>(LIBRARY_MAX_DEDUP_KEYS), path.c_str());
@@ -520,37 +541,6 @@ void walk(WalkState& st, const std::string& path, const int depth) {
     if (!stageRecord(st, name, size, myFolderId, joinLibraryPath(path, name), modificationTime)) break;
   }
   dir.close();
-
-  // Walk subdirectories in one second pass. Close the parent around recursion so
-  // only one directory reader is active, then reopen it at the saved position.
-  HalFile parent = Storage.open(path.c_str());
-  if (!parent || !parent.isDirectory()) {
-    if (parent) parent.close();
-    st.unreadableSkipped++;
-    return;
-  }
-  parent.rewindDirectory();
-  for (HalFile entry = parent.openNextFile(); entry; entry = parent.openNextFile()) {
-    serviceBuilder(st.serviceUnits);
-    st.nameBuf[0] = '\0';
-    entry.getName(st.nameBuf, NAME_BUF_SIZE);
-    const bool isDir = entry.isDirectory();
-    entry.close();
-    if (!isDir || st.nameBuf[0] == '\0' || isHiddenOrSidecar(st.nameBuf)) continue;
-
-    const std::string sub(st.nameBuf);
-    const size_t resumePosition = parent.position();
-    parent.close();
-    walk(st, joinLibraryPath(path, sub), depth + 1);
-    if (st.failed || st.books >= CLIX_MAX_RECORDS) return;
-
-    parent = Storage.open(path.c_str());
-    if (!parent || !parent.isDirectory() || !parent.seekSet(resumePosition)) {
-      if (parent) parent.close();
-      st.unreadableSkipped++;
-      return;
-    }
-  }
 }
 
 // Shared by the offset and write passes so the name-blob layout has one source of
@@ -595,6 +585,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
     stage.close();
     return false;
   }
+  serialization::BufferedFileWriter outBuffer(out, LIBRARY_IO_BUFFER_SIZE);
 
   // Returns false rather than spinning. A full card makes write() return 0, and
   // the old loop never advanced past it — the device simply hung mid-rebuild with
@@ -603,21 +594,18 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // Every final-index write goes through here. A short write on a full card
   // leaves a file that still passes the header check when the header describes
   // what was intended rather than what landed.
-  const auto put = [&out, &ioFailed](const void* data, const size_t len) {
+  const auto put = [&outBuffer, &ioFailed](const void* data, const size_t len) {
     if (ioFailed) return;
-    if (out.write(static_cast<const uint8_t*>(data), len) != len) ioFailed = true;
+    outBuffer.write(data, len);
   };
-  const auto padTo = [&out, &ioFailed, &serviceUnits](const uint32_t target) {
+  const auto padTo = [&outBuffer, &ioFailed, &serviceUnits](const uint32_t target) {
     if (ioFailed) return;
     static const uint8_t zeros[64] = {0};
-    while (out.position() < target) {
+    while (outBuffer.position() < target) {
       serviceBuilder(serviceUnits);
-      const uint32_t gap = target - static_cast<uint32_t>(out.position());
+      const uint32_t gap = target - static_cast<uint32_t>(outBuffer.position());
       const size_t want = std::min<uint32_t>(gap, sizeof(zeros));
-      if (out.write(zeros, want) != want) {
-        ioFailed = true;
-        return;
-      }
+      outBuffer.write(zeros, want);
     }
   };
   const auto readStageAt = [&stage, &ioFailed](const uint64_t offset, void* data, const size_t len) {
@@ -665,6 +653,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   padTo(header.recordStart);
   if (ioFailed) {
     LOG_ERR("LIBIDX", "emit failed while copying the folder stage");
+    outBuffer.flush();
     stage.close();
     out.close();
     Storage.remove(NEW_PATH);
@@ -904,6 +893,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
   if (ioFailed) {
     LOG_ERR("LIBIDX", "emit failed while reading the record stage");
+    outBuffer.flush();
     stage.close();
     out.close();
     Storage.remove(NEW_PATH);
@@ -921,6 +911,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   auto staged = makeUniqueNoThrow<StagedEntry[]>(2);
   if (!staged) {
     LOG_ERR("LIBIDX", "staging buffers alloc failed");
+    outBuffer.flush();
     out.close();
     Storage.remove(NEW_PATH);
     return false;
@@ -988,16 +979,16 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   // Captured HERE, at the end of the data, and not after the header rewrite
   // below: that rewrite seeks back to 0, so asking afterwards reports 64 — the
   // header's own length — and every rebuild looks truncated.
-  const uint32_t written = static_cast<uint32_t>(out.position());
+  const uint32_t written = static_cast<uint32_t>(outBuffer.position());
+  if (!outBuffer.flush()) ioFailed = true;
 
   header.flags =
       (stats.ranksDegraded ? CLIX_FLAG_RANKS_DEGRADED : 0) | (stats.dedupDegraded ? CLIX_FLAG_DEDUP_DEGRADED : 0);
 
   if (!out.seekSet(0)) {
     ioFailed = true;
-  } else {
-    put(&header, sizeof(header));
-  }
+  } else if (out.write(reinterpret_cast<const uint8_t*>(&header), sizeof(header)) != sizeof(header))
+    ioFailed = true;
   // The file is only as long as it claims if every write landed. A full card
   // fails them silently, and the result passes the header check while carrying
   // zeros — an index that looks valid and is not.
@@ -1115,11 +1106,21 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     return false;
   }
 
-  walk(st, rootPath, 0);
+  LOG_DBG("LIBIDX", "phase prepare/prior: %ums", static_cast<unsigned>(millis() - startMs));
+  [[maybe_unused]] const uint32_t walkStartMs = millis();
+  bool stageFlushed = false;
+  {
+    serialization::BufferedFileWriter stageOut(st.stage, LIBRARY_IO_BUFFER_SIZE);
+    st.stageOut = &stageOut;
+    walk(st, rootPath, 0);
+    st.stageOut = nullptr;
+    stageFlushed = stageOut.flush();
+  }
   const bool stageClosed = st.stage.close();
   const bool foldersClosed = st.folders.close();
+  LOG_DBG("LIBIDX", "phase walk/metadata/stage: %ums", static_cast<unsigned>(millis() - walkStartMs));
 
-  if (st.failed || !stageClosed || !foldersClosed) {
+  if (st.failed || !stageFlushed || !stageClosed || !foldersClosed) {
     LOG_ERR("LIBIDX", "staging failed; keeping the previous index");
     Storage.remove(STAGE_PATH);
     Storage.remove(folderStagePath.c_str());
@@ -1160,6 +1161,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   // re-read. A content hash would settle it properly but would read ~12 KB per
   // book on every single verification, to decide a case that arises when someone
   // renames a file.
+  [[maybe_unused]] const uint32_t reconcileStartMs = millis();
   auto resolvedFirstSeen = makeUniqueNoThrow<uint16_t[]>(st.books == 0 ? 1 : st.books);
   if (!resolvedFirstSeen) {
     LOG_ERR("LIBIDX", "firstSeen array alloc failed");
@@ -1228,8 +1230,10 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
       if (priorList && !priorMatched(priorList[q])) stats.removed++;
     }
   }
+  LOG_DBG("LIBIDX", "phase reconcile: %ums", static_cast<unsigned>(millis() - reconcileStartMs));
 
   // --- title order -----------------------------------------------------------
+  [[maybe_unused]] const uint32_t titleStartMs = millis();
   // The walk-only allocations are released before the largest temporary block.
   previous.close();
   st.previous = nullptr;
@@ -1305,9 +1309,12 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
       LOG_ERR("LIBIDX", "sort skipped: key array alloc failed");
     }
   }
+  LOG_DBG("LIBIDX", "phase title order: %ums", static_cast<unsigned>(millis() - titleStartMs));
 
+  [[maybe_unused]] const uint32_t emitStartMs = millis();
   const bool ok =
       emitIndex(folderStagePath.c_str(), st, order.get(), resolvedFirstSeen.get(), coreSortsAvailable, stats);
+  LOG_DBG("LIBIDX", "phase author/orders/emit: %ums", static_cast<unsigned>(millis() - emitStartMs));
   Storage.remove(STAGE_PATH);
   Storage.remove(folderStagePath.c_str());
 

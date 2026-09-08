@@ -21,10 +21,13 @@ inline int failWrite = -1;
 inline int failRename = -1;
 inline int failAlloc = -1;
 inline std::string failClosePath;
+inline std::string failWritePath;
 inline unsigned parses = 0;
 inline unsigned reads = 0;
 inline unsigned seeks = 0;
 inline unsigned delays = 0;
+inline std::map<std::string, unsigned> writesByPath;
+inline std::map<std::string, unsigned> directoryEntriesByPath;
 inline bool failureTriggered = false;
 inline std::map<std::string, std::vector<std::string>> extraDirectoryEntries;
 
@@ -46,10 +49,13 @@ inline void reset() {
   failRename = -1;
   failAlloc = -1;
   failClosePath.clear();
+  failWritePath.clear();
   parses = 0;
   reads = 0;
   seeks = 0;
   delays = 0;
+  writesByPath.clear();
+  directoryEntriesByPath.clear();
   failureTriggered = false;
   extraDirectoryEntries.clear();
 }
@@ -115,6 +121,7 @@ class HalFile {
     HalFile file;
     file.path = children[pos++];
     file.node = fake::files[file.path];
+    fake::directoryEntriesByPath[file.path]++;
     return file;
   }
   size_t getName(char* out, const size_t size) {
@@ -135,6 +142,7 @@ class HalFile {
     pos = offset;
     return true;
   }
+  bool seek(const size_t offset) { return seekSet(offset); }
   int read(void* out, size_t size) {
     fake::reads++;
     if (size == 0) return 0;
@@ -146,12 +154,19 @@ class HalFile {
   }
   size_t write(const uint8_t* data, const size_t size) {
     if (size == 0) return 0;
+    fake::writesByPath[path]++;
+    if (!fake::failWritePath.empty() && path == fake::failWritePath) {
+      fake::failWritePath.clear();
+      fake::failureTriggered = true;
+      return 0;
+    }
     if (!node || fake::fail(fake::failWrite)) return 0;
     node->bytes.resize(std::max(node->bytes.size(), pos + size));
     std::memcpy(node->bytes.data() + pos, data, size);
     pos += size;
     return size;
   }
+  size_t write(const void* data, const size_t size) { return write(static_cast<const uint8_t*>(data), size); }
 };
 
 class HalStorage {
