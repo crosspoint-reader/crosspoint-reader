@@ -8,6 +8,8 @@
 struct FakeMetadata {
   std::string title = "Title";
   std::string author = "Author";
+  std::string series;
+  std::string seriesIndexText;
   bool success = true;
 };
 
@@ -25,6 +27,17 @@ class Epub {
     if (!metadata.success) return false;
     title = metadata.title;
     author = metadata.author;
+    return true;
+  }
+
+  bool loadMetadata(std::string& title, std::string& author, std::string& series, std::string& seriesIndexText) {
+    ++fake::parses;
+    const auto& metadata = bookMetadata[path];
+    if (!metadata.success) return false;
+    title = metadata.title;
+    author = metadata.author;
+    series = metadata.series;
+    seriesIndexText = metadata.seriesIndexText;
     return true;
   }
 };

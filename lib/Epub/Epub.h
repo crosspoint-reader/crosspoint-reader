@@ -32,7 +32,8 @@ class Epub {
 
   bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
-                       bool metadataOnly = false, ZipFile* sharedZip = nullptr);
+                       bool metadataOnly = false, ZipFile* sharedZip = nullptr, std::string* seriesOut = nullptr,
+                       std::string* seriesIndexTextOut = nullptr);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
@@ -47,6 +48,10 @@ class Epub {
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool loadMetadata(std::string& title, std::string& author);
+  // Series-aware form. The reader's book cache holds no series, so this one
+  // always reads the package document rather than accepting a cached answer
+  // that could only ever say "no series".
+  bool loadMetadata(std::string& title, std::string& author, std::string& series, std::string& seriesIndexText);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

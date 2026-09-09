@@ -3,6 +3,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 namespace library {
@@ -412,6 +413,65 @@ std::string surnameKey(const std::string_view displayAuthor) {
   key.push_back(' ');
   key.append(folded.substr(0, sep));
   return key;
+}
+
+uint16_t parseSeriesIndex(const std::string_view text) {
+  const auto isDigit = [](const char c) { return c >= '0' && c <= '9'; };
+  const auto isSpace = [](const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+
+  size_t i = 0;
+  while (i < text.size() && isSpace(text[i])) i++;
+
+  // A leading sign never reaches the digit loop, so "-1" is no position rather
+  // than a wrapped one.
+  uint32_t whole = 0;
+  size_t wholeDigits = 0;
+  while (i < text.size() && isDigit(text[i])) {
+    if (whole < 100000) whole = whole * 10 + static_cast<uint32_t>(text[i] - '0');
+    wholeDigits++;
+    i++;
+  }
+  if (wholeDigits == 0) return SERIES_INDEX_NONE;
+
+  uint32_t frac = 0;
+  if (i < text.size() && (text[i] == '.' || text[i] == ',')) {
+    i++;
+    size_t fracDigits = 0;
+    uint32_t third = 0;
+    while (i < text.size() && isDigit(text[i])) {
+      const uint32_t d = static_cast<uint32_t>(text[i] - '0');
+      if (fracDigits == 0) {
+        frac += d * 10;
+      } else if (fracDigits == 1) {
+        frac += d;
+      } else if (fracDigits == 2) {
+        third = d;
+      }
+      fracDigits++;
+      i++;
+    }
+    if (third >= 5) frac++;  // round half up, so 2.567 is nearer 2.57 than 2.56
+  }
+
+  const uint32_t scaled = whole * 100 + frac;
+  return scaled >= SERIES_INDEX_NONE ? SERIES_INDEX_MAX : static_cast<uint16_t>(scaled);
+}
+
+bool formatSeriesIndex(const uint16_t index, char* out, const size_t outSize) {
+  if (out == nullptr || outSize == 0) return false;
+  out[0] = '\0';
+  if (index == SERIES_INDEX_NONE) return false;
+
+  const unsigned whole = index / 100u;
+  const unsigned frac = index % 100u;
+  if (frac == 0) {
+    snprintf(out, outSize, "%u", whole);
+  } else if (frac % 10 == 0) {
+    snprintf(out, outSize, "%u.%u", whole, frac / 10u);
+  } else {
+    snprintf(out, outSize, "%u.%02u", whole, frac);
+  }
+  return true;
 }
 
 }  // namespace library
