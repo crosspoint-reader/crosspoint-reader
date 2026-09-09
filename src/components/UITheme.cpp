@@ -74,15 +74,16 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
 }
 
 const ThemeMetrics& UITheme::getMetrics() const {
-  // hasTouch() can flip once touch init completes after static construction, so the
-  // cached copy is refreshed when the flag differs instead of copying the struct per call.
-  const bool touch = gpio.hasTouch();
-  if (!metricsValid || touch != metricsForTouch) {
+  // hasTouch() (inside buttonHintsHidden()) can flip once touch init completes after
+  // static construction, so the cached copy is refreshed when the flag differs
+  // instead of copying the struct per call.
+  const bool hintsHidden = BaseTheme::buttonHintsHidden();
+  if (!metricsValid || hintsHidden != metricsForHiddenHints) {
     adjustedMetrics = *currentMetrics;
-    if (touch) {
+    if (hintsHidden) {
       adjustedMetrics.buttonHintsHeight = 0;
     }
-    metricsForTouch = touch;
+    metricsForHiddenHints = hintsHidden;
     metricsValid = true;
   }
   return adjustedMetrics;

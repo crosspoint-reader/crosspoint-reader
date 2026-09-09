@@ -58,7 +58,7 @@ class UITheme {
   std::unique_ptr<BaseTheme> currentTheme;
   mutable ThemeMetrics adjustedMetrics;
   mutable bool metricsValid = false;
-  mutable bool metricsForTouch = false;
+  mutable bool metricsForHiddenHints = false;
 };
 
 // Helper macro to access current theme

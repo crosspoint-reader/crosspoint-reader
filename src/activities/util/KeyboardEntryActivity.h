@@ -125,7 +125,6 @@ class KeyboardEntryActivity : public Activity {
   void moveSelectionCol(int delta);
   // Grid walk in reading order, for boards with no Left/Right keys.
   void moveSelectionLinear(int delta);
-  static bool hasHorizontalKeys();
   bool syncSelectionToValue(int16_t value);
   // Handles one key activation (by stable key id). Returns true when the
   // screen needs a repaint; OK/cancel finish the activity instead.
