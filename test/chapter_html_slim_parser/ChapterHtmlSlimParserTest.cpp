@@ -69,4 +69,51 @@ TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) 
 INSTANTIATE_TEST_SUITE_P(CssVerticalAlign, ChapterHtmlSlimParserTest,
                          ::testing::Values("vertical-align: super", "vertical-align: sub"));
 
+TEST_F(ChapterHtmlSlimParserTest, ParagraphWithHiddenAttributeShouldBeSkipped) {
+  const XML_Char* attributes[] = {"hidden", "hidden"};
+
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "p", attributes);
+  ChapterHtmlSlimParser::characterData(&parser, "[HIDDEN]", 8);
+
+  ASSERT_EQ(parser.partWordBufferIndex, 0);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, HeaderWithHiddenAttributeShouldBeSkipped) {
+  const XML_Char* attributes[] = {"hidden", "hidden"};
+
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "h1", attributes);
+  ChapterHtmlSlimParser::characterData(&parser, "[HIDDEN]", 8);
+
+  ASSERT_EQ(parser.partWordBufferIndex, 0);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, SpanWithHiddenAttributeShouldBeSkipped) {
+  const XML_Char* attributes[] = {"hidden", "hidden"};
+
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
+  ChapterHtmlSlimParser::characterData(&parser, "Before ", 7);
+  ChapterHtmlSlimParser::startElement(&parser, "span", attributes);
+  ChapterHtmlSlimParser::characterData(&parser, "[HIDDEN]", 8);
+  ChapterHtmlSlimParser::endElement(&parser, "span");
+  ChapterHtmlSlimParser::characterData(&parser, " After ", 7);
+
+  ASSERT_EQ(parser.currentTextBlock->size(), 2);
+  ASSERT_EQ(parser.currentTextBlock->words[0], "Before");
+  ASSERT_EQ(parser.currentTextBlock->words[1], "After");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, DivWithHiddenAttributeContentShouldBeSkipped) {
+  const XML_Char* attributes[] = {"hidden", "hidden"};
+
+  parser.beginParse();
+  ChapterHtmlSlimParser::startElement(&parser, "div", attributes);
+  ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
+  ChapterHtmlSlimParser::characterData(&parser, "[HIDDEN]", 8);
+
+  ASSERT_EQ(parser.partWordBufferIndex, 0);
+}
+
 }  // namespace
