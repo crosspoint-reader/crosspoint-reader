@@ -50,6 +50,9 @@ class HalDisplay {
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;
+  // True when an ordinary deferred B/W refresh is suitable as the base for a
+  // grayscale pass. X3 needs its controller-specific grayscale base waveform.
+  bool supportsAsyncGrayscaleBase() const;
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Output polarity. The framebuffer remains in normal polarity; inversion is

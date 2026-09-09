@@ -216,6 +216,9 @@ class GfxRenderer {
   // fadingFix isn't forcing the blocking path. Callers can skip overlap
   // scaffolding (e.g. whole-plane grayscale buffers) when false.
   bool supportsAsyncRefresh() const;
+  // True when the display can overlap an ordinary B/W refresh with grayscale
+  // composition without bypassing a required grayscale base waveform.
+  bool supportsAsyncGrayscaleBase() const;
   // EXPERIMENTAL: Windowed update - display only a rectangular region
   // void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;

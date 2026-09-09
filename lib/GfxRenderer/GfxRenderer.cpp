@@ -1731,6 +1731,8 @@ void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
 
+bool GfxRenderer::supportsAsyncGrayscaleBase() const { return !fadingFix && display.supportsAsyncGrayscaleBase(); }
+
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
   if (dst == nullptr || w <= 0 || h <= 0) return 0;
 
