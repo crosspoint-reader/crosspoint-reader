@@ -58,6 +58,7 @@ enum class BmpReaderError : uint8_t {
   BufferTooSmall,
   OomRowBuffer,
   ShortReadRow,
+  OomDitherer,
 };
 
 class Bitmap {

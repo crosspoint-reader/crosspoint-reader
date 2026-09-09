@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 struct BmpHeader;
 
@@ -35,10 +36,13 @@ void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder ro
 class Atkinson1BitDitherer {
  public:
   explicit Atkinson1BitDitherer(int width) : width(width) {
-    errorRow0 = new int16_t[width + 4]();  // Current row
-    errorRow1 = new int16_t[width + 4]();  // Next row
-    errorRow2 = new int16_t[width + 4]();  // Row after next
+    errorRow0 = new (std::nothrow) int16_t[width + 4]();  // Current row
+    errorRow1 = new (std::nothrow) int16_t[width + 4]();  // Next row
+    errorRow2 = new (std::nothrow) int16_t[width + 4]();  // Row after next
   }
+
+  // Callers must check row allocation before processing pixels.
+  bool isValid() const { return errorRow0 && errorRow1 && errorRow2; }
 
   ~Atkinson1BitDitherer() {
     delete[] errorRow0;
@@ -117,10 +121,13 @@ class AtkinsonDitherer {
  public:
   explicit AtkinsonDitherer(int width, bool originalThresholds = false)
       : width(width), originalThresholds(originalThresholds) {
-    errorRow0 = new int16_t[width + 4]();  // Current row
-    errorRow1 = new int16_t[width + 4]();  // Next row
-    errorRow2 = new int16_t[width + 4]();  // Row after next
+    errorRow0 = new (std::nothrow) int16_t[width + 4]();  // Current row
+    errorRow1 = new (std::nothrow) int16_t[width + 4]();  // Next row
+    errorRow2 = new (std::nothrow) int16_t[width + 4]();  // Row after next
   }
+
+  // Callers must check row allocation before processing pixels.
+  bool isValid() const { return errorRow0 && errorRow1 && errorRow2; }
 
   ~AtkinsonDitherer() {
     delete[] errorRow0;
@@ -220,9 +227,12 @@ class FloydSteinbergDitherer {
  public:
   explicit FloydSteinbergDitherer(int width, bool originalThresholds = false)
       : width(width), rowCount(0), originalThresholds(originalThresholds) {
-    errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
-    errorNextRow = new int16_t[width + 2]();
+    errorCurRow = new (std::nothrow) int16_t[width + 2]();  // +2 for boundary handling
+    errorNextRow = new (std::nothrow) int16_t[width + 2]();
   }
+
+  // Callers must check row allocation before processing pixels.
+  bool isValid() const { return errorCurRow && errorNextRow; }
 
   ~FloydSteinbergDitherer() {
     delete[] errorCurRow;

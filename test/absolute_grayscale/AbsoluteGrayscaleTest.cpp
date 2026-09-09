@@ -2,6 +2,42 @@
 
 #include "lib/GfxRenderer/BitmapHelpers.h"
 
+namespace {
+thread_local int rowAllocationToFail = -1;
+}
+
+// Fail one row allocation without changing production allocator APIs.
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+  if (rowAllocationToFail >= 0 && rowAllocationToFail-- == 0) return nullptr;
+  return ::operator new[](size);
+}
+
+TEST(AbsoluteGrayscale, DitherersReportEachRowAllocationFailure) {
+  for (int row = 0; row < 3; ++row) {
+    rowAllocationToFail = row;
+    AtkinsonDitherer atkinson(8);
+    rowAllocationToFail = -1;
+    EXPECT_FALSE(atkinson.isValid());
+
+    rowAllocationToFail = row;
+    Atkinson1BitDitherer oneBit(8);
+    rowAllocationToFail = -1;
+    EXPECT_FALSE(oneBit.isValid());
+  }
+  for (int row = 0; row < 2; ++row) {
+    rowAllocationToFail = row;
+    FloydSteinbergDitherer floyd(8);
+    rowAllocationToFail = -1;
+    EXPECT_FALSE(floyd.isValid());
+  }
+  AtkinsonDitherer atkinson(8);
+  Atkinson1BitDitherer oneBit(8);
+  FloydSteinbergDitherer floyd(8);
+  EXPECT_TRUE(atkinson.isValid());
+  EXPECT_TRUE(oneBit.isValid());
+  EXPECT_TRUE(floyd.isValid());
+}
+
 TEST(AbsoluteGrayscale, FullPlanesIncludeBlackWhiteAndBothGrayLevels) {
   uint8_t planes[2] = {0xff, 0xff};
   for (unsigned p = 0; p < 2; ++p) {
