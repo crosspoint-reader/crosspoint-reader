@@ -15,7 +15,15 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
   const std::string path = BookmarkUtil::getBookmarkPath(bookPath);
   JsonDocument doc;
   bool migrating = false;
-  if (!PersistableStoreBase::readDocFromFile(path.c_str(), doc)) {
+  if (Storage.exists(path.c_str())) {
+    // Exists but failed to read/parse -- a real corruption, not a missing
+    // file. Don't guess by falling back to the legacy path: that could load
+    // an unrelated book's bookmarks (see the migration note below) and
+    // silently overwrite this file with the wrong data.
+    if (!PersistableStoreBase::readDocFromFile(path.c_str(), doc)) {
+      return false;
+    }
+  } else {
     // One-time fallback: this book's bookmarks may still live under the old,
     // collision-prone sanitized-path scheme (see getLegacyBookmarkPath()).
     // Load from there if so, then re-save below under the new path so this
@@ -48,10 +56,13 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
 
   if (migrating) {
     LOG_INF("BKM", "Migrating legacy bookmark file to hash-based path");
-    if (save(bookPath, bookmarks)) {
-      Storage.remove(BookmarkUtil::getLegacyBookmarkPath(bookPath).c_str());
-    } else {
-      LOG_ERR("BKM", "Failed to save migrated bookmarks -- leaving legacy file in place");
+    // Deliberately does not remove the legacy file: it may be shared with
+    // another book that collided under the old scheme (see
+    // getLegacyBookmarkPath()) and hasn't migrated yet. Leaving it in place
+    // costs a small orphaned file but keeps that book's migration possible;
+    // deleting it here would strand it after only the first book to load.
+    if (!save(bookPath, bookmarks)) {
+      LOG_ERR("BKM", "Failed to save migrated bookmarks");
     }
   }
 
