@@ -644,19 +644,27 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   }
 
   if (hasGreyscale) {
+    // Absolute four-tone planes where the panel supports them (cleared to
+    // white), differential masks otherwise (cleared to black). A preserved
+    // background is not part of the planes, so it keeps the differential path.
+    const bool absolute = renderer.supportsAbsoluteGrayPlanes() && !preserveBackground;
+    renderer.setAbsoluteGrayPlanes(absolute);
+    const uint8_t clearColor = absolute ? 0xFF : 0x00;
+
     bitmap.rewindToData();
-    renderer.clearScreen(0x00);
+    renderer.clearScreen(clearColor);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
-    renderer.clearScreen(0x00);
+    renderer.clearScreen(clearColor);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
     renderer.copyGrayscaleMsbBuffers();
 
-    renderer.displayGrayBuffer();
+    renderer.displayGrayBuffer(absolute);
+    renderer.setAbsoluteGrayPlanes(false);
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }

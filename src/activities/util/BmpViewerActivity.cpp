@@ -160,6 +160,11 @@ void BmpViewerActivity::onEnter() {
       if (bitmap.hasGreyscale()) {
         renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
 
+        // Panels with an absolute four-tone image waveform take absolute planes
+        // (white|dark, white|light) cleared to white; the others take the
+        // differential masks cleared to black.
+        const bool absolute = renderer.supportsAbsoluteGrayPlanes();
+        renderer.setAbsoluteGrayPlanes(absolute);
         bool planesReady = true;
         for (const auto mode : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
           if (bitmap.rewindToData() != BmpReaderError::Ok) {
@@ -167,7 +172,7 @@ void BmpViewerActivity::onEnter() {
             planesReady = false;
             break;
           }
-          renderer.clearScreen(0x00);
+          renderer.clearScreen(absolute ? 0xFF : 0x00);
           renderer.setRenderMode(mode);
           renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
           GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -177,7 +182,8 @@ void BmpViewerActivity::onEnter() {
             renderer.copyGrayscaleMsbBuffers();
           }
         }
-        if (planesReady) renderer.displayGrayBuffer();
+        if (planesReady) renderer.displayGrayBuffer(absolute);
+        renderer.setAbsoluteGrayPlanes(false);
 
         // Rebuild the BW framebuffer for popups and subsequent differential updates.
         renderer.setRenderMode(GfxRenderer::BW);

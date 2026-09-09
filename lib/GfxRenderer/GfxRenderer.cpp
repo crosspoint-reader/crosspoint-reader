@@ -1433,12 +1433,22 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
 
+      // Differential masks set only the pixels to nudge. Absolute planes are a
+      // full image: LSB holds white|dark, MSB white|light, every pixel written.
       if (renderMode == BW && val < 3) {
         drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_MSB) {
+        if (absoluteGrayPlanes) {
+          drawPixel(screenX, screenY, !(val == 3 || val == 2));
+        } else if (val == 1 || val == 2) {
+          drawPixel(screenX, screenY, false);
+        }
+      } else if (renderMode == GRAYSCALE_LSB) {
+        if (absoluteGrayPlanes) {
+          drawPixel(screenX, screenY, !(val == 3 || val == 1));
+        } else if (val == 1) {
+          drawPixel(screenX, screenY, false);
+        }
       }
     }
   }
@@ -2228,7 +2238,9 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuff
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
-void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
+void GfxRenderer::displayGrayBuffer(const bool absolute) const { display.displayGrayBuffer(fadingFix, absolute); }
+
+bool GfxRenderer::supportsAbsoluteGrayPlanes() const { return display.supportsAbsoluteGrayPlanes(); }
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.

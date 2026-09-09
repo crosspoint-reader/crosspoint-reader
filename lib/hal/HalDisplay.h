@@ -90,13 +90,18 @@ class HalDisplay {
   void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 
-  void displayGrayBuffer(bool turnOffScreen = false);
+  // factoryMode selects the driver's absolute four-tone image waveform; the
+  // planes must then be absolute (see supportsAbsoluteGrayPlanes).
+  void displayGrayBuffer(bool turnOffScreen = false, bool factoryMode = false);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)
   // straight to the controller; supportsStripGrayscale() gates the path. See
   // EInkDisplay::writeGrayscalePlaneStrip.
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
   bool supportsStripGrayscale() const;
+  // True when the driver's factoryMode grayscale consumes absolute planes:
+  // LSB plane bit = white or dark gray, MSB plane bit = white or light gray.
+  bool supportsAbsoluteGrayPlanes() const;
 
   // True when displayGrayscaleBase() defers the base activation so the gray
   // planes join it in a single waveform (Paper Mono). Callers should then route
