@@ -23,6 +23,7 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#include "substack/SubstackActivity.h"
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
@@ -253,13 +254,22 @@ void ActivityManager::goToRecentBooks() {
 }
 
 void ActivityManager::goToBrowser() {
-  const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
+  const auto& servers = OPDS_STORE.getServers();
   if (servers.size() == 1) {
     replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
   } else {
     replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
   }
+}
+
+void ActivityManager::goToSubstack() {
+  auto activity = makeUniqueNoThrow<SubstackActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: Substack activity");
+    return;
+  }
+  replaceActivity(std::move(activity));
 }
 
 void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
@@ -306,6 +316,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
+    } else if (activityName == "Substack") {
+      initialMenuItem = HomeMenuItem::SUBSTACK;
     } else if (activityName == "Settings") {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }

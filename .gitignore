@@ -31,3 +31,4 @@ lib/EpdFont/scripts/output/
 /sdkconfig.*
 sdkconfig.sticky
 flake.*
+test/substack_preview/out/
