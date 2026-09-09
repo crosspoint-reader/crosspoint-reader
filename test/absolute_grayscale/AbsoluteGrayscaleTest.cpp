@@ -41,3 +41,23 @@ TEST(AbsoluteGrayscale, ImageQuantizersRetainFourEvenLevels) {
   AtkinsonDitherer overlay(1);
   EXPECT_EQ(overlay.processPixel(85, 0), 2);
 }
+
+TEST(AbsoluteGrayscale, TransparentPassesRetainBackgroundWithoutClearingBetweenPlanes) {
+  // Alternating B/W background, with four opaque pixels and four transparent ones.
+  uint8_t frame = 0xaa;
+  uint8_t planes[2] = {};
+  for (unsigned plane = 0; plane < 2; ++plane) {
+    for (unsigned x = 0; x < 4; ++x) {
+      const auto pixel = grayPlanePixel(x, plane == 1, true);
+      if (pixel.black)
+        frame &= ~(0x80 >> x);
+      else
+        frame |= 0x80 >> x;
+    }
+    planes[plane] = frame;
+  }
+  EXPECT_EQ(planes[0], 0x5a);
+  EXPECT_EQ(planes[1], 0x3a);
+  EXPECT_EQ(planes[0] & 0x0f, 0x0a);
+  EXPECT_EQ(planes[1] & 0x0f, 0x0a);
+}

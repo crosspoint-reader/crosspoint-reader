@@ -1,5 +1,6 @@
 #include "SleepActivity.h"
 
+#include <BitmapHelpers.h>
 #include <Epub.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FontCacheManager.h>
@@ -284,11 +285,12 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
           renderer.drawPixel(screenX, screenY, level < 3);
           break;
         case TransparentOverlayPass::GrayscaleLsb:
-          if (level == 1) renderer.drawPixel(screenX, screenY, false);
+        case TransparentOverlayPass::GrayscaleMsb: {
+          const auto pixel =
+              grayPlanePixel(level, pass == TransparentOverlayPass::GrayscaleMsb, renderer.grayPlanesAreAbsolute());
+          if (pixel.write) renderer.drawPixel(screenX, screenY, pixel.black);
           break;
-        case TransparentOverlayPass::GrayscaleMsb:
-          if (level == 1 || level == 2) renderer.drawPixel(screenX, screenY, false);
-          break;
+        }
       }
     }
   }
@@ -343,9 +345,15 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
 
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::BW))
     return AlphaOverlayResult::Error;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return AlphaOverlayResult::Error;
+  } else {
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  }
 
-  renderer.clearScreen(0x00);
+  // Absolute planes retain B/W background bits; each visible overlay pixel is rewritten in both passes.
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -355,7 +363,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   }
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleMsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -719,9 +727,15 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   LOG_DBG("SLP", "Rendering transparent PNG overlay: %s (%dx%d)", path.c_str(), dimensions.width, dimensions.height);
 
   if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+  if (absolute) {
+    if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return false;
+  } else {
+    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  }
 
-  renderer.clearScreen(0x00);
+  // Absolute planes retain B/W background bits; each visible overlay pixel is rewritten in both passes.
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!converter.decodeToFramebuffer(path, renderer, config)) {
     renderer.setRenderMode(GfxRenderer::BW);
@@ -729,7 +743,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   }
   renderer.copyGrayscaleLsbBuffers();
 
-  renderer.clearScreen(0x00);
+  if (!absolute) renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
   if (!converter.decodeToFramebuffer(path, renderer, config)) {
     renderer.setRenderMode(GfxRenderer::BW);
