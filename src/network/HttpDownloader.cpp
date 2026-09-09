@@ -73,7 +73,8 @@ HttpDownloader::DownloadError runGetSecure(const std::string& startUrl, const st
     }
     for (const auto& h : headers) http.addHeader(h.first, h.second);
 
-    LOG_DBG("HTTP", "wolfSSL GET: %s", url.c_str());
+    LOG_DBG("HTTP", "wolfSSL GET: %s (heap %u, max block %u)", url.c_str(), (unsigned)ESP.getFreeHeap(),
+            (unsigned)ESP.getMaxAllocHeap());
     const int status = http.GET(
         [&http, &sink](const uint8_t* data, size_t len) {
           if (http.getStatus() != 200) return true;

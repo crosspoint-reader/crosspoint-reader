@@ -48,7 +48,8 @@ constexpr size_t MAX_MANIFEST_SIZE = 8 * 1024;
 constexpr size_t MAX_API_RESPONSE = 48 * 1024;
 // Browse responses stream to this SD temp file instead of DRAM: one page of
 // raw catalog JSON can run 60+ KB (BookFusion inlines heavy per-book
-// metadata), and buffering that in a std::string aborts on low heap.
+// metadata), and buffering that in a std::string aborts on low heap. Keep the
+// response until leaving the catalog so downloads can release the parsed rows.
 constexpr char BROWSE_TMP_PATH[] = "/.pcat_tmp.json";
 constexpr size_t MAX_BROWSE_RESPONSE = 1024 * 1024;
 constexpr int MAX_PAGE_SIZE = 16;
@@ -515,6 +516,7 @@ void PluginCatalogActivity::onEnter() {
 }
 
 void PluginCatalogActivity::enterPluginPicker() {
+  Storage.remove(BROWSE_TMP_PATH);
   installedPlugins = discoverPlugins();
   // Discovery just re-read the plugin folders; keep the event subscription
   // table in step so a plugin installed since boot starts receiving events
@@ -675,9 +677,7 @@ bool PluginCatalogActivity::fetchBrowseResponse() {
   return false;
 }
 
-void PluginCatalogActivity::fetchXmlList() {
-  if (!fetchBrowseResponse()) return;
-
+bool PluginCatalogActivity::parseXmlList() {
   const std::string origin = UrlUtils::extractHost(browseCurrentUrl);
   const std::string selfPath = pathOf(browseCurrentUrl);
   auto trimSlash = [](std::string s) {
@@ -716,11 +716,15 @@ void PluginCatalogActivity::fetchXmlList() {
     HalFile file;
     if (!parser) {
       LOG_ERR("PCAT", "OOM: XML list reader");
+      fail(StrId::STR_PARSE_FEED_FAILED);
+      return false;
     } else if (Storage.openFileForRead("PCAT", BROWSE_TMP_PATH, file)) {
       parser->parseFile(file);
+    } else {
+      fail(StrId::STR_PARSE_FEED_FAILED);
+      return false;
     }
   }
-  Storage.remove(BROWSE_TMP_PATH);
 
   // Folders first, then files, each alphabetical — matches how file managers list.
   std::sort(items.begin(), items.end(), [](const Item& a, const Item& b) {
@@ -728,9 +732,7 @@ void PluginCatalogActivity::fetchXmlList() {
     return strcasecmp(a.title.c_str(), b.title.c_str()) < 0;
   });
   hasMore = false;
-  nav.reset();
-  state = State::BROWSING;
-  requestUpdate();
+  return true;
 }
 
 bool PluginCatalogActivity::prevRowVisible() const {
@@ -762,12 +764,15 @@ const std::string& PluginCatalogActivity::activeBrowseBody() const {
 }
 
 void PluginCatalogActivity::fetchPage(const int newPage) {
-  if (manifest.isXmlList()) {
-    fetchXmlList();
-    return;
-  }
-  page = newPage;
-  if (!fetchBrowseResponse()) return;
+  if (!manifest.isXmlList()) page = newPage;
+  if (!fetchBrowseResponse() || !parseBrowseResponse()) return;
+  nav.reset();
+  state = State::BROWSING;
+  requestUpdate();
+}
+
+bool PluginCatalogActivity::parseBrowseResponse() {
+  if (manifest.isXmlList()) return parseXmlList();
 
   JsonDocument filter;
   addFieldFilter(filter, manifest.itemsPath, manifest.titlePath);
@@ -782,11 +787,10 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
   // occupies DRAM, only the few fields the filter admits.
   JsonDocument doc;
   {
-    ScopedCleanup cleanup{[] { Storage.remove(BROWSE_TMP_PATH); }};
     HalFile file;
     if (!Storage.openFileForRead("PCAT", BROWSE_TMP_PATH, file)) {
       fail(StrId::STR_PARSE_FEED_FAILED);
-      return;
+      return false;
     }
     struct HalFileReader {
       HalFile& f;
@@ -800,7 +804,7 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
     if (parseErr != DeserializationError::Ok) {
       LOG_ERR("PCAT", "browse JSON parse error: %s", parseErr.c_str());
       fail(StrId::STR_PARSE_FEED_FAILED);
-      return;
+      return false;
     }
   }
 
@@ -834,9 +838,7 @@ void PluginCatalogActivity::fetchPage(const int newPage) {
   hasMore = static_cast<int>(items.size()) > manifest.pageSize;
   if (hasMore) items.resize(manifest.pageSize);
   computeInstallStatus();
-  nav.reset();
-  state = State::BROWSING;
-  requestUpdate();
+  return true;
 }
 
 // Badge each item by comparing its catalog version to the installed copy's
@@ -935,9 +937,30 @@ void PluginCatalogActivity::pollAuth() {
   }
 }
 
-void PluginCatalogActivity::downloadItem(const Item& item) {
-  beginDownload(item.title);
-  finishDownload(manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item));
+void PluginCatalogActivity::downloadItem(const int itemIndex) {
+  // Own only the selected item's metadata while TLS needs the catalog's heap.
+  Item item;
+  LOG_DBG("PCAT", "Download preparation: %u items, heap %u, max block %u", (unsigned)items.size(),
+          (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
+  {
+    RenderLock lock;
+    item = std::move(items[itemIndex]);
+    beginDownload(item.title);
+    releaseRows();
+    std::vector<fui::ListItem>().swap(rowItems);
+    std::vector<Item>().swap(items);
+  }
+  requestUpdateAndWait();
+  LOG_DBG("PCAT", "Catalog released for download: heap %u, max block %u", (unsigned)ESP.getFreeHeap(),
+          (unsigned)ESP.getMaxAllocHeap());
+  const auto result = manifest.isBundle() && !item.files.empty() ? downloadBundle(item) : downloadBook(item);
+  session.reset();
+  item = {};
+  // Reuse the SD response without another network request or resetting navigation.
+  if (!parseBrowseResponse()) return;
+  session = makeUniqueNoThrow<freeink::SecureHttpClient>();
+  if (!session) LOG_ERR("PCAT", "OOM: browse client; using per-request connections");
+  finishDownload(result);
 }
 
 void PluginCatalogActivity::downloadFinished(const bool cancelled) {
@@ -946,6 +969,7 @@ void PluginCatalogActivity::downloadFinished(const bool cancelled) {
 }
 
 HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& item) {
+  session.reset();
   const std::string subdir = substituted(manifest.bundleSubdir, &item);
   // Reject path traversal in the subdir (a hostile catalog could escape).
   if (subdir.empty() || subdir.find("..") != std::string::npos || subdir.front() == '/') {
@@ -1051,8 +1075,6 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
                                                               : std::vector<HttpDownloader::Header>{};
   session.reset();  // free browse TLS before the large file GET
   const auto result = downloadFile(fileUrl, dest, dlUser, dlPass, fileHeaders);
-  session.reset(new (std::nothrow) freeink::SecureHttpClient());
-  if (session) session->setReuse(true);
   if (result != HttpDownloader::OK) return result;
   clearBookCache(dest);
 
@@ -1175,7 +1197,7 @@ void PluginCatalogActivity::onBackButton() {
     browseCurrentUrl = browseHistory.back();
     browseHistory.pop_back();
     beginLoading();
-    fetchXmlList();
+    fetchPage(page);
   } else if (state == State::BROWSING && currentList >= 0) {
     // Browsing a picked list: Back returns to the list picker, not out.
     currentList = -1;
@@ -1229,10 +1251,10 @@ void PluginCatalogActivity::activateItem(const int itemIndex) {
     browseHistory.push_back(browseCurrentUrl);
     browseCurrentUrl = item.url;
     beginLoading();
-    fetchXmlList();
+    fetchPage(page);
     return;
   }
-  downloadItem(item);
+  downloadItem(itemIndex);
 }
 
 void PluginCatalogActivity::drawFooter() {
