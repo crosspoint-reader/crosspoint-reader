@@ -286,9 +286,9 @@ bool renderTransparentOverlayPass(HalFile& file, const OverlayBmpInfo& info, con
           break;
         case TransparentOverlayPass::GrayscaleLsb:
         case TransparentOverlayPass::GrayscaleMsb: {
-          const auto pixel =
+          const auto planePixel =
               grayPlanePixel(level, pass == TransparentOverlayPass::GrayscaleMsb, renderer.grayPlanesAreAbsolute());
-          if (pixel.write) renderer.drawPixel(screenX, screenY, pixel.black);
+          if (planePixel.write) renderer.drawPixel(screenX, screenY, planePixel.black);
           break;
         }
       }
