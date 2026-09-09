@@ -64,7 +64,8 @@ class Bitmap {
  public:
   static const char* errorToString(BmpReaderError err);
 
-  explicit Bitmap(HalFile& file, bool dithering = false) : file(file), dithering(dithering) {}
+  explicit Bitmap(HalFile& file, bool dithering = false, bool originalThresholds = false)
+      : file(file), dithering(dithering), originalThresholds(originalThresholds) {}
   ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
@@ -83,6 +84,7 @@ class Bitmap {
 
   HalFile& file;
   bool dithering = false;
+  bool originalThresholds = false;
   int width = 0;
   int height = 0;
   bool topDown = false;

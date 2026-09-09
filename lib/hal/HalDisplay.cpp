@@ -105,6 +105,11 @@ uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisp
 
 void HalDisplay::returnFrameBufferStorage() { einkDisplay.returnBuildStorage(); }
 
+bool HalDisplay::displayGrayscaleBase(GrayscaleMode mode, RefreshMode fallback, bool turnOffScreen) {
+  if (gpio.deviceIsX3() && fallback == HALF_REFRESH) einkDisplay.requestResync();
+  return einkDisplay.displayGrayscaleBase(mode, static_cast<EInkDisplay::RefreshMode>(fallback), turnOffScreen);
+}
+
 void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
   einkDisplay.copyGrayscaleBuffers(lsbBuffer, msbBuffer);
 }

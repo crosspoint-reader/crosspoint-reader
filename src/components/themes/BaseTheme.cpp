@@ -186,12 +186,15 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   constexpr int wideButtonPositions[] = {38, 154, 268, 384};
   const int* buttonPositions = renderer.getScreenWidth() >= 528 ? wideButtonPositions : narrowButtonPositions;
   const char* labels[] = {btn1, btn2, btn3, btn4};
+  const bool grayscale = renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute();
 
   for (int i = 0; i < 4; i++) {
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
+      // Zero gray-plane bits leave the monochrome hint from the base pass intact.
+      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, grayscale);
+      if (grayscale) continue;
       renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
       drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
                     textYOffset);
