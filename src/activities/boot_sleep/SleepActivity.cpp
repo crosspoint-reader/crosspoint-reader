@@ -565,6 +565,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
     Bitmap bitmap(file, true,
                   renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+                      display.getController() == HalDisplay::Controller::SSD1677 &&
                       SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
@@ -587,6 +588,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       delay(100);
       Bitmap bitmap(randFile, true,
                     renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+                        display.getController() == HalDisplay::Controller::SSD1677 &&
                         SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
       if (bitmap.parseHeaders() == BmpReaderError::Ok) {
         renderBitmapSleepScreen(bitmap);
@@ -795,8 +797,11 @@ void SleepActivity::renderCoverSleepScreen() const {
     return (this->*renderNoCoverSleepScreen)();
   }
 
-  const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
-                        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+  // SSD absolute images use the new thresholds; other panels retain legacy tuning.
+  const bool originalThresholds =
+      renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+      display.getController() == HalDisplay::Controller::SSD1677 &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
   std::string coverBmpPath;
   bool cropped = SETTINGS.sleepScreenCoverMode == CrossPointSettings::SLEEP_SCREEN_COVER_MODE::CROP;
 
@@ -838,12 +843,12 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastEpub.generateCoverBmp(cropped, absolute)) {
+    if (!lastEpub.generateCoverBmp(cropped, originalThresholds)) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    coverBmpPath = lastEpub.getCoverBmpPath(cropped, absolute);
+    coverBmpPath = lastEpub.getCoverBmpPath(cropped, originalThresholds);
   } else {
     return (this->*renderNoCoverSleepScreen)();
   }

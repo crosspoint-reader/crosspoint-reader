@@ -1,9 +1,13 @@
 #pragma once
 #include <Arduino.h>
+#include <BoardConfig.h>
 #include <EInkDisplay.h>
 
 class HalDisplay {
  public:
+  using Controller = BoardConfig::DisplayController;
+  Controller getController() const;
+
   using GrayscaleMode = freeink::GrayscaleMode;
   using GrayscaleCapabilities = freeink::GrayscaleCapabilities;
   using GrayscaleBase = freeink::GrayscaleBase;

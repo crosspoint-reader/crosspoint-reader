@@ -4,6 +4,7 @@
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
@@ -117,7 +118,9 @@ void BmpViewerActivity::onEnter() {
   HalFile file;
   // 1. Open the BMP file
   if (Storage.openFileForRead("BMP", filePath, file)) {
-    Bitmap bitmap(file, true, renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported());
+    Bitmap bitmap(file, true,
+                  renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+                      display.getController() == HalDisplay::Controller::SSD1677);
 
     // 2. Parse headers to get dimensions
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {

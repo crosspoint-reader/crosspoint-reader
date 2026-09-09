@@ -156,16 +156,16 @@ class AtkinsonDitherer {
         quantized = 3;
         quantizedValue = 255;
       }
-    } else {  // fine-tuned to X4 eink display
+    } else {  // Legacy panel tuning; slightly darker midtones.
       if (adjusted < 30) {
         quantized = 0;
         quantizedValue = 15;
-      } else if (adjusted < 50) {
+      } else if (adjusted < 55) {
         quantized = 1;
-        quantizedValue = 30;
-      } else if (adjusted < 140) {
+        quantizedValue = 35;
+      } else if (adjusted < 150) {
         quantized = 2;
-        quantizedValue = 80;
+        quantizedValue = 90;
       } else {
         quantized = 3;
         quantizedValue = 210;
@@ -262,16 +262,16 @@ class FloydSteinbergDitherer {
         quantized = 3;
         quantizedValue = 255;
       }
-    } else {  // fine-tuned to X4 eink display
+    } else {  // Legacy panel tuning; slightly darker midtones.
       if (adjusted < 30) {
         quantized = 0;
         quantizedValue = 15;
-      } else if (adjusted < 50) {
+      } else if (adjusted < 55) {
         quantized = 1;
-        quantizedValue = 30;
-      } else if (adjusted < 140) {
+        quantizedValue = 35;
+      } else if (adjusted < 150) {
         quantized = 2;
-        quantizedValue = 80;
+        quantizedValue = 90;
       } else {
         quantized = 3;
         quantizedValue = 210;
