@@ -153,15 +153,48 @@ void BmpViewerActivity::onEnter() {
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
-      // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,
-      // pageHeight, 0, 0)
       renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
 
       // Draw UI hints on the base layer
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      // Single pass for non-grayscale images
+      if (bitmap.hasGreyscale()) {
+        renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
 
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        bool planesReady = true;
+        for (const auto mode : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+          if (bitmap.rewindToData() != BmpReaderError::Ok) {
+            LOG_ERR("BMP", "Failed to rewind bitmap for grayscale rendering");
+            planesReady = false;
+            break;
+          }
+          renderer.clearScreen(0x00);
+          renderer.setRenderMode(mode);
+          renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+          GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+          if (mode == GfxRenderer::GRAYSCALE_LSB) {
+            renderer.copyGrayscaleLsbBuffers();
+          } else {
+            renderer.copyGrayscaleMsbBuffers();
+          }
+        }
+        if (planesReady) renderer.displayGrayBuffer();
+
+        // Rebuild the BW framebuffer for popups and subsequent differential updates.
+        renderer.setRenderMode(GfxRenderer::BW);
+        renderer.clearScreen();
+        if (bitmap.rewindToData() == BmpReaderError::Ok) {
+          renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+        } else {
+          LOG_ERR("BMP", "Failed to rewind bitmap to restore the BW framebuffer");
+          renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+          planesReady = false;
+        }
+        GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+        renderer.cleanupGrayscaleWithFrameBuffer();
+        if (!planesReady) renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      } else {
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      }
 
     } else {
       // Handle file parsing error
