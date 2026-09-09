@@ -47,9 +47,6 @@ class LibraryListActivity final : public UiTabListActivity {
   bool handleCustomInput() override;
   bool handleButtons() override;
   void navigateButtons() override;
-  // The FUI screen owns the header so its Search action participates in the
-  // same touch routing as tabs and rows.
-  void drawChrome() override {}
   void drawFooter() override;
 
  private:
@@ -85,7 +82,7 @@ class LibraryListActivity final : public UiTabListActivity {
   bool groupable() const;
 
   // Screen building
-  void buildHeader(UiScreen& screen);
+  void buildSearchAction(UiScreen& screen);
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
   void formatInitialHeading(uint32_t initial, std::string& out) const;

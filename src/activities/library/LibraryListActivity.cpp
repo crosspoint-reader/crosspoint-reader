@@ -601,29 +601,49 @@ void LibraryListActivity::formatAuthorHeading(const std::string& author, std::st
   }
 }
 
-void LibraryListActivity::buildHeader(UiScreen& screen) {
-  fui::HeaderProps header;
-  header.title = headerTitle();
-  header.borderEdges = fui::EdgeBottom;
-  if (!groupsCollapsed && !degraded) {
-    header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
-    header.trailingAction = ACTION_SEARCH;
-    const int titleFontId = uiScaleSpec().titleFontId;
-    header.actionOffsetY =
-        static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+void LibraryListActivity::buildSearchAction(UiScreen& screen) {
+  if (groupsCollapsed || degraded) return;
+
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto& theme = screen.theme();
+  const auto icon = fui::bitmapFromIcon(icon_search_32);
+  const int titleFontId = uiScaleSpec().titleFontId;
+  const int16_t buttonWidth = static_cast<int16_t>(icon.width + 8);
+  const int16_t buttonHeight = static_cast<int16_t>(icon.height + 4);
+  const int16_t headerTop = static_cast<int16_t>(metrics.topPadding);
+  int16_t buttonY = static_cast<int16_t>(headerTop + (metrics.headerHeight - buttonHeight) / 2);
+  if (metrics.headerBatteryDetached) {
+    const int titleLineHeight = renderer.getLineHeight(titleFontId);
+    const int titleTop = headerTop + metrics.headerHeight - theme.headerUnderline - theme.spaceMd - titleLineHeight;
+    buttonY = static_cast<int16_t>(titleTop + (titleLineHeight - buttonHeight) / 2);
   }
-  screen.header(header);
-  screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().verticalSpacing));
+
+  int16_t rightInset = theme.headerSidePadding;
+  if (!metrics.headerBatteryDetached && metrics.headerBatterySide == 0) {
+    rightInset = static_cast<int16_t>(rightInset + metrics.batteryWidth + theme.spaceMd * 2 +
+                                      renderer.getTextWidth(SMALL_FONT_ID, "100%"));
+  }
+
+  fui::ButtonProps search;
+  search.icon = icon;
+  search.action = ACTION_SEARCH;
+  search.inputMask = fui::InputTouch;
+  search.styles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
+  search.minTouchSize = theme.minTouchSize;
+  fui::button(screen.frame(),
+              fui::Rect{static_cast<int16_t>(renderer.getScreenWidth() - rightInset - buttonWidth), buttonY,
+                        buttonWidth, buttonHeight},
+              search);
 }
 
 void LibraryListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // The position readout owns the line above the hints; rows must not overlap
-  // it. The header itself is in the FUI layout so Search is a real action.
+  // it. Search is overlaid on the standard battery/title header as a FUI action.
   const int16_t readoutReserved = static_cast<int16_t>(renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
-  buildHeader(screen);
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
+  buildSearchAction(screen);
 
   if (!degraded) buildTabBar(screen);
   if (bookRowCount() == 0) {
