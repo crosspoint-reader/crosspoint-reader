@@ -57,11 +57,9 @@ void BmpViewerActivity::loadSiblingImages() {
 
   FsHelpers::sortFileList(siblingImages);
 
-  for (size_t i = 0; i < siblingImages.size(); ++i) {
-    if (siblingImages[i] == fileName) {
-      currentImageIndex = static_cast<int>(i);
-      break;
-    }
+  const auto image = std::find(siblingImages.begin(), siblingImages.end(), fileName);
+  if (image != siblingImages.end()) {
+    currentImageIndex = static_cast<int>(image - siblingImages.begin());
   }
 }
 

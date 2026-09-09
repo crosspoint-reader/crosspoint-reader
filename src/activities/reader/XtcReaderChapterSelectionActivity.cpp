@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <vector>
 
 #include "MappedInputManager.h"
@@ -23,12 +24,10 @@ int XtcReaderChapterSelectionActivity::findChapterIndexForPage(const uint32_t pa
   }
 
   const auto& chapters = xtc->getChapters();
-  for (size_t i = 0; i < chapters.size(); i++) {
-    if (page >= chapters[i].startPage && page <= chapters[i].endPage) {
-      return static_cast<int>(i);
-    }
-  }
-  return 0;
+  const auto chapter = std::find_if(chapters.begin(), chapters.end(), [page](const auto& candidate) {
+    return page >= candidate.startPage && page <= candidate.endPage;
+  });
+  return chapter != chapters.end() ? static_cast<int>(chapter - chapters.begin()) : 0;
 }
 
 void XtcReaderChapterSelectionActivity::onEnter() {

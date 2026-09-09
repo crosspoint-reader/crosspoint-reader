@@ -12,7 +12,7 @@ struct tinfl_decompressor_tag;
 // Replaces the uzlib-backed InflateReader on the throughput paths (EPUB zip
 // entries, PNG IDAT). tinfl decodes via lookup tables where uzlib walks the
 // Huffman tree bit-by-bit -- several times faster on this CPU -- at the cost
-// of a larger decompressor state (~11KB, transient for the scope of the
+// of a larger decompressor state (~8KB, transient for the scope of the
 // stream; taken from the lent framebuffer bytes via buildscratch::claim()
 // when a FrameBufferLoan is active, heap otherwise). FontDecompressor
 // intentionally stays on InflateReader:
@@ -49,8 +49,7 @@ class InflateStream {
   InflateStream& operator=(const InflateStream&) = delete;
 
   // Allocate decompressor state (and the 32KB window when streaming) and reset
-  // stream state. Reuses existing allocations on repeated calls. Returns false
-  // on OOM.
+  // stream state. Releases prior storage first; leaves no allocation on OOM.
   bool init(bool streaming);
 
   // Free the decompressor state and window.
@@ -73,7 +72,7 @@ class InflateStream {
   Status readAtMost(uint8_t* dest, size_t maxLen, size_t* produced);
 
  private:
-  tinfl_decompressor_tag* state = nullptr;  // ~11KB: heap, or inside the claimed build scratch
+  tinfl_decompressor_tag* state = nullptr;  // ~8KB: heap, or inside the claimed build scratch
   uint8_t* window = nullptr;                // 32KB ring, streaming mode only
   uint8_t* arenaBase = nullptr;             // non-null when state/window live in lent framebuffer bytes
   size_t windowPos = 0;                     // ring write cursor
