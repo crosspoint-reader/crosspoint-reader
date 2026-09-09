@@ -582,7 +582,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   screen.list(props);
 }
 
-void LibraryListActivity::formatInitialHeading(uint32_t initial, std::string& out) const {
+void LibraryListActivity::formatInitialHeading(uint32_t initial, std::string& out) {
   out.clear();
   if (initial == 0) {
     out.push_back('#');

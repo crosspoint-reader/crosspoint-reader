@@ -85,7 +85,7 @@ class LibraryListActivity final : public UiTabListActivity {
   void buildSearchAction(UiScreen& screen);
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
-  void formatInitialHeading(uint32_t initial, std::string& out) const;
+  static void formatInitialHeading(uint32_t initial, std::string& out);
   void formatAuthorHeading(const std::string& author, std::string& out) const;
   void drawPositionReadout() const;
   void drawHoldHelp() const;
