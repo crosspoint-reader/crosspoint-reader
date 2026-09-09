@@ -70,7 +70,7 @@ INSTANTIATE_TEST_SUITE_P(CssVerticalAlign, ChapterHtmlSlimParserTest,
                          ::testing::Values("vertical-align: super", "vertical-align: sub"));
 
 TEST_F(ChapterHtmlSlimParserTest, ParagraphWithHiddenAttributeShouldBeSkipped) {
-  const XML_Char* attributes[] = {"hidden", "hidden"};
+  const XML_Char* attributes[] = {"hidden", "hidden", nullptr};
 
   parser.beginParse();
   ChapterHtmlSlimParser::startElement(&parser, "p", attributes);
@@ -80,7 +80,7 @@ TEST_F(ChapterHtmlSlimParserTest, ParagraphWithHiddenAttributeShouldBeSkipped) {
 }
 
 TEST_F(ChapterHtmlSlimParserTest, HeaderWithHiddenAttributeShouldBeSkipped) {
-  const XML_Char* attributes[] = {"hidden", "hidden"};
+  const XML_Char* attributes[] = {"hidden", "hidden", nullptr};
 
   parser.beginParse();
   ChapterHtmlSlimParser::startElement(&parser, "h1", attributes);
@@ -90,7 +90,7 @@ TEST_F(ChapterHtmlSlimParserTest, HeaderWithHiddenAttributeShouldBeSkipped) {
 }
 
 TEST_F(ChapterHtmlSlimParserTest, SpanWithHiddenAttributeShouldBeSkipped) {
-  const XML_Char* attributes[] = {"hidden", "hidden"};
+  const XML_Char* attributes[] = {"hidden", "hidden", nullptr};
 
   parser.beginParse();
   ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
@@ -106,7 +106,7 @@ TEST_F(ChapterHtmlSlimParserTest, SpanWithHiddenAttributeShouldBeSkipped) {
 }
 
 TEST_F(ChapterHtmlSlimParserTest, DivWithHiddenAttributeContentShouldBeSkipped) {
-  const XML_Char* attributes[] = {"hidden", "hidden"};
+  const XML_Char* attributes[] = {"hidden", "hidden", nullptr};
 
   parser.beginParse();
   ChapterHtmlSlimParser::startElement(&parser, "div", attributes);
