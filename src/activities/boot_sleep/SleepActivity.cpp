@@ -357,8 +357,8 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   if (!renderTransparentOverlayPass(file, info, placement, renderer, row.get(), TransparentOverlayPass::GrayscaleLsb)) {
     renderer.setRenderMode(GfxRenderer::BW);
-    // The BW composite is already on the panel. Keep it instead of falling
-    // through to another overlay with this grayscale work buffer cleared.
+    // Keep the current display instead of trying another overlay with a
+    // framebuffer that now contains an incomplete gray plane.
     return AlphaOverlayResult::Rendered;
   }
   renderer.copyGrayscaleLsbBuffers();
@@ -683,7 +683,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     if (ready)
       renderer.displayGrayBuffer();
     else
-      LOG_ERR("SLP", "Incomplete grayscale image; keeping the B/W base");
+      LOG_ERR("SLP", "Incomplete grayscale image; keeping the current display");
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }
