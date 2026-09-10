@@ -43,6 +43,7 @@ class GfxRenderer {
 
   HalDisplay& display;
   RenderMode renderMode;
+  bool absoluteGrayPlanes = false;
   Orientation orientation;
   bool fadingFix;
   uint8_t* frameBuffer = nullptr;
@@ -331,7 +332,18 @@ class GfxRenderer {
   void displayGrayscaleBase(HalDisplay::RefreshMode fallback = HalDisplay::HALF_REFRESH) const;
   void copyGrayscaleLsbBuffers() const;
   void copyGrayscaleMsbBuffers() const;
-  void displayGrayBuffer() const;
+  // absolute = true runs the driver's factoryMode four-tone waveform on
+  // absolute planes (see setAbsoluteGrayPlanes).
+  void displayGrayBuffer(bool absolute = false) const;
+  // True when the display can render images through an absolute four-tone
+  // pass: the GRAYSCALE_LSB plane then holds white|dark gray and the
+  // GRAYSCALE_MSB plane white|light gray, instead of the differential masks.
+  bool supportsAbsoluteGrayPlanes() const;
+  // Switch the plane content drawBitmap() produces in GRAYSCALE_LSB/MSB modes
+  // between differential masks (default) and absolute planes. Absolute planes
+  // are cleared to white (0xFF) and B/W overlays are drawn normally into them.
+  void setAbsoluteGrayPlanes(const bool absolute) { this->absoluteGrayPlanes = absolute; }
+  bool grayPlanesAreAbsolute() const { return absoluteGrayPlanes; }
 
   // Tiled grayscale (X4): stream one band of a plane straight to controller RAM
   // from `scratch` (panelWidthBytes * numRows, physical rows [yStart, yStart+
