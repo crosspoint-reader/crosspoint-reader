@@ -23,15 +23,8 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool, std::ve
   for (size_t index = 0; index < words.size(); ++index) order[index] = static_cast<uint16_t>(index);
   return true;
 }
+int detectParagraphLevel(const char*, int, int) { return 0; }
 }  // namespace BidiUtils
-
-TextBlock::TextBlock(const std::vector<std::string>&, const std::vector<int16_t>&,
-                     const std::vector<EpdFontFamily::Style>&, const std::vector<uint8_t>&,
-                     const std::vector<uint16_t>&, const BlockStyle& blockStyle, std::vector<std::string> rubyTexts,
-                     std::vector<LinkSpan> linkSpans)
-    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), linkSpans(std::move(linkSpans)) {}
-
-bool TextBlock::hasRuby() const { return false; }
 
 ImageBlock::ImageBlock(const std::string& imagePath, const std::string& srcPath, int16_t width, int16_t height)
     : imagePath(imagePath), srcPath(srcPath), width(width), height(height) {}
