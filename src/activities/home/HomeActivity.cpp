@@ -311,7 +311,7 @@ void HomeActivity::render(RenderLock&&) {
 
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    menuIcons.insert(menuIcons.begin() + 2, Blocks);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
