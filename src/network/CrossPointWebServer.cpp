@@ -2451,7 +2451,7 @@ void CrossPointWebServer::handlePluginFs() {
 }
 
 void CrossPointWebServer::handlePluginRunnerPage() const {
-  sendHtmlContent(server.get(), RunnerPageHtml, sizeof(RunnerPageHtml));
+  sendStaticContent(server.get(), RunnerPageHtml, sizeof(RunnerPageHtml), RunnerPageHtmlETag, "text/html");
   LOG_DBG("WEB", "Served plugin runner page");
 }
 
