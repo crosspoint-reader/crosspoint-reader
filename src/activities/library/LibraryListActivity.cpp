@@ -14,6 +14,8 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "RecentBooksStore.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -26,25 +28,11 @@ namespace {
 constexpr int SIDE_PADDING = 12;
 constexpr unsigned long LONG_PRESS_MS = 1000;
 
-constexpr int ADDED_TAB = 0;
-constexpr int TITLE_TAB = 1;
-constexpr int AUTHOR_TAB = 2;
+constexpr int RECENT_TAB = 0;
+constexpr int ADDED_TAB = 1;
+constexpr int TITLE_TAB = 2;
+constexpr int AUTHOR_TAB = 3;
 constexpr int TAB_SLOTS = AUTHOR_TAB + 1;
-
-constexpr int sortTabIndex(const library::SortOrder order) {
-  switch (order) {
-    case library::SortOrder::AddedAsc:
-    case library::SortOrder::AddedDesc:
-      return ADDED_TAB;
-    case library::SortOrder::TitleAsc:
-    case library::SortOrder::TitleDesc:
-      return TITLE_TAB;
-    case library::SortOrder::AuthorAsc:
-    case library::SortOrder::AuthorDesc:
-      return AUTHOR_TAB;
-  }
-  return ADDED_TAB;
-}
 
 constexpr bool isDescending(const library::SortOrder order) {
   return order == library::SortOrder::AddedDesc || order == library::SortOrder::TitleDesc ||
@@ -67,6 +55,7 @@ constexpr library::SortOrder orderForTab(const int tab, const uint8_t descending
 }
 
 const char* tabLabelFor(const int tab) {
+  if (tab == RECENT_TAB) return tr(STR_LIBRARY_TAB_RECENT);
   if (tab == TITLE_TAB) return tr(STR_LIBRARY_TAB_TITLE);
   if (tab == AUTHOR_TAB) return tr(STR_LIBRARY_TAB_AUTHOR);
   return tr(STR_LIBRARY_TAB_TIME);
@@ -86,6 +75,10 @@ void LibraryListActivity::onEnter() {
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
+
+  // Recent is backed by the resident store. Prune before opening the index so
+  // its persistence write never overlaps the long-lived index reader.
+  if (RECENT_BOOKS.pruneMissing()) RECENT_BOOKS.saveToFile();
 
   // Optimistic open: if an index exists, paint from it immediately and let the
   // user decide when to refresh. Only a missing or unreadable index forces the
@@ -136,16 +129,24 @@ int LibraryListActivity::selectedEntry() const {
   return entry < 0 ? 0 : entry;
 }
 
-void LibraryListActivity::openSelectedBook() {
-  if (!index.isOpen()) return;
-  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedEntry())));
-  if (ordinal == 0xFFFF) return;
+bool LibraryListActivity::showingRecents() const { return activeTabIndex == RECENT_TAB; }
 
-  library::ClixRecord record{};
+void LibraryListActivity::openSelectedBook() {
   std::string path;
-  if (!index.readRecord(ordinal, record) || !index.readPath(record, path)) {
-    LOG_ERR("LIB", "cannot resolve path for row %d", selectedEntry());
-    return;
+  if (showingRecents()) {
+    const auto& books = RECENT_BOOKS.getBooks();
+    if (selectedEntry() < 0 || selectedEntry() >= static_cast<int>(books.size())) return;
+    path = books[static_cast<size_t>(selectedEntry())].path;
+  } else {
+    if (!index.isOpen()) return;
+    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(selectedEntry())));
+    if (ordinal == 0xFFFF) return;
+
+    library::ClixRecord record{};
+    if (!index.readRecord(ordinal, record) || !index.readPath(record, path)) {
+      LOG_ERR("LIB", "cannot resolve path for row %d", selectedEntry());
+      return;
+    }
   }
   // The reader screen this opens has its own surfaces; a lingering tap flash
   // would gray an unrelated element there.
@@ -165,11 +166,43 @@ void LibraryListActivity::activateIndex(const int index) {
 }
 
 void LibraryListActivity::onRowLongPress(const int index) {
-  if (!groupsCollapsed && groupable()) {
+  if (showingRecents()) {
+    const auto& books = RECENT_BOOKS.getBooks();
+    if (index < 0 || index >= static_cast<int>(books.size())) return;
+    promptRemoveRecentBook(books[static_cast<size_t>(index)].path, books[static_cast<size_t>(index)].title);
+  } else if (!groupsCollapsed && groupable()) {
     collapseGroups(index);
   } else {
     activateIndex(index);
   }
+}
+
+void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const std::string& title) {
+  const bool reopenIndex = index.isOpen();
+  index.close();
+  auto confirmation =
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title);
+  if (!confirmation) {
+    LOG_ERR("LIB", "OOM: recent removal confirmation");
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    return;
+  }
+
+  startActivityForResult(std::move(confirmation), [this, path, reopenIndex](const ActivityResult& result) {
+    swallowHeldReleases();
+    if (!result.isCancelled && RECENT_BOOKS.removeByPath(path)) {
+      closeRouting();
+      auto& nav = activeNav();
+      const int count = listCount();
+      if (count == 0) {
+        nav.selected = 0;
+      } else if (nav.selected > count) {
+        nav.selected = count;
+      }
+      nav.followOnBuild = true;
+    }
+    if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+  });
 }
 
 void LibraryListActivity::openSearch() {
@@ -216,10 +249,16 @@ void LibraryListActivity::onTabAction(const int index) {
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
   if (index < 0 || index >= TAB_SLOTS) return;
-  if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
-  sortOrder = orderForTab(index, descendingTabs);
-  // The filter holds positions in the old order, so it must be rebuilt.
-  applyFilter();
+  if (index != RECENT_TAB) {
+    if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
+    sortOrder = orderForTab(index, descendingTabs);
+    // The filter holds positions in the old order, so it must be rebuilt.
+    applyFilter();
+  } else {
+    groupsCollapsed = false;
+    groupCount = 0;
+  }
+  activeTabIndex = index;
   // Tab changes happen only while the bar owns focus. A tab's remembered row
   // must not pull focus back into the list after the switch.
   auto& nav = activeNav();
@@ -232,16 +271,17 @@ void LibraryListActivity::toggleSortDirection() { selectTab(activeTab(), true); 
 
 int LibraryListActivity::tabCount() const { return TAB_SLOTS; }
 
-int LibraryListActivity::activeTab() const { return sortTabIndex(sortOrder); }
+int LibraryListActivity::activeTab() const { return activeTabIndex; }
 
 const char* LibraryListActivity::tabLabel(const int index) const { return tabLabelFor(index); }
 
 fui::TabIndicator LibraryListActivity::tabIndicator(const int index) const {
-  if (index != activeTab()) return fui::TabIndicator::None;
+  if (index != activeTab() || index == RECENT_TAB) return fui::TabIndicator::None;
   return isDescending(sortOrder) ? fui::TabIndicator::Down : fui::TabIndicator::Up;
 }
 
 int LibraryListActivity::bookRowCount() const {
+  if (showingRecents()) return static_cast<int>(RECENT_BOOKS.getBooks().size());
   return query.empty() ? static_cast<int>(index.bookCount()) : static_cast<int>(filteredCount);
 }
 
@@ -255,7 +295,9 @@ int LibraryListActivity::rowFor(const int entry) const {
   return filtered[entry];
 }
 
-bool LibraryListActivity::groupable() const { return !degraded && !isAddedSort(sortOrder) && bookRowCount() > 0; }
+bool LibraryListActivity::groupable() const {
+  return !showingRecents() && !degraded && !isAddedSort(sortOrder) && bookRowCount() > 0;
+}
 
 uint32_t LibraryListActivity::titleInitialFor(const int entry) {
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
@@ -396,6 +438,14 @@ void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent&, void* 
 bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::string& author) {
   title.clear();
   author.clear();
+  if (showingRecents()) {
+    const auto& books = RECENT_BOOKS.getBooks();
+    if (entry < 0 || entry >= static_cast<int>(books.size())) return false;
+    const auto& book = books[static_cast<size_t>(entry)];
+    title = book.title;
+    author = book.author;
+    return true;
+  }
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
   library::ClixRecord record{};
   std::string name;
@@ -429,9 +479,27 @@ bool LibraryListActivity::handleButtons() {
   const int count = listCount();
   auto& nav = activeNav();
 
+  // Wait for release before opening the removal dialog. If it opened at the
+  // long-press threshold, that same release would immediately select Cancel in
+  // the dialog.
+  if (showingRecents() && !tabsFocused() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
+      const auto& books = RECENT_BOOKS.getBooks();
+      if (selectedEntry() < static_cast<int>(books.size())) {
+        const auto& book = books[static_cast<size_t>(selectedEntry())];
+        promptRemoveRecentBook(book.path, book.title);
+      }
+    } else if (count > 0) {
+      activateIndex(selectedEntry());
+    }
+    return true;
+  }
+
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
-      if (!degraded) openSearch();
+      if (!showingRecents() && !degraded) openSearch();
+    } else if (showingRecents()) {
+      // Removal is dispatched by the release branch above.
     } else if (!groupsCollapsed && groupable()) {
       collapseGroups(selectedEntry());
     } else {
@@ -446,7 +514,7 @@ bool LibraryListActivity::handleButtons() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (groupsCollapsed) {
       restoreExpandedList();
-    } else if (!query.empty()) {
+    } else if (!showingRecents() && !query.empty()) {
       query.clear();
       applyFilter();
       nav.selected = bookRowCount() > 0 ? 1 : 0;
@@ -465,7 +533,7 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
-      toggleSortDirection();
+      if (!showingRecents()) toggleSortDirection();
       return true;
     }
     if (count > 0) activateIndex(selectedEntry());
@@ -477,7 +545,7 @@ bool LibraryListActivity::handleButtons() {
 
 void LibraryListActivity::navigateButtons() {
   if (tabsFocused()) {
-    if (degraded) return;
+    if (degraded && !showingRecents()) return;
     buttonNavigator.onRelease({MappedInputManager::Button::ScreenDown}, [this] {
       const int count = listCount();
       if (count <= 0) return;
@@ -511,8 +579,8 @@ void LibraryListActivity::navigateButtons() {
 void LibraryListActivity::buildRows(UiScreen& screen) {
   auto& nav = activeNav();
   const int count = listCount();
-  const bool authorGrouped = isAuthorSort(sortOrder);
-  const bool grouped = !isAddedSort(sortOrder);
+  const bool authorGrouped = !showingRecents() && isAuthorSort(sortOrder);
+  const bool grouped = !showingRecents() && !isAddedSort(sortOrder);
 
   fui::ListProps props;
   props.count = static_cast<uint16_t>(count);
@@ -549,7 +617,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
         formatInitialHeading(titleInitialFor(bookEntry), title);
       }
     } else {
-      rowTextFor(entry, title, author);
+      if (!rowTextFor(entry, title, author)) continue;
       uint32_t initial = 0;
       bool startsGroup = false;
       if (authorGrouped) {
@@ -571,6 +639,7 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
     }
 
     item.label = title.c_str();
+    if (showingRecents()) item.icon = listIconFor(UITheme::getFileIcon(RECENT_BOOKS.getBooks()[entry].path), 32);
     item.actionValue = static_cast<int16_t>(entry);
     winItems.push_back(item);
     rows++;
@@ -602,7 +671,7 @@ void LibraryListActivity::formatAuthorHeading(const std::string& author, std::st
 }
 
 void LibraryListActivity::buildSearchAction(UiScreen& screen) {
-  if (groupsCollapsed || degraded) return;
+  if (showingRecents() || groupsCollapsed || degraded) return;
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& theme = screen.theme();
@@ -645,12 +714,12 @@ void LibraryListActivity::buildScreen(UiScreen& screen) {
                                                 static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
   buildSearchAction(screen);
 
-  if (!degraded) buildTabBar(screen);
+  if (!degraded || showingRecents()) buildTabBar(screen);
   if (bookRowCount() == 0) {
-    const char* message = tr(STR_LIBRARY_NO_RESULTS);
-    if (filterFailed) {
+    const char* message = showingRecents() ? tr(STR_NO_RECENT_BOOKS) : tr(STR_LIBRARY_NO_RESULTS);
+    if (!showingRecents() && filterFailed) {
       message = tr(STR_LIBRARY_SEARCH_UNAVAILABLE);
-    } else if (query.empty()) {
+    } else if (!showingRecents() && query.empty()) {
       message = tr(STR_LIBRARY_EMPTY);
     }
     screen.centeredText(message);
@@ -680,13 +749,13 @@ void LibraryListActivity::drawPositionReadout() const {
 }
 
 const char* LibraryListActivity::headerTitle() const {
-  return degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_LIBRARY);
+  return !showingRecents() && degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_LIBRARY);
 }
 
 void LibraryListActivity::drawHoldHelp() const {
   if (mappedInput.hasTouch() || groupsCollapsed) return;
   const char* help = nullptr;
-  if (tabsFocused() && !degraded)
+  if (tabsFocused() && !showingRecents() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SEARCH);
   else if (groupable())
     help = tr(STR_LIBRARY_HOLD_GROUPS);
@@ -704,8 +773,9 @@ void LibraryListActivity::drawFooter() {
 
   const char* backLabel = tabsFocused() ? tr(STR_HOME) : tr(STR_BACK);
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
-  const auto labels = tabsFocused() ? mappedInput.mapDirectionalLabels(backLabel, tr(STR_TOGGLE), tr(STR_DIR_LEFT),
-                                                                       tr(STR_DIR_RIGHT), "", tr(STR_SELECT))
-                                    : mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = tabsFocused()
+                          ? mappedInput.mapDirectionalLabels(backLabel, showingRecents() ? "" : tr(STR_TOGGLE),
+                                                             tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT), "", tr(STR_SELECT))
+                          : mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

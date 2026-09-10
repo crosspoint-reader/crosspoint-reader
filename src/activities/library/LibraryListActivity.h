@@ -9,8 +9,8 @@
 
 #include "activities/UiTabListActivity.h"
 
-// One indexed list of every book on the card, shown by arrival, title, or
-// author, with the title and author visible in expanded rows.
+// One Library screen: recently opened books from RecentBooksStore, plus every
+// indexed book on the card shown by arrival, title, or author.
 //
 // The two-slot row is the whole point rather than a styling choice: the problem
 // being solved is "I cannot find my books because I do not know the authors",
@@ -61,6 +61,7 @@ class LibraryListActivity final : public UiTabListActivity {
   // Input
   void openSelectedBook();
   void openSearch();
+  void promptRemoveRecentBook(const std::string& path, const std::string& title);
   bool collapseGroups(int bookEntry);
   void expandGroup(int groupEntry);
   void restoreExpandedList();
@@ -95,11 +96,13 @@ class LibraryListActivity final : public UiTabListActivity {
   // row 0 as the working selection exactly as the pre-ring code did.
   int selectedEntry() const;
   bool tabsFocused() const { return ringPos() == 0; }
+  bool showingRecents() const;
 
   library::LibraryIndexFile index;
+  int activeTabIndex = 0;
   library::SortOrder sortOrder = library::SortOrder::AddedDesc;
-  // One bit per tab; only Added starts descending.
-  uint8_t descendingTabs = 1u;
+  // One bit per tab; only Added starts descending (Recent has no direction).
+  uint8_t descendingTabs = 1u << 1;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;

@@ -15,29 +15,28 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
     - [3.2 Reading Mode](#32-reading-mode)
     - [3.3 Browse Files Screen](#33-browse-files-screen)
     - [3.4 Library Screen](#34-library-screen)
-    - [3.5 Recent Books Screen](#35-recent-books-screen)
-    - [3.6 File Transfer Screen](#36-file-transfer-screen)
-    - [3.6.1 Calibre Wireless Transfers](#361-calibre-wireless-transfers)
+    - [3.5 File Transfer Screen](#35-file-transfer-screen)
+    - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
       - [Installing the Plugin in Calibre](#installing-the-plugin-in-calibre)
       - [Configuring the CrossPoint Plugin in Calibre](#configuring-the-crosspoint-plugin-in-calibre)
       - [Uploading Books](#uploading-books)
       - [Removing a Book](#removing-a-book)
-    - [3.7 Settings](#37-settings)
-      - [3.7.1 Display](#371-display)
-      - [3.7.2 Reader](#372-reader)
-      - [3.7.3 Controls](#373-controls)
-      - [3.7.4 System](#374-system)
-      - [3.7.5 OPDS Servers (Multiple Libraries)](#375-opds-servers-multiple-libraries)
-      - [3.7.6 Web Settings (Wi-Fi + OPDS)](#376-web-settings-wi-fi--opds)
-      - [3.7.7 KOReader Sync Quick Setup](#377-koreader-sync-quick-setup)
+    - [3.6 Settings](#36-settings)
+      - [3.6.1 Display](#361-display)
+      - [3.6.2 Reader](#362-reader)
+      - [3.6.3 Controls](#363-controls)
+      - [3.6.4 System](#364-system)
+      - [3.6.5 OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries)
+      - [3.6.6 Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds)
+      - [3.6.7 KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)
         - [Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)](#option-a-crosspoint-sync-server-synccrosspointreadercom-default)
         - [Option B: Legacy Public KOReader Server (`sync.koreader.rocks`)](#option-b-legacy-public-koreader-server-synckoreaderrocks)
         - [Option C: Self-Hosted Server (Docker Compose)](#option-c-self-hosted-server-docker-compose)
         - [Syncing While Reading](#syncing-while-reading)
-    - [3.8 Sleep Screen](#38-sleep-screen)
+    - [3.7 Sleep Screen](#37-sleep-screen)
       - [Cover settings](#cover-settings)
       - [Custom images](#custom-images)
-    - [3.9 Custom Fonts (SD Card)](#39-custom-fonts-sd-card)
+    - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
   - [4. Reading Mode](#4-reading-mode)
     - [Page Turning](#page-turning)
     - [Chapter Navigation](#chapter-navigation)
@@ -108,7 +107,7 @@ Upon turning the device on for the first time, you will be placed on the **[Home
 
 ### 3.1 Home Screen
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[Recent Books](#35-recent-books-screen)**, **[File Transfer](#36-file-transfer-screen)**, or **[Settings](#37-settings)**.
+The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, **[Browse Files](#33-browse-files-screen)**, the **[Library](#34-library-screen)**, **[File Transfer](#35-file-transfer-screen)**, or **[Settings](#36-settings)**.
 
 ### 3.2 Reading Mode
 
@@ -125,9 +124,10 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library indexes every supported book on the SD card and shows its title and author without requiring you to remember its folder. Its three tabs provide different views of the same collection. An arrow beside the active tab shows the sort direction:
+The Library indexes every supported book on the SD card and shows its title and author without requiring you to remember its folder. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
 
-- **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first. This is separate from **Recent Books**, which contains only books you have opened recently.
+- **Recent** lists the ten books you opened most recently. Hold a book to remove it from this list.
+- **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first.
 - **Title** groups books by the first letter of the title. Up sorts A-Z and down sorts Z-A. Titles beginning with numbers or punctuation appear under `#`; letters from non-English scripts, including Hebrew, have their own groups.
 - **Author** groups books by author. Up sorts A-Z and down sorts Z-A.
 
@@ -139,15 +139,11 @@ On a button-only device:
 - While the tabs are focused, hold **Confirm** to open Search.
 - In the Title or Author views, hold **Confirm** on a book to collapse the list to its letter or author groups. The matching group remains selected. Press **Confirm** to enter a group, or **Back** to restore the exact book and position you came from.
 
-On a touch device, tap tabs, books, and the Search icon directly. Tap the active tab again to reverse its sort direction. Swipe to scroll. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Added** view is not grouped; tapping or long-pressing a book opens it.
+On a touch device, tap tabs, books, and the Search icon directly. Tap an active indexed tab again to reverse its sort direction. Swipe to scroll. Long-press a book in the Recent view to remove it from the list. Long-press a book in a Title or Author view to collapse to the group list, then tap a group to expand it. The **Added** view is not grouped; tapping or long-pressing a book opens it.
 
 The index is created automatically the first time the Library is opened. To pick up later file changes or updated metadata, use **Settings → System → Rebuild library index**. The **Use book metadata** setting controls whether the index reads titles and authors stored inside books.
 
-### 3.5 Recent Books Screen
-
-The Recent Books screen lists the books opened most recently, displaying title and author. It is a short reading-history list, not the Library's complete **Added** view.
-
-### 3.6 File Transfer Screen
+### 3.5 File Transfer Screen
 
 The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
 
@@ -164,7 +160,7 @@ A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined
 > [!TIP]
 > If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
 
-### 3.6.1 Calibre Wireless Transfers
+### 3.5.1 Calibre Wireless Transfers
 
 CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
 
@@ -206,11 +202,11 @@ The CrossPoint plugin will connect to your device, create a folder for the book'
 
 Books cannot be removed from your device through Calibre. Use the web interface instead.
 
-### 3.7 Settings
+### 3.6 Settings
 
 The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
 
-#### 3.7.1 Display
+#### 3.6.1 Display
 
 - **Sleep Screen**: Which sleep screen to display when the device sleeps:
   
@@ -267,7 +263,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 > [!NOTE]
 > A battery charging indicator is shown on the battery icon whenever the device is actively charging.
 
-#### 3.7.2 Reader
+#### 3.6.2 Reader
 
 - **Reader Font Family**: Choose the font used for reading:
   
@@ -306,7 +302,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
 
-#### 3.7.3 Controls
+#### 3.6.3 Controls
 
 - **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
 
@@ -331,7 +327,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
 - **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
 
-#### 3.7.4 System
+#### 3.6.4 System
 
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
 
@@ -353,7 +349,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#39-custom-fonts-sd-card) for more information.
 
-#### 3.7.5 OPDS Servers (Multiple Libraries)
+#### 3.6.5 OPDS Servers (Multiple Libraries)
 
 CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs.
 
@@ -384,7 +380,7 @@ You can also manage OPDS servers from the web interface while in File Transfer m
 
 For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#376-web-settings-wi-fi--opds).
 
-#### 3.7.6 Web Settings (Wi-Fi + OPDS)
+#### 3.6.6 Web Settings (Wi-Fi + OPDS)
 
 While in **File Transfer** mode, the web settings page includes management cards for both **Wi-Fi Networks** and **OPDS Servers**.
 
@@ -399,7 +395,7 @@ Behavior notes:
 - Leaving Password blank while editing keeps the existing saved password unchanged.
 - The web UI can save hidden-network SSIDs, but connecting to hidden networks still depends on the device-side Wi-Fi connection flow.
 
-#### 3.7.7 KOReader Sync Quick Setup
+#### 3.6.7 KOReader Sync Quick Setup
 
 CrossPoint can sync reading progress with KOReader-compatible sync servers.
 It also interoperates with KOReader apps/devices when they use the same server and credentials.
@@ -529,7 +525,7 @@ Once any of the options above is set up, press **Confirm** while reading to open
 - With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
 - With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
 
-### 3.8 Sleep Screen
+### 3.7 Sleep Screen
 
 The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
 
@@ -578,7 +574,7 @@ Transparent overlay files are intentionally separate from normal sleep images. R
 
 ---
 
-### 3.9 Custom Fonts (SD Card)
+### 3.8 Custom Fonts (SD Card)
 
 CrossPoint supports loading additional fonts from the SD card, extending beyond the two built-in families (Noto Serif, Noto Sans). Custom fonts can include extended Unicode coverage, enabling CJK (Chinese, Japanese, Korean) and other scripts.
 
