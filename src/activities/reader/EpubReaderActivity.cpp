@@ -155,8 +155,18 @@ EpubReaderActivity::~EpubReaderActivity() {
   discardOverlayPage();  // free the overlay's page snapshot if one is held
 
   if (footnoteDepth > 0 && epub) {
-    const SavedPosition& origin = savedPositions[0];
-    saveProgress(origin.spineIndex, origin.pageNumber, 0);
+    // Exiting mid-footnote must not leave progress on the footnote text:
+    // resume at the origin of the footnote excursion, its lowest stack entry.
+    // Link jumps are reading navigation, not excursions — per-render saves
+    // already hold the current page, so restoring a pre-link origin would
+    // silently discard everything read since the jump.
+    for (int i = 0; i < footnoteDepth; i++) {
+      if (savedPositions[i].isFootnote) {
+        const SavedPosition& origin = savedPositions[i];
+        saveProgress(origin.spineIndex, origin.pageNumber, 0);
+        break;
+      }
+    }
   }
 
   section.reset();
@@ -555,7 +565,7 @@ void EpubReaderActivity::loop() {
       const auto* link = EpubReaderUtils::linkAtPoint(currentPageLinks, touchX, touchY, currentPageLinkMarginLeft,
                                                       currentPageLinkMarginTop);
       if (link) {
-        navigateToHref(link->href, true);
+        navigateToHref(link->href, true, false);
         return;
       }
     }
@@ -2455,11 +2465,12 @@ void EpubReaderActivity::activateMoreRow(int row) {
   if (action != MA::GO_HOME && action != MA::DELETE_CACHE) requestUpdate();
 }
 
-void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {
+void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition,
+                                        const bool isFootnoteJump) {
   if (!epub) return;
 
   if (savePosition && section && footnoteDepth < MAX_FOOTNOTE_DEPTH) {
-    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage};
+    savedPositions[footnoteDepth] = {currentSpineIndex, section->currentPage, isFootnoteJump};
     footnoteDepth++;
     LOG_DBG("ERS", "Saved position [%d]: spine %d, page %d", footnoteDepth, currentSpineIndex, section->currentPage);
   }
