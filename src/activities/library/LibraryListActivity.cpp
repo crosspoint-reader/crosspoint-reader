@@ -135,7 +135,7 @@ void LibraryListActivity::openSelectedBook() {
   std::string path;
   if (showingRecents()) {
     const auto& books = RECENT_BOOKS.getBooks();
-    if (selectedEntry() < 0 || selectedEntry() >= static_cast<int>(books.size())) return;
+    if (selectedEntry() >= static_cast<int>(books.size())) return;
     path = books[static_cast<size_t>(selectedEntry())].path;
   } else {
     if (!index.isOpen()) return;
