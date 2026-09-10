@@ -18,7 +18,33 @@ OVERRIDES = f"""
    heap, and TLS cert verification allocates dozens at once. */
 #undef FP_MAX_BITS
 #define FP_MAX_BITS 8192
+/* Verified-TLS support for public CA chains (GitHub OTA):
+   - WOLFSSL_ALT_CERT_CHAINS: a served cross-sign intermediate whose issuer is
+     not itself in the trust store must not fail the chain when the peer cert
+     already validates to a directly-trusted anchor (internal.c documents this
+     exact case). Without it, real-hardware verification fails ASN_NO_SIGNER_E
+     on today's Sectigo/ISRG cross-signed chains regardless of bundle content.
+   - SHA-384/512: Sectigo's ECDSA-P384 intermediates sign with SHA-384; ISRG
+     cross-signs use SHA-512-capable paths. platformio.ini's
+     -DWOLFSSL_OPTIONS_H satisfies options.h's include guard before the file is
+     read, so the defaults that would normally enable these are silently
+     skipped -- they must be set here.
+   - WOLFSSL_SP_384: single-precision math for P-384, needed to verify the
+     ECDSA-P384 signatures on chip without the generic fallback's heap cost. */
+#ifndef WOLFSSL_ALT_CERT_CHAINS
+#define WOLFSSL_ALT_CERT_CHAINS
+#endif
+#ifndef WOLFSSL_SHA384
+#define WOLFSSL_SHA384
+#endif
+#ifndef WOLFSSL_SHA512
+#define WOLFSSL_SHA512
+#endif
+#ifndef WOLFSSL_SP_384
+#define WOLFSSL_SP_384
+#endif
 """
+
 
 
 def patch_user_settings(path: Path) -> None:

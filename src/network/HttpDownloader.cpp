@@ -9,6 +9,8 @@
 #include <functional>
 #include <string>
 
+#include "HttpVerifiedFetch.h"
+
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
 
@@ -65,14 +67,23 @@ struct WifiPowerSaveGuard {
 
 #if defined(FREEINK_NET_WOLFSSL)
 HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std::string& username,
-                                         const std::string& password, Sink& sink, bool downgradeRedirectsToHttp) {
+                                         const std::string& password, Sink& sink, bool downgradeRedirectsToHttp,
+                                         const char* caPem) {
   WifiPowerSaveGuard psGuard;
   std::string url = startUrl;
 
   for (int hop = 0; hop <= MAX_REDIRECTS; ++hop) {
     freeink::SecureHttpClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
-    http.setInsecure();
+    if (caPem != nullptr) {
+      // Chain verification against the caller's anchors. Identity checking is
+      // not covered yet: SecureClient (freeink-sdk) does not verify the
+      // hostname against the presented certificate, so this authenticates the
+      // issuing chain but not the peer it belongs to.
+      http.setCACert(caPem);
+    } else {
+      http.setInsecure();
+    }
     if (!http.begin(url)) {
       LOG_ERR("HTTP", "wolfSSL bad URL: %s", url.c_str());
       return HttpDownloader::HTTP_ERROR;
@@ -110,11 +121,23 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
         return HttpDownloader::HTTP_ERROR;
       }
-      if (downgradeRedirectsToHttp && url.rfind("https://", 0) == 0) {
-        // Fetch the redirect target over plain HTTP. GitHub's release-asset
-        // CDN serves its signed URLs on both schemes, and skipping the second
-        // TLS session removes its ~17KB record buffer — the MEMORY_E /
-        // OOM-abort site on C3 heaps that sit near 45KB free.
+      if (caPem != nullptr) {
+        // Verified mode never follows an https -> http downgrade, and never
+        // performs one. Pinned anchors mean every hop is authenticated, which
+        // plaintext cannot be -- so this takes precedence over
+        // downgradeRedirectsToHttp rather than sitting alongside it. A caller
+        // asking for both is asking for a contradiction, and verification is
+        // the half worth keeping.
+        if (!urlIsHttps(url)) {
+          LOG_ERR("HTTP", "refusing redirect downgrade to non-https");
+          return HttpDownloader::HTTP_ERROR;
+        }
+      } else if (downgradeRedirectsToHttp && url.rfind("https://", 0) == 0) {
+        // Unverified mode keeps upstream's optimisation: fetch the redirect
+        // target over plain HTTP. GitHub's release-asset CDN serves its signed
+        // URLs on both schemes, and skipping the second TLS session removes its
+        // ~17KB record buffer -- the MEMORY_E / OOM-abort site on C3 heaps that
+        // sit near 45KB free.
         url.replace(0, 8, "http://");
       }
       continue;
@@ -251,7 +274,7 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
                                            const std::string& password, Sink& sink,
                                            bool downgradeRedirectsToHttp = false) {
 #if defined(FREEINK_NET_WOLFSSL)
-  return runGetWolf(url, username, password, sink, downgradeRedirectsToHttp);
+  return runGetWolf(url, username, password, sink, downgradeRedirectsToHttp, nullptr);
 #else
   // esp_http_client follows redirects internally; the downgrade only exists on
   // the wolfSSL path, where the manual hop loop exposes the Location URL.
@@ -287,6 +310,27 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
   Sink sink;
   sink.write = onData;
   return runGetSecure(url, username, password, sink) == OK;
+}
+
+bool HttpDownloader::fetchUrlVerified(const std::string& url, const DataCallback& onData, const char* caPem,
+                                      const std::string& username, const std::string& password) {
+  // Runs on every build, wolfSSL or not: on the esp_http_client path caPem is
+  // unused (esp_crt_bundle verifies the chain), but the https-only requirement
+  // still has to hold or a "verified" fetch of an http:// URL would go out in
+  // clear.
+  if (const char* refusal = verifiedFetchRefusal(url, caPem, kVerifiedFetchNeedsAnchors)) {
+    LOG_ERR("HTTP", "Refusing verified fetch: %s", refusal);
+    return false;
+  }
+  LOG_DBG("HTTP", "Fetching (verified): %s", url.c_str());
+  Sink sink;
+  sink.write = onData;
+#if defined(FREEINK_NET_WOLFSSL)
+  // Never the downgrade, whatever else is configured: this is the verified path.
+  return runGetWolf(url, username, password, sink, /*downgradeRedirectsToHttp=*/false, caPem) == OK;
+#else
+  return runGet(url, username, password, sink) == OK;
+#endif
 }
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,

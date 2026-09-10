@@ -5,6 +5,7 @@
 // ip4_addr.h unless seen first. Pin this order; clang-format would otherwise sort
 // the local header last and break the build.
 #include "HttpDownloader.h"
+#include "OtaCaCerts.h"
 #include <Logging.h>
 #include <ReleaseJsonParser.h>
 #include <esp_ota_ops.h>
@@ -40,10 +41,13 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
              board_tag::boardName());
   }
   releaseParser.setFirmwareAssetName(assetName);
-  const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
-    releaseParser.feed(reinterpret_cast<const char*>(data), len);
-    return true;
-  });
+  const bool ok = HttpDownloader::fetchUrlVerified(
+      latestReleaseUrl,
+      [&releaseParser](const uint8_t* data, size_t len) {
+        releaseParser.feed(reinterpret_cast<const char*>(data), len);
+        return true;
+      },
+      ota_ca::kGithubOtaCaAnchors);
   if (!ok) {
     LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
@@ -159,45 +163,48 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   // the inactive OTA slot, but esp_ota_abort() below means it never becomes
   // the boot target.
   board_tag::Scanner tagScanner;
-  const bool fetchOk = HttpDownloader::fetchUrl(otaUrl, [&](const uint8_t* data, size_t len) {
-    if (hdrLen < sizeof(hdr)) {
-      const size_t take = std::min(len, sizeof(hdr) - hdrLen);
-      std::memcpy(hdr + hdrLen, data, take);
-      hdrLen += take;
-      if (hdrLen == sizeof(hdr)) {
-        uint16_t imageChip;
-        std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
-        const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
-        if (deviceChip != 0xFFFF && imageChip != deviceChip) {
-          LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
-          wrongChip = true;
+  const bool fetchOk = HttpDownloader::fetchUrlVerified(
+      otaUrl,
+      [&](const uint8_t* data, size_t len) {
+        if (hdrLen < sizeof(hdr)) {
+          const size_t take = std::min(len, sizeof(hdr) - hdrLen);
+          std::memcpy(hdr + hdrLen, data, take);
+          hdrLen += take;
+          if (hdrLen == sizeof(hdr)) {
+            uint16_t imageChip;
+            std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
+            const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
+            if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+              LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+              wrongChip = true;
+              return false;  // abort the transfer
+            }
+          }
+        }
+        tagScanner.feed(data, len);
+        if (tagScanner.mismatch()) {
+          LOG_ERR("OTA", "wrong board: image=%s device=%.*s", tagScanner.foundName(),
+                  static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
           return false;  // abort the transfer
         }
-      }
-    }
-    tagScanner.feed(data, len);
-    if (tagScanner.mismatch()) {
-      LOG_ERR("OTA", "wrong board: image=%s device=%.*s", tagScanner.foundName(),
-              static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
-      return false;  // abort the transfer
-    }
-    if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
-      flashOk = false;
-      return false;  // abort the transfer
-    }
-    processedSize += len;
-    // Fire the callback only on whole-percent change. Per-chunk updates wake the
-    // render task, whose framebuffer work contends with TLS on the internal arena,
-    // and e-ink can't repaint faster than a percent tick anyway.
-    if (onProgress && totalSize > 0) {
-      const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
-      if (pct != lastReportedPct) {
-        lastReportedPct = pct;
-        onProgress(ctx);
-      }
-    }
-    return true;
-  });
+        if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
+          flashOk = false;
+          return false;  // abort the transfer
+        }
+        processedSize += len;
+        // Fire the callback only on whole-percent change. Per-chunk updates wake the
+        // render task, whose framebuffer work contends with TLS on the internal arena,
+        // and e-ink can't repaint faster than a percent tick anyway.
+        if (onProgress && totalSize > 0) {
+          const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
+          if (pct != lastReportedPct) {
+            lastReportedPct = pct;
+            onProgress(ctx);
+          }
+        }
+        return true;
+      },
+      ota_ca::kGithubOtaCaAnchors);
 
   /* Return back to default power saving for WiFi in case of failing */
   esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
