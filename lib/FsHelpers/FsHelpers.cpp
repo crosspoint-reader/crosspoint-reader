@@ -185,16 +185,7 @@ std::string extractFolderPath(const std::string& filePath) {
 }
 
 bool isSafePathComponent(std::string_view name) {
-  if (name.empty()) {
-    return false;
-  }
-  if (name.find('/') != std::string_view::npos || name.find('\\') != std::string_view::npos) {
-    return false;
-  }
-  if (name == "." || name == "..") {
-    return false;
-  }
-  return true;
+  return !name.empty() && name.find_first_of("/\\") == std::string_view::npos && name != "." && name != "..";
 }
 
 void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen) {

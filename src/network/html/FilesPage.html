@@ -1956,28 +1956,6 @@
     const breadcrumbs = document.getElementById('directory-breadcrumbs');
     const fileTable = document.getElementById('file-table');
 
-    // Delegated handler for row actions (move/rename/delete). The file/folder
-    // name and path are user-controlled text, so they travel as data
-    // attributes (HTML-escaped, never parsed as code) rather than being
-    // interpolated into an inline onclick string. Bound once on the
-    // container, which persists across re-renders of its innerHTML.
-    if (!fileTable.dataset.actionsBound) {
-      fileTable.dataset.actionsBound = 'true';
-      fileTable.addEventListener('click', function(e) {
-        const btn = e.target.closest('[data-action]');
-        if (!btn) return;
-        const name = btn.dataset.name;
-        const path = btn.dataset.path;
-        if (btn.dataset.action === 'move') {
-          openMoveModal(name, path);
-        } else if (btn.dataset.action === 'rename') {
-          openRenameModal(name, path);
-        } else if (btn.dataset.action === 'delete') {
-          openDeleteModal(name, path, btn.dataset.folder === 'true');
-        }
-      });
-    }
-
     const segments = currentPath.split('/').filter(Boolean);
     breadcrumbs.replaceChildren();
 
@@ -2990,12 +2968,27 @@
 
   // Initialize quality settings handlers
   document.addEventListener('DOMContentLoaded', function() {
-    // Delegated so it survives file-table re-renders (avoids inline onclick with untrusted names).
+    // Delegated so it survives file-table re-renders. Names and paths are
+    // user-controlled text, so they travel as data attributes rather than
+    // being interpolated into inline onclick strings.
     document.getElementById('file-table').addEventListener('click', function(e) {
       const link = e.target.closest('.image-preview-link');
-      if (!link) return;
-      e.preventDefault();
-      openImagePreview(link.getAttribute('href'), link.textContent);
+      if (link) {
+        e.preventDefault();
+        openImagePreview(link.getAttribute('href'), link.textContent);
+        return;
+      }
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const name = btn.dataset.name;
+      const path = btn.dataset.path;
+      if (btn.dataset.action === 'move') {
+        openMoveModal(name, path);
+      } else if (btn.dataset.action === 'rename') {
+        openRenameModal(name, path);
+      } else if (btn.dataset.action === 'delete') {
+        openDeleteModal(name, path, btn.dataset.folder === 'true');
+      }
     });
 
     const qualitySlider = document.getElementById('qualitySlider');
