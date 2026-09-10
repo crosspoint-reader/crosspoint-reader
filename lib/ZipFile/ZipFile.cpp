@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 
 struct ZipInflateCtx {
   HalFile* file = nullptr;
@@ -246,11 +247,15 @@ bool ZipFile::loadZipDetails() {
   file.seek(fileSize - scanRange);
   file.read(buffer, scanRange);
 
-  // Scan backwards for the signature
+  // Scan backwards for the signature. Buffer offsets aren't 4-byte aligned,
+  // so reads must go through memcpy -- a direct pointer-cast dereference
+  // faults on RISC-V (ESP32-C3).
   int foundOffset = -1;
   for (int i = scanRange - 22; i >= 0; i--) {
     constexpr uint32_t signature = 0x06054b50;
-    if (*reinterpret_cast<uint32_t*>(&buffer[i]) == signature) {
+    uint32_t candidate;
+    memcpy(&candidate, &buffer[i], sizeof(candidate));
+    if (candidate == signature) {
       foundOffset = i;
       break;
     }
@@ -266,8 +271,8 @@ bool ZipFile::loadZipDetails() {
   // Relative positions within EOCD:
   // Offset 10: Total number of entries (2 bytes)
   // Offset 16: Offset of start of central directory with respect to the starting disk number (4 bytes)
-  zipDetails.totalEntries = *reinterpret_cast<uint16_t*>(&buffer[foundOffset + 10]);
-  zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
+  memcpy(&zipDetails.totalEntries, &buffer[foundOffset + 10], sizeof(zipDetails.totalEntries));
+  memcpy(&zipDetails.centralDirOffset, &buffer[foundOffset + 16], sizeof(zipDetails.centralDirOffset));
   zipDetails.isSet = true;
 
   free(buffer);
