@@ -63,7 +63,7 @@ The device utilises the standard buttons on the Xteink X4 (in the same layout as
 | **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right**           |
 | **Right Side**  | **Power**, **Side Up**, **Side Down**, **Reset** |
 
-Button layout can be customized in the **[Controls Settings](#373-controls)**.
+Button layout can be customized in the **[Controls Settings](#363-controls)**.
 
 ### Taking a Screenshot
 
@@ -90,7 +90,7 @@ If the frontlight doesn't come back on after the device wakes from sleep, check 
 ### Power On / Off
 
 To turn the device on or off, **press and hold the Power button for approximately half a second**.
-In the **[Controls Settings](#373-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
+In the **[Controls Settings](#363-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
 
 To reboot the device (for example after a firmware update or if it's frozen), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
 
@@ -124,7 +124,7 @@ The Browse Files screen acts as a file and folder browser. The full path to the 
 
 ### 3.4 Library Screen
 
-The Library indexes every supported book on the SD card and shows its title and author without requiring you to remember its folder. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
+The Library indexes up to 4,096 supported books on the SD card and shows their titles and authors without requiring you to remember their folders. Its four tabs provide different views. An arrow beside an indexed tab shows the sort direction:
 
 - **Recent** lists the ten books you opened most recently. Hold a book to remove it from this list.
 - **Added** keeps books in the order in which the Library first discovered them. Down shows newest additions first; up shows oldest first.
@@ -212,12 +212,12 @@ The Settings screen allows you to configure the device's behavior. There are a f
   
   - "Dark" (default) - The default dark Crosspoint logo sleep screen
   - "Light" - The same default sleep screen, on a white background
-  - "Custom" - Custom images from the SD card; see [Sleep Screen](#38-sleep-screen) below for more information
+  - "Custom" - Custom images from the SD card; see [Sleep Screen](#37-sleep-screen) below for more information
   - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
   - "None" - A blank screen
   - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
   - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
-  - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#38-sleep-screen) below for more information
+  - "Transparent" - A transparent overlay image drawn over the current screen; see [Sleep Screen](#37-sleep-screen) below for more information
 - **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
   
   - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
@@ -335,7 +335,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **KOReader Sync**: Options for setting up KOReader for syncing book progress. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
 
-- **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#375-opds-servers-multiple-libraries) below.
+- **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
 - **Clear Reading Cache**: Clear the internal SD card cache.
 
@@ -347,7 +347,7 @@ The Settings screen allows you to configure the device's behavior. There are a f
 
 - **Language**: Set the UI language. CrossPoint supports 32 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, European Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, Hebrew, Arabic, Slovak, Bosnian, Vietnamese, Norwegian Bokmål, Indonesian, and Orangutan.
 
-- **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#39-custom-fonts-sd-card) for more information.
+- **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
 
 #### 3.6.5 OPDS Servers (Multiple Libraries)
 
@@ -378,7 +378,7 @@ You can also manage OPDS servers from the web interface while in File Transfer m
 2. Open `http://<device-ip>/settings`.
 3. Use the **OPDS Servers** card to add, edit, or delete entries.
 
-For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#376-web-settings-wi-fi--opds).
+For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
 
 #### 3.6.6 Web Settings (Wi-Fi + OPDS)
 
@@ -601,7 +601,7 @@ Once you have opened a book, the button layout changes to facilitate reading.
 | **Previous Page** | Press **Left** _or_ **Side Up**    |
 | **Next Page**     | Press **Right** _or_ **Side Down** |
 
-The role of the side buttons can be swapped in the **[Controls Settings](#373-controls)**.
+The role of the side buttons can be swapped in the **[Controls Settings](#363-controls)**.
 
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
@@ -610,7 +610,7 @@ If the **Short Power Button Click** setting is set to "Page Turn", you can also 
 * **Next Chapter:** Press and **hold** the **Right** (or **Side Down**) button briefly, then release.
 * **Previous Chapter:** Press and **hold** the **Left** (or **Side Up**) button briefly, then release.
 
-This feature can be disabled in the **[Controls Settings](#373-controls)** to help avoid changing chapters by mistake.
+This feature can be disabled in the **[Controls Settings](#363-controls)** to help avoid changing chapters by mistake.
 
 ### Auto Page Turn
 
@@ -637,7 +637,7 @@ See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and w
 * **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
 * **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
 * **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#373-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
+* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
 
 ### Supported Languages
 
@@ -647,7 +647,7 @@ CrossPoint renders text using the following Unicode character blocks, enabling s
 * **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
 * **Vietnamese:** Supported via extended Latin glyph coverage in the built-in reader fonts.
 
-The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#39-custom-fonts-sd-card).
+The UI includes Arabic and Hebrew (menus use built-in fonts with presentation-form coverage). Built-in **reader** fonts do not cover Chinese, Japanese, Korean, Arabic, Greek, Hebrew, or Farsi for book text. **CJK, Hebrew, Arabic, Greek, and other extended scripts can be enabled for reading by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
 
 ---
 
@@ -666,7 +666,7 @@ Available options include:
 - **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
 - **Show page as QR** – Display a QR code encoding the current reading position.
 - **Go Home** – Close the book and return to the Home screen.
-- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#377-koreader-sync-quick-setup)).
+- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
 - **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
 
 Press **Back** at any time to close the menu and return to your current page.

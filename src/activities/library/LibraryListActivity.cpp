@@ -448,15 +448,14 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
   }
   const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
   library::ClixRecord record{};
-  std::string name;
-  if (ordinal != 0xFFFF && index.readRecord(ordinal, record) && index.readName(record, name)) {
+  if (ordinal != 0xFFFF && index.readRecord(ordinal, record)) {
     // The build already decided both fields — from the book's own metadata when
     // it has any, and with one spelling chosen per author across the library.
     // Re-parsing the name here would throw that away, and only works while the
     // name still looks like "Title - Author".
     if (!index.readAuthor(record, author)) author.clear();
     // The stored title when the book gave one, the filename otherwise.
-    if (!index.readTitle(record, title) || title.empty()) title = name;
+    if (!index.readTitle(record, title) || title.empty()) index.readName(record, title);
   }
   if (title.empty()) title = tr(STR_LIBRARY_UNKNOWN_TITLE);
   return true;
