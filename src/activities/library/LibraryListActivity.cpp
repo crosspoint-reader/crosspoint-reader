@@ -80,12 +80,15 @@ void LibraryListActivity::onEnter() {
   // its persistence write never overlaps the long-lived index reader.
   if (RECENT_BOOKS.pruneMissing()) RECENT_BOOKS.saveToFile();
 
-  // Optimistic open: if an index exists, paint from it immediately and let the
-  // user decide when to refresh. Only a missing or unreadable index forces the
-  // walk, so entering the screen is normally instant.
-  if (!index.open(library::libraryIndexPath())) {
+  // Rebuild when the index is missing, invalid, or was built with the other
+  // metadata mode. Otherwise entering the screen stays instant.
+  const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
+  const bool rebuildNeeded = !index.open(library::libraryIndexPath()) || index.header().metadataEnabled != readMetadata;
+  if (rebuildNeeded) {
+    index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
-    if (rebuildIndex()) index.open(library::libraryIndexPath());
+    rebuildIndex();
+    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   }
   degraded = index.isOpen() && index.ranksDegraded();
   if (index.isOpen() && index.dedupDegraded()) {

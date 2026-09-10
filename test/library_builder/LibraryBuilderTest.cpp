@@ -99,6 +99,16 @@ TEST_F(LibraryBuilderTest, DirectoryEntriesAreEnumeratedOnce) {
   EXPECT_EQ(fake::directoryEntriesByPath["/folder/c.txt"], 1u);
 }
 
+TEST_F(LibraryBuilderTest, DirectoryResumeFailureRetainsPreviousIndex) {
+  initial();
+  const auto old = fake::files[INDEX]->bytes;
+  fake::add("/aa-folder/c.txt");
+  fake::failDirectorySeek = true;
+
+  EXPECT_FALSE(buildLibraryIndex("/", stats, false));
+  EXPECT_EQ(fake::files[INDEX]->bytes, old);
+}
+
 TEST_F(LibraryBuilderTest, StagingAndIndexWritesAreBatched) {
   fake::reset();
   for (unsigned i = 0; i < 128; i++) fake::add("/book" + numbered("", i) + ".txt");

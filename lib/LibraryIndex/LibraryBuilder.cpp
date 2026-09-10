@@ -479,7 +479,8 @@ void walk(WalkState& st, const std::string& path, const int depth) {
       dir = Storage.open(path.c_str());
       if (!dir || !dir.isDirectory() || !dir.seekSet(resumePosition)) {
         if (dir) dir.close();
-        st.unreadableSkipped++;
+        LOG_ERR("LIBIDX", "cannot resume directory %s at %u", path.c_str(), static_cast<unsigned>(resumePosition));
+        st.failed = true;
         return;
       }
       continue;
