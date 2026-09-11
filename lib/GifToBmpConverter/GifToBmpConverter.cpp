@@ -18,114 +18,84 @@ constexpr bool USE_ATKINSON = true;
 constexpr bool USE_FLOYD_STEINBERG = false;
 constexpr uint16_t MAX_CANVAS_HEIGHT = 3072;
 
-inline void write16(Print& out, const uint16_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
+inline bool writeByte(Print& out, const uint8_t value) { return out.write(value) == 1; }
+
+inline bool write16(Print& out, const uint16_t value) {
+  return writeByte(out, static_cast<uint8_t>(value & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 8) & 0xFF));
 }
 
-inline void write32(Print& out, const uint32_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-  out.write((value >> 16) & 0xFF);
-  out.write((value >> 24) & 0xFF);
+inline bool write32(Print& out, const uint32_t value) {
+  return writeByte(out, static_cast<uint8_t>(value & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 8) & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 16) & 0xFF)) &&
+         writeByte(out, static_cast<uint8_t>((value >> 24) & 0xFF));
 }
 
-inline void write32Signed(Print& out, const int32_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-  out.write((value >> 16) & 0xFF);
-  out.write((value >> 24) & 0xFF);
-}
+inline bool write32Signed(Print& out, const int32_t value) { return write32(out, static_cast<uint32_t>(value)); }
 
-void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
+bool writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
   const int bytesPerRow = (width + 3) / 4 * 4;
   const int imageSize = bytesPerRow * height;
   const uint32_t paletteSize = 256 * 4;
   const uint32_t fileSize = 14 + 40 + paletteSize + imageSize;
 
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);
-  write32(bmpOut, 14 + 40 + paletteSize);
-
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);
-  write16(bmpOut, 1);
-  write16(bmpOut, 8);
-  write32(bmpOut, 0);
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 256);
-  write32(bmpOut, 256);
+  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, 14 + 40 + paletteSize) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
+      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, 8) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, 256) ||
+      !write32(bmpOut, 256)) {
+    return false;
+  }
 
   for (int i = 0; i < 256; i++) {
-    bmpOut.write(static_cast<uint8_t>(i));
-    bmpOut.write(static_cast<uint8_t>(i));
-    bmpOut.write(static_cast<uint8_t>(i));
-    bmpOut.write(static_cast<uint8_t>(0));
+    if (!writeByte(bmpOut, static_cast<uint8_t>(i)) || !writeByte(bmpOut, static_cast<uint8_t>(i)) ||
+        !writeByte(bmpOut, static_cast<uint8_t>(i)) || !writeByte(bmpOut, 0)) {
+      return false;
+    }
   }
+  return true;
 }
 
-void writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
+bool writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
   const int bytesPerRow = (width + 31) / 32 * 4;
   const int imageSize = bytesPerRow * height;
   const uint32_t fileSize = 62 + imageSize;
 
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);
-  write32(bmpOut, 62);
-
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);
-  write16(bmpOut, 1);
-  write16(bmpOut, 1);
-  write32(bmpOut, 0);
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2);
-  write32(bmpOut, 2);
-
-  uint8_t palette[8] = {0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  for (const uint8_t value : palette) {
-    bmpOut.write(value);
+  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, 62) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
+      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, 1) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, 2) ||
+      !write32(bmpOut, 2)) {
+    return false;
   }
+
+  const uint8_t palette[8] = {0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
+  for (const uint8_t value : palette) {
+    if (!writeByte(bmpOut, value)) return false;
+  }
+  return true;
 }
 
-void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
+bool writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
   const int bytesPerRow = (width * 2 + 31) / 32 * 4;
   const int imageSize = bytesPerRow * height;
   const uint32_t fileSize = 70 + imageSize;
 
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);
-  write32(bmpOut, 70);
-
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);
-  write16(bmpOut, 1);
-  write16(bmpOut, 2);
-  write32(bmpOut, 0);
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 4);
-  write32(bmpOut, 4);
-
-  uint8_t palette[16] = {0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x00,
-                         0xAA, 0xAA, 0xAA, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  for (const uint8_t value : palette) {
-    bmpOut.write(value);
+  if (!writeByte(bmpOut, 'B') || !writeByte(bmpOut, 'M') || !write32(bmpOut, fileSize) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, 70) || !write32(bmpOut, 40) || !write32Signed(bmpOut, width) ||
+      !write32Signed(bmpOut, -height) || !write16(bmpOut, 1) || !write16(bmpOut, 2) || !write32(bmpOut, 0) ||
+      !write32(bmpOut, imageSize) || !write32(bmpOut, 2835) || !write32(bmpOut, 2835) || !write32(bmpOut, 4) ||
+      !write32(bmpOut, 4)) {
+    return false;
   }
+
+  const uint8_t palette[16] = {0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x00,
+                               0xAA, 0xAA, 0xAA, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
+  for (const uint8_t value : palette) {
+    if (!writeByte(bmpOut, value)) return false;
+  }
+  return true;
 }
 
 struct GifBmpContext {
@@ -396,15 +366,20 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
   ctx.dstHeight = outHeight;
   ctx.nextOutYSrcStart = ctx.scaleY_fp;
 
+  bool headerWritten = false;
   if (USE_8BIT_OUTPUT && !oneBit) {
-    writeBmpHeader8bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
+    headerWritten = writeBmpHeader8bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
     ctx.bytesPerRow = (ctx.dstWidth + 3) / 4 * 4;
   } else if (oneBit) {
-    writeBmpHeader1bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
+    headerWritten = writeBmpHeader1bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
     ctx.bytesPerRow = (ctx.dstWidth + 31) / 32 * 4;
   } else {
-    writeBmpHeader2bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
+    headerWritten = writeBmpHeader2bit(bmpOut, ctx.dstWidth, ctx.dstHeight);
     ctx.bytesPerRow = (ctx.dstWidth * 2 + 31) / 32 * 4;
+  }
+  if (!headerWritten) {
+    LOG_ERR("GIF", "Failed to write BMP header");
+    return false;
   }
 
   ctx.grayRow = makeUniqueNoThrow<uint8_t[]>(ctx.srcWidth);
