@@ -35,9 +35,12 @@ CrossPoint runs cleanly on ESP32-based e-reader hardware beyond Xteink (X3 / X4)
 * DRAM and heap fragmentation reduction across the reader core.
 * Flash footprint reduction (dead code, redundant strings, oversized tables).
 * Refactors that tighten the HAL / SDK boundary.
-* Pluggable per-device SDK layers (display, input, storage, battery) and per-device build configuration without
-  forking the reader core.
-* Documentation for adding a new ESP32 e-reader target.
+* ~~Pluggable per-device SDK layers (display, input, storage, battery) and per-device build configuration without
+  forking the reader core.~~ **Done.** CrossPoint now builds for and runs on multiple device targets beyond the
+  Xteink X3 / X4, including ESP32-S3 class hardware (X4 Pro, PaperMono, Seeed Sticky).
+* Adding support for a new device is done in the [FreeInk SDK](https://freeink.org) first (display, input,
+  storage, battery drivers), followed by a commit to this repo adding board support (build environment and
+  device configuration).
 * E-ink driver refinement (ghosting, partial update behavior).
 
 **Closed during this phase:** new themes built into firmware, new external network connectors (sync engines, cloud
@@ -54,12 +57,19 @@ flash.
 **Focus areas:**
 
 * Multi-language reading support (underserved languages, complex script support where realistic on ESP32 hardware).
-* Better font support and custom fonts.
-* UI languages and localization.
+  Substantial progress has already landed: RTL reading (Arabic, Hebrew) and CJK via SD card fonts.
+* ~~Better font support and custom fonts.~~ **Landed early.** SD card fonts with a downloader and font manager,
+  script grouping, and CJK support are shipped (see [docs/sd-card-fonts.md](docs/sd-card-fonts.md)).
+* ~~UI languages and localization.~~ **Landed early.** The UI ships with 30+ translations, including RTL languages,
+  and continues to receive improvements.
 * Moving themes off-firmware to SD-loaded assets (see SCOPE.md Section 6).
+* **SD-loaded plugins.** Extend the device from the SD card without growing the firmware: plugin packages that add
+  integrations and connectors, running through the web server and a whitelisted job queue instead of compiled-in
+  code. This is how new "talk to a server" functionality gets added without paying the flash and RAM cost in the
+  core firmware, keeping the connector freeze in SCOPE.md intact.
 * **Moving hyphenation files off-firmware.** Hyphenation rules vary per language and the files are large (German
   alone is ~200KB). Today these eat flash budget that should be available for the reader core. The plan is to build
-  a downloader analogous to the existing font downloader and store the dictionaries on SD / SPIFFS, loading on
+  a downloader analogous to the existing font downloader and store the hyphenation files on SD, loading on
   demand. This unlocks better hyphenation for long-word languages (German, Finnish, Norwegian, etc.) without paying
   the flash cost up front.
 

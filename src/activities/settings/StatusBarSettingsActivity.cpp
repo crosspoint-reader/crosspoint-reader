@@ -243,8 +243,8 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   const int statusBarHeight = UITheme::getInstance().getStatusBarHeight();
   const auto previewFooter =
       static_cast<int16_t>(statusBarHeight + verticalPreviewTextPadding + metrics.verticalSpacing);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight + previewFooter), 0});
+  screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
+                                                static_cast<int16_t>(metrics.buttonHintsHeight + previewFooter), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   // rowItems_'s labels/actionValue were set once in onEnter(); only the live

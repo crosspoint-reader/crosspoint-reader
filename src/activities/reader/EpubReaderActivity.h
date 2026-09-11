@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/PageLink.h>
 #include <Epub/Section.h>
 
 #include <atomic>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "BookmarkEntry.h"
+#include "ChapterPosition.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderActivity.h"
@@ -85,6 +87,9 @@ class EpubReaderActivity final : public ReaderActivity {
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;
+  std::vector<PageLink> currentPageLinks;
+  int currentPageLinkMarginLeft = 0;
+  int currentPageLinkMarginTop = 0;
   struct SavedPosition {
     int spineIndex;
     int pageNumber;
@@ -121,6 +126,10 @@ class EpubReaderActivity final : public ReaderActivity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  // Live section position, or the values cached before a child screen
+  // released the section.
+  ChapterPosition chapterPosition() const;
+  int bookPercentFor(const ChapterPosition& position) const;
   void openReaderMenu();
   // Toolbar reader menu (see Overlay above).
   bool usesToolbarMenu() const;

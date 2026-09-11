@@ -2,6 +2,8 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <cstring>
 
@@ -45,11 +47,8 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends three virtual items: "Add Server", "Download folder"
-  // and "Filename format".
-  if (!pickerMode) {
-    count += 3;
-  }
+  // Picker mode appends "Add Server"; Settings also adds folder and format.
+  count += pickerMode ? 1 : 3;
   return count;
 }
 
@@ -86,12 +85,12 @@ void OpdsServerListActivity::rebuildRowItems() {
     item.actionValue = static_cast<int16_t>(i);
     rowItems_.push_back(item);
   }
-  if (!pickerMode) {
-    fui::ListItem addServer;
-    addServer.label = tr(STR_ADD_SERVER);
-    addServer.actionValue = static_cast<int16_t>(serverCount);
-    rowItems_.push_back(addServer);
+  fui::ListItem addServer;
+  addServer.label = tr(STR_ADD_SERVER);
+  addServer.actionValue = static_cast<int16_t>(serverCount);
+  rowItems_.push_back(addServer);
 
+  if (!pickerMode) {
     fui::ListItem folder;
     folder.label = tr(STR_OPDS_DOWNLOAD_FOLDER);
     folder.actionValue = static_cast<int16_t>(serverCount + 1);
@@ -137,6 +136,16 @@ void OpdsServerListActivity::handleSelection() {
       if (server) {
         activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
       }
+    } else {
+      auto editor = makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, -1);
+      if (!editor) {
+        LOG_ERR("OPS", "OOM: OPDS settings activity");
+        return;
+      }
+      startActivityForResult(std::move(editor), [this](const ActivityResult&) {
+        OPDS_STORE.loadFromFile();
+        rebuildRowItems();
+      });
     }
     return;
   }
@@ -162,8 +171,8 @@ void OpdsServerListActivity::handleSelection() {
 
   // "Filename format": picker like every other multi-option setting.
   if (nav.selected == serverCount + 2) {
-    static const StrId formatLabels[] = {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR,
-                                         StrId::STR_FMT_TITLE};
+    static constexpr StrId formatLabels[] = {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR,
+                                             StrId::STR_FMT_TITLE};
     optionPopup.show(StrId::STR_OPDS_FILENAME_FORMAT, formatLabels, static_cast<int>(OpdsFilenameFormat::Count),
                      SETTINGS.opdsFilenameFormat, [this](int idx) {
                        SETTINGS.opdsFilenameFormat = static_cast<uint8_t>(idx);
@@ -193,7 +202,7 @@ void OpdsServerListActivity::buildScreen(UiScreen& screen) {
   // Content below the GUI.drawHeader band, above the button hints; derived
   // from the safe area so board bezel insets apply (same as LanguageSelect).
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  screen.setContentMargin(
+  screen.setContentMarginFromScreen(
       fui::Insets{static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight),
                   static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
                   static_cast<int16_t>(renderer.getScreenHeight() - (safe.y + safe.height) + metrics.buttonHintsHeight),

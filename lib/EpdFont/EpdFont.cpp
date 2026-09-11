@@ -154,10 +154,23 @@ int8_t EpdFont::getKerning(const uint32_t leftCp, const uint32_t rightCp) const 
   return data->kernMatrix[(lc - 1) * data->kernRightClassCount + (rc - 1)];
 }
 
+// Arabic contextual joining (including Lam-Alef) is resolved earlier by
+// do_shape() in MiniBidi, which emits presentation forms in visual order.
+// Font GSUB ligatures must not run a second pass over that output: a shaped
+// Alef+Lam ("…ال…") is FEDF+FE8E, which the font's Lam-Alef pairs would
+// wrongly re-collapse into FEFB/FEFC — transposing the letters (e.g. کسالت →
+// کسلات). Latin ligatures (ff/fi/fl) key off ASCII and are unaffected.
+static inline bool isArabicPresentationForm(const uint32_t cp) {
+  return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF);
+}
+
 uint32_t EpdFont::getLigature(const uint32_t leftCp, const uint32_t rightCp) const {
   const auto* pairs = data->ligaturePairs;
   const auto count = data->ligaturePairCount;
   if (!pairs || count == 0 || leftCp > 0xFFFF || rightCp > 0xFFFF) {
+    return 0;
+  }
+  if (isArabicPresentationForm(leftCp) || isArabicPresentationForm(rightCp)) {
     return 0;
   }
 

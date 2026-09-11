@@ -1,6 +1,7 @@
 import os
 import re
 import gzip
+import hashlib
 
 SRC_DIR = "src"
 
@@ -60,8 +61,9 @@ for root, _, files in os.walk(SRC_DIR):
                 processed = content
 
             # Compress with gzip (compresslevel 9 is maximum compression)
+            # mtime=0 keeps the output reproducible across builds
             # IMPORTANT: we don't use brotli because Firefox doesn't support brotli with insecured context (only supported on HTTPS)
-            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9)
+            compressed = gzip.compress(processed.encode('utf-8'), compresslevel=9, mtime=0)
 
             # Create valid C identifier from filename
             # Use appropriate suffix based on file type
@@ -86,6 +88,13 @@ for root, _, files in os.walk(SRC_DIR):
                 h.write(f"}};\n\n")
                 h.write(f"constexpr size_t {base_name}CompressedSize = {len(compressed)};\n")
                 h.write(f"constexpr size_t {base_name}OriginalSize = {len(processed)};\n")
+
+                # ETag derived from the compressed payload. The content is
+                # immutable at runtime (baked into flash at build time), so a
+                # strong ETag keyed on the bytes is safe and stable. Browsers
+                # echo it back as If-None-Match, enabling 304 responses.
+                etag = hashlib.sha256(compressed).hexdigest()[:16]
+                h.write(f'constexpr const char* {base_name}ETag = "\\"{etag}\\"";\n')
 
             print(f"Generated: {header_path}")
             print(f"  Original: {len(content)} bytes")

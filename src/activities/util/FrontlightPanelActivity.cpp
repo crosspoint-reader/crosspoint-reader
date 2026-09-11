@@ -12,7 +12,6 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
-#include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
@@ -161,17 +160,9 @@ void FrontlightPanelActivity::runTile(const int idx) {
     case 2:  // Cycle the reading orientation
       SETTINGS.orientation = static_cast<uint8_t>((SETTINGS.orientation + 1) % 4);
       SETTINGS.saveToFile();
-      // Nothing else would turn the renderer: ActivityManager::Pop restores the
-      // activity underneath without calling onEnter(), so its
-      // applyInitialOrientation() never runs. Apply it here instead.
-      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-      // Close rather than redraw in place: the turned panel lays out against
-      // the new frame while the old panel's pixels sit in the old frame, so
-      // repeated taps stacked stale panels on screen. The screen underneath
-      // repaints in the new orientation and its refresh carries the cleanup a
-      // whole-frame rewrite needs.
-      renderer.promoteNextRefresh(HalDisplay::FULL_REFRESH);
-      close();
+      // Only the setting changes: turning the renderer cropped the portrait-only
+      // screens the panel opens over. The reader reflows on its next loop().
+      requestUpdate();
       break;
     case 3:  // Touch reader controls (for reading with the palm on the glass)
       // Toggles the existing Settings -> Controls option, nothing lower-level:
@@ -240,6 +231,12 @@ void FrontlightPanelActivity::loop() {
       if (touch.event.dragPermille >= 0) draggingSlider = true;
       return;
     }
+    // Swipe up dismisses the sheet, the way it was pulled down from the top
+    // edge. draggingSlider keeps a fast slider flick from closing it.
+    if (!draggingSlider && mappedInput.wasSwipe() == MappedInputManager::SwipeDir::Up) {
+      close();
+      return;
+    }
     // panelBottom > 0 guards the frame the sheet opens in: the release that
     // opened it (a status-bar tap) is still in the input snapshot when the panel
     // runs its first loop(), and panelBottom is only known once render() has
@@ -272,8 +269,11 @@ void FrontlightPanelActivity::loop() {
 
 int FrontlightPanelActivity::computePanelBottom() const {
   const auto tokens = uiThemeTokens(uiTarget);
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const int16_t lineHeight = uiTarget.lineHeight(tokens.smallText.font);
-  int y = tokens.spaceLg + tokens.spaceMd;  // top padding
+  // Slim battery band + the air around it (mirrors buildPanelScreen).
+  const int y0 = std::max<int>(metrics.batteryHeight, lineHeight);
+  int y = tokens.spaceMd + y0 + tokens.spaceMd;
   if (Frontlight.present()) {
     // Screen::sliderRow reserves caption + spaceMd + control band, then a
     // spaceMd gap; addSliderRow() adds one more spaceMd of air after each row.
@@ -348,10 +348,19 @@ void FrontlightPanelActivity::buildPanelScreen(UiScreen& screen) {
   screen.sheet(sheetProps, static_cast<int16_t>(panelBottom));
   screen.insetContent(fui::Insets{0, kPanelSideMargin, 0, kPanelSideMargin});
 
-  // The sheet hangs from the very top of the screen, so its content needs a
-  // real top inset of its own — nothing above it reserves space the way a
-  // header band did.
-  screen.spacer(static_cast<int16_t>(theme.spaceLg + theme.spaceMd));
+  // Reuse the exact battery renderer and header rectangle used by Home. Call
+  // the base implementation directly because RoundedRaff suppresses its
+  // untitled Home header.
+  {
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    screen.spacer(theme.spaceMd);
+    const int16_t bandH = std::max<int16_t>(static_cast<int16_t>(metrics.batteryHeight),
+                                            screen.target().lineHeight(theme.smallText.font));
+    screen.takeTop(bandH, theme.spaceMd);
+    UITheme::getInstance().getTheme().BaseTheme::drawHeader(
+        renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.homeTopPadding - metrics.topPadding},
+        nullptr);
+  }
 
   if (Frontlight.present()) {
     addSliderRow(screen, tr(STR_BRIGHTNESS), brightness, ACTION_BRIGHTNESS, ACTION_BRIGHTNESS_STEP,
@@ -403,13 +412,14 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   panelBottom = computePanelBottom();
 
   // fui::sheet draws the card body, its bottom rule, and the grabber during
-  // renderUi(); nothing is hand-drawn around it any more.
+  // renderUi(); the battery band at the card's top is part of the screen build.
   renderUi();
 
   // A tile that rewrote the whole frame (night mode) re-drives every pixel
-  // once; ordinary repaints stay on the fast path. FULL, not HALF: HALF is the
-  // balanced-speed waveform and leaves some ghost behind, which is exactly what
-  // the tile that sets this flag is asked to remove.
-  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  // once; ordinary repaints stay on the fast path. HALF: strong enough to
+  // flip the whole frame's polarity without the FULL waveform's blackout
+  // flash. Any faint residue clears with the panel's dedicated refresh tile
+  // or the next scheduled clean refresh.
+  renderer.displayBuffer(cleanRefreshPending ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
   cleanRefreshPending = false;
 }

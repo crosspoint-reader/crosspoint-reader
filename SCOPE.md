@@ -32,7 +32,7 @@ During this period, the priorities are:
 PRs in the following areas will be closed until this notice is lifted. Adding these now makes the cleanup and multi-device work materially harder:
 
 * **New themes.** The existing theming surface is frozen. 
-* **New external network connectors.** This includes sync engines, cloud storage clients, OPDS extensions beyond what exists, remote file access, and any new "talk to a server" feature. We now have our own CrossPoint KOSync server which gives us a way to sync to 3rd party systems like Hardcover at an API level instead of bloating the firmware. If you're interested in helping here, the sync server is also open source.
+* **New external network connectors.** This includes sync engines, cloud storage clients, remote file access, and any new "talk to a server" feature. Fixes and improvements to the *existing* OPDS support (usability, performance, compatibility with more catalogs) remain in scope and welcome; what is closed is adding entirely new protocols or connectors. We now have our own CrossPoint KOSync server which gives us a way to sync to 3rd party systems like Hardcover at an API level instead of bloating the firmware. If you're interested in helping here, the sync server is also open source.
 
 If you are unsure whether your idea falls into one of these categories, open a Discussion first.
 

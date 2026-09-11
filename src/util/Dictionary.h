@@ -165,13 +165,13 @@ class Dictionary {
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
   // (8 for .idx: offset+size; 4 for .syn: ordinal). magic tags the sidecar.
   // *outResult (if provided) reports why a failed pass failed.
-  bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic, uint32_t suffixBytes,
-                    void (*yieldFn)(void*), void* ctx, IndexResult* outResult);
+  static bool buildSidecar(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic,
+                           uint32_t suffixBytes, void (*yieldFn)(void*), void* ctx, IndexResult* outResult);
 
   // True when sidecarPath must be (re)built from sourcePath: missing/unreadable/
   // wrong-version sidecar, or a source-size mismatch. Shared by needsIndex() and
   // buildIndex() so each sidecar is rebuilt only when actually stale.
-  bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
+  static bool sidecarIsStale(const std::string& sourcePath, const std::string& sidecarPath, uint32_t magic);
 
   // Read the definition at location. On failure returns false and, if outResult
   // is given, sets it to the specific reason (Decompress / LowMemory / ReadError).

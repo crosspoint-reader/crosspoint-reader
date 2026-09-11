@@ -71,6 +71,7 @@ class ChapterHtmlSlimParser {
     CssTextDecoration textDecoration = CssTextDecoration::None;
     bool hasDirection = false;
     CssTextDirection direction = CssTextDirection::Ltr;
+    bool setsParagraphDirection = false;
     bool hasTextAlign = false;
     CssTextAlign textAlign = CssTextAlign::Left;
     bool hasSup = false, sup = false;
@@ -124,6 +125,7 @@ class ChapterHtmlSlimParser {
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;
+  uint8_t currentFootnoteLinkId = 0;
   FootnoteEntry currentFootnote = {};
   int currentFootnoteLinkTextLen = 0;
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
@@ -152,6 +154,7 @@ class ChapterHtmlSlimParser {
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
+  static void applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css);
   void pushTableTextStyleEntry(const CssStyle& cssStyle);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);

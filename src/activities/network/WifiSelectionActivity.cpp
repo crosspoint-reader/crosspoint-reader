@@ -812,7 +812,7 @@ void WifiSelectionActivity::loop() {
   }
 }
 
-std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi) const {
+std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi) {
   // Convert RSSI to signal bars representation
   if (rssi >= -50) {
     return "||||";  // Excellent
@@ -896,7 +896,7 @@ void WifiSelectionActivity::buildListScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content below the header + MAC sub-band, above the legend line.
-  screen.setContentMargin(fui::Insets{
+  screen.setContentMarginFromScreen(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
                            metrics.verticalSpacing),
       static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
