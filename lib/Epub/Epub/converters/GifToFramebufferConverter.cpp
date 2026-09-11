@@ -51,57 +51,69 @@ void updateGrayPalette(const GIFDRAW* pDraw, GifContext& ctx) {
 }
 
 void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
-  const int dstY = static_cast<int>(srcY * ctx.scale);
-  if (dstY == ctx.lastDstY) return;
-  ctx.lastDstY = dstY;
-  if (dstY >= ctx.dstHeight) return;
+  // Map source rows using the exact output-height ratio. During downscaling,
+  // multiple source rows may map to the same output row; during upscaling, a
+  // source row must be repeated across every destination row in its range.
+  int firstDstY = (srcY * ctx.dstHeight) / ctx.srcHeight;
+  int endDstY = firstDstY + 1;
+  if (ctx.dstHeight > ctx.srcHeight) {
+    endDstY = ((srcY + 1) * ctx.dstHeight) / ctx.srcHeight;
+  }
 
-  const int outY = ctx.config->y + dstY;
-  if (outY >= ctx.screenHeight) return;
+  if (firstDstY <= ctx.lastDstY) firstDstY = ctx.lastDstY + 1;
+  if (firstDstY >= endDstY || firstDstY >= ctx.dstHeight) return;
+  if (endDstY > ctx.dstHeight) endDstY = ctx.dstHeight;
 
   DirectPixelWriter pw;
   pw.init(*ctx.renderer);
-  pw.beginRow(outY);
 
-  bool caching = ctx.caching;
-  DirectCacheWriter cw;
-  if (caching) {
-    if (!ctx.cache.advanceTo(dstY)) {
-      caching = false;
-      ctx.caching = false;
-    } else {
-      cw.init(ctx.cache.buffer, ctx.cache.bytesPerRow, ctx.cache.bandRows, ctx.cache.originX);
-      cw.beginRow(outY, ctx.config->y + ctx.cache.bandStart);
-    }
-  }
+  for (int dstY = firstDstY; dstY < endDstY; ++dstY) {
+    ctx.lastDstY = dstY;
+    const int outY = ctx.config->y + dstY;
+    if (outY >= ctx.screenHeight) continue;
 
-  int srcX = 0;
-  int error = 0;
-  const int outXBase = ctx.config->x;
-  const bool useDithering = ctx.config->useDithering;
+    pw.beginRow(outY);
 
-  for (int dstX = 0; dstX < ctx.dstWidth; ++dstX) {
-    const int outX = outXBase + dstX;
-    if (outX < ctx.screenWidth) {
-      const uint8_t gray = grayRow[srcX];
-      uint8_t ditheredGray;
-      if (useDithering) {
-        ditheredGray = applyBayerDither4Level(gray, outX, outY);
+    bool caching = ctx.caching;
+    DirectCacheWriter cw;
+    if (caching) {
+      if (!ctx.cache.advanceTo(dstY)) {
+        caching = false;
+        ctx.caching = false;
       } else {
-        ditheredGray = gray / 85;
-        if (ditheredGray > 3) ditheredGray = 3;
+        cw.init(ctx.cache.buffer, ctx.cache.bytesPerRow, ctx.cache.bandRows, ctx.cache.originX);
+        cw.beginRow(outY, ctx.config->y + ctx.cache.bandStart);
       }
-      pw.writePixel(outX, ditheredGray);
-      if (caching) cw.writePixel(outX, ditheredGray);
     }
 
-    error += ctx.srcWidth;
-    while (error >= ctx.dstWidth) {
-      error -= ctx.dstWidth;
-      srcX++;
-      if (srcX >= ctx.srcWidth) {
-        srcX = ctx.srcWidth - 1;
-        break;
+    int srcX = 0;
+    int error = 0;
+    const int outXBase = ctx.config->x;
+    const bool useDithering = ctx.config->useDithering;
+
+    for (int dstX = 0; dstX < ctx.dstWidth; ++dstX) {
+      const int outX = outXBase + dstX;
+      if (outX < ctx.screenWidth) {
+        const uint8_t gray = grayRow[srcX];
+        uint8_t ditheredGray;
+        if (useDithering) {
+          ditheredGray = applyBayerDither4Level(gray, outX, outY);
+        } else {
+          ditheredGray = gray / 85;
+          if (ditheredGray > 3) ditheredGray = 3;
+        }
+        pw.writePixel(outX, ditheredGray);
+        if (caching) cw.writePixel(outX, ditheredGray);
+      }
+
+      error += ctx.srcWidth;
+      while (error >= ctx.dstWidth) {
+        error -= ctx.dstWidth;
+        srcX++;
+        if (srcX >= ctx.srcWidth) {
+          srcX = ctx.srcWidth - 1;
+          break;
+        }
       }
     }
   }
@@ -240,7 +252,12 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     return false;
   }
 
-  GifContext ctx;
+  auto ctxPtr = makeUniqueNoThrow<GifContext>();
+  if (!ctxPtr) {
+    LOG_ERR("GIF", "OOM: GIF context");
+    return false;
+  }
+  GifContext& ctx = *ctxPtr;
   ctx.renderer = &renderer;
   ctx.config = &config;
   ctx.screenWidth = renderer.getScreenWidth();
