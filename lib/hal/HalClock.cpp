@@ -16,7 +16,7 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   if (!_available) return false;
 
   const unsigned long now = millis();
-  const bool firstPoll = _lastPollMs == 0;
+  const bool firstPoll = !_hasPolled;
   if (firstPoll || (now - _lastPollMs) >= CLOCK_POLL_MS) {
     Rtc::DateTime dt;
     const bool valid = _sdkRtc.now(dt) && dt.year >= MIN_VALID_YEAR;
@@ -29,6 +29,7 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
     }
     _cachedTimeValid = valid;
     _lastPollMs = now;
+    _hasPolled = true;
   }
 
   if (!_cachedTimeValid) return false;
@@ -92,7 +93,7 @@ bool HalClock::syncFromNTP() {
       dt.second = static_cast<uint8_t>(timeinfo.tm_sec);
       dt.weekday = static_cast<uint8_t>(timeinfo.tm_wday);
       if (_sdkRtc.set(dt)) {
-        _lastPollMs = 0;
+        _hasPolled = false;
         _cachedHour = dt.hour;
         _cachedMinute = dt.minute;
         _cachedTimeValid = true;

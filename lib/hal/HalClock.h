@@ -12,6 +12,7 @@ class HalClock {
   mutable uint8_t _cachedHour = 0;
   mutable uint8_t _cachedMinute = 0;
   mutable bool _cachedTimeValid = false;
+  mutable bool _hasPolled = false;
   mutable unsigned long _lastPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds

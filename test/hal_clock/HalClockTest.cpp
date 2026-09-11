@@ -82,6 +82,16 @@ TEST_F(HalClockTest, ReadsRtcAtMostOncePerPollInterval) {
   EXPECT_EQ(fakeRtc.readCount, 2);
 }
 
+TEST_F(HalClockTest, ThrottlesRtcReadsWhenFirstPollIsAtMillisZero) {
+  fakeRtc.time = timeOfDay(14, 5);
+  fakeMillis = 0;
+
+  testClock.getTime(hour, minute);
+  testClock.getTime(hour, minute);
+
+  EXPECT_EQ(fakeRtc.readCount, 1);
+}
+
 TEST_F(HalClockTest, FormatTimeFailsWhenRtcTimeIsInvalid) {
   fakeRtc.readSucceeds = false;
   char buf[9];
