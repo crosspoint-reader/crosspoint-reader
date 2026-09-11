@@ -36,6 +36,11 @@ class ParsedText {
   // 0 = none. An annotation rather than a token split, so the hyphenator and line breaker still
   // see whole words; TextBlock stores emphasis the same way, so extractLine passes it through.
   std::vector<uint8_t> wordFocusBoundary;
+  // Internal-link identity through tokenization, hyphenation and BiDi reorder.
+  // Zero means plain text; non-zero indexes linkTargets. Kept at one byte per
+  // token and discarded after layout, never added to the page-cache TextBlock.
+  std::vector<uint8_t> wordLinkIds;
+  std::vector<std::string> linkTargets;
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
   // uint16_t deltas from a shared base to keep this layout-only metadata small.
   // Pathological spans wider than uint16_t use sparse rebases; rendered
@@ -98,7 +103,9 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
-               uint32_t visibleTextOffset = 0);
+               uint32_t visibleTextOffset = 0, uint8_t linkId = 0);
+  uint8_t addLinkTarget(const char* href);
+  bool linkTargetMatches(uint8_t linkId, const char* href) const;
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
   EpdFontFamily::Style getWordStyleAt(size_t index) const {

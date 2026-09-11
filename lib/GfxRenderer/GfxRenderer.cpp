@@ -11,7 +11,6 @@
 
 #include <algorithm>
 
-#include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 
 namespace {
@@ -380,6 +379,7 @@ enum class TextRotation { None, Rotated90CW };
 static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                              const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                              const bool pixelState, const EpdFontFamily::Style style) {
+  if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) return;
 
@@ -448,6 +448,7 @@ template <TextRotation rotation = TextRotation::None>
 static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
+  if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
   const EpdGlyph* glyph = fontFamily.getGlyph(cp, style);
   if (!glyph) {
     LOG_ERR("GFX", "No glyph for codepoint %d", cp);
@@ -1340,13 +1341,12 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
   }
 }
 
-void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
+bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
                              const float cropX, const float cropY) const {
-  if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
-    drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
-    return;
+    return drawBitmap1Bit(bitmap, x, y, maxWidth, maxHeight);
   }
 
   float scale = 1.0f;
@@ -1381,14 +1381,15 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   // Calculate output row size (2 bits per pixel, packed into bytes)
   // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  const auto rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
-  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(outputRowSize) + rowBytesSize);
-  if (!rowScratch) {
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
     LOG_ERR("GFX", "!! Failed to allocate BMP row buffers");
-    return;
+    free(outputRow);
+    free(rowBytes);
+    return false;
   }
-  auto* outputRow = rowScratch.get();
-  auto* rowBytes = rowScratch.get() + outputRowSize;
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
@@ -1404,7 +1405,9 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
-      return;
+      free(outputRow);
+      free(rowBytes);
+      return false;
     }
 
     if (screenY < 0) {
@@ -1433,21 +1436,25 @@ void GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
       if (renderMode == BW && val < 3) {
         drawPixel(screenX, screenY);
-      } else if (renderMode == GRAYSCALE_MSB && (val == 1 || val == 2)) {
-        drawPixel(screenX, screenY, false);
-      } else if (renderMode == GRAYSCALE_LSB && val == 1) {
-        drawPixel(screenX, screenY, false);
+      } else if (renderMode == GRAYSCALE_LSB || renderMode == GRAYSCALE_MSB) {
+        const auto pixel = grayPlanePixel(val, renderMode == GRAYSCALE_MSB, absoluteGrayPlanes);
+        if (pixel.write) drawPixel(screenX, screenY, pixel.black);
       }
     }
   }
+
+  free(outputRow);
+  free(rowBytes);
+
   const int sourceWidth = bitmap.getWidth() - cropPixX * 2;
   const int sourceHeight = bitmap.getHeight() - cropPixY * 2;
   const int renderedWidth = isScaled ? static_cast<int>(std::floor((sourceWidth - 1) * scale)) + 1 : sourceWidth;
   const int renderedHeight = isScaled ? static_cast<int>(std::floor((sourceHeight - 1) * scale)) + 1 : sourceHeight;
   preserveImagePolarity(x, y, renderedWidth, renderedHeight);
+  return true;
 }
 
-void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
+bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y, const int maxWidth,
                                  const int maxHeight) const {
   float scale = 1.0f;
   bool isScaled = false;
@@ -1462,20 +1469,23 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 
   // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  const auto rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
-  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(outputRowSize) + rowBytesSize);
-  if (!rowScratch) {
+  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
+  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
+
+  if (!outputRow || !rowBytes) {
     LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
-    return;
+    free(outputRow);
+    free(rowBytes);
+    return false;
   }
-  auto* outputRow = rowScratch.get();
-  auto* rowBytes = rowScratch.get() + outputRowSize;
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
-      return;
+      free(outputRow);
+      free(rowBytes);
+      return false;
     }
 
     // Calculate screen Y based on whether BMP is top-down or bottom-up
@@ -1508,11 +1518,16 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       // White pixels (val == 3) are not drawn (leave background)
     }
   }
+
+  free(outputRow);
+  free(rowBytes);
+
   const int renderedWidth =
       isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
   const int renderedHeight =
       isScaled ? static_cast<int>(std::floor((bitmap.getHeight() - 1) * scale)) + 1 : bitmap.getHeight();
   preserveImagePolarity(x, y, renderedWidth, renderedHeight);
+  return true;
 }
 
 void GfxRenderer::preserveImagePolarity(const int x, const int y, const int width, const int height) const {
@@ -1563,7 +1578,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
 
   // Allocate node buffer for scanline algorithm
-  auto nodeX = makeUniqueNoThrow<int[]>(numPoints);
+  auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
   if (!nodeX) {
     LOG_ERR("GFX", "!! Failed to allocate polygon node buffer");
     return;
@@ -1587,7 +1602,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
     }
 
     // Sort nodes by X
-    std::sort(nodeX.get(), nodeX.get() + nodes);
+    std::sort(nodeX, nodeX + nodes);
 
     // Fill between pairs of nodes
     for (int i = 0; i < nodes - 1; i += 2) {
@@ -1604,6 +1619,8 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       }
     }
   }
+
+  free(nodeX);
 }
 
 // For performance measurement (using static to allow "const" methods)
@@ -1685,6 +1702,14 @@ void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const 
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
 
 bool GfxRenderer::supportsAsyncRefresh() const { return !fadingFix && display.supportsAsyncRefresh(); }
+
+HalDisplay::GrayscaleCapabilities GfxRenderer::grayscaleCapabilities(HalDisplay::GrayscaleMode mode) const {
+  auto caps = display.grayscaleCapabilities(mode);
+  if (fadingFix) caps.asyncBase = false;
+  return caps;
+}
+
+bool GfxRenderer::supportsAsyncGrayscaleBase() const { return grayscaleCapabilities().asyncBase; }
 
 size_t GfxRenderer::readFramebufferRegion(int x, int y, int w, int h, uint8_t* dst, size_t dstCapacity) const {
   if (dst == nullptr || w <= 0 || h <= 0) return 0;
@@ -2186,7 +2211,15 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 // void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
+  absoluteGrayPlanes = false;
   display.displayGrayscaleBase(fallback, fadingFix);
+}
+
+bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
+  absoluteGrayPlanes = false;
+  if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
+  absoluteGrayPlanes = mode == HalDisplay::GrayscaleMode::Absolute;
+  return true;
 }
 
 void GfxRenderer::preconditionGrayscale() const { display.preconditionGrayscale(); }
@@ -2213,7 +2246,18 @@ void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuff
 
 void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
 
-void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
+void GfxRenderer::displayGrayBuffer() const {
+  display.displayGrayBuffer(fadingFix);
+  absoluteGrayPlanes = false;
+}
+
+void GfxRenderer::setRenderMode(RenderMode mode) {
+  if (mode == BW && absoluteGrayPlanes) {
+    display.cleanupGrayscaleBuffers(nullptr);  // cancel an unfinished absolute pass
+    absoluteGrayPlanes = false;
+  }
+  renderMode = mode;
+}
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.
@@ -2221,9 +2265,11 @@ void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch
   display.writeGrayscalePlaneStrip(lsbPlane, scratch, static_cast<uint16_t>(yStart), static_cast<uint16_t>(numRows));
 }
 
-bool GfxRenderer::supportsStripGrayscale() const { return display.supportsStripGrayscale(); }
+bool GfxRenderer::supportsStripGrayscale() const { return grayscaleCapabilities().stripUploads; }
 
-bool GfxRenderer::combinesGrayscaleBase() const { return display.combinesGrayscaleBase(); }
+bool GfxRenderer::combinesGrayscaleBase() const {
+  return grayscaleCapabilities().base == HalDisplay::GrayscaleBase::Combined;
+}
 
 void GfxRenderer::freeBwBufferChunks() {
   for (auto& bwBufferChunk : bwBufferChunks) {

@@ -401,7 +401,7 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop) {
+                                                   bool oneBit, bool crop, bool originalThresholds) {
   LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   // Verify PNG signature
@@ -513,15 +513,15 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   ctx.rawRowBytes = rawRowBytes;
   ctx.paletteSize = 0;
 
-  // One allocation keeps the two scanline buffers adjacent and reduces heap fragmentation.
-  const size_t scanlineRowBytes = rawRowBytes;
-  auto scanlineRows = makeUniqueNoThrow<uint8_t[]>(scanlineRowBytes * 2);
-  if (!scanlineRows) {
-    LOG_ERR("PNG", "OOM: scanline buffers (%u bytes each)", rawRowBytes);
+  // Allocate scanline buffers
+  ctx.currentRow = static_cast<uint8_t*>(malloc(rawRowBytes));
+  ctx.previousRow = static_cast<uint8_t*>(calloc(rawRowBytes, 1));
+  if (!ctx.currentRow || !ctx.previousRow) {
+    LOG_ERR("PNG", "Failed to allocate scanline buffers (%u bytes each)", rawRowBytes);
+    free(ctx.currentRow);
+    free(ctx.previousRow);
     return false;
   }
-  ctx.currentRow = scanlineRows.get();
-  ctx.previousRow = ctx.currentRow + scanlineRowBytes;
 
   // Scan for PLTE chunk (palette) and first IDAT chunk
   // We need to read chunks until we find IDAT, collecting PLTE along the way
@@ -555,12 +555,16 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   if (!foundIdat) {
     LOG_ERR("PNG", "No IDAT chunk found");
+    free(ctx.currentRow);
+    free(ctx.previousRow);
     return false;
   }
 
   // Initialize streaming decompressor with 32KB window for back-reference history
   if (!ctx.reader.init(true)) {
     LOG_ERR("PNG", "Failed to init inflate stream");
+    free(ctx.currentRow);
+    free(ctx.previousRow);
     return false;
   }
   ctx.reader.setFill(pngIdatFillCallback, &ctx);
@@ -611,15 +615,14 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
-  // Keep the packed BMP row and grayscale source row in one scratch block.
-  const size_t rowScratchBytes = static_cast<size_t>(bytesPerRow) + static_cast<size_t>(width);
-  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(rowScratchBytes);
-  if (!rowScratch) {
-    LOG_ERR("PNG", "OOM: row scratch buffer (%u bytes)", static_cast<unsigned>(rowScratchBytes));
+  // Allocate BMP row buffer
+  auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
+  if (!rowBuffer) {
+    LOG_ERR("PNG", "Failed to allocate row buffer");
+    free(ctx.currentRow);
+    free(ctx.previousRow);
     return false;
   }
-  uint8_t* rowBuffer = rowScratch.get();
-  uint8_t* grayRow = rowBuffer + bytesPerRow;
 
   // Create ditherers (same as JpegToBmpConverter)
   std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
@@ -629,39 +632,57 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   if (oneBit) {
     atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(outWidth);
     if (!atkinson1BitDitherer || !atkinson1BitDitherer->isValid()) {
-      LOG_ERR("PNG", "OOM: Atkinson1BitDitherer");
+      LOG_ERR("PNG", "OOM: Atkinson1BitDitherer or row buffers");
+      free(rowBuffer);
+      free(ctx.currentRow);
+      free(ctx.previousRow);
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
+      atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth, originalThresholds);
       if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
-        LOG_ERR("PNG", "OOM: AtkinsonDitherer");
+        LOG_ERR("PNG", "OOM: AtkinsonDitherer or row buffers");
+        free(rowBuffer);
+        free(ctx.currentRow);
+        free(ctx.previousRow);
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
+      fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth, originalThresholds);
       if (!fsDitherer || !fsDitherer->isValid()) {
-        LOG_ERR("PNG", "OOM: FloydSteinbergDitherer");
+        LOG_ERR("PNG", "OOM: FloydSteinbergDitherer or row buffers");
+        free(rowBuffer);
+        free(ctx.currentRow);
+        free(ctx.previousRow);
         return false;
       }
     }
   }
 
   // Scaling accumulators
-  std::unique_ptr<uint32_t[]> rowAccum;
-  std::unique_ptr<uint32_t[]> rowCount;
+  uint32_t* rowAccum = nullptr;
+  uint16_t* rowCount = nullptr;
   int currentOutY = 0;
   uint32_t nextOutY_srcStart = 0;
 
   if (needsScaling) {
-    rowAccum = makeUniqueNoThrow<uint32_t[]>(outWidth);
-    rowCount = makeUniqueNoThrow<uint32_t[]>(outWidth);
-    if (!rowAccum || !rowCount) {
-      LOG_ERR("PNG", "OOM: scaling accumulators");
-      return false;
-    }
+    rowAccum = new uint32_t[outWidth]();
+    rowCount = new uint16_t[outWidth]();
     nextOutY_srcStart = scaleY_fp;
+  }
+
+  // Allocate grayscale row buffer - batch-convert each scanline to avoid
+  // per-pixel getPixelGray() switch overhead in the hot loops
+  auto* grayRow = static_cast<uint8_t*>(malloc(width));
+  if (!grayRow) {
+    LOG_ERR("PNG", "Failed to allocate grayscale row buffer");
+    delete[] rowAccum;
+    delete[] rowCount;
+    free(rowBuffer);
+    free(ctx.currentRow);
+    free(ctx.previousRow);
+    return false;
   }
 
   bool success = true;
@@ -797,8 +818,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
           continue;
         }
         // Moving to next source row - reset accumulators
-        memset(rowAccum.get(), 0, static_cast<size_t>(outWidth) * sizeof(uint32_t));
-        memset(rowCount.get(), 0, static_cast<size_t>(outWidth) * sizeof(uint32_t));
+        memset(rowAccum, 0, outWidth * sizeof(uint32_t));
+        memset(rowCount, 0, outWidth * sizeof(uint16_t));
       }
     }
 
@@ -808,17 +829,25 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     ctx.currentRow = temp;
   }
 
+  // Clean up
+  free(grayRow);
+  delete[] rowAccum;
+  delete[] rowCount;
+  free(rowBuffer);
+  free(ctx.currentRow);
+  free(ctx.previousRow);
+
   if (success) {
     LOG_DBG("PNG", "Successfully converted PNG to BMP");
   }
   return success;
 }
 
-bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop) {
+bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool crop, bool originalThresholds) {
   // Use runtime display dimensions (swapped for portrait cover sizing)
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop);
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop, originalThresholds);
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,

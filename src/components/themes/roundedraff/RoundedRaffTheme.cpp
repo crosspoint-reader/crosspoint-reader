@@ -214,6 +214,13 @@ void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, 
   const int hintY = pageHeight - hintHeight - bottomMargin;
   const int textY = hintY + (hintHeight - renderer.getLineHeight(kGuideFontId)) / 2;
 
+  if (renderer.getRenderMode() != GfxRenderer::BW && !renderer.grayPlanesAreAbsolute()) {
+    renderer.fillRect(sidePadding, hintY, groupWidth, hintHeight, true);
+    renderer.fillRect(sidePadding + groupWidth + groupGap, hintY, groupWidth, hintHeight, true);
+    renderer.setOrientation(origOrientation);
+    return;
+  }
+
   const bool backDisabled = (btn1 == nullptr || btn1[0] == '\0');
   const int leftGroupX = sidePadding;
   const int rightGroupX = leftGroupX + groupWidth + groupGap;

@@ -71,6 +71,8 @@ const char* asCStr(const char* s) { return s; }
 // resetStyleMiniData retention bounds (see the PerStyle comment in the header).
 constexpr size_t MINI_RETAIN_MIN_FREE_HEAP = 40 * 1024;
 constexpr uint8_t MINI_UNDERUSE_RUNS_BEFORE_FREE = 3;
+// Working headroom left outside the mini bitmap arena's single contiguous block.
+constexpr uint32_t PREWARM_MAX_ALLOC_RESERVE = 4 * 1024;
 
 // Keep-if-fits buffer reuse: only reallocate when the needed size exceeds the
 // current capacity. Freeing + reallocating slightly different sizes every page
@@ -907,7 +909,29 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
   int totalMissed = 0;
   for (uint8_t si = 0; si < MAX_STYLES; si++) {
     if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
-    totalMissed += prewarmStyle(si, codepoints.get(), cpCount, metadataOnly, loadKernLig);
+    int missedForStyle = prewarmStyle(si, codepoints.get(), cpCount, metadataOnly, loadKernLig);
+    if (missedForStyle == PREWARM_ARENA_TOO_LARGE) {
+      // The arena is one contiguous block, so a fragmented heap can fail it with
+      // ample free bytes. Retry with the estimated largest prefix, backing off
+      // if variable-size glyphs made that estimate too large.
+      const uint32_t perGlyph = styles_[si].measuredBytesPerGlyph > 0 ? styles_[si].measuredBytesPerGlyph : 1;
+      const uint32_t maxAlloc = ESP.getMaxAllocHeap();
+      const uint32_t arenaBytes = maxAlloc > PREWARM_MAX_ALLOC_RESERVE ? maxAlloc - PREWARM_MAX_ALLOC_RESERVE : 0;
+      uint32_t fit = arenaBytes / perGlyph;
+      if (fit > cpCount) fit = cpCount;
+      while (fit > 0) {
+        LOG_DBG("SDCF", "Arena retry: %u -> %u glyphs (%uB/glyph, maxAlloc=%u)", cpCount, fit, perGlyph, maxAlloc);
+        missedForStyle = prewarmStyle(si, codepoints.get(), fit, metadataOnly, loadKernLig);
+        if (missedForStyle != PREWARM_ARENA_TOO_LARGE) break;
+        fit /= 2;
+      }
+      if (missedForStyle == PREWARM_ARENA_TOO_LARGE) {
+        missedForStyle = static_cast<int>(cpCount);  // nothing resident
+      } else {
+        missedForStyle += static_cast<int>(cpCount - fit);  // the dropped suffix is absent too
+      }
+    }
+    totalMissed += missedForStyle;
   }
 
   stats_.prewarmTotalMs = millis() - startMs;
@@ -1155,12 +1179,16 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       totalBitmapSize += s.miniGlyphs[i].dataLength;
     }
 
+    // Rounded up: the retry multiplies this back out to size a glyph set, and a
+    // floored figure can yield an arena that still does not fit.
+    if (validCount > 0) s.measuredBytesPerGlyph = (totalBitmapSize + validCount - 1) / validCount;
+
     if (!ensureArrayCapacity(s.miniBitmap, s.miniBitmapCapacity, totalBitmapSize)) {
       LOG_ERR("SDCF", "Failed to allocate mini bitmap (%u bytes) for style %u", totalBitmapSize, styleIdx);
       delete[] readOrder;
       delete[] mappings;
       freeStyleMiniData(s);
-      return static_cast<int>(cpCount);
+      return PREWARM_ARENA_TOO_LARGE;
     }
     s.miniBitmapUsed = totalBitmapSize;  // underuse-hysteresis signal for resetStyleMiniData
 

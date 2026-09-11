@@ -220,7 +220,7 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
-  void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
+  static void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total);
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                        bool showPercentage = true) const;  // Left aligned (reader mode)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
@@ -228,7 +228,7 @@ class BaseTheme {
                                const char* btn4) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
   // wrapping to two lines rather than overflowing when it's too wide to fit.
-  static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
+  static void drawHintLabel(const GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight, int singleLineYOffset);
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   // Menu row height as DRAWN by drawButtonMenu. HomeActivity builds its touch
@@ -247,11 +247,11 @@ class BaseTheme {
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
-  void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
-                     std::string title, const int paddingBottom = 0, const int textYOffset = 0,
-                     const bool fillMargin = true, const bool isPageBookmarked = false,
-                     const bool pageCountEstimated = false) const;
-  void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  static void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
+                            std::string title, const int paddingBottom = 0, const int textYOffset = 0,
+                            const bool fillMargin = true, const bool isPageBookmarked = false,
+                            const bool pageCountEstimated = false);
+  static void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label);
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual bool showsFileIcons() const { return false; }
