@@ -1,7 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "components/UiAppHost.h"
@@ -30,6 +32,11 @@ class EndOfBookOptions : private UiAppHost {
   // True when the suggestion menu is showing and should own the reader's input.
   bool menuActive() const;
 
+  // True when the selected suggestion's marquee is due for another frame.
+  // The reader calls this from its normal loop so the render task remains the
+  // only place that changes the visible title and touches the renderer.
+  bool marqueeUpdateDue(uint32_t now) const;
+
   // Menu input handling, following the standard list idiom: a tap on a row opens it
   // (or Home), side Up/Down and front Left/Right move the selection (wrapping),
   // Confirm opens the selection, and a short Back press returns to the last page of
@@ -47,6 +54,8 @@ class EndOfBookOptions : private UiAppHost {
   static void listScreen(UiScreen& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
   void buildListScreen(UiScreen& screen);
+  bool buildMarqueeLabel(const freeink::ui::DrawTarget& target, std::string_view title, size_t startByte,
+                         int16_t maxWidth, const freeink::ui::TextStyle& style);
 
   GfxRenderer& renderer;
   std::string folder;
@@ -56,6 +65,18 @@ class EndOfBookOptions : private UiAppHost {
   // Main-task selection updates may overlap a repaint on the render task.
   std::atomic<int> selector{0};
   std::atomic<bool> isLoaded{false};
+
+  // Reuse a bounded buffer for the moving label. The render task owns this
+  // state; only the atomic deadline is also read by the input task.
+  static constexpr size_t MAX_MARQUEE_LABEL_BYTES = 512;
+  static constexpr uint32_t MARQUEE_INITIAL_PAUSE_MS = 1500;
+  static constexpr uint32_t MARQUEE_STEP_INTERVAL_MS = 300;
+  static constexpr uint32_t MARQUEE_END_PAUSE_MS = 1500;
+  char marqueeLabel[MAX_MARQUEE_LABEL_BYTES + 1]{};
+  int marqueeRow = -1;
+  size_t marqueeStartByte = 0;
+  bool marqueeAtEnd = false;
+  std::atomic<uint32_t> marqueeNextUpdateAt{0};
 
   // Row storage, built once in loadOnce() (same acquire/release publication
   // point as names — see isLoaded above) rather than per-render in

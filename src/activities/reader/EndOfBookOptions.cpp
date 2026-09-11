@@ -5,6 +5,8 @@
 #include <HalGPIO.h>
 #include <I18n.h>
 
+#include <cstring>
+
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
 // ReaderUtils.h pulls in ActivityManager.h, which only forward-declares Activity while holding
@@ -20,6 +22,24 @@ namespace fui = freeink::ui;
 
 namespace {
 constexpr fui::ActionId ACTION_ROW = 1;
+
+bool timeReached(const uint32_t now, const uint32_t deadline) { return static_cast<int32_t>(now - deadline) >= 0; }
+
+uint32_t marqueeDeadline(const uint32_t now, const uint32_t pause) {
+  const uint32_t deadline = now + pause;
+  return deadline == 0 ? 1 : deadline;  // Zero disables the timer.
+}
+
+size_t nextUtf8Boundary(const std::string_view text, const size_t byte) {
+  if (byte >= text.size()) return text.size();
+  size_t next = byte + 1;
+  size_t continuations = 0;
+  while (continuations < 3 && next < text.size() && (static_cast<unsigned char>(text[next]) & 0xC0) == 0x80) {
+    ++continuations;
+    ++next;
+  }
+  return next;
+}
 
 // Display name without the file extension, mirroring the file browser rows
 std::string displayName(const std::string& filename) {
@@ -73,6 +93,12 @@ void EndOfBookOptions::buildRowItems() {
 }
 
 bool EndOfBookOptions::menuActive() const { return isLoaded.load(std::memory_order_acquire) && !names.empty(); }
+
+bool EndOfBookOptions::marqueeUpdateDue(const uint32_t now) const {
+  if (!menuActive()) return false;
+  const uint32_t deadline = marqueeNextUpdateAt.load(std::memory_order_acquire);
+  return deadline != 0 && timeReached(now, deadline);
+}
 
 std::string EndOfBookOptions::fullPath(const size_t index) const {
   if (index >= names.size()) {
@@ -155,6 +181,35 @@ void EndOfBookOptions::listScreen(UiScreen& screen, void* user) {
   static_cast<EndOfBookOptions*>(user)->buildListScreen(screen);
 }
 
+bool EndOfBookOptions::buildMarqueeLabel(const fui::DrawTarget& target, const std::string_view title,
+                                         const size_t startByte, const int16_t maxWidth, const fui::TextStyle& style) {
+  marqueeLabel[0] = '\0';
+  if (startByte >= title.size() || maxWidth <= 0) return false;
+
+  size_t outputBytes = 0;
+  size_t cursor = startByte;
+  while (cursor < title.size()) {
+    const size_t next = nextUtf8Boundary(title, cursor);
+    const size_t bytes = next - cursor;
+    if (outputBytes + bytes > MAX_MARQUEE_LABEL_BYTES) break;
+
+    std::memcpy(marqueeLabel + outputBytes, title.data() + cursor, bytes);
+    outputBytes += bytes;
+    marqueeLabel[outputBytes] = '\0';
+
+    // Keep every emitted window within the row. The first codepoint is kept
+    // even when a broken/oversized glyph exceeds the slot by itself, so the
+    // marquee never produces an empty label.
+    if (outputBytes > bytes && target.measureText(style.font, marqueeLabel, style).width > maxWidth) {
+      outputBytes -= bytes;
+      marqueeLabel[outputBytes] = '\0';
+      break;
+    }
+    cursor = next;
+  }
+  return cursor >= title.size();
+}
+
 void EndOfBookOptions::buildListScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // Same layout math as render(): the list band starts under the title/subtitle it
@@ -176,6 +231,8 @@ void EndOfBookOptions::buildListScreen(UiScreen& screen) {
   props.selectedIndex = static_cast<int16_t>(selector.load(std::memory_order_relaxed));
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in handleMenuInput()
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = 1;
   if (!gpio.hasTouch()) {
     // Non-touch hardware (X3/X4) keeps the original, denser row height
     // instead of FreeInkUI's touch-target-sized default. This short, fixed
@@ -184,6 +241,85 @@ void EndOfBookOptions::buildListScreen(UiScreen& screen) {
     // this reads the capability directly like BaseTheme's draw code does.
     props.rowHeight = static_cast<int16_t>(metrics.listRowHeight);
   }
+
+  // Reset all labels first because the selected row may have used the fixed
+  // marquee buffer on the previous frame. The list's layout is then measured
+  // with the same effective geometry that Screen::list() will apply.
+  for (size_t i = 0; i < rowCount; ++i) rowItems[i].label = rowLabels[i].c_str();
+
+  const fui::Rect listRect = screen.body();
+  const int16_t effectiveRowHeight = props.rowHeight > 0 ? props.rowHeight : screen.theme().rowHeight;
+  const int16_t effectiveRowGap = props.rowGap >= 0 ? props.rowGap : screen.theme().listRowGap;
+  const uint16_t visibleRows = fui::listVisibleRows(listRect, effectiveRowHeight, effectiveRowGap);
+  const bool listOverflows = rowCount > visibleRows;
+  int16_t rowAreaWidth = listRect.width;
+  const int16_t rowInset = props.rowInset >= 0 ? props.rowInset : screen.theme().listInset;
+  if (rowInset > 0) rowAreaWidth = static_cast<int16_t>(rowAreaWidth - rowInset * 2);
+  const int16_t scrollWidth =
+      props.scrollIndicatorWidth >= 0 ? props.scrollIndicatorWidth : screen.theme().listScrollWidth;
+  const int16_t scrollInset =
+      props.scrollIndicatorInset >= 0 ? props.scrollIndicatorInset : screen.theme().listScrollInset;
+  if (listOverflows && props.scrollIndicator && scrollWidth > 0) {
+    const int16_t needed = static_cast<int16_t>(scrollWidth + scrollInset + 2);
+    if (rowInset < needed) rowAreaWidth = static_cast<int16_t>(rowAreaWidth - (needed - rowInset));
+  }
+  const int16_t sidePadding = props.sidePadding >= 0 ? props.sidePadding : screen.theme().listSidePadding;
+  const int16_t labelWidth = static_cast<int16_t>(rowAreaWidth - sidePadding * 2);
+
+  const int selected = props.selectedIndex;
+  const uint32_t now = static_cast<uint32_t>(millis());
+  if (selected >= 0 && selected < static_cast<int>(names.size()) && selected < visibleRows && labelWidth > 0) {
+    const std::string_view title = rowLabels[selected];
+    const bool overflows =
+        screen.target().measureText(props.labelText.font, rowLabels[selected].c_str(), props.labelText).width >
+        labelWidth;
+    if (overflows) {
+      const uint32_t deadline = marqueeNextUpdateAt.load(std::memory_order_acquire);
+      if (marqueeRow != selected || deadline == 0) {
+        marqueeRow = selected;
+        marqueeStartByte = 0;
+        marqueeAtEnd = false;
+        marqueeNextUpdateAt.store(marqueeDeadline(now, MARQUEE_INITIAL_PAUSE_MS), std::memory_order_release);
+      }
+
+      const bool due = marqueeUpdateDue(now);
+      bool restarted = false;
+      if (due) {
+        if (marqueeAtEnd) {
+          marqueeStartByte = 0;
+          marqueeAtEnd = false;
+          restarted = true;
+        } else {
+          const size_t next = nextUtf8Boundary(title, marqueeStartByte);
+          marqueeStartByte = next < title.size() ? next : 0;
+        }
+      }
+
+      const bool reachedEnd = buildMarqueeLabel(screen.target(), title, marqueeStartByte, labelWidth, props.labelText);
+      const bool wasAtEnd = marqueeAtEnd;
+      marqueeAtEnd = reachedEnd;
+      if (marqueeStartByte == 0 && reachedEnd) {
+        // An oversized single codepoint has no further window to reveal.
+        marqueeNextUpdateAt.store(0, std::memory_order_release);
+      } else if (due || (!wasAtEnd && marqueeAtEnd)) {
+        const uint32_t pause =
+            restarted ? MARQUEE_INITIAL_PAUSE_MS : (marqueeAtEnd ? MARQUEE_END_PAUSE_MS : MARQUEE_STEP_INTERVAL_MS);
+        marqueeNextUpdateAt.store(marqueeDeadline(now, pause), std::memory_order_release);
+      }
+      rowItems[selected].label = marqueeLabel;
+    } else {
+      marqueeRow = -1;
+      marqueeAtEnd = false;
+      marqueeStartByte = 0;
+      marqueeNextUpdateAt.store(0, std::memory_order_release);
+    }
+  } else {
+    marqueeRow = -1;
+    marqueeAtEnd = false;
+    marqueeStartByte = 0;
+    marqueeNextUpdateAt.store(0, std::memory_order_release);
+  }
+
   screen.list(props);
 }
 
