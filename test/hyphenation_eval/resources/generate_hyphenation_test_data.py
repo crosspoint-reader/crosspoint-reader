@@ -123,6 +123,7 @@ def extract_text_from_epub(epub_path):
                 data = z.read(name).decode("utf-8", errors="ignore")
                 extractor = EpubTextExtractor()
                 extractor.feed(data)
+                extractor.close()
                 text = strip_gutenberg_boilerplate(extractor.text())
                 if text.strip():
                     texts.append(text)
