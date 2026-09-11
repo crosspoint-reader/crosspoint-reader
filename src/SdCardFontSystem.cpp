@@ -22,8 +22,8 @@ void snapFontPointSizeTo(const uint8_t availablePointSize) {
 }
 
 // Built-in UI fonts and their physical point sizes (at 150 DPI, matching the
-// SD-font converter). Each is paired with a same-size SD fallback so CJK UI
-// text matches the surrounding Latin. See SdCardFontSystem::setupUiFallbacks.
+// SD-font converter). Each is paired with a same-size SD fallback so non-Latin
+// UI text matches the surrounding Latin. See SdCardFontSystem::setupUiFallbacks.
 struct UiFontSize {
   int fontId;
   uint8_t pointSize;
@@ -142,21 +142,47 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   if (!family) return;
 
   // Probe the already-loaded reader-size font before paying for the UI sizes:
-  // resolveTextFontId only redirects on CJK codepoints, so a Latin-only family
-  // can never act as a fallback and its UI sizes would be dead weight in RAM.
+  // resolveTextFontId redirects on any codepoint the built-in UI fonts lack,
+  // so a family with no non-Latin coverage at all can never act as a fallback
+  // and its UI sizes would be dead weight in RAM. Probes specific codepoints
+  // rather than scanning the font's own interval table: SD-card fonts only
+  // keep a RAM-resident subset of their coverage after load, so hasCodepoint()
+  // is the only full-coverage query available. Every named interval preset
+  // the SD-font converter ships (docs/sd-card-fonts.md) is probed here except
+  // the Latin ones (latin1/latin-ext -- the built-in UI fonts already ship
+  // broad European Latin coverage, so a Latin-only family correctly redirects
+  // nothing in resolveTextFontId), plus Devanagari and Bengali, which don't
+  // have a named preset yet but already work via a custom --intervals range.
   const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
   if (readerIt == renderer.getFontMap().end()) return;
-  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul.
-  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
-  bool hasCjk = false;
-  for (const uint32_t cp : kCjkProbes) {
+  static constexpr uint32_t kNonLatinProbes[] = {
+      0x4E00,  // CJK Unified Ideographs (Han)
+      0x3042,  // Hiragana
+      0x30A2,  // Katakana
+      0xAC00,  // Hangul Syllables
+      0x0391,  // Greek
+      0x0410,  // Cyrillic
+      0x0531,  // Armenian
+      0x10D0,  // Georgian
+      0x05D0,  // Hebrew
+      0x0627,  // Arabic
+      0x1200,  // Ethiopic
+      0x13A0,  // Cherokee
+      0x2D30,  // Tifinagh
+      0x01A1,  // Vietnamese-specific Latin Extended-B (ơ)
+      0x0259,  // IPA Extensions (ə)
+      0x0905,  // Devanagari
+      0x0985,  // Bengali
+  };
+  bool hasNonLatinCoverage = false;
+  for (const uint32_t cp : kNonLatinProbes) {
     if (readerIt->second.hasCodepoint(cp)) {
-      hasCjk = true;
+      hasNonLatinCoverage = true;
       break;
     }
   }
-  if (!hasCjk) {
-    LOG_DBG("SDFS", "%s has no CJK coverage - skipping UI fallback sizes", familyName.c_str());
+  if (!hasNonLatinCoverage) {
+    LOG_DBG("SDFS", "%s has no non-Latin coverage - skipping UI fallback sizes", familyName.c_str());
     return;
   }
 
