@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <Utf8.h>
 
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
@@ -243,6 +244,21 @@ void KeyboardEntryActivity::insertUtf8(const char* out) {
   if (cursorPos > text.length()) cursorPos = text.length();
   text.insert(cursorPos, out, n);
   cursorPos += n;
+
+  // If the inserted codepoint is a combining mark, NFC-compose the buffer so
+  // the renderer always sees precomposed codepoints. Device fonts have no
+  // combining-mark positioning (see utf8ComposeNfc comment in Utf8.h), so NFD
+  // sequences (base + combining mark) render broken without this step.
+  const unsigned char* p = reinterpret_cast<const unsigned char*>(out);
+  if (utf8IsCombiningMark(utf8NextCodepoint(&p))) {
+    const size_t lenBefore = text.length();
+    text = utf8ComposeNfc(text);
+    // NFC merges base+mark into a shorter precomposed form (e.g. a+U+0301 → á
+    // saves 1 byte); pull the cursor back by the same byte delta so it stays
+    // after the newly composed character.
+    const size_t saved = lenBefore - text.length();
+    cursorPos = (cursorPos > saved) ? cursorPos - saved : 0;
+  }
 }
 
 bool KeyboardEntryActivity::backspaceUtf8() {
