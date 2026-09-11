@@ -77,6 +77,9 @@ class ActivityManager {
   void begin();
   void loop();
 
+  // check whether the current activity has a given activity name
+  bool currentActivityHasName(std::string activityName);
+
   // Will replace currentActivity and drop all activities on stack
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 

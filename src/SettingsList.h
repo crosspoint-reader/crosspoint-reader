@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -361,6 +362,16 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                           {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
                           StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_TILT_TO_SELECT, &CrossPointSettings::tiltToSelect,
+                          {StrId::STR_STATE_OFF, StrId::STR_DICTIONARY, StrId::STR_DICTIONARY_AND_KEYBOARD},
+                          "tiltToSelect", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_TILT_TO_SELECT_SENSITIVITY, &CrossPointSettings::tiltToSelectSensitivity,
+                          {StrId::STR_LOW, StrId::STR_NORMAL, StrId::STR_HIGH}, "tiltToSelectSensitivity",
+                          StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_TILT_TO_SELECT_INVERT, &CrossPointSettings::tiltToSelectInvert,
+                          {StrId::STR_STATE_OFF, StrId::STR_INVERT_X, StrId::STR_INVERT_Y, StrId::STR_INVERT_XY},
+                          "tiltToSelectInvert", StrId::STR_CAT_CONTROLS),
+
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
@@ -488,15 +499,27 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
+
     // Erasing keeps the list at its initial allocation; inserting into a full
     // vector would reallocate it at double capacity for the process lifetime.
-    const auto eraseEntry = [&v](const StrId nameId) {
-      v.erase(std::find_if(v.begin(), v.end(), [nameId](const SettingInfo& s) { return s.nameId == nameId; }));
+    const auto eraseEntries = [&v](const StrId firstId, std::optional<StrId> lastId = std::nullopt) {
+      auto firstIt = std::find_if(v.begin(), v.end(), [firstId](const SettingInfo& s) { return s.nameId == firstId; });
+
+      if (!lastId) {
+        v.erase(firstIt);
+      } else {
+        auto lastIt =
+            std::find_if(firstIt, v.end(), [target = *lastId](const SettingInfo& s) { return s.nameId == target; });
+        v.erase(firstIt, std::next(lastIt));
+      }
     };
     // Double-click power frontlight shortcut only exists on the X4 Pro.
-    if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
+    if (!BoardConfig::isX4Pro()) eraseEntries(StrId::STR_DBL_CLICK_PWR_LIGHT);
     // Tilt page turn needs the QMI8658 IMU (X3).
-    if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
+    if (!halTiltSensor.isAvailable()) {
+      eraseEntries(StrId::STR_TILT_PAGE_TURN, StrId::STR_TILT_TO_SELECT_INVERT);
+    }
+
     return v;
   }();
 

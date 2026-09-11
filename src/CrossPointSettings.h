@@ -208,6 +208,26 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PAGE_TURN_GESTURE_COUNT
   };
 
+  enum TILT_TO_SELECT {
+    TILT_SELECT_OFF = 0,
+    TILT_SELECT_DICTIONARY = 1,
+    TILT_SELECT_DICTIONARY_AND_KEYBOARD = 2,
+    TILT_TO_SELECT_COUNT
+  };
+  enum TILT_TO_SELECT_SENSITIVITY {
+    TILT_SELECT_SENSITIVITY_LOW = 0,
+    TILT_SELECT_SENSITIVITY_NORMAL = 1,
+    TILT_SELECT_SENSITIVITY_HIGH = 2,
+    TILT_SELECT_SENSITIVITY_COUNT
+  };
+  enum TILT_TO_SELECT_INVERT {
+    TILT_SELECT_INVERT_OFF = 0,
+    TILT_SELECT_INVERT_X = 1,
+    TILT_SELECT_INVERT_Y = 2,
+    TILT_SELECT_INVERT_XY = 3,
+    TILT_TO_SELECT_INVERT_COUNT
+  };
+
   // How the reader menu opens on touch boards. Persisted under the legacy
   // "tapForReaderMenu" key: 0/1 keep their old Off/Tap meaning.
   enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, READER_MENU_SWIPE_UP = 2, SHOW_READER_MENU_COUNT };
@@ -353,6 +373,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Which gestures turn the page in each direction (PAGE_TURN_GESTURE).
   uint8_t pageTurnGesture = SWIPE_ONLY;
   uint8_t previousPageGesture = SWIPE_ONLY;
+  // Use tilt sensor for selection (requires IMU)
+  uint8_t tiltToSelect = TILT_SELECT_OFF;
+  // Sensitivity level for tilt to select (0, 1, 2 -> LOW - NORMAL - HIGH) (requires IMU)
+  uint8_t tiltToSelectSensitivity = TILT_SELECT_SENSITIVITY_NORMAL;
+  // Invert axes for tilt-to-select (requires IMU)
+  uint8_t tiltToSelectInvert = TILT_SELECT_INVERT_OFF;
   // Reader menu open gesture (SHOW_READER_MENU: off / center tap / bottom-edge
   // up-swipe). Only surfaced on home-key boards, where Home is the capacitive
   // key and the bottom edge is free; elsewhere it stays at the Tap default.
