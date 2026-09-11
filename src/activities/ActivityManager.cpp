@@ -225,6 +225,10 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
+bool ActivityManager::currentActivityHasName(std::string activityName) {
+  return !activityName.empty() && currentActivity ? currentActivity->hasName(activityName) : false;
+}
+
 void ActivityManager::goToFileTransfer() {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
 }

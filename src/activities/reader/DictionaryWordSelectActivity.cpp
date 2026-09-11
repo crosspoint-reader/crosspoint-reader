@@ -2,6 +2,7 @@
 
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalTiltSensor.h>
 #include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -272,11 +273,17 @@ void DictionaryWordSelectActivity::loop() {
 
   const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
   const unsigned long now = millis();
+
+  int tiltMoveX = 0, tiltMoveY = 0;
+  if (halTiltSensor.isAvailable()) {
+    halTiltSensor.getXYPointerMove(tiltMoveX, tiltMoveY);
+  }
+
   const bool repeat =
       mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
-  const bool moveLeft = mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||
+  const bool moveLeft = -1 == tiltMoveX || mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||
                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));
-  const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
+  const bool moveRight = 1 == tiltMoveX || mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
                          (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));
   if (moveLeft && selected > 0) {
     selected--;
@@ -286,9 +293,9 @@ void DictionaryWordSelectActivity::loop() {
     selected++;
     lastHorizontalMoveTime = now;
     requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
+  } else if (-1 == tiltMoveY || mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
     moveVertical(-1);
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
+  } else if (1 == tiltMoveY || mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
     moveVertical(1);
   }
 }

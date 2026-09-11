@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "HalTiltSensor.h"
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
@@ -571,6 +572,25 @@ void KeyboardEntryActivity::loop() {
   if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     upHeld = true;
     upLongHandled = false;
+  }
+
+  if (halTiltSensor.isAvailable()) {
+    int moveX = 0, moveY = 0;
+    halTiltSensor.getXYPointerMove(moveX, moveY);
+
+    if (moveX) {
+      if (cursorMode) {
+        cursorPos = moveX > 0 ? utf8Next(text, cursorPos) : utf8Prev(text, cursorPos);
+      } else {
+        moveSelectionCol(moveX);
+      }
+      requestUpdate();
+    }
+
+    if (!cursorMode && moveY) {
+      moveSelectionRow(moveY);
+      requestUpdate();
+    }
   }
 
   if (upHeld && !upLongHandled && mappedInput.isPressed(MappedInputManager::Button::Up) &&
