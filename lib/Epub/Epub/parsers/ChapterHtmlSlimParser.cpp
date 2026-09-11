@@ -52,7 +52,7 @@ constexpr uint8_t TABLE_ROW_SEPARATOR_THICKNESS = 1;
 constexpr int16_t TABLE_MIN_CELL_WIDTH_LINE_HEIGHTS = 3;
 
 constexpr const char* HEADER_TAGS[] = {"h1", "h2", "h3", "h4", "h5", "h6"};
-constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote"};
+constexpr const char* BLOCK_TAGS[] = {"p", "li", "div", "br", "blockquote", "ul", "ol"};
 constexpr const char* BOLD_TAGS[] = {"b", "strong"};
 constexpr const char* ITALIC_TAGS[] = {"i", "em"};
 constexpr const char* UNDERLINE_TAGS[] = {"u", "ins"};
@@ -1396,8 +1396,31 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
-        self->listItemBulletOnly = true;
+        // Innermost open <ul>/<ol> (if any) decides whether this item gets a bullet,
+        // a number, or no marker at all (list-style-type: none). A malformed <li>
+        // with no enclosing list falls back to the plain bullet.
+        if (!self->listStack.empty() && self->listStack.back().styleNone) {
+          // No marker: leave the block empty so it behaves like a normal paragraph.
+        } else if (!self->listStack.empty() && self->listStack.back().ordered) {
+          self->listStack.back().counter += 1;
+          char marker[16];
+          snprintf(marker, sizeof(marker), "%d.", self->listStack.back().counter);
+          self->currentTextBlock->addWord(marker, EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
+          self->listItemBulletOnly = true;
+        } else {
+          self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false,
+                                          self->visibleTextOffset);
+          self->listItemBulletOnly = true;
+        }
+      } else if (strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) {
+        // <ul>/<ol> container accumulation: pushing the block-style stack here includes
+        // the container's own margin/padding in the inset children combine with, so a
+        // hanging text-indent on <li><p> children keeps the first line on the page.
+        ChapterHtmlSlimParser::ListContext ctx;
+        ctx.ordered = strcmp(name, "ol") == 0;
+        ctx.styleNone = cssStyle.hasListStyleType() && cssStyle.listStyleType == CssListStyleType::None;
+        ctx.depth = self->depth;
+        self->listStack.push_back(ctx);
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -1963,6 +1986,17 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
       self->listItemBulletOnly = false;
     }
   }
+
+  // </ul> or </ol> closes: pop its list context so a following sibling list at the
+  // same nesting level starts its own counter/style instead of inheriting this one's.
+  // Guarded by depth (not just tag name + non-empty stack): a display:none <ul>/<ol>
+  // returns early in startElement without ever pushing a context (see the
+  // hasDisplay()/CssDisplay::None branch above), so its closing tag must not pop
+  // the *parent* list's context out from under still-unprocessed siblings.
+  if ((strcmp(name, "ul") == 0 || strcmp(name, "ol") == 0) && !self->listStack.empty() &&
+      self->listStack.back().depth == self->depth) {
+    self->listStack.pop_back();
+  }
   if (strcmp(name, "body") == 0) {
     self->insideBody = false;
   }
@@ -1986,6 +2020,8 @@ bool ChapterHtmlSlimParser::beginParse() {
   blockStyleStack.reserve(8);
   blockStyleStack.push_back(rootBlockStyle);
 
+  listStack.clear();
+  listStack.reserve(4);
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;
