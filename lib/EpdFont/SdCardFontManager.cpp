@@ -95,9 +95,17 @@ int SdCardFontManager::loadFamilyExtraSize(const SdCardFontFamilyInfo& family, G
 }
 
 void SdCardFontManager::unloadAll(GfxRenderer& renderer) {
-  // Drop UI CJK fallbacks before the SD fonts they point at are freed.
-  renderer.clearFallbackFonts();
-  renderer.clearSdCardFonts();
+  // Scoped to this instance's own fonts: a second, independent
+  // SdCardFontManager (e.g. SdCardFontSystem's UI-language fallback) may
+  // have its own fonts and fallback registrations live at the same time,
+  // and must not have them wiped by this one unloading. removeFont() below
+  // already erases each id from the renderer's font/SD-font maps
+  // individually, so no separate blanket clear is needed for those.
+  std::vector<int> ownedIds;
+  ownedIds.reserve(loaded_.size());
+  for (const auto& lf : loaded_) ownedIds.push_back(lf.fontId);
+  renderer.clearFallbackFontsTo(ownedIds);
+
   for (auto& lf : loaded_) {
     renderer.removeFont(lf.fontId);
     delete lf.font;

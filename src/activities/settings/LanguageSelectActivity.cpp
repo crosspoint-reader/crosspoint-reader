@@ -1,6 +1,7 @@
 #include "LanguageSelectActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -9,6 +10,8 @@
 #include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
+#include "activities/util/FullScreenMessageActivity.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -50,9 +53,25 @@ void LanguageSelectActivity::activateIndex(const int index) {
   nav.selected = index;
   const uint8_t langIndex = SORTED_LANGUAGE_INDICES[index];
 
+  bool cjkAvailable;
   {
     RenderLock lock(*this);
     I18N.setLanguage(static_cast<Language>(langIndex));
+    cjkAvailable = sdFontSystem.ensureUiLanguageFallback(renderer);
+    if (!cjkAvailable) {
+      // Revert inside the same lock, before its render fires: the screen
+      // must never flash in a language it doesn't have glyphs for.
+      I18N.setLanguage(static_cast<Language>(SETTINGS.language));
+      sdFontSystem.ensureUiLanguageFallback(renderer);
+    }
+  }
+
+  if (!cjkAvailable) {
+    startActivityForResult(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, tr(STR_CJK_FONT_REQUIRED),
+                                                                       EpdFontFamily::REGULAR, HalDisplay::FAST_REFRESH,
+                                                                       /*dismissible=*/true),
+                           nullptr);
+    return;
   }
 
   SETTINGS.language = langIndex;

@@ -1,6 +1,7 @@
 #include "SdCardFontSystem.h"
 
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include <iterator>
@@ -34,6 +35,11 @@ constexpr UiFontSize kUiFontSizes[] = {
     {UI_12_FONT_ID, 12},
 };
 
+// SD font family used to back a CJK UI language when the active reading
+// font doesn't already provide CJK coverage. Must match the `name:` field
+// in sd-fonts.yaml. See ensureUiLanguageFallback().
+constexpr const char* kDefaultUiCjkFamily = "NotoSansCJKtc";
+
 }  // namespace
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
@@ -65,9 +71,30 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   }
 
   LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
+  // begin() runs from setupDisplayAndFonts(), called after main.cpp's setup()
+  // has already loaded SETTINGS and called I18N.setLanguage() -- so the
+  // saved language (including a CJK one) is already active here.
+  if (!ensureUiLanguageFallback(renderer)) {
+    // The SD card/font was removed since zh-Hant was saved (LanguageSelectActivity
+    // guards this at selection time, but nothing guards the file disappearing
+    // afterward). Revert before the first UI render rather than booting into a
+    // language with no usable glyphs for its own menus.
+    LOG_ERR("SDFS", "zh-Hant CJK fallback unavailable at boot - reverting UI language to English");
+    I18N.setLanguage(Language::EN);
+    SETTINGS.language = static_cast<uint8_t>(Language::EN);
+    SETTINGS.saveToFile();
+  }
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
+  ensureReadingFont(renderer);
+  // A reading-font change can flip whether it covers CJK, or release/claim
+  // the same family+size the UI-language fallback uses, so re-check on every
+  // call regardless of which ensureReadingFont() branch fired.
+  ensureUiLanguageFallback(renderer);
+}
+
+void SdCardFontSystem::ensureReadingFont(GfxRenderer& renderer) {
   // If the web server (or another task) installed/deleted fonts, re-discover.
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
@@ -120,6 +147,16 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
 
   const auto* family = registry_.findFamily(wantedFamily);
   if (family) {
+    // SD font ids are deterministic (content hash + family + size, see
+    // SdCardFontManager::computeFontId), so loading the same family+size the
+    // UI-language fallback already holds would collide with its own
+    // registration and fail. Release that copy first — ensureUiLanguageFallback()
+    // (called right after this function) reloads it if the load below
+    // doesn't end up covering CJK after all.
+    if (uiLangFallbackFamily_ == wantedFamily) {
+      uiLangFallbackManager_.unloadAll(renderer);
+      uiLangFallbackFamily_.clear();
+    }
     if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
       snapFontPointSizeTo(manager_.currentPointSize());
       setupUiFallbacks(renderer);
@@ -134,40 +171,118 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   }
 }
 
+bool SdCardFontSystem::readingFontHasCjkCoverage(const GfxRenderer& renderer) const {
+  const std::string& familyName = manager_.currentFamilyName();
+  if (familyName.empty()) return false;
+
+  // resolveTextFontId only redirects on CJK codepoints, so a Latin-only
+  // family can never act as a fallback and its UI sizes would be dead
+  // weight in RAM — probe before paying for them.
+  const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
+  if (readerIt == renderer.getFontMap().end()) return false;
+  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul.
+  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
+  for (const uint32_t cp : kCjkProbes) {
+    if (readerIt->second.hasCodepoint(cp)) return true;
+  }
+  return false;
+}
+
+bool SdCardFontSystem::readingFontCoversZhHant(const GfxRenderer& renderer) const {
+  const std::string& familyName = manager_.currentFamilyName();
+  if (familyName.empty()) return false;
+
+  const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
+  if (readerIt == renderer.getFontMap().end()) return false;
+  // Stricter than readingFontHasCjkCoverage(): that check accepts any single
+  // CJK script and is fine for its purpose (deciding whether to fall back a
+  // book title/filename to the reading font — a wrong guess there only
+  // affects one string). A Kana- or Hangul-only reading font would pass that
+  // check yet have no Han glyphs at all, which would leave every zh-Hant
+  // menu string unrendered if it were accepted here.
+  return readerIt->second.hasCodepoint(0x4E2D);  // 中 - present in any Han-literate font
+}
+
+bool SdCardFontSystem::loadUiFallbackSizes(SdCardFontManager& mgr, const SdCardFontFamilyInfo& family,
+                                           GfxRenderer& renderer) {
+  bool allLoaded = true;
+  for (const auto& ui : kUiFontSizes) {
+    const int sdFontId = mgr.loadFamilyExtraSize(family, renderer, ui.pointSize);
+    if (sdFontId != 0) {
+      renderer.setFallbackFont(ui.fontId, sdFontId);
+    } else {
+      LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, family.name.c_str());
+      allLoaded = false;
+    }
+  }
+  return allLoaded;
+}
+
 void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   const std::string& familyName = manager_.currentFamilyName();
   if (familyName.empty()) return;  // no SD family loaded — nothing to fall back to
 
-  const auto* family = registry_.findFamily(familyName);
-  if (!family) return;
-
-  // Probe the already-loaded reader-size font before paying for the UI sizes:
-  // resolveTextFontId only redirects on CJK codepoints, so a Latin-only family
-  // can never act as a fallback and its UI sizes would be dead weight in RAM.
-  const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
-  if (readerIt == renderer.getFontMap().end()) return;
-  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul.
-  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
-  bool hasCjk = false;
-  for (const uint32_t cp : kCjkProbes) {
-    if (readerIt->second.hasCodepoint(cp)) {
-      hasCjk = true;
-      break;
-    }
-  }
-  if (!hasCjk) {
+  if (!readingFontHasCjkCoverage(renderer)) {
     LOG_DBG("SDFS", "%s has no CJK coverage - skipping UI fallback sizes", familyName.c_str());
     return;
   }
 
-  for (const auto& ui : kUiFontSizes) {
-    const int sdFontId = manager_.loadFamilyExtraSize(*family, renderer, ui.pointSize);
-    if (sdFontId != 0) {
-      renderer.setFallbackFont(ui.fontId, sdFontId);
-    } else {
-      LOG_DBG("SDFS", "No %u pt SD glyphs for UI fallback in %s", ui.pointSize, familyName.c_str());
+  const auto* family = registry_.findFamily(familyName);
+  if (!family) return;
+
+  loadUiFallbackSizes(manager_, *family, renderer);
+}
+
+bool SdCardFontSystem::ensureUiLanguageFallback(GfxRenderer& renderer) {
+  // Only zh-Hant needs this today; add to this list when another CJK
+  // translation ships (see gen_cjk_ui_intervals.py for the matching
+  // built-in-font-side change).
+  const bool needsCjk = I18N.getLanguage() == Language::ZH_HANT;
+
+  // The active reading font already covers zh-Hant specifically (e.g. the
+  // user also picked NotoSansCJKtc as their reading font) - setupUiFallbacks()
+  // already wires it up. Drop our own independent copy if we're holding one
+  // (e.g. the user just switched to such a reading font): loading it again
+  // here would waste SD I/O and RAM for the exact same glyphs. Deliberately
+  // stricter than setupUiFallbacks()'s own readingFontHasCjkCoverage() check
+  // (see readingFontCoversZhHant()) since a wrong "yes" here drops the
+  // entire menu's coverage, not just one book title.
+  const bool readingFontCovers = needsCjk && readingFontCoversZhHant(renderer);
+
+  if (!needsCjk || readingFontCovers) {
+    if (!uiLangFallbackFamily_.empty()) {
+      uiLangFallbackManager_.unloadAll(renderer);
+      uiLangFallbackFamily_.clear();
+      // unloadAll() above is scoped to uiLangFallbackManager_'s own fonts
+      // (see SdCardFontManager::unloadAll), so the reading font's own
+      // fallback registration, if any, is untouched by it.
     }
+    return true;  // not needed, or already covered by the reading font
   }
+
+  const auto* family = registry_.findFamily(kDefaultUiCjkFamily);
+  if (!family) {
+    LOG_DBG("SDFS", "%s not installed - zh-Hant menus will show missing glyphs until it is", kDefaultUiCjkFamily);
+    return false;
+  }
+
+  // Re-assert unconditionally (not just when uiLangFallbackFamily_ was still
+  // empty): this keeps the fallback registration idempotent rather than
+  // trusting a cached flag to reflect what's actually registered.
+  // loadFamilyExtraSize() reuses an already-loaded size, so repeat calls are
+  // cheap.
+  if (!loadUiFallbackSizes(uiLangFallbackManager_, *family, renderer)) {
+    // A partial install (e.g. a manually side-loaded .cpfont missing a size)
+    // must not be accepted as "covered" -- most UI text would still show
+    // missing glyphs. Reject the whole family rather than leaving some sizes
+    // registered and others not.
+    LOG_ERR("SDFS", "%s is missing required UI sizes - rejecting incomplete zh-Hant fallback", kDefaultUiCjkFamily);
+    uiLangFallbackManager_.unloadAll(renderer);
+    uiLangFallbackFamily_.clear();
+    return false;
+  }
+  uiLangFallbackFamily_ = kDefaultUiCjkFamily;
+  return true;
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*/) const {
