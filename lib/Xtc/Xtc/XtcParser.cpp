@@ -447,6 +447,13 @@ size_t XtcParser::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSiz
     bitmapSize = ((pageHeader.width + 7) / 8) * pageHeader.height;
   }
 
+  if (pageHeader.dataSize != bitmapSize) {
+    LOG_DBG("XTC", "Page %u payload size mismatch: declared %lu, expected %lu", pageIndex,
+            static_cast<unsigned long>(pageHeader.dataSize), static_cast<unsigned long>(bitmapSize));
+    m_lastError = XtcError::CORRUPTED_HEADER;
+    return 0;
+  }
+
   // Check buffer size
   if (bufferSize < bitmapSize) {
     LOG_DBG("XTC", "Buffer too small: need %u, have %u", bitmapSize, bufferSize);
@@ -507,6 +514,12 @@ XtcError XtcParser::loadPageStreaming(uint32_t pageIndex,
     bitmapSize = static_cast<size_t>(pageHeader.width) * ((static_cast<size_t>(pageHeader.height) + 7) / 8) * 2;
   } else {
     bitmapSize = ((pageHeader.width + 7) / 8) * pageHeader.height;
+  }
+
+  if (pageHeader.dataSize != bitmapSize) {
+    LOG_DBG("XTC", "Page %u payload size mismatch: declared %lu, expected %lu", pageIndex,
+            static_cast<unsigned long>(pageHeader.dataSize), static_cast<unsigned long>(bitmapSize));
+    return XtcError::CORRUPTED_HEADER;
   }
 
   // Read in chunks
