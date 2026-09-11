@@ -827,6 +827,9 @@ void ChapterHtmlSlimParser::finishTableRow() {
       if (!currentPage) {
         LOG_ERR("EHP", "OOM: page for table row");
         clearLayoutLines();
+        tableRowAnchorCount = 0;
+        tableRowAnchorBytes = 0;
+        tableAnchorCellPendingLine = UINT8_MAX;
         return;
       }
       currentPageNextY = 0;
@@ -846,6 +849,9 @@ void ChapterHtmlSlimParser::finishTableRow() {
       if (!currentPage) {
         LOG_ERR("EHP", "OOM: page for table row");
         clearLayoutLines();
+        tableRowAnchorCount = 0;
+        tableRowAnchorBytes = 0;
+        tableAnchorCellPendingLine = UINT8_MAX;
         return;
       }
       currentPageNextY = 0;
