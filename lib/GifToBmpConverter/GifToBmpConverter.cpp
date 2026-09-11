@@ -405,20 +405,20 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
 
   if (oneBit) {
     ctx.atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(ctx.dstWidth);
-    if (!ctx.atkinson1BitDitherer) {
+    if (!ctx.atkinson1BitDitherer || !ctx.atkinson1BitDitherer->isValid()) {
       LOG_ERR("GIF", "OOM: Atkinson1BitDitherer");
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
       ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(ctx.dstWidth);
-      if (!ctx.atkinsonDitherer) {
+      if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
         LOG_ERR("GIF", "OOM: AtkinsonDitherer");
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
       ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(ctx.dstWidth);
-      if (!ctx.fsDitherer) {
+      if (!ctx.fsDitherer || !ctx.fsDitherer->isValid()) {
         LOG_ERR("GIF", "OOM: FloydSteinbergDitherer");
         return false;
       }
@@ -466,10 +466,10 @@ bool GifToBmpConverter::gifFileToBmpStream(HalFile& gifFile, Print& bmpOut, bool
 
 bool GifToBmpConverter::gifFileToBmpStreamWithSize(HalFile& gifFile, Print& bmpOut, int targetMaxWidth,
                                                    int targetMaxHeight) {
-  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetMaxWidth, targetMaxHeight, false);
+  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetMaxWidth, targetMaxHeight, false, false);
 }
 
 bool GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(HalFile& gifFile, Print& bmpOut, int targetMaxWidth,
                                                        int targetMaxHeight) {
-  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetMaxWidth, targetMaxHeight, true, false);
 }

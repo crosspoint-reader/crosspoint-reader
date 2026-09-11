@@ -1,6 +1,7 @@
 #pragma once
 
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include <cstdint>
 #include <cstring>
@@ -24,24 +25,35 @@ inline uint16_t readLe16(const uint8_t* data) {
 inline bool skipSubBlocks(HalFile& file) {
   uint8_t blockLen = 0;
   while (true) {
-    if (file.read(&blockLen, 1) != 1) return false;
+    if (file.read(&blockLen, 1) != 1) {
+      LOG_ERR("GIF", "Failed to read GIF sub-block length");
+      return false;
+    }
     if (blockLen == 0) return true;
-    if (!file.seekCur(blockLen)) return false;
+    if (!file.seekCur(blockLen)) {
+      LOG_ERR("GIF", "Failed to skip GIF sub-block (%u bytes)", blockLen);
+      return false;
+    }
   }
 }
 
 inline bool readBasicInfo(HalFile& file, GifBasicInfo& info) {
   info = {};
-  if (!file.seek(0)) return false;
+  if (!file.seek(0)) {
+    LOG_ERR("GIF", "Failed to seek to GIF header");
+    return false;
+  }
 
   uint8_t header[13];
   if (file.read(header, sizeof(header)) != static_cast<int>(sizeof(header))) {
+    LOG_ERR("GIF", "Failed to read GIF header");
     file.seek(0);
     return false;
   }
   const bool isGif87 = memcmp(header, "GIF87a", 6) == 0;
   const bool isGif89 = memcmp(header, "GIF89a", 6) == 0;
   if (!isGif87 && !isGif89) {
+    LOG_ERR("GIF", "Invalid GIF signature");
     file.seek(0);
     return false;
   }
@@ -52,6 +64,7 @@ inline bool readBasicInfo(HalFile& file, GifBasicInfo& info) {
   if ((packed & 0x80) != 0) {
     const uint32_t paletteEntries = 1u << ((packed & 0x07) + 1u);
     if (!file.seekCur(static_cast<int32_t>(paletteEntries * 3u))) {
+      LOG_ERR("GIF", "Failed to skip GIF global color table");
       file.seek(0);
       return false;
     }
@@ -60,18 +73,26 @@ inline bool readBasicInfo(HalFile& file, GifBasicInfo& info) {
   while (true) {
     uint8_t marker = 0;
     if (file.read(&marker, 1) != 1) {
+      LOG_ERR("GIF", "Unexpected EOF before GIF image descriptor");
       file.seek(0);
       return false;
     }
 
     if (marker == 0x3B) {
+      LOG_ERR("GIF", "GIF trailer reached before image descriptor");
       file.seek(0);
       return false;
     }
 
     if (marker == 0x21) {
       uint8_t label = 0;
-      if (file.read(&label, 1) != 1 || !skipSubBlocks(file)) {
+      if (file.read(&label, 1) != 1) {
+        LOG_ERR("GIF", "Failed to read GIF extension label");
+        file.seek(0);
+        return false;
+      }
+      if (!skipSubBlocks(file)) {
+        LOG_ERR("GIF", "Failed to skip GIF extension data");
         file.seek(0);
         return false;
       }
@@ -81,6 +102,7 @@ inline bool readBasicInfo(HalFile& file, GifBasicInfo& info) {
     if (marker == 0x2C) {
       uint8_t descriptor[9];
       if (file.read(descriptor, sizeof(descriptor)) != static_cast<int>(sizeof(descriptor))) {
+        LOG_ERR("GIF", "Failed to read GIF image descriptor");
         file.seek(0);
         return false;
       }
@@ -93,6 +115,7 @@ inline bool readBasicInfo(HalFile& file, GifBasicInfo& info) {
       return true;
     }
 
+    LOG_ERR("GIF", "Unexpected GIF block marker 0x%02X", marker);
     file.seek(0);
     return false;
   }
