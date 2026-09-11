@@ -5,6 +5,9 @@
 #define REPLACEMENT_GLYPH 0xFFFD
 
 uint32_t utf8NextCodepoint(const unsigned char** string);
+// Byte length of the UTF-8 sequence a lead byte starts (1 for an invalid lead).
+// Reads only the lead byte, so it is safe to call at a buffer end.
+int utf8CodepointLen(unsigned char lead);
 // Appends a Unicode codepoint to a std::string in UTF-8 encoding.
 void utf8AppendCodepoint(uint32_t cp, std::string& out);
 // Remove the last UTF-8 codepoint from a std::string and return the new size.

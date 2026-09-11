@@ -57,6 +57,7 @@ add_subdirectory(chapter_html_slim_parser)
 add_subdirectory(ligature_guard)
 add_subdirectory(page_link)
 add_subdirectory(chapter_position)
+add_subdirectory(text_wrap)
 
 add_subdirectory(inflate_stream)
 add_subdirectory(fs_helpers)
