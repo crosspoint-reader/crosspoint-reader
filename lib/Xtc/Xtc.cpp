@@ -19,12 +19,6 @@ void yieldDuringThumbnail(uint8_t& rowsSinceYield) {
   rowsSinceYield = 0;
   vTaskDelay(1);
 }
-
-constexpr size_t xthBitIndex(const size_t columnIndex, const size_t height, const size_t y) {
-  return columnIndex * height + y;
-}
-
-static_assert(xthBitIndex(1, 9, 8) == 17);
 }  // namespace
 
 #include "../Memory/Memory.h"
@@ -166,10 +160,10 @@ bool Xtc::generateCoverBmp() const {
 
   // Allocate buffer for page data
   // XTG (1-bit): Row-major, ((width+7)/8) * height bytes
-  // XTH (2-bit): Two bit planes, column-major, ((width * height + 7) / 8) * 2 bytes
+  // XTH (2-bit): Two column-major bit planes; each column occupies ceil(height/8) bytes
   size_t bitmapSize;
   if (bitDepth == 2) {
-    bitmapSize = ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) * 2;
+    bitmapSize = static_cast<size_t>(pageInfo.width) * ((static_cast<size_t>(pageInfo.height) + 7) / 8) * 2;
   } else {
     bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
   }
@@ -227,7 +221,8 @@ bool Xtc::generateCoverBmp() const {
     memcpy(hdr + 34, &imageSize, 4);
     coverBmp.write(hdr, sizeof(hdr));
 
-    const size_t planeSize = (static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8;
+    const size_t colBytes = (pageInfo.height + 7) / 8;  // Bytes per column
+    const size_t planeSize = static_cast<size_t>(pageInfo.width) * colBytes;
     const uint8_t* plane1 = pageBuffer;              // Bit1 plane
     const uint8_t* plane2 = pageBuffer + planeSize;  // Bit2 plane
 
@@ -239,9 +234,10 @@ bool Xtc::generateCoverBmp() const {
       for (uint16_t x = 0; x < pageInfo.width; x++) {
         // Column-major, right to left: column index = (width - 1 - x)
         const size_t colIndex = pageInfo.width - 1 - x;
-        const size_t bitIndex = xthBitIndex(colIndex, pageInfo.height, y);
-        const size_t byteOffset = bitIndex / 8;
-        const size_t bitInByte = 7 - (bitIndex % 8);
+        const size_t byteInCol = y / 8;
+        const size_t bitInByte = 7 - (y % 8);  // MSB = topmost pixel
+
+        const size_t byteOffset = colIndex * colBytes + byteInCol;
         const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
         const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
         const uint8_t pixelValue = (bit1 << 1) | bit2;
@@ -351,7 +347,7 @@ bool Xtc::generateThumbBmp(int height) const {
   // Allocate buffer for page data
   size_t bitmapSize;
   if (bitDepth == 2) {
-    bitmapSize = ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) * 2;
+    bitmapSize = static_cast<size_t>(pageInfo.width) * ((static_cast<size_t>(pageInfo.height) + 7) / 8) * 2;
   } else {
     bitmapSize = ((pageInfo.width + 7) / 8) * pageInfo.height;
   }
@@ -387,7 +383,8 @@ bool Xtc::generateThumbBmp(int height) const {
   uint32_t scaleInv_fp = static_cast<uint32_t>(65536.0f / scale);
 
   // Pre-calculate plane info for 2-bit mode
-  const size_t planeSize = (bitDepth == 2) ? ((static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8) : 0;
+  const size_t colBytes = (bitDepth == 2) ? ((pageInfo.height + 7) / 8) : 0;
+  const size_t planeSize = (bitDepth == 2) ? static_cast<size_t>(pageInfo.width) * colBytes : 0;
   const uint8_t* plane1 = (bitDepth == 2) ? pageBuffer : nullptr;
   const uint8_t* plane2 = (bitDepth == 2) ? pageBuffer + planeSize : nullptr;
   const size_t srcRowBytes = (bitDepth == 1) ? ((pageInfo.width + 7) / 8) : 0;
@@ -426,9 +423,9 @@ bool Xtc::generateThumbBmp(int height) const {
             // Bounds check for column index
             if (srcX < pageInfo.width) {
               const size_t colIndex = pageInfo.width - 1 - srcX;
-              const size_t bitIndex = xthBitIndex(colIndex, pageInfo.height, srcY);
-              const size_t byteOffset = bitIndex / 8;
-              const size_t bitInByte = 7 - (bitIndex % 8);
+              const size_t byteInCol = srcY / 8;
+              const size_t bitInByte = 7 - (srcY % 8);
+              const size_t byteOffset = colIndex * colBytes + byteInCol;
               // Bounds check for buffer access
               if (byteOffset < planeSize) {
                 const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
