@@ -302,6 +302,7 @@
 
   <div id="wifi-container"></div>
   <div id="opds-container"></div>
+  <div id="plugin-container"></div>
 
   <div class="card">
     <p style="text-align: center; color: #95a5a6; margin: 0;">
@@ -362,10 +363,13 @@
     }
 
     if (setting.type === 'string') {
-      const inputType = setting.name.toLowerCase().includes('password') ? 'password' : 'text';
+      const isPassword = 'hasPassword' in setting;
+      const inputType = isPassword ? 'password' : 'text';
       const val = setting.value || '';
       return '<input type="' + inputType + '" id="' + id + '" value="' + escapeHtml(val) + '"' +
-        ' oninput="handleSettingChanged(\'' + setting.key + '\')">';
+        ' placeholder="' + (setting.hasPassword ? '(unchanged)' : '') + '"' +
+        ' oninput="this.dataset.changed=\'true\';handleSettingChanged(\'' + setting.key + '\')">' +
+        (setting.hasPassword ? ' <button class="btn-small btn-delete" type="button" onclick="clearPassword(\'' + setting.key + '\')">Clear</button>' : '');
     }
 
     return '';
@@ -385,6 +389,7 @@
       return parseInt(el.value, 10);
     }
     if (setting.type === 'string') {
+      if ('hasPassword' in setting && !el.dataset.changed) return undefined;
       return el.value;
     }
     return undefined;
@@ -392,6 +397,13 @@
 
   function markChanged() {
     document.getElementById('saveBtn').disabled = false;
+  }
+
+  function clearPassword(key) {
+    const el = getControl(key);
+    el.value = '';
+    el.dataset.changed = 'true';
+    handleSettingChanged(key);
   }
 
   function findSetting(key) {
@@ -823,13 +835,16 @@
     }
   }
 
+<!--#include file="shared/PluginHost.js.inc" -->
+
   // Sequential, not concurrent: the device's web server handles one client
-  // connection at a time, and three simultaneous fetches on page load can
+  // connection at a time, and simultaneous fetches on page load can
   // stall long enough inside a single response to trip the firmware watchdog.
   (async () => {
     await loadSettings();
     await loadWifiNetworks();
     await loadOpdsServers();
+    await loadPlugins('settings');
   })();
 </script>
 </body>

@@ -21,6 +21,9 @@ class ReaderActivity : public Activity {
                           std::string bookPath, bool allowFastInitialRefresh);
 
   virtual bool loadBook() = 0;
+  // Called when loadBook() failed. Return true to keep the activity alive
+  // (e.g. showing a dialog); false finishes it (the default).
+  virtual bool handleLoadFailure() { return false; }
   virtual std::string getBookTitle() const = 0;
   virtual std::string getBookAuthor() const { return ""; }
   virtual std::string getBookThumbBmpPath() const { return ""; }

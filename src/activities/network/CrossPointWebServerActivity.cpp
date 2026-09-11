@@ -16,6 +16,7 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/PluginEvents.h"
 #include "util/QrUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -85,6 +86,14 @@ void CrossPointWebServerActivity::onEnter() {
   lastHandleClientTime = 0;
   requestUpdate();
 
+  if (startInJoinNetwork) {
+    // Came back from the heap-defrag reboot on a pristine heap: skip the mode
+    // picker and go straight into Join Network (onNetworkModeSelected won't
+    // reboot again while this flag is set).
+    onNetworkModeSelected(NetworkMode::JOIN_NETWORK);
+    return;
+  }
+
   // Launch network mode selection subactivity
   LOG_DBG("WEBACT", "Launching NetworkModeSelectionActivity...");
   startActivityForResult(std::make_unique<NetworkModeSelectionActivity>(renderer, mappedInput),
@@ -106,6 +115,11 @@ void CrossPointWebServerActivity::onExit() {
   stopDnsServer();
   MDNS.end();
 
+  // Web uploads may have installed or removed plugins. Non-touch devices
+  // reboot below (setup() re-reads everything), but touch devices end the
+  // session in place, so re-read event subscriptions here.
+  pluginevents::refreshSubscriptions();
+
   // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     if (isApMode) {
@@ -121,6 +135,15 @@ void CrossPointWebServerActivity::onExit() {
 }
 
 void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) {
+  // Join Network brings up WiFi + the web server + TLS relays, whose working set
+  // needs a large *contiguous* block. After reading/browsing the heap is
+  // fragmented enough that tight boards (X3) abort mid-activation. Reboot once
+  // into a pristine heap and land straight back here; the flag prevents a second
+  // reboot on that return. No-op on touch boards, which fall through.
+  if (mode == NetworkMode::JOIN_NETWORK && !startInJoinNetwork) {
+    silentRestartToJoinNetwork();  // does not return on non-touch boards
+  }
+
   const char* modeName = "Join Network";
   if (mode == NetworkMode::CONNECT_CALIBRE) {
     modeName = "Connect to Calibre";
@@ -283,6 +306,13 @@ void CrossPointWebServerActivity::startWebServer() {
     state = WebServerActivityState::SERVER_RUNNING;
     LOG_DBG("WEBACT", "Web server started successfully");
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
+
+    // The device is online: deliver queued plugin events through their
+    // manifest handlers. STA only (AP mode has no internet route); bounded by
+    // the drain's per-call event budget so serving is not noticeably delayed.
+    if (!isApMode) {
+      pluginevents::drain(&renderer);
+    }
 
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.

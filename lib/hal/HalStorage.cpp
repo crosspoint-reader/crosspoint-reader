@@ -3,6 +3,7 @@
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
 #include <SDCardManager.h>
+#include <esp_heap_caps.h>
 #if FREEINK_CAP_USB_MSC
 #include <UsbMassStorage.h>
 #endif
@@ -129,6 +130,25 @@ bool HalStorage::readFileToStream(const char* path, Print& out, size_t chunkSize
 
 size_t HalStorage::readFileToBuffer(const char* path, char* buffer, size_t bufferSize, size_t maxBytes) {
   HAL_STORAGE_WRAPPED_CALL(readFileToBuffer, path, buffer, bufferSize, maxBytes);
+}
+
+// Composed of already-locked HalStorage/HalFile operations; needs no
+// StorageLock of its own.
+bool HalStorage::readFileToString(const char* moduleName, const std::string& path, size_t cap, std::string& out) {
+  out.clear();
+  HalFile file;
+  if (!openFileForRead(moduleName, path, file)) return false;
+  if (file.isDirectory()) return false;
+  const size_t size = file.fileSize();
+  if (size == 0 || size > cap) return false;
+  // string growth is a bare allocation under -fno-exceptions; probe first so
+  // a large file on a fragmented heap fails soft instead of abort()ing.
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) < size + 512) {
+    LOG_ERR(moduleName, "readFileToString OOM: %u bytes for %s", static_cast<unsigned>(size), path.c_str());
+    return false;
+  }
+  out.resize(size);
+  return file.read(out.data(), size) == static_cast<int>(size);
 }
 
 bool HalStorage::writeFile(const char* path, const String& content) {
