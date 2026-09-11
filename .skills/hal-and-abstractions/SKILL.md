@@ -1,24 +1,29 @@
 ---
 name: hal-and-abstractions
-description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay) instead of raw SDK classes, MappedInputManager logical buttons instead of raw GPIO indices, UITheme/GUI for all rendering, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
+description: Layering and abstraction discipline for the firmware. Use when touching storage, input, display, clock, power, system, tilt, frontlight, settings, i18n, or rendering, or any code that could reach into the SDK. Covers routing through the HAL (HalStorage / HalGPIO / HalDisplay / HalClock / HalPowerManager / HalSystem / HalTiltSensor / HalFrontlight) instead of raw SDK classes, MappedInputManager logical buttons instead of raw GPIO indices, UITheme/GUI for all rendering, the singleton macros, tr() for user-facing text, and where a new abstraction boundary belongs.
 ---
 
 # HAL and Abstractions
 
-CLAUDE.md lists the HAL classes and the SdFat-concurrency reason they exist.
-This is when and how to route through them, and where to draw a new boundary.
+`AGENTS.md` states the SdFat-concurrency reason the HAL exists. This is when
+and how to route through it, and where to draw a new boundary.
+
+Which extras a device actually has (touch, frontlight, tilt) come from
+`platform-targets`, not from assuming one input style or accessory set.
 
 ## Route through the layer, always
 
 - **SD card I/O:** `Storage` (HalStorage) and `HalFile`. Never `SdFat`,
   `FsFile`, `SdSpiCard`, `FsBaseFile`, or `SDCardManager` directly. The HAL
   serializes every SD access through one mutex; bypassing it races the SPI state
-  machine and panics FreeRTOS (CLAUDE.md has the failure mode). This is a
+  machine and panics FreeRTOS (`AGENTS.md` has the failure mode). This is a
   correctness boundary, not a style preference.
 - **Display:** `HalDisplay` over `EInkDisplay`. **Input:** `HalGPIO` over
-  `InputManager`.
+  `InputManager`. **Clock / power / system / tilt / frontlight:** `HalClock`,
+  `HalPowerManager`, `HalSystem`, `HalTiltSensor`, `HalFrontlight` — same
+  rule as storage. Do not call `FrontlightManager` from activities.
 - **Rendering:** everything through the `GUI` macro (UITheme) and the renderer's
-  oriented metrics. No hardcoded fonts, colors, coordinates, or 800/480
+  oriented metrics. No hardcoded fonts, colors, coordinates, or panel-size
   literals; ask the renderer for width/height and use the oriented viewable
   area.
 - **Input in activities:** `MappedInputManager::Button` logical enums
@@ -26,7 +31,7 @@ This is when and how to route through them, and where to draw a new boundary.
   indices outside `ButtonRemapActivity`. Logical buttons survive user remapping
   and orientation; raw indices do not.
 - **Shared state:** the singleton macros (`SETTINGS`, `APP_STATE`, `GUI`,
-  `Storage`, `I18N`), not threaded pointers.
+  `Storage`, `I18N`, `Frontlight`), not threaded pointers.
 
 ## User-facing text
 
@@ -47,13 +52,13 @@ it carries one of those contracts or hides a real implementation choice.
 
 ## Self-review
 
-- [ ] No direct SdFat / FsFile / SDCardManager / EInkDisplay / InputManager use
-      outside `lib/hal`.
+- [ ] No direct SdFat / FsFile / SDCardManager / EInkDisplay / InputManager /
+      FrontlightManager use outside `lib/hal`.
 - [ ] File access uses `HalFile`; no `.close()` on a local handle
       (DESTRUCTOR_CLOSES_FILE); members closed in `onExit`.
 - [ ] Input uses `MappedInputManager::Button`, not raw `BTN_*` indices.
-- [ ] Rendering goes through GUI/UITheme and oriented metrics; no 800/480 or
-      hardcoded fonts/coords.
+- [ ] Rendering goes through GUI/UITheme and oriented metrics; no hardcoded
+      panel size, fonts, or coordinates.
 - [ ] User-facing strings use `tr(STR_*)`; new keys added to YAML and
       regenerated.
 - [ ] Any new SDK capability is exposed as a HAL method, not called inline.

@@ -1,14 +1,14 @@
 # CrossPoint Reader Development Guide
 
-Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
+Project: Open-source e-reader firmware for ESP32-class e-ink devices. Which boards this tree **compiles** is committed `platformio.ini` ∩ CI. Per-device facts live in the `platform-targets` skill.
 Mission: Provide a lightweight, high-performance reading experience focused on EPUB rendering on constrained hardware.
 
 ## AI Agent Identity and Cognitive Rules
 
 * Role: Senior Embedded Systems Engineer (ESP-IDF/Arduino-ESP32 specialized).
-* Primary Constraint: 380KB RAM is the hard ceiling. Stability is non-negotiable.
-* Evidence-Based Reasoning: Before proposing a change, you MUST cite the specific file path and line numbers that justify the modification.
-* Anti-Hallucination: Do not assume the existence of libraries or ESP-IDF functions. If you are unsure of an API's availability for the ESP32-C3 RISC-V target, check the freeink-sdk source or the FreeInk SDK docs (https://freeink.org/llms.txt for an LLM-readable index) first.
+* Primary Constraint: Budget DRAM as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env, ~380KB usable). Stability is non-negotiable. Device-specific RAM, PSRAM, panel size, and controllers live in the `platform-targets` skill — not in this file.
+* Evidence-Based Reasoning: Before proposing a change, cite the file and a function, type, or constant name that justifies it. Do not cite line numbers. The same name can have more than one definition (overloads, templates, another translation unit); the file — and the signature if needed — is what disambiguates.
+* Anti-Hallucination: Do not assume the existence of libraries or ESP-IDF functions. Prefer in-tree `freeink-sdk/` (especially `BoardConfig.h`) for hardware and SDK APIs on this checkout. That header lists more devices than this tree compiles; do not treat every `BoardProfile` as a CrossPoint target. https://freeink.org/llms.txt is a website index — useful for general hints, not this tree's device matrix. Before an SDK update or a proposal to add new device support, you may suggest reviewing that index and the latest branch of upstream `freeink-sdk` (https://github.com/Free-Ink/freeink-sdk) so published notes and newer profiles are not missed. Neither overrides the in-tree header for facts on this checkout.
 * No Unfounded Claims: Do not claim performance gains or memory savings without explaining the technical mechanism (e.g., DRAM vs IRAM usage).
 * Resource Justification: You must justify any new heap allocation (new, malloc, std::vector) or explain why a stack/static alternative was rejected.
 * Verification: After suggesting a fix, instruct the user on how to verify it (e.g., monitoring heap via Serial or checking a specific cache file).
@@ -48,18 +48,18 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 ### Hardware Specs
 
-* MCUs: ESP32-C3 (single-core RISC-V @ 160MHz) and ESP32-S3 (`sticky`, dual-core Xtensa LX7)
-* RAM: ~380KB usable on ESP32-C3 (VERY LIMITED - primary project constraint)
-  * **NO PSRAM on C3**.
-  * **Single Buffer Mode**: Only ONE 48KB framebuffer (not double-buffered)
-* Flash: 16MB (Instruction storage and static data)
-* Display: 800x480 E-Ink (Slow refresh, monochrome, 1-2s full update)
-  * Framebuffer: 48,000 bytes (800 × 480 ÷ 8)
-* Storage: SD Card (Used for books and aggressive caching)
+Hardware facts (MCU, PSRAM, panel size, controller, framebuffer bytes, touch, multitouch, home key, frontlight, USB detect, shared GPIO pads, `uiScale`, bezel insets) **differ by device**. Read them from the `platform-targets` skill.
+
+* One reader core; one binary per PlatformIO env. Parse committed `platformio.ini` for `[env:…]` and `-DFREEINK_DEVICE_*`, then follow the `platform-targets` skill. Open a `resources/` file when the compile set or the task names that device. When `BoardConfig.h`, the committed INI, CI, or that skill's schema moves, refresh every committed resource **and** the schema's per-field option comments — including files whose flags are not on this compile set. Do not treat unread files as must-build.
+* One env may set several device flags (shared binary). Treat each flag as its own device until that env is split.
+* Compile contract: committed INI ∩ CI `pio run -e` (see `platform-targets`). `platformio.local.ini` is desk-only. A local-only env is a question only if the task is about that env.
+* DRAM discipline as if the tightest compiled DRAM target is in the room (today that is the C3 `default` env). PSRAM / `MALLOC_CAP_SPIRAM` only when the **env being built** sets `BOARD_HAS_PSRAM` (S3 silicon does not imply that).
+* Never hardcode panel size. Use `renderer.getScreenWidth()` / `getScreenHeight()` and `BoardConfig::MAX_FRAMEBUFFER_BYTES` for the compiled set.
+* Single framebuffer (`EINK_DISPLAY_SINGLE_BUFFER_MODE=1`). Storage is the SD card (books and cache). Partition table in this tree is 16MB flash.
 
 ### The Resource Protocol
 
-1. Stack Safety: Limit local function variables to < 256 bytes. The ESP32-C3 default stack is small; use std::unique_ptr or static pools for larger buffers.
+1. Stack Safety: Limit local function variables to < 256 bytes. Task stacks are small (especially on the C3); use std::unique_ptr or static pools for larger buffers.
 2. Heap Fragmentation: Avoid repeated new/delete in loops. Allocate buffers once during onEnter() and reuse them.
 3. Flash Persistence: Large constant data (UI strings, lookup tables) MUST be marked static const to stay in Flash (Instruction Bus), freeing DRAM.
 4. String Policy: Prohibit std::string and Arduino String in hot paths. Use std::string_view for read-only access and snprintf with fixed char[] buffers for construction.
@@ -105,20 +105,66 @@ Never invoke or probe `clang-format` directly. The repository wrapper is the onl
 
 ### Build Environment
 
-* **Standard**: C++20 (`-std=c++2a`). No Exceptions, No RTTI.
+* **Standard**: C++20 (`-std=c++2a`). No exceptions (`-fno-exceptions` in `platformio.ini`). RTTI is not pinned in this INI — confirm the env's compiler command if you need it.
 * **Logging**: ALWAYS use `LOG_INF`, `LOG_DBG`, or `LOG_ERR` from `Logging.h`. Raw Serial output is deprecated.
-* **Environments** (in `platformio.ini`):
-  * `default`: Development (LOG_LEVEL=2, serial enabled)
-  * `gh_release`: Production (LOG_LEVEL=0)
-  * `gh_release_rc`: Release candidate (LOG_LEVEL=1)
-  * `slim`: Minimal build (no serial logging)
+* **Environments**: whatever `[env:…]` is in committed `platformio.ini`. Device flags and hardware numbers live in the `platform-targets` skill. `LOG_LEVEL` and serial are per-env in the INI (`default` is typically 2; release siblings typically 1).
+
+### Shared tools, isolated builds
+
+PlatformIO toolchains are large; `.pio` trees must not be shared across
+agents. Split them:
+
+| Share across worktrees (tools / downloads) | Isolate per worktree (outputs) |
+|---|---|
+| `PLATFORMIO_CORE_DIR` (default `~/.platformio`) | `PLATFORMIO_WORKSPACE_DIR` (default `<project>/.pio`) |
+| `packages/` (compiler, esptool, Arduino-ESP32, ESP-IDF) | `PLATFORMIO_BUILD_DIR` (`<project>/.pio/build`) |
+| `platforms/` | `PLATFORMIO_LIBDEPS_DIR` (`<project>/.pio/libdeps`) |
+| `.cache/` (downloaded platform zips) | Firmware `.bin` / `.elf` / compile_commands |
+
+Leave `PLATFORMIO_CORE_DIR` at the shared default. Do **not** set
+`core_dir` to a path inside a worktree (that duplicates multi-hundred-MB
+toolchains). Do **not** point `PLATFORMIO_WORKSPACE_DIR`,
+`PLATFORMIO_BUILD_DIR`, or `PLATFORMIO_LIBDEPS_DIR` at the core dir or at
+any other shared folder.
+
+A worktree already has its own project directory, so the default
+`<project>/.pio` is isolated. That is the whole isolation mechanism — keep
+it.
+
+Optional extra reuse (still not a substitute for a per-worktree `.pio`):
+
+```bash
+# Content-addressed object cache. Safe to share; misses are fine.
+export PLATFORMIO_BUILD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/platformio-build-cache"
+```
+
+If `ccache` is on the PATH, a shared `CCACHE_DIR` is likewise safe.
+
+Never run two `pio run` processes in the **same** project directory at
+once. Two worktrees sharing `~/.platformio` is expected; two processes
+sharing one `.pio/build/<env>` will clobber firmware and object files.
+
+Optional cache warmth (sequential `pio run`) is in the `platform-targets`
+skill. Skip it unless you want a warm `.pio/`.
+
+If `platformio.local.ini` points `lib_deps` at a local `freeink-sdk`
+checkout (`symlink://…`), that checkout must be this agent's own — not a
+shared tree another agent is editing.
+
+Host-test scripts under `freeink-sdk/` write to `$TMPDIR` with **fixed**
+subdirectory names. Before running them, point `TMPDIR` at a directory
+unique to this worktree so parallel agents do not clobber each other:
+
+```bash
+export TMPDIR="$(mktemp -d)"
+```
 
 ### Critical Build Flags
 
 These flags in `platformio.ini` fundamentally affect firmware behavior:
 
 ```cpp
--DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (saves 48KB RAM!)
+-DEINK_DISPLAY_SINGLE_BUFFER_MODE=1  // Single framebuffer (not double-buffered)
 -DARDUINO_USB_MODE=1                 // Enable USB CDC
 -DARDUINO_USB_CDC_ON_BOOT=1          // Serial available immediately at boot
 -DXML_CONTEXT_BYTES=1024             // XML parser memory limit (EPUB parsing)
@@ -145,12 +191,12 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 - Only ONE framebuffer exists (not double-buffered)
 - Grayscale rendering requires temporary buffer allocation (`renderer.storeBwBuffer()`)
 - Must call `renderer.restoreBwBuffer()` to free temporary buffers
-- See [lib/GfxRenderer/GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp) for malloc usage
+- See `GfxRenderer::storeBwBuffer` / `restoreBwBuffer` for the temporary-buffer malloc
 
 ### Directory Structure
 
 * lib/: Internal libraries (Epub engine, GfxRenderer, UITheme, I18n)
-  * lib/hal/: Hardware Abstraction Layer (HalDisplay, HalGPIO, HalStorage)
+  * lib/hal/: Hardware Abstraction Layer (see HAL table below)
   * lib/I18n/: Internationalization (translations in `translations/*.yaml`, generated string tables)
 * src/activities/: UI logic using the Activity Lifecycle (onEnter, loop, onExit)
 * freeink-sdk/: Low-level SDK (EInkDisplay, InputManager, BatteryMonitor, SDCardManager)
@@ -160,11 +206,18 @@ These flags in `platformio.ini` fundamentally affect firmware behavior:
 
 **CRITICAL**: Always use HAL classes, NOT SDK classes directly.
 
-| HAL Class    | Wraps SDK Class | Purpose               | Singleton Macro |
-| ------------ | --------------- | --------------------- | --------------- |
-| `HalDisplay` | `EInkDisplay`   | E-ink display control | *(none)*        |
-| `HalGPIO`    | `InputManager`  | Button input handling | *(none)*        |
-| `HalStorage` | `SDCardManager` | SD card file I/O      | `Storage`       |
+| HAL Class          | Wraps SDK Class              | Purpose                         | Access            |
+| ------------------ | ---------------------------- | ------------------------------- | ----------------- |
+| `HalDisplay`       | `EInkDisplay`                | E-ink display control           | *(none)*          |
+| `HalGPIO`          | `InputManager`               | Button input handling           | *(none)*          |
+| `HalStorage`       | `SDCardManager`              | SD card file I/O                | `Storage`         |
+| `HalClock`         | `Rtc`                        | On-board RTC (when present)     | `halClock`        |
+| `HalPowerManager`  | `BatteryMonitor` / sleep     | Battery, sleep, CPU frequency   | `powerManager`    |
+| `HalSystem`        | panic / reboot helpers       | Panic dump, reboot info         | `HalSystem::`     |
+| `HalTiltSensor`    | `Imu`                        | Tilt page-turn (when present)   | `halTiltSensor`   |
+| `HalFrontlight`    | `FrontlightManager`          | Frontlight (inert if absent)    | `Frontlight`      |
+
+Which extras a device actually has (RTC, IMU, touch, home key, frontlight, USB detect) comes from the `platform-targets` skill — do not assume one input style or accessory set. Route new SDK capability through the matching HAL class; do not call the SDK from activities.
 
 **Location**: [lib/hal/](lib/hal/)
 
@@ -191,7 +244,7 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 
 **SdFat is not thread-safe; all SD access MUST go through HalStorage**:
 
-- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert (`tasks.c:5156, pxTCB == pxCurrentTCBs[0]`) and panics the system. See SdFat issue #518.
+- SdFat's `SdSpiCard` tracks SPI bus state with an unsynchronized `m_spiActive` bool. Two tasks calling SdFat concurrently can confuse that state machine and end with one task calling `SPIClass::endTransaction()` against a paramLock the *other* task is holding. That trips FreeRTOS's `xTaskPriorityDisinherit` assert and panics the system. See SdFat issue #518.
 - `HalStorage` serializes everything via `storageMutex`. Downstream code uses `HalFile` (declared in `<HalStorage.h>`); every method call (read, write, seek, close) takes the mutex. `HalFile`'s destructor also takes the mutex before letting the underlying SdFat `FsFile` close.
 - **Never** call into `SdFat` / `SdSpiCard` / `FsBaseFile` / `SDCardManager` / raw `FsFile` directly — that bypasses the mutex.
 
@@ -223,6 +276,8 @@ if (Storage.openFileForRead("MODULE", "/path/to/file.bin", file)) {
 * RAII: Use destructors for cleanup. Call `vTaskDelete()` explicitly for deterministic task release. Do NOT call `file.close()` on local `FsFile` variables — `DESTRUCTOR_CLOSES_FILE=1` handles it at scope exit (see Critical Build Flags).
 
 ### ESP32-C3 Platform Pitfalls
+
+These apply to the C3 `default` binary (the feature-presence floor). Other compiled MCUs may be Xtensa — still avoid unaligned casts and still keep ISR code in IRAM.
 
 #### `std::string_view` and Null Termination
 
@@ -307,7 +362,7 @@ When a template is necessary, limit instantiations: use explicit template instan
 
 ### Error Handling Philosophy
 
-**Source**: [src/main.cpp:132-143](src/main.cpp), [lib/GfxRenderer/GfxRenderer.cpp:10](lib/GfxRenderer/GfxRenderer.cpp)
+**Source**: `LOG_ERR` return paths in `GfxRenderer` (e.g. missing framebuffer) and `ActivityManager`
 
 **Pattern Hierarchy**:
 
@@ -356,9 +411,9 @@ sdkApiThatTakesOwnership(buffer, bufferSize);  // SDK calls free() / delete[]
 
 **Examples in codebase**:
 
-- Memory utilities: [Memory.h](lib/Memory/Memory.h) (`makeUniqueNoThrow`)
-- Cover image buffers: [HomeActivity.cpp:166](src/activities/home/HomeActivity.cpp)
-- Bitmap rendering: [GfxRenderer.cpp:439-440](lib/GfxRenderer/GfxRenderer.cpp)
+- Memory utilities: `makeUniqueNoThrow` in `lib/Memory/Memory.h`
+- Cover image buffers: `HomeActivity::storeCoverBuffer`
+- Grayscale / BW backup: `GfxRenderer::storeBwBuffer`
 
 ### Heap Allocation with `new`: Always Use `makeUniqueNoThrow`
 
@@ -410,7 +465,7 @@ sdkApiThatTakesOwnership(obj);  // SDK calls delete
 
 ### Logical Button Mapping
 
-**Source**: [src/MappedInputManager.cpp:20-55](src/MappedInputManager.cpp)
+**Source**: `MappedInputManager::mapButton` / `mapScreenDirection`
 
 Constraint: Physical button positions are fixed on hardware, but their logical functions change based on user settings and screen orientation.
 
@@ -438,10 +493,16 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
    
    - `Button::PageForward` → Uses side button (swappable)
 
+4. **Touch / swipe / home** (when the device has them — see `platform-targets`):
+   
+   - Screen-edge and swipe helpers on `MappedInputManager` (`wasSwipe`, `wasHomeGesture`, `ScreenLeft` / `ScreenRight` / …)
+   
+   - Do not assume a home key, swipe, or multi-touch; `HalGPIO` / the mapper report what is present. The `has_home_key` and `multitouch` fields in `platform-targets` are `BoardConfig::hasHomeKey` and `InputManager::supportsMultiTouch` (GT911 only today). USB detect and GPIO13/20 roles also live there (`usb_detect`, `shared_pads`) — do not treat a raw `BoardProfile.usbDetect >= 0` as a VBUS pin. Route new SDK capability through HAL — do not call `InputManager` from activities.
+
 **Implementation**:
 
 - Activities use **logical buttons** (e.g., `Button::Confirm`)
-- `MappedInputManager` translates to **physical hardware buttons**
+- `MappedInputManager` translates to **physical hardware buttons** and, when compiled in, touch
 - User can remap front buttons in settings
 - Orientation changes handled separately by renderer coordinate transforms
 
@@ -466,33 +527,30 @@ Constraint: Physical button positions are fixed on hardware, but their logical f
 #define GUI UITheme::getInstance()                   // Current theme
 #define Storage HalStorage::getInstance()            // SD card I/O
 #define I18N I18n::getInstance()                     // Internationalization
+#define Frontlight HalFrontlight::getInstance()      // Frontlight (inert if absent)
 ```
 
 ### Activity Lifecycle and Memory Management
 
-**Source**: [src/main.cpp:132-143](src/main.cpp)
+**Source**: `ActivityManager` (`replaceActivity`, `pushActivity`, `popActivity`, `exitActivity`)
 
-**CRITICAL**: Activities are **heap-allocated** and **deleted on exit**.
+**CRITICAL**: Activities are **heap-allocated** (`std::unique_ptr<Activity>`) and destroyed on exit.
 
 ```cpp
-// main.cpp navigation pattern
-void exitActivity() {
-  if (currentActivity) {
-    currentActivity->onExit();
-    delete currentActivity;  // Activity deleted here!
-    currentActivity = nullptr;
-  }
+// ActivityManager navigation
+void ActivityManager::exitActivity(...) {
+  currentActivity->onExit();
+  currentActivity.reset();  // unique_ptr deletes the activity
 }
 
-void enterNewActivity(Activity* activity) {
-  currentActivity = activity;  // Heap-allocated activity
-  currentActivity->onEnter();
+void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  // drops the stack, replaces currentActivity, calls onEnter
 }
 ```
 
 **Memory Implications**:
 
-- Activity navigation = `delete` old activity + `new` create next activity
+- Activity navigation = destroy old activity + create next activity
 - Any memory allocated in `onEnter()` MUST be freed in `onExit()`
 - FreeRTOS tasks MUST be deleted in `onExit()` before activity destruction
 - Member `FsFile` handles MUST be closed in `onExit()` (local `FsFile` variables auto-close via destructor)
@@ -509,9 +567,9 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### FreeRTOS Task Guidelines
 
-**Source**: [src/activities/util/KeyboardEntryActivity.cpp:45-50](src/activities/util/KeyboardEntryActivity.cpp)
+**Source**: `ActivityManager::renderTaskTrampoline` / `xTaskCreatePinnedToCore`
 
-**Pattern**: See Activity Lifecycle above. `xTaskCreate(&taskTrampoline, "Name", stackSize, this, 1, &handle)`
+**Pattern**: See Activity Lifecycle above. `xTaskCreatePinnedToCore(&renderTaskTrampoline, "Name", stackSize, this, …)`
 
 **Stack Sizing** (in BYTES, not words):
 
@@ -523,7 +581,7 @@ void onExit()   { /* free: vTaskDelete, free buffer, close member FsFiles */ Act
 
 ### Global Font Loading
 
-**Source**: [src/main.cpp:40-115](src/main.cpp)
+**Source**: global `EpdFont` / `EpdFontFamily` objects and `renderer.insertFont` in `src/main.cpp`
 
 **All fonts are loaded as global static objects** at firmware startup:
 
@@ -707,6 +765,27 @@ upstream    https://github.com/crosspoint-reader/crosspoint-reader.git (fetch/pu
 4. Never add Claude, Codex, or assistant self-attribution as a commit co-author or generated-by trailer.
 5. When a change supersedes or adapts another person's PR, verify the original human author from Git/GitHub and add that person as `Co-Authored-By`; skip bot authors.
 
+### Worktrees
+
+Do not edit, build, or commit in a checkout another person or agent is
+using. Never run two `pio run` processes in the same project directory.
+
+Not required when this checkout is already yours alone. If two agents or
+people would otherwise share a tree, a dedicated git worktree is a
+consistent way to isolate them. One concurrent agent, one worktree.
+
+1. Branch from `develop` unless the task continues an existing branch.
+2. Add a sibling worktree (name from the task slug; follow this repository's
+   branch naming):
+
+   ```bash
+   git worktree add -b <branch> ../crosspoint-reader-<slug> develop
+   ```
+
+3. In that worktree: `git submodule update --init` (`freeink-sdk`).
+4. Work, build, and test only inside that directory. Remove the worktree
+   when the task is finished (`git worktree remove`).
+
 ### Branch Naming Convention
 
 **For feature/fix branches**:
@@ -835,7 +914,7 @@ renderer.drawText(FONT_UI, x, y, tr(STR_LOADING), true);
 
 1. Place source fonts in `lib/EpdFont/fontsrc/` (gitignored)
 2. Run conversion script (see `lib/EpdFont/README`)
-3. Update global font objects in `src/main.cpp:40-115`
+3. Update the global `EpdFont` / `EpdFontFamily` objects and `renderer.insertFont` calls in `src/main.cpp`
 4. Add font ID constant to `src/fontIds.h`
 
 ---
@@ -905,16 +984,17 @@ build_flags =
 
 | Workflow      | File                                        | Purpose                |
 | ------------- | ------------------------------------------- | ---------------------- |
-| Build Check   | `.github/workflows/ci.yml`                  | Verifies code compiles |
-| Format Check  | `.github/workflows/pr-formatting-check.yml` | Validates clang-format |
-| Release Build | `.github/workflows/release.yml`             | Production releases    |
-| RC Build      | `.github/workflows/release_candidate.yml`   | Release candidates     |
+| Build Check   | `.github/workflows/ci.yml`                  | Compiles each `pio run -e` in that workflow (the compile-set gate); `clang-format` job on `pull_request` |
+| PR Title      | `.github/workflows/pr-formatting-check.yml` | Semantic PR title check |
+| Release Build | `.github/workflows/release.yml`             | Production release artifacts; not a PR compile-set gate |
+| RC Build      | `.github/workflows/release_candidate.yml`   | Manual `gh_release_rc` on `release/*`; not a PR compile-set gate |
+| Fonts         | `.github/workflows/release-fonts.yml`       | SD-card fonts; not firmware |
 
 **Rules**:
 
 - **Fix CI failures BEFORE** requesting review
 - CI runs on: Push to PR, PR updates
-- Format check fails → Run `./bin/clang-format-fix -g`
+- `ci.yml` clang-format job fails → Run `./bin/clang-format-fix -g`
 - Build check fails → Fix compile errors
 
 ---
@@ -999,31 +1079,15 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 
 ### Cache File Format Versioning
 
-**Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
-
-**Current Versions** (as of docs/file-formats.md):
-
-- `book.bin`: **Version 7** (metadata structure)
-- `section.bin`: **Version 25** (layout structure)
+Live values are `BOOK_CACHE_VERSION` in `lib/Epub/Epub/BookMetadataCache.cpp` and
+`SECTION_FILE_VERSION` in `lib/Epub/Epub/Section.cpp`. Do not copy those integers
+into this file. Layout notes live in `docs/file-formats.md`.
 
 **Version Increment Rules**:
 
-1. **ALWAYS increment version** BEFORE changing binary structure
+1. **ALWAYS increment** the matching `constexpr` BEFORE changing binary structure
 2. Version mismatch → Cache auto-invalidated and regenerated
 3. Document format changes in `docs/file-formats.md`
-
-**Example** (incrementing section format version):
-
-```cpp
-// lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 26;  // Was 25, now 26
-
-// Add new field to structure
-struct PageLine {
-  // ... existing fields ...
-  uint16_t newField;  // New field added
-};
-```
 
 ---
 
