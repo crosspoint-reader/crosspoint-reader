@@ -82,6 +82,20 @@ TEST_F(ChapterHtmlSlimParserTest, KeepsNestedTableAnchorsDeferredForTheirOuterCe
   EXPECT_EQ(parser.pendingAnchorId, "second-anchor");
 }
 
+TEST_F(ChapterHtmlSlimParserTest, PreservesCurrentAnchorWhenFlushingStoredCellAnchors) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  parser.pendingAnchorId = "stored-anchor";
+  parser.collectPendingTableAnchor();
+
+  parser.pendingAnchorId = "current-anchor";
+  parser.flushTableRowAnchorsForCell(0);
+
+  ASSERT_EQ(parser.anchorData.size(), 1u);
+  EXPECT_EQ(parser.anchorData.front().first, "stored-anchor");
+  EXPECT_EQ(parser.pendingAnchorId, "current-anchor");
+}
+
 TEST_F(ChapterHtmlSlimParserTest, ReclaimsFlushedTableAnchorStorageBeforeCollectingAnother) {
   parser.tableRowStacked = true;
   parser.insideTableCell = true;

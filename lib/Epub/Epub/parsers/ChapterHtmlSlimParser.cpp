@@ -365,6 +365,7 @@ void ChapterHtmlSlimParser::compactTableRowAnchors() {
 }
 
 void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) {
+  std::string savedPendingAnchor = std::move(pendingAnchorId);
   size_t offset = 0;
   while (offset < tableRowAnchorBytes) {
     auto& storedCellIndex = reinterpret_cast<uint8_t&>(tableRowAnchorStorage[offset]);
@@ -378,6 +379,7 @@ void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) 
     }
     offset += recordBytes;
   }
+  pendingAnchorId = std::move(savedPendingAnchor);
 }
 
 void ChapterHtmlSlimParser::flushPendingTableCellAnchors() {
