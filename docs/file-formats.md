@@ -90,6 +90,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 46
+
+Version 46 keeps the version 45 serialized layout unchanged. It was bumped
+because ordered lists now number their items, `list-style-type: none`
+suppresses list markers, and `<ul>`/`<ol>` containers contribute their own
+margins and padding to child block insets, changing cached word contents and
+page layout.
+
 ### Version 45
 
 Version 45 keeps the version 44 serialized layout unchanged. It was bumped
