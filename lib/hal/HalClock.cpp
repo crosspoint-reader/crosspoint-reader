@@ -16,24 +16,22 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   if (!_available) return false;
 
   const unsigned long now = millis();
-  if (_lastPollMs != 0 && (now - _lastPollMs) < CLOCK_POLL_MS) {
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
+  const bool firstPoll = _lastPollMs == 0;
+  if (firstPoll || (now - _lastPollMs) >= CLOCK_POLL_MS) {
+    Rtc::DateTime dt;
+    const bool valid = _sdkRtc.now(dt) && dt.year >= MIN_VALID_YEAR;
+    if (!valid && (firstPoll || _cachedTimeValid)) {
+      LOG_ERR("CLK", "RTC time unreadable or not set, hiding clock");
+    }
+    if (valid) {
+      _cachedHour = dt.hour;
+      _cachedMinute = dt.minute;
+    }
+    _cachedTimeValid = valid;
+    _lastPollMs = now;
   }
 
-  Rtc::DateTime dt;
-  if (!_sdkRtc.now(dt)) {
-    if (!_hasCachedTime) return false;
-    _lastPollMs = now;
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
-  }
-  _cachedHour = dt.hour;
-  _cachedMinute = dt.minute;
-  _lastPollMs = now;
-  _hasCachedTime = true;
+  if (!_cachedTimeValid) return false;
   hour = _cachedHour;
   minute = _cachedMinute;
   return true;
@@ -97,7 +95,7 @@ bool HalClock::syncFromNTP() {
         _lastPollMs = 0;
         _cachedHour = dt.hour;
         _cachedMinute = dt.minute;
-        _hasCachedTime = true;
+        _cachedTimeValid = true;
         LOG_INF("CLK", "RTC set to %04u-%02u-%02u %02u:%02u:%02u UTC", dt.year, dt.month, dt.day, dt.hour, dt.minute,
                 dt.second);
         return true;
