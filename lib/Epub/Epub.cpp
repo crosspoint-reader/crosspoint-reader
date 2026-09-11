@@ -632,14 +632,15 @@ const std::string& Epub::getLanguage() const {
   return bookMetadataCache->coreMetadata.language;
 }
 
-std::string Epub::getCoverBmpPath(bool cropped) const {
-  const auto coverFileName = std::string("cover") + (cropped ? "_crop" : "");
+std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
+  const auto coverFileName =
+      std::string("cover") + (originalThresholds ? "_original" : "_legacy_v2") + (cropped ? "_crop" : "");
   return cachePath + "/" + coverFileName + ".bmp";
 }
 
-bool Epub::generateCoverBmp(bool cropped) const {
+bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   // Already generated, return true
-  if (Storage.exists(getCoverBmpPath(cropped).c_str())) {
+  if (Storage.exists(getCoverBmpPath(cropped, originalThresholds).c_str())) {
     return true;
   }
 
@@ -655,7 +656,8 @@ bool Epub::generateCoverBmp(bool cropped) const {
   }
 
   if (FsHelpers::hasJpgExtension(coverImageHref)) {
-    LOG_DBG("EBP", "Generating BMP from JPG cover image (%s mode)", cropped ? "cropped" : "fit");
+    LOG_DBG("EBP", "Generating BMP from JPG cover image (%s mode%s)", cropped ? "cropped" : "fit",
+            originalThresholds ? ", original thresholds" : "");
     const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
 
     HalFile coverJpg;
@@ -671,10 +673,10 @@ bool Epub::generateCoverBmp(bool cropped) const {
     }
 
     HalFile coverBmp;
-    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds), coverBmp)) {
       return false;
     }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped);
+    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped, originalThresholds);
     // Explicitly close() files before calling Storage.remove()
     coverJpg.close();
     coverBmp.close();
@@ -682,14 +684,15 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from cover image");
-      Storage.remove(getCoverBmpPath(cropped).c_str());
+      Storage.remove(getCoverBmpPath(cropped, originalThresholds).c_str());
     }
     LOG_DBG("EBP", "Generated BMP from JPG cover image, success: %s", success ? "yes" : "no");
     return success;
   }
 
   if (FsHelpers::hasPngExtension(coverImageHref)) {
-    LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode)", cropped ? "cropped" : "fit");
+    LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode%s)", cropped ? "cropped" : "fit",
+            originalThresholds ? ", original thresholds" : "");
     const auto coverPngTempPath = getCachePath() + "/.cover.png";
 
     HalFile coverPng;
@@ -705,10 +708,10 @@ bool Epub::generateCoverBmp(bool cropped) const {
     }
 
     HalFile coverBmp;
-    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped, originalThresholds), coverBmp)) {
       return false;
     }
-    const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped);
+    const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped, originalThresholds);
     // Explicitly close() files before calling Storage.remove()
     coverPng.close();
     coverBmp.close();
@@ -716,7 +719,7 @@ bool Epub::generateCoverBmp(bool cropped) const {
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from PNG cover image");
-      Storage.remove(getCoverBmpPath(cropped).c_str());
+      Storage.remove(getCoverBmpPath(cropped, originalThresholds).c_str());
     }
     LOG_DBG("EBP", "Generated BMP from PNG cover image, success: %s", success ? "yes" : "no");
     return success;

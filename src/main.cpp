@@ -8,6 +8,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalMemory.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <HalSystem.h>
@@ -605,8 +606,14 @@ void loop() {
   renderer.setFadingFix(SETTINGS.fadingFix);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
-    LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
-            ESP.getHeapSize(), ESP.getMinFreeHeap(), ESP.getMaxAllocHeap());
+    const auto heap = HalMemory::getInternalHeap();
+    LOG_INF("MEM", "Free: %zu bytes, Total: %zu bytes, Min Free: %zu bytes, MaxAlloc: %zu bytes", heap.freeBytes,
+            heap.totalBytes, heap.minFreeBytes, heap.largestBlockBytes);
+#ifdef BOARD_HAS_PSRAM
+    const auto psram = HalMemory::getPsramHeap();
+    LOG_INF("MEM", "PSRAM: Free: %zu bytes, Total: %zu bytes, Min Free: %zu bytes, MaxAlloc: %zu bytes",
+            psram.freeBytes, psram.totalBytes, psram.minFreeBytes, psram.largestBlockBytes);
+#endif
     lastMemPrint = millis();
   }
 
@@ -764,7 +771,14 @@ void loop() {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(50);
+      // Sleep in short slices and wake the poll as soon as a button contact closes.
+      // InputManager commits a press only when two consecutive polls agree, so a
+      // press shorter than one 50 ms sleep could land in a single sample and be lost.
+      const unsigned long idleStart = millis();
+      while (millis() - idleStart < 50) {
+        delay(10);
+        if (gpio.rawInputActive()) break;
+      }
     } else {
       // Short delay to prevent tight loop while still being responsive
       delay(10);

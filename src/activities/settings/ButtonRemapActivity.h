@@ -33,6 +33,6 @@ class ButtonRemapActivity final : public Activity, private UiAppHost {
   // Returns false if a hardware button is already assigned to a different role.
   bool validateUnassigned(uint8_t pressedButton);
   // Labels for UI display.
-  const char* getRoleName(uint8_t roleIndex) const;
+  static const char* getRoleName(uint8_t roleIndex);
   const char* getHardwareName(uint8_t buttonIndex) const;
 };

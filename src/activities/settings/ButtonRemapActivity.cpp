@@ -200,7 +200,7 @@ bool ButtonRemapActivity::validateUnassigned(const uint8_t pressedButton) {
   return true;
 }
 
-const char* ButtonRemapActivity::getRoleName(const uint8_t roleIndex) const {
+const char* ButtonRemapActivity::getRoleName(const uint8_t roleIndex) {
   switch (roleIndex) {
     case 0:
       return tr(STR_BACK);
