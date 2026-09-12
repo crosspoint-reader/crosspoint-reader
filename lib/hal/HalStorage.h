@@ -87,8 +87,8 @@ class HalFile : public Print {
  public:
   HalFile();
   ~HalFile();
-  HalFile(HalFile&&);
-  HalFile& operator=(HalFile&&);
+  HalFile(HalFile&&) noexcept;
+  HalFile& operator=(HalFile&&) noexcept;
   HalFile(const HalFile&) = delete;
   HalFile& operator=(const HalFile&) = delete;
 

@@ -9,6 +9,8 @@
 
 class XtcReaderActivity final : public ReaderActivity {
   std::shared_ptr<Xtc> xtc;
+  std::unique_ptr<uint8_t[]> pageBuffer;
+  size_t pageBufferCapacity = 0;
   uint32_t currentPage = 0;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
@@ -18,6 +20,7 @@ class XtcReaderActivity final : public ReaderActivity {
     std::string title;
   };
 
+  bool ensurePageBuffer(size_t requiredSize);
   void renderPage();
   void openChapterSelection();
   void renderStatusBarOverlay(GfxRenderer& renderer, StatusBarOverlayPosition position) const;
