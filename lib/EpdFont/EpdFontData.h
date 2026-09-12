@@ -106,6 +106,24 @@ constexpr int raiseAboveBase(const Anchor anchor, const int markTop, const int m
   return (gap < MIN_GAP_PX) ? (MIN_GAP_PX - gap) : 0;
 }
 
+/// Lower a below-baseline combining mark clear of a base glyph that descends
+/// past it. `lineDescent` (negative) clamps the mark inside the line box.
+/// Returns 0 for above-baseline marks (see raiseAboveBase), non-default
+/// anchors, bases that don't reach the mark, and when there is no base glyph
+/// (baseHeight 0, e.g. a leading mark or a mark after a zero-height space).
+constexpr int lowerBelowBase(const Anchor anchor, const int markTop, const int markHeight, const int baseTop,
+                             const int baseHeight, const int lineDescent) {
+  if (anchor != Anchor::CenterRaised) return 0;
+  if (markTop > 0) return 0;
+  if (baseHeight == 0) return 0;  // no base glyph to clear
+  const int wantTop = (baseTop - baseHeight) - MIN_GAP_PX;
+  if (markTop <= wantTop) return 0;
+  int lower = markTop - wantTop;
+  const int markBottomAfter = markTop - lower - markHeight;
+  if (markBottomAfter < lineDescent) lower -= (lineDescent - markBottomAfter);  // keep inside line box
+  return lower < 0 ? 0 : lower;
+}
+
 }  // namespace combiningMark
 
 /// GCC/Clang (the ESP32 firmware toolchain) pack structs with __attribute__((packed)).
