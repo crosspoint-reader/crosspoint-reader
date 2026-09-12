@@ -597,6 +597,46 @@ std::string Dictionary::cleanWord(const char* word) {
   return result;
 }
 
+bool Dictionary::germanUppercaseFolded(const char* word, char* out, size_t outSize) {
+  // Fold the German uppercase codepoints asciiCaseCmp cannot: Ä/Ö/Ü
+  // (C3 84/96/9C -> C3 A4/B6/BC) and capital ẞ (E1 BA 9E -> C3 9F, one byte
+  // shorter). False when nothing folded — lookup() skips the reprobe — or when
+  // the result would not fit, which no matchable query can hit: readWordInto()
+  // caps headwords below the same size, so an over-long query has no match.
+  // A fallback probe rather than part of cleanWord(): capitalized headwords
+  // ("Überprüfung", "Ärzte") are stored with their uppercase umlaut bytes and
+  // must keep matching an unfolded query first — folding unconditionally would
+  // trade the sentence-initial fix for a miss on every umlaut-initial noun.
+  const auto* b = reinterpret_cast<const unsigned char*>(word);
+  size_t w = 0;
+  bool changed = false;
+  for (size_t i = 0; b[i] != '\0';) {
+    // b[i] != 0 makes b[i + 1] readable; the ẞ arm reads b[i + 2] only after
+    // b[i + 1] == 0xBA rules out the terminator.
+    unsigned char first = b[i];
+    unsigned char second = 0;
+    size_t consumed = 1;
+    if (b[i] == 0xC3 && (b[i + 1] == 0x84 || b[i + 1] == 0x96 || b[i + 1] == 0x9C)) {  // Ä Ö Ü
+      first = 0xC3;
+      second = b[i + 1] + 0x20;  // -> ä ö ü
+      consumed = 2;
+      changed = true;
+    } else if (b[i] == 0xE1 && b[i + 1] == 0xBA && b[i + 2] == 0x9E) {  // ẞ
+      first = 0xC3;
+      second = 0x9F;  // -> ß
+      consumed = 3;
+      changed = true;
+    }
+    const size_t emit = second != 0 ? 2 : 1;
+    if (w + emit >= outSize) return false;  // keep room for the terminator
+    out[w++] = static_cast<char>(first);
+    if (second != 0) out[w++] = static_cast<char>(second);
+    i += consumed;
+  }
+  out[w] = '\0';
+  return changed;
+}
+
 void Dictionary::stemVariants(const std::string& word, std::vector<std::string>& out) {
   out.clear();
   out.reserve(6);
@@ -658,6 +698,20 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     if (!location.found && hasSyn) {
       location = locateSynonym(session, cleaned.c_str(), &matchedHeadwordOut);
       searchFailed = searchFailed || location.readError;
+    }
+
+    // Reprobe with German uppercase umlauts / ẞ folded, so sentence-initial
+    // "Überprüf" or all-caps "STRAẞE" find their lowercase index forms. Runs
+    // only after the unfolded probes so capitalized headwords ("Überprüfung")
+    // keep their exact match. foldBuf (not wordBuf) holds the target: locate()
+    // clobbers wordBuf on every entry it scans.
+    if (!location.found && germanUppercaseFolded(cleaned.c_str(), foldBuf, sizeof(foldBuf))) {
+      location = locate(session, foldBuf, &matchedHeadwordOut);
+      searchFailed = searchFailed || location.readError;
+      if (!location.found && hasSyn) {
+        location = locateSynonym(session, foldBuf, &matchedHeadwordOut);
+        searchFailed = searchFailed || location.readError;
+      }
     }
 
     if (!location.found) {
