@@ -1,8 +1,12 @@
 #include "HalTiltSensor.h"
 
 #include <Logging.h>
+#include <Memory.h>
 
-#include "HalTiltSensor_IMUPitchRollEstimator.h"
+#include <algorithm>
+#include <iterator>
+
+#include "HalTiltSensor_IMUTiltEstimator.h"
 
 HalTiltSensor halTiltSensor;  // Singleton instance
 
@@ -19,6 +23,8 @@ bool HalTiltSensor::readGyro(float& ax, float& ay, float& az, float& gx, float& 
 }
 
 void HalTiltSensor::begin() {
+  _havePointerGyroBias = false;
+  std::fill(std::begin(_pointerGyroBias), std::end(_pointerGyroBias), 0.0f);
   _available = _sdkImu.begin();
   if (_available) {
     _initMs = millis();
@@ -68,6 +74,14 @@ bool HalTiltSensor::deepSleep() {
 }
 
 void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation) {
+  if (!(mode & CrossPointTiltSensorMode::TILT_PAGE_ACTIVE)) {
+    _tiltForwardEvent = false;
+    _tiltBackEvent = false;
+  }
+  if (mode != _lastMode || orientation != _lastOrientation) {
+    _pointerMoveX = 0;
+    _pointerMoveY = 0;
+  }
   _lastMode = mode;
   _lastOrientation = orientation;
 
@@ -81,10 +95,11 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation) {
     return;
   } else if ((mode == CrossPointTiltPageTurn::TILT_OFF) && _isAwake) {
     _isAwake = !deepSleep();
-    if (_pitchRoll) {
-      delete _pitchRoll;
-      _pitchRoll = nullptr;
+    if (_tiltEstimator) {
+      delete _tiltEstimator;
+      _tiltEstimator = nullptr;
     }
+    _tiltEstimatorAllocationFailed = false;
     return;
   }
 
@@ -93,14 +108,25 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation) {
     return;
   }
 
-  if (!_pitchRoll && mode & CrossPointTiltSensorMode::TILT_POINTER_ACTIVE) {
-    _pitchRoll = new IMUPitchRollEstimator();
-    if (_pitchRoll) {
-      _pitchRoll->begin();
+  if (mode & CrossPointTiltSensorMode::TILT_POINTER_ACTIVE) {
+    if (!_tiltEstimator && !_tiltEstimatorAllocationFailed) {
+      auto tiltEstimator = makeUniqueNoThrow<IMUTiltEstimator>();
+      if (!tiltEstimator) {
+        LOG_ERR("GYR-IMU", "OOM: IMUTiltEstimator");
+        _tiltEstimatorAllocationFailed = true;
+      } else {
+        _tiltEstimator = tiltEstimator.release();
+        _tiltEstimator->begin(_havePointerGyroBias ? _pointerGyroBias : nullptr);
+      }
     }
-  } else if (_pitchRoll && !(mode & CrossPointTiltSensorMode::TILT_POINTER_ACTIVE)) {
-    delete _pitchRoll;
-    _pitchRoll = nullptr;
+  } else {
+    if (_tiltEstimator) {
+      delete _tiltEstimator;
+      _tiltEstimator = nullptr;
+    }
+    _tiltEstimatorAllocationFailed = false;
+    _pointerMoveX = 0;
+    _pointerMoveY = 0;
   }
 
   const unsigned long now = millis();
@@ -127,16 +153,16 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation) {
     float tiltAxis;
     switch (orientation) {
       case CrossPointOrientation::PORTRAIT:
-        tiltAxis = mode & CrossPointTiltPageTurn::TILT_INVERTED ? -gx : gx;
+        tiltAxis = (mode & CrossPointTiltPageTurn::TILT_INVERTED) ? -gx : gx;
         break;
       case CrossPointOrientation::INVERTED:
-        tiltAxis = mode & CrossPointTiltPageTurn::TILT_INVERTED ? gx : -gx;
+        tiltAxis = (mode & CrossPointTiltPageTurn::TILT_INVERTED) ? gx : -gx;
         break;
       case CrossPointOrientation::LANDSCAPE_CW:
-        tiltAxis = mode & CrossPointTiltPageTurn::TILT_INVERTED ? gy : -gy;
+        tiltAxis = (mode & CrossPointTiltPageTurn::TILT_INVERTED) ? gy : -gy;
         break;
       case CrossPointOrientation::LANDSCAPE_CCW:
-        tiltAxis = mode & CrossPointTiltPageTurn::TILT_INVERTED ? -gy : gy;
+        tiltAxis = (mode & CrossPointTiltPageTurn::TILT_INVERTED) ? -gy : gy;
         break;
       default:
         tiltAxis = gx;
@@ -168,9 +194,27 @@ void HalTiltSensor::update(const uint8_t mode, const uint8_t orientation) {
     }
   }
 
-  if (mode & CrossPointTiltSensorMode::TILT_POINTER_ACTIVE && _pitchRoll) {
-    _pitchRoll->consume(ax, ay, az, gx, gy, gz, now);
-    _hadActivity = true;
+  if (mode & CrossPointTiltSensorMode::TILT_POINTER_ACTIVE && _tiltEstimator) {
+    _tiltEstimator->consume(ax, ay, az, gx, gy, gz, now);
+    if (_tiltEstimator->hasGyroBias()) {
+      for (uint8_t axis = 0; axis < 3; ++axis) {
+        _pointerGyroBias[axis] = _tiltEstimator->estimatedGyroBias(axis);
+      }
+      _havePointerGyroBias = true;
+    }
+    int moveX = 0;
+    int moveY = 0;
+    _tiltEstimator->pollPointerMove(moveX, moveY, orientation,
+                                    (mode & CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_LOW)    ? 0
+                                    : (mode & CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_HIGH) ? 2
+                                                                                                       : 1,
+                                    (mode & CrossPointTiltSensorMode::TILT_POINTER_INVERT_X) != 0,
+                                    (mode & CrossPointTiltSensorMode::TILT_POINTER_INVERT_Y) != 0);
+    if (moveX || moveY) {
+      _pointerMoveX = static_cast<int8_t>(moveX);
+      _pointerMoveY = static_cast<int8_t>(moveY);
+      _hadActivity = true;
+    }
   }
 }
 
@@ -196,24 +240,19 @@ void HalTiltSensor::clearPendingEvents() {
   _tiltForwardEvent = false;
   _tiltBackEvent = false;
   _hadActivity = false;
-  if (_pitchRoll) {
-    delete _pitchRoll;
-    _pitchRoll = nullptr;
+  _pointerMoveX = 0;
+  _pointerMoveY = 0;
+  if (_tiltEstimator) {
+    delete _tiltEstimator;
+    _tiltEstimator = nullptr;
   }
   // Intentionally preserve _inTilt so a held tilt doesn't retrigger on next poll
 }
 
 bool HalTiltSensor::getXYPointerMove(int& moveX, int& moveY) {
-  if (_pitchRoll) {
-    _pitchRoll->pollPointerMove(moveX, moveY, _lastOrientation,
-                                (_lastMode & CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_LOW)    ? 0
-                                : (_lastMode & CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_HIGH) ? 2
-                                                                                                        : 1,
-                                _lastMode & CrossPointTiltSensorMode::TILT_POINTER_INVERT_X ? true : false,
-                                _lastMode & CrossPointTiltSensorMode::TILT_POINTER_INVERT_Y ? true : false);
-    return moveX || moveY ? true : false;
-  } else {
-    moveX = moveY = 0;
-  }
-  return false;
+  moveX = _pointerMoveX;
+  moveY = _pointerMoveY;
+  _pointerMoveX = 0;
+  _pointerMoveY = 0;
+  return moveX || moveY;
 }
