@@ -29,6 +29,11 @@ class HalTiltSensor;
 extern HalTiltSensor halTiltSensor;  // Singleton
 
 class HalTiltSensor {
+ public:
+  // Sample-driven estimator; its definition lives in the separate estimator header.
+  class IMUTiltEstimator;
+
+ private:
   bool _available = false;
   mutable Imu _sdkImu;
 
@@ -55,8 +60,12 @@ class HalTiltSensor {
   uint8_t _lastMode = CrossPointTiltSensorMode::SENSOR_OFF;
   uint8_t _lastOrientation = CrossPointOrientation::PORTRAIT;
 
-  class IMUPitchRollEstimator;
-  IMUPitchRollEstimator* _pitchRoll;
+  IMUTiltEstimator* _tiltEstimator = nullptr;
+  bool _tiltEstimatorAllocationFailed = false;
+  float _pointerGyroBias[3] = {};
+  bool _havePointerGyroBias = false;
+  int8_t _pointerMoveX = 0;
+  int8_t _pointerMoveY = 0;
 
   bool readGyro(float& ax, float& ay, float& az, float& gx, float& gy, float& gz) const;
 
