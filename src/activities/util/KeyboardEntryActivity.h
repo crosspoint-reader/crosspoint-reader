@@ -32,6 +32,7 @@ class KeyboardEntryActivity : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override { return true; }
+  TiltInteraction tiltInteraction() const;
 
  private:
   std::string title;

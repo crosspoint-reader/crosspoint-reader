@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -18,6 +19,8 @@ class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
 enum class HomeMenuItem { NONE, FILE_BROWSER, LIBRARY, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+
+enum class TiltInteraction : uint8_t { None, PageTurn, PointerXY };
 
 /**
  * ActivityManager
@@ -77,9 +80,6 @@ class ActivityManager {
   void begin();
   void loop();
 
-  // check whether the current activity has a given activity name
-  bool currentActivityHasName(std::string activityName);
-
   // Will replace currentActivity and drop all activities on stack
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
 
@@ -107,6 +107,7 @@ class ActivityManager {
   bool preventAutoSleep() const;
   bool requiresExclusiveStorageLoop() const;
   bool isReaderActivity() const;
+  TiltInteraction activeTiltInteraction() const;
   bool handleForcedRefresh();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;

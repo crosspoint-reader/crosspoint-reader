@@ -42,6 +42,16 @@ void indexBuildYield(void*) { vTaskDelay(1); }
 
 }  // namespace
 
+TiltInteraction DictionaryWordSelectActivity::tiltInteraction() const {
+  switch (SETTINGS.tiltToSelect) {
+    case CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY:
+    case CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY_AND_KEYBOARD:
+      return TiltInteraction::PointerXY;
+    default:
+      return TiltInteraction::None;
+  }
+}
+
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
   fontId = SETTINGS.getReaderFontId();
@@ -231,6 +241,10 @@ void DictionaryWordSelectActivity::performLookup() {
 }
 
 void DictionaryWordSelectActivity::loop() {
+  int tiltMoveX = 0;
+  int tiltMoveY = 0;
+  const bool hasTiltMove = halTiltSensor.getXYPointerMove(tiltMoveX, tiltMoveY);
+
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
       popup = Popup::None;
@@ -274,16 +288,28 @@ void DictionaryWordSelectActivity::loop() {
   const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
   const unsigned long now = millis();
 
-  int tiltMoveX = 0, tiltMoveY = 0;
-  if (halTiltSensor.isAvailable()) {
-    halTiltSensor.getXYPointerMove(tiltMoveX, tiltMoveY);
+  if (hasTiltMove) {
+    if (tiltMoveX < 0 && selected > 0) {
+      selected--;
+      lastHorizontalMoveTime = now;
+      requestUpdate();
+    } else if (tiltMoveX > 0 && hasNextWord) {
+      selected++;
+      lastHorizontalMoveTime = now;
+      requestUpdate();
+    } else if (tiltMoveX == 0 && tiltMoveY < 0) {
+      moveVertical(-1);
+    } else if (tiltMoveX == 0 && tiltMoveY > 0) {
+      moveVertical(1);
+    }
+    return;
   }
 
   const bool repeat =
       mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
-  const bool moveLeft = -1 == tiltMoveX || mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||
+  const bool moveLeft = mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||
                         (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenLeft));
-  const bool moveRight = 1 == tiltMoveX || mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
+  const bool moveRight = mappedInput.wasPressed(MappedInputManager::Button::ScreenRight) ||
                          (repeat && mappedInput.isPressed(MappedInputManager::Button::ScreenRight));
   if (moveLeft && selected > 0) {
     selected--;
@@ -293,9 +319,9 @@ void DictionaryWordSelectActivity::loop() {
     selected++;
     lastHorizontalMoveTime = now;
     requestUpdate();
-  } else if (-1 == tiltMoveY || mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenUp)) {
     moveVertical(-1);
-  } else if (1 == tiltMoveY || mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::ScreenDown)) {
     moveVertical(1);
   }
 }

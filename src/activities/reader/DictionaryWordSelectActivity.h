@@ -25,6 +25,7 @@ class DictionaryWordSelectActivity final : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
+  TiltInteraction tiltInteraction() const;
 
  private:
   // Screen box of one selectable word. `text` points into the owned Page's

@@ -59,5 +59,6 @@ class ReaderActivity : public Activity {
   void render(RenderLock&& lock) override;
 
   bool isReaderActivity() const final { return true; }
+  TiltInteraction tiltInteraction() const;
   bool handleForcedRefresh() final;
 };
