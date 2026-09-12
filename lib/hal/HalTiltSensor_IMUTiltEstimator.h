@@ -38,16 +38,17 @@ class HalTiltSensor::IMUTiltEstimator {
   bool haveSample = false, haveBias = false, referencePendingFromCachedBias = false, pointerOutputReady = false;
   bool loggedInvalidInput = false, loggedInvalidState = false;
 
-  static constexpr float ACCEL_MIN_G = 0.8f;                   // Lower acceleration limit for gravity-based correction.
-  static constexpr float ACCEL_MAX_G = 1.2f;                   // Upper acceleration limit for gravity-based correction.
-  static constexpr float STATIONARY_ACCEL_DOT_MIN = 0.99985f;  // Maximum direction drift during a stable window.
+  static constexpr float ACCEL_MIN_G = 0.8f;  // Lower acceleration limit for gravity-based correction.
+  static constexpr float ACCEL_MAX_G = 1.2f;  // Upper acceleration limit for gravity-based correction.
+  static constexpr float STATIONARY_ACCEL_DOT_MIN =
+      0.99939f;  // Maximum direction drift during a stable window (approx. 2 deg)
   static constexpr float STATIONARY_GYRO_VARIATION_DPS = 8.0f;  // Maximum sample deviation from the window mean.
   static constexpr float STATIONARY_CORRECTED_RATE_DPS = 2.5f;  // Maximum corrected rate when recovering a reference.
   static constexpr float CALIBRATION_MAX_BIAS_DPS = 20.0f;      // Largest zero-rate offset accepted at startup.
   static constexpr uint32_t CALIBRATION_HOLD_MS = 250;          // Quiet startup time needed to estimate gyro bias.
   static constexpr uint16_t CALIBRATION_MIN_SAMPLES = 8;        // Minimum startup samples used to estimate gyro bias.
-  static constexpr uint32_t STATIONARY_HOLD_MS = 600;           // Stable time required to capture a reference.
-  static constexpr uint16_t STATIONARY_MIN_SAMPLES = 12;        // Minimum samples required for a stable window.
+  static constexpr uint32_t STATIONARY_HOLD_MS = 500;           // Stable time required to capture a reference.
+  static constexpr uint16_t STATIONARY_MIN_SAMPLES = 10;        // Minimum samples required for a stable window.
 
   static constexpr float REPOSITION_MIN_ANGLE_DEG = 32.0f;  // Relative angle that enables automatic re-tare.
   static constexpr float REPOSITION_MAX_RATE_DPS = 1.75f;   // Maximum mean rate while settling at a new posture.
@@ -60,8 +61,9 @@ class HalTiltSensor::IMUTiltEstimator {
   static constexpr uint32_t REFERENCE_LOST_INTERVAL_MS = 250;   // Gap above which the reference is reacquired.
   static constexpr uint32_t TARE_WAIT_LOG_INTERVAL_MS = 1000;   // Repeat interval for stable-window diagnostics.
 
-  static constexpr float TRACK_MIN_ANGLE = 2.5f;            // Base angle required to trigger pointer movement.
-  static constexpr float TRACK_REPEAT_MAX_ANGLE = 20.0f;    // Angle that reaches the fastest repeat rate.
+  static constexpr float TRACK_MIN_ANGLE = 3.5f;  // Base angle required to trigger pointer movement.
+  static constexpr float TRACK_REPEAT_MAX_ANGLE_F =
+      3.25f;  // Multiple of minimum tracking angle that reaches the fastest repeat rate.
   static constexpr float MOVE_REPEAT_MIN_MS = 150.0f;       // Fastest interval between repeated movements.
   static constexpr float SENSITIVITY_FACTOR_LOW = 2.25f;    // Low-sensitivity angle multiplier.
   static constexpr float SENSITIVITY_FACTOR_NORMAL = 1.5f;  // Normal-sensitivity angle multiplier.

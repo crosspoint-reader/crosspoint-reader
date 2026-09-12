@@ -90,7 +90,7 @@ During a stationary window, acceleration is averaged to define gravity in the
 reference frame and all three raw gyro rates are averaged as zero-rate offsets.
 Initial calibration must contain at least 8 samples (`CALIBRATION_MIN_SAMPLES`)
 and span at least 250 ms (`CALIBRATION_HOLD_MS`). Reference reacquisition must
-contain at least 12 samples (`STATIONARY_MIN_SAMPLES`) and span at least 600 ms
+contain at least 10 samples (`STATIONARY_MIN_SAMPLES`) and span at least 500 ms
 (`STATIONARY_HOLD_MS`). Both remain within 0.8-1.2 g (`ACCEL_MIN_G` and
 `ACCEL_MAX_G`), stay within approximately one degree of their initial
 acceleration direction (`STATIONARY_ACCEL_DOT_MIN`), and keep each gyro sample
