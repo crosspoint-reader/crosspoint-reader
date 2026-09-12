@@ -412,7 +412,10 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   // overwrites every byte, so a moved-from value carries nothing into the next iteration.
   std::string scratch;
   for (uint16_t i = 0; i < wc; i++) {
-    serialization::readString(file, scratch);
+    if (!serialization::readString(file, scratch)) {
+      LOG_ERR("TXB", "Deserialization failed: ruby text %u of %u", i, wc);
+      return nullptr;
+    }
     if (scratch.empty()) continue;
     if (block->rubyTexts.empty()) {
       block->rubyTexts.resize(wc);
@@ -420,22 +423,24 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
     block->rubyTexts[i] = std::move(scratch);
   }
 
-  // Style (alignment + margins/padding/indent)
+  // Style (alignment + margins/padding/indent). A short read here zeroes the
+  // field rather than leaving the BlockStyle default (alignment defaults to
+  // Justify, not 0), so a truncated tail must fail the whole block instead of
+  // rendering it with silently wrong geometry.
   BlockStyle& blockStyle = block->blockStyle;
-  serialization::readPod(file, blockStyle.alignment);
-  serialization::readPod(file, blockStyle.textAlignDefined);
-  serialization::readPod(file, blockStyle.marginTop);
-  serialization::readPod(file, blockStyle.marginBottom);
-  serialization::readPod(file, blockStyle.marginLeft);
-  serialization::readPod(file, blockStyle.marginRight);
-  serialization::readPod(file, blockStyle.paddingTop);
-  serialization::readPod(file, blockStyle.paddingBottom);
-  serialization::readPod(file, blockStyle.paddingLeft);
-  serialization::readPod(file, blockStyle.paddingRight);
-  serialization::readPod(file, blockStyle.textIndent);
-  serialization::readPod(file, blockStyle.textIndentDefined);
-  serialization::readPod(file, blockStyle.isRtl);
-  serialization::readPod(file, blockStyle.directionDefined);
+  const bool styleRead =
+      serialization::readPod(file, blockStyle.alignment) && serialization::readPod(file, blockStyle.textAlignDefined) &&
+      serialization::readPod(file, blockStyle.marginTop) && serialization::readPod(file, blockStyle.marginBottom) &&
+      serialization::readPod(file, blockStyle.marginLeft) && serialization::readPod(file, blockStyle.marginRight) &&
+      serialization::readPod(file, blockStyle.paddingTop) && serialization::readPod(file, blockStyle.paddingBottom) &&
+      serialization::readPod(file, blockStyle.paddingLeft) && serialization::readPod(file, blockStyle.paddingRight) &&
+      serialization::readPod(file, blockStyle.textIndent) &&
+      serialization::readPod(file, blockStyle.textIndentDefined) && serialization::readPod(file, blockStyle.isRtl) &&
+      serialization::readPod(file, blockStyle.directionDefined);
+  if (!styleRead) {
+    LOG_ERR("TXB", "Deserialization failed: block style");
+    return nullptr;
+  }
 
   return block;
 }

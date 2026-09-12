@@ -32,6 +32,16 @@ class ContentOpfParser final : public Print {
   HalFile tempItemStore;
   std::string coverItemId;
   bool hasExplicitStartReference = false;
+  // Set when the temporary item store could not be opened, sought, or read.
+  // Any of those leaves an idref unresolved, which is indistinguishable from a
+  // genuinely absent id: the itemref is silently skipped and the spine is
+  // written a chapter short, and the resulting book.bin looks valid forever
+  // after. Surfaced so the caller can discard the build and rebuild instead.
+  //
+  // A failed open matters on its own: with no store, the manifest index stays
+  // empty, so lookups take the fallback path, where available() reports zero,
+  // no read is ever attempted, and nothing else would notice.
+  bool itemStoreUnusable = false;
 
   // Index for fast idref→href lookup (binary search over .items.bin)
   struct ItemIndexEntry {
@@ -73,6 +83,10 @@ class ContentOpfParser final : public Print {
   ~ContentOpfParser() override;
 
   bool setup();
+
+  // False when a spine itemref could not be resolved because the item store was
+  // unusable. The parsed spine is incomplete and must not be cached.
+  [[nodiscard]] bool spineIsComplete() const { return !itemStoreUnusable; }
 
   size_t write(uint8_t) override;
   size_t write(const uint8_t* buffer, size_t size) override;

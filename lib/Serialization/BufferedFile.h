@@ -1,6 +1,7 @@
 #pragma once
 #include <HalStorage.h>
 #include <Memory.h>
+#include <Serialization.h>
 
 #include <algorithm>
 #include <cstring>
@@ -110,6 +111,15 @@ class BufferedFileReader {
   // Logical read position.
   size_t position() const { return bufStart + off; }
 
+  // Bytes between the logical cursor and end of file. Measured against the file
+  // rather than the buffer, so it is the true remaining count even when the
+  // buffer is empty or holds a window that ends before EOF.
+  size_t available() const {
+    const size_t end = file.size();
+    const size_t pos = position();
+    return end > pos ? end - pos : 0;
+  }
+
   bool seek(const size_t target) {
     // Within the buffered window: just move the cursor.
     if (cap != 0 && target >= bufStart && target < bufStart + fill) {
@@ -139,8 +149,9 @@ void writePod(BufferedFileWriter& out, const T& value) {
 }
 
 template <typename T>
-void readPod(BufferedFileReader& in, T& value) {
-  in.read(&value, sizeof(T));
+bool readPod(BufferedFileReader& in, T& value) {
+  value = T{};
+  return in.read(&value, sizeof(T)) == sizeof(T);
 }
 
 inline void writeString(BufferedFileWriter& out, const std::string& s) {
@@ -149,13 +160,30 @@ inline void writeString(BufferedFileWriter& out, const std::string& s) {
   out.write(s.data(), len);
 }
 
-inline void readString(BufferedFileReader& in, std::string& s) {
-  uint32_t len;
-  readPod(in, len);
-  s.resize(len);
-  if (len > 0) {
-    in.read(&s[0], len);
+// Bounded for the same reason as the HalFile overload in Serialization.h: the
+// length comes off the file before it can be trusted, and an unbounded resize()
+// is a throwing allocation that aborts under -fno-exceptions.
+inline bool readString(BufferedFileReader& in, std::string& s) {
+  uint32_t len = 0;
+  if (!readPod(in, len)) {
+    s.clear();
+    return false;
   }
+  const size_t remaining = in.available();
+  if (len > remaining) {
+    LOG_ERR("SER", "String length %u exceeds %u bytes remaining", len, static_cast<unsigned>(remaining));
+    s.clear();
+    return false;
+  }
+  s.resize(len);
+  if (len == 0) {
+    return true;
+  }
+  if (in.read(&s[0], len) != len) {
+    s.clear();
+    return false;
+  }
+  return true;
 }
 
 }  // namespace serialization
