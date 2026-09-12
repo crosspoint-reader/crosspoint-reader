@@ -225,10 +225,6 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
-bool ActivityManager::currentActivityHasName(std::string activityName) {
-  return !activityName.empty() && currentActivity ? currentActivity->hasName(activityName) : false;
-}
-
 void ActivityManager::goToFileTransfer() {
   replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
 }
@@ -352,6 +348,10 @@ bool ActivityManager::isReaderActivity() const {
   return std::any_of(stackActivities.begin(), stackActivities.end(),
                      [](const auto& activity) { return activity->isReaderActivity(); }) ||
          (currentActivity && currentActivity->isReaderActivity());
+}
+
+TiltInteraction ActivityManager::activeTiltInteraction() const {
+  return currentActivity ? currentActivity->tiltInteraction() : TiltInteraction::None;
 }
 
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }

@@ -602,51 +602,55 @@ void loop() {
   }
 
   uint8_t tiltSensorConf = CrossPointTiltSensorMode::SENSOR_OFF;
+  switch (activityManager.activeTiltInteraction()) {
+    case TiltInteraction::None:
+      break;
 
-  if (SETTINGS.tiltPageTurn && activityManager.isReaderActivity()) {
-    tiltSensorConf |= CrossPointTiltSensorMode::TILT_PAGE_ACTIVE;
+    case TiltInteraction::PageTurn: {
+      tiltSensorConf |= CrossPointTiltSensorMode::TILT_PAGE_ACTIVE;
 
-    if (CrossPointTiltSensorMode::TILT_PAGE_INVERTED == SETTINGS.tiltPageTurn) {
-      tiltSensorConf |= CrossPointTiltSensorMode::TILT_PAGE_INVERTED;
+      if (CrossPointTiltSensorMode::TILT_PAGE_INVERTED == SETTINGS.tiltPageTurn) {
+        tiltSensorConf |= CrossPointTiltSensorMode::TILT_PAGE_INVERTED;
+      }
+
+      break;
+    }
+
+    case TiltInteraction::PointerXY: {
+      tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_ACTIVE;
+
+      switch (SETTINGS.tiltToSelectSensitivity) {
+        case CrossPointSettings::TILT_TO_SELECT_SENSITIVITY::TILT_SELECT_SENSITIVITY_LOW:
+          tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_LOW;
+          break;
+        case CrossPointSettings::TILT_TO_SELECT_SENSITIVITY::TILT_SELECT_SENSITIVITY_HIGH:
+          tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_HIGH;
+          break;
+        default:
+          break;
+      }
+
+      switch (SETTINGS.tiltToSelectInvert) {
+        case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_X:
+          tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_X;
+          break;
+        case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_Y:
+          tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_Y;
+          break;
+        case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_XY:
+          tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_X;
+          tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_Y;
+          break;
+        case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_OFF:
+        default:
+          break;
+      }
+
+      break;
     }
   }
 
-  if (((SETTINGS.tiltToSelect == CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY ||
-        SETTINGS.tiltToSelect == CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY_AND_KEYBOARD) &&
-       activityManager.currentActivityHasName("DictionaryWordSelect")) ||
-      (SETTINGS.tiltToSelect == CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY_AND_KEYBOARD &&
-       activityManager.currentActivityHasName("KeyboardEntry"))) {
-    tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_ACTIVE;
-
-    switch (SETTINGS.tiltToSelectSensitivity) {
-      case CrossPointSettings::TILT_TO_SELECT_SENSITIVITY::TILT_SELECT_SENSITIVITY_LOW:
-        tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_LOW;
-        break;
-      case CrossPointSettings::TILT_TO_SELECT_SENSITIVITY::TILT_SELECT_SENSITIVITY_HIGH:
-        tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_SENSITIVITY_HIGH;
-        break;
-      default:
-        break;
-    }
-
-    switch (SETTINGS.tiltToSelectInvert) {
-      case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_X:
-        tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_X;
-        break;
-      case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_Y:
-        tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_Y;
-        break;
-      case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_XY:
-        tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_X;
-        tiltSensorConf |= CrossPointTiltSensorMode::TILT_POINTER_INVERT_Y;
-        break;
-      case CrossPointSettings::TILT_TO_SELECT_INVERT::TILT_SELECT_INVERT_OFF:
-      default:
-        break;
-    }
-  }
-
-  halTiltSensor.update(tiltSensorConf, SETTINGS.orientation);
+  halTiltSensor.update(tiltSensorConf, static_cast<uint8_t>(renderer.getOrientation()));
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 

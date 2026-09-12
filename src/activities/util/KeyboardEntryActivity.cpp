@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "CrossPointSettings.h"
 #include "HalTiltSensor.h"
 #include "KeyboardLayoutSet.h"
 #include "MappedInputManager.h"
@@ -146,6 +147,13 @@ void KeyboardEntryActivity::onEnter() {
 }
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
+
+TiltInteraction KeyboardEntryActivity::tiltInteraction() const {
+  if (CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY_AND_KEYBOARD == SETTINGS.tiltToSelect) {
+    return TiltInteraction::PointerXY;
+  }
+  return TiltInteraction::None;
+}
 
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
   if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
@@ -523,6 +531,10 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 }
 
 void KeyboardEntryActivity::loop() {
+  int tiltMoveX = 0;
+  int tiltMoveY = 0;
+  const bool hasTiltMove = halTiltSensor.getXYPointerMove(tiltMoveX, tiltMoveY);
+
   int tx = 0;
   int ty = 0;
 
@@ -574,22 +586,20 @@ void KeyboardEntryActivity::loop() {
     upLongHandled = false;
   }
 
-  if (halTiltSensor.isAvailable()) {
-    int moveX = 0, moveY = 0;
-    halTiltSensor.getXYPointerMove(moveX, moveY);
-
-    if (moveX) {
+  if (hasTiltMove) {
+    if (tiltMoveX) {
       if (cursorMode) {
-        cursorPos = moveX > 0 ? utf8Next(text, cursorPos) : utf8Prev(text, cursorPos);
+        cursorPos = tiltMoveX > 0 ? utf8Next(text, cursorPos) : utf8Prev(text, cursorPos);
       } else {
-        moveSelectionCol(moveX);
+        moveSelectionCol(tiltMoveX);
       }
       requestUpdate();
+      return;
     }
-
-    if (!cursorMode && moveY) {
-      moveSelectionRow(moveY);
+    if (!cursorMode && tiltMoveY) {
+      moveSelectionRow(tiltMoveY);
       requestUpdate();
+      return;
     }
   }
 
