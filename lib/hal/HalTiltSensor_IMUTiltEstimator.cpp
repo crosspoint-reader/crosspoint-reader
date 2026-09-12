@@ -277,7 +277,7 @@ bool HalTiltSensor::IMUTiltEstimator::updateAttitude(float ax, float ay, float a
   const float ny = q[0] * dy - q[1] * dz + q[2] * dw + q[3] * dx;
   const float nz = q[0] * dz + q[1] * dy - q[2] * dx + q[3] * dw;
   const float norm = sqrtf(nw * nw + nx * nx + ny * ny + nz * nz);
-  
+
   if (!std::isfinite(norm) || norm < MIN_VECTOR_NORM) return false;
 
   q[0] = nw / norm;
@@ -286,7 +286,7 @@ bool HalTiltSensor::IMUTiltEstimator::updateAttitude(float ax, float ay, float a
   q[3] = nz / norm;
 
   updateRotationVector();
-  
+
   return hasFiniteState();
 }
 
@@ -455,14 +455,22 @@ void HalTiltSensor::IMUTiltEstimator::getPointerMove(float angle, int& dir, uint
                                                      const float sensitivityFactor) {
   const float absAngle = fabsf(angle);
   const float minAngle = TRACK_MIN_ANGLE * sensitivityFactor;
+
+  // The angle-to-direction (e.g. the sign) is chosen so that on an XTEINK X3, the "normal" (e.g. non-inverted)
+  // configuration is correct with respect to the IMU's orientation relative to the screen. This may not hold for all
+  // readers with a built-in IMU, but this can be alleviated with the inversion settings.
   const int movement = absAngle >= minAngle ? (angle > 0 ? -1 : 1) * (invert ? -1 : 1) : 0;
 
   if (movement &&
       (lastMillis == 0 || ((lastMillis & 1UL) != ((movement > 0) ? 0 : 1)) ||
        ((lastUpdateMs - lastMillis) >
         (MOVE_REPEAT_MIN_MS *
-         (1.0f + 2.0f * std::max(0.0f, 1.0f - (absAngle - minAngle) / (TRACK_REPEAT_MAX_ANGLE - minAngle))))))) {
+         (1.0f + 2.0f * std::max(0.0f, std::min(1.0f, 1.0f - (absAngle - minAngle) /
+                                                                 (minAngle * (TRACK_REPEAT_MAX_ANGLE_F - 1))))))))) {
     dir = movement;
+    // Optimization: To trigger multiple move events in the same direction by holding the tilt, we expect the direction
+    // of that tilt not to change while the repeat delay elapses. So that we don't need another field to store the
+    // direction of the last move, we use the LSB of lastMillis for that, since it's negligible for timing purposes.
     lastMillis = ((lastUpdateMs - 2) & ~1UL) | ((movement > 0) ? 0 : 1);
   } else {
     dir = 0;
