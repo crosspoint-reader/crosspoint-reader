@@ -111,6 +111,7 @@ class HalFile : public Print {
   bool rename(const char* newPath);
   bool isDirectory() const;
   void rewindDirectory();
+  // Closing an empty or already-closed handle succeeds without touching SD.
   bool close();
   HalFile openNextFile();
   bool isOpen() const;
