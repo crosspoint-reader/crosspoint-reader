@@ -36,80 +36,73 @@ constexpr fui::ActionId ACTION_KEY = 1;
 
 constexpr int16_t URL_PANEL_VALUE = -3;  // mirrors KeyboardEntryActivity::URL_PANEL_KEY
 
-const fui::KeyboardKey URL_NUM_ROW[] = {UKA("1", "1", '1', "!"), UKA("2", "2", '2', "@"), UKA("3", "3", '3', "#"),
-                                        UKA("4", "4", '4', "$"), UKA("5", "5", '5', "%"), UKA("6", "6", '6', "^"),
-                                        UKA("7", "7", '7', "&"), UKA("8", "8", '8', "*"), UKA("9", "9", '9', "("),
-                                        UKA("0", "0", '0', ")")};
+static constexpr fui::KeyboardKey URL_NUM_ROW[] = {
+    UKA("1", "1", '1', "!"), UKA("2", "2", '2', "@"), UKA("3", "3", '3', "#"), UKA("4", "4", '4', "$"),
+    UKA("5", "5", '5', "%"), UKA("6", "6", '6', "^"), UKA("7", "7", '7', "&"), UKA("8", "8", '8', "*"),
+    UKA("9", "9", '9', "("), UKA("0", "0", '0', ")")};
 
-const fui::KeyboardKey URL_ROW1[] = {UK("q", "q", 'q'), UK("w", "w", 'w'), UK("e", "e", 'e'), UK("r", "r", 'r'),
-                                     UK("t", "t", 't'), UK("y", "y", 'y'), UK("u", "u", 'u'), UK("i", "i", 'i'),
-                                     UK("o", "o", 'o'), UK("p", "p", 'p')};
-const fui::KeyboardKey URL_ROW2[] = {UK("a", "a", 'a'), UK("s", "s", 's'), UK("d", "d", 'd'),
-                                     UK("f", "f", 'f'), UK("g", "g", 'g'), UK("h", "h", 'h'),
-                                     UK("j", "j", 'j'), UK("k", "k", 'k'), UK("l", "l", 'l')};
-const fui::KeyboardKey URL_ROW3[] = {UKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 2),
-                                     UK("z", "z", 'z'),
-                                     UK("x", "x", 'x'),
-                                     UK("c", "c", 'c'),
-                                     UK("v", "v", 'v'),
-                                     UK("b", "b", 'b'),
-                                     UK("n", "n", 'n'),
-                                     UK("m", "m", 'm'),
-                                     UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
+static constexpr fui::KeyboardKey URL_ROW1[] = {
+    UK("q", "q", 'q'), UK("w", "w", 'w'), UK("e", "e", 'e'), UK("r", "r", 'r'), UK("t", "t", 't'),
+    UK("y", "y", 'y'), UK("u", "u", 'u'), UK("i", "i", 'i'), UK("o", "o", 'o'), UK("p", "p", 'p')};
+static constexpr fui::KeyboardKey URL_ROW2[] = {UK("a", "a", 'a'), UK("s", "s", 's'), UK("d", "d", 'd'),
+                                                UK("f", "f", 'f'), UK("g", "g", 'g'), UK("h", "h", 'h'),
+                                                UK("j", "j", 'j'), UK("k", "k", 'k'), UK("l", "l", 'l')};
+static constexpr fui::KeyboardKey URL_ROW3[] = {
+    UK("z", "z", 'z'), UK("x", "x", 'x'),
+    UK("c", "c", 'c'), UK("v", "v", 'v'),
+    UK("b", "b", 'b'), UK("n", "n", 'n'),
+    UK("m", "m", 'm'), UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
 // URLs have no spaces, so the URL bottom row spends the space slot on ":",
 // "/", "." and the snippet-panel toggle instead (the legacy keyboard did the
 // same with its "URL" key).
-const fui::KeyboardKey URL_BOTTOM[] = {UKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
-                                       UK(":", ":", ':'),
-                                       UK("/", "/", '/'),
-                                       UK(".", ".", '.'),
-                                       UKW("URL", nullptr, URL_PANEL_VALUE, 2),
-                                       UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+static constexpr fui::KeyboardKey URL_BOTTOM[] = {UKS("?123", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
+                                                  UKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 2),
+                                                  UK(":", ":", ':'),
+                                                  UK("/", "/", '/'),
+                                                  UK(".", ".", '.'),
+                                                  UKW("URL", nullptr, URL_PANEL_VALUE, 2),
+                                                  UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
-const fui::KeyboardKey URL_SHIFT_ROW1[] = {UK("Q", "Q", 'Q'), UK("W", "W", 'W'), UK("E", "E", 'E'), UK("R", "R", 'R'),
-                                           UK("T", "T", 'T'), UK("Y", "Y", 'Y'), UK("U", "U", 'U'), UK("I", "I", 'I'),
-                                           UK("O", "O", 'O'), UK("P", "P", 'P')};
-const fui::KeyboardKey URL_SHIFT_ROW2[] = {UK("A", "A", 'A'), UK("S", "S", 'S'), UK("D", "D", 'D'),
-                                           UK("F", "F", 'F'), UK("G", "G", 'G'), UK("H", "H", 'H'),
-                                           UK("J", "J", 'J'), UK("K", "K", 'K'), UK("L", "L", 'L')};
-const fui::KeyboardKey URL_SHIFT_ROW3[] = {UKS("Shift", fui::KeyKind::Shift, fui::QWERTY_KEY_SHIFT, 2),
-                                           UK("Z", "Z", 'Z'),
-                                           UK("X", "X", 'X'),
-                                           UK("C", "C", 'C'),
-                                           UK("V", "V", 'V'),
-                                           UK("B", "B", 'B'),
-                                           UK("N", "N", 'N'),
-                                           UK("M", "M", 'M'),
-                                           UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
+static constexpr fui::KeyboardKey URL_SHIFT_ROW1[] = {
+    UK("Q", "Q", 'Q'), UK("W", "W", 'W'), UK("E", "E", 'E'), UK("R", "R", 'R'), UK("T", "T", 'T'),
+    UK("Y", "Y", 'Y'), UK("U", "U", 'U'), UK("I", "I", 'I'), UK("O", "O", 'O'), UK("P", "P", 'P')};
+static constexpr fui::KeyboardKey URL_SHIFT_ROW2[] = {UK("A", "A", 'A'), UK("S", "S", 'S'), UK("D", "D", 'D'),
+                                                      UK("F", "F", 'F'), UK("G", "G", 'G'), UK("H", "H", 'H'),
+                                                      UK("J", "J", 'J'), UK("K", "K", 'K'), UK("L", "L", 'L')};
+static constexpr fui::KeyboardKey URL_SHIFT_ROW3[] = {
+    UK("Z", "Z", 'Z'), UK("X", "X", 'X'),
+    UK("C", "C", 'C'), UK("V", "V", 'V'),
+    UK("B", "B", 'B'), UK("N", "N", 'N'),
+    UK("M", "M", 'M'), UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2)};
 
 // Snippet keys: multi-character outputs, stable ids above the localized-key
 // range so they never collide with layout key ids.
-const fui::KeyboardKey URL_SNIP_ROW1[] = {UK("https://", "https://", 2001), UK("www.", "www.", 2002),
-                                          UK(".com", ".com", 2003)};
-const fui::KeyboardKey URL_SNIP_ROW2[] = {UK("http://", "http://", 2004), UK("192.168.", "192.168.", 2005),
-                                          UK(".org", ".org", 2006)};
-const fui::KeyboardKey URL_SNIP_ROW3[] = {UK("/opds", "/opds", 2007), UK(":8080", ":8080", 2008),
-                                          UK(".net", ".net", 2009)};
-const fui::KeyboardKey URL_SNIP_BOTTOM[] = {UKS("abc", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
-                                            UKW("URL", nullptr, URL_PANEL_VALUE, 2),
-                                            UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2),
-                                            UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
+static constexpr fui::KeyboardKey URL_SNIP_ROW1[] = {UK("https://", "https://", 2001), UK("www.", "www.", 2002),
+                                                     UK(".com", ".com", 2003)};
+static constexpr fui::KeyboardKey URL_SNIP_ROW2[] = {UK("http://", "http://", 2004), UK("192.168.", "192.168.", 2005),
+                                                     UK(".org", ".org", 2006)};
+static constexpr fui::KeyboardKey URL_SNIP_ROW3[] = {UK("/opds", "/opds", 2007), UK(":8080", ":8080", 2008),
+                                                     UK(".net", ".net", 2009)};
+static constexpr fui::KeyboardKey URL_SNIP_BOTTOM[] = {UKS("abc", fui::KeyKind::Mode, fui::QWERTY_KEY_MODE, 2),
+                                                       UKW("URL", nullptr, URL_PANEL_VALUE, 2),
+                                                       UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2),
+                                                       UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
 #undef UK
 #undef UKA
 #undef UKW
 #undef UKS
 
-const fui::KeyboardRow URL_ROWS[] = {
-    {URL_NUM_ROW, 10, 0}, {URL_ROW1, 10, 0}, {URL_ROW2, 9, 1}, {URL_ROW3, 9, 0}, {URL_BOTTOM, 6, 0}};
-const fui::KeyboardRow URL_SHIFT_ROWS[] = {
-    {URL_NUM_ROW, 10, 0}, {URL_SHIFT_ROW1, 10, 0}, {URL_SHIFT_ROW2, 9, 1}, {URL_SHIFT_ROW3, 9, 0}, {URL_BOTTOM, 6, 0}};
-const fui::KeyboardRow URL_SNIP_ROWS[] = {
+static constexpr fui::KeyboardRow URL_ROWS[] = {
+    {URL_NUM_ROW, 10, 0}, {URL_ROW1, 10, 0}, {URL_ROW2, 9, 0}, {URL_ROW3, 8, 0}, {URL_BOTTOM, 7, 0}};
+static constexpr fui::KeyboardRow URL_SHIFT_ROWS[] = {
+    {URL_NUM_ROW, 10, 0}, {URL_SHIFT_ROW1, 10, 0}, {URL_SHIFT_ROW2, 9, 0}, {URL_SHIFT_ROW3, 8, 0}, {URL_BOTTOM, 7, 0}};
+static constexpr fui::KeyboardRow URL_SNIP_ROWS[] = {
     {URL_SNIP_ROW1, 3, 0}, {URL_SNIP_ROW2, 3, 0}, {URL_SNIP_ROW3, 3, 0}, {URL_SNIP_BOTTOM, 4, 0}};
 
-const fui::KeyboardLayout URL_LAYOUT{URL_ROWS, 5};
-const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
-const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
+static constexpr fui::KeyboardLayout URL_LAYOUT{URL_ROWS, 5};
+static constexpr fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
+static constexpr fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
 
 }  // namespace
 
@@ -147,7 +140,8 @@ void KeyboardEntryActivity::onEnter() {
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
-  if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
+  if (symbols)
+    return fui::builtinKeyboardLayout(layoutId, shifted, true, false, showLangKey && inputType != InputType::Url);
   if (inputType == InputType::Url) {
     if (urlPanel) return URL_SNIPPET_LAYOUT;
     return shifted ? URL_SHIFT_LAYOUT : URL_LAYOUT;
@@ -510,15 +504,26 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
+  int top = 0, right = 0, bottom = 0, left = 0;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  if (gpio.deviceIsX3()) {
+    left = std::max(left, metrics.sideButtonHintsWidth);
+    right = std::max(right, metrics.sideButtonHintsWidth);
+  }
   const int rows = currentLayout().rowCount;
-  const int gap = metrics.keyboardKeySpacing;
-  const int height = rows * metrics.keyboardKeyHeight + (rows > 1 ? (rows - 1) * gap : 0);
-  const int width = pageWidth * metrics.keyboardWidthPercent / 100;
-  const int x = (pageWidth - width) / 2;
-  const int y =
-      pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - height + metrics.keyboardVerticalOffset;
-  return fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(width),
-                   static_cast<int16_t>(height)};
+  const int safeWidth = pageWidth - left - right;
+  const int width = safeWidth * metrics.keyboardWidthPercent / 100;
+  const fui::Insets padding{5, 2, 5, 2};
+  const int preferred =
+      fui::keyboardPreferredHeight(width, rows, padding, metrics.keyboardRowSpacing, metrics.keyboardKeyHeight);
+  const int extraGap = std::max(0, metrics.keyboardRowSpacing - 2);
+  const int maxHeight = (pageHeight - top - bottom) / 2 + extraGap * std::max(0, rows - 1);
+  const int keyboardBottom = pageHeight - std::max(bottom, metrics.buttonHintsHeight) - metrics.verticalSpacing;
+  const int fieldBottom = std::max(top, metrics.topPadding) + metrics.headerHeight + metrics.verticalSpacing * 5 +
+                          metrics.keyboardVerticalOffset + renderer.getLineHeight(UI_12_FONT_ID) * 2;
+  const int height = std::max(0, std::min({preferred, maxHeight, keyboardBottom - fieldBottom}));
+  return fui::Rect{static_cast<int16_t>(left + (safeWidth - width) / 2), static_cast<int16_t>(keyboardBottom - height),
+                   static_cast<int16_t>(width), static_cast<int16_t>(height)};
 }
 
 void KeyboardEntryActivity::loop() {
@@ -979,7 +984,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
   props.altText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.gap = static_cast<int16_t>(metrics.keyboardKeySpacing);
-  props.padding = fui::Insets{0, 0, 0, 0};
+  props.rowGap = static_cast<int16_t>(metrics.keyboardRowSpacing);
+  props.padding = fui::Insets{5, 2, 5, 2};
   // Fingers land low on the bottom row (occlusion) and there is no key below
   // to catch the miss — extend its hit band down to the button hints bar.
   const int hintsTop = renderer.getScreenHeight() - metrics.buttonHintsHeight;
