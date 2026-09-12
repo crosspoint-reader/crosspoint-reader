@@ -34,17 +34,17 @@ LanguageHyphenator finnishHyphenator(fi_patterns, isLatinLetter, toLowerLatin);
 using EntryArray = std::array<LanguageEntry, 11>;
 
 const EntryArray& entries() {
-  static const EntryArray kEntries = {{{"catalan", "ca", &catalanHyphenator},
-                                       {"english", "en", &englishHyphenator},
-                                       {"french", "fr", &frenchHyphenator},
-                                       {"german", "de", &germanHyphenator},
-                                       {"russian", "ru", &russianHyphenator},
-                                       {"spanish", "es", &spanishHyphenator},
-                                       {"italian", "it", &italianHyphenator},
-                                       {"polish", "pl", &polishHyphenator},
-                                       {"swedish", "sv", &swedishHyphenator},
-                                       {"ukrainian", "uk", &ukrainianHyphenator},
-                                       {"finnish", "fi", &finnishHyphenator}}};
+  static constexpr EntryArray kEntries = {{{"catalan", "ca", &catalanHyphenator},
+                                           {"english", "en", &englishHyphenator},
+                                           {"french", "fr", &frenchHyphenator},
+                                           {"german", "de", &germanHyphenator},
+                                           {"russian", "ru", &russianHyphenator},
+                                           {"spanish", "es", &spanishHyphenator},
+                                           {"italian", "it", &italianHyphenator},
+                                           {"polish", "pl", &polishHyphenator},
+                                           {"swedish", "sv", &swedishHyphenator},
+                                           {"ukrainian", "uk", &ukrainianHyphenator},
+                                           {"finnish", "fi", &finnishHyphenator}}};
   return kEntries;
 }
 

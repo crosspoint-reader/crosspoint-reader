@@ -61,7 +61,7 @@ class EpubTextExtractor(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.parts = []
-        self.skip_depth = 0
+        self.skip_stack = []
 
     def handle_starttag(self, tag, attrs):
         if tag in self.VOID_TAGS:
@@ -74,18 +74,20 @@ class EpubTextExtractor(HTMLParser):
             or "pg-boilerplate" in classes
             or attributes.get("id") in {"pg-header", "pg-footer"}
         )
-        if self.skip_depth or should_skip:
-            self.skip_depth += 1
+        if self.skip_stack or should_skip:
+            self.skip_stack.append(tag)
 
     def handle_startendtag(self, _tag, _attrs):
         return
 
-    def handle_endtag(self, _tag):
-        if self.skip_depth:
-            self.skip_depth -= 1
+    def handle_endtag(self, tag):
+        for index in range(len(self.skip_stack) - 1, -1, -1):
+            if self.skip_stack[index] == tag:
+                del self.skip_stack[index:]
+                break
 
     def handle_data(self, data):
-        if not self.skip_depth:
+        if not self.skip_stack:
             self.parts.append(data)
 
     def text(self):
