@@ -3,13 +3,51 @@
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
+#include <sys/time.h>
 #include <time.h>
+
+namespace {
+constexpr int64_t MIN_SYSTEM_EPOCH = 1577836800;  // 2020-01-01 UTC
+constexpr int64_t MAX_SYSTEM_EPOCH = 4102444800;  // 2100-01-01 UTC
+
+bool validEpoch(const time_t epoch) { return epoch >= MIN_SYSTEM_EPOCH && epoch < MAX_SYSTEM_EPOCH; }
+
+bool leapYear(const unsigned year) { return year % 4 == 0 && (year % 100 != 0 || year % 400 == 0); }
+
+// RTC fields are UTC. Validate before conversion rather than allowing mktime()
+// to normalize corrupt dates or apply the display timezone.
+bool rtcEpoch(const Rtc::DateTime& dt, time_t& epoch) {
+  constexpr uint8_t MONTH_DAYS[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  if (dt.year < 2020 || dt.year >= 2100 || dt.month < 1 || dt.month > 12 || dt.hour > 23 || dt.minute > 59 ||
+      dt.second > 59)
+    return false;
+  const unsigned daysInMonth = MONTH_DAYS[dt.month - 1] + (dt.month == 2 && leapYear(dt.year) ? 1 : 0);
+  if (dt.day < 1 || dt.day > daysInMonth) return false;
+  int64_t days = dt.day - 1;
+  for (unsigned year = 1970; year < dt.year; ++year) days += leapYear(year) ? 366 : 365;
+  for (unsigned month = 1; month < dt.month; ++month) {
+    days += MONTH_DAYS[month - 1] + (month == 2 && leapYear(dt.year) ? 1 : 0);
+  }
+  epoch = static_cast<time_t>(days * 86400 + dt.hour * 3600 + dt.minute * 60 + dt.second);
+  return validEpoch(epoch);
+}
+}  // namespace
 
 HalClock halClock;  // Singleton instance
 
 void HalClock::begin() {
   _available = _sdkRtc.begin();
   LOG_INF("CLK", _available ? "SDK RTC found" : "RTC not found");
+  if (_available && !hasValidSystemTime()) {
+    Rtc::DateTime dt;
+    time_t epoch = 0;
+    if (_sdkRtc.now(dt) && rtcEpoch(dt, epoch)) {
+      const timeval utc{epoch, 0};
+      if (settimeofday(&utc, nullptr) != 0) {
+        LOG_ERR("CLK", "Could not restore system UTC from RTC");
+      }
+    }
+  }
 }
 
 bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
@@ -66,24 +104,29 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   return true;
 }
 
-bool HalClock::syncFromNTP() {
-  if (!_available) return false;
+bool HalClock::hasValidSystemTime() const { return validEpoch(time(nullptr)); }
 
+bool HalClock::syncFromNTP() {
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;
   }
 
   LOG_INF("CLK", "Starting NTP sync...");
+  sntp_set_sync_status(SNTP_SYNC_STATUS_RESET);
   configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
 
   // Wait for SNTP sync to complete (up to 5 seconds)
   constexpr int maxAttempts = 50;
   for (int i = 0; i < maxAttempts; i++) {
-    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
+    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED && hasValidSystemTime()) {
+      if (!_available) return true;
       time_t now = time(nullptr);
       struct tm timeinfo;
-      gmtime_r(&now, &timeinfo);
+      if (!gmtime_r(&now, &timeinfo)) {
+        LOG_ERR("CLK", "Could not convert synchronized UTC");
+        return false;
+      }
 
       Rtc::DateTime dt;
       dt.year = static_cast<uint16_t>(timeinfo.tm_year + 1900);
