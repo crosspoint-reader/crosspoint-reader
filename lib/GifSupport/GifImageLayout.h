@@ -18,9 +18,9 @@ struct ImageLayout {
 };
 
 inline bool calculateLayout(int width, int height, int targetWidth, int targetHeight, bool crop, ImageLayout& out) {
-  if (width <= 0 || height <= 0 || width > MAX_OUTPUT_DIMENSION || height > MAX_OUTPUT_DIMENSION ||
-      targetWidth <= 0 || targetHeight <= 0 || targetWidth > MAX_OUTPUT_DIMENSION ||
-      targetHeight > MAX_OUTPUT_DIMENSION) return false;
+  if (width <= 0 || height <= 0 || width > MAX_OUTPUT_DIMENSION || height > MAX_OUTPUT_DIMENSION || targetWidth <= 0 ||
+      targetHeight <= 0 || targetWidth > MAX_OUTPUT_DIMENSION || targetHeight > MAX_OUTPUT_DIMENSION)
+    return false;
   out = {0, 0, width, height, targetWidth, targetHeight};
   if (crop) {
     if (static_cast<int64_t>(width) * targetHeight > static_cast<int64_t>(height) * targetWidth) {

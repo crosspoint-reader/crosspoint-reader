@@ -6,8 +6,14 @@ namespace {
 class CountingOutput : public Print {
  public:
   size_t total = 0;
-  size_t write(uint8_t) override { ++total; return 1; }
-  size_t write(const uint8_t*, size_t size) override { total += size; return size; }
+  size_t write(uint8_t) override {
+    ++total;
+    return 1;
+  }
+  size_t write(const uint8_t*, size_t size) override {
+    total += size;
+    return size;
+  }
 };
 
 TEST(GifSupport, StopsAnExtractionAtTheByteLimit) {
@@ -25,8 +31,8 @@ TEST(GifSupport, TallAndWideCoversStayWithinTheirTarget) {
   for (const auto& dimensions : {std::pair{1, 3072}, std::pair{3072, 1}, std::pair{640, 480}}) {
     for (const auto& target : {std::pair{480, 800}, std::pair{800, 480}}) {
       GifCommon::ImageLayout layout;
-      ASSERT_TRUE(GifCommon::calculateLayout(dimensions.first, dimensions.second, target.first, target.second, true,
-                                            layout));
+      ASSERT_TRUE(
+          GifCommon::calculateLayout(dimensions.first, dimensions.second, target.first, target.second, true, layout));
       EXPECT_EQ(layout.width, target.first);
       EXPECT_EQ(layout.height, target.second);
       EXPECT_GE(layout.sourceX, 0);
