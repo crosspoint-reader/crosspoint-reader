@@ -60,71 +60,90 @@ MappedInputManager::Button MappedInputManager::mapScreenDirection(const Button b
   return directions[orientation][direction];
 }
 
-bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
+uint8_t MappedInputManager::buttonMask(const Button button) const {
+  const auto mask = [](uint8_t index) -> uint8_t { return index < 7 ? (1u << index) : 0; };
   const auto sideLayout = SETTINGS.sideButtonLayout;
 
   switch (button) {
     case Button::Back:
       // Logical Back maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonBack);
+      return mask(SETTINGS.frontButtonBack);
     case Button::Confirm:
       // Logical Confirm maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+      return mask(SETTINGS.frontButtonConfirm);
     case Button::Left:
       // Logical Left maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+      return mask(SETTINGS.frontButtonLeft);
     case Button::Right:
       // Logical Right maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonRight);
+      return mask(SETTINGS.frontButtonRight);
     case Button::Up:
       // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_UP);
+      return mask(HalGPIO::BTN_UP);
     case Button::Down:
       // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+      return mask(HalGPIO::BTN_DOWN);
     case Button::Power:
       // Power button bypasses remapping.
-      return (gpio.*fn)(HalGPIO::BTN_POWER);
+      return mask(HalGPIO::BTN_POWER);
     case Button::PageBack:
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
+          return mask(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
+          return mask(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
-          return false;
+          return 0;
       }
     case Button::PageForward:
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
+          return mask(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
+          return mask(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
-          return false;
+          return 0;
       }
     case Button::NavNext:
       // Logical "next item" navigation: side Down + front Right, with the control axis flipped in
       // INVERTED / LANDSCAPE_CCW under the live orientation policy, matching the rotated hint labels.
-      return isNavDirectionSwapped() ? (mapButton(Button::Up, fn) || mapButton(Button::Left, fn))
-                                     : (mapButton(Button::Down, fn) || mapButton(Button::Right, fn));
+      return isNavDirectionSwapped() ? (buttonMask(Button::Up) | buttonMask(Button::Left))
+                                     : (buttonMask(Button::Down) | buttonMask(Button::Right));
     case Button::NavPrevious:
       // Logical "previous item" navigation: side Up + front Left, axis-flipped in the same orientations.
-      return isNavDirectionSwapped() ? (mapButton(Button::Down, fn) || mapButton(Button::Right, fn))
-                                     : (mapButton(Button::Up, fn) || mapButton(Button::Left, fn));
+      return isNavDirectionSwapped() ? (buttonMask(Button::Down) | buttonMask(Button::Right))
+                                     : (buttonMask(Button::Up) | buttonMask(Button::Left));
     case Button::ScreenLeft:
     case Button::ScreenRight:
     case Button::ScreenUp:
     case Button::ScreenDown:
-      return mapButton(mapScreenDirection(button), fn);
+      return buttonMask(mapScreenDirection(button));
   }
 
+  return 0;
+}
+
+bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
+  const uint8_t mask = buttonMask(button);
+  for (uint8_t index = 0; index < 7; ++index) {
+    if ((mask & (1u << index)) && (gpio.*fn)(index)) return true;
+  }
   return false;
 }
+
+#ifdef ENABLE_SERIAL_LOG
+int MappedInputManager::controlButton(Button button) const {
+  const uint8_t mask = buttonMask(button);
+  for (uint8_t index = 0; index < 7; ++index) {
+    if (mask & (1u << index)) return index;
+  }
+  return -1;
+}
+#endif
 
 namespace {
 constexpr unsigned long TOUCH_DOWN_SELECT_DELAY_MS = 90;

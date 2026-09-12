@@ -34,6 +34,21 @@ python3 -m pip install pyserial colorama matplotlib
 python3 scripts/debugging_monitor.py
 ```
 
+Add `--serve` to share the monitor's serial connection with automation over a
+localhost API. Add `--headless` to run without the memory graph or interactive
+stdin. With the server running, control it from another terminal:
+
+```sh
+python3 scripts/device_control.py state
+python3 scripts/device_control.py press page-forward --expect-page-change
+python3 scripts/device_control.py screenshot page.pbm
+```
+
+See [Device control and test automation](../device-control.md) for commands,
+buttons, verified activities, command files, and test fixtures.
+See [Debugging monitor server](../debugging-monitor.md) for the HTTP API,
+exclusive control, screenshot transport, and releasing the port for flashing.
+
 ## Useful bug report contents
 
 - Firmware version and build environment
