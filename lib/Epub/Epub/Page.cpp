@@ -76,7 +76,16 @@ std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
   serialization::readPod(file, yPos);
 
   auto ib = ImageBlock::deserialize(file);
-  return std::unique_ptr<PageImage>(new PageImage(std::move(ib), xPos, yPos));
+  if (!ib) {
+    LOG_ERR("PGE", "Deserialization failed: null ImageBlock");
+    return nullptr;
+  }
+  auto* image = new (std::nothrow) PageImage(std::move(ib), xPos, yPos);
+  if (!image) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageImage");
+    return nullptr;
+  }
+  return std::unique_ptr<PageImage>(image);
 }
 
 void PageHorizontalRule::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {

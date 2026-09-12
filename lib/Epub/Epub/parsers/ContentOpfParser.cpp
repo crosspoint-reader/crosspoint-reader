@@ -273,14 +273,19 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
                                          return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
                                        });
 
-            // Check for match (may need to check a few due to hash collisions)
+            // Check for match (may need to check a few due to hash collisions).
+            // Each candidate re-seeks to its own it->fileOffset, so a
+            // readString() failure (corrupt length -- see Serialization.h)
+            // only desyncs this one candidate's read, not the rest of the
+            // chain -- treat it as a non-match and keep checking, same as
+            // the pre-existing "itemId != idref" case.
             while (it != self->itemIndex.end() && it->idHash == targetHash) {
               self->tempItemStore.seek(it->fileOffset);
               std::string itemId;
-              serialization::readString(self->tempItemStore, itemId);
-              if (itemId == idref) {
-                serialization::readString(self->tempItemStore, href);
-                found = true;
+              if (serialization::readString(self->tempItemStore, itemId) && itemId == idref) {
+                if (serialization::readString(self->tempItemStore, href)) {
+                  found = true;
+                }
                 break;
               }
               ++it;
@@ -291,8 +296,11 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             self->tempItemStore.seek(0);
             std::string itemId;
             while (self->tempItemStore.available()) {
-              serialization::readString(self->tempItemStore, itemId);
-              serialization::readString(self->tempItemStore, href);
+              if (!serialization::readString(self->tempItemStore, itemId) ||
+                  !serialization::readString(self->tempItemStore, href)) {
+                LOG_ERR("OPF", "Corrupt tempItemStore entry, aborting manifest scan");
+                break;
+              }
               if (itemId == idref) {
                 found = true;
                 break;

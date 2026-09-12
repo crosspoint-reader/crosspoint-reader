@@ -1,10 +1,13 @@
 #pragma once
 #include <HalStorage.h>
+#include <Logging.h>
 #include <Memory.h>
 
 #include <algorithm>
 #include <cstring>
 #include <string>
+
+#include "Serialization.h"
 
 namespace serialization {
 
@@ -149,13 +152,23 @@ inline void writeString(BufferedFileWriter& out, const std::string& s) {
   out.write(s.data(), len);
 }
 
-inline void readString(BufferedFileReader& in, std::string& s) {
+// See Serialization.h's readString() overloads for why this returns bool: a
+// rejected length leaves the stream desynced, so the caller must abort the
+// whole record rather than continue parsing.
+[[nodiscard]] inline bool readString(BufferedFileReader& in, std::string& s) {
   uint32_t len;
   readPod(in, len);
+  // See Serialization.h's MAX_SERIALIZED_STRING_LEN for why this is capped.
+  if (len > MAX_SERIALIZED_STRING_LEN) {
+    LOG_ERR("SER", "readString: length %u exceeds max, treating as corrupt", len);
+    s.clear();
+    return false;
+  }
   s.resize(len);
   if (len > 0) {
     in.read(&s[0], len);
   }
+  return true;
 }
 
 }  // namespace serialization
