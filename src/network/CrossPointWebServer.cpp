@@ -26,6 +26,7 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "util/BookCacheUtils.h"
+#include "util/OpdsFilename.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -1349,6 +1350,8 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     doc["name"] = servers[i].name;
     doc["url"] = servers[i].url;
     doc["username"] = servers[i].username;
+    // Empty means this server inherits the global opdsDownloadFolder setting
+    doc["downloadFolder"] = servers[i].downloadFolder;
     // Never expose passwords over the API — only indicate whether one is set
     doc["hasPassword"] = !servers[i].password.empty();
 
@@ -1390,22 +1393,31 @@ void CrossPointWebServer::handlePostOpdsServer() {
   bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
   std::string password = doc["password"] | std::string("");
 
+  // downloadFolder follows the same absent-vs-empty rule as the password: a
+  // client that omits the field keeps the stored folder, while an explicit ""
+  // clears it back to the global default.
+  bool hasFolderField = doc["downloadFolder"].is<const char*>() || doc["downloadFolder"].is<std::string>();
+  std::string downloadFolder = normalizeOpdsFolder(doc["downloadFolder"] | std::string(""));
+
   if (doc["index"].is<int>()) {
     int idx = doc["index"].as<int>();
     if (idx < 0 || idx >= static_cast<int>(OPDS_STORE.getCount())) {
       server->send(400, "text/plain", "Invalid server index");
       return;
     }
-    // Preserve existing password if not explicitly provided
-    if (!hasPasswordField) {
-      const auto* existing = OPDS_STORE.getServer(static_cast<size_t>(idx));
-      if (existing) password = existing->password;
+    // Preserve existing values for any field the payload left out
+    const auto* existing = OPDS_STORE.getServer(static_cast<size_t>(idx));
+    if (existing) {
+      if (!hasPasswordField) password = existing->password;
+      if (!hasFolderField) downloadFolder = existing->downloadFolder;
     }
     opdsServer.password = password;
+    opdsServer.downloadFolder = downloadFolder;
     OPDS_STORE.updateServer(static_cast<size_t>(idx), opdsServer);
     LOG_DBG("WEB", "Updated OPDS server at index %d", idx);
   } else {
     opdsServer.password = password;
+    opdsServer.downloadFolder = downloadFolder;
     if (!OPDS_STORE.addServer(opdsServer)) {
       server->send(400, "text/plain", "Cannot add server (limit reached)");
       return;

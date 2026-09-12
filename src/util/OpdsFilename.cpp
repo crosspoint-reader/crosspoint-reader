@@ -21,3 +21,13 @@ std::string opdsBookFilename(const std::string& author, const std::string& title
   // identical treatment to the previous inline construction.
   return StringUtils::sanitizeFilename(base) + ".epub";
 }
+
+std::string normalizeOpdsFolder(std::string path) {
+  while (!path.empty() && (path.front() == ' ' || path.front() == '\t')) path.erase(path.begin());
+  while (!path.empty() && (path.back() == ' ' || path.back() == '\t')) path.pop_back();
+  if (path.empty()) return "";
+  if (path.front() != '/') path.insert(path.begin(), '/');
+  while (path.size() > 1 && path.back() == '/') path.pop_back();
+  if (path == "/") return "";  // a bare slash is SD root, same as empty
+  return path;
+}

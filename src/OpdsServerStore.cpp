@@ -13,6 +13,7 @@ void OpdsServerStore::toJson(JsonDocument& doc) const {
     obj["name"] = server.name;
     obj["url"] = server.url;
     obj["username"] = server.username;
+    obj["downloadFolder"] = server.downloadFolder;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
   }
 }
@@ -31,6 +32,9 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     server.name = obj["name"] | "";
     server.url = obj["url"] | "";
     server.username = obj["username"] | "";
+    // Absent on files written before per-server folders existed; empty then
+    // defers to the global setting, so no migration is needed.
+    server.downloadFolder = obj["downloadFolder"] | "";
     server.password = extractPassword(obj, needsResave);
     servers.push_back(std::move(server));
   }
