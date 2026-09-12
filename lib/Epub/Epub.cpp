@@ -658,7 +658,9 @@ bool extractGifCover(const Epub& epub, const std::string& href, const std::strin
   }
   GifLimitedWriter limited(file, GifCommon::MAX_FILE_BYTES);
   success = epub.readItemContentsToStream(href, limited, 1024);
-  if (!success) LOG_ERR("EBP", "GIF extraction failed or exceeded byte limit: %s", path.c_str());
+  const bool closed = file.close();
+  success = success && closed;
+  if (!success) LOG_ERR("EBP", "GIF extraction failed, exceeded byte limit, or could not close: %s", path.c_str());
   return success;
 }
 }  // namespace
