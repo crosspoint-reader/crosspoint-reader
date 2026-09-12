@@ -18,6 +18,7 @@ class ReleaseJsonParser {
   // Release-asset filename to match (default "firmware.bin").
   void setFirmwareAssetName(const char* name);
 
+  // True only for a complete tag that fits the buffer without truncation.
   bool foundTag() const;
   bool foundFirmware() const;
   const char* getTagName() const;
