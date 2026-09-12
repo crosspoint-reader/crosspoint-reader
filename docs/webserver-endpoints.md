@@ -351,8 +351,10 @@ is itself the SD card root when empty.
 Adds or updates an OPDS server. Include `index` to update an existing entry.
 If `password` is omitted during an update, the existing password is preserved.
 `downloadFolder` follows the same rule: omit it to keep the stored folder, or
-send an explicit `""` to reset the server back to the device-wide default. Any
-value is normalized to a single leading `/` with no trailing `/`.
+send an explicit `""` to reset the server back to the device-wide default. For
+non-empty values, leading and trailing spaces or tabs are removed, a leading
+`/` is added when missing, and trailing `/` characters are removed. A bare `/`
+also resets the server to the device-wide default.
 
 ```bash
 curl -X POST \

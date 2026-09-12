@@ -3,6 +3,8 @@
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
+#include "util/OpdsFilename.h"
+
 #include <algorithm>
 #include <cstring>
 
@@ -33,8 +35,10 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     server.url = obj["url"] | "";
     server.username = obj["username"] | "";
     // Absent on files written before per-server folders existed; empty then
-    // defers to the global setting, so no migration is needed.
-    server.downloadFolder = obj["downloadFolder"] | "";
+    // defers to the global setting, so no migration is needed. Re-normalized
+    // here too, in case the file was ever hand-edited or written by another
+    // client without going through normalizeOpdsFolder() first.
+    server.downloadFolder = normalizeOpdsFolder(obj["downloadFolder"] | "");
     server.password = extractPassword(obj, needsResave);
     servers.push_back(std::move(server));
   }

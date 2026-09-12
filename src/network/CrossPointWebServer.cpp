@@ -1344,6 +1344,9 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
 
+  // Tracks records actually sent, not the loop index — an oversized record
+  // that gets skipped below must not leave a stray leading/double comma.
+  bool emittedAny = false;
   for (size_t i = 0; i < servers.size(); i++) {
     doc.clear();
     doc["index"] = i;
@@ -1358,8 +1361,9 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
 
-    if (i > 0) server->sendContent(",");
+    if (emittedAny) server->sendContent(",");
     server->sendContent(output);
+    emittedAny = true;
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
   }
