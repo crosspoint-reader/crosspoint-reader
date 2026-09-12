@@ -11,6 +11,8 @@
 #include <PngToBmpConverter.h>
 #include <Utf8.h>
 #include <ZipFile.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 #include <cstring>
 #include <string_view>
@@ -645,6 +647,9 @@ std::string Epub::getCoverBmpPath(bool cropped, bool originalThresholds) const {
 }
 
 namespace {
+StaticSemaphore_t gifGenerationMutexStorage;
+const SemaphoreHandle_t gifGenerationMutex = xSemaphoreCreateMutexStatic(&gifGenerationMutexStorage);
+
 bool extractGifCover(const Epub& epub, const std::string& href, const std::string& path) {
   HalFile file;
   bool success = false;
@@ -753,6 +758,14 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
   }
 
   if (FsHelpers::hasGifExtension(coverImageHref)) {
+    if (!gifGenerationMutex || xSemaphoreTake(gifGenerationMutex, portMAX_DELAY) != pdTRUE) {
+      LOG_ERR("EBP", "Failed to lock GIF cache generation");
+      return false;
+    }
+    const ScopedCleanup unlock{[]() { xSemaphoreGive(gifGenerationMutex); }};
+    // Another caller may have completed this cache while we waited.
+    if (Storage.exists(getCoverBmpPath(cropped, originalThresholds).c_str())) return true;
+
     LOG_DBG("EBP", "Generating BMP from GIF cover image (%s mode)", cropped ? "cropped" : "fit");
     const auto coverGifTempPath = getCachePath() + "/.cover.gif";
     const auto coverBmpPath = getCoverBmpPath(cropped, originalThresholds);
@@ -892,6 +905,14 @@ bool Epub::generateThumbBmp(int height) const {
     LOG_DBG("EBP", "Generated thumb BMP from PNG cover image, success: %s", success ? "yes" : "no");
     return success;
   } else if (FsHelpers::hasGifExtension(coverImageHref)) {
+    if (!gifGenerationMutex || xSemaphoreTake(gifGenerationMutex, portMAX_DELAY) != pdTRUE) {
+      LOG_ERR("EBP", "Failed to lock GIF cache generation");
+      return false;
+    }
+    const ScopedCleanup unlock{[]() { xSemaphoreGive(gifGenerationMutex); }};
+    // Another caller may have completed this cache while we waited.
+    if (Storage.exists(getThumbBmpPath(height).c_str())) return true;
+
     LOG_DBG("EBP", "Generating thumb BMP from GIF cover image");
     const auto coverGifTempPath = getCachePath() + "/.cover.gif";
     const auto thumbBmpPath = getThumbBmpPath(height);

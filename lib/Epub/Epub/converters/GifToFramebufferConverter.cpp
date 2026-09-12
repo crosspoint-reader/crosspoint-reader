@@ -74,12 +74,12 @@ void renderCanvasRow(const uint8_t* grayRow, int srcY, GifContext& ctx) {
 
     pw.beginRow(outY);
 
-    bool caching = ctx.caching;
+    const bool caching = ctx.caching;
     DirectCacheWriter cw;
     if (caching) {
       if (!ctx.cache.advanceTo(dstY)) {
-        caching = false;
-        ctx.caching = false;
+        ctx.success = false;
+        return;
       } else {
         cw.init(ctx.cache.buffer, ctx.cache.bytesPerRow, ctx.cache.bandRows, ctx.cache.originX);
         cw.beginRow(outY, ctx.config->y + ctx.cache.bandStart);
@@ -311,8 +311,8 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.caching = !config.cachePath.empty();
   if (ctx.caching) {
     if (!ctx.cache.begin(config.cachePath, ctx.dstWidth, ctx.dstHeight, config.x, config.y, 1)) {
-      LOG_ERR("GIF", "Failed to start cache stream, continuing without caching");
-      ctx.caching = false;
+      LOG_ERR("GIF", "Failed to start cache stream");
+      return false;
     }
   }
 
@@ -336,8 +336,9 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
     warnUnsupportedFeature("animation (using first frame only)", imagePath);
   }
 
-  if (ctx.caching) {
-    ctx.cache.finalize();
+  if (ctx.caching && !ctx.cache.finalize()) {
+    LOG_ERR("GIF", "Failed to finalize pixel cache: %s", config.cachePath.c_str());
+    return false;
   }
 
   return true;
