@@ -1280,7 +1280,7 @@ bool ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   lineWordStyles.reserve(lineWordCount);
 
   for (size_t i = 0; i < lineWordCount; ++i) {
-    std::string word = std::move(words[lastBreakAt + i]);
+    std::string word = words[lastBreakAt + i];
     if (containsSoftHyphen(word)) {
       stripSoftHyphensInPlace(word);
     }

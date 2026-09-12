@@ -12,6 +12,14 @@
 #undef class
 
 extern bool failNextTextBlockArena;
+static thread_local size_t allocationSizeToFail = 0;
+void* operator new(size_t size, const std::nothrow_t&) noexcept {
+  if (allocationSizeToFail == size) {
+    allocationSizeToFail = 0;
+    return nullptr;
+  }
+  return ::operator new(size);
+}
 
 namespace {
 
@@ -160,6 +168,7 @@ TEST_F(ChapterHtmlSlimParserTest, DoesNotConsumeTextWhenItsArenaAllocationFails)
       renderer, 0, 100, [&](std::shared_ptr<TextBlock>, uint32_t) { emitted = true; }));
   EXPECT_FALSE(emitted);
   EXPECT_EQ(parser.currentTextBlock->size(), 1u);
+  EXPECT_EQ(parser.currentTextBlock->words.front(), "preserved");
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridCellArenaFailure) {
@@ -236,4 +245,40 @@ TEST_F(ChapterHtmlSlimParserTest, DivWithHiddenAttributeContentShouldBeSkipped) 
   ASSERT_EQ(parser.partWordBufferIndex, 0);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, HiddenIdDoesNotDisplaceVisibleAnchor) {
+  parser.pendingAnchorId = "visible";
+  const XML_Char* attributes[] = {"id", "hidden-target", "hidden", "", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "div", attributes);
+  EXPECT_EQ(parser.pendingAnchorId, "visible");
+  EXPECT_TRUE(parser.anchorData.empty());
+}
+TEST_F(ChapterHtmlSlimParserTest, DisplayNoneIdDoesNotDisplaceVisibleAnchor) {
+  parser.pendingAnchorId = "visible";
+  const XML_Char* attributes[] = {"id", "hidden-target", "style", "display:none", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "div", attributes);
+  EXPECT_EQ(parser.pendingAnchorId, "visible");
+  EXPECT_TRUE(parser.anchorData.empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterTableCellAllocationFailure) {
+  parser.tableDepth = 1;
+  allocationSizeToFail = sizeof(ParsedText);
+  ChapterHtmlSlimParser::startElement(&parser, "td", nullptr);
+  allocationSizeToFail = 0;
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
+}
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridAllocationFailure) {
+  parser.tableRowCells.reserve(2);
+  for (int i = 0; i < 2; ++i) {
+    auto cell = std::make_unique<ParsedText>(false);
+    cell->addWord("cell", EpdFontFamily::REGULAR);
+    parser.tableRowCells.push_back(std::move(cell));
+  }
+  allocationSizeToFail = sizeof(PageTableGridRow);
+  parser.finishTableRow();
+  allocationSizeToFail = 0;
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
+}
 }  // namespace

@@ -859,7 +859,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
     const bool pageFull =
         !currentPage->elements.empty() && prospectiveY + rowLineHeight + TABLE_GRID_VERTICAL_PADDING > viewportHeight;
     if (pageFull) {
-      finishGridSegment();
+      if (gridHasLines && !finishGridSegment()) {
+        failLayout();
+        clearLayoutLines();
+        return;
+      }
       gridTopY = -1;
       setCurrentPageVisibleOffset(lineVisibleOffset);
       completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
@@ -916,6 +920,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   tablePreviousRowWasGrid = finishGridSegment();
+  if (gridHasLines && !tablePreviousRowWasGrid) {
+    failLayout();
+    clearLayoutLines();
+    return;
+  }
   tablePreviousRowEndedWithSeparator = false;
   tableRowStacked = false;
   clearLayoutLines();
@@ -952,6 +961,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   std::string styleAttr;
   std::string dirAttr;
   bool hasHiddenAttr = false;
+  const char* idAttr = nullptr;
   if (atts != nullptr) {
     for (int i = 0; atts[i]; i += 2) {
       if (strcmp(atts[i], "class") == 0) {
@@ -959,33 +969,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       } else if (strcmp(atts[i], "style") == 0) {
         styleAttr = atts[i + 1];
       } else if (strcmp(atts[i], "id") == 0) {
-        // Defer both anchor recording and TOC page breaks until startNewTextBlock,
-        // after the previous block is flushed to pages via makePages().
-        //
-        // Skip IDs on non-navigable inline elements (e.g. <span>): these are never
-        // link targets in epub content, but reading-system converters can inject tens
-        // of thousands of them per chapter, exhausting the heap. TOC anchors are
-        // always recorded regardless of element type, since they drive page breaks.
-        const char* idValue = atts[i + 1];
-        const bool isTocAnchor =
-            std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
-        const size_t deferredAnchorCount = self->tableRowAnchorCount + (self->pendingAnchorId.empty() ? 0 : 1);
-        const bool canStoreAnchor = self->anchorData.size() + deferredAnchorCount < MAX_ANCHORS_PER_CHAPTER;
-        if (isTocAnchor || (!isNonNavigableInlineElement(name) && canStoreAnchor)) {
-          // Flush a displaced anchor before overwriting. Consecutive non-block elements
-          // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
-          // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
-          // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
-          // lands at page 0 (section start) instead of the footnote.
-          if (!self->pendingAnchorId.empty()) {
-            if (self->tableDepth >= 1 && self->insideTableCell) {
-              self->collectPendingTableAnchor();
-            } else {
-              self->flushPendingAnchor();
-            }
-          }
-          self->pendingAnchorId = idValue;
-        }
+        idAttr = atts[i + 1];
       } else if (strcmp(atts[i], "dir") == 0) {
         dirAttr = atts[i + 1];
       } else if (strcmp(atts[i], "hidden") == 0) {
@@ -1038,6 +1022,36 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->skipUntilDepth = self->depth;
     self->depth += 1;
     return;
+  }
+
+  if (idAttr) {
+    // Defer both anchor recording and TOC page breaks until startNewTextBlock,
+    // after the previous block is flushed to pages via makePages().
+    //
+    // Skip IDs on non-navigable inline elements (e.g. <span>): these are never
+    // link targets in epub content, but reading-system converters can inject tens
+    // of thousands of them per chapter, exhausting the heap. TOC anchors are
+    // always recorded regardless of element type, since they drive page breaks.
+    const char* idValue = idAttr;
+    const bool isTocAnchor =
+        std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
+    const size_t deferredAnchorCount = self->tableRowAnchorCount + (self->pendingAnchorId.empty() ? 0 : 1);
+    const bool canStoreAnchor = self->anchorData.size() + deferredAnchorCount < MAX_ANCHORS_PER_CHAPTER;
+    if (isTocAnchor || (!isNonNavigableInlineElement(name) && canStoreAnchor)) {
+      // Flush a displaced anchor before overwriting. Consecutive non-block elements
+      // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
+      // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
+      // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
+      // lands at page 0 (section start) instead of the footnote.
+      if (!self->pendingAnchorId.empty()) {
+        if (self->tableDepth >= 1 && self->insideTableCell) {
+          self->collectPendingTableAnchor();
+        } else {
+          self->flushPendingAnchor();
+        }
+      }
+      self->pendingAnchorId = idValue;
+    }
   }
 
   // Buffer one simple row; oversized rows fall back to full-width flow.
@@ -1136,8 +1150,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                                                            self->focusReadingEnabled, tableCellBlockStyle);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
-      self->skipUntilDepth = self->depth;
-      self->depth += 1;
+      self->failLayout();
       return;
     }
     self->insideTableCell = true;
