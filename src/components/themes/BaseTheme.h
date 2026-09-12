@@ -118,6 +118,7 @@ struct ThemeMetrics {
   int controlRadius;
   int sheetRadius;
   int capsuleRadius;
+  int keyboardRowSpacing = 6;
 };
 
 enum UIIcon {
@@ -183,12 +184,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .progressBarMarginTop = 1,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
-                                 .keyboardKeyHeight = 48,
-                                 .keyboardKeySpacing = 0,
+                                 .keyboardKeyHeight = 64,
+                                 .keyboardKeySpacing = 2,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
-                                 .keyboardWidthPercent = 94,
+                                 .keyboardWidthPercent = 100,
                                  .popupTopOffsetRatio = 0.075f,
                                  .popupMarginX = 15,
                                  .popupMarginY = 15,
