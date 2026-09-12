@@ -120,6 +120,58 @@ std::unique_ptr<PageHorizontalRule> PageHorizontalRule::deserialize(HalFile& fil
   return std::unique_ptr<PageHorizontalRule>(rule);
 }
 
+void PageTableGridRow::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) {
+  (void)fontId;
+  if (width < columnCount || height < 2 || columnCount < 2 || columnCount > MAX_COLUMNS) {
+    return;
+  }
+
+  const int16_t x = xPos + xOffset;
+  const int16_t y = yPos + yOffset;
+  renderer.drawRect(x, y, width, height, true);
+
+  const uint16_t cellWidth = width / columnCount;
+  for (uint8_t column = 1; column < columnCount; ++column) {
+    const int16_t dividerX = static_cast<int16_t>(x + column * cellWidth);
+    renderer.drawLine(dividerX, y, dividerX, y + height - 1, true);
+  }
+}
+
+bool PageTableGridRow::serialize(HalFile& file) {
+  serialization::writePod(file, xPos);
+  serialization::writePod(file, yPos);
+  serialization::writePod(file, width);
+  serialization::writePod(file, height);
+  serialization::writePod(file, columnCount);
+  return true;
+}
+
+std::unique_ptr<PageTableGridRow> PageTableGridRow::deserialize(HalFile& file) {
+  int16_t xPos = 0;
+  int16_t yPos = 0;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  uint8_t columnCount = 0;
+  serialization::readPod(file, xPos);
+  serialization::readPod(file, yPos);
+  serialization::readPod(file, width);
+  serialization::readPod(file, height);
+  serialization::readPod(file, columnCount);
+
+  if (width < columnCount || height < 2 || columnCount < 2 || columnCount > MAX_COLUMNS) {
+    LOG_ERR("PGE", "Deserialization failed: invalid table grid metadata (width=%u height=%u columns=%u)", width, height,
+            columnCount);
+    return nullptr;
+  }
+
+  auto* grid = new (std::nothrow) PageTableGridRow(width, height, columnCount, xPos, yPos);
+  if (!grid) {
+    LOG_ERR("PGE", "Deserialization failed: could not allocate PageTableGridRow");
+    return nullptr;
+  }
+  return std::unique_ptr<PageTableGridRow>(grid);
+}
+
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
   renderFilteredPageElements(elements, renderer, fontId, xOffset, yOffset, [](const PageElement&) { return true; });
 }
@@ -220,6 +272,12 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
         return nullptr;
       }
       page->elements.push_back(std::move(rule));
+    } else if (tag == TAG_PageTableGridRow) {
+      auto grid = PageTableGridRow::deserialize(file);
+      if (!grid) {
+        return nullptr;
+      }
+      page->elements.push_back(std::move(grid));
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;

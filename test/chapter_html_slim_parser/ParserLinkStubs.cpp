@@ -25,11 +25,16 @@ bool computeVisualWordOrder(const std::vector<std::string>& words, bool, std::ve
 }
 }  // namespace BidiUtils
 
+bool failNextTextBlockArena = false;
+
 TextBlock::TextBlock(const std::vector<std::string>&, const std::vector<int16_t>&,
                      const std::vector<EpdFontFamily::Style>&, const std::vector<uint8_t>&,
                      const std::vector<uint16_t>&, const BlockStyle& blockStyle, std::vector<std::string> rubyTexts,
                      std::vector<LinkSpan> linkSpans)
-    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), linkSpans(std::move(linkSpans)) {}
+    : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), linkSpans(std::move(linkSpans)) {
+  isValid = !failNextTextBlockArena;
+  failNextTextBlockArena = false;
+}
 
 bool TextBlock::hasRuby() const { return false; }
 
@@ -51,3 +56,6 @@ bool PageImage::serialize(HalFile&) { return false; }
 
 void PageHorizontalRule::render(GfxRenderer&, int, int, int) {}
 bool PageHorizontalRule::serialize(HalFile&) { return false; }
+
+void PageTableGridRow::render(GfxRenderer&, int, int, int) {}
+bool PageTableGridRow::serialize(HalFile&) { return false; }
