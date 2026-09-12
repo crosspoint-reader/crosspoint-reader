@@ -8,6 +8,7 @@
 #include "OpdsServerStore.h"
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
+#include "network/OpdsBatchDownload.h"
 #include "util/ButtonNavigator.h"
 
 /**
@@ -34,14 +35,32 @@ class OpdsBookBrowserActivity final : public Activity, private UiAppHost {
   // a ListItem vector per render.
   std::vector<freeink::ui::ListItem> rowItems;
   void rebuildRowItems();
+  // A synthetic "Download new" row precedes the feed whenever the current page
+  // holds at least one acquisition entry, so rowItems is one longer than
+  // entries. Same shape as FontDownloadActivity's "Download All" row.
+  bool showDownloadAllRow = false;
+  bool hasBookEntry() const;
+  int entryIndexFromRow(int rowIndex) const { return showDownloadAllRow ? rowIndex - 1 : rowIndex; }
+  bool isDownloadAllRow(const int rowIndex) const { return showDownloadAllRow && rowIndex == 0; }
+  int rowCount() const { return static_cast<int>(rowItems.size()); }
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   std::string searchTemplate;
+  // Index into rowItems, not entries: a "Download new" row may sit in front of
+  // the feed (see entryIndexFromRow()).
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
+  // Set while "Download new" runs; batchStatus feeds the counter line the
+  // download screen adds under the title.
+  bool batchActive = false;
+  OpdsBatchDownload::Status batchStatus;
+  // Repaint throttling across the whole batch (the single-download path keeps
+  // its equivalents as locals, one download long).
+  int batchRenderedPercent = -1;
+  unsigned long batchProgressUpdateMs = 0;
 
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
@@ -75,6 +94,8 @@ class OpdsBookBrowserActivity final : public Activity, private UiAppHost {
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
   void downloadBook(const OpdsEntry& book);
+  void downloadAllNew();
+  static bool onBatchProgress(void* ctx, const OpdsBatchDownload::Status& status);
   void launchSearch();
   void performSearch(const std::string& query);
   bool preventAutoSleep() override { return true; }

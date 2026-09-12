@@ -356,6 +356,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                           {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                           "opdsFilenameFormat"),
+        // OPDS startup sync: persisted + web-exposed, category-less so it is
+        // hidden from the on-device Settings screen (toggled from the OPDS UI).
+        SettingInfo::Toggle(StrId::STR_OPDS_SYNC_ON_STARTUP, &CrossPointSettings::opdsSyncOnStartup,
+                            "opdsSyncOnStartup"),
 
         // Frontlight quick-panel state: persisted and web-exposed, but hidden
         // from the on-device Settings screen because the swipe panel owns it.
