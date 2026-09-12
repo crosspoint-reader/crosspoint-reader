@@ -737,6 +737,15 @@ void loop() {
       RenderLock lock;
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
+    return;
+  }
+
+  // Return to Home when power button is short-pressed with HOME_SCREEN setting.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::HOME_SCREEN &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    LOG_DBG("MAIN", "Power-button Home shortcut triggered");
+    activityManager.goHome();
+    return;
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.
