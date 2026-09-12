@@ -3,10 +3,10 @@
 #include <Logging.h>
 #include <ObfuscationUtils.h>
 
-#include "util/OpdsFilename.h"
-
 #include <algorithm>
 #include <cstring>
+
+#include "util/OpdsFilename.h"
 
 void OpdsServerStore::toJson(JsonDocument& doc) const {
   JsonArray arr = doc["servers"].to<JsonArray>();
