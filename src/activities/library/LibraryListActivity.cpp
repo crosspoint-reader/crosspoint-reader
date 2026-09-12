@@ -222,13 +222,12 @@ void LibraryListActivity::openSearch() {
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
     swallowHeldReleases();
     if (result.isCancelled) return;
+    if (showingRecents()) selectTab(ADDED_TAB, false);
     query = std::get<KeyboardResult>(result.data).text;
     applyFilter();
     auto& nav = activeNav();
     if (!query.empty() && filteredCount == 0 && !degraded) {
-      // The tab band remains focusable when there is no
-      // row. ScreenLeft then follows the OPDS header
-      // action pattern and reopens Search.
+      // Up from the tab bar reopens Search even with no results.
       nav.selected = 0;
     } else {
       // A non-empty result belongs to the list: land on
@@ -499,7 +498,7 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
-      if (!showingRecents() && !degraded) openSearch();
+      if (!showingRecents() && !degraded) toggleSortDirection();
     } else if (showingRecents()) {
       // Removal is dispatched by the release branch above.
     } else if (!groupsCollapsed && groupable()) {
@@ -510,23 +509,19 @@ bool LibraryListActivity::handleButtons() {
     return true;
   }
 
-  // Back clears the filter before it leaves. A shelf showing 7 of 60 books is
-  // a state the reader must be able to undo, and giving it the press they
-  // would reach for anyway costs no screen space and needs no explaining.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (groupsCollapsed) {
-      restoreExpandedList();
-    } else if (!showingRecents() && !query.empty()) {
+    if (!showingRecents() && !query.empty()) {
       query.clear();
       applyFilter();
-      nav.selected = bookRowCount() > 0 ? 1 : 0;
+      nav.selected = 0;
       nav.top = 0;
       requestUpdate();
     } else if (!tabsFocused() && !degraded) {
-      // The sort bar is a separate control mode. Preserve the viewport so a
-      // short Confirm can return to the same page.
+      // Keep the current list and viewport while returning focus to the tabs.
       nav.selected = 0;
       requestUpdate();
+    } else if (groupsCollapsed) {
+      restoreExpandedList();
     } else {
       onGoHome();
     }
@@ -535,7 +530,7 @@ bool LibraryListActivity::handleButtons() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (tabsFocused()) {
-      if (!showingRecents()) toggleSortDirection();
+      stepTab(1);
       return true;
     }
     if (count > 0) activateIndex(selectedEntry());
@@ -546,35 +541,22 @@ bool LibraryListActivity::handleButtons() {
 }
 
 void LibraryListActivity::navigateButtons() {
-  if (tabsFocused()) {
-    if (degraded && !showingRecents()) return;
-    buttonNavigator.onRelease({MappedInputManager::Button::ScreenDown}, [this] {
-      const int count = listCount();
-      if (count <= 0) return;
-      auto& nav = activeNav();
-      nav.selected = std::min(nav.top + 1, count);
-      requestUpdate();
-    });
-    buttonNavigator.onRelease({MappedInputManager::Button::ScreenRight}, [this] { stepTab(1); });
-    buttonNavigator.onRelease({MappedInputManager::Button::ScreenLeft}, [this] { stepTab(-1); });
-    buttonNavigator.onContinuous({MappedInputManager::Button::ScreenRight}, [this] { stepTab(1); });
-    buttonNavigator.onContinuous({MappedInputManager::Button::ScreenLeft}, [this] { stepTab(-1); });
-    return;
-  }
-
   const int count = listCount();
-  if (count <= 0) return;
+  const int ringSize = count + 1;
   auto& nav = activeNav();
-  const auto moveToRow = [this](const int row) { moveRingTo(row + 1); };
-  buttonNavigator.onNextRelease(
-      [this, count, &moveToRow] { moveToRow(ButtonNavigator::nextIndex(selectedEntry(), count)); });
-  buttonNavigator.onPreviousRelease(
-      [this, count, &moveToRow] { moveToRow(ButtonNavigator::previousIndex(selectedEntry(), count)); });
-  buttonNavigator.onNextContinuous([this, count, &nav, &moveToRow] {
-    moveToRow(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()));
+  buttonNavigator.onNextRelease([this, ringSize] { moveRingTo(ButtonNavigator::nextIndex(ringPos(), ringSize)); });
+  buttonNavigator.onPreviousRelease([this, ringSize] {
+    if (tabsFocused() && !degraded) {
+      openSearch();
+    } else {
+      moveRingTo(ButtonNavigator::previousIndex(ringPos(), ringSize));
+    }
   });
-  buttonNavigator.onPreviousContinuous([this, count, &nav, &moveToRow] {
-    moveToRow(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()));
+  buttonNavigator.onNextContinuous([this, count, &nav] {
+    if (count > 0) moveRingTo(ButtonNavigator::nextPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
+  });
+  buttonNavigator.onPreviousContinuous([this, count, &nav] {
+    if (count > 0) moveRingTo(ButtonNavigator::previousPageIndex(selectedEntry(), count, nav.pageRows()) + 1);
   });
 }
 
@@ -672,49 +654,45 @@ void LibraryListActivity::formatAuthorHeading(const std::string& author, std::st
   }
 }
 
-void LibraryListActivity::buildSearchAction(UiScreen& screen) {
-  if (showingRecents() || groupsCollapsed || degraded) return;
-
+void LibraryListActivity::buildHeader(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& theme = screen.theme();
-  const auto icon = fui::bitmapFromIcon(icon_search_32);
-  const int titleFontId = uiScaleSpec().titleFontId;
-  const int16_t buttonWidth = static_cast<int16_t>(icon.width + 8);
-  const int16_t buttonHeight = static_cast<int16_t>(icon.height + 4);
-  const int16_t headerTop = static_cast<int16_t>(metrics.topPadding);
-  int16_t buttonY = static_cast<int16_t>(headerTop + (metrics.headerHeight - buttonHeight) / 2);
-  if (metrics.headerBatteryDetached) {
-    const int titleLineHeight = renderer.getLineHeight(titleFontId);
-    const int titleTop = headerTop + metrics.headerHeight - theme.headerUnderline - theme.spaceMd - titleLineHeight;
-    buttonY = static_cast<int16_t>(titleTop + (titleLineHeight - buttonHeight) / 2);
+  fui::HeaderProps header;
+  header.title = headerTitle();
+  header.titleText = theme.titleText;
+  header.titleText.align = theme.headerTitleAlign;
+  header.sidePadding = theme.headerSidePadding;
+  header.minTouchSize = theme.minTouchSize;
+  header.styles = theme.popup;
+  if (header.styles.normal.border.kind == fui::PaintKind::None && theme.headerUnderline > 0) {
+    header.styles.normal.border = fui::Paint::solid(fui::Color::Black);
+    header.styles.normal.borderWidth = theme.headerUnderline;
   }
-
-  int16_t rightInset = theme.headerSidePadding;
-  if (!metrics.headerBatteryDetached && metrics.headerBatterySide == 0) {
-    rightInset = static_cast<int16_t>(rightInset + metrics.batteryWidth + theme.spaceMd * 2 +
-                                      renderer.getTextWidth(SMALL_FONT_ID, "100%"));
+  header.trailingStyles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
+  header.borderEdges = fui::EdgeBottom;
+  if (!degraded) {
+    header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
+    header.trailingAction = ACTION_SEARCH;
+    const int titleFontId = uiScaleSpec().titleFontId;
+    header.actionOffsetY =
+        static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
   }
-
-  fui::ButtonProps search;
-  search.icon = icon;
-  search.action = ACTION_SEARCH;
-  search.inputMask = fui::InputTouch;
-  search.styles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
-  search.minTouchSize = theme.minTouchSize;
-  fui::button(screen.frame(),
-              fui::Rect{static_cast<int16_t>(renderer.getScreenWidth() - rightInset - buttonWidth), buttonY,
-                        buttonWidth, buttonHeight},
-              search);
+  const auto frameRect = screen.frame().screen();
+  // Header and tabs share a screen-relative boundary, independent of bezel insets.
+  fui::header(screen.frame(),
+              fui::Rect{frameRect.x, static_cast<int16_t>(metrics.topPadding), frameRect.width,
+                        static_cast<int16_t>(metrics.headerHeight)},
+              header);
 }
 
 void LibraryListActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   // The position readout owns the line above the hints; rows must not overlap
-  // it. Search is overlaid on the standard battery/title header as a FUI action.
+  // it.
   const int16_t readoutReserved = static_cast<int16_t>(renderer.getLineHeight(SMALL_FONT_ID) + metrics.verticalSpacing);
+  buildHeader(screen);
   screen.setContentMarginFromScreen(fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight), 0,
                                                 static_cast<int16_t>(metrics.buttonHintsHeight + readoutReserved), 0});
-  buildSearchAction(screen);
 
   if (!degraded || showingRecents()) buildTabBar(screen);
   if (bookRowCount() == 0) {
@@ -758,8 +736,8 @@ void LibraryListActivity::drawHoldHelp() const {
   if (mappedInput.hasTouch() || groupsCollapsed) return;
   const char* help = nullptr;
   if (tabsFocused() && !showingRecents() && !degraded)
-    help = tr(STR_LIBRARY_HOLD_SEARCH);
-  else if (groupable())
+    help = tr(STR_LIBRARY_HOLD_SORT);
+  else if (!tabsFocused() && groupable())
     help = tr(STR_LIBRARY_HOLD_GROUPS);
   if (!help) return;
 
@@ -773,11 +751,11 @@ void LibraryListActivity::drawFooter() {
   drawPositionReadout();
   drawHoldHelp();
 
-  const char* backLabel = tabsFocused() ? tr(STR_HOME) : tr(STR_BACK);
+  const bool backGoesHome = tabsFocused() && !groupsCollapsed && (showingRecents() || query.empty());
+  const char* backLabel = backGoesHome ? tr(STR_HOME) : tr(STR_BACK);
   const char* confirmLabel = groupsCollapsed ? tr(STR_SELECT) : tr(STR_OPEN);
-  const auto labels = tabsFocused()
-                          ? mappedInput.mapDirectionalLabels(backLabel, showingRecents() ? "" : tr(STR_TOGGLE),
-                                                             tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT), "", tr(STR_SELECT))
-                          : mappedInput.mapLabels(backLabel, confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const bool canSearch = tabsFocused() && !degraded;
+  const auto labels = mappedInput.mapLabels(backLabel, tabsFocused() ? tr(STR_TOGGLE) : confirmLabel,
+                                            canSearch ? tr(STR_SEARCH) : tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }

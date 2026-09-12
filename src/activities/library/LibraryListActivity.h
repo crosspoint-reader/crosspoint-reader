@@ -47,6 +47,8 @@ class LibraryListActivity final : public UiTabListActivity {
   bool handleCustomInput() override;
   bool handleButtons() override;
   void navigateButtons() override;
+  // The FreeInkUI header owns both the title and search touch target.
+  void drawChrome() override {}
   void drawFooter() override;
 
  private:
@@ -83,7 +85,7 @@ class LibraryListActivity final : public UiTabListActivity {
   bool groupable() const;
 
   // Screen building
-  void buildSearchAction(UiScreen& screen);
+  void buildHeader(UiScreen& screen);
   // Materializes ListItems and their strings for the visible window only.
   void buildRows(UiScreen& screen);
   static void formatInitialHeading(uint32_t initial, std::string& out);
