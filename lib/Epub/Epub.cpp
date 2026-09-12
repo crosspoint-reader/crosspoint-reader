@@ -780,9 +780,9 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
       return false;
     }
     bool success = GifToBmpConverter::gifFileToBmpStream(coverGif, coverBmp, cropped, originalThresholds);
-    coverGif.close();
+    const bool sourceClosed = coverGif.close();
     const bool closed = coverBmp.close();
-    success = success && closed;
+    success = success && sourceClosed && closed;
     Storage.remove(coverGifTempPath.c_str());
 
     if (success && !Storage.rename(bmpTempPath.c_str(), coverBmpPath.c_str())) {
@@ -922,9 +922,9 @@ bool Epub::generateThumbBmp(int height) const {
     int THUMB_TARGET_HEIGHT = height;
     bool success =
         GifToBmpConverter::gifFileTo1BitBmpStreamWithSize(coverGif, thumbBmp, THUMB_TARGET_WIDTH, THUMB_TARGET_HEIGHT);
-    coverGif.close();
+    const bool sourceClosed = coverGif.close();
     const bool closed = thumbBmp.close();
-    success = success && closed;
+    success = success && sourceClosed && closed;
     Storage.remove(coverGifTempPath.c_str());
 
     if (success && !Storage.rename(bmpTempPath.c_str(), thumbBmpPath.c_str())) {
