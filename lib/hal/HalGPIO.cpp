@@ -4,6 +4,7 @@
 #include <PowerManager.h>
 #include <Preferences.h>
 #include <SPI.h>
+#include <SerialInput.h>
 #include <Wire.h>
 #include <XteinkDetect.h>
 #include <esp_sleep.h>
@@ -148,15 +149,48 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+#ifdef ENABLE_SERIAL_LOG
+  if (buttonIndex < 7 && (serialInput.down() & (1u << buttonIndex))) return true;
+#endif
+  return inputMgr.isPressed(buttonIndex);
+}
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+#ifdef ENABLE_SERIAL_LOG
+  if (buttonIndex < 7 && (serialInput.pressed() & (1u << buttonIndex))) return true;
+#endif
+  return inputMgr.wasPressed(buttonIndex);
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const {
+#ifdef ENABLE_SERIAL_LOG
+  if (serialInput.pressed()) return true;
+#endif
+  return inputMgr.wasAnyPressed();
+}
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+#ifdef ENABLE_SERIAL_LOG
+  if (buttonIndex < 7 && (serialInput.released() & (1u << buttonIndex))) return true;
+#endif
+  return inputMgr.wasReleased(buttonIndex);
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const {
+#ifdef ENABLE_SERIAL_LOG
+  if (serialInput.released()) return true;
+#endif
+  return inputMgr.wasAnyReleased();
+}
+
+bool HalGPIO::physicalInputActive() const {
+  if (inputMgr.wasAnyPressed() || inputMgr.wasAnyReleased() || inputMgr.wasTouchActivity()) return true;
+  for (uint8_t button = 0; button < 7; ++button) {
+    if (inputMgr.isPressed(button)) return true;
+  }
+  return false;
+}
 
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
@@ -167,7 +201,12 @@ bool HalGPIO::rawInputActive() {
   return (g1.raw >= 0 && g1.raw < kIdleRailMin) || (g2.raw >= 0 && g2.raw < kIdleRailMin);
 }
 
-unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
+unsigned long HalGPIO::getHeldTime() const {
+#ifdef ENABLE_SERIAL_LOG
+  if (serialInput.down() || serialInput.released()) return serialInput.heldMs(millis());
+#endif
+  return inputMgr.getHeldTime();
+}
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
