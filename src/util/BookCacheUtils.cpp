@@ -25,7 +25,7 @@ void clearBookCache(const std::string& path) {
     Epub(path, "/.crosspoint").clearCache();
   } else if (FsHelpers::hasXtcExtension(path)) {
     Xtc(path, "/.crosspoint").clearCache();
-  } else if (FsHelpers::hasTxtExtension(path)) {
+  } else if (FsHelpers::hasPlainTextBookExtension(path)) {
     Txt(path, "/.crosspoint").clearCache();
   } else {
     return;

@@ -33,4 +33,15 @@ TEST(NormalisePath, CollapsesParentReferenceWithinPath) {
 
 TEST(NormalisePath, DropsLeadingParentReferencesPastRoot) { EXPECT_EQ(FsHelpers::normalisePath("/../../etc"), "etc"); }
 
+TEST(HasPlainTextBookExtension, RecognisesTxtAndMarkdown) {
+  EXPECT_TRUE(FsHelpers::hasPlainTextBookExtension("notes.txt"sv));
+  EXPECT_TRUE(FsHelpers::hasPlainTextBookExtension("book.md"sv));
+  EXPECT_TRUE(FsHelpers::hasPlainTextBookExtension("BOOK.MD"sv));
+}
+
+TEST(HasPlainTextBookExtension, RejectsOtherExtensions) {
+  EXPECT_FALSE(FsHelpers::hasPlainTextBookExtension("book.epub"sv));
+  EXPECT_FALSE(FsHelpers::hasPlainTextBookExtension("book.bak"sv));
+}
+
 }  // namespace
