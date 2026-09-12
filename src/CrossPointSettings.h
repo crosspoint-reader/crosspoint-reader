@@ -183,6 +183,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     TOUCH_READER_ON = 1,
     TOUCH_READER_SWIPE = 2,
     TOUCH_READER_INVERTED_TAP = 3,
+    TOUCH_READER_TAP_ALWAYS_NEXT = 4,
     TOUCH_READER_CONTROLS_COUNT
   };
 
