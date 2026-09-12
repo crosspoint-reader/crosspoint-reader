@@ -49,4 +49,39 @@ TEST(OpdsFilename, UnknownFormatValueFallsBackToAuthorTitle) {
   EXPECT_EQ(opdsBookFilename("J. Doe", "My Book", bogus), "J. Doe - My Book.epub");
 }
 
+TEST(OpdsFolder, EmptyAndBareSlashBothMeanSdRoot) {
+  // "" is the sentinel for "no folder of my own"; a bare "/" collapses onto it
+  // so the two never produce different download paths.
+  EXPECT_EQ(normalizeOpdsFolder(""), "");
+  EXPECT_EQ(normalizeOpdsFolder("/"), "");
+  EXPECT_EQ(normalizeOpdsFolder("///"), "");
+}
+
+TEST(OpdsFolder, LeadingSlashIsAdded) {
+  EXPECT_EQ(normalizeOpdsFolder("books"), "/books");
+  EXPECT_EQ(normalizeOpdsFolder("/books"), "/books");
+}
+
+TEST(OpdsFolder, TrailingSlashesAreStripped) {
+  EXPECT_EQ(normalizeOpdsFolder("/books/"), "/books");
+  EXPECT_EQ(normalizeOpdsFolder("books///"), "/books");
+}
+
+TEST(OpdsFolder, NestedPathsKeepInteriorSeparators) {
+  EXPECT_EQ(normalizeOpdsFolder("calibre/scifi/"), "/calibre/scifi");
+}
+
+TEST(OpdsFolder, SurroundingWhitespaceIsTrimmed) {
+  EXPECT_EQ(normalizeOpdsFolder("  /books  "), "/books");
+  EXPECT_EQ(normalizeOpdsFolder("\tbooks\t"), "/books");
+  EXPECT_EQ(normalizeOpdsFolder("   "), "");
+}
+
+TEST(OpdsFolder, IsIdempotent) {
+  // The store round-trips already-normalized values through this on every edit.
+  const std::string once = normalizeOpdsFolder("  books/sci-fi//  ");
+  EXPECT_EQ(once, "/books/sci-fi");
+  EXPECT_EQ(normalizeOpdsFolder(once), once);
+}
+
 }  // namespace

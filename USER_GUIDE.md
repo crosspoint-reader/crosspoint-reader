@@ -343,19 +343,28 @@ CrossPoint supports saving multiple OPDS servers and switching between them when
    - **OPDS Server URL**: Full catalog root URL (for Calibre Content Server, usually ends with `/opds`).
    
    - **Username / Password**: Optional credentials for authenticated servers.
+   
+   - **Download folder**: Where books from *this* server are saved, for example `/books/calibre`. Leave it on **Default** to use the shared folder described below.
 
 4. Use **Delete Server** inside a server entry to remove it.
+
+The server list screen also has two settings that apply to every server:
+
+- **Default download folder**: Where downloads go for any server that has not set a folder of its own. Leave it empty to save to the SD card root.
+- **Filename format**: How downloaded files are named (`Author - Title`, `Title - Author`, or `Title`).
 
 Behavior notes:
 
 - You can store up to 8 OPDS servers.
 - OPDS authentication supports HTTP Basic auth. If you use Calibre Content Server with authentication enabled, set it to Basic (not Digest).
+- Folders are created on demand at download time. If a folder cannot be created, the book is saved to the SD card root rather than being lost.
+- Paths are tidied automatically: a leading `/` is added if you omit it, and trailing slashes are removed.
 
 You can also manage OPDS servers from the web interface while in File Transfer mode:
 
 1. Connect to the device web UI.
 2. Open `http://<device-ip>/settings`.
-3. Use the **OPDS Servers** card to add, edit, or delete entries.
+3. Use the **OPDS Servers** card to add, edit, or delete entries, including each server's **Download folder**.
 
 For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
 
@@ -371,6 +380,7 @@ While in **File Transfer** mode, the web settings page includes management cards
 Behavior notes:
 
 - Passwords are never shown back in the web UI after saving.
+- Clearing a server's **Download folder** in the web UI resets it to the device's default download folder.
 - Leaving Password blank while editing keeps the existing saved password unchanged.
 - The web UI can save hidden-network SSIDs, but connecting to hidden networks still depends on the device-side Wi-Fi connection flow.
 

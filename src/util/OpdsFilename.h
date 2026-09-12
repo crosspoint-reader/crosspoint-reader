@@ -16,3 +16,9 @@ enum class OpdsFilenameFormat : uint8_t {
 // for a downloaded OPDS book, according to `format`. When the author is empty,
 // every format collapses to just the sanitized title. Pure: no I/O, no globals.
 std::string opdsBookFilename(const std::string& author, const std::string& title, OpdsFilenameFormat format);
+
+// Normalizes a user-typed OPDS download folder: trims surrounding whitespace,
+// returns "" for an empty path or a bare "/" (both mean SD root), and otherwise
+// guarantees exactly one leading '/' and no trailing '/'. Cold path (runs once
+// per edit). Pure: no I/O, no globals.
+std::string normalizeOpdsFolder(std::string path);
