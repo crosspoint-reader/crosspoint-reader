@@ -320,17 +320,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
 #if FREEINK_CAP_TOUCH
-    SettingInfo::Enum(
-      StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-      {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-       StrId::STR_FOOTNOTES, StrId::STR_CONFIRM, StrId::STR_EOB_HOME},
-      "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM, StrId::STR_EOB_HOME},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
-    SettingInfo::Enum(
-      StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-      {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-       StrId::STR_FOOTNOTES, StrId::STR_EOB_HOME},
-      "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_EOB_HOME},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
