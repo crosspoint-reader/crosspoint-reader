@@ -13,3 +13,6 @@ Run a single suite directly:
 
 Google Test is fetched via CMake FetchContent on first configure; the pinned
 version lives in test/CMakeLists.txt.
+
+Tilt selection estimator, HAL integration tests, and device diagnostics:
+  test/tilt_estimator/README.md
