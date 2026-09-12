@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <GifCommon.h>
+#include <HalMemory.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -128,8 +129,12 @@ void processGapRowsUpTo(int canvasY, GifContext& ctx) {
 
 void* gifOpenWithHandle(const char* filename, int32_t* size) {
   auto file = makeUniqueNoThrow<HalFile>();
-  if (!file) return nullptr;
+  if (!file) {
+    LOG_ERR("GIF", "OOM: file handle for %s", filename);
+    return nullptr;
+  }
   if (!Storage.openFileForRead("GIF", std::string(filename), *file)) {
+    LOG_ERR("GIF", "Failed to open decoder source: %s", filename);
     return nullptr;
   }
   *size = static_cast<int32_t>(file->size());
@@ -145,19 +150,31 @@ void gifCloseWithHandle(void* handle) {
 
 int32_t gifReadWithHandle(GIFFILE* pFile, uint8_t* pBuf, int32_t len) {
   auto* file = reinterpret_cast<HalFile*>(pFile->fHandle);
-  if (!file) return 0;
+  if (!file) {
+    LOG_ERR("GIF", "Read requested without a file handle");
+    return 0;
+  }
   int32_t bytesRead = file->read(pBuf, len);
-  if (bytesRead < 0) return 0;
+  if (bytesRead < 0) {
+    LOG_ERR("GIF", "Read failed at offset %d for %d bytes", pFile->iPos, len);
+    return 0;
+  }
   pFile->iPos += bytesRead;
   return bytesRead;
 }
 
 int32_t gifSeekWithHandle(GIFFILE* pFile, int32_t position) {
   auto* file = reinterpret_cast<HalFile*>(pFile->fHandle);
-  if (!file) return -1;
+  if (!file) {
+    LOG_ERR("GIF", "Seek requested without a file handle");
+    return -1;
+  }
   if (position < 0) position = 0;
   if (position >= pFile->iSize) position = pFile->iSize - 1;
-  if (!file->seek(position)) return -1;
+  if (!file->seek(position)) {
+    LOG_ERR("GIF", "Seek failed at offset %d", position);
+    return -1;
+  }
   pFile->iPos = position;
   return position;
 }
@@ -199,7 +216,10 @@ void gifDrawCallback(GIFDRAW* pDraw) {
 
 bool readGifInfoFromPath(const std::string& imagePath, GifBasicInfo& info) {
   HalFile file;
-  if (!Storage.openFileForRead("GIF", imagePath, file)) return false;
+  if (!Storage.openFileForRead("GIF", imagePath, file)) {
+    LOG_ERR("GIF", "Failed to open source for header inspection: %s", imagePath.c_str());
+    return false;
+  }
   return GifCommon::readBasicInfo(file, info);
 }
 
@@ -240,7 +260,7 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ImageDimensions sourceDimensions;
   if (!validateAndStoreDimensions(info.canvasWidth, info.canvasHeight, sourceDimensions, "GIF")) return false;
 
-  const size_t freeHeap = ESP.getFreeHeap();
+  const size_t freeHeap = HalMemory::getInternalHeap().freeBytes;
   if (freeHeap < MIN_FREE_HEAP_FOR_GIF) {
     LOG_ERR("GIF", "Not enough heap for GIF decoder (%u free, need %u)", freeHeap, MIN_FREE_HEAP_FOR_GIF);
     return false;
@@ -296,8 +316,8 @@ bool GifToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
           "GIF header: canvas=%ux%u frame=%ux%u frameOffset=%u,%u interlaced=%s "
           "renderTarget=%dx%d MAX_WIDTH=%d freeHeap=%u file=%s",
           info.canvasWidth, info.canvasHeight, info.frameWidth, info.frameHeight, info.frameX, info.frameY,
-          info.interlaced ? "yes" : "no", config.maxWidth, config.maxHeight, MAX_WIDTH, ESP.getFreeHeap(),
-          imagePath.c_str());
+          info.interlaced ? "yes" : "no", config.maxWidth, config.maxHeight, MAX_WIDTH,
+          HalMemory::getInternalHeap().freeBytes, imagePath.c_str());
   const int rcOpen = gif->open(imagePath.c_str(), gifOpenWithHandle, gifCloseWithHandle, gifReadWithHandle,
                                gifSeekWithHandle, gifDrawCallback);
   const ScopedCleanup cleanup{[&gif]() { gif->close(); }};
