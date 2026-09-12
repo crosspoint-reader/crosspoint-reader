@@ -13,8 +13,9 @@ namespace {
 constexpr int16_t TOUCH_TAB_BAR_HEIGHT = 50;
 }
 
-UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiListActivity(name, renderer, mappedInput) {}
+UiTabListActivity::UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                     const bool wantsTouchLongPress)
+    : UiListActivity(name, renderer, mappedInput, wantsTouchLongPress) {}
 
 void UiTabListActivity::onEnter() {
   // Size the per-tab state before the base resets activeNav() (which indexes
@@ -46,6 +47,10 @@ void UiTabListActivity::tabActionTrampoline(const fui::ActionEvent& event, void*
 
 void UiTabListActivity::onRowAction(const fui::ActionEvent& event) {
   activeNav().selected = event.value + 1;  // ring position, not row index
+  if (event.longPress) {
+    onRowLongPress(event.value);
+    return;
+  }
   activateIndex(event.value);
 }
 
@@ -57,7 +62,7 @@ void UiTabListActivity::moveRingTo(const int ringIndex) {
   } else {
     // Pull the viewport to the row (ring - 1); ListNav::follow reads
     // n.selected as a row index, so compute directly here.
-    const uint16_t rows = n.visibleRows > 0 ? static_cast<uint16_t>(n.visibleRows) : 1;
+    const uint16_t rows = n.pageRows() > 0 ? static_cast<uint16_t>(n.pageRows()) : 1;
     n.top = fui::listTopIndexFor(static_cast<int16_t>(ringIndex - 1), static_cast<uint16_t>(n.top < 0 ? 0 : n.top),
                                  rows, static_cast<uint16_t>(listCount()));
   }
@@ -105,6 +110,7 @@ void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& pr
   if (n.selected > count) n.selected = count;
   props.topIndex = static_cast<uint16_t>(n.top);
   props.selectedIndex = static_cast<int16_t>(n.selected - 1);  // -1 = tab band focused
+  props.nav = &n;
 }
 
 void UiTabListActivity::buildTabBar(UiScreen& screen) {
@@ -121,6 +127,7 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
     tabs[i].label = tabLabel(i);
     tabs[i].value = static_cast<int16_t>(i);
     tabs[i].selected = activeTab() == i;
+    tabs[i].indicator = tabIndicator(i);
   }
   fui::TabBarProps tabProps;
   tabProps.tabs = tabs;
