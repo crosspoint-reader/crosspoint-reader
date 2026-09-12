@@ -126,6 +126,7 @@ class ChapterHtmlSlimParser {
   bool currentPageVisibleOffsetSet = false;
   bool insideBody = false;
   bool htmlEnded_ = false;
+  bool layoutFailed = false;
   bool syntheticCharacterData = false;
   uint16_t nonVisibleTextDepth = 0;
 
@@ -164,6 +165,8 @@ class ChapterHtmlSlimParser {
   bool addTableGridSegment(uint8_t columnCount, int16_t topY, int16_t bottomY);
   void setCurrentPageVisibleOffset(uint32_t offset);
   void makePages();
+  void failLayout();
+  bool ensureCurrentPage();
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);

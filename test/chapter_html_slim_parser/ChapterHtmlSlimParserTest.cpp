@@ -11,6 +11,8 @@
 #undef private
 #undef class
 
+extern bool failNextTextBlockArena;
+
 namespace {
 
 class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
@@ -113,6 +115,75 @@ TEST_F(ChapterHtmlSlimParserTest, ReclaimsFlushedTableAnchorStorageBeforeCollect
   EXPECT_EQ(static_cast<uint8_t>(parser.tableRowAnchorStorage[0]), 0u);
   EXPECT_STREQ(parser.tableRowAnchorStorage.data() + 1, "next-anchor");
   EXPECT_TRUE(parser.pendingAnchorId.empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitEmptyPageForOversizedLine) {
+  parser.viewportHeight = 8;
+  parser.currentPage = std::make_unique<Page>();
+  size_t completed = 0;
+  parser.completePageFn = [&](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
+    ++completed;
+    EXPECT_FALSE(page->elements.empty());
+  };
+  auto line =
+      std::make_shared<TextBlock>(std::vector<std::string>{}, std::vector<int16_t>{},
+                                  std::vector<EpdFontFamily::Style>{}, std::vector<uint8_t>{}, std::vector<uint16_t>{});
+  parser.addLineToPage(line, 0);
+  EXPECT_EQ(completed, 0u);
+  ASSERT_NE(parser.currentPage, nullptr);
+  EXPECT_EQ(parser.currentPage->elements.size(), 1u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, MapsCellAliasesAfterItsTocPageBreak) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  parser.tocAnchors = {"chapter"};
+  parser.currentPage = std::make_unique<Page>();
+  parser.currentPage->elements.push_back(std::make_shared<PageHorizontalRule>(100, 1, 0, 0));
+  parser.completePageFn = [](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) {};
+  parser.pendingAnchorId = "alias";
+  parser.collectPendingTableAnchor();
+  parser.pendingAnchorId = "chapter";
+  parser.collectPendingTableAnchor();
+  parser.pendingAnchorId = "next-cell";
+  parser.flushPendingTableCellAnchors();
+  ASSERT_EQ(parser.anchorData.size(), 2u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+  EXPECT_EQ(parser.pendingAnchorId, "next-cell");
+}
+
+TEST_F(ChapterHtmlSlimParserTest, DoesNotConsumeTextWhenItsArenaAllocationFails) {
+  parser.currentTextBlock->addWord("preserved", EpdFontFamily::REGULAR);
+  bool emitted = false;
+  failNextTextBlockArena = true;
+  EXPECT_FALSE(parser.currentTextBlock->layoutAndExtractLines(
+      renderer, 0, 100, [&](std::shared_ptr<TextBlock>, uint32_t) { emitted = true; }));
+  EXPECT_FALSE(emitted);
+  EXPECT_EQ(parser.currentTextBlock->size(), 1u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridCellArenaFailure) {
+  parser.tableRowCells.reserve(2);
+  for (int i = 0; i < 2; ++i) {
+    auto cell = std::make_unique<ParsedText>(false);
+    cell->addWord("cell", EpdFontFamily::REGULAR);
+    parser.tableRowCells.push_back(std::move(cell));
+  }
+  failNextTextBlockArena = true;
+  parser.finishTableRow();
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_EQ(parser.parseStep(), ChapterHtmlSlimParser::ParseStatus::Error);
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterStackedCellArenaFailure) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  parser.currentTextBlock->addWord("cell", EpdFontFamily::REGULAR);
+  failNextTextBlockArena = true;
+  parser.closeTableCell();
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
 }
 
 INSTANTIATE_TEST_SUITE_P(CssVerticalAlign, ChapterHtmlSlimParserTest,

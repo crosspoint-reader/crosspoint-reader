@@ -628,7 +628,11 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
 
 bool Section::finalizeBuild() {
   // Flush the trailing page (emits the last page via the completePageFn into the LUT).
-  build_->parser->finishParse();
+  if (!build_->parser->finishParse()) {
+    LOG_ERR("SCT", "Layout error while finalizing section");
+    abandonBuild();
+    return false;
+  }
 
   if (!build_->reusedHtml) {
     // Parse succeeded: promote the freshly unzipped HTML to the persistent cache so future
