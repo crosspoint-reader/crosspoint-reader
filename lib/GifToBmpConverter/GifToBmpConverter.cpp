@@ -3,6 +3,7 @@
 #include <AnimatedGIF.h>
 #include <Arduino.h>
 #include <GifCommon.h>
+#include <GifImageLayout.h>
 #include <HalDisplay.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -102,6 +103,7 @@ struct GifBmpContext {
   Print* bmpOut{nullptr};
   int srcWidth{0};
   int srcHeight{0};
+  GifCommon::ImageLayout layout;
   int dstWidth{0};
   int dstHeight{0};
   bool oneBit{false};
@@ -213,7 +215,9 @@ void emitOutputRow(const uint8_t* row, GifBmpContext& ctx, int outY) {
 }
 
 void processCanvasRow(const uint8_t* grayRow, int srcY, GifBmpContext& ctx) {
-  if (!ctx.success) return;
+  if (!ctx.success || srcY < ctx.layout.sourceY || srcY >= ctx.layout.sourceY + ctx.layout.sourceHeight) return;
+  srcY -= ctx.layout.sourceY;
+  grayRow += ctx.layout.sourceX;
 
   if (!ctx.needsScaling) {
     emitOutputRow(grayRow, ctx, srcY);
@@ -226,11 +230,11 @@ void processCanvasRow(const uint8_t* grayRow, int srcY, GifBmpContext& ctx) {
 
     int sum = 0;
     int count = 0;
-    for (int srcX = srcXStart; srcX < srcXEnd && srcX < ctx.srcWidth; ++srcX) {
+    for (int srcX = srcXStart; srcX < srcXEnd && srcX < ctx.layout.sourceWidth; ++srcX) {
       sum += grayRow[srcX];
       count++;
     }
-    if (count == 0 && srcXStart < ctx.srcWidth) {
+    if (count == 0 && srcXStart < ctx.layout.sourceWidth) {
       sum = grayRow[srcXStart];
       count = 1;
     }
@@ -240,7 +244,7 @@ void processCanvasRow(const uint8_t* grayRow, int srcY, GifBmpContext& ctx) {
   }
 
   const uint32_t srcY_fp = static_cast<uint32_t>(srcY + 1) << 16;
-  while (srcY_fp >= ctx.nextOutYSrcStart && ctx.currentOutY < ctx.dstHeight) {
+  while (ctx.success && srcY_fp >= ctx.nextOutYSrcStart && ctx.currentOutY < ctx.dstHeight) {
     for (int x = 0; x < ctx.dstWidth; ++x) {
       ctx.scaledGrayRow[x] = static_cast<uint8_t>((ctx.rowCount[x] > 0) ? (ctx.rowAccum[x] / ctx.rowCount[x]) : 255);
     }
@@ -307,7 +311,7 @@ constexpr size_t MIN_FREE_HEAP = GIF_DECODER_APPROX_SIZE + 32 * 1024;
 }  // namespace
 
 bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop) {
+                                                   bool oneBit, bool crop, bool originalThresholds) {
   LOG_DBG("GIF", "Converting GIF to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
 
   if (ESP.getFreeHeap() < MIN_FREE_HEAP) {
@@ -347,24 +351,23 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
   ctx.srcHeight = info.canvasHeight;
   ctx.oneBit = oneBit;
 
-  int outWidth = ctx.srcWidth;
-  int outHeight = ctx.srcHeight;
-  if (targetWidth > 0 && targetHeight > 0 && (ctx.srcWidth != targetWidth || ctx.srcHeight != targetHeight)) {
-    const float scaleToFitWidth = static_cast<float>(targetWidth) / ctx.srcWidth;
-    const float scaleToFitHeight = static_cast<float>(targetHeight) / ctx.srcHeight;
-    float scale = crop ? ((scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight)
-                       : ((scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight);
-    outWidth = static_cast<int>(ctx.srcWidth * scale);
-    outHeight = static_cast<int>(ctx.srcHeight * scale);
-    if (outWidth < 1) outWidth = 1;
-    if (outHeight < 1) outHeight = 1;
-    ctx.scaleX_fp = (static_cast<uint32_t>(ctx.srcWidth) << 16) / outWidth;
-    ctx.scaleY_fp = (static_cast<uint32_t>(ctx.srcHeight) << 16) / outHeight;
-    ctx.needsScaling = true;
+  if (!GifCommon::calculateLayout(ctx.srcWidth, ctx.srcHeight, targetWidth, targetHeight, crop, ctx.layout)) {
+    LOG_ERR("GIF", "Invalid GIF output dimensions: %dx%d", targetWidth, targetHeight);
+    return false;
   }
-  ctx.dstWidth = outWidth;
-  ctx.dstHeight = outHeight;
+  ctx.dstWidth = ctx.layout.width;
+  ctx.dstHeight = ctx.layout.height;
+  ctx.scaleX_fp = (static_cast<uint32_t>(ctx.layout.sourceWidth) << 16) / ctx.dstWidth;
+  ctx.scaleY_fp = (static_cast<uint32_t>(ctx.layout.sourceHeight) << 16) / ctx.dstHeight;
+  ctx.needsScaling = ctx.layout.sourceWidth != ctx.dstWidth || ctx.layout.sourceHeight != ctx.dstHeight;
   ctx.nextOutYSrcStart = ctx.scaleY_fp;
+  const uint32_t bitsPerPixel = (USE_8BIT_OUTPUT && !oneBit) ? 8 : (oneBit ? 1 : 2);
+  const uint32_t rowBytes = ((static_cast<uint32_t>(ctx.dstWidth) * bitsPerPixel + 31) / 32) * 4;
+  const uint32_t headerBytes = 54 + (1u << bitsPerPixel) * 4;
+  if (static_cast<uint64_t>(rowBytes) * ctx.dstHeight + headerBytes > GifCommon::MAX_BMP_BYTES) {
+    LOG_ERR("GIF", "GIF BMP exceeds output byte limit");
+    return false;
+  }
 
   bool headerWritten = false;
   if (USE_8BIT_OUTPUT && !oneBit) {
@@ -411,13 +414,13 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
     }
   } else if (!USE_8BIT_OUTPUT) {
     if (USE_ATKINSON) {
-      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(ctx.dstWidth);
+      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(ctx.dstWidth, originalThresholds);
       if (!ctx.atkinsonDitherer || !ctx.atkinsonDitherer->isValid()) {
         LOG_ERR("GIF", "OOM: AtkinsonDitherer");
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
-      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(ctx.dstWidth);
+      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(ctx.dstWidth, originalThresholds);
       if (!ctx.fsDitherer || !ctx.fsDitherer->isValid()) {
         LOG_ERR("GIF", "OOM: FloydSteinbergDitherer");
         return false;
@@ -458,10 +461,10 @@ bool GifToBmpConverter::gifFileToBmpStreamInternal(HalFile& gifFile, Print& bmpO
   return true;
 }
 
-bool GifToBmpConverter::gifFileToBmpStream(HalFile& gifFile, Print& bmpOut, bool crop) {
+bool GifToBmpConverter::gifFileToBmpStream(HalFile& gifFile, Print& bmpOut, bool crop, bool originalThresholds) {
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetWidth, targetHeight, false, crop);
+  return gifFileToBmpStreamInternal(gifFile, bmpOut, targetWidth, targetHeight, false, crop, originalThresholds);
 }
 
 bool GifToBmpConverter::gifFileToBmpStreamWithSize(HalFile& gifFile, Print& bmpOut, int targetMaxWidth,
