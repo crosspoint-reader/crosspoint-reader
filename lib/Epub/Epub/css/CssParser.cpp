@@ -943,6 +943,28 @@ void CssParser::deleteCache() const {
   Storage.remove((cachePath + rulesCacheBackup).c_str());
 }
 
+bool CssParser::sectionCacheIsStale(const CacheStatus statusBefore, const CacheLoadResult loadResult,
+                                    const ParseResult parseResult) {
+  // The complete cache hydrated: sections were laid out against this exact file.
+  if (loadResult == CacheLoadResult::Complete) return false;
+
+  // Too little heap to hydrate. The file is untouched and no reparse ran, so whatever the
+  // sections were built from is still on disk for the next attempt.
+  if (loadResult == CacheLoadResult::LowMemory) return false;
+
+  // A complete parse always rewrites the cache.
+  if (parseResult == ParseResult::Complete) return true;
+
+  // A partial parse replaces the cache unless a partial one was already there, in which
+  // case parseCssFiles() keeps the existing file rather than writing a shorter one.
+  if (parseResult == ParseResult::Partial) return statusBefore != CacheStatus::Partial;
+
+  // The parse failed, so nothing was written. Sections are stale only when the rule set
+  // they were built from was deleted on the way in: an unreadable or wrong-version cache
+  // (Invalid), or a Complete header that failed to hydrate. Both call deleteCache().
+  return statusBefore == CacheStatus::Invalid || statusBefore == CacheStatus::Complete;
+}
+
 CssParser::CacheStatus CssParser::inspectCache() const {
   if (cachePath.empty() || (!hasCache() && !restoreCacheBackupIfNeeded())) {
     return CacheStatus::Missing;

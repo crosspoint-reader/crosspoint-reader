@@ -455,11 +455,9 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
           LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
           return false;
         }
-        const bool cssCacheChanged =
-            cssParseResult == CssParser::ParseResult::Complete ||
-            (cssParseResult == CssParser::ParseResult::Partial && cacheStatus != CssParser::CacheStatus::Partial);
-        if (cssCacheChanged) {
-          // The CSS cache changed, so section caches must use the same rule set.
+        if (CssParser::sectionCacheIsStale(cacheStatus, cacheLoadResult, cssParseResult)) {
+          // Section caches hold styles already resolved against the previous rule set, and
+          // that rule set is either gone or replaced.
           Storage.removeDir((cachePath + "/sections").c_str());
         }
       }
@@ -562,9 +560,10 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (!skipLoadingCss) {
     // Parse CSS before reloading book.bin to leave more heap for CSS rule-table growth.
     bookMetadataCache.reset();
-    if (parseCssFiles(cssParser->inspectCache()) != CssParser::ParseResult::Error) {
-      Storage.removeDir((cachePath + "/sections").c_str());
-    }
+    parseCssFiles(cssParser->inspectCache());
+    // book.bin was just rebuilt, so any surviving section files were laid out against a
+    // different spine and rule set whatever the parse returned.
+    Storage.removeDir((cachePath + "/sections").c_str());
   }
 
   // Reload the cache from disk so it's in the correct state
