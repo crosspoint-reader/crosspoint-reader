@@ -19,7 +19,7 @@ class CountingOutput : public Print {
 TEST(GifSupport, StopsAnExtractionAtTheByteLimit) {
   CountingOutput output;
   GifLimitedWriter writer(output, 10);
-  const uint8_t bytes[8] = {};
+  constexpr uint8_t bytes[8] = {};
   EXPECT_EQ(writer.write(bytes, 8), 8u);
   EXPECT_EQ(writer.write(bytes, 8), 0u);
   EXPECT_EQ(writer.write(bytes, 2), 2u);
@@ -28,8 +28,10 @@ TEST(GifSupport, StopsAnExtractionAtTheByteLimit) {
 }
 
 TEST(GifSupport, TallAndWideCoversStayWithinTheirTarget) {
-  for (const auto& dimensions : {std::pair{1, 3072}, std::pair{3072, 1}, std::pair{640, 480}}) {
-    for (const auto& target : {std::pair{480, 800}, std::pair{800, 480}}) {
+  constexpr std::pair<int, int> dimensionsCases[] = {{1, 3072}, {3072, 1}, {640, 480}};
+  constexpr std::pair<int, int> targets[] = {{480, 800}, {800, 480}};
+  for (const auto& dimensions : dimensionsCases) {
+    for (const auto& target : targets) {
       GifCommon::ImageLayout layout;
       ASSERT_TRUE(
           GifCommon::calculateLayout(dimensions.first, dimensions.second, target.first, target.second, true, layout));
