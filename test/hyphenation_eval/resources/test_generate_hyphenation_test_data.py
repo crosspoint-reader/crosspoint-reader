@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from generate_hyphenation_test_data import EpubTextExtractor, extract_text_from_epub
 
@@ -32,6 +33,25 @@ class EpubTextExtractorTest(unittest.TestCase):
             with zipfile.ZipFile(path, "w") as archive:
                 archive.writestr("chapter.xhtml", "visible&unfinished")
             self.assertIn("unfinished", extract_text_from_epub(path))
+
+    def test_rejects_oversized_member(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "large.epub"
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("chapter.xhtml", "x" * 65)
+            with patch("generate_hyphenation_test_data.MAX_EPUB_MEMBER_BYTES", 64):
+                with self.assertRaisesRegex(ValueError, "size limit"):
+                    extract_text_from_epub(path)
+
+    def test_rejects_cumulative_expansion(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "large.epub"
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("one.xhtml", "x" * 40)
+                archive.writestr("two.xhtml", "x" * 40)
+            with patch("generate_hyphenation_test_data.MAX_EPUB_TEXT_BYTES", 64):
+                with self.assertRaisesRegex(ValueError, "size limit"):
+                    extract_text_from_epub(path)
 
 
 if __name__ == "__main__":

@@ -111,9 +111,14 @@ def strip_gutenberg_boilerplate(text):
     return text
 
 
+MAX_EPUB_MEMBER_BYTES = 16 * 1024 * 1024
+MAX_EPUB_TEXT_BYTES = 64 * 1024 * 1024
+
+
 def extract_text_from_epub(epub_path):
     """Extract visible book text from an EPUB archive."""
     texts = []
+    total_bytes = 0
     with zipfile.ZipFile(epub_path, "r") as z:
         for name in sorted(z.namelist()):
             lower = name.lower()
@@ -122,7 +127,15 @@ def extract_text_from_epub(epub_path):
                 or lower.endswith(".html")
                 or lower.endswith(".htm")
             ):
-                data = z.read(name).decode("utf-8", errors="ignore")
+                limit = min(MAX_EPUB_MEMBER_BYTES, MAX_EPUB_TEXT_BYTES - total_bytes)
+                if z.getinfo(name).file_size > limit:
+                    raise ValueError(f"EPUB text size limit exceeded: {name}")
+                with z.open(name) as member:
+                    raw = member.read(limit + 1)
+                if len(raw) > limit:
+                    raise ValueError(f"EPUB text size limit exceeded: {name}")
+                total_bytes += len(raw)
+                data = raw.decode("utf-8", errors="ignore")
                 extractor = EpubTextExtractor()
                 extractor.feed(data)
                 extractor.close()
