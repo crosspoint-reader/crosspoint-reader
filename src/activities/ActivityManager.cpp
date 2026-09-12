@@ -53,6 +53,10 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 void ActivityManager::renderTaskLoop() {
   while (true) {
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+#ifdef ENABLE_SERIAL_LOG
+    controlRendering.store(true);
+    const uint32_t ticket = controlRequested.load();
+#endif
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
@@ -63,6 +67,10 @@ void ActivityManager::renderTaskLoop() {
       display.setInverted(SETTINGS.screenInverted != 0);
       currentActivity->render(std::move(lock));
     }
+#ifdef ENABLE_SERIAL_LOG
+    controlCompleted.store(ticket);
+    controlRendering.store(false);
+#endif
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
     taskENTER_CRITICAL(&activityManagerSpinlock);
@@ -357,6 +365,9 @@ ScreenshotInfo ActivityManager::getScreenshotInfo() const {
 }
 
 void ActivityManager::requestUpdate(bool immediate) {
+#ifdef ENABLE_SERIAL_LOG
+  controlRequested.fetch_add(1);
+#endif
   if (immediate) {
     if (renderTaskHandle) {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
@@ -393,9 +404,30 @@ void ActivityManager::requestUpdateAndWait() {
   // Cannot call while holding RenderLock or it will cause a deadlock
   assert(!holdingRenderLock && "Cannot call requestUpdateAndWait() while holding RenderLock");
 
+#ifdef ENABLE_SERIAL_LOG
+  controlRequested.fetch_add(1);
+#endif
   xTaskNotify(renderTaskHandle, 1, eIncrement);
   ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 }
+
+#ifdef ENABLE_SERIAL_LOG
+void ActivityManager::getControlState(ControlState& state) const {
+  state.requested = controlRequested.load();
+  state.completed = controlCompleted.load();
+  if (xSemaphoreTake(renderingMutex, 0) != pdTRUE) return;
+  if (currentActivity) {
+    snprintf(state.activity, sizeof(state.activity), "%s", currentActivity->name.c_str());
+    state.reader = currentActivity->getScreenshotInfo();
+    state.orientation = static_cast<uint8_t>(renderer.getOrientation());
+    state.available = true;
+    state.busy = controlRendering.load() || state.requested != state.completed || requestedUpdate.load() ||
+                 pendingAction != PendingAction::None || currentActivity->controlBusy() ||
+                 currentActivity->requiresExclusiveStorageLoop();
+  }
+  xSemaphoreGive(renderingMutex);
+}
+#endif
 
 // RenderLock
 
