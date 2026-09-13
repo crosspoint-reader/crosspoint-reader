@@ -56,8 +56,15 @@ OpdsParser::OpdsParser(const char* passed_preferred_format) {
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
   if (passed_preferred_format != nullptr) {
-    preferredFormat = new char[strlen(passed_preferred_format) + 1];
-    strcpy(preferredFormat, passed_preferred_format);
+    preferredFormat = new (std::nothrow) char[strlen(passed_preferred_format) + 1];
+    if (preferredFormat == nullptr) {
+      // If it can't allocate the few bytes necessary to store the format, bigger problems
+      // are happening, and the user won't mind if they download the slightly incorrect optimized file,
+      // so log and ignore
+      LOG_DBG("OPDS", "Failed to allocate space to store the preferred file extension format");
+    } else {
+      strcpy(preferredFormat, passed_preferred_format);
+    }
   }
 }
 
