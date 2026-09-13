@@ -131,6 +131,7 @@ enum UIIcon {
   Settings,
   Transfer,
   Library,
+  Plugins,
   Wifi,
   Hotspot,
   Bookmark,
