@@ -82,6 +82,8 @@ struct TestFile testFiles[] = {
 
 class OpdsParserTestFixture : public testing::TestWithParam<TestFile> {
  public:
+  OpdsParser* parser;
+
   void SetUp() override {
     const TestFile p = GetParam();
 
@@ -113,7 +115,8 @@ class OpdsParserTestFixture : public testing::TestWithParam<TestFile> {
 
     delete[] buffer;
   }
-  OpdsParser* parser;
+
+  void TearDown() override { delete parser; }
 };
 
 TEST_P(OpdsParserTestFixture, VerifyTestFiles) {

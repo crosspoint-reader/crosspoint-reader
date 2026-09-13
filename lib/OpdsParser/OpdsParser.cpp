@@ -15,7 +15,8 @@ constexpr size_t MAX_HREF_CHARS = 768;
 constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
 constexpr size_t MAX_PAGE_URL_CHARS = 768;
 
-constexpr char NO_PREFERRED_FORMAT[] = "";
+constexpr char EPUB_DIRECTORY[] = "/epub/";
+constexpr char* NO_PREFERRED_FORMAT = nullptr;
 constexpr uint8_t PREFERRED_FORMAT_SCORE = 5;
 constexpr uint8_t OPTIMIZED_EPUB_SCORE = 4;
 constexpr uint8_t EPUB_EXTENSION_SCORE = 3;
@@ -25,7 +26,7 @@ constexpr uint8_t IS_APPLICATION_EPUB_ZIP_SCORE = 1;
 
 /// @brief A score is calculated for each download link, and the highest one is chosen
 uint8_t get_file_score(const char* download_href, const char* preferred_format) {
-  if (strcmp(preferred_format, NO_PREFERRED_FORMAT) && strstr(download_href, preferred_format) != nullptr) {
+  if (preferred_format != nullptr && strstr(download_href, preferred_format) != nullptr) {
     return PREFERRED_FORMAT_SCORE;
   }
   if (strstr(download_href, OpdsParser::X4_EPUB_EXT) != nullptr || strstr(download_href, OpdsParser::X3_EPUB_EXT)) {
@@ -34,7 +35,7 @@ uint8_t get_file_score(const char* download_href, const char* preferred_format) 
   if (strstr(download_href, OpdsParser::EPUB_EXT) != nullptr) {
     return EPUB_EXTENSION_SCORE;
   }
-  if (std::string(download_href).find("/epub/") != std::string::npos) {
+  if (strstr(download_href, EPUB_DIRECTORY) != nullptr) {
     return INCLUDES_EPUB_DIR_SCORE;
   }
   return IS_APPLICATION_EPUB_ZIP_SCORE;
@@ -43,7 +44,7 @@ uint8_t get_file_score(const char* download_href, const char* preferred_format) 
 }  // namespace
 
 OpdsParser::OpdsParser() : OpdsParser(NO_PREFERRED_FORMAT) {}
-OpdsParser::OpdsParser(const char* preferred_format) : preferredFormat(preferred_format) {
+OpdsParser::OpdsParser(const char* passed_preferred_format) {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
     errorOccured = true;
@@ -54,9 +55,18 @@ OpdsParser::OpdsParser(const char* preferred_format) : preferredFormat(preferred
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
+  if (passed_preferred_format != nullptr) {
+    preferredFormat = new char[strlen(passed_preferred_format) + 1];
+    strcpy(preferredFormat, passed_preferred_format);
+  }
 }
 
-OpdsParser::~OpdsParser() { destroyXmlParser(parser); }
+OpdsParser::~OpdsParser() {
+  if (preferredFormat != nullptr) {
+    delete[] preferredFormat;
+  }
+  destroyXmlParser(parser);
+}
 
 size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 

@@ -46,7 +46,7 @@ using OpdsBook = OpdsEntry;
 class OpdsParser final : public Print {
  public:
   OpdsParser();
-  OpdsParser(const char* preferredFormat);
+  explicit OpdsParser(const char* preferred_format);
   ~OpdsParser();
 
   // Disable copy
@@ -109,7 +109,7 @@ class OpdsParser final : public Print {
   uint8_t currentEntryFileScore = 0;  // Only for books, used for picking optimal download
   std::string currentText;
 
-  const char* preferredFormat;
+  char* preferredFormat = nullptr;
 
   // Parser state
   bool inEntry = false;
