@@ -187,6 +187,75 @@ TEST_F(IMUTiltEstimatorTest, StationaryXBiasConvergesWithoutCursorDrift) {
   }
 }
 
+TEST_F(IMUTiltEstimatorTest, StationaryBiasChangeAdaptsWithoutResettingNeutral) {
+  Trace trace;
+  trace.hold(20, 3000, 10);
+  ASSERT_EQ(trace.estimator.state(), Estimator::TRACKING);
+  ASSERT_NEAR(trace.estimator.estimatedGyroBias(0), 10, 0.01f);
+  for (int step = 1; step <= 40; ++step) trace.roll(20.0f + step * 0.2f, 8, 10);
+  ASSERT_NEAR(trace.estimator.roll(), 8, 1);
+
+  trace.hold(28, 10000, 11);
+
+  EXPECT_GT(trace.estimator.estimatedGyroBias(0), 10.45f);
+  EXPECT_LT(trace.estimator.estimatedGyroBias(0), 10.8f);
+  EXPECT_NEAR(trace.estimator.roll(), 8, 1);
+  EXPECT_NE(trace.poll().x, 0);
+  EXPECT_EQ(countLog("reason=posture_change"), 0U);
+  EXPECT_GT(countLog("bias_adapt"), 0U);
+}
+
+TEST_F(IMUTiltEstimatorTest, NoisyStationaryBiasChangeContinuesAdapting) {
+  Trace trace;
+  trace.hold(20, 3000, 10);
+  ASSERT_EQ(trace.estimator.state(), Estimator::TRACKING);
+
+  for (int sample = 0; sample < 480; ++sample) {
+    const float angle = (20.0f + (sample % 2 == 0 ? -0.3f : 0.3f)) * RAD_PER_DEG;
+    trace.sample(0, std::sin(angle), std::cos(angle), sample % 2 == 0 ? 8.0f : 14.0f, sample % 2 == 0 ? -2.0f : 1.2f,
+                 sample % 2 == 0 ? -1.0f : 1.6f);
+  }
+
+  EXPECT_GT(trace.estimator.estimatedGyroBias(0), 10.6f);
+  EXPECT_LT(trace.estimator.estimatedGyroBias(1), -0.2f);
+  EXPECT_GT(trace.estimator.estimatedGyroBias(2), 0.15f);
+  EXPECT_NEAR(trace.estimator.roll(), 0, 1);
+  EXPECT_EQ(trace.poll().x, 0);
+  EXPECT_GT(countLog("bias_adapt"), 5U);
+}
+
+TEST_F(IMUTiltEstimatorTest, StationaryAdaptationRemovesUnobservableGravityAxisDrift) {
+  Trace trace;
+  static constexpr std::array<float, 3> CACHED_BIAS = {0, 0, 0};
+  const Vec3 gravity = normalized({-0.5f, -0.04f, -0.86f});
+  trace.estimator.begin(CACHED_BIAS.data());
+
+  bool generatedMove = false;
+  for (int sample = 0; sample < 480; ++sample) {
+    trace.sample(gravity.x, gravity.y, gravity.z, gravity.x * 1.5f, gravity.y * 1.5f, gravity.z * 1.5f);
+    const Move move = trace.poll();
+    generatedMove |= move.x != 0 || move.y != 0;
+  }
+
+  EXPECT_FALSE(generatedMove);
+  EXPECT_LT(
+      std::sqrt(trace.estimator.roll() * trace.estimator.roll() + trace.estimator.pitch() * trace.estimator.pitch() +
+                trace.estimator.twist() * trace.estimator.twist()),
+      1.0f);
+  EXPECT_GT(countLog("bias_adapt"), 5U);
+}
+
+TEST_F(IMUTiltEstimatorTest, ContinuousMotionIsNotLearnedAsBias) {
+  Trace trace;
+  trace.hold(20);
+  const size_t adaptationsBeforeMotion = countLog("bias_adapt");
+  for (int step = 1; step <= 400; ++step) trace.roll(20.0f + step * 0.075f, 3);
+
+  EXPECT_LE(trace.estimator.estimatedGyroBias(0), 0.1f);
+  EXPECT_LE(countLog("bias_adapt"), adaptationsBeforeMotion + 1);
+  EXPECT_EQ(countLog("reason=posture_change"), 0U);
+}
+
 TEST_F(IMUTiltEstimatorTest, MeasuredStationaryNoiseStillCalibrates) {
   static constexpr std::array<Vec3, 20> GYRO_SAMPLES = {
       Vec3{13.969f, 1.234f, 0.078f},  Vec3{12.922f, 0.172f, 0.594f},  Vec3{13.641f, 0.953f, 0.062f},

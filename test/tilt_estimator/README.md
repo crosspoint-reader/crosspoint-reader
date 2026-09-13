@@ -92,7 +92,7 @@ Initial calibration must contain at least 8 samples (`CALIBRATION_MIN_SAMPLES`)
 and span at least 250 ms (`CALIBRATION_HOLD_MS`). Reference reacquisition must
 contain at least 10 samples (`STATIONARY_MIN_SAMPLES`) and span at least 500 ms
 (`STATIONARY_HOLD_MS`). Both remain within 0.8-1.2 g (`ACCEL_MIN_G` and
-`ACCEL_MAX_G`), stay within approximately one degree of their initial
+`ACCEL_MAX_G`), stay within approximately two degrees of their initial
 acceleration direction (`STATIONARY_ACCEL_DOT_MIN`), and keep each gyro sample
 within 8 degrees/second of the running mean (`STATIONARY_GYRO_VARIATION_DPS`).
 Calibration permits a constant offset up to 20 degrees/second on each axis
@@ -104,6 +104,26 @@ window-average corrected rates below 2.5 degrees/second
 the current boot. A later pointer session therefore captures its neutral gravity
 direction from the first valid accelerometer sample and can track immediately,
 without treating physical motion as a new zero-rate calibration window.
+
+During ordinary tracking, at least 24 stable samples (`BIAS_ADAPT_MIN_SAMPLES`)
+over 1500 ms (`BIAS_ADAPT_HOLD_MS`) can update gyro bias without changing the
+neutral reference. The corrected window mean must remain within 1.75 degrees/second
+(`BIAS_ADAPT_MAX_RATE_DPS`). An accepted window learns 20 percent of its residual
+(`BIAS_ADAPT_ALPHA`), capped at 0.1 degrees/second per axis
+(`BIAS_ADAPT_MAX_STEP_DPS`). It also removes accumulated rotation around gravity
+by rebuilding the attitude from the stationary mean acceleration and the original
+reference gravity. This preserves the observable tilt and neutral reference while
+preventing an unobservable quaternion component from coupling into pointer X/Y.
+Movement resets the candidate instead of being learned as bias. Applying the rate
+limit to the average allows adaptation through the QMI8658's observed per-sample
+gyro noise. Acceleration must remain within approximately one degree of the window
+anchor (`BIAS_ADAPT_ACCEL_DOT_MIN`), and the gyro-variation check still rejects
+unstable windows.
+
+A candidate accumulated mostly at rest can finish immediately after motion
+begins, before the IMU has observed enough gravity change to classify it. That
+boundary case permits at most one capped update; continued motion invalidates
+the next window rather than being repeatedly learned as bias.
 
 Large-posture reacquisition uses the same fixed accumulators but requires at
 least 8 samples (`REPOSITION_MIN_SAMPLES`) over 250 ms (`REPOSITION_HOLD_MS`)
@@ -221,6 +241,10 @@ At DEBUG level, three lines share a source-sample timestamp:
 - `estimate`: state after the sample, blocker mask, finite-state result, and all
   three bias estimates;
 - `attitude`: normalized quaternion and X/Y/Z relative rotation vector in degrees.
+
+An accepted ordinary stationary window emits a `bias_adapt` DEBUG message with
+the raw window mean, updated three-axis bias, and sample count. It does not report
+a state transition because tracking and the current neutral remain active.
 
 Every delivered interval over 100 ms (`SAMPLE_GAP_LOG_THRESHOLD_MS`) emits an
 immediate `sample_gap` INFO line with `action=skip` or `action=reacquire`. Invalid
