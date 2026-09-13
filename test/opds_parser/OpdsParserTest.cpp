@@ -60,6 +60,24 @@ struct TestFile testFiles[] = {
                 {.type = OpdsEntryType::BOOK, .title = "Ignores order to choose compact epub", .href = "e.x3.epub"},
             },
     },
+    {
+        .filename = "test_device_download_priorities.xml",
+        .preferred_format = OpdsParser::X3_EPUB_EXT,
+        .books =
+            {
+                {.type = OpdsEntryType::BOOK, .title = "Device-specific preferences 1", .href = "a.x3.epub"},
+                {.type = OpdsEntryType::BOOK, .title = "Device-specific preferences 2", .href = "b.x3.epub"},
+            },
+    },
+    {
+        .filename = "test_device_download_priorities.xml",
+        .preferred_format = OpdsParser::X4_EPUB_EXT,
+        .books =
+            {
+                {.type = OpdsEntryType::BOOK, .title = "Device-specific preferences 1", .href = "b.x4.epub"},
+                {.type = OpdsEntryType::BOOK, .title = "Device-specific preferences 2", .href = "a.x4.epub"},
+            },
+    },
 };
 
 class OpdsParserTestFixture : public testing::TestWithParam<TestFile> {
@@ -67,7 +85,11 @@ class OpdsParserTestFixture : public testing::TestWithParam<TestFile> {
   void SetUp() override {
     const TestFile p = GetParam();
 
-    parser = new OpdsParser();
+    if (p.preferred_format != nullptr) {
+      parser = new OpdsParser(GetParam().preferred_format);
+    } else {
+      parser = new OpdsParser();
+    }
 
     std::string filepath = std::string(TEST_DATA_DIR) + p.filename;
     std::ifstream file(filepath, std::ios::binary | std::ios::ate);
