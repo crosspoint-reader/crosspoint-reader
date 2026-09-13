@@ -116,7 +116,7 @@ class OpdsParserTestFixture : public testing::TestWithParam<TestFile> {
   OpdsParser* parser;
 };
 
-TEST_P(OpdsParserTestFixture, Invalid) {
+TEST_P(OpdsParserTestFixture, VerifyTestFiles) {
   const TestFile p = GetParam();
   if (p.error) {
     EXPECT_EQ(parser->error(), true);
@@ -134,6 +134,12 @@ TEST_P(OpdsParserTestFixture, Invalid) {
   EXPECT_EQ(parser->getBooks(), p.books);
 }
 
-INSTANTIATE_TEST_SUITE_P(OpdsParserTest, OpdsParserTestFixture, testing::ValuesIn(testFiles));
+INSTANTIATE_TEST_SUITE_P(OpdsParserTest, OpdsParserTestFixture, testing::ValuesIn(testFiles),
+                         [](const testing::TestParamInfo<OpdsParserTestFixture::ParamType>& info) {
+                           std::stringstream ss;
+                           ss << info.index << "_"
+                              << info.param.filename.substr(0, info.param.filename.find_first_of("."));
+                           return ss.str();
+                         });
 
 }  // namespace
