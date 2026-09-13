@@ -90,14 +90,20 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 46
+### Version 47
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 46 adds a fixed-size table-grid-row page element containing its bounds
+Version 47 adds a fixed-size table-grid-row page element containing its bounds
 and equal-width column count.
+
+Version 46 keeps the version 45 serialized layout unchanged. It was bumped
+because ordered lists now number their items, `list-style-type: none`
+suppresses list markers, and `<ul>`/`<ol>` containers contribute their own
+margins and padding to child block insets, changing cached word contents and
+page layout.
 
 Version 45 keeps the version 44 serialized layout unchanged. It was bumped
 because internal EPUB links now preserve CSS superscript and subscript styles,
@@ -176,7 +182,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 46
+#define EXPECTED_VERSION 47
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
