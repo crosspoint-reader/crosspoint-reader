@@ -55,9 +55,9 @@ struct TestFile testFiles[] = {
                 {.type = OpdsEntryType::BOOK,
                  .title = "Prefers paths containing /epub/",
                  .href = "/epub/c.somethingelse"},
-                {.type = OpdsEntryType::BOOK, .title = "Prefers explicit epubs", .href = "/epub/c.somethingelse"},
-                {.type = OpdsEntryType::BOOK, .title = "Prefers compact epubs", .href = "/epub/c.somethingelse"},
-                {.type = OpdsEntryType::BOOK, .title = "Ignores order to choose compact epub", .href = "d.epub"},
+                {.type = OpdsEntryType::BOOK, .title = "Prefers explicit epubs", .href = "d.epub"},
+                {.type = OpdsEntryType::BOOK, .title = "Prefers compact epubs", .href = "e.x3.epub"},
+                {.type = OpdsEntryType::BOOK, .title = "Ignores order to choose compact epub", .href = "e.x3.epub"},
             },
     },
 };

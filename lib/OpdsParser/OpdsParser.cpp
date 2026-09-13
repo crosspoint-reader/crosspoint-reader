@@ -14,9 +14,36 @@ constexpr size_t MAX_ID_CHARS = 128;
 constexpr size_t MAX_HREF_CHARS = 768;
 constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
 constexpr size_t MAX_PAGE_URL_CHARS = 768;
+
+constexpr char NO_PREFERRED_FORMAT[] = "";
+constexpr uint8_t PREFERRED_FORMAT_SCORE = 5;
+constexpr uint8_t OPTIMIZED_EPUB_SCORE = 4;
+constexpr uint8_t EPUB_EXTENSION_SCORE = 3;
+constexpr uint8_t INCLUDES_EPUB_DIR_SCORE = 2;
+// For now, we are _only_ allowing downloads of files with type application/epub+zip
+constexpr uint8_t IS_APPLICATION_EPUB_ZIP_SCORE = 1;
+
+/// @brief A score is calculated for each download link, and the highest one is chosen
+uint8_t get_file_score(const char* download_href, const char* preferred_format) {
+  if (strcmp(preferred_format, NO_PREFERRED_FORMAT) && strstr(download_href, preferred_format) != nullptr) {
+    return PREFERRED_FORMAT_SCORE;
+  }
+  if (strstr(download_href, OpdsParser::X4_EPUB_EXT) != nullptr || strstr(download_href, OpdsParser::X3_EPUB_EXT)) {
+    return OPTIMIZED_EPUB_SCORE;
+  }
+  if (strstr(download_href, OpdsParser::EPUB_EXT) != nullptr) {
+    return EPUB_EXTENSION_SCORE;
+  }
+  if (std::string(download_href).find("/epub/") != std::string::npos) {
+    return INCLUDES_EPUB_DIR_SCORE;
+  }
+  return IS_APPLICATION_EPUB_ZIP_SCORE;
+}
+
 }  // namespace
 
-OpdsParser::OpdsParser() {
+OpdsParser::OpdsParser() : OpdsParser(NO_PREFERRED_FORMAT) {}
+OpdsParser::OpdsParser(const char* preferred_format) : preferredFormat(preferred_format) {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
     errorOccured = true;
@@ -125,6 +152,7 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     self->feedTruncated = self->feedTruncated || !self->collectCurrentEntry;
     self->currentEntry = OpdsEntry{};
     self->currentText.clear();
+    self->currentEntryFileScore = 0;
     self->inTitle = self->inAuthor = self->inAuthorName = self->inId = false;
     return;
   }
@@ -148,14 +176,11 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       if (self->inEntry && self->collectCurrentEntry) {
         if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
             strcmp(type, "application/epub+zip") == 0) {
-          // Prefer plain EPUB links over derived formats when multiple
-          // acquisition links are present for one entry.
-          const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                            self->currentEntry.href.find("/epub/") != std::string::npos);
-          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
+          const uint8_t file_score = get_file_score(href, self->preferredFormat);
+
+          if (self->currentEntry.type != OpdsEntryType::BOOK || file_score > self->currentEntryFileScore) {
             self->currentEntry.type = OpdsEntryType::BOOK;
+            self->currentEntryFileScore = file_score;
             assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {

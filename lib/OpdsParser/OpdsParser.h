@@ -46,12 +46,10 @@ using OpdsBook = OpdsEntry;
 class OpdsParser final : public Print {
  public:
   OpdsParser();
+  OpdsParser(const char* preferredFormat);
   ~OpdsParser();
 
   // Disable copy
-  const std::string& getSearchTemplate() const { return searchTemplate; }
-  const std::string& getNextPageUrl() const { return nextPageUrl; }
-  const std::string& getPrevPageUrl() const { return prevPageUrl; }
   OpdsParser(const OpdsParser&) = delete;
   OpdsParser& operator=(const OpdsParser&) = delete;
 
@@ -83,6 +81,14 @@ class OpdsParser final : public Print {
    */
   void clear();
 
+  const std::string& getSearchTemplate() const { return searchTemplate; }
+  const std::string& getNextPageUrl() const { return nextPageUrl; }
+  const std::string& getPrevPageUrl() const { return prevPageUrl; }
+
+  static constexpr const char* X4_EPUB_EXT = ".x4.epub";
+  static constexpr const char* X3_EPUB_EXT = ".x3.epub";
+  static constexpr const char* EPUB_EXT = ".epub";
+
  private:
   // Expat callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
@@ -100,7 +106,10 @@ class OpdsParser final : public Print {
   XML_Parser parser = nullptr;
   std::vector<OpdsEntry> entries;
   OpdsEntry currentEntry;
+  uint8_t currentEntryFileScore = 0;  // Only for books, used for picking optimal download
   std::string currentText;
+
+  const char* preferredFormat;
 
   // Parser state
   bool inEntry = false;
