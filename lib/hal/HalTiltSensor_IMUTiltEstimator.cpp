@@ -215,7 +215,11 @@ void HalTiltSensor::IMUTiltEstimator::adaptGyroBias() {
 
 void HalTiltSensor::IMUTiltEstimator::alignAttitudeToStationaryGravity() {
   const float accelLength = vectorLength(stationaryAccelMean[0], stationaryAccelMean[1], stationaryAccelMean[2]);
-  if (!std::isfinite(accelLength) || accelLength < MIN_VECTOR_NORM) return;
+  if (!std::isfinite(accelLength) || accelLength < MIN_VECTOR_NORM) {
+    LOG_ERR(_IMU_LOG_NAME_, "gravity_adapt t=%lu assert failed: gravity vector invalid (mag:%.4f)",
+            static_cast<unsigned long>(lastSampleMs), accelLength);
+    return;
+  }
 
   const float currentX = stationaryAccelMean[0] / accelLength;
   const float currentY = stationaryAccelMean[1] / accelLength;
@@ -223,7 +227,11 @@ void HalTiltSensor::IMUTiltEstimator::alignAttitudeToStationaryGravity() {
   const float dot = std::clamp(
       currentX * referenceAccel[0] + currentY * referenceAccel[1] + currentZ * referenceAccel[2], -1.0f, 1.0f);
   const float denominator = sqrtf(2.0f * (1.0f + dot));
-  if (!std::isfinite(denominator) || denominator < MIN_VECTOR_NORM) return;
+  if (!std::isfinite(denominator) || denominator < MIN_VECTOR_NORM) {
+    LOG_ERR(_IMU_LOG_NAME_, "gravity_adapt t=%lu vectors possibly opposed (dot:%.4f)",
+            static_cast<unsigned long>(lastSampleMs), dot);
+    return;
+  }
 
   q[0] = denominator * 0.5f;
   q[1] = (currentY * referenceAccel[2] - currentZ * referenceAccel[1]) / denominator;
