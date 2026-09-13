@@ -30,6 +30,7 @@ class HalTiltSensor::IMUTiltEstimator {
   float stationaryAccelAnchor[3] = {};
   uint32_t stationaryStartMs = 0;
   uint16_t stationarySampleCount = 0;
+  bool stationaryCandidateForReposition = false;
 
   uint32_t lastUpdateMs = 0, lastMoveXMs = 0, lastMoveYMs = 0;
   uint32_t lastSampleMs = 0, sampleInterval = 0, integrationInterval = 0;
@@ -55,7 +56,15 @@ class HalTiltSensor::IMUTiltEstimator {
   static constexpr uint32_t REPOSITION_HOLD_MS = 250;       // Settled time required for automatic re-tare.
   static constexpr uint16_t REPOSITION_MIN_SAMPLES = 8;     // Minimum samples required for automatic re-tare.
 
-  static constexpr float ATTITUDE_KP = 2.5f;                    // Strength of accelerometer gravity correction.
+  static constexpr float BIAS_ADAPT_MAX_RATE_DPS = 1.75f;  // Maximum residual accepted as stationary drift.
+  static constexpr float BIAS_ADAPT_ACCEL_DOT_MIN =
+      0.99985f;                                           // Maximum gravity drift during adaptation (approx. 1 deg).
+  static constexpr float BIAS_ADAPT_ALPHA = 0.2f;         // Fraction of residual bias learned per stable window.
+  static constexpr float BIAS_ADAPT_MAX_STEP_DPS = 0.1f;  // Maximum per-axis change from one stable window.
+  static constexpr uint32_t BIAS_ADAPT_HOLD_MS = 1500;    // Stable time required before updating bias.
+  static constexpr uint16_t BIAS_ADAPT_MIN_SAMPLES = 24;  // Minimum samples required before updating bias.
+
+  static constexpr float ATTITUDE_KP = 4.0f;                    // Strength of accelerometer gravity correction.
   static constexpr uint32_t MAX_INTEGRATION_INTERVAL_MS = 50;   // Maximum interval integrated from one sample.
   static constexpr uint32_t SAMPLE_GAP_LOG_THRESHOLD_MS = 100;  // Gap above which integration is skipped.
   static constexpr uint32_t REFERENCE_LOST_INTERVAL_MS = 250;   // Gap above which the reference is reacquired.
@@ -83,7 +92,14 @@ class HalTiltSensor::IMUTiltEstimator {
 
   // Accumulate stable samples until the requested hold completes.
   bool updateStationaryCandidate(float ax, float ay, float az, float gx, float gy, float gz, float rateLimit,
-                                 uint32_t holdMs, uint16_t minSamples);
+                                 uint32_t holdMs, uint16_t minSamples, bool logRejection = true,
+                                 float accelDotMin = STATIONARY_ACCEL_DOT_MIN);
+
+  // Gently move gyro bias toward a stationary window without changing neutral orientation.
+  void adaptGyroBias();
+
+  // Remove rotation around gravity while preserving observable tilt from the original neutral.
+  void alignAttitudeToStationaryGravity();
 
   // Capture gravity and gyro bias from the stationary window.
   bool captureReference();

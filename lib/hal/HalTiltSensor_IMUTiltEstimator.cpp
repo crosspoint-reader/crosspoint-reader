@@ -54,6 +54,7 @@ void HalTiltSensor::IMUTiltEstimator::begin(const float* initialGyroBias) {
   pointerOutputReady = false;
   loggedInvalidInput = false;
   loggedInvalidState = false;
+  stationaryCandidateForReposition = false;
   lastUpdateMs = lastMoveXMs = lastMoveYMs = 0;
   lastSampleMs = sampleInterval = integrationInterval = 0;
   lastTraceMs = lastTareWaitLogMs = 0;
@@ -95,6 +96,7 @@ void HalTiltSensor::IMUTiltEstimator::resetAttitude() {
 void HalTiltSensor::IMUTiltEstimator::resetStationaryCandidate() {
   stationaryStartMs = 0;
   stationarySampleCount = 0;
+  stationaryCandidateForReposition = false;
   std::fill(std::begin(stationaryAccelMean), std::end(stationaryAccelMean), 0.0f);
   std::fill(std::begin(stationaryGyroMean), std::end(stationaryGyroMean), 0.0f);
   std::fill(std::begin(stationaryAccelAnchor), std::end(stationaryAccelAnchor), 0.0f);
@@ -114,7 +116,8 @@ void HalTiltSensor::IMUTiltEstimator::logTareWait([[maybe_unused]] float accelLe
 
 bool HalTiltSensor::IMUTiltEstimator::updateStationaryCandidate(float ax, float ay, float az, float gx, float gy,
                                                                 float gz, const float rateLimit, const uint32_t holdMs,
-                                                                const uint16_t minSamples) {
+                                                                const uint16_t minSamples, const bool logRejection,
+                                                                const float accelDotMin) {
   const float accelLength = vectorLength(ax, ay, az);
   const float gxCorrected = haveBias ? gx - gyroBias[0] : gx;
   const float gyCorrected = haveBias ? gy - gyroBias[1] : gy;
@@ -140,7 +143,7 @@ bool HalTiltSensor::IMUTiltEstimator::updateStationaryCandidate(float ax, float 
   if (!blockers && stationarySampleCount > 0) {
     const float accelDot =
         nx * stationaryAccelAnchor[0] + ny * stationaryAccelAnchor[1] + nz * stationaryAccelAnchor[2];
-    if (accelDot < STATIONARY_ACCEL_DOT_MIN) blockers |= ACCEL_DIRECTION;
+    if (accelDot < accelDotMin) blockers |= ACCEL_DIRECTION;
     if (fabsf(gx - stationaryGyroMean[0]) > STATIONARY_GYRO_VARIATION_DPS ||
         fabsf(gy - stationaryGyroMean[1]) > STATIONARY_GYRO_VARIATION_DPS ||
         fabsf(gz - stationaryGyroMean[2]) > STATIONARY_GYRO_VARIATION_DPS) {
@@ -150,7 +153,7 @@ bool HalTiltSensor::IMUTiltEstimator::updateStationaryCandidate(float ax, float 
 
   tareBlockerMask = blockers;
   if (blockers) {
-    logTareWait(accelLength, gxCorrected, gyCorrected, gzCorrected);
+    if (logRejection) logTareWait(accelLength, gxCorrected, gyCorrected, gzCorrected);
     resetStationaryCandidate();
     return false;
   }
@@ -190,13 +193,43 @@ bool HalTiltSensor::IMUTiltEstimator::updateStationaryCandidate(float ax, float 
     if (fabsf(meanGzCorrected) > rateLimit) blockers |= GYRO_Z;
     tareBlockerMask = blockers;
     if (blockers) {
-      logTareWait(accelLength, meanGxCorrected, meanGyCorrected, meanGzCorrected);
+      if (logRejection) logTareWait(accelLength, meanGxCorrected, meanGyCorrected, meanGzCorrected);
       resetStationaryCandidate();
       return false;
     }
   }
 
   return true;
+}
+
+void HalTiltSensor::IMUTiltEstimator::adaptGyroBias() {
+  for (unsigned int axis = 0; axis < 3; ++axis) {
+    const float residual = stationaryGyroMean[axis] - gyroBias[axis];
+    gyroBias[axis] += std::clamp(residual * BIAS_ADAPT_ALPHA, -BIAS_ADAPT_MAX_STEP_DPS, BIAS_ADAPT_MAX_STEP_DPS);
+  }
+  alignAttitudeToStationaryGravity();
+  LOG_DBG(_IMU_LOG_NAME_, "bias_adapt t=%lu mean:%.3f,%.3f,%.3f bias:%.3f,%.3f,%.3f samples=%u",
+          static_cast<unsigned long>(lastSampleMs), stationaryGyroMean[0], stationaryGyroMean[1], stationaryGyroMean[2],
+          gyroBias[0], gyroBias[1], gyroBias[2], static_cast<unsigned int>(stationarySampleCount));
+}
+
+void HalTiltSensor::IMUTiltEstimator::alignAttitudeToStationaryGravity() {
+  const float accelLength = vectorLength(stationaryAccelMean[0], stationaryAccelMean[1], stationaryAccelMean[2]);
+  if (!std::isfinite(accelLength) || accelLength < MIN_VECTOR_NORM) return;
+
+  const float currentX = stationaryAccelMean[0] / accelLength;
+  const float currentY = stationaryAccelMean[1] / accelLength;
+  const float currentZ = stationaryAccelMean[2] / accelLength;
+  const float dot = std::clamp(
+      currentX * referenceAccel[0] + currentY * referenceAccel[1] + currentZ * referenceAccel[2], -1.0f, 1.0f);
+  const float denominator = sqrtf(2.0f * (1.0f + dot));
+  if (!std::isfinite(denominator) || denominator < MIN_VECTOR_NORM) return;
+
+  q[0] = denominator * 0.5f;
+  q[1] = (currentY * referenceAccel[2] - currentZ * referenceAccel[1]) / denominator;
+  q[2] = (currentZ * referenceAccel[0] - currentX * referenceAccel[2]) / denominator;
+  q[3] = (currentX * referenceAccel[1] - currentY * referenceAccel[0]) / denominator;
+  updateRotationVector();
 }
 
 bool HalTiltSensor::IMUTiltEstimator::captureReference() {
@@ -436,6 +469,8 @@ void HalTiltSensor::IMUTiltEstimator::consume(float ax, float ay, float az, floa
     pointerOutputReady = true;
     const float relativeAngle = vectorLength(rollValue, pitchValue, twistValue);
     if (relativeAngle >= REPOSITION_MIN_ANGLE_DEG) {
+      if (stationarySampleCount > 0 && !stationaryCandidateForReposition) resetStationaryCandidate();
+      stationaryCandidateForReposition = true;
       pointerOutputReady = false;
       if (updateStationaryCandidate(ax, ay, az, gx, gy, gz, REPOSITION_MAX_RATE_DPS, REPOSITION_HOLD_MS,
                                     REPOSITION_MIN_SAMPLES)) {
@@ -444,8 +479,14 @@ void HalTiltSensor::IMUTiltEstimator::consume(float ax, float ay, float az, floa
         resetStationaryCandidate();
       }
     } else {
+      if (stationarySampleCount > 0 && stationaryCandidateForReposition) resetStationaryCandidate();
+      stationaryCandidateForReposition = false;
+      if (updateStationaryCandidate(ax, ay, az, gx, gy, gz, BIAS_ADAPT_MAX_RATE_DPS, BIAS_ADAPT_HOLD_MS,
+                                    BIAS_ADAPT_MIN_SAMPLES, false, BIAS_ADAPT_ACCEL_DOT_MIN)) {
+        adaptGyroBias();
+        resetStationaryCandidate();
+      }
       tareBlockerMask = 0;
-      resetStationaryCandidate();
     }
   }
   logDiagnostics(firstSample, ax, ay, az, gx, gy, gz);
