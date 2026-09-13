@@ -20,7 +20,7 @@ class FontCacheManager {
   // loaded. Everything faults back in on demand. For heap-critical transitions
   // (e.g. web-server + WiFi startup); see SdCardFont::releaseResidentCaches().
   void releaseSdFontCaches();
-  void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F);
+  void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
   void logStats(const char* label = "render");
   void resetStats();
 

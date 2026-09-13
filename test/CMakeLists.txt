@@ -50,6 +50,7 @@ add_subdirectory(combining_marks)
 add_subdirectory(credential_integrity)
 add_subdirectory(xml_parser_utils)
 add_subdirectory(token_boundary)
+add_subdirectory(koreader_xpath_resolver)
 add_subdirectory(progress_comparison)
 add_subdirectory(font_cache_manager)
 add_subdirectory(css_parser)
@@ -64,3 +65,5 @@ add_subdirectory(fs_helpers)
 add_subdirectory(absolute_grayscale)
 
 add_subdirectory(gif_support)
+
+add_subdirectory(sd_card_font)

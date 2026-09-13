@@ -23,6 +23,8 @@ jobs:
             device: sticky
           - pio_env: x4pro-gh_release
             device: x4pro
+          - pio_env: x4c-gh_release
+            device: x4c
           - pio_env: papermono-gh_release
             device: papermono
     steps:
@@ -101,9 +103,9 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version="${RELEASE_TAG#v}"
-          for device in x3-x4 sticky x4pro papermono; do
+          for device in x3-x4 sticky x4pro x4c papermono; do
             test -f "dist/crosspoint-${version}-${device}.bin"
           done
-          test "$(find dist -maxdepth 1 -type f -name 'crosspoint-*.bin' | wc -l)" -eq 4
+          test "$(find dist -maxdepth 1 -type f -name 'crosspoint-*.bin' | wc -l)" -eq 5
           gh release upload "$RELEASE_TAG" dist/crosspoint-*.bin \
             --repo "$GITHUB_REPOSITORY" --clobber
