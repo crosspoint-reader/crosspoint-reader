@@ -64,6 +64,10 @@ class LibraryListActivity final : public UiTabListActivity {
   void openSelectedBook();
   void openSearch();
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
+  // Long-press delete owns the gesture where grouping does not apply: the
+  // Added sort, degraded lists, and any active search result.
+  bool deleteEligible() const;
+  void promptDeleteBook(int entry);
   bool collapseGroups(int bookEntry);
   void expandGroup(int groupEntry);
   void restoreExpandedList();

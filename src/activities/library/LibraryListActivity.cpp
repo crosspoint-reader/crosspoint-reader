@@ -2,6 +2,7 @@
 
 #include <FreeInkUIIcon.h>
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <LibraryText.h>
@@ -21,6 +22,7 @@
 #include "components/UITheme.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
+#include "util/BookCacheUtils.h"
 
 namespace fui = freeink::ui;
 
@@ -168,11 +170,21 @@ void LibraryListActivity::activateIndex(const int index) {
   }
 }
 
+// Row long-press prompts delete wherever grouping does not own the gesture:
+// the Added sort has no groups, and an active search is already a flat list
+// the reader narrowed down on purpose ("find it, hold it, delete it").
+// Unfiltered Title/Author lists keep collapse-to-groups.
+bool LibraryListActivity::deleteEligible() const {
+  return !showingRecents() && !groupsCollapsed && (!query.empty() || !groupable());
+}
+
 void LibraryListActivity::onRowLongPress(const int index) {
   if (showingRecents()) {
     const auto& books = RECENT_BOOKS.getBooks();
     if (index < 0 || index >= static_cast<int>(books.size())) return;
     promptRemoveRecentBook(books[static_cast<size_t>(index)].path, books[static_cast<size_t>(index)].title);
+  } else if (deleteEligible()) {
+    promptDeleteBook(index);
   } else if (!groupsCollapsed && groupable()) {
     collapseGroups(index);
   } else {
@@ -205,6 +217,67 @@ void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const 
       nav.followOnBuild = true;
     }
     if (reopenIndex && !index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+  });
+}
+
+void LibraryListActivity::promptDeleteBook(const int entry) {
+  if (!index.isOpen() || entry < 0 || entry >= bookRowCount()) return;
+  const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+  if (ordinal == 0xFFFF) return;
+
+  std::string path;
+  library::ClixRecord record{};
+  if (!index.readRecord(ordinal, record) || !index.readPath(record, path)) {
+    LOG_ERR("LIB", "cannot resolve path for row %d", entry);
+    return;
+  }
+  std::string title;
+  std::string author;
+  rowTextFor(entry, title, author);
+
+  // The dialog and the delete both want the card; reopen when we resume.
+  index.close();
+  auto confirmation =
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), title);
+  if (!confirmation) {
+    LOG_ERR("LIB", "OOM: delete confirmation");
+    if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+    return;
+  }
+
+  startActivityForResult(std::move(confirmation), [this, path](const ActivityResult& result) {
+    swallowHeldReleases();
+    {
+      // Same lock rationale as onEnter: the walk wants the card to itself, and
+      // the render task must not read the index (or the filter) around the
+      // rebuild.
+      RenderLock lock(*this);
+      if (!result.isCancelled) {
+        LOG_DBG("LIB", "deleting %s", path.c_str());
+        clearBookCache(path);
+        if (!Storage.remove(path.c_str())) LOG_ERR("LIB", "cannot delete %s", path.c_str());
+        if (RECENT_BOOKS.removeByPath(path)) RECENT_BOOKS.saveToFile();
+        GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+        rebuildIndex();
+      }
+      if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
+      if (!result.isCancelled) {
+        // Search positions and group starts point into the old order.
+        applyFilter();
+        auto& nav = activeNav();
+        const int count = listCount();
+        if (count == 0) {
+          nav.selected = 0;
+        } else if (nav.selected > count) {
+          nav.selected = count;
+        }
+        nav.followOnBuild = true;
+      }
+    }
+    if (!result.isCancelled) {
+      closeRouting();
+      requestUpdate(true);
+    }
   });
 }
 
@@ -480,15 +553,21 @@ bool LibraryListActivity::handleButtons() {
   const int count = listCount();
   auto& nav = activeNav();
 
-  // Wait for release before opening the removal dialog. If it opened at the
-  // long-press threshold, that same release would immediately select Cancel in
-  // the dialog.
-  if (showingRecents() && !tabsFocused() && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // Holds that open a dialog (remove-recent, delete) dispatch on release. If
+  // the dialog opened at the long-press threshold, that same release would
+  // immediately select Cancel in it — and wasLongPressed() suppresses the
+  // release globally, so it must not run at all in these contexts.
+  if (!tabsFocused() && (showingRecents() || deleteEligible()) &&
+      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      const auto& books = RECENT_BOOKS.getBooks();
-      if (selectedEntry() < static_cast<int>(books.size())) {
-        const auto& book = books[static_cast<size_t>(selectedEntry())];
-        promptRemoveRecentBook(book.path, book.title);
+      if (showingRecents()) {
+        const auto& books = RECENT_BOOKS.getBooks();
+        if (selectedEntry() < static_cast<int>(books.size())) {
+          const auto& book = books[static_cast<size_t>(selectedEntry())];
+          promptRemoveRecentBook(book.path, book.title);
+        }
+      } else if (count > 0) {
+        promptDeleteBook(selectedEntry());
       }
     } else if (count > 0) {
       activateIndex(selectedEntry());
@@ -499,8 +578,6 @@ bool LibraryListActivity::handleButtons() {
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
       if (!showingRecents() && !degraded) toggleSortDirection();
-    } else if (showingRecents()) {
-      // Removal is dispatched by the release branch above.
     } else if (!groupsCollapsed && groupable()) {
       collapseGroups(selectedEntry());
     } else {
@@ -737,6 +814,8 @@ void LibraryListActivity::drawHoldHelp() const {
   const char* help = nullptr;
   if (tabsFocused() && !showingRecents() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);
+  else if (!tabsFocused() && deleteEligible() && listCount() > 0)
+    help = tr(STR_HOLD_OPEN_TO_DELETE);
   else if (!tabsFocused() && groupable())
     help = tr(STR_LIBRARY_HOLD_GROUPS);
   if (!help) return;
