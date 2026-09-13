@@ -92,6 +92,8 @@ jobs:
             asset: firmware-sticky.bin
           - env: x4pro
             asset: firmware-x4pro.bin
+          - env: x4c
+            asset: firmware-x4c.bin
           - env: papermono
             asset: firmware-papermono.bin
     steps:
