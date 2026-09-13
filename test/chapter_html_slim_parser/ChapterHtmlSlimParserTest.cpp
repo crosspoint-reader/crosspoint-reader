@@ -155,6 +155,50 @@ TEST_F(ChapterHtmlSlimParserTest, PageImageDeserializeRejectsMissingImageBlock) 
   EXPECT_EQ(PageImage::deserialize(input), nullptr);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, PageGridDeserializeRejectsAllocationFailure) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-grid-allocation-cache.bin";
+  {
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    PageTableGridRow grid(240, 20, 2, 0, 0);
+    ASSERT_TRUE(grid.serialize(output));
+  }
+  {
+    HalFile input;
+    ASSERT_TRUE(input.open(path.c_str(), "rb"));
+    allocationSizeToFail = sizeof(PageTableGridRow);
+    EXPECT_EQ(PageTableGridRow::deserialize(input), nullptr);
+  }
+  std::filesystem::remove(path);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PageElementReserveIsNotASerializedCountLimit) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-page-reserve-cache.bin";
+  constexpr size_t count = 257;
+  {
+    Page page;
+    page.elements.reserve(count);
+    for (size_t i = 0; i < count; ++i) {
+      page.elements.push_back(std::make_unique<PageTableGridRow>(240, 2, 2, 0, static_cast<int16_t>(i * 2)));
+    }
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    ASSERT_TRUE(page.serialize(output));
+  }
+  {
+    HalFile input;
+    ASSERT_TRUE(input.open(path.c_str(), "rb"));
+    auto page = Page::deserialize(input);
+    ASSERT_NE(page, nullptr);
+    ASSERT_EQ(page->elements.size(), count);
+    for (size_t i = 0; i < count; ++i) {
+      EXPECT_EQ(page->elements[i]->getTag(), TAG_PageTableGridRow);
+      EXPECT_EQ(page->elements[i]->yPos, static_cast<int16_t>(i * 2));
+    }
+  }
+  std::filesystem::remove(path);
+}
+
 TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) {
   const char* verticalAlign = GetParam();
   const char* expectedHref = "#note-target";
@@ -408,6 +452,19 @@ TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridAllocationFailure) {
   parser.finishTableRow();
   EXPECT_EQ(allocationSizeToFail, 0u);
   EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterTableSeparatorAllocationFailure) {
+  parser.currentPage = std::make_unique<Page>();
+  parser.currentPage->elements.reserve(1);
+  parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0));
+  parser.tableRowStacked = true;
+  allocationSizeToFail = sizeof(PageHorizontalRule);
+  parser.finishTableRow();
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.tablePreviousRowEndedWithSeparator);
+  EXPECT_EQ(parser.currentPage->elements.size(), 1u);
   EXPECT_FALSE(parser.finishParse());
 }
 }  // namespace

@@ -674,6 +674,7 @@ void ChapterHtmlSlimParser::addTableRowSeparator() {
       makeUniqueNoThrow<PageHorizontalRule>(viewportWidth, TABLE_ROW_SEPARATOR_THICKNESS, 0, currentPageNextY + 1);
   if (!separator) {
     LOG_ERR("EHP", "OOM: table row separator");
+    failLayout();
     return;
   }
   if (currentPage->elements.capacity() == currentPage->elements.size()) {

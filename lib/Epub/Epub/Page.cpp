@@ -172,12 +172,12 @@ std::unique_ptr<PageTableGridRow> PageTableGridRow::deserialize(HalFile& file) {
     return nullptr;
   }
 
-  auto* grid = new (std::nothrow) PageTableGridRow(width, height, columnCount, xPos, yPos);
+  auto grid = makeUniqueNoThrow<PageTableGridRow>(width, height, columnCount, xPos, yPos);
   if (!grid) {
     LOG_ERR("PGE", "Deserialization failed: could not allocate PageTableGridRow");
     return nullptr;
   }
-  return std::unique_ptr<PageTableGridRow>(grid);
+  return grid;
 }
 
 void Page::render(GfxRenderer& renderer, const int fontId, const int xOffset, const int yOffset) const {
