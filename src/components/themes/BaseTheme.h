@@ -118,6 +118,8 @@ struct ThemeMetrics {
   int controlRadius;
   int sheetRadius;
   int capsuleRadius;
+  // Compact row spacing; touch devices override this in UITheme::getMetrics().
+  int keyboardRowSpacing = 0;
 };
 
 enum UIIcon {
@@ -184,11 +186,11 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
                                  .keyboardKeyHeight = 48,
-                                 .keyboardKeySpacing = 0,
+                                 .keyboardKeySpacing = 2,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
-                                 .keyboardWidthPercent = 94,
+                                 .keyboardWidthPercent = 100,
                                  .popupTopOffsetRatio = 0.075f,
                                  .popupMarginX = 15,
                                  .popupMarginY = 15,

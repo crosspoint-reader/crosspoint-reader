@@ -52,11 +52,11 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
                                  .keyboardKeyHeight = 36,
-                                 .keyboardKeySpacing = 10,
+                                 .keyboardKeySpacing = 2,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = 0,
                                  .keyboardTextFieldWidthPercent = 85,
-                                 .keyboardWidthPercent = 94,
+                                 .keyboardWidthPercent = 100,
                                  .popupTopOffsetRatio = 0.12f,
                                  .popupMarginX = 20,
                                  .popupMarginY = 14,
@@ -80,7 +80,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldLineEndOffset = -1,
                                  .controlRadius = 18,
                                  .sheetRadius = 18,
-                                 .capsuleRadius = 255};
+                                 .capsuleRadius = 255,
+                                 .keyboardRowSpacing = 10};
 }
 
 class RoundedRaffTheme : public BaseTheme {

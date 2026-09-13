@@ -61,6 +61,8 @@ const ThemeMetrics& UITheme::getMetrics() const {
     adjustedMetrics = *currentMetrics;
     if (touch) {
       adjustedMetrics.buttonHintsHeight = 0;
+      adjustedMetrics.keyboardKeyHeight = 64;
+      adjustedMetrics.keyboardRowSpacing = 6;
     }
     metricsForTouch = touch;
     metricsValid = true;
