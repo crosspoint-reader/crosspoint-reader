@@ -18,7 +18,7 @@ hanging, and so we enter the stricter phases with a clean slate.
 * ✅ **RTL support PRs.** The in-flight right-to-left work was reviewed, iterated, and merged.
 * ✅ **Dictionary PR.** The offline dictionary lookup work was reviewed and merged.
 * ✅ **Bookmarks** feature. First-class navigation markers in EPUBs.
-* ❌ **Transparent sleep screens.** Shelved; not picked back up under the stricter phases.
+* ✅ **Transparent sleep screens.**
 
 Phase 0 is closed. The tighter scope in [SCOPE.md](SCOPE.md) is now fully enforced. "But it was on the old roadmap"
 is not a valid argument for accepting a PR.
