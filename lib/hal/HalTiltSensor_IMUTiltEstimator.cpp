@@ -234,7 +234,11 @@ void HalTiltSensor::IMUTiltEstimator::alignAttitudeToStationaryGravity() {
 
 bool HalTiltSensor::IMUTiltEstimator::captureReference() {
   const float accelLength = vectorLength(stationaryAccelMean[0], stationaryAccelMean[1], stationaryAccelMean[2]);
-  if (!std::isfinite(accelLength) || accelLength < MIN_VECTOR_NORM) return false;
+  if (!std::isfinite(accelLength) || accelLength < MIN_VECTOR_NORM) {
+    LOG_ERR(_IMU_LOG_NAME_, "tare t=%lu gravity sample rejected (mag:%.4f)", static_cast<unsigned long>(lastSampleMs),
+            accelLength);
+    return false;
+  }
 
   for (unsigned int axis = 0; axis < 3; ++axis) {
     referenceAccel[axis] = stationaryAccelMean[axis] / accelLength;
