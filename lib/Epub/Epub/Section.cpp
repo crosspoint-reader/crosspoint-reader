@@ -1,5 +1,7 @@
 #include "Section.h"
 
+#include <FontCacheManager.h>
+#include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -259,6 +261,10 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
+  }
+  // Reclaim rebuildable font caches before CSS and layout allocations.
+  if (auto* fontCache = renderer.getFontCacheManager()) {
+    fontCache->releaseSdFontCaches();
   }
   buildComplete_ = false;
   builtPageCount_ = 0;
