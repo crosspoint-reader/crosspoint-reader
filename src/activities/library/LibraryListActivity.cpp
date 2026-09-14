@@ -64,7 +64,11 @@ const char* tabLabelFor(const int tab) {
 }  // namespace
 
 LibraryListActivity::LibraryListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiTabListActivity("Library", renderer, mappedInput, true) {}
+    : UiTabListActivity("Library", renderer, mappedInput, true) {
+  // Three short tab labels: a full-slot pill would stretch across a third of
+  // the screen, so cap it at the label plus padding (slots stay put).
+  tabPillMaxPad = 16;
+}
 
 void LibraryListActivity::onEnter() {
   // One lock across the base lifecycle AND the data phase: the base onEnter
@@ -614,31 +618,22 @@ bool LibraryListActivity::handleButtons() {
   const int count = listCount();
   auto& nav = activeNav();
 
-  // Holds that open a dialog (remove-recent, delete) dispatch on release. If
-  // the dialog opened at the long-press threshold, that same release would
-  // immediately select Cancel in it — and wasLongPressed() suppresses the
-  // release globally, so it must not run at all in these contexts.
-  if (!tabsFocused() && (selectedEntry() < pinnedCount() || deleteEligible()) &&
-      mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.getHeldTime() >= LONG_PRESS_MS) {
-      if (selectedEntry() < pinnedCount()) {
-        const auto& books = RECENT_BOOKS.getBooks();
-        if (selectedEntry() < static_cast<int>(books.size())) {
-          const auto& book = books[static_cast<size_t>(selectedEntry())];
-          promptRemoveRecentBook(book.path, book.title);
-        }
-      } else if (count > 0) {
-        promptDeleteBook(selectedEntry());
-      }
-    } else if (count > 0) {
-      activateIndex(selectedEntry());
-    }
-    return true;
-  }
-
+  // Every hold action fires at the threshold, mid-hold, including the ones
+  // that open a dialog (remove-recent, delete). The release that follows is
+  // armed as suppressed by wasLongPressed() and consumed globally by
+  // ActivityManager::loop() before any activity runs, so it cannot land in
+  // the freshly opened confirmation and select its default.
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
       if (!degraded) toggleSortDirection();
+    } else if (selectedEntry() < pinnedCount()) {
+      const auto& books = RECENT_BOOKS.getBooks();
+      if (selectedEntry() < static_cast<int>(books.size())) {
+        const auto& book = books[static_cast<size_t>(selectedEntry())];
+        promptRemoveRecentBook(book.path, book.title);
+      }
+    } else if (deleteEligible()) {
+      if (count > 0) promptDeleteBook(selectedEntry());
     } else if (!groupsCollapsed && groupable()) {
       collapseGroups(selectedEntry());
     } else {
@@ -901,7 +896,9 @@ void LibraryListActivity::drawHoldHelp() const {
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);
-  else if (!tabsFocused() && deleteEligible() && selectedEntry() >= pinnedCount() && listCount() > 0)
+  else if (!tabsFocused() && selectedEntry() < pinnedCount())
+    help = tr(STR_HOLD_OPEN_TO_REMOVE);  // pinned recents: hold removes from the list
+  else if (!tabsFocused() && deleteEligible() && listCount() > 0)
     help = tr(STR_HOLD_OPEN_TO_DELETE);
   else if (!tabsFocused() && groupable())
     help = tr(STR_LIBRARY_HOLD_GROUPS);

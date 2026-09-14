@@ -118,11 +118,22 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   const int16_t preferredTabHeight =
       mappedInput.hasTouch() ? TOUCH_TAB_BAR_HEIGHT : static_cast<int16_t>(metrics.tabBarHeight);
   const int16_t tabBand = preferredTabHeight > tabLineHeight + 10 ? preferredTabHeight : tabLineHeight + 10;
+
+  if (tabPillMaxPad > 0) {
+    // Cap each pill at its label plus this padding: the equal-width slots (and
+    // so the tab positions) stay exactly where they were, only the pill stops
+    // stretching across the whole slot. The SDK shrinks the pill to content
+    // width and centers it in its slot when the horizontal contentInset is
+    // nonzero.
+    tabProps.contentInset.left = tabPillMaxPad;
+    tabProps.contentInset.right = tabPillMaxPad;
+  }
+
   // Legacy Lyra two-state treatment: with the selection on the tab band, the
   // band fills gray and the active tab is a solid pill; with the selection
   // down in the list, the band is plain and the active tab keeps a gray box
-  // with an underline. The 1px rule under the band is always there.
-  tabProps.divider = true;
+  // with an underline. The 1px rule under the band is always there, drawn
+  // full-width below (not by tabBar, whose rect is inset for side padding).
   fui::StyleSet tabStyles;
   tabStyles.explicitlySet = true;
   tabStyles.normal.foreground = fui::Paint::solid(fui::Color::Black);
@@ -156,6 +167,17 @@ void UiTabListActivity::buildTabBar(UiScreen& screen) {
   if (tabsFocused && !metrics.tabPillFullSlot) {
     screen.target().fill(tabRect, fui::Paint::dither(fui::Color::LightGray));
   }
-  fui::tabBar(screen.frame(), tabRect, tabProps);
+  // The band chrome (wash, divider) spans the full screen width, but the tab
+  // slots keep the content side padding so the outer pills never touch the
+  // bezel. The divider is drawn here rather than by tabBar(), which would
+  // inset it along with the slots; the slot band is shortened by the same 1px
+  // so pill geometry is unchanged.
+  const auto side = static_cast<int16_t>(metrics.contentSidePadding);
+  const fui::Rect slotsRect{static_cast<int16_t>(tabRect.x + side), tabRect.y,
+                            static_cast<int16_t>(tabRect.width - 2 * side), static_cast<int16_t>(tabRect.height - 1)};
+  tabProps.divider = false;
+  fui::tabBar(screen.frame(), slotsRect, tabProps);
+  screen.target().fill(fui::Rect{tabRect.x, static_cast<int16_t>(tabRect.bottom() - 1), tabRect.width, 1},
+                       fui::Paint::solid(fui::Color::Black));
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 }

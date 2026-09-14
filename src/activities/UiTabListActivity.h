@@ -68,6 +68,12 @@ class UiTabListActivity : public UiListActivity {
   // tab-switch code can seed the target tab's ring/viewport.
   std::vector<freeink::ui::ListNav> tabNavs;
 
+  // When > 0, each tab pill is capped at its label width plus this padding
+  // per side, centered in its unchanged equal-width slot. With few tabs the
+  // default full-slot pill stretches across a third of the screen; screens
+  // with more tabs (Settings) keep the default of 0 (fill the slot).
+  int16_t tabPillMaxPad = 0;
+
  private:
   static void tabActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
 };
