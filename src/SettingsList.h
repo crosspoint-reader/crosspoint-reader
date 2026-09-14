@@ -485,9 +485,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   if (BoardConfig::hasHomeKey()) {
     v.reserve(v.size() + 3);
     for (unsigned i = 0; i < 3; ++i) {
-      v.push_back(SettingInfo::Enum(home_button::GESTURE_LABELS[i], home_button::FIELDS[i],
-                                    {std::begin(home_button::ACTION_LABELS), std::end(home_button::ACTION_LABELS)},
-                                    home_button::KEYS[i], StrId::STR_CAT_CONTROLS));
+      v.push_back(SettingInfo::StaticEnum(home_button::GESTURE_LABELS[i], home_button::FIELDS[i],
+                                          home_button::ACTION_LABELS, home_button::KEYS[i], StrId::STR_CAT_CONTROLS));
     }
   }
   if (BoardConfig::hasTouch()) {
