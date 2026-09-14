@@ -176,14 +176,6 @@ void EndOfBookOptions::buildListScreen(UiScreen& screen) {
   props.selectedIndex = static_cast<int16_t>(selector.load(std::memory_order_relaxed));
   props.action = ACTION_ROW;
   props.inputMask = fui::InputTouch;  // physical buttons stay in handleMenuInput()
-  if (!gpio.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser row height
-    // instead of FreeInkUI's touch-target-sized default. This short, fixed
-    // menu never scrolls, so there's no viewport to resync here. No
-    // MappedInputManager reference here (this class isn't an Activity), so
-    // this reads the capability directly like BaseTheme's draw code does.
-    props.rowHeight = static_cast<int16_t>(metrics.listRowHeight);
-  }
   screen.list(props);
 }
 

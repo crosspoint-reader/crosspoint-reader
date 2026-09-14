@@ -132,6 +132,9 @@ class LibraryListActivity final : public UiTabListActivity {
   // Empty query means no filtering and this owns no allocation, so the ordinary
   // shelf pays nothing proportional to the library for the feature.
   std::string query;
+  // The active query, pre-quoted for the header: headerTitle() returns a
+  // stable c_str the render task can hold across a build.
+  std::string headerSearchTitle;
   std::unique_ptr<uint16_t[]> filtered;
   uint16_t filteredCount = 0;
   bool filterFailed = false;

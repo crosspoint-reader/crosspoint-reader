@@ -484,20 +484,14 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // Tap opens/navigates; long-press prompts delete (physical buttons stay in loop()).
   props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.valueInset = 8;  // air between the extension and the row edge
-  // Names use up to two small-font lines. Measure actual wrapping, with
-  // explicit padding and the touch target minimum on touch hardware.
+  // Names use up to two small-font lines; shared list layout sizes each row.
   fui::TextStyle label = screen.theme().smallText;
   label.maxLines = 2;
   props.labelText = label;
-  props.rowPaddingY = 4;
-  const int16_t contentHeight = static_cast<int16_t>(screen.target().lineHeight(label.font) + 8);
-  props.rowHeight = mappedInput.hasTouch() ? std::max(contentHeight, screen.theme().rowHeight) : contentHeight;
 
   // The trailing value here is just the short extension: skip the balanced
   // 60%-band wrap cap and let both name lines run the full width before it.
   props.balanceWrappedLabelWithValue = false;
-  // The next row retains its filename and extension layout, clipped at the fold.
-  props.partialTrailingRow = true;
   syncListViewport(screen, props);
   screen.list(props);
 }

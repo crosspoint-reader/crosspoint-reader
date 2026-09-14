@@ -520,6 +520,9 @@ void LibraryListActivity::applyFilter() {
   filtered.reset();
   filteredCount = 0;
   filterFailed = false;
+  // The header shows the active query in place of the screen title, so the
+  // reader can see what narrowed the list without reopening the keyboard.
+  headerSearchTitle = query.empty() ? std::string() : "“" + query + "”";
   if (query.empty()) return;
 
   // Folded the same way the stored folds were, articles removed included —
@@ -707,17 +710,11 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 1;
-  // Size each row from its actual title, optional author, and icon. The
-  // minimum also bounds the materialized window before rows are measured.
-  props.rowPaddingY = 4;
-  props.rowHeight = static_cast<int16_t>(screen.target().lineHeight(props.labelText.font) + props.rowPaddingY * 2);
-  if (mappedInput.hasTouch()) props.rowHeight = std::max(props.rowHeight, screen.theme().minTouchSize);
   // Breathing room between rows; the dense theme default packs the two-line
   // rows edge-to-edge.
   props.rowGap = std::max<int16_t>(screen.theme().listRowGap, 6);
   props.headerUnderline = false;
-  props.partialTrailingRow = true;
-  syncTabListViewport(screen, props, /*hasSubtitle=*/!groupsCollapsed && !authorGrouped);
+  syncTabListViewport(screen, props);
 
   // Keep one extra entry in the reusable window for a clipped trailing row.
   const size_t cap = static_cast<size_t>(nav.visibleRows > 0 ? nav.visibleRows : 1) + 1;
@@ -884,6 +881,7 @@ void LibraryListActivity::drawPositionReadout() const {
 }
 
 const char* LibraryListActivity::headerTitle() const {
+  if (!headerSearchTitle.empty()) return headerSearchTitle.c_str();
   return degraded ? tr(STR_LIBRARY_TITLE_UNSORTED) : tr(STR_LIBRARY);
 }
 

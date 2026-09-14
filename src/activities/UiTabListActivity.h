@@ -61,8 +61,8 @@ class UiTabListActivity : public UiListActivity {
   void buildTabBar(UiScreen& screen);
   // Ring-aware counterpart of syncListViewport: measures rows, applies the
   // one-shot follow to the remembered row, clamps, and writes
-  // props.selectedIndex = ring - 1. hasSubtitle: see syncListViewport().
-  void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
+  // props.selectedIndex = ring - 1.
+  void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props);
 
   // Per-tab selection/viewport state, sized in onEnter. Protected so subclass
   // tab-switch code can seed the target tab's ring/viewport.

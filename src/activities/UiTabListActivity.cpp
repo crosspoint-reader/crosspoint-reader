@@ -69,22 +69,8 @@ void UiTabListActivity::navigateButtons() {
   buttonNavigator.onPreviousContinuous([this] { stepTab(-1); });
 }
 
-void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
-  const int count = listCount();
-  auto& n = activeNav();
-  int16_t rowHeight = props.rowHeight > 0 ? props.rowHeight : screen.theme().rowHeight;
-  if (props.rowHeight <= 0 && !mappedInput.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
-    // height instead of FreeInkUI's touch-target-sized default (see
-    // UiListActivity::syncListViewport, the non-tab counterpart of this).
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
-    // Wrapped (maxLines > 1) labels grow only their own row: list() sizes
-    // wrapped items per-row, so the dense height stays for the rest.
-    props.rowHeight = rowHeight;
-  }
-  n.syncToProps(screen.body(), rowHeight, props.rowGap >= 0 ? props.rowGap : screen.theme().listRowGap, count, props,
-                1);
+void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props) {
+  syncListViewport(screen, props, 1);
 }
 
 void UiTabListActivity::buildTabBar(UiScreen& screen) {
