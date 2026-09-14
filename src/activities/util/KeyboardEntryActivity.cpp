@@ -587,17 +587,20 @@ void KeyboardEntryActivity::loop() {
   }
 
   if (hasTiltMove) {
+    bool handledTiltMove = false;
     if (tiltMoveX) {
       if (cursorMode) {
         cursorPos = tiltMoveX > 0 ? utf8Next(text, cursorPos) : utf8Prev(text, cursorPos);
       } else {
         moveSelectionCol(tiltMoveX);
       }
-      requestUpdate();
-      return;
+      handledTiltMove = true;
     }
     if (!cursorMode && tiltMoveY) {
       moveSelectionRow(tiltMoveY);
+      handledTiltMove = true;
+    }
+    if (handledTiltMove) {
       requestUpdate();
       return;
     }

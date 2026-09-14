@@ -297,11 +297,12 @@ void DictionaryWordSelectActivity::loop() {
       selected++;
       lastHorizontalMoveTime = now;
       requestUpdate();
-    } else if (tiltMoveX == 0 && tiltMoveY < 0) {
-      moveVertical(-1);
-    } else if (tiltMoveX == 0 && tiltMoveY > 0) {
-      moveVertical(1);
     }
+
+    if (tiltMoveY) {
+      moveVertical(tiltMoveY);
+    }
+
     return;
   }
 
