@@ -371,11 +371,6 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
   return mapFrontLabels(back, confirm, leftLabel, rightLabel);
 }
 
-MappedInputManager::Labels MappedInputManager::mapActionLabels(const char* back, const char* confirm, const char* left,
-                                                               const char* right) const {
-  return mapFrontLabels(back, confirm, left, right);
-}
-
 MappedInputManager::Labels MappedInputManager::mapDirectionalLabels(const char* back, const char* confirm,
                                                                     const char* left, const char* right, const char* up,
                                                                     const char* down) const {

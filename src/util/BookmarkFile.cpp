@@ -44,6 +44,13 @@ bool BookmarkFile::load(const std::string& bookPath, std::vector<BookmarkEntry>&
 }
 
 bool BookmarkFile::save(const std::string& bookPath, const std::vector<BookmarkEntry>& bookmarks) {
+  for (const auto& bookmark : bookmarks) {
+    if (bookmark.name.size() > BookmarkEntry::MAX_NAME_LENGTH) {
+      LOG_ERR("BKM", "Bookmark name exceeds %zu bytes", BookmarkEntry::MAX_NAME_LENGTH);
+      return false;
+    }
+  }
+
   JsonDocument doc;
   JsonArray arr = doc["bookmarks"].to<JsonArray>();
   LOG_DBG("BKM", "Saving %zu bookmarks to file", bookmarks.size());

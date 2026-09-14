@@ -104,8 +104,6 @@ class MappedInputManager {
   unsigned long getHeldTime() const;
   const GfxRenderer& getRenderer() const { return renderer; }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;
-  // Maps labels to fixed logical front-button roles without navigation swapping.
-  Labels mapActionLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   // Maps four screen-direction labels onto the two physical front-button roles
   // using the same live-orientation transform as ScreenLeft/Right/Up/Down.
   Labels mapDirectionalLabels(const char* back, const char* confirm, const char* left, const char* right,
