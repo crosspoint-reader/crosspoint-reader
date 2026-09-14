@@ -58,11 +58,11 @@ class HalTiltSensor::IMUTiltEstimator {
 
   static constexpr float BIAS_ADAPT_MAX_RATE_DPS = 1.75f;  // Maximum residual accepted as stationary drift.
   static constexpr float BIAS_ADAPT_ACCEL_DOT_MIN =
-      0.99966f;                                           // Maximum gravity drift during adaptation (approx. 1.5 deg).
-  static constexpr float BIAS_ADAPT_ALPHA = 0.15f;        // Fraction of residual bias learned per stable window.
-  static constexpr float BIAS_ADAPT_MAX_STEP_DPS = 0.15f; // Maximum per-axis change from one stable window.
-  static constexpr uint32_t BIAS_ADAPT_HOLD_MS = 1000;    // Stable time required before updating bias.
-  static constexpr uint16_t BIAS_ADAPT_MIN_SAMPLES = 24;  // Minimum samples required before updating bias.
+      0.99966f;                                            // Maximum gravity drift during adaptation (approx. 1.5 deg).
+  static constexpr float BIAS_ADAPT_ALPHA = 0.15f;         // Fraction of residual bias learned per stable window.
+  static constexpr float BIAS_ADAPT_MAX_STEP_DPS = 0.15f;  // Maximum per-axis change from one stable window.
+  static constexpr uint32_t BIAS_ADAPT_HOLD_MS = 1000;     // Stable time required before updating bias.
+  static constexpr uint16_t BIAS_ADAPT_MIN_SAMPLES = 24;   // Minimum samples required before updating bias.
 
   static constexpr float ATTITUDE_KP = 4.0f;                    // Strength of accelerometer gravity correction.
   static constexpr uint32_t MAX_INTEGRATION_INTERVAL_MS = 50;   // Maximum interval integrated from one sample.
