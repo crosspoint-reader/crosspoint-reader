@@ -128,6 +128,11 @@ bool EpubReaderBookmarksActivity::handleCustomInput() {
 }
 
 bool EpubReaderBookmarksActivity::handleButtons() {
+  if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, ENTER_ACTIONS_MODE_MS)) {
+    showBookmarkActions();
+    return true;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
@@ -137,11 +142,7 @@ bool EpubReaderBookmarksActivity::handleButtons() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.getHeldTime() > ENTER_ACTIONS_MODE_MS) {
-      showBookmarkActions();
-    } else {
-      openSelectedBookmark();
-    }
+    openSelectedBookmark();
     return true;
   }
 
