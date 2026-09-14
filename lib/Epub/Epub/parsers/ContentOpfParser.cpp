@@ -34,8 +34,14 @@ bool startsWithImageMediaType(const std::string& mediaType) {
 
 bool isXmlWhitespace(const char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; }
 
+// Metadata text comes straight from the (untrusted) OPF; unbounded growth on
+// a multi-megabyte title would exhaust the heap. Downstream consumers truncate
+// far below this anyway, so overflow is clamped, not fatal.
+constexpr size_t MAX_METADATA_TEXT = 512;
+
 void appendMetadataText(std::string& out, const XML_Char* text, const int len, bool& spacePending,
                         bool* separatorPending = nullptr) {
+  if (out.size() >= MAX_METADATA_TEXT) return;  // already clamped and logged
   for (int i = 0; i < len; i++) {
     const char c = text[i];
     if (isXmlWhitespace(c)) {
@@ -43,6 +49,10 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
       continue;
     }
 
+    if (out.size() >= MAX_METADATA_TEXT) {
+      LOG_DBG("COF", "Metadata text exceeds %u bytes; truncating", static_cast<unsigned>(MAX_METADATA_TEXT));
+      return;
+    }
     if (separatorPending != nullptr && *separatorPending) {
       out.append(", ");
       *separatorPending = false;

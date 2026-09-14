@@ -23,6 +23,18 @@ TEST(ContentOpfParserMetadata, EntityCallbackDoesNotSplitOneAuthor) {
   EXPECT_EQ(parser.author, "Émile Zola");
 }
 
+TEST(ContentOpfParserMetadata, ClampsOversizedMetadataTextInsteadOfGrowingUnbounded) {
+  const std::string hugeTitle(64 * 1024, 'A');
+  const std::string xml =
+      "<package xmlns:dc=\"urn:dc\"><metadata><dc:title>" + hugeTitle + " tail</dc:title></metadata></package>";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.title.size(), 512u);
+  EXPECT_EQ(parser.title[0], 'A');
+}
+
 TEST(ContentOpfParserMetadata, SeparatesCreatorElementsAndCollapsesXmlWhitespace) {
   const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
     <dc:title>  The
