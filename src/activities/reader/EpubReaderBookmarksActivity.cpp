@@ -2,11 +2,14 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 
 #include "../../util/BookmarkFile.h"
 #include "MappedInputManager.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
@@ -61,7 +64,7 @@ void EpubReaderBookmarksActivity::rebuildBookmarkRowItems() {
     bookmarkSubtitles.push_back(std::move(subtitle));
 
     fui::ListItem item;
-    item.label = bookmark.summary.c_str();
+    item.label = bookmark.name.empty() ? bookmark.summary.c_str() : bookmark.name.c_str();
     item.subtitle = bookmarkSubtitles.back().c_str();
     item.icon = listIconFor(UIIcon::Bookmark, 32);  // subtitle rows carry the larger icon
     item.actionValue = static_cast<int16_t>(bookmarkRowItems.size());
@@ -147,7 +150,43 @@ bool EpubReaderBookmarksActivity::handleButtons() {
     return true;
   }
 
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    startRename();
+    return true;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    showDeleteConfirmation();
+    return true;
+  }
+
   return false;
+}
+
+void EpubReaderBookmarksActivity::startRename() {
+  if (bookmarks.empty() || nav.selected < 0 || nav.selected >= listCount()) {
+    return;
+  }
+
+  const int renameIndex = nav.selected;
+  auto keyboard =
+      makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_RENAME), bookmarks[renameIndex].name,
+                                               BookmarkEntry::MAX_NAME_LENGTH, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("EPB", "OOM: bookmark rename keyboard");
+    return;
+  }
+  startActivityForResult(std::move(keyboard), [this, renameIndex](const ActivityResult& result) {
+    if (result.isCancelled || renameIndex < 0 || renameIndex >= listCount()) {
+      return;
+    }
+    bookmarks[renameIndex].name = std::get<KeyboardResult>(result.data).text;
+    rebuildBookmarkRowItems();
+    if (!BookmarkFile::save(epubPath, bookmarks)) {
+      LOG_ERR("EPB", "Failed to save bookmarks after rename");
+    }
+    requestUpdate();
+  });
 }
 
 void EpubReaderBookmarksActivity::showDeleteConfirmation() {
@@ -255,7 +294,8 @@ void EpubReaderBookmarksActivity::render(RenderLock&&) {
   if (confirmPopup.processRender(renderer, mappedInput)) return;
 
   const auto confirmLabel = bookmarks.size() > 0 ? tr(STR_SELECT) : "";
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapActionLabels(tr(STR_BACK), confirmLabel, bookmarks.empty() ? "" : tr(STR_RENAME),
+                                                  bookmarks.empty() ? "" : tr(STR_DELETE));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

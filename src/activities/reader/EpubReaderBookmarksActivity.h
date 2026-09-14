@@ -45,6 +45,8 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   // Open the selected bookmark: finishes with a ProgressChangeResult for the reader.
   void openSelectedBookmark();
 
+  void startRename();
+
   // Opens the Cancel/Delete confirmation for the selected bookmark; shared by
   // the physical Confirm hold and the touch row long-press.
   void showDeleteConfirmation();
