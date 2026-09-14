@@ -40,6 +40,9 @@ class MappedInputManager {
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
   void update() const;
+#ifdef ENABLE_SERIAL_LOG
+  int controlButton(Button button) const;
+#endif
 #if FREEINK_CAP_TOUCH
   // X4 Pro delays a single power click until its frontlight double-click window
   // expires. The main loop supplies that one-frame event here.
@@ -126,6 +129,7 @@ class MappedInputManager {
 
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
+  uint8_t buttonMask(Button button) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
   // SDK edge classification (fui::edgeSwipe) + the shared decode/held-time
   // bookkeeping; the wrappers below give each edge its board meaning.
