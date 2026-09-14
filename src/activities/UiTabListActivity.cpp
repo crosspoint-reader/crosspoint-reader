@@ -55,17 +55,7 @@ void UiTabListActivity::onRowAction(const fui::ActionEvent& event) {
 }
 
 void UiTabListActivity::moveRingTo(const int ringIndex) {
-  auto& n = activeNav();
-  n.selected = ringIndex;
-  if (ringIndex == 0) {
-    n.top = 0;
-  } else {
-    // Pull the viewport to the row (ring - 1); ListNav::follow reads
-    // n.selected as a row index, so compute directly here.
-    const uint16_t rows = n.pageRows() > 0 ? static_cast<uint16_t>(n.pageRows()) : 1;
-    n.top = fui::listTopIndexFor(static_cast<int16_t>(ringIndex - 1), static_cast<uint16_t>(n.top < 0 ? 0 : n.top),
-                                 rows, static_cast<uint16_t>(listCount()));
-  }
+  activeNav().requestSelection(ringIndex);
   requestUpdate();
 }
 
@@ -82,8 +72,8 @@ void UiTabListActivity::navigateButtons() {
 void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
   const int count = listCount();
   auto& n = activeNav();
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
+  int16_t rowHeight = props.rowHeight > 0 ? props.rowHeight : screen.theme().rowHeight;
+  if (props.rowHeight <= 0 && !mappedInput.hasTouch()) {
     // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
     // height instead of FreeInkUI's touch-target-sized default (see
     // UiListActivity::syncListViewport, the non-tab counterpart of this).
@@ -93,24 +83,8 @@ void UiTabListActivity::syncTabListViewport(UiScreen& screen, fui::ListProps& pr
     // wrapped items per-row, so the dense height stays for the rest.
     props.rowHeight = rowHeight;
   }
-  const uint16_t rows = fui::listVisibleRows(screen.body(), rowHeight, screen.theme().listRowGap);
-  n.visibleRows = rows > 0 ? rows : 1;
-  if (n.followOnBuild) {
-    // Screen entry / tab switch: show the tab's remembered selection, or the
-    // top when the tab bar holds the focus.
-    n.followOnBuild = false;
-    n.top = n.selected > 0 ? static_cast<int>(fui::listTopIndexFor(
-                                 static_cast<int16_t>(n.selected - 1), static_cast<uint16_t>(n.top < 0 ? 0 : n.top),
-                                 static_cast<uint16_t>(n.visibleRows), static_cast<uint16_t>(count)))
-                           : 0;
-  }
-  n.scrollBy(0, count);  // clamp to range
-  // listCount() may shrink between passes (ring: 0 = tab band, 1..count = rows);
-  // keep a stale ring selection from indexing past the new row count.
-  if (n.selected > count) n.selected = count;
-  props.topIndex = static_cast<uint16_t>(n.top);
-  props.selectedIndex = static_cast<int16_t>(n.selected - 1);  // -1 = tab band focused
-  props.nav = &n;
+  n.syncToProps(screen.body(), rowHeight, props.rowGap >= 0 ? props.rowGap : screen.theme().listRowGap, count, props,
+                1);
 }
 
 void UiTabListActivity::buildTabBar(UiScreen& screen) {
