@@ -25,12 +25,14 @@ class UiTabListActivity : public UiListActivity {
   static constexpr freeink::ui::ActionId ACTION_TAB = ACTION_USER;
   static constexpr freeink::ui::ActionId ACTION_TAB_USER = ACTION_USER + 1;
 
-  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
+  UiTabListActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
+                    bool wantsTouchLongPress = false);
 
   // --- subclass contract (in addition to UiListActivity's) ------------------
   virtual int tabCount() const = 0;
   virtual int activeTab() const = 0;
   virtual const char* tabLabel(int index) const = 0;
+  virtual freeink::ui::TabIndicator tabIndicator(int) const { return freeink::ui::TabIndicator::None; }
   // Touch tap on a tab pill (bounds already checked).
   virtual void onTabAction(int index) = 0;
   // Advance the active tab by direction (continuous-hold navigation; also what
@@ -59,12 +61,18 @@ class UiTabListActivity : public UiListActivity {
   void buildTabBar(UiScreen& screen);
   // Ring-aware counterpart of syncListViewport: measures rows, applies the
   // one-shot follow to the remembered row, clamps, and writes
-  // props.selectedIndex = ring - 1. hasSubtitle: see syncListViewport().
-  void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
+  // props.selectedIndex = ring - 1.
+  void syncTabListViewport(UiScreen& screen, freeink::ui::ListProps& props);
 
   // Per-tab selection/viewport state, sized in onEnter. Protected so subclass
   // tab-switch code can seed the target tab's ring/viewport.
   std::vector<freeink::ui::ListNav> tabNavs;
+
+  // When > 0, each tab pill is capped at its label width plus this padding
+  // per side, centered in its unchanged equal-width slot. With few tabs the
+  // default full-slot pill stretches across a third of the screen; screens
+  // with more tabs (Settings) keep the default of 0 (fill the slot).
+  int16_t tabPillMaxPad = 0;
 
  private:
   static void tabActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
