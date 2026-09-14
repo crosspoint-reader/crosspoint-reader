@@ -22,8 +22,9 @@ void snapFontPointSizeTo(const uint8_t availablePointSize) {
 }
 
 // Built-in UI fonts and their physical point sizes (at 150 DPI, matching the
-// SD-font converter). Each is paired with a same-size SD fallback so CJK UI
-// text matches the surrounding Latin. See SdCardFontSystem::setupUiFallbacks.
+// SD-font converter). Each is paired with a same-size SD fallback so UI text
+// in scripts the built-ins lack (CJK, Greek, Cyrillic, ...) matches the
+// surrounding Latin. See SdCardFontSystem::setupUiFallbacks.
 struct UiFontSize {
   int fontId;
   uint8_t pointSize;
@@ -142,21 +143,25 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   if (!family) return;
 
   // Probe the already-loaded reader-size font before paying for the UI sizes:
-  // resolveTextFontId only redirects on CJK codepoints, so a Latin-only family
-  // can never act as a fallback and its UI sizes would be dead weight in RAM.
+  // resolveTextFontId only redirects on codepoints the built-in UI fonts lack,
+  // so a family with no coverage beyond theirs can never act as a fallback and
+  // its UI sizes would be dead weight in RAM.
   const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
   if (readerIt == renderer.getFontMap().end()) return;
-  // One representative codepoint per script: Han, Hiragana, Katakana, Hangul.
-  static constexpr uint32_t kCjkProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00};
-  bool hasCjk = false;
-  for (const uint32_t cp : kCjkProbes) {
+  // One representative codepoint per script the built-in fonts may lack:
+  // Han, Hiragana, Katakana, Hangul, Greek, Cyrillic, Hebrew, Arabic, Thai,
+  // Devanagari.
+  static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x03B1,
+                                                 0x0430, 0x05D0, 0x0627, 0x0E01, 0x0905};
+  bool hasFallbackScript = false;
+  for (const uint32_t cp : kFallbackProbes) {
     if (readerIt->second.hasCodepoint(cp)) {
-      hasCjk = true;
+      hasFallbackScript = true;
       break;
     }
   }
-  if (!hasCjk) {
-    LOG_DBG("SDFS", "%s has no CJK coverage - skipping UI fallback sizes", familyName.c_str());
+  if (!hasFallbackScript) {
+    LOG_DBG("SDFS", "%s has no fallback-script coverage - skipping UI fallback sizes", familyName.c_str());
     return;
   }
 

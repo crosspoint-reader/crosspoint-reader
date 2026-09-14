@@ -29,6 +29,7 @@ class OptionPopup {
   void show(StrId titleId, const StrId* optionIds, int optionCount, int currentIndex,
             std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
+    headline.clear();
     ownedStrings.resize(optionCount);
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = I18N.get(optionIds[i]);
@@ -42,6 +43,7 @@ class OptionPopup {
   void show(const char* titleStr, const char* const* options, int optionCount, int currentIndex,
             std::function<void(int)> onSelect) {
     title = titleStr;
+    headline.clear();
     ownedStrings.resize(optionCount);
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = options[i];
@@ -52,9 +54,18 @@ class OptionPopup {
     active = true;
   }
 
+  // As above, plus a subject line inside the dialog (a book or event title).
+  // It wraps to several lines under the caption; the dialog grows to fit.
+  void show(const char* titleStr, const char* headlineStr, const char* const* options, int optionCount,
+            int currentIndex, std::function<void(int)> onSelect) {
+    show(titleStr, options, optionCount, currentIndex, std::move(onSelect));
+    headline = headlineStr ? headlineStr : "";
+  }
+
   void show(StrId titleId, const std::vector<std::string>& options, int currentIndex,
             std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
+    headline.clear();
     ownedStrings = options;
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
@@ -178,6 +189,7 @@ class OptionPopup {
 
     fui::OptionDialogProps props;
     props.title = title.c_str();
+    props.headline = headline.empty() ? nullptr : headline.c_str();
     props.options = options;
     props.optionCount = count;
     props.verticalOptions = true;
@@ -187,6 +199,12 @@ class OptionPopup {
     props.titleText.font = fui::GfxRendererTarget::FONT_BODY;
     props.titleText.bold = true;
     props.titleText.align = fui::TextAlign::Center;
+    // Captions like "Remove from Recent Books?" overflow the narrow portrait
+    // dialog in one line; let them wrap and the panel grow.
+    props.titleText.maxLines = 2;
+    props.headlineText.font = fui::GfxRendererTarget::FONT_BODY;
+    props.headlineText.align = fui::TextAlign::Center;
+    props.headlineText.maxLines = 3;
     props.buttonText.font = fui::GfxRendererTarget::FONT_BODY;
     const int16_t innerPadding = static_cast<int16_t>(metrics.optionPopupInnerPadding);
     props.padding = fui::Insets{innerPadding, innerPadding, innerPadding, innerPadding};
@@ -247,6 +265,7 @@ class OptionPopup {
 
   bool active = false;
   std::string title;
+  std::string headline;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;

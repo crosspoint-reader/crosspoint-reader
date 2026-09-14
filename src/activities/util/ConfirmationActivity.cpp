@@ -12,22 +12,11 @@ ConfirmationActivity::ConfirmationActivity(GfxRenderer& renderer, MappedInputMan
 void ConfirmationActivity::onEnter() {
   Activity::onEnter();
 
-  lineHeight = renderer.getLineHeight(fontId);
-  const int maxWidth = renderer.getScreenWidth() - (margin * 2);
-
-  if (!heading.empty()) {
-    safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::BOLD);
-  }
-  if (!body.empty()) {
-    safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
-  }
-
-  // Text sits in the upper part of the screen so the confirmation popup
-  // (centered) doesn't cover it.
-  startY = renderer.getScreenHeight() / 6;
-
+  // Both texts live inside the dialog: the heading as its caption and the
+  // subject (a book title) as the wrapping headline beneath it. No
+  // pre-truncation — the dialog wraps both to its own width.
   const char* options[] = {I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM)};
-  confirmPopup.show(safeHeading.c_str(), options, 2, 0, [this](int idx) {
+  confirmPopup.show(heading.c_str(), body.c_str(), options, 2, 0, [this](int idx) {
     ActivityResult res;
     res.isCancelled = (idx != 1);
     setResult(std::move(res));
@@ -39,19 +28,6 @@ void ConfirmationActivity::onEnter() {
 
 void ConfirmationActivity::render(RenderLock&& lock) {
   renderer.clearScreen();
-
-  int currentY = startY;
-  LOG_DBG("CONF", "currentY: %d", currentY);
-  // Draw Heading
-  if (!safeHeading.empty()) {
-    renderer.drawCenteredText(fontId, currentY, safeHeading.c_str(), true, EpdFontFamily::BOLD);
-    currentY += lineHeight + spacing;
-  }
-
-  // Draw Body
-  if (!safeBody.empty()) {
-    renderer.drawCenteredText(fontId, currentY, safeBody.c_str(), true, EpdFontFamily::REGULAR);
-  }
 
   if (confirmPopup.processRender(renderer, mappedInput)) return;
 
