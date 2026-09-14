@@ -11,7 +11,10 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 10;  // v10: ignore ambiguous guide text references
+// v10: ignore ambiguous guide text references
+// v11: coverItemHref follows an SVG wrapper to the picture inside it, so a v10 cache written for
+//      one of those books holds the .svg path cover generation cannot use
+constexpr uint8_t BOOK_CACHE_VERSION = 11;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
