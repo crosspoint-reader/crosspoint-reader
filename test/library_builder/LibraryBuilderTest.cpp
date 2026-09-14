@@ -209,6 +209,22 @@ TEST_F(LibraryBuilderTest, EqualBasenamesInDifferentFoldersReconcileIndependentl
   EXPECT_EQ(stats.metadataReused, 3);
 }
 
+TEST_F(LibraryBuilderTest, ArrivalOrderFollowsModificationTimeOverDiscoveryOrder) {
+  // a and b exist with the default time; c lands with an older timestamp and d
+  // with the newest, so file times, not walk or firstSeen order, decide.
+  fake::add("/c.epub", "book c", /*time=*/0);
+  fake::add("/d.epub", "book d", /*time=*/9);
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 0), "/c.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 1), "/a.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 2), "/b.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 3), "/d.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentDesc, 0), "/d.epub");
+}
+
 TEST_F(LibraryBuilderTest, AddedRemovedMovedAndRenamedBooksKeepArrivalOrder) {
   initial();
   fake::add("/c.epub");
@@ -216,9 +232,9 @@ TEST_F(LibraryBuilderTest, AddedRemovedMovedAndRenamedBooksKeepArrivalOrder) {
 
   LibraryIndexFile index;
   ASSERT_TRUE(index.open(INDEX));
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 0), "/a.epub");
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 1), "/b.epub");
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 2), "/c.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 0), "/a.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 1), "/b.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 2), "/c.epub");
   index.close();
 
   ASSERT_TRUE(Storage.remove("/b.epub"));
@@ -227,16 +243,16 @@ TEST_F(LibraryBuilderTest, AddedRemovedMovedAndRenamedBooksKeepArrivalOrder) {
   EXPECT_EQ(stats.removed, 1);
   EXPECT_EQ(stats.renamed, 1);
   ASSERT_TRUE(index.open(INDEX));
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 0), "/moved.epub");
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 1), "/c.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 0), "/moved.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 1), "/c.epub");
   index.close();
 
   ASSERT_TRUE(Storage.rename("/moved.epub", "/renamed.epub"));
   ASSERT_TRUE(buildLibraryIndex("/", stats, true));
   EXPECT_EQ(stats.renamed, 1);
   ASSERT_TRUE(index.open(INDEX));
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 0), "/renamed.epub");
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 1), "/c.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 0), "/renamed.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 1), "/c.epub");
 }
 
 TEST_F(LibraryBuilderTest, WholeFolderRenameWithUniqueSizePreservesArrivalOrder) {
@@ -253,7 +269,7 @@ TEST_F(LibraryBuilderTest, WholeFolderRenameWithUniqueSizePreservesArrivalOrder)
   EXPECT_EQ(fake::parses, 1u);
   LibraryIndexFile index;
   ASSERT_TRUE(index.open(INDEX));
-  EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, 2), "/new/unique.epub");
+  EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 2), "/new/unique.epub");
 }
 
 TEST_F(LibraryBuilderTest, DuplicateDetectionRemainsBoundedAndFindsTrackedKeysAfterTheCap) {
@@ -361,7 +377,7 @@ TEST_F(LibraryBuilderTest, LibrariesPastOldGateAndAtFormatCeilingKeepAllOrders) 
     LibraryIndexFile index;
     ASSERT_TRUE(index.open(INDEX));
     for (uint16_t row = 0; row < count; row++) {
-      EXPECT_EQ(pathAt(index, SortOrder::AddedAsc, row), "/book" + numbered("", row) + ".epub") << count << ':' << row;
+      EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, row), "/book" + numbered("", row) + ".epub") << count << ':' << row;
       EXPECT_EQ(pathAt(index, SortOrder::TitleAsc, row), "/book" + numbered("", count - 1 - row) + ".epub")
           << count << ':' << row;
       EXPECT_EQ(pathAt(index, SortOrder::AuthorAsc, row), "/book" + numbered("", authorOrder[row]) + ".epub")

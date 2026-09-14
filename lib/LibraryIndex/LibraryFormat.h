@@ -30,9 +30,10 @@ inline constexpr char CLIX_MAGIC[4] = {'C', 'L', 'X', '1'};
 // validation and is rebuilt. No previous development format is accepted.
 inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
 
-// Bump when the fold or the article table changes. Forces fold and ranks to be
-// rebuilt while firstSeen values are preserved, so "recently added" survives.
-inline constexpr uint8_t CLIX_FOLD_VERSION = 2;
+// Bump when the fold, the article table, or a permutation's sort key changes.
+// Forces fold and ranks to be rebuilt while firstSeen values are preserved, so
+// arrival history survives.
+inline constexpr uint8_t CLIX_FOLD_VERSION = 3;
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_FOLD_BYTES = 96;
@@ -41,6 +42,18 @@ inline constexpr size_t CLIX_AUTHOR_KEY_BYTES = 12;
 // A 2000-book card already produces a 429 KiB index. This hard bound keeps every
 // record count and permutation ordinal representable by uint16_t.
 inline constexpr uint16_t CLIX_MAX_RECORDS = 4096;
+
+// Complete-path fingerprint stored in front of every record's name blob.
+// Shared by the builder's reconciliation and the browser's recent-book lookup,
+// which must agree byte-for-byte on the hash of the same path.
+inline uint64_t clixPathHash(const char* data, const size_t len) {
+  uint64_t hash = 14695981039346656037ULL;  // FNV-1a 64
+  for (size_t i = 0; i < len; i++) {
+    hash ^= static_cast<unsigned char>(data[i]);
+    hash *= 1099511628211ULL;
+  }
+  return hash;
+}
 
 enum ClixFlags : uint8_t {
   CLIX_FLAG_RANKS_DEGRADED = 1 << 0,

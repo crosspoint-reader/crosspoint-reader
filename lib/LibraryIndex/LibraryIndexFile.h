@@ -17,12 +17,23 @@
 namespace library {
 
 enum class SortOrder : uint8_t {
-  AddedAsc,
-  AddedDesc,
+  // "Recent" orders by file modification time (arrival on the card), oldest
+  // first in Asc; firstSeen breaks ties for filesystems without timestamps.
+  RecentAsc,
+  RecentDesc,
   TitleAsc,
   TitleDesc,
   AuthorAsc,
   AuthorDesc,
+};
+
+// One book to locate in the index: the complete-path hash (clixPathHash) is
+// the identity; fileSize, when nonzero, is a cheap in-record prefilter that
+// avoids reading the hash blob for most records. Zero means size unknown and
+// every record's hash is checked.
+struct BookIdentity {
+  uint64_t pathHash;
+  uint32_t fileSize;
 };
 
 class LibraryIndexFile {
@@ -53,6 +64,13 @@ class LibraryIndexFile {
   // 0xFFFF when out of range, which callers treat as "no such row" rather than
   // indexing anyway.
   uint16_t ordinalForRow(SortOrder order, uint16_t row);
+
+  // Display rows (RecentAsc space) of up to MAX_IDENTITY_LOOKUPS books, 0xFFFF
+  // for books not in the index. One chunked pass over the record section plus
+  // one over the arrival permutation, so cost is bounded by the library, not by
+  // `count` — callers batch their lookups instead of calling per book.
+  static constexpr size_t MAX_IDENTITY_LOOKUPS = 16;
+  bool recentRowsFor(const BookIdentity* books, size_t count, uint16_t* outRows);
 
   bool readRecord(uint16_t ordinal, ClixRecord& out);
   // Persisted complete-path fingerprint used by rebuild reconciliation.

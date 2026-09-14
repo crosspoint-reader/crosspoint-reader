@@ -408,6 +408,12 @@ and is rebuilt; that is the entire migration mechanism.
 | Permutations | `permStart` | `bookCount` u16 author order, then `bookCount` u16 arrival order |
 | Name blob | `nameStart` | per record: path hash, name, canonical author, title, source author (see below) |
 
+The arrival permutation runs oldest first, keyed by the record's FAT
+modification time (when the file landed on the card); `firstSeen` — the
+build-assigned discovery counter — breaks ties and carries books whose
+filesystem reports no time. Fold version 3 introduced the timestamp key; a
+fold bump rebuilds ranks while preserving `firstSeen`.
+
 Sections are 512-byte aligned so each starts on an SD block boundary.
 
 ### Records are exactly 128 bytes

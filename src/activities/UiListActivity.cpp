@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 
@@ -83,6 +84,7 @@ void UiListActivity::loop() {
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
     auto& n = activeNav();
     const int delta = swipe == MappedInputManager::SwipeDir::Up ? n.inputPageRows() : -n.inputPageRows();
+    LOG_DBG("LIST", "%s swipe delta=%d count=%d", name.c_str(), delta, listCount());
     n.requestScroll(delta);
     requestUpdate();
     return;

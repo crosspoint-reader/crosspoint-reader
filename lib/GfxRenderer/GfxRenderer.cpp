@@ -1805,26 +1805,28 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 
     if (getTextWidth(fontId, testLine.c_str(), style) <= maxWidth) {
       currentLine = testLine;
+    } else if (!currentLine.empty()) {
+      lines.push_back(currentLine);
+      currentLine.clear();
+      // Requeue the word instead of deciding its fate here: the loop top then
+      // applies the last-line ellipsis or the overlong split with the correct
+      // remaining line budget.
+      remaining = remaining.empty() ? word : word + " " + remaining;
     } else {
-      if (!currentLine.empty()) {
-        lines.push_back(currentLine);
-        // If the carried-over word itself exceeds maxWidth, truncate it and
-        // push it as a complete line immediately — storing it in currentLine
-        // would allow a subsequent short word to be appended after the ellipsis.
-        if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
-          lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
-          currentLine.clear();
-          if (static_cast<int>(lines.size()) >= maxLines) return lines;
-        } else {
-          currentLine = word;
-        }
-      } else {
-        // Single word wider than maxWidth: truncate and stop to avoid complicated
-        // splitting rules (different between languages). Results in an aesthetically
-        // pleasing end.
-        lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
-        return lines;
+      // Single word wider than the line — a no-space filename or a CJK run,
+      // which has no space boundaries at all. Hard-split at the widest UTF-8
+      // prefix that fits (never below one codepoint, so the loop advances) and
+      // requeue the rest to keep wrapping.
+      size_t fit = 0;
+      while (fit < word.size()) {
+        size_t next = fit + 1;
+        while (next < word.size() && (static_cast<unsigned char>(word[next]) & 0xC0) == 0x80) next++;
+        if (fit > 0 && getTextWidth(fontId, word.substr(0, next).c_str(), style) > maxWidth) break;
+        fit = next;
       }
+      lines.push_back(word.substr(0, fit));
+      const std::string rest = word.substr(fit);
+      if (!rest.empty()) remaining = remaining.empty() ? rest : rest + " " + remaining;
     }
   }
 

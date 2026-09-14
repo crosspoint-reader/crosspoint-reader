@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstring>
@@ -76,17 +77,78 @@ uint16_t LibraryIndexFile::ordinalForRow(const SortOrder order, const uint16_t r
       uint16_t ordinal = NONE;
       return readAt(authorOrderOffset(head, k), &ordinal, sizeof(ordinal)) && ordinal < head.bookCount ? ordinal : NONE;
     }
-    case SortOrder::AddedAsc:
-    case SortOrder::AddedDesc: {
+    case SortOrder::RecentAsc:
+    case SortOrder::RecentDesc: {
       // arrivalOrder runs oldest first, so both directions share one on-disk
       // permutation.
-      const uint16_t k = order == SortOrder::AddedAsc ? row : static_cast<uint16_t>(head.bookCount - 1 - row);
+      const uint16_t k = order == SortOrder::RecentAsc ? row : static_cast<uint16_t>(head.bookCount - 1 - row);
       uint16_t ordinal = NONE;
       return readAt(arrivalOrderOffset(head, k), &ordinal, sizeof(ordinal)) && ordinal < head.bookCount ? ordinal
                                                                                                         : NONE;
     }
   }
   return NONE;
+}
+
+bool LibraryIndexFile::recentRowsFor(const BookIdentity* books, const size_t count, uint16_t* outRows) {
+  constexpr uint16_t NONE = 0xFFFF;
+  for (size_t i = 0; i < count; i++) outRows[i] = NONE;
+  if (!opened || count == 0 || count > MAX_IDENTITY_LOOKUPS || head.bookCount == 0) return opened;
+
+  constexpr size_t CHUNK_RECORDS = 32;  // 4096 bytes, the aligned-tile size
+  auto chunk = makeUniqueNoThrow<uint8_t[]>(CHUNK_RECORDS * sizeof(ClixRecord));
+  if (!chunk) {
+    LOG_ERR("LIBIDX", "OOM: %u-byte lookup chunk", static_cast<unsigned>(CHUNK_RECORDS * sizeof(ClixRecord)));
+    return false;
+  }
+
+  // Pass 1: record section, matching sizes in the chunk and confirming the few
+  // size hits against the stored path hash.
+  uint16_t ordinals[MAX_IDENTITY_LOOKUPS];
+  for (size_t i = 0; i < count; i++) ordinals[i] = NONE;
+  size_t unresolved = count;
+  for (uint16_t base = 0; base < head.bookCount && unresolved > 0; base += CHUNK_RECORDS) {
+    const uint16_t batch = std::min<uint16_t>(CHUNK_RECORDS, head.bookCount - base);
+    if (!readAt(recordOffset(head, base), chunk.get(), batch * sizeof(ClixRecord))) return false;
+    for (uint16_t r = 0; r < batch && unresolved > 0; r++) {
+      // memcpy, not a cast: the chunk buffer has no alignment guarantee for the
+      // record's 32-bit fields.
+      ClixRecord record;
+      memcpy(&record, chunk.get() + r * sizeof(ClixRecord), sizeof(ClixRecord));
+      uint64_t hash = 0;
+      bool hashRead = false;
+      for (size_t i = 0; i < count; i++) {
+        if (ordinals[i] != NONE) continue;
+        // Size 0 means the caller could not stat the file (the index handle
+        // may be the only reader the card allows); the hash alone decides.
+        if (books[i].fileSize != 0 && books[i].fileSize != record.fileSize) continue;
+        if (!hashRead) {
+          if (record.nameOff > head.nameLen) break;  // unvalidated record; skip it
+          if (!readPathHash(record, hash)) return false;
+          hashRead = true;
+        }
+        if (books[i].pathHash == hash) {
+          ordinals[i] = base + r;
+          unresolved--;
+        }
+      }
+    }
+  }
+
+  // Pass 2: arrival permutation, translating matched ordinals to ascending
+  // rows.
+  for (uint16_t base = 0; base < head.bookCount && unresolved < count; base += CHUNK_RECORDS * 2) {
+    const uint16_t batch = std::min<uint16_t>(CHUNK_RECORDS * 2, head.bookCount - base);
+    if (!readAt(arrivalOrderOffset(head, base), chunk.get(), batch * sizeof(uint16_t))) return false;
+    for (uint16_t k = 0; k < batch; k++) {
+      uint16_t ordinal;
+      memcpy(&ordinal, chunk.get() + k * sizeof(uint16_t), sizeof(uint16_t));
+      for (size_t i = 0; i < count; i++) {
+        if (ordinals[i] != NONE && ordinals[i] == ordinal) outRows[i] = base + k;
+      }
+    }
+  }
+  return true;
 }
 
 bool LibraryIndexFile::readRecord(const uint16_t ordinal, ClixRecord& out) {

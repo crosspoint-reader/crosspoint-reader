@@ -7,10 +7,13 @@
 #include <string>
 #include <vector>
 
+#include "RecentBooksStore.h"
 #include "activities/UiTabListActivity.h"
 
-// One Library screen: recently opened books from RecentBooksStore, plus every
-// indexed book on the card shown by arrival, title, or author.
+// One Library screen: every indexed book on the card shown by recency, title,
+// or author. The Recent shelf orders by file modification time (when a book
+// landed on the card) and pins the recently OPENED books from RecentBooksStore
+// on top, so active reads and fresh arrivals share one list.
 //
 // The two-slot row is the whole point rather than a styling choice: the problem
 // being solved is "I cannot find my books because I do not know the authors",
@@ -65,7 +68,7 @@ class LibraryListActivity final : public UiTabListActivity {
   void openSearch();
   void promptRemoveRecentBook(const std::string& path, const std::string& title);
   // Long-press delete owns the gesture where grouping does not apply: the
-  // Added sort, degraded lists, and any active search result.
+  // Recent sort, degraded lists, and any active search result.
   bool deleteEligible() const;
   void promptDeleteBook(int entry);
   bool collapseGroups(int bookEntry);
@@ -82,7 +85,9 @@ class LibraryListActivity final : public UiTabListActivity {
   void applyFilter();
   int bookRowCount() const;
   int rowFor(int entry) const;
-  bool rowTextFor(int entry, std::string& title, std::string& author);
+  // fileName, when asked for, is the on-card name the row's icon derives from
+  // (the display title may come from metadata and carry no extension).
+  bool rowTextFor(int entry, std::string& title, std::string& author, std::string* fileName = nullptr);
   uint32_t titleInitialFor(int entry);
   bool buildGroupStarts();
   int groupForBook(int bookEntry) const;
@@ -102,13 +107,23 @@ class LibraryListActivity final : public UiTabListActivity {
   // row 0 as the working selection exactly as the pre-ring code did.
   int selectedEntry() const;
   bool tabsFocused() const { return ringPos() == 0; }
-  bool showingRecents() const;
+
+  // --- pinned recently-opened overlay ---------------------------------------
+  // On the unfiltered Recent shelf the RecentBooksStore entries sit on top, in
+  // read order; the modification-time list follows with those books skipped.
+  // Entries below pinnedCount() are store rows; the rest go through rowFor().
+  int pinnedCount() const;
+  // Re-match the store against the index (chunked scan). Call whenever the
+  // index or the store changes.
+  void resolvePinned();
+  // Direction-space translation of the matched rows. Call on sort toggles.
+  void refreshOverlap();
 
   library::LibraryIndexFile index;
   int activeTabIndex = 0;
-  library::SortOrder sortOrder = library::SortOrder::AddedDesc;
-  // One bit per tab; only Added starts descending (Recent has no direction).
-  uint8_t descendingTabs = 1u << 1;
+  library::SortOrder sortOrder = library::SortOrder::RecentDesc;
+  // One bit per tab; Recent starts descending (newest first).
+  uint8_t descendingTabs = 1u << 0;
   // Set when the walk finished but the sort did not, so the screen can say the
   // order is discovery order rather than silently showing a wrong one.
   bool degraded = false;
@@ -138,6 +153,14 @@ class LibraryListActivity final : public UiTabListActivity {
   std::vector<std::string> winTitles;
   std::vector<std::string> winAuthors;
   std::vector<std::string> winHeaders;
+
+  // Pinned overlay state: per store entry its RecentAsc row (0xFFFF when the
+  // book is not in the index), and the current-direction rows to skip, sorted
+  // ascending, so unpinned entries map to sort rows with a <=10-step walk.
+  uint16_t pinnedAscRows[RecentBooksStore::MAX_RECENT_BOOKS] = {};
+  uint16_t overlapRows[RecentBooksStore::MAX_RECENT_BOOKS] = {};
+  uint8_t pinnedTotal = 0;
+  uint8_t overlapCount = 0;
 
   bool lockNextConfirmRelease = false;
   bool lockNextBackRelease = false;

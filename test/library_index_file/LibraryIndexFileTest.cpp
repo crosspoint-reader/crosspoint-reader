@@ -62,12 +62,55 @@ TEST(LibraryIndexFile, ReadsEveryStoredOrderInBothDirections) {
     EXPECT_EQ(index.ordinalForRow(order, 2), c);
     EXPECT_EQ(index.ordinalForRow(order, 3), 0xFFFF);
   };
-  expectOrder(library::SortOrder::AddedAsc, 1, 2, 0);
-  expectOrder(library::SortOrder::AddedDesc, 0, 2, 1);
+  expectOrder(library::SortOrder::RecentAsc, 1, 2, 0);
+  expectOrder(library::SortOrder::RecentDesc, 0, 2, 1);
   expectOrder(library::SortOrder::TitleAsc, 0, 1, 2);
   expectOrder(library::SortOrder::TitleDesc, 2, 1, 0);
   expectOrder(library::SortOrder::AuthorAsc, 2, 0, 1);
   expectOrder(library::SortOrder::AuthorDesc, 1, 0, 2);
+}
+
+TEST(LibraryIndexFile, ResolvesRecentRowsByIdentity) {
+  library::ClixHeader header{};
+  std::memcpy(header.magic, library::CLIX_MAGIC, sizeof(header.magic));
+  header.formatVersion = library::CLIX_FORMAT_VERSION;
+  header.foldVersion = library::CLIX_FOLD_VERSION;
+  header.bookCount = 3;
+  // One 8-byte path hash blob per record.
+  library::layoutSections(header, 0, 3 * sizeof(uint64_t));
+  std::vector<uint8_t> bytes(header.selfSize, 0);
+  std::memcpy(bytes.data(), &header, sizeof(header));
+
+  // Ordinals 0 and 2 share a size, so only the hash can tell them apart.
+  constexpr uint64_t HASHES[] = {11, 22, 33};
+  constexpr uint32_t SIZES[] = {100, 200, 100};
+  for (uint16_t ordinal = 0; ordinal < 3; ordinal++) {
+    library::ClixRecord record{};
+    record.fileSize = SIZES[ordinal];
+    record.nameOff = ordinal * sizeof(uint64_t);
+    std::memcpy(bytes.data() + library::recordOffset(header, ordinal), &record, sizeof(record));
+    std::memcpy(bytes.data() + header.nameStart + record.nameOff, &HASHES[ordinal], sizeof(uint64_t));
+  }
+  const uint16_t arrivalOrder[] = {1, 2, 0};
+  std::memcpy(bytes.data() + library::arrivalOrderOffset(header, 0), arrivalOrder, sizeof(arrivalOrder));
+  Storage.setFile("/library.clx", std::move(bytes));
+
+  library::LibraryIndexFile index;
+  ASSERT_TRUE(index.open("/library.clx"));
+  const library::BookIdentity books[] = {
+      {HASHES[0], SIZES[0]},  // ordinal 0 -> ascending row 2
+      {HASHES[2], SIZES[2]},  // same size as ordinal 0, hash picks ordinal 2 -> row 1
+      {99, SIZES[0]},         // size matches, hash does not: absent
+      {HASHES[1], 999},       // hash matches, size does not: absent
+      {HASHES[1], 0},         // size unknown: the hash alone matches -> row 0
+  };
+  uint16_t rows[5] = {};
+  ASSERT_TRUE(index.recentRowsFor(books, 5, rows));
+  EXPECT_EQ(rows[0], 2);
+  EXPECT_EQ(rows[1], 1);
+  EXPECT_EQ(rows[2], 0xFFFF);
+  EXPECT_EQ(rows[3], 0xFFFF);
+  EXPECT_EQ(rows[4], 0);
 }
 
 TEST(LibraryIndexFile, RejectsInvalidPermutationOrdinal) {

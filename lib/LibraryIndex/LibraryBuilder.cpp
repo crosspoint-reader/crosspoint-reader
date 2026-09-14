@@ -224,15 +224,6 @@ uint32_t fnv1a32(const char* data, const size_t len) {
   return hash;
 }
 
-uint64_t fnv1a64(const char* data, const size_t len) {
-  uint64_t hash = 14695981039346656037ULL;
-  for (size_t i = 0; i < len; i++) {
-    hash ^= static_cast<unsigned char>(data[i]);
-    hash *= 1099511628211ULL;
-  }
-  return hash;
-}
-
 // Sentinel written into a staged record whose book matched no previous path. A
 // second pass decides whether it is a rename or genuinely new.
 constexpr uint16_t FIRST_SEEN_UNRESOLVED = 0xFFFF;
@@ -300,7 +291,7 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   bool titleFromBook = false;
   bool authorFromBook = false;
 
-  entry.pathHash = fnv1a64(fullPath.data(), fullPath.size());
+  entry.pathHash = clixPathHash(fullPath.data(), fullPath.size());
   const int priorIndex = findPrior(st, entry.pathHash);
 
   const bool extractionExpected = st.readMetadata && FsHelpers::hasEpubExtension(name);
@@ -863,23 +854,47 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
   // --- arrival order -------------------------------------------------------
   //
-  // firstSeen values now come from the PREVIOUS index, so they are no longer a
-  // dense sequence in walk order: a rebuild reuses each book's original number
-  // and only hands out new ones for books it has never seen. The arrival order has
-  // to be SORTED rather than assumed, or "Recently added" silently degrades into
-  // "the order the card enumerates in" — which is exactly the bug reconciliation
-  // exists to prevent.
+  // Primary key is the file's modification time, so the "Recent" shelf reflects
+  // when a book actually landed on the card rather than when a rebuild happened
+  // to discover it. firstSeen breaks ties (and carries books whose filesystem
+  // reports no time): it comes from the PREVIOUS index, so it is no longer a
+  // dense sequence in walk order — a rebuild reuses each book's original number
+  // and only hands out new ones for books it has never seen. The arrival order
+  // has to be SORTED rather than assumed, or "Recent" silently degrades into
+  // "the order the card enumerates in" — which is exactly the bug
+  // reconciliation exists to prevent.
   if (rankable) {
     for (uint16_t i = 0; i < n; i++) arrivalOrder[i] = i;
     if (n > 1) {
-      delay(1);
-      std::sort(arrivalOrder.get(), arrivalOrder.get() + n,
-                [order, resolvedFirstSeen](const uint16_t a, const uint16_t b) {
-                  const uint16_t aSeen = resolvedFirstSeen[order[a]];
-                  const uint16_t bSeen = resolvedFirstSeen[order[b]];
-                  return aSeen < bSeen || (aSeen == bSeen && a < b);
-                });
-      delay(1);
+      // Fallible and non-fatal: without the array the sort still runs on
+      // firstSeen alone, which is the pre-timestamp behaviour.
+      auto mtimes = makeUniqueNoThrow<uint32_t[]>(n);
+      if (mtimes) {
+        for (uint16_t i = 0; i < n; i++) {
+          serviceBuilder(serviceUnits);
+          if (!readStageAt(static_cast<uint64_t>(order[i]) * STAGE_STRIDE + offsetof(ClixRecord, modificationTime),
+                           &mtimes[i], sizeof(mtimes[i]))) {
+            mtimes.reset();
+            break;
+          }
+        }
+      } else {
+        LOG_ERR("LIBIDX", "OOM: %u-byte mtime array, arrival falls back to firstSeen",
+                static_cast<unsigned>(n * sizeof(uint32_t)));
+      }
+      if (ioFailed) {
+        // The shared read helper latched the failure; the emit fails below.
+      } else {
+        delay(1);
+        std::sort(arrivalOrder.get(), arrivalOrder.get() + n,
+                  [order, resolvedFirstSeen, mt = mtimes.get()](const uint16_t a, const uint16_t b) {
+                    if (mt && mt[a] != mt[b]) return mt[a] < mt[b];
+                    const uint16_t aSeen = resolvedFirstSeen[order[a]];
+                    const uint16_t bSeen = resolvedFirstSeen[order[b]];
+                    return aSeen < bSeen || (aSeen == bSeen && a < b);
+                  });
+        delay(1);
+      }
     }
   } else {
     // Without sorting, preserve walk order by mapping each staging ordinal back
