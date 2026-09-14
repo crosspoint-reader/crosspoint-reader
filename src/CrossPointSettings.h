@@ -137,7 +137,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PAGE_TURN = 2,
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
+#if FREEINK_CAP_TOUCH
     PWR_CONFIRM = 5,
+    HOME_SCREEN = 6,
+#else
+    HOME_SCREEN = 5,
+#endif
     SHORT_PWRBTN_COUNT
   };
 
