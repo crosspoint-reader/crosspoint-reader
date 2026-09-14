@@ -78,6 +78,10 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+  // True when any button contact is closed right now, read straight from the
+  // hardware (ADC ladder off its idle rail, or the power GPIO asserted), without
+  // going through the debounced state. Cheap enough to call every few ms.
+  bool rawInputActive();
   bool hasTouch() const;
   // Capacitive Home key reported by the touch controller (X4 Pro). The tap
   // event fires on release and excludes a long hold.

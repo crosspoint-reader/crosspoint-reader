@@ -116,6 +116,10 @@ time_data: deque[str] = deque(maxlen=MAX_POINTS)
 free_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
 total_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
 max_alloc_data: deque[float] = deque(maxlen=MAX_POINTS)
+psram_time_data: deque[str] = deque(maxlen=MAX_POINTS)
+psram_free_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
+psram_total_mem_data: deque[float] = deque(maxlen=MAX_POINTS)
+psram_max_alloc_data: deque[float] = deque(maxlen=MAX_POINTS)
 data_lock: threading.Lock = threading.Lock()  # Prevent reading while writing
 
 # Global shutdown flag
@@ -311,10 +315,16 @@ def serial_worker(ser, kwargs: dict[str, str]) -> None:
                         free_val, total_val, max_alloc_val = parse_memory_line(formatted_line)
                         if free_val is not None and total_val is not None:
                             with data_lock:
-                                time_data.append(pc_time)
-                                free_mem_data.append(free_val / 1024)
-                                total_mem_data.append(total_val / 1024)
-                                max_alloc_data.append((max_alloc_val or 0) / 1024)
+                                if "PSRAM:" in formatted_line:
+                                    psram_time_data.append(pc_time)
+                                    psram_free_mem_data.append(free_val / 1024)
+                                    psram_total_mem_data.append(total_val / 1024)
+                                    psram_max_alloc_data.append((max_alloc_val or 0) / 1024)
+                                else:
+                                    time_data.append(pc_time)
+                                    free_mem_data.append(free_val / 1024)
+                                    total_mem_data.append(total_val / 1024)
+                                    max_alloc_data.append((max_alloc_val or 0) / 1024)
                     # Apply filters
                     if filter_keyword and filter_keyword not in formatted_line.lower():
                         continue
@@ -360,17 +370,21 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
         return []
 
     with data_lock:
-        if not time_data:
+        if not time_data and not psram_time_data:
             return []
 
         x = list(time_data)
         y_free = list(free_mem_data)
         y_total = list(total_mem_data)
         y_max_alloc = list(max_alloc_data)
+        px = list(psram_time_data)
+        py_free = list(psram_free_mem_data)
+        py_total = list(psram_total_mem_data)
+        py_max_alloc = list(psram_max_alloc_data)
 
     fig = plt.gcf()
     fig.clf()
-    ax1 = fig.add_subplot(111)
+    ax1 = fig.add_subplot(211 if px else 111)
 
     ax1.plot(x, y_total, label="Total RAM (KB)", color="red", linestyle="--")
     ax1.plot(x, y_free, label="Free RAM (KB)", color="green", marker="o", markersize=3)
@@ -383,6 +397,20 @@ def update_graph(frame) -> list:  # pylint: disable=unused-argument
     ax1.legend(loc="upper left")
     ax1.grid(True, linestyle=":", alpha=0.6)
     plt.setp(ax1.get_xticklabels(), rotation=45, ha="right")
+
+    if px:
+        ax2 = fig.add_subplot(212)
+        ax2.plot(px, py_total, label="Total PSRAM (KB)", color="red", linestyle="--")
+        ax2.plot(px, py_free, label="Free PSRAM (KB)", color="green", marker="o", markersize=3)
+        if any(v > 0 for v in py_max_alloc):
+            ax2.plot(px, py_max_alloc, label="Max Alloc (KB)", color="orange", linestyle="-.")
+        ax2.fill_between(px, py_free, color="green", alpha=0.1)
+        ax2.set_title("ESP32 PSRAM Monitor")
+        ax2.set_ylabel("Memory (KB)")
+        ax2.set_xlabel("Time")
+        ax2.legend(loc="upper left")
+        ax2.grid(True, linestyle=":", alpha=0.6)
+        plt.setp(ax2.get_xticklabels(), rotation=45, ha="right")
 
     fig.tight_layout()
     return []

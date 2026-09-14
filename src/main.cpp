@@ -771,7 +771,14 @@ void loop() {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(50);
+      // Sleep in short slices and wake the poll as soon as a button contact closes.
+      // InputManager commits a press only when two consecutive polls agree, so a
+      // press shorter than one 50 ms sleep could land in a single sample and be lost.
+      const unsigned long idleStart = millis();
+      while (millis() - idleStart < 50) {
+        delay(10);
+        if (gpio.rawInputActive()) break;
+      }
     } else {
       // Short delay to prevent tight loop while still being responsive
       delay(10);

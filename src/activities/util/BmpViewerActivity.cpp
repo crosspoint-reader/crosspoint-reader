@@ -4,6 +4,7 @@
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
@@ -117,7 +118,9 @@ void BmpViewerActivity::onEnter() {
   HalFile file;
   // 1. Open the BMP file
   if (Storage.openFileForRead("BMP", filePath, file)) {
-    Bitmap bitmap(file, true);
+    Bitmap bitmap(file, true,
+                  renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported() &&
+                      display.getController() == HalDisplay::Controller::SSD1677);
 
     // 2. Parse headers to get dimensions
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
@@ -153,15 +156,56 @@ void BmpViewerActivity::onEnter() {
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
-      // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,
-      // pageHeight, 0, 0)
-      renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
+      if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+        renderer.clearScreen();
+        renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        return;
+      }
 
       // Draw UI hints on the base layer
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      // Single pass for non-grayscale images
+      if (bitmap.hasGreyscale()) {
+        const bool absolute = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
+        if (absolute && !renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) return;
+        if (!absolute) renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+        bool planesReady = true;
+        for (const auto mode : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+          if (bitmap.rewindToData() != BmpReaderError::Ok) {
+            LOG_ERR("BMP", "Failed to rewind bitmap for grayscale rendering");
+            planesReady = false;
+            break;
+          }
+          renderer.clearScreen(absolute ? 0xFF : 0x00);
+          renderer.setRenderMode(mode);
+          if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+            planesReady = false;
+            break;
+          }
+          GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+          if (mode == GfxRenderer::GRAYSCALE_LSB) {
+            renderer.copyGrayscaleLsbBuffers();
+          } else {
+            renderer.copyGrayscaleMsbBuffers();
+          }
+        }
+        if (planesReady) renderer.displayGrayBuffer();
 
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        // Rebuild the BW framebuffer for popups and subsequent differential updates.
+        renderer.setRenderMode(GfxRenderer::BW);
+        renderer.clearScreen();
+        if (bitmap.rewindToData() != BmpReaderError::Ok ||
+            !renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0)) {
+          LOG_ERR("BMP", "Failed to rewind bitmap to restore the BW framebuffer");
+          renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+          planesReady = false;
+        }
+        GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+        renderer.cleanupGrayscaleWithFrameBuffer();
+        if (!planesReady) renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      } else {
+        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      }
 
     } else {
       // Handle file parsing error

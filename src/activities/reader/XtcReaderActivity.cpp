@@ -206,7 +206,7 @@ void XtcReaderActivity::renderPage() {
       // the display sync, so only the gentle reinforcement cells fire).
       // Combined-base panels (Paper Mono) instead defer the base so the gray
       // planes below join it in one waveform.
-      if (renderer.combinesGrayscaleBase()) {
+      if (renderer.grayscaleCapabilities().base == HalDisplay::GrayscaleBase::Combined) {
         renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
       } else {
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
