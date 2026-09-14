@@ -142,7 +142,7 @@ STR_LIBRARY_SEARCH_UNAVAILABLE: "Поиск недоступен: мало па�
 STR_LIBRARY_UNKNOWN_TITLE: "(без названия)"
 STR_LIBRARY_UNKNOWN_AUTHOR: "Автор неизвестен"
 STR_LIBRARY_TITLE_UNSORTED: "Библиотека (без сортировки)"
-STR_LIBRARY_TAB_RECENT: "История"
+STR_LIBRARY_TAB_RECENT: "Недавние"
 STR_LIBRARY_TAB_TITLE: "Название"
 STR_LIBRARY_TAB_AUTHOR: "Автор"
 STR_LIBRARY_SEARCH: "Поиск"
