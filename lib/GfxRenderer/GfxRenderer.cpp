@@ -1345,7 +1345,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 }
 
 bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, const bool whiteAsTransparent) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
@@ -1436,6 +1436,7 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+      if (whiteAsTransparent && val == 3) continue;
 
       if (renderMode == BW && val < 3) {
         drawPixel(screenX, screenY);
@@ -2229,7 +2230,7 @@ void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
   if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
-  absoluteGrayPlanes = mode == HalDisplay::GrayscaleMode::Absolute;
+  absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
   return true;
 }
 
