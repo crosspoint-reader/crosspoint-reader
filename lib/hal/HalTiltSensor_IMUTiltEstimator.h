@@ -43,13 +43,13 @@ class HalTiltSensor::IMUTiltEstimator {
   static constexpr float ACCEL_MAX_G = 1.2f;  // Upper acceleration limit for gravity-based correction.
   static constexpr float STATIONARY_ACCEL_DOT_MIN =
       0.99939f;  // Maximum direction drift during a stable window (approx. 2 deg)
-  static constexpr float STATIONARY_GYRO_VARIATION_DPS = 8.0f;  // Maximum sample deviation from the window mean.
+  static constexpr float STATIONARY_GYRO_VARIATION_DPS = 4.0f;  // Maximum sample deviation from the window mean.
   static constexpr float STATIONARY_CORRECTED_RATE_DPS = 2.5f;  // Maximum corrected rate when recovering a reference.
   static constexpr float CALIBRATION_MAX_BIAS_DPS = 20.0f;      // Largest zero-rate offset accepted at startup.
   static constexpr uint32_t CALIBRATION_HOLD_MS = 250;          // Quiet startup time needed to estimate gyro bias.
-  static constexpr uint16_t CALIBRATION_MIN_SAMPLES = 8;        // Minimum startup samples used to estimate gyro bias.
+  static constexpr uint16_t CALIBRATION_MIN_SAMPLES = 10;       // Minimum startup samples used to estimate gyro bias.
   static constexpr uint32_t STATIONARY_HOLD_MS = 500;           // Stable time required to capture a reference.
-  static constexpr uint16_t STATIONARY_MIN_SAMPLES = 10;        // Minimum samples required for a stable window.
+  static constexpr uint16_t STATIONARY_MIN_SAMPLES = 12;        // Minimum samples required for a stable window.
 
   static constexpr float REPOSITION_MIN_ANGLE_DEG = 32.0f;  // Relative angle that enables automatic re-tare.
   static constexpr float REPOSITION_MAX_RATE_DPS = 1.75f;   // Maximum mean rate while settling at a new posture.
@@ -58,10 +58,10 @@ class HalTiltSensor::IMUTiltEstimator {
 
   static constexpr float BIAS_ADAPT_MAX_RATE_DPS = 1.75f;  // Maximum residual accepted as stationary drift.
   static constexpr float BIAS_ADAPT_ACCEL_DOT_MIN =
-      0.99985f;                                           // Maximum gravity drift during adaptation (approx. 1 deg).
-  static constexpr float BIAS_ADAPT_ALPHA = 0.2f;         // Fraction of residual bias learned per stable window.
-  static constexpr float BIAS_ADAPT_MAX_STEP_DPS = 0.1f;  // Maximum per-axis change from one stable window.
-  static constexpr uint32_t BIAS_ADAPT_HOLD_MS = 1500;    // Stable time required before updating bias.
+      0.99966f;                                           // Maximum gravity drift during adaptation (approx. 1.5 deg).
+  static constexpr float BIAS_ADAPT_ALPHA = 0.15f;        // Fraction of residual bias learned per stable window.
+  static constexpr float BIAS_ADAPT_MAX_STEP_DPS = 0.15f; // Maximum per-axis change from one stable window.
+  static constexpr uint32_t BIAS_ADAPT_HOLD_MS = 1000;    // Stable time required before updating bias.
   static constexpr uint16_t BIAS_ADAPT_MIN_SAMPLES = 24;  // Minimum samples required before updating bias.
 
   static constexpr float ATTITUDE_KP = 4.0f;                    // Strength of accelerometer gravity correction.

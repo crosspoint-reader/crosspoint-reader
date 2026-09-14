@@ -88,13 +88,13 @@ boundary.
 
 During a stationary window, acceleration is averaged to define gravity in the
 reference frame and all three raw gyro rates are averaged as zero-rate offsets.
-Initial calibration must contain at least 8 samples (`CALIBRATION_MIN_SAMPLES`)
+Initial calibration must contain at least 10 samples (`CALIBRATION_MIN_SAMPLES`)
 and span at least 250 ms (`CALIBRATION_HOLD_MS`). Reference reacquisition must
-contain at least 10 samples (`STATIONARY_MIN_SAMPLES`) and span at least 500 ms
+contain at least 12 samples (`STATIONARY_MIN_SAMPLES`) and span at least 500 ms
 (`STATIONARY_HOLD_MS`). Both remain within 0.8-1.2 g (`ACCEL_MIN_G` and
 `ACCEL_MAX_G`), stay within approximately two degrees of their initial
 acceleration direction (`STATIONARY_ACCEL_DOT_MIN`), and keep each gyro sample
-within 8 degrees/second of the running mean (`STATIONARY_GYRO_VARIATION_DPS`).
+within 4 degrees/second of the running mean (`STATIONARY_GYRO_VARIATION_DPS`).
 Calibration permits a constant offset up to 20 degrees/second on each axis
 (`CALIBRATION_MAX_BIAS_DPS`). Once bias is known, reacquisition requires the
 window-average corrected rates below 2.5 degrees/second
@@ -108,8 +108,8 @@ without treating physical motion as a new zero-rate calibration window.
 During ordinary tracking, at least 24 stable samples (`BIAS_ADAPT_MIN_SAMPLES`)
 over 1500 ms (`BIAS_ADAPT_HOLD_MS`) can update gyro bias without changing the
 neutral reference. The corrected window mean must remain within 1.75 degrees/second
-(`BIAS_ADAPT_MAX_RATE_DPS`). An accepted window learns 20 percent of its residual
-(`BIAS_ADAPT_ALPHA`), capped at 0.1 degrees/second per axis
+(`BIAS_ADAPT_MAX_RATE_DPS`). An accepted window learns 15 percent of its residual
+(`BIAS_ADAPT_ALPHA`), capped at 0.15 degrees/second per axis
 (`BIAS_ADAPT_MAX_STEP_DPS`). It also removes accumulated rotation around gravity
 by rebuilding the attitude from the stationary mean acceleration and the original
 reference gravity. This preserves the observable tilt and neutral reference while
