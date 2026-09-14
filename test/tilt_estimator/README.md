@@ -94,7 +94,7 @@ contain at least 12 samples (`STATIONARY_MIN_SAMPLES`) and span at least 500 ms
 (`STATIONARY_HOLD_MS`). Both remain within 0.8-1.2 g (`ACCEL_MIN_G` and
 `ACCEL_MAX_G`), stay within approximately two degrees of their initial
 acceleration direction (`STATIONARY_ACCEL_DOT_MIN`), and keep each gyro sample
-within 4 degrees/second of the running mean (`STATIONARY_GYRO_VARIATION_DPS`).
+within 6 degrees/second of the running mean (`STATIONARY_GYRO_VARIATION_DPS`).
 Calibration permits a constant offset up to 20 degrees/second on each axis
 (`CALIBRATION_MAX_BIAS_DPS`). Once bias is known, reacquisition requires the
 window-average corrected rates below 2.5 degrees/second
@@ -106,7 +106,7 @@ direction from the first valid accelerometer sample and can track immediately,
 without treating physical motion as a new zero-rate calibration window.
 
 During ordinary tracking, at least 24 stable samples (`BIAS_ADAPT_MIN_SAMPLES`)
-over 1500 ms (`BIAS_ADAPT_HOLD_MS`) can update gyro bias without changing the
+over 1000 ms (`BIAS_ADAPT_HOLD_MS`) can update gyro bias without changing the
 neutral reference. The corrected window mean must remain within 1.75 degrees/second
 (`BIAS_ADAPT_MAX_RATE_DPS`). An accepted window learns 15 percent of its residual
 (`BIAS_ADAPT_ALPHA`), capped at 0.15 degrees/second per axis

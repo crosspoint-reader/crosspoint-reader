@@ -43,7 +43,7 @@ class HalTiltSensor::IMUTiltEstimator {
   static constexpr float ACCEL_MAX_G = 1.2f;  // Upper acceleration limit for gravity-based correction.
   static constexpr float STATIONARY_ACCEL_DOT_MIN =
       0.99939f;  // Maximum direction drift during a stable window (approx. 2 deg)
-  static constexpr float STATIONARY_GYRO_VARIATION_DPS = 4.0f;  // Maximum sample deviation from the window mean.
+  static constexpr float STATIONARY_GYRO_VARIATION_DPS = 6.0f;  // Maximum sample deviation from the window mean.
   static constexpr float STATIONARY_CORRECTED_RATE_DPS = 2.5f;  // Maximum corrected rate when recovering a reference.
   static constexpr float CALIBRATION_MAX_BIAS_DPS = 20.0f;      // Largest zero-rate offset accepted at startup.
   static constexpr uint32_t CALIBRATION_HOLD_MS = 250;          // Quiet startup time needed to estimate gyro bias.
