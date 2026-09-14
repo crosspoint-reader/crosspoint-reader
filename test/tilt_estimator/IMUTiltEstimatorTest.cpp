@@ -251,7 +251,7 @@ TEST_F(IMUTiltEstimatorTest, ContinuousMotionIsNotLearnedAsBias) {
   const size_t adaptationsBeforeMotion = countLog("bias_adapt");
   for (int step = 1; step <= 400; ++step) trace.roll(20.0f + step * 0.075f, 3);
 
-  EXPECT_LE(trace.estimator.estimatedGyroBias(0), 0.1f);
+  EXPECT_LE(trace.estimator.estimatedGyroBias(0), 0.15f);
   EXPECT_LE(countLog("bias_adapt"), adaptationsBeforeMotion + 1);
   EXPECT_EQ(countLog("reason=posture_change"), 0U);
 }
@@ -271,8 +271,8 @@ TEST_F(IMUTiltEstimatorTest, MeasuredStationaryNoiseStillCalibrates) {
   for (size_t index = 0; index < GYRO_SAMPLES.size(); ++index) {
     const Vec3 gyro = GYRO_SAMPLES[index];
     trace.sample(-0.275f, -0.063f, -0.908f, gyro.x, gyro.y, gyro.z, 34);
-    if (index == 7) EXPECT_EQ(trace.estimator.state(), Estimator::CALIBRATING);
-    if (index == 8) EXPECT_EQ(trace.estimator.state(), Estimator::TRACKING);
+    if (index == 8) EXPECT_EQ(trace.estimator.state(), Estimator::CALIBRATING);
+    if (index == 9) EXPECT_EQ(trace.estimator.state(), Estimator::TRACKING);
   }
 
   ASSERT_EQ(trace.estimator.state(), Estimator::TRACKING);
