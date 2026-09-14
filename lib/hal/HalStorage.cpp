@@ -84,6 +84,15 @@ bool HalStorage::disconnectUsbDriveHost() {
 #endif
 }
 
+bool HalStorage::usbDriveHostSuspended() const {
+#if FREEINK_CAP_USB_MSC
+  StorageLock lock;
+  return usbMassStorage.hostSuspended();
+#else
+  return false;
+#endif
+}
+
 void HalStorage::endUsbDrive() {
 #if FREEINK_CAP_USB_MSC
   StorageLock lock;
