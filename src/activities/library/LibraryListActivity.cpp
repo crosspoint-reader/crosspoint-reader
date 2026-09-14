@@ -675,14 +675,15 @@ bool LibraryListActivity::handleButtons() {
 
 void LibraryListActivity::navigateButtons() {
   const int count = listCount();
-  const int ringSize = count + 1;
   auto& nav = activeNav();
-  buttonNavigator.onNextRelease([this, ringSize] { moveRingTo(ButtonNavigator::nextIndex(ringPos(), ringSize)); });
-  buttonNavigator.onPreviousRelease([this, ringSize] {
+  buttonNavigator.onNextRelease([this, count] {
+    if (count > 0) moveRingTo(ringPos() == count ? 1 : ringPos() + 1);
+  });
+  buttonNavigator.onPreviousRelease([this, count] {
     if (tabsFocused() && !degraded) {
       openSearch();
-    } else {
-      moveRingTo(ButtonNavigator::previousIndex(ringPos(), ringSize));
+    } else if (count > 0) {
+      moveRingTo(ringPos() <= 1 ? count : ringPos() - 1);
     }
   });
   // A held button steps tabs while the strip has focus (the base behaviour
