@@ -88,6 +88,20 @@ class GfxRenderer {
   mutable int clipRight_ = 32767;
   mutable int clipBottom_ = 32767;
 
+  // Reader text spacing, honoured by every text measure/draw call while a
+  // TextSpacingScope is active. Mutable because layout and rendering hold a
+  // const GfxRenderer&; UI text outside a scope keeps the font's native spacing.
+  mutable int8_t characterSpacing_ = 0;
+  mutable uint8_t wordSpacingPercent_ = 100;
+  static constexpr bool isSpaceCp(const uint32_t cp) { return cp == ' ' || cp == 0xA0 || cp == 0x3000; }
+  // Extra pixels between two adjacent glyphs; whitespace keeps its own advance.
+  int trackingBetween(const uint32_t leftCp, const uint32_t rightCp) const {
+    return leftCp == 0 || isSpaceCp(leftCp) || isSpaceCp(rightCp) ? 0 : characterSpacing_;
+  }
+  int scaleSpace(const int advancePx) const {
+    return wordSpacingPercent_ == 100 ? advancePx : (advancePx * wordSpacingPercent_ + 50) / 100;
+  }
+
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
   // or measured with a mapped primary font contains a CJK codepoint the primary
@@ -299,6 +313,28 @@ class GfxRenderer {
   void writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src);
 
   // Text
+  // Applies word/character spacing to text calls for its lifetime, then restores the previous values.
+  class TextSpacingScope {
+   public:
+    TextSpacingScope(const GfxRenderer& renderer, const int8_t characterSpacing, const uint8_t wordSpacingPercent)
+        : renderer_(renderer),
+          savedCharacterSpacing_(renderer.characterSpacing_),
+          savedWordSpacingPercent_(renderer.wordSpacingPercent_) {
+      renderer.characterSpacing_ = characterSpacing;
+      renderer.wordSpacingPercent_ = wordSpacingPercent;
+    }
+    ~TextSpacingScope() {
+      renderer_.characterSpacing_ = savedCharacterSpacing_;
+      renderer_.wordSpacingPercent_ = savedWordSpacingPercent_;
+    }
+    TextSpacingScope(const TextSpacingScope&) = delete;
+    TextSpacingScope& operator=(const TextSpacingScope&) = delete;
+
+   private:
+    const GfxRenderer& renderer_;
+    int8_t savedCharacterSpacing_;
+    uint8_t savedWordSpacingPercent_;
+  };
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                    BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,

@@ -131,6 +131,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     LOG_ERR("TXB", "Render skipped: invalid block");
     return;
   }
+  const GfxRenderer::TextSpacingScope textSpacing(renderer, blockStyle.characterSpacing, blockStyle.wordSpacingPercent);
 
   const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
@@ -260,7 +261,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
       int lineStartX = drawX;
       int lineWidth = renderer.getTextWidth(fontId, word, currentStyle, baseDir);
 
-      if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+      // With tracking, getTextWidth measures by advance, which is already halved for SUP/SUB.
+      if (blockStyle.characterSpacing == 0 && (currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
         lineWidth = (lineWidth + 1) / 2;
       }
 
@@ -270,7 +272,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         const char* visibleText = word + 3;
         lineStartX += renderer.getTextAdvanceX(fontId, "\xe2\x80\x83", currentStyle);
         lineWidth = renderer.getTextWidth(fontId, visibleText, currentStyle, baseDir);
-        if ((currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
+        if (blockStyle.characterSpacing == 0 && (currentStyle & (EpdFontFamily::SUP | EpdFontFamily::SUB)) != 0) {
           lineWidth = (lineWidth + 1) / 2;
         }
       }
@@ -338,6 +340,8 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.textIndentDefined);
   serialization::writePod(file, blockStyle.isRtl);
   serialization::writePod(file, blockStyle.directionDefined);
+  serialization::writePod(file, blockStyle.characterSpacing);
+  serialization::writePod(file, blockStyle.wordSpacingPercent);
 
   return true;
 }
@@ -436,6 +440,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
+  serialization::readPod(file, blockStyle.characterSpacing);
+  serialization::readPod(file, blockStyle.wordSpacingPercent);
 
   return block;
 }
