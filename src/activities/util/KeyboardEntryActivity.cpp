@@ -95,6 +95,10 @@ const fui::KeyboardKey URL_SNIP_BOTTOM[] = {UKS("abc", fui::KeyKind::Mode, fui::
                                             UKS("Del", fui::KeyKind::Delete, fui::QWERTY_KEY_BACKSPACE, 2),
                                             UKS("OK", fui::KeyKind::Ok, fui::QWERTY_KEY_ENTER, 2)};
 
+static constexpr fui::KeyboardKey ARABIC_PUNCTUATION_ROW[] = {
+    UK("،", "،", 0x060C), UK("؛", "؛", 0x061B), UK("؟", "؟", 0x061F), UK("ـ", "ـ", 0x0640),
+    UK("«", "«", 0x00AB), UK("»", "»", 0x00BB), UK("…", "…", 0x2026)};
+
 #undef UK
 #undef UKA
 #undef UKW
@@ -110,6 +114,20 @@ const fui::KeyboardRow URL_SNIP_ROWS[] = {
 const fui::KeyboardLayout URL_LAYOUT{URL_ROWS, 5};
 const fui::KeyboardLayout URL_SHIFT_LAYOUT{URL_SHIFT_ROWS, 5};
 const fui::KeyboardLayout URL_SNIPPET_LAYOUT{URL_SNIP_ROWS, 4};
+
+const fui::KeyboardLayout& arabicSymbolsLayout() {
+  const auto& base = fui::builtinKeyboardLayout(fui::KeyboardLayoutId::ArabicAr, false, true);
+  // The SDK exposes its shared rows through a runtime accessor.
+  static const fui::KeyboardRow rows[] = {
+      base.rows[0],
+      base.rows[1],
+      base.rows[2],
+      {ARABIC_PUNCTUATION_ROW, static_cast<uint8_t>(sizeof(ARABIC_PUNCTUATION_ROW) / sizeof(ARABIC_PUNCTUATION_ROW[0])),
+       0},
+      base.rows[3]};
+  static constexpr fui::KeyboardLayout layout{rows, 5};
+  return layout;
+}
 
 }  // namespace
 
@@ -147,7 +165,10 @@ void KeyboardEntryActivity::onEnter() {
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
 
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
-  if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);
+  if (symbols) {
+    if (layoutId == fui::KeyboardLayoutId::ArabicAr && !shifted) return arabicSymbolsLayout();
+    return fui::builtinKeyboardLayout(layoutId, shifted, true);
+  }
   if (inputType == InputType::Url) {
     if (urlPanel) return URL_SNIPPET_LAYOUT;
     return shifted ? URL_SHIFT_LAYOUT : URL_LAYOUT;
