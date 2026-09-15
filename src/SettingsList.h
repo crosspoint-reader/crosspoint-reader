@@ -463,9 +463,20 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       // Insert after the short power button setting (end of Controls section)
       for (auto it = v.begin(); it != v.end(); ++it) {
         if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
-          v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
-                                             {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED},
-                                             "tiltPageTurn", StrId::STR_CAT_CONTROLS));
+          v.insert(
+              it + 1,
+              {SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
+                                 {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
+                                 StrId::STR_CAT_CONTROLS),
+               SettingInfo::Enum(StrId::STR_TILT_TO_SELECT, &CrossPointSettings::tiltToSelect,
+                                 {StrId::STR_STATE_OFF, StrId::STR_DICTIONARY, StrId::STR_DICTIONARY_AND_KEYBOARD},
+                                 "tiltToSelect", StrId::STR_CAT_CONTROLS),
+               SettingInfo::Enum(StrId::STR_TILT_TO_SELECT_SENSITIVITY, &CrossPointSettings::tiltToSelectSensitivity,
+                                 {StrId::STR_LOW, StrId::STR_NORMAL, StrId::STR_HIGH}, "tiltToSelectSensitivity",
+                                 StrId::STR_CAT_CONTROLS),
+               SettingInfo::Enum(StrId::STR_TILT_TO_SELECT_INVERT, &CrossPointSettings::tiltToSelectInvert,
+                                 {StrId::STR_STATE_OFF, StrId::STR_INVERT_X, StrId::STR_INVERT_Y, StrId::STR_INVERT_XY},
+                                 "tiltToSelectInvert", StrId::STR_CAT_CONTROLS)});
           break;
         }
       }

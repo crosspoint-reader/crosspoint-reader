@@ -181,6 +181,26 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
+  enum TILT_TO_SELECT {
+    TILT_SELECT_OFF = 0,
+    TILT_SELECT_DICTIONARY = 1,
+    TILT_SELECT_DICTIONARY_AND_KEYBOARD = 2,
+    TILT_TO_SELECT_COUNT
+  };
+  enum TILT_TO_SELECT_SENSITIVITY {
+    TILT_SELECT_SENSITIVITY_LOW = 0,
+    TILT_SELECT_SENSITIVITY_NORMAL = 1,
+    TILT_SELECT_SENSITIVITY_HIGH = 2,
+    TILT_SELECT_SENSITIVITY_COUNT
+  };
+  enum TILT_TO_SELECT_INVERT {
+    TILT_SELECT_INVERT_OFF = 0,
+    TILT_SELECT_INVERT_X = 1,
+    TILT_SELECT_INVERT_Y = 2,
+    TILT_SELECT_INVERT_XY = 3,
+    TILT_TO_SELECT_INVERT_COUNT
+  };
+
   enum TOUCH_READER_CONTROLS {
     TOUCH_READER_OFF = 0,
     TOUCH_READER_ON = 1,
@@ -315,6 +335,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)
   uint8_t tiltPageTurn = TILT_OFF;
+  // Use tilt sensor for selection (requires IMU)
+  uint8_t tiltToSelect = TILT_SELECT_OFF;
+  // Sensitivity level for tilt to select (0, 1, 2 -> LOW - NORMAL - HIGH) (requires IMU)
+  uint8_t tiltToSelectSensitivity = TILT_SELECT_SENSITIVITY_NORMAL;
+  // Invert axes for tilt-to-select (requires IMU)
+  uint8_t tiltToSelectInvert = TILT_SELECT_INVERT_OFF;
   // Touch screen reader zones/gestures on boards with a touch controller.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
   // Reader menu open gesture (SHOW_READER_MENU: off / center tap / bottom-edge

@@ -353,6 +353,10 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
+TiltInteraction ActivityManager::activeTiltInteraction() const {
+  return currentActivity ? currentActivity->tiltInteraction() : TiltInteraction::None;
+}
+
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }

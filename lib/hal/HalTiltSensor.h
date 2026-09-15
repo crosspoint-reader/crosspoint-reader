@@ -12,10 +12,28 @@ namespace CrossPointTiltPageTurn {
 enum Value : uint8_t { TILT_OFF = 0, TILT_NORMAL = 1, TILT_INVERTED = 2 };
 }
 
+namespace CrossPointTiltSensorMode {
+enum Value : uint8_t {
+  SENSOR_OFF = 0,
+  TILT_PAGE_ACTIVE = 1,
+  TILT_PAGE_INVERTED = 2,
+  TILT_POINTER_ACTIVE = 4,
+  TILT_POINTER_INVERT_X = 8,
+  TILT_POINTER_INVERT_Y = 16,
+  TILT_POINTER_SENSITIVITY_LOW = 32,
+  TILT_POINTER_SENSITIVITY_HIGH = 64
+};
+}
+
 class HalTiltSensor;
 extern HalTiltSensor halTiltSensor;  // Singleton
 
 class HalTiltSensor {
+ public:
+  // Sample-driven estimator; its definition lives in the separate estimator header.
+  class IMUTiltEstimator;
+
+ private:
   bool _available = false;
   mutable Imu _sdkImu;
 
@@ -30,15 +48,26 @@ class HalTiltSensor {
   unsigned long _wakeMs = 0;       // Timestamp of last wake() for stabilization
 
   // Tuning constants
-  static constexpr float RATE_THRESHOLD_DPS = 270.0f;      // Deg/sec speed to trigger flick
-  static constexpr float NEUTRAL_RATE_DPS = 50.0f;         // Must stop moving below this rate before next trigger
-  static constexpr unsigned long COOLDOWN_MS = 600;        // Minimum ms between triggers
-  static constexpr unsigned long POLL_INTERVAL_MS = 50;    // 20 Hz polling
-  static constexpr unsigned long WAKE_STABILIZE_MS = 300;  // Ignore readings after wake
+  static constexpr float RATE_THRESHOLD_DPS = 270.0f;         // Deg/sec speed to trigger flick
+  static constexpr float NEUTRAL_RATE_DPS = 50.0f;            // Must stop moving below this rate before next trigger
+  static constexpr unsigned long COOLDOWN_MS = 600;           // Minimum ms between triggers
+  static constexpr unsigned long POLL_INTERVAL_MS = 50;       // 20 Hz polling
+  static constexpr unsigned long POLL_INTERVAL_FAST_MS = 25;  // 40 Hz polling
+  static constexpr unsigned long WAKE_STABILIZE_MS = 300;     // Ignore readings after wake
 
   mutable unsigned long _lastPollMs = 0;
 
-  bool readGyro(float& gx, float& gy, float& gz) const;
+  uint8_t _lastMode = CrossPointTiltSensorMode::SENSOR_OFF;
+  uint8_t _lastOrientation = CrossPointOrientation::PORTRAIT;
+
+  IMUTiltEstimator* _tiltEstimator = nullptr;
+  bool _tiltEstimatorAllocationFailed = false;
+  float _pointerGyroBias[3] = {};
+  bool _havePointerGyroBias = false;
+  int8_t _pointerMoveX = 0;
+  int8_t _pointerMoveY = 0;
+
+  bool readGyro(float& ax, float& ay, float& az, float& gx, float& gy, float& gz) const;
 
  public:
   // Call after BoardConfig has selected the active device.
@@ -53,8 +82,8 @@ class HalTiltSensor {
   // True if an IMU is present on this device
   bool isAvailable() const { return _available; }
 
-  // Poll the accelerometer and update tilt gesture state.
-  void update(const uint8_t mode, const uint8_t orientation, const bool inReader);
+  // Poll the IMU and update tilt gesture state + pointer state
+  void update(const uint8_t mode, const uint8_t orientation);
 
   // Returns true once per tilt-forward gesture (next page direction).
   // Consumed on read — subsequent calls return false until next gesture.
@@ -70,4 +99,8 @@ class HalTiltSensor {
 
   // Discard any pending tilt events (call when leaving reader or disabling tilt).
   void clearPendingEvents();
+
+  // Obtain a pointer move event from the tilt sensor (+/-1 or 0 in moveX/Y). Returns true if there is at least one move
+  // indicated.
+  bool getXYPointerMove(int& moveX, int& moveY);
 };

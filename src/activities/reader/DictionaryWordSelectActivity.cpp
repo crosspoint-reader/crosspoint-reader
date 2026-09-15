@@ -2,6 +2,7 @@
 
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalTiltSensor.h>
 #include <Memory.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -40,6 +41,16 @@ bool isSelectableToken(const char* text) {
 void indexBuildYield(void*) { vTaskDelay(1); }
 
 }  // namespace
+
+TiltInteraction DictionaryWordSelectActivity::tiltInteraction() const {
+  switch (SETTINGS.tiltToSelect) {
+    case CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY:
+    case CrossPointSettings::TILT_TO_SELECT::TILT_SELECT_DICTIONARY_AND_KEYBOARD:
+      return TiltInteraction::PointerXY;
+    default:
+      return TiltInteraction::None;
+  }
+}
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
@@ -230,6 +241,10 @@ void DictionaryWordSelectActivity::performLookup() {
 }
 
 void DictionaryWordSelectActivity::loop() {
+  int tiltMoveX = 0;
+  int tiltMoveY = 0;
+  const bool hasTiltMove = halTiltSensor.getXYPointerMove(tiltMoveX, tiltMoveY);
+
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupTime >= POPUP_DURATION_MS) {
       popup = Popup::None;
@@ -272,6 +287,25 @@ void DictionaryWordSelectActivity::loop() {
 
   const bool hasNextWord = selected + 1 < static_cast<int>(words.size());
   const unsigned long now = millis();
+
+  if (hasTiltMove) {
+    if (tiltMoveX < 0 && selected > 0) {
+      selected--;
+      lastHorizontalMoveTime = now;
+      requestUpdate();
+    } else if (tiltMoveX > 0 && hasNextWord) {
+      selected++;
+      lastHorizontalMoveTime = now;
+      requestUpdate();
+    }
+
+    if (tiltMoveY) {
+      moveVertical(tiltMoveY);
+    }
+
+    return;
+  }
+
   const bool repeat =
       mappedInput.getHeldTime() >= WORD_REPEAT_START_MS && now - lastHorizontalMoveTime >= WORD_REPEAT_INTERVAL_MS;
   const bool moveLeft = mappedInput.wasPressed(MappedInputManager::Button::ScreenLeft) ||

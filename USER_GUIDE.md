@@ -327,6 +327,18 @@ The Settings screen allows you to configure the device's behavior. There are a f
   - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
 - **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
 
+- **Tilt Page Turn** *(shown on devices with a supported motion sensor)*: Enables page-turn gestures and optionally reverses their direction. Page gestures are active only while the reading page itself is visible, not in reader menus or dictionary screens.
+
+- **Tilt To Select** *(shown on devices with a supported motion sensor)*: Enables two-dimensional tilt navigation for dictionary word selection, or for both dictionary selection and the on-screen keyboard.
+
+- **Tilt To Select Sensitivity**: Adjusts how far the device must move from its neutral position before navigation starts.
+
+- **Tilt To Select Invert Axes**: Independently reverses horizontal movement, vertical movement, or both.
+
+On the first tilt-selection screen after startup, hold the device still for about half a second while it measures the motion sensor's zero-rate offset. Later tilt-selection screens reuse that measurement and establish their current position as neutral immediately. Small tilts then generate one navigation action at a time using the orientation currently shown on screen. Horizontal movement takes priority for a diagonal tilt. Stationary sensor readings do not prevent automatic sleep.
+
+If you substantially change how you are holding the device, move to the new position and hold it briefly. A change beyond the normal selection range is automatically accepted as the new neutral after it remains settled for approximately a quarter second; a shorter excursion does not change neutral.
+
 #### 3.6.4 System
 
 - **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
@@ -628,7 +640,7 @@ If the device goes to sleep or you close the book while viewing a footnote, the 
 
 ### Dictionary Lookup
 
-Words on the current page can be looked up in an offline StarDict dictionary stored on the SD card. Copy a dictionary to the `/dictionaries/` folder, select it in **Settings → Reader → Dictionary**, then start a lookup by choosing **Look Up** in the **[Reader Menu](#5-reader-menu)** (or by holding **Confirm**, if the **Long-press Menu** setting in **[Controls Settings](#363-controls)** is set to "Dictionary"). Use **Left/Right** to highlight a word and press **Confirm** to show its definition.
+Words on the current page can be looked up in an offline StarDict dictionary stored on the SD card. Copy a dictionary to the `/dictionaries/` folder, select it in **Settings → Reader → Dictionary**, then start a lookup by choosing **Look Up** in the **[Reader Menu](#5-reader-menu)** (or by holding **Confirm**, if the **Long-press Menu** setting in **[Controls Settings](#363-controls)** is set to "Dictionary"). Use **Left/Right** to move through words, **Up/Down** to move between rows, and **Confirm** to show the definition. On devices with a supported motion sensor, the optional **Tilt To Select** control provides the same directional navigation.
 
 See [docs/dictionary.md](docs/dictionary.md) for supported formats, setup, and where to find dictionaries.
 
