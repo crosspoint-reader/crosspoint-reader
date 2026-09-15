@@ -234,6 +234,32 @@ TEST(Regression, HebrewUntouchedByShaper) {
 // Pure Latin text passes through unchanged.
 TEST(Regression, LatinPassthrough) { EXPECT_EQ(shapeVisual({'h', 'e', 'l', 'l', 'o'}), (CP{'h', 'e', 'l', 'l', 'o'})); }
 
+/* ── AE (U+06D5) final-form fallback ─────────────────────────────────────
+ * AE has no encoded presentation form; its connected (final) shape falls back
+ * to the final-form Heh (U+FEEA) so a preceding letter joins into it, while
+ * the isolated form keeps the base codepoint. AE is right-joining, so it never
+ * joins forward. Expectations are visual order (left to right). */
+
+// Standalone AE keeps its base codepoint (isolated).
+TEST(ArabicAe, IsolatedKeepsBase) { EXPECT_EQ(shapeVisual({0x06D5}), (CP{0x06D5})); }
+
+// A dual-joining letter before AE joins into it; AE takes the fallback final form.
+TEST(ArabicAe, ConnectsAfterJoiningLetter) {
+  EXPECT_EQ(shapeVisual({0x0628, 0x06D5}), (CP{0xFEEA, 0xFE91}));                  // بە
+  EXPECT_EQ(shapeVisual({0x0628, 0x06D5, 0x062A}), (CP{0xFE95, 0xFEEA, 0xFE91}));  // بەت
+  EXPECT_EQ(shapeVisual({0x0645, 0x06D5, 0x0646}), (CP{0xFEE5, 0xFEEA, 0xFEE3}));  // مەن
+}
+
+// A right-joining-only letter (alef) does not join forward, so AE stays isolated.
+TEST(ArabicAe, StaysIsolatedAfterNonForwardJoiner) {
+  EXPECT_EQ(shapeVisual({0x0627, 0x06D5}), (CP{0x06D5, 0xFE8D}));  // اە
+}
+
+// ZWNJ blocks the join: AE stays isolated (the ZWNJ is dropped from output).
+TEST(ArabicAe, StaysIsolatedAcrossZwnj) {
+  EXPECT_EQ(shapeVisual({0x0628, 0x200C, 0x06D5}), (CP{0x06D5, 0xFE8F}));  // ب‌ە
+}
+
 /* ── isTransparentMark ───────────────────────────────────────────────── */
 
 TEST(TransparentMark, RtlMarksAreTransparent) {
