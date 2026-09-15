@@ -11,10 +11,10 @@
 // APPEND ONLY: CrossPointSettings::clockTimezone persists an index into this
 // table, so reordering or removing entries retargets users' saved zones.
 struct TimezoneInfo {
-  const char* name;      // shown in the picker; city/region names stay untranslated
-  const char* posixTz;   // POSIX TZ rule, e.g. "CET-1CEST,M3.5.0,M10.5.0/3"
-  int16_t stdOffsetQ;    // standard (non-DST) offset in quarter hours, for display
-                         // and for migrating the legacy clockUtcOffsetQ setting
+  const char* name;     // shown in the picker; city/region names stay untranslated
+  const char* posixTz;  // POSIX TZ rule, e.g. "CET-1CEST,M3.5.0,M10.5.0/3"
+  int16_t stdOffsetQ;   // standard (non-DST) offset in quarter hours, for display
+                        // and for migrating the legacy clockUtcOffsetQ setting
 };
 
 namespace timezones {

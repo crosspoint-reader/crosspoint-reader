@@ -25,11 +25,8 @@ enum MenuItem {
 };
 
 const StrId menuNames[ClockSettingsActivity::ITEM_COUNT] = {
-    StrId::STR_TIMEZONE,
-    StrId::STR_CLOCK_DST,
-    StrId::STR_CLOCK_FORMAT,
-    StrId::STR_CLOCK_IN_HEADER,
-    StrId::STR_CLOCK_SYNC_NOW,
+    StrId::STR_TIMEZONE,        StrId::STR_CLOCK_DST,      StrId::STR_CLOCK_FORMAT,
+    StrId::STR_CLOCK_IN_HEADER, StrId::STR_CLOCK_SYNC_NOW,
 };
 
 const StrId dstNames[CrossPointSettings::CLOCK_DST_MODE_COUNT] = {StrId::STR_CLOCK_DST_AUTO, StrId::STR_STATE_ON,
@@ -83,8 +80,7 @@ void ClockSettingsActivity::buildScreen(UiScreen& screen) {
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   rowValues_[ITEM_TIMEZONE] = timezones::table()[timezones::activeIndex()].name;
-  const uint8_t dst =
-      SETTINGS.clockDst < CrossPointSettings::CLOCK_DST_MODE_COUNT ? SETTINGS.clockDst : uint8_t{0};
+  const uint8_t dst = SETTINGS.clockDst < CrossPointSettings::CLOCK_DST_MODE_COUNT ? SETTINGS.clockDst : uint8_t{0};
   rowValues_[ITEM_DST] = I18N.get(dstNames[dst]);
   rowValues_[ITEM_FORMAT] = SETTINGS.clockFormat == 1 ? tr(STR_CLOCK_FORMAT_12H) : tr(STR_CLOCK_FORMAT_24H);
   rowValues_[ITEM_SHOW_ON_HOME] = SETTINGS.clockShowInHeader ? tr(STR_SHOW) : tr(STR_HIDE);
@@ -111,4 +107,3 @@ void ClockSettingsActivity::buildScreen(UiScreen& screen) {
   syncListViewport(screen, props);
   screen.list(props);
 }
-
