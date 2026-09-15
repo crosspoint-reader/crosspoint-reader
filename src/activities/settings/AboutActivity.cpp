@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>
+#include <HalMemory.h>
 #include <HalTiltSensor.h>
 #include <I18n.h>
 #include <esp_mac.h>
@@ -124,8 +125,11 @@ void AboutActivity::buildScreen(UiScreen& screen) {
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   // The one live row: refreshed every repaint so it tracks the session.
+  // Default-capability heap, so PSRAM boards report their full pool.
   char buf[24];
-  snprintf(buf, sizeof(buf), "%u KB", static_cast<unsigned>(ESP.getFreeHeap() / 1024u));
+  const auto heap = HalMemory::getDefaultHeap();
+  snprintf(buf, sizeof(buf), "%u / %u KB", static_cast<unsigned>(heap.freeBytes / 1024u),
+           static_cast<unsigned>(heap.totalBytes / 1024u));
   rowValues_[ITEM_FREE_HEAP] = buf;
   for (int i = 0; i < ITEM_COUNT; i++) {
     rowItems_[i].value = rowValues_[i].c_str();
