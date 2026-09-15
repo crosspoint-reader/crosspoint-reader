@@ -193,6 +193,21 @@ void OpdsBookBrowserActivity::loop() {
   }
 }
 
+bool OpdsBookBrowserActivity::preventAutoSleep() {
+  switch (state) {
+    case BrowserState::CHECK_WIFI:
+    case BrowserState::WIFI_SELECTION:
+    case BrowserState::LOADING:
+    case BrowserState::DOWNLOADING:
+    case BrowserState::SEARCH_INPUT:
+      return true;
+    case BrowserState::BROWSING:
+    case BrowserState::ERROR:
+      return false;
+  }
+  return false;
+}
+
 void OpdsBookBrowserActivity::rootScreen(UiScreen& screen, void* user) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(user);
   switch (self->state) {
@@ -251,16 +266,8 @@ void OpdsBookBrowserActivity::buildBrowsingScreen(UiScreen& screen) {
   props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
   props.valueInset = 8;               // air between the nav chevron and the row edge
   listNav.selected = selectorIndex;
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser row height
-    // instead of FreeInkUI's touch-target-sized default (see
-    // UiListActivity::syncListViewport; this screen predates that base and
-    // syncs its own viewport directly). Book rows carry an author subtitle.
-    rowHeight = static_cast<int16_t>(UITheme::getInstance().getMetrics().listWithSubtitleRowHeight);
-    props.rowHeight = rowHeight;
-  }
-  listNav.syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, static_cast<int>(entries.size()), props);
+  props.partialTrailingRow = true;
+  screen.syncListViewport(listNav, props, static_cast<int>(entries.size()));
   screen.list(props);
 }
 

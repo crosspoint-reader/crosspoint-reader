@@ -63,7 +63,7 @@ inline void applySharedUiTheme(App& app, const freeink::ui::GfxRendererTarget& t
 // Bind the uiScale fonts before FreeInkApp's constructor derives its theme
 // metrics from the body font's line height.
 inline freeink::ui::GfxRendererTarget makeUiTarget(const GfxRenderer& renderer) {
-  freeink::ui::GfxRendererTarget target(renderer);
+  freeink::ui::GfxRendererTarget target(renderer, BoardConfig::hasTouch());
   const auto spec = uiScaleSpec();
   target.setFont(freeink::ui::GfxRendererTarget::FONT_SMALL, spec.smallFontId);
   target.setFont(freeink::ui::GfxRendererTarget::FONT_BODY, spec.bodyFontId);
@@ -101,6 +101,8 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
         return freeink::ui::bitmapFromIcon(icon_usb_32);
       case UIIcon::Bookmark:
         return freeink::ui::bitmapFromIcon(icon_bookmark_32);
+      case UIIcon::Blocks:
+        return freeink::ui::bitmapFromIcon(icon_blocks_32);
       default:
         return {};
     }
@@ -126,6 +128,8 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
       return freeink::ui::bitmapFromIcon(icon_usb_24);
     case UIIcon::Bookmark:
       return freeink::ui::bitmapFromIcon(icon_bookmark_24);
+    case UIIcon::Blocks:
+      return freeink::ui::bitmapFromIcon(icon_blocks_24);
     default:
       return {};
   }

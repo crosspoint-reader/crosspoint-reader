@@ -2,7 +2,9 @@
 #include <GfxRenderer.h>
 #include <gtest/gtest.h>
 
+#include <filesystem>
 #include <memory>
+#include <set>
 #include <string>
 
 #define class struct
@@ -40,6 +42,86 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
 
   void SetUp() override { parser.currentTextBlock = std::make_unique<ParsedText>(false); }
 };
+
+TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
+  ParsedText text(false);
+  text.addWord("a", EpdFontFamily::REGULAR);
+  text.addWord("b", EpdFontFamily::REGULAR);
+  text.addWord("c", EpdFontFamily::REGULAR);
+  text.setRubyForWordAt(2, "c");
+  size_t lines = 0;
+  text.layoutAndExtractLines(
+      renderer, 0, 20,
+      [&](std::unique_ptr<TextBlock> line, auto) {
+        ++lines;
+        EXPECT_TRUE(line->getRubyTexts().empty());
+      },
+      false);
+  EXPECT_EQ(lines, 1u);
+  const size_t retainedWords = text.size();
+  ASSERT_GT(retainedWords, 0u);
+  ASSERT_LT(retainedWords, 3u);
+  text.layoutAndExtractLines(renderer, 0, 200, [&](std::unique_ptr<TextBlock> line, auto) {
+    ++lines;
+    ASSERT_EQ(line->getRubyTexts().size(), retainedWords);
+    EXPECT_EQ(line->getRubyTexts().back(), "c");
+    for (size_t i = 0; i + 1 < retainedWords; ++i) EXPECT_TRUE(line->getRubyTexts()[i].empty());
+  });
+  EXPECT_EQ(lines, 2u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, UnequalTableCellsAndRubySurvivePageBreaks) {
+  parser.viewportWidth = 240;
+  parser.viewportHeight = 32;
+  parser.tableRowCells.reserve(2);
+  std::multiset<std::string> expected;
+  for (int column = 0; column < 2; ++column) {
+    auto cell = std::make_unique<ParsedText>(false);
+    for (int index = 0; index < (column == 0 ? 30 : 3); ++index) {
+      const auto word = std::string(column == 0 ? "left" : "right") + std::to_string(index);
+      expected.insert(word);
+      cell->addWord(word, EpdFontFamily::REGULAR);
+    }
+    if (column == 0) cell->setRubyGroupAt(0, 2, "reading");
+    parser.tableRowCells.push_back(std::move(cell));
+  }
+  std::multiset<std::string> actual;
+  unsigned pages = 0;
+  unsigned rubyLines = 0;
+  auto inspect = [&](std::unique_ptr<Page> page, auto, auto, auto) {
+    ++pages;
+    for (const auto& element : page->elements) {
+      if (element->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*element);
+      const auto& block = *line.getBlock();
+      ASSERT_TRUE(block.valid());
+      EXPECT_LE(element->yPos + 16 + block.getRubyShift(12), parser.viewportHeight);
+      rubyLines += block.hasRuby();
+      for (uint16_t word = 0; word < block.wordCount(); ++word) actual.insert(block.wordText(word));
+    }
+  };
+  parser.completePageFn = inspect;
+  parser.finishTableRow();
+  ASSERT_NE(parser.currentPage, nullptr);
+  inspect(std::move(parser.currentPage), 0, 0, 0);
+  EXPECT_GT(pages, 2u);
+  EXPECT_EQ(rubyLines, 1u);
+  EXPECT_EQ(actual, expected);
+  for (const auto& lines : parser.tableCellLines) EXPECT_TRUE(lines.empty());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PageImageDeserializeRejectsMissingImageBlock) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-missing-image-cache.bin";
+  {
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    const int16_t coordinates[] = {0, 0};
+    output.write(coordinates, sizeof(coordinates));
+  }
+  HalFile input;
+  ASSERT_TRUE(input.open(path.c_str(), "rb"));
+  EXPECT_EQ(PageImage::deserialize(input), nullptr);
+}
 
 TEST_P(ChapterHtmlSlimParserTest, KeepsCssVerticalAlignAndInternalLinkMetadata) {
   const char* verticalAlign = GetParam();

@@ -484,22 +484,14 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // Tap opens/navigates; long-press prompts delete (physical buttons stay in loop()).
   props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.valueInset = 8;  // air between the extension and the row edge
-  // File names in the small font, wrapping onto a second line inside the same
-  // row height (rowHeight is derived from the small font itself: two of its
-  // lines plus 8, so two small lines always fit), so long names show more
-  // text. maxLines=2 doubles as the caller-owned marker: an all-default
-  // smallText fails textStyleUnset and Screen::list() would substitute
-  // bodyText back (FONT_SLOT_SMALL is 0).
+  // Names use up to two small-font lines; shared list layout sizes each row.
   fui::TextStyle label = screen.theme().smallText;
   label.maxLines = 2;
   props.labelText = label;
+
   // The trailing value here is just the short extension: skip the balanced
   // 60%-band wrap cap and let both name lines run the full width before it.
   props.balanceWrappedLabelWithValue = false;
-  // Wrapped two-line names shrink how many rows fit a page, so the last row
-  // of a page can end up in leftover space: draw it as a partial preview so
-  // files past the fold are visibly present, not silently absent.
-  props.partialTrailingRow = true;
   syncListViewport(screen, props);
   screen.list(props);
 }

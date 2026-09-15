@@ -45,11 +45,13 @@ class SdCardFont {
   // styleMask: bitmask of styles to prewarm (bit 0=regular, 1=bold, 2=italic, 3=bolditalic).
   // Default 0x0F = all present styles.
   // When metadataOnly=true, only glyph metrics are loaded (no bitmap data).
-  // Accumulative: codepoints already resident from earlier prewarms stay
-  // resident (the rebuild unions them with the request, up to MAX_PAGE_GLYPHS),
-  // so per-string callers converge instead of evicting each other.
+  // Incremental string prewarms accumulate up to MAX_PAGE_GLYPHS so adjacent
+  // UI labels do not evict each other.
+  // Complete render scans pass accumulate=false: rebuild for this page only,
+  // while retaining buffers and allowing a resident subset hit.
   // Returns number of glyphs that couldn't be loaded (0 on full success).
-  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false, bool loadKernLig = true);
+  int prewarm(const char* utf8Text, uint8_t styleMask = 0x0F, bool metadataOnly = false, bool loadKernLig = true,
+              bool accumulate = true);
 
   // Multi-string variant: extracts codepoints from `textCount` strings fetched
   // one at a time through `getter` (C-style callback: no std::function bloat,
@@ -62,7 +64,7 @@ class SdCardFont {
   // heap-tight screens. Reader-quality paths keep the default.
   using TextGetter = const char* (*)(const void* ctx, uint32_t index);
   int prewarm(TextGetter getter, const void* ctx, uint32_t textCount, uint8_t styleMask = 0x0F,
-              bool metadataOnly = false, bool loadKernLig = true);
+              bool metadataOnly = false, bool loadKernLig = true, bool accumulate = true);
 
   // Build a compact advance-only table for layout measurement.
   // Extracts ALL unique codepoints from words (no MAX_PAGE_GLYPHS cap),
@@ -87,7 +89,7 @@ class SdCardFont {
   void clearCache();
 
   // Drop the persistent advance cache. Call when unloading the SD font or
-  // when font/size/family/glyph-table state changes.
+  // when font/size/family/glyph-table state changes, or to recover a failed bitmap allocation.
   void clearPersistentCache();
 
   // Release every rebuildable cache while keeping the font loaded and usable:
@@ -325,7 +327,8 @@ class SdCardFont {
   template <typename Iter>
   int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
                              const char* extraText = nullptr);
-  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, bool loadKernLig);
+  int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, bool loadKernLig,
+                   bool accumulate);
 
   // Global helpers
   void freeAll();

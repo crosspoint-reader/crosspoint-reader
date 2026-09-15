@@ -17,13 +17,20 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - pio_env: gh_release
+          - release_env: gh_release
+            rc_env: gh_release_rc
             device: x3-x4
-          - pio_env: sticky-gh_release
+          - release_env: sticky-gh_release
+            rc_env: sticky-gh_release_rc
             device: sticky
-          - pio_env: x4pro-gh_release
+          - release_env: x4pro-gh_release
+            rc_env: x4pro-gh_release_rc
             device: x4pro
-          - pio_env: papermono-gh_release
+          - release_env: x4c-gh_release
+            rc_env: x4c-gh_release_rc
+            device: x4c
+          - release_env: papermono-gh_release
+            rc_env: papermono-gh_release_rc
             device: papermono
     steps:
       - uses: actions/checkout@v6
@@ -37,7 +44,11 @@ jobs:
         run: |
           version="${RELEASE_TAG#v}"
           configured_version="$(sed -n 's/^version = //p' platformio.ini | head -n1)"
-          test "$version" = "$configured_version"
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            test "$version" = "${configured_version}rc"
+          else
+            test "$version" = "$configured_version"
+          fi
 
       - uses: actions/setup-python@v6
         with:
@@ -61,20 +72,23 @@ jobs:
             "reedsolo>=1.5.3,<1.8" "esp-idf-size>=2.0.0" "esp-coredump>=1.14.0"
 
       - name: Build CrossPoint
-        run: pio run -e ${{ matrix.pio_env }} -j1
+        env:
+          PIO_ENV: ${{ github.event.release.prerelease && matrix.rc_env || matrix.release_env }}
+        run: CROSSPOINT_RC_HASH="$(git rev-parse --short=7 HEAD)" pio run -e "$PIO_ENV" -j1
 
       - name: Prepare firmware asset
         id: asset
         env:
+          PIO_ENV: ${{ github.event.release.prerelease && matrix.rc_env || matrix.release_env }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version="${RELEASE_TAG#v}"
           asset="crosspoint-${version}-${{ matrix.device }}.bin"
-          cp ".pio/build/${{ matrix.pio_env }}/firmware.bin" "$asset"
+          cp ".pio/build/${PIO_ENV}/firmware.bin" "$asset"
           echo "name=$asset" >> "$GITHUB_OUTPUT"
 
       - name: Stage firmware asset
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.asset.outputs.name }}
           path: ${{ steps.asset.outputs.name }}
@@ -101,9 +115,9 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           version="${RELEASE_TAG#v}"
-          for device in x3-x4 sticky x4pro papermono; do
+          for device in x3-x4 sticky x4pro x4c papermono; do
             test -f "dist/crosspoint-${version}-${device}.bin"
           done
-          test "$(find dist -maxdepth 1 -type f -name 'crosspoint-*.bin' | wc -l)" -eq 4
+          test "$(find dist -maxdepth 1 -type f -name 'crosspoint-*.bin' | wc -l)" -eq 5
           gh release upload "$RELEASE_TAG" dist/crosspoint-*.bin \
             --repo "$GITHUB_REPOSITORY" --clobber
