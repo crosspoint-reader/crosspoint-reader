@@ -26,6 +26,7 @@ enum class SettingAction {
   DownloadFonts,
   TextSettings,
   KeyboardLayouts,
+  About,
 };
 
 struct SettingInfo {
