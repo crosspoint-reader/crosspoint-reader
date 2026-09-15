@@ -6,7 +6,6 @@
 #include <HalFrontlight.h>
 #include <HalMemory.h>
 #include <HalTiltSensor.h>
-#include <I18n.h>
 #include <esp_mac.h>
 
 #include <cstdio>
@@ -32,10 +31,13 @@ enum MenuItem {
   ITEM_MAC,
 };
 
-const StrId menuNames[AboutActivity::ITEM_COUNT] = {
-    StrId::STR_ABOUT_DEVICE,  StrId::STR_ABOUT_FIRMWARE,   StrId::STR_ABOUT_CHIP,      StrId::STR_ABOUT_FLASH,
-    StrId::STR_ABOUT_DISPLAY, StrId::STR_ABOUT_RESOLUTION, StrId::STR_TOUCH_TOGGLE,    StrId::STR_ABOUT_FRONTLIGHT,
-    StrId::STR_ABOUT_RTC,     StrId::STR_ABOUT_IMU,        StrId::STR_ABOUT_FREE_HEAP, StrId::STR_ABOUT_MAC,
+// Deliberately hardcoded English, exempt from the tr() rule: support reads
+// these screenshots across every device language, so the labels must be
+// identical on every unit.
+const char* const menuNames[AboutActivity::ITEM_COUNT] = {
+    "Device",      "Firmware",    "Chip",       "Flash", "Display Controller",
+    "Resolution",  "Touch",       "Frontlight", "RTC",   "Tilt Sensor (IMU)",
+    "Free Memory", "MAC Address",
 };
 
 // Chip part numbers, not user prose — deliberately untranslated.
@@ -83,12 +85,12 @@ const char* touchControllerName(const BoardConfig::TouchController c) {
 AboutActivity::AboutActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
     : UiListActivity("About", renderer, mappedInput) {}
 
-const char* AboutActivity::headerTitle() const { return tr(STR_ABOUT); }
+const char* AboutActivity::headerTitle() const { return "About"; }
 
 void AboutActivity::onEnter() {
   UiListActivity::onEnter();
   for (int i = 0; i < ITEM_COUNT; i++) {
-    rowItems_[i].label = I18N.get(menuNames[i]);
+    rowItems_[i].label = menuNames[i];
     rowItems_[i].actionValue = static_cast<int16_t>(i);
   }
 
@@ -108,10 +110,10 @@ void AboutActivity::onEnter() {
            static_cast<unsigned>(BoardConfig::ACTIVE.displayHeight));
   rowValues_[ITEM_RESOLUTION] = buf;
   const char* touch = touchControllerName(BoardConfig::ACTIVE.touch.controller);
-  rowValues_[ITEM_TOUCH] = touch ? touch : tr(STR_NO);
-  rowValues_[ITEM_FRONTLIGHT] = Frontlight.present() ? tr(STR_YES) : tr(STR_NO);
-  rowValues_[ITEM_RTC] = halClock.isAvailable() ? tr(STR_YES) : tr(STR_NO);
-  rowValues_[ITEM_IMU] = halTiltSensor.isAvailable() ? tr(STR_YES) : tr(STR_NO);
+  rowValues_[ITEM_TOUCH] = touch ? touch : "No";
+  rowValues_[ITEM_FRONTLIGHT] = Frontlight.present() ? "Yes" : "No";
+  rowValues_[ITEM_RTC] = halClock.isAvailable() ? "Yes" : "No";
+  rowValues_[ITEM_IMU] = halTiltSensor.isAvailable() ? "Yes" : "No";
   uint8_t mac[6] = {0};
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   snprintf(buf, sizeof(buf), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
