@@ -74,8 +74,8 @@ class EpubReaderActivity final : public ReaderActivity {
   int lastSavedPage = -1;
   int lastSavedPageCount = -1;
 
-  static constexpr int BUILD_PAGES_PER_CHUNK = 8;
-  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 2;
+  static constexpr int BUILD_PAGES_PER_CHUNK = 4;
+  static constexpr int BACKGROUND_BUILD_PAGES_PER_TICK = 1;
   // Skip background build ticks below these floors. The parse path grows word
   // vectors of heap strings — throwing allocations that abort() on OOM under
   // -fno-exceptions. The tick is deferrable work: page-turn transients free up
@@ -83,10 +83,10 @@ class EpubReaderActivity final : public ReaderActivity {
   // steady reading with BLE resident runs at ~29.4 KB free / ~16.4 KB largest
   // block (ticks are safe there), while the field crash happened at 34.7 KB free
   // with an ~11 KB largest block.
-  static constexpr size_t BACKGROUND_BUILD_MIN_FREE_HEAP = 26 * 1024;
+  static constexpr size_t BACKGROUND_BUILD_MIN_FREE_HEAP = 34 * 1024;
   // Fragmentation floor for the same gate: free heap says how much memory exists;
   // maxAlloc says whether any single allocation can actually have it.
-  static constexpr size_t BACKGROUND_BUILD_MIN_MAX_ALLOC = 13 * 1024;
+  static constexpr size_t BACKGROUND_BUILD_MIN_MAX_ALLOC = 20 * 1024;
   // Gate for a background build tick: true when the heap can take parse allocations.
   // When BLE is what's squeezing the heap, sheds it (the lifecycle then restarts it
   // behind its gates) instead of stalling the build forever below the floors.
@@ -96,7 +96,7 @@ class EpubReaderActivity final : public ReaderActivity {
   // vectors/strings) and glyph caching allocate through throwing paths that abort()
   // on OOM; below this floor render() lends the framebuffer (and the restore path
   // sheds BLE if reallocation fails) before touching the page.
-  static constexpr size_t RENDER_MIN_FREE_HEAP = 24 * 1024;
+  static constexpr size_t RENDER_MIN_FREE_HEAP = 30 * 1024;
   // Heap floor for entering a section build. The layout code allocates freely (line-break DP
   // arrays sized by word count, CSS rule lookups, glyph buffers) and under -fno-exceptions an
   // OOM there abort()s the firmware instead of failing cleanly -- so a starved heap must be
@@ -104,7 +104,7 @@ class EpubReaderActivity final : public ReaderActivity {
   // resident; abort() observed at ~11 KB free. CSS styling already degrades below 48 KB
   // (MIN_FREE_HEAP_FOR_CSS), so 40 KB trades a few early BLE teardowns for not crashing.
   static constexpr size_t BUILD_MIN_FREE_HEAP = 40 * 1024;
-  static constexpr int BUILD_WINDOW_AHEAD = 5;
+  static constexpr int BUILD_WINDOW_AHEAD = 4;
   static constexpr int PARTIAL_REBUILD_START_MARGIN = 15;
   static constexpr int BUILD_POPUP_PAGE_THRESHOLD = 20;
   static constexpr size_t BUILD_POPUP_BYTE_THRESHOLD = 96 * 1024;

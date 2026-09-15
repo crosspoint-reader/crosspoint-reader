@@ -332,9 +332,8 @@ bool EpubReaderActivity::buildTickHeapGate() {
   // just wait: page-turn transients free up between turns and the tick retries
   // every loop pass.
   if (BleHid.isRunning()) {
-    LOG_INF("ERS", "Background build needs heap (free=%u maxAlloc=%u); freeing BLE RAM", (unsigned)freeHeap,
+    LOG_INF("ERS", "Background build paused for heap (free=%u maxAlloc=%u); keeping BLE connected", (unsigned)freeHeap,
             (unsigned)maxBlock);
-    bleinput::stop();
   }
   buildHeapPaused = true;
   return false;
@@ -422,9 +421,10 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  const int partialResumeMargin = BleHid.isRunning() ? 4 : PARTIAL_REBUILD_START_MARGIN;
   if (section && !section->isBuilding() && section->isPartial() && !RenderLock::peek() && buildViewportWidth > 0 &&
       !partialRebuildStartFailed &&
-      section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
+      section->currentPage + partialResumeMargin >= static_cast<int>(section->pageCount)) {
     RenderLock lock;
     const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
     if (!section->startBuild(buildSpec)) {
@@ -1362,7 +1362,8 @@ void EpubReaderActivity::renderBook() {
     }
   }
 
-  if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
+  if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount) && !BleHid.isRunning() &&
+      renderer.hasFrameBuffer()) {
     GUI.drawPopup(renderer, tr(STR_INDEXING));
     pagesUntilFullRefresh = 1;
   }
@@ -1402,10 +1403,14 @@ void EpubReaderActivity::renderBook() {
 
   applyDeferredReposition();
 
-  const auto restoreFramebufferForDraw = [&buildLoan]() {
+  const auto restoreFramebufferForDraw = [this, &buildLoan]() {
     if (!buildLoan.restore()) {
       ESP.restart();
       return false;
+    }
+    if ((ESP.getFreeHeap() < RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() < BACKGROUND_BUILD_MIN_MAX_ALLOC) &&
+        section && section->isBuilding()) {
+      section->suspendBuild();
     }
     return true;
   };
@@ -1437,6 +1442,12 @@ void EpubReaderActivity::renderBook() {
   updateBookmarkFlag();
 
   {
+    if (section->isBuilding()) {
+      section->suspendBuild();
+    }
+    if (ESP.getFreeHeap() < RENDER_MIN_FREE_HEAP || ESP.getMaxAllocHeap() < BACKGROUND_BUILD_MIN_MAX_ALLOC) {
+      buildLoan.release();
+    }
     auto p = section->loadPage(section->currentPage);
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
