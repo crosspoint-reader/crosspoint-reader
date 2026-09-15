@@ -32,10 +32,9 @@ enum MenuItem {
 };
 
 const StrId menuNames[AboutActivity::ITEM_COUNT] = {
-    StrId::STR_ABOUT_DEVICE,     StrId::STR_ABOUT_FIRMWARE,   StrId::STR_ABOUT_CHIP,
-    StrId::STR_ABOUT_FLASH,      StrId::STR_ABOUT_DISPLAY,    StrId::STR_ABOUT_RESOLUTION,
-    StrId::STR_TOUCH_TOGGLE,     StrId::STR_ABOUT_FRONTLIGHT, StrId::STR_ABOUT_RTC,
-    StrId::STR_ABOUT_IMU,        StrId::STR_ABOUT_FREE_HEAP,  StrId::STR_ABOUT_MAC,
+    StrId::STR_ABOUT_DEVICE,  StrId::STR_ABOUT_FIRMWARE,   StrId::STR_ABOUT_CHIP,      StrId::STR_ABOUT_FLASH,
+    StrId::STR_ABOUT_DISPLAY, StrId::STR_ABOUT_RESOLUTION, StrId::STR_TOUCH_TOGGLE,    StrId::STR_ABOUT_FRONTLIGHT,
+    StrId::STR_ABOUT_RTC,     StrId::STR_ABOUT_IMU,        StrId::STR_ABOUT_FREE_HEAP, StrId::STR_ABOUT_MAC,
 };
 
 // Chip part numbers, not user prose — deliberately untranslated.
