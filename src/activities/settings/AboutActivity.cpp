@@ -4,7 +4,6 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalFrontlight.h>
-#include <HalMemory.h>
 #include <HalTiltSensor.h>
 #include <esp_mac.h>
 
@@ -27,7 +26,6 @@ enum MenuItem {
   ITEM_FRONTLIGHT,
   ITEM_RTC,
   ITEM_IMU,
-  ITEM_FREE_HEAP,
   ITEM_MAC,
 };
 
@@ -35,9 +33,8 @@ enum MenuItem {
 // these screenshots across every device language, so the labels must be
 // identical on every unit.
 const char* const menuNames[AboutActivity::ITEM_COUNT] = {
-    "Device",      "Firmware",    "Chip",       "Flash", "Display Controller",
-    "Resolution",  "Touch",       "Frontlight", "RTC",   "Tilt Sensor (IMU)",
-    "Free Memory", "MAC Address",
+    "Device", "Firmware",          "Chip",        "Flash", "Display Controller", "Resolution", "Touch", "Frontlight",
+    "RTC",    "Tilt Sensor (IMU)", "MAC Address",
 };
 
 // Chip part numbers, not user prose — deliberately untranslated.
@@ -95,7 +92,7 @@ void AboutActivity::onEnter() {
   }
 
   char buf[32];
-  // Everything except the heap is fixed after boot; fill it once here.
+  // Hardware and firmware information is fixed after boot; fill it once here.
   // BoardConfig::ACTIVE reflects RUNTIME detection: selectDevice() picked the
   // profile and applyXteinkDisplayController() may have promoted the display
   // controller to the panel actually found on the bus.
@@ -126,13 +123,6 @@ void AboutActivity::buildScreen(UiScreen& screen) {
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  // The one live row: refreshed every repaint so it tracks the session.
-  // Default-capability heap, so PSRAM boards report their full pool.
-  char buf[24];
-  const auto heap = HalMemory::getDefaultHeap();
-  snprintf(buf, sizeof(buf), "%u / %u KB", static_cast<unsigned>(heap.freeBytes / 1024u),
-           static_cast<unsigned>(heap.totalBytes / 1024u));
-  rowValues_[ITEM_FREE_HEAP] = buf;
   for (int i = 0; i < ITEM_COUNT; i++) {
     rowItems_[i].value = rowValues_[i].c_str();
   }
