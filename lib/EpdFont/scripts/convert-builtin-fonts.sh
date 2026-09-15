@@ -72,9 +72,10 @@ for size in ${UI_FONT_SIZES[@]}; do
     # are filled from it while every glyph Ubuntu already has stays unchanged
     # (fontstack is ordered by descending priority).
     viet_path="../builtinFonts/source/Ubuntu/Ubuntu-Vietnamese-${style}.ttf"
+    notosans_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path \
-      --additional-intervals 0x05D0,0x05EA "${ARABIC_INTERVALS[@]}" > $output_path
+    python fontconvert.py $font_name $size $font_path $hebrew_path $arabic_path $viet_path $notosans_path \
+      --additional-intervals 0x05D0,0x05EA --additional-intervals 0x25CC,0x25CC "${ARABIC_INTERVALS[@]}" > $output_path
     echo "Generated $output_path"
   done
 done
