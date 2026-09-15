@@ -81,16 +81,20 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
     return result;
   }
 
-  if (SETTINGS.touchReaderControls == CrossPointSettings::TOUCH_READER_SWIPE) {
-    // Horizontal swipes turn pages; taps remain free for the centered reader-menu
-    // zone. A slow swipe never becomes a long-press chapter skip.
+  if (SETTINGS.touchReaderControls == CrossPointSettings::TOUCH_READER_SWIPE ||
+      SETTINGS.touchReaderControls == CrossPointSettings::TOUCH_READER_TAP_SWIPE) {
+    // Horizontal swipes turn pages. A swipe never falls through to tap handling
+    // or becomes a long-press chapter skip.
     const auto dir = input.wasSwipe();
     if (dir == MappedInputManager::SwipeDir::Left) {
       result.next = true;
     } else if (dir == MappedInputManager::SwipeDir::Right) {
       result.prev = true;
     }
-    return result;
+    if (dir != MappedInputManager::SwipeDir::None ||
+        SETTINGS.touchReaderControls == CrossPointSettings::TOUCH_READER_SWIPE) {
+      return result;
+    }
   }
 
   int x = 0;
