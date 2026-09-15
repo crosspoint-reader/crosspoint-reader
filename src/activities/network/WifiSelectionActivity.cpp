@@ -517,11 +517,10 @@ void WifiSelectionActivity::checkConnectionStatus() {
             WiFi.RSSI());
 #endif
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
-      if (halClock.syncFromNTP()) {
+    // Bootstrap system UTC for TLS after cold boot, including devices without RTC.
+    // The persisted flag tracks RTC setup only; it does not validate the system clock.
+    if (!halClock.hasValidSystemTime() || (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced)) {
+      if (halClock.syncFromNTP() && halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();
       }

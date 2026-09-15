@@ -34,9 +34,12 @@ class HalClock {
   // Returns false if RTC is not available.
   bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
 
-  // Sync the RTC from an NTP server. Requires WiFi to be connected.
+  // TLS needs system UTC even on devices without an external RTC.
+  bool hasValidSystemTime() const;
+
+  // Sync system UTC and the RTC, if present. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.
-  // Returns true if the RTC was successfully updated.
+  // Returns true after a valid NTP response and, when present, a successful RTC write.
   //
   // Debouncing (skip if already synced once) is enforced by the caller, not here,
   // so the HAL stays free of any app-layer settings dependency.
