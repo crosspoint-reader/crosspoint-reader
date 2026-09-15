@@ -93,6 +93,9 @@ class EpubReaderActivity final : public ReaderActivity {
   struct SavedPosition {
     int spineIndex;
     int pageNumber;
+    // Footnote entries mark an excursion whose origin is the reading position
+    // to restore on exit; link entries only record a Back target.
+    bool isFootnote = false;
   };
   static constexpr int MAX_FOOTNOTE_DEPTH = 3;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
@@ -162,7 +165,10 @@ class EpubReaderActivity final : public ReaderActivity {
   void addBookmark();
   void updateBookmarkFlag();
 
-  void navigateToHref(const std::string& href, bool savePosition = false);
+  // Footnote jumps restore their saved origin when the reader exits; link jumps
+  // are reading navigation and exit on the per-render saved progress. Defaults
+  // to footnote semantics for callers that don't specify.
+  void navigateToHref(const std::string& href, bool savePosition = false, bool isFootnoteJump = true);
   void restoreSavedPosition();
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
