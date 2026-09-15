@@ -108,6 +108,10 @@ bool BookMetadataCache::beginTocPass() {
     return false;
   }
 
+  spineFilenameIndex.clear();
+  spineFilenameIndex.shrink_to_fit();
+  spineFilenameIndexBuilt = false;
+
   if (spineCount >= LARGE_SPINE_THRESHOLD) {
     spineHrefIndex.clear();
     spineHrefIndex.resize(spineCount);
@@ -149,6 +153,10 @@ bool BookMetadataCache::endTocPass() {
   spineHrefIndex.clear();
   spineHrefIndex.shrink_to_fit();
   useSpineHrefIndex = false;
+
+  spineFilenameIndex.clear();
+  spineFilenameIndex.shrink_to_fit();
+  spineFilenameIndexBuilt = false;
 
   return flushed;
 }
@@ -403,6 +411,58 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
   spineCount++;
 }
 
+std::string BookMetadataCache::filenameOf(const std::string& path) {
+  const size_t slash = path.find_last_of('/');
+  return slash != std::string::npos ? path.substr(slash + 1) : path;
+}
+
+// Last-resort match for a TOC href that does not resolve against any spine href.
+// Real books ship nav documents whose links are relative to a directory the nav file
+// does not live in (nav.xhtml at OEBPS/ pointing at "chuong-0001.xhtml" while the spine
+// carries "text/chuong-0001.xhtml"), which would leave every contents row dead. In-book
+// links already accept a filename-only match (Epub::resolveHrefToSpineIndex), so the
+// contents index is no less forgiving.
+//
+// The index is built on the first exact-match miss and reused for the rest of the pass:
+// a well-formed book never builds it, and a book whose nav is off by a directory (where
+// every entry misses) walks the spine once rather than once per entry.
+int16_t BookMetadataCache::findSpineIndexByFilename(const std::string& href) {
+  const std::string filename = filenameOf(href);
+  if (filename.empty() || !spineFile) return -1;
+
+  // spineIndex is part of the ordering so that when two spine items share a filename
+  // (same name in different directories) the lookup lands on the earliest one, matching
+  // the spine-order scan that Epub::resolveHrefToSpineIndex does for in-book links.
+  const auto orderByHash = [](const SpineFilenameIndexEntry& a, const SpineFilenameIndexEntry& b) {
+    if (a.filenameHash != b.filenameHash) return a.filenameHash < b.filenameHash;
+    if (a.filenameLen != b.filenameLen) return a.filenameLen < b.filenameLen;
+    return a.spineIndex < b.spineIndex;
+  };
+
+  if (!spineFilenameIndexBuilt) {
+    spineFilenameIndexBuilt = true;  // one build per TOC pass, whether or not anything matches
+    spineFilenameIndex.clear();
+    spineFilenameIndex.resize(spineCount);
+    spineFile.seek(0);
+    for (int i = 0; i < spineCount; i++) {
+      const std::string name = filenameOf(readSpineEntry(spineFile).href);
+      spineFilenameIndex[i] =
+          SpineFilenameIndexEntry{fnvHash64(name), static_cast<uint16_t>(name.size()), static_cast<int16_t>(i)};
+    }
+    spineFile.seek(0);
+    std::sort(spineFilenameIndex.begin(), spineFilenameIndex.end(), orderByHash);
+    LOG_DBG("BMC", "Built spine filename index for %d spine items", spineCount);
+  }
+
+  const SpineFilenameIndexEntry target{fnvHash64(filename), static_cast<uint16_t>(filename.size()), 0};
+  const auto it = std::lower_bound(spineFilenameIndex.begin(), spineFilenameIndex.end(), target, orderByHash);
+  if (it != spineFilenameIndex.end() && it->filenameHash == target.filenameHash &&
+      it->filenameLen == target.filenameLen) {
+    return it->spineIndex;
+  }
+  return -1;
+}
+
 void BookMetadataCache::createTocEntry(const std::string& title, const std::string& href, const std::string& anchor,
                                        const uint8_t level) {
   if (!buildMode || !tocFile || !spineFile) {
@@ -427,9 +487,6 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
       break;
     }
 
-    if (spineIndex == -1) {
-      LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
-    }
   } else {
     spineFile.seek(0);
     for (int i = 0; i < spineCount; i++) {
@@ -439,9 +496,13 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
         break;
       }
     }
-    if (spineIndex == -1) {
-      LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
-    }
+  }
+
+  if (spineIndex == -1) {
+    spineIndex = findSpineIndexByFilename(href);
+  }
+  if (spineIndex == -1) {
+    LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
   }
 
   // Compose the title to NFC at index time so the cache stores precomposed glyphs;
