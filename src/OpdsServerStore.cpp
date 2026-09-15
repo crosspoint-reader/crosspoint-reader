@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "util/OpdsFilename.h"
+
 void OpdsServerStore::toJson(JsonDocument& doc) const {
   JsonArray arr = doc["servers"].to<JsonArray>();
   for (const auto& server : servers) {
@@ -13,6 +15,7 @@ void OpdsServerStore::toJson(JsonDocument& doc) const {
     obj["name"] = server.name;
     obj["url"] = server.url;
     obj["username"] = server.username;
+    obj["downloadFolder"] = server.downloadFolder;
     obj["password_obf"] = obfuscation::obfuscateToBase64(server.password);
   }
 }
@@ -31,6 +34,11 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
     server.name = obj["name"] | "";
     server.url = obj["url"] | "";
     server.username = obj["username"] | "";
+    // Absent on files written before per-server folders existed; empty then
+    // defers to the global setting, so no migration is needed. Re-normalized
+    // here too, in case the file was ever hand-edited or written by another
+    // client without going through normalizeOpdsFolder() first.
+    server.downloadFolder = normalizeOpdsFolder(obj["downloadFolder"] | "");
     server.password = extractPassword(obj, needsResave);
     servers.push_back(std::move(server));
   }

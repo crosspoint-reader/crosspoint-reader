@@ -20,18 +20,6 @@
 namespace fui = freeink::ui;
 
 namespace {
-// Normalizes a user-typed folder: trims spaces, "" => SD root, otherwise a
-// single leading '/' and no trailing '/'. Cold path (runs once per edit).
-std::string normalizeFolder(std::string v) {
-  while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
-  while (!v.empty() && (v.back() == ' ' || v.back() == '\t')) v.pop_back();
-  if (v.empty()) return "";
-  if (v.front() != '/') v.insert(v.begin(), '/');
-  while (v.size() > 1 && v.back() == '/') v.pop_back();
-  if (v == "/") return "";  // a bare slash is SD root, same as empty
-  return v;
-}
-
 // Label shown for the current OPDS filename format in the list subtitle.
 StrId opdsFormatLabel(uint8_t format) {
   switch (format) {
@@ -92,7 +80,7 @@ void OpdsServerListActivity::rebuildRowItems() {
 
   if (!pickerMode) {
     fui::ListItem folder;
-    folder.label = tr(STR_OPDS_DOWNLOAD_FOLDER);
+    folder.label = tr(STR_OPDS_DEFAULT_DOWNLOAD_FOLDER);
     folder.actionValue = static_cast<int16_t>(serverCount + 1);
     rowItems_.push_back(folder);  // subtitle refreshed per render below
 
@@ -150,12 +138,12 @@ void OpdsServerListActivity::handleSelection() {
     return;
   }
 
-  // Index layout: [servers 0..serverCount-1], [Add Server], [Download folder], [Filename format].
+  // Index layout: [servers 0..serverCount-1], [Add Server], [Default download folder], [Filename format].
   if (nav.selected == serverCount + 1) {
     auto folderHandler = [this](const ActivityResult& result) {
       if (!result.isCancelled) {
         const auto& kb = std::get<KeyboardResult>(result.data);
-        const std::string norm = normalizeFolder(kb.text);
+        const std::string norm = normalizeOpdsFolder(kb.text);
         strncpy(SETTINGS.opdsDownloadFolder, norm.c_str(), sizeof(SETTINGS.opdsDownloadFolder) - 1);
         SETTINGS.opdsDownloadFolder[sizeof(SETTINGS.opdsDownloadFolder) - 1] = '\0';
         SETTINGS.saveToFile();
@@ -163,7 +151,7 @@ void OpdsServerListActivity::handleSelection() {
       }
     };
     startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DOWNLOAD_FOLDER),
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_DEFAULT_DOWNLOAD_FOLDER),
                                                 std::string(SETTINGS.opdsDownloadFolder), 63, InputType::Text),
         folderHandler);
     return;
