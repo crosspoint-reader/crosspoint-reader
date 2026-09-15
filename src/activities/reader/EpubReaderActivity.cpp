@@ -138,6 +138,18 @@ void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string&
     return;
   }
 
+  const std::string rightsSrcPath = srcPath + ".rights";
+  if (Storage.exists(rightsSrcPath.c_str())) {
+    const std::string rightsDstPath = dstPath + ".rights";
+    if (!Storage.rename(rightsSrcPath.c_str(), rightsDstPath.c_str())) {
+      LOG_ERR("ERS", "Failed to move rights file %s -> %s", rightsSrcPath.c_str(), rightsDstPath.c_str());
+      if (!Storage.rename(dstPath.c_str(), srcPath.c_str())) {
+        LOG_ERR("ERS", "Failed to restore epub after rights move failure: %s -> %s", dstPath.c_str(), srcPath.c_str());
+      }
+      return;
+    }
+  }
+
   const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));
   if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
     if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
