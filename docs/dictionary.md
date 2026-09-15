@@ -1,64 +1,61 @@
-# Dictionary
+# Dictionary lookup
 
-Look up words while reading an EPUB using an offline StarDict dictionary stored on the SD card.
+You can look up words in an EPUB without an internet connection. A dictionary is a set of word definitions that you save on the SD card.
 
-## Supported Format
+## Get a dictionary
 
-The reader supports **StarDict** dictionaries. When searching for dictionaries online, look for "StarDict format" or files with `.dict`, `.idx`, and `.ifo` extensions.
+CrossPoint uses **StarDict** dictionaries. Search for "StarDict format" or for files named `.dict`, `.idx`, and `.ifo`.
 
 A dictionary folder must contain:
 
-- `.idx` — word index (required, **must be uncompressed** — a `.idx.gz` will not work; decompress it on your computer with `gzip -d` first)
-- `.dict` or `.dict.dz` — definition data (`.dict.dz` is supported as-is; entries are decompressed on the fly during lookup)
-- `.syn` — synonym index (optional; maps alternate spellings and irregular forms to their headword)
-- `.ifo` — metadata (optional)
+- `.idx` is the word list. It is required and must not be compressed. A `.idx.gz` file does not work.
+- `.dict` or `.dict.dz` contains the definitions.
+- `.syn` is optional. It links alternative spellings and word forms to a main word.
+- `.ifo` is optional. It describes the dictionary.
 
-Not supported: dictionaries with 64-bit index offsets (`idxoffsetbits=64` in the `.ifo` — rare, and rejected with an error).
+CrossPoint does not support dictionaries with `idxoffsetbits=64` in the `.ifo` file.
 
-## Setting Up a Dictionary
+## Put it on the reader
 
-1. Copy your dictionary folder(s) to `/dictionaries/` on the SD card — one dictionary per folder, e.g. `/dictionaries/webster/webster.idx` + `webster.dict.dz`. A hidden `/.dictionaries/` folder (dot-prefixed) works the same way, for keeping it out of the file browser.
+1. Copy each dictionary folder to `/dictionaries/` on the SD card. Use one dictionary per folder. For example, use `/dictionaries/webster/webster.idx` and `webster.dict.dz`.
 2. Open **Settings → Reader → Dictionary** on the device.
 3. Select a dictionary from the list, or **None** to disable lookups.
 
-The Dictionary setting only appears when at least one usable dictionary folder exists. Folders containing more than one dictionary (multiple `.idx` stems) are skipped as ambiguous.
+The Dictionary setting appears only when CrossPoint finds a usable dictionary. CrossPoint ignores a folder that contains more than one dictionary.
 
-## Looking Up a Word
+## Look up a word
 
-Two ways to start a lookup while reading:
+You can start a lookup in two ways:
 
 - Open the reader menu (**Confirm**) and choose **Look Up**.
 - Or set **Settings → Controls → Long-press Menu** to "Dictionary", then hold **Confirm** (~0.4s) on the reading page.
 
-One word on the page becomes highlighted:
+CrossPoint highlights one word on the page:
 
 1. Use **Left/Right** to move between words in reading order, and the side **Up/Down** buttons to jump between lines.
 2. Press **Confirm** to look up the highlighted word.
 3. Press **Back** to return to the reader.
 
-On the very first lookup with a dictionary (and again whenever the `.idx` or `.syn` source file changes), the reader shows *"Indexing dictionary…"* while it builds small sidecar files next to them — a `.qidx` for the word index, and a `.sidx` when a `.syn` synonym file is present. Each sidecar is rebuilt independently, only when its own source changes. This takes a few seconds for large dictionaries and makes all subsequent lookups fast. The sidecars can be deleted safely at any time — they will simply be rebuilt.
+The first lookup can show *"Indexing dictionary…"*. CrossPoint creates small helper files beside the dictionary. This can take a few seconds for a large dictionary. Later lookups are faster. You can delete the `.qidx` and `.sidx` helper files at any time. CrossPoint creates them again when needed.
 
-### How Lookup Works
+### If the word is not found
 
-1. **Direct match** — the word is found as-is (case-insensitive) in the dictionary index. Surrounding punctuation is ignored.
-2. **Synonyms** — on a miss, if the dictionary ships a `.syn` file, alternate spellings and irregular forms recorded there are resolved to their headword (e.g. `oxen` → `ox`, `colour` → `color`). This step is skipped if the `.sidx` sidecar could not be built (e.g. transient low memory during indexing); the dictionary otherwise stays usable, and the build is retried the next time it is opened.
-3. **Stemming** — still no match: common English word forms are retried automatically: possessives and plurals (`dogs` → `dog`, `stories` → `story`) and verb endings (`walked` → `walk`, `running` → `run`, `making` → `make`).
-4. **Not found** — a short popup appears and you return to word selection.
+CrossPoint ignores letter case and punctuation around a word. If the dictionary includes a `.syn` file, it also tries the alternatives in that file. CrossPoint then tries common English forms, such as `dogs` for `dog` and `walked` for `walk`. If it cannot find the word, it shows a short message and returns to word selection.
 
-## The Definition Screen
+## Read a definition
 
-When a word is found, the definition screen shows the matched headword at the top and the definition text below, with a page counter for long definitions.
+The definition screen shows the matched word at the top. Long definitions have a page number.
 
-HTML dictionaries that declare `sametypesequence=h` use the EPUB text-layout engine for semantic formatting such as headings, bold, italics, lists, and line breaks. Images and CSS styling are ignored. Definitions that are too large or cannot be laid out within the available memory fall back to plain text.
+Some HTML dictionaries show headings, bold text, italics, lists, and line breaks. Images and style details do not appear. A very large definition can appear as plain text.
 
-- **Left/Right** or side **Up/Down** — previous / next page
-- **Back** — return to word selection
+- **Left/Right** or side **Up/Down**: Previous or next page.
+- **Back**: Return to word selection.
 
 
 
-## Where to find dictionaries
+## Find dictionaries
 
-> credit to https://github.com/koreader/koreader/wiki/Dictionary-support for the list.
+The KOReader Dictionary Support page helped compile this list.
 
 - The [reader.dict](https://www.reader-dict.com) (ex "BoboTiG/ebook-reader-dict") project provides StarDict version of daily dumps of [Wiktionary](https://www.wiktionary.org/) monolingual dictionaries for a variety of languages. It also provides [non-free multilingual](https://www.reader-dict.com) dictionaries.
 - The [WikDict](https://www.wikdict.com) project provides free bilingual dictionaries based on [Wiktionary](https://www.wiktionary.org/) for a lot of language pairs. StarDict versions can be [downloaded from here](https://download.wikdict.com/dictionaries/stardict/).

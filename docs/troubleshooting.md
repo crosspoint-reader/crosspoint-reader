@@ -1,60 +1,41 @@
-# Troubleshooting
+# Troubleshooting file transfer
 
-This document shows common issues and possible solutions while using the device features.
+Use this guide when a phone, tablet, or computer cannot connect to the reader during File Transfer.
 
-- [Troubleshooting](#troubleshooting)
-    - [Cannot See the Device on the Network](#cannot-see-the-device-on-the-network)
-    - [Connection Drops or Times Out](#connection-drops-or-times-out)
-    - [Upload Fails](#upload-fails)
-    - [Saved Password Not Working](#saved-password-not-working)
+## The browser cannot find the reader
 
-### Cannot See the Device on the Network
+The browser shows "Cannot connect" or "Site can't be reached."
 
-**Problem:** Browser shows "Cannot connect" or "Site can't be reached"
+1. Make sure that both devices use the same Wi-Fi network. In **Create Hotspot** mode, connect to `CrossPoint-Reader`.
+2. Type the address shown on the reader, including `http://`.
+3. If `http://crosspoint.local/` does not work, use the number address shown on the reader.
+4. Turn off a VPN, if you use one.
+5. If the network blocks devices from communicating, use **Create Hotspot** mode or ask the network owner for help.
 
-**Solutions:**
+## The connection stops
 
-1. Verify both devices are on the correct network
-   - Check your computer/phone Wi-Fi settings
-   - In **Join Network** mode, your computer/phone and CrossPoint Reader must be on the same Wi-Fi network
-   - In **Create Hotspot** mode, your computer/phone must be connected to the `CrossPoint-Reader` hotspot
-2. Double-check the IP address
-   - Make sure you typed it correctly
-   - Include `http://` at the beginning
-   - Try the displayed IP address if `http://crosspoint.local/` does not resolve
-3. Try disabling VPN if you're using one
-4. Some networks have "client isolation" enabled - use Create Hotspot mode or check with your network administrator
+The Wi-Fi connection is unstable.
 
-### Connection Drops or Times Out
+1. Move closer to the Wi-Fi router. You can also use **Create Hotspot** mode for a direct connection.
+2. Make sure that the reader shows at least `||` for Wi-Fi strength.
+3. Move away from devices that interfere with Wi-Fi.
+4. Try another Wi-Fi network.
 
-**Problem:** Wi-Fi connection is unstable
+## An upload fails
 
-**Solutions:**
+The upload stops or shows an error.
 
-1. Move closer to the Wi-Fi router, or use Create Hotspot mode for a direct connection
-2. Check signal strength on the device (should be at least `||` or better)
-3. Avoid interference from other devices
-4. Try a different Wi-Fi network if available
+1. Make sure that the SD card has enough free space.
+2. Make sure that the file name works on the SD card.
+3. Try a smaller file.
+4. Refresh the browser page and try again.
+5. If the upload fails again, refresh the page. CrossPoint then uses its other upload method.
 
-### Upload Fails
+## A saved password does not work
 
-**Problem:** File upload doesn't complete or shows an error
+The reader cannot connect with a saved password.
 
-**Solutions:**
-
-1. Check that the SD card has enough free space
-2. Check that the filename is valid for the SD card filesystem
-3. Try uploading a smaller file first to test
-4. Refresh the browser page and try again
-5. If WebSocket upload fails repeatedly, refresh the page and retry with the HTTP fallback path
-
-### Saved Password Not Working
-
-**Problem:** Device fails to connect with saved credentials
-
-**Solutions:**
-
-1. When connection fails, you'll be prompted to "Forget Network"
+1. When the connection fails, select **Forget Network**.
 2. Select **Yes** to remove the saved password
 3. Reconnect and enter the password again
-4. Choose to save the new password
+4. Save the new password.
