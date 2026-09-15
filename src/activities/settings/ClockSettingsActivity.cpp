@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <memory>
 
@@ -51,7 +53,11 @@ void ClockSettingsActivity::activateIndex(const int index) {
   app.clearTapFlash();
   switch (index) {
     case ITEM_TIMEZONE:
-      startActivityForResult(std::make_unique<TimezonePickerActivity>(renderer, mappedInput), nullptr);
+      if (auto activity = makeUniqueNoThrow<TimezonePickerActivity>(renderer, mappedInput)) {
+        startActivityForResult(std::move(activity), nullptr);
+      } else {
+        LOG_ERR("CLKSET", "OOM: TimezonePickerActivity");
+      }
       return;
     case ITEM_DST:
       SETTINGS.clockDst = (SETTINGS.clockDst + 1) % CrossPointSettings::CLOCK_DST_MODE_COUNT;
@@ -64,7 +70,11 @@ void ClockSettingsActivity::activateIndex(const int index) {
       SETTINGS.clockShowInHeader = (SETTINGS.clockShowInHeader + 1) % 2;
       break;
     case ITEM_SYNC:
-      startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), nullptr);
+      if (auto activity = makeUniqueNoThrow<ClockSyncActivity>(renderer, mappedInput)) {
+        startActivityForResult(std::move(activity), nullptr);
+      } else {
+        LOG_ERR("CLKSET", "OOM: ClockSyncActivity");
+      }
       return;
     default:
       return;
@@ -79,22 +89,19 @@ void ClockSettingsActivity::buildScreen(UiScreen& screen) {
                                                 static_cast<int16_t>(metrics.buttonHintsHeight), 0});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
-  rowValues_[ITEM_TIMEZONE] = timezones::table()[timezones::activeIndex()].name;
+  // Every value is a flash/translation string or the member time buffer, so
+  // the render pass allocates nothing.
+  rowItems_[ITEM_TIMEZONE].value = timezones::table()[timezones::activeIndex()].name;
   const uint8_t dst = SETTINGS.clockDst < CrossPointSettings::CLOCK_DST_MODE_COUNT ? SETTINGS.clockDst : uint8_t{0};
-  rowValues_[ITEM_DST] = I18N.get(dstNames[dst]);
-  rowValues_[ITEM_FORMAT] = SETTINGS.clockFormat == 1 ? tr(STR_CLOCK_FORMAT_12H) : tr(STR_CLOCK_FORMAT_24H);
-  rowValues_[ITEM_SHOW_ON_HOME] = SETTINGS.clockShowInHeader ? tr(STR_SHOW) : tr(STR_HIDE);
+  rowItems_[ITEM_DST].value = I18N.get(dstNames[dst]);
+  rowItems_[ITEM_FORMAT].value = SETTINGS.clockFormat == 1 ? tr(STR_CLOCK_FORMAT_12H) : tr(STR_CLOCK_FORMAT_24H);
+  rowItems_[ITEM_SHOW_ON_HOME].value = SETTINGS.clockShowInHeader ? tr(STR_SHOW) : tr(STR_HIDE);
   // The sync row's value is the current time itself: it confirms the sync,
   // previews format/zone changes, and reads "Not Set" until the first sync.
-  char timeBuf[9];
-  if (SETTINGS.clockHasBeenSynced && halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockFormat == 1)) {
-    rowValues_[ITEM_SYNC] = timeBuf;
-  } else {
-    rowValues_[ITEM_SYNC] = tr(STR_NOT_SET);
-  }
-  for (int i = 0; i < ITEM_COUNT; i++) {
-    rowItems_[i].value = rowValues_[i].c_str();
-  }
+  rowItems_[ITEM_SYNC].value =
+      SETTINGS.clockHasBeenSynced && halClock.formatTime(syncTime_, sizeof(syncTime_), SETTINGS.clockFormat == 1)
+          ? syncTime_
+          : tr(STR_NOT_SET);
 
   fui::ListProps props;
   props.items = rowItems_;

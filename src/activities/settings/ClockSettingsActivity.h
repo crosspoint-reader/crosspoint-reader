@@ -1,6 +1,4 @@
 #pragma once
-#include <string>
-
 #include "activities/UiListActivity.h"
 
 // Clock configuration under System settings: timezone, 12/24-hour format,
@@ -20,6 +18,9 @@ class ClockSettingsActivity final : public UiListActivity {
   void activateIndex(int index) override;
   const char* headerTitle() const override;
 
-  std::string rowValues_[ITEM_COUNT];
+  // Row values are flash/translation strings assigned directly into rowItems_;
+  // the one formatted value (the sync row's live time) lives here so its
+  // pointer stays valid across the frame. Fits "HH:MM PM" + NUL.
+  char syncTime_[9] = {0};
   freeink::ui::ListItem rowItems_[ITEM_COUNT]{};
 };
