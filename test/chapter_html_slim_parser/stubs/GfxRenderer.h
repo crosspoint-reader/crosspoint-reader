@@ -12,7 +12,9 @@ enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 class GfxRenderer {
  public:
   bool isFontCacheScanning() const { return false; }
+  void drawLine(int, int, int, int, bool = true) const {}
   void drawLine(int, int, int, int, int, bool) const {}
+  void drawRect(int, int, int, int, bool = true) const {}
   void drawText(int, int, int, const char*, bool, EpdFontFamily::Style,
                 BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO) const {}
   int getTextWidth(int font, const char* text, EpdFontFamily::Style style,
