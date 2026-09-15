@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "activities/UiListActivity.h"
+#include "components/OptionPopup.h"
 
 class FileBrowserActivity final : public UiListActivity {
  public:
@@ -12,8 +13,13 @@ class FileBrowserActivity final : public UiListActivity {
   enum class Mode { Books, PickFirmware };
 
  private:
-  // Deletion
+  // File actions
   bool removeDirFile(const std::string& fullPath);
+  void showEntryActions();
+  void startRename();
+  void renameSelectedFile(const std::string& oldPath, const std::string& oldEntry, const std::string& newStem,
+                          const std::string& extension);
+  void deleteSelected();
 
   Mode mode = Mode::Books;
 
@@ -21,6 +27,7 @@ class FileBrowserActivity final : public UiListActivity {
   std::string basepath = "/";
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
+  OptionPopup optionPopup;
 
   // Per-row render buffers, derived from `files` and rebuilt only when it
   // changes (loadFiles()) rather than on every repaint — buildScreen() used to
@@ -43,16 +50,14 @@ class FileBrowserActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onRowLongPress(int index) override;
   // Long-press BACK goes to root; short Back goes up a directory (home/cancel at
-  // root), and Confirm activates on RELEASE (a hold is "delete").
+  // root), and Confirm activates on release while a hold opens file actions.
   bool handleCustomInput() override;
   bool handleButtons() override;
   // Header shows the current folder name (battery indicator via GUI.drawHeader);
   // footer labels depend on path depth and picker mode.
   void drawChrome() override;
   void drawFooter() override;
-  // forceDelete routes the touch long-press to the delete branch; button
-  // navigation leaves it false and relies on getHeldTime() instead.
-  void activateSelected(bool forceDelete = false);
+  void activateSelected();
 
   // Data loading
   void loadFiles();
@@ -63,4 +68,5 @@ class FileBrowserActivity final : public UiListActivity {
                                Mode mode = Mode::Books);
   void onEnter() override;
   void onExit() override;
+  void render(RenderLock&& lock) override;
 };
