@@ -315,8 +315,9 @@ bool MappedInputManager::wasLightPanelGesture() const {
 bool MappedInputManager::wasPowerConfirmClick() const {
   if (!gpio.hasTouch() || SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM) return false;
   // Wait out the X4 Pro's frontlight double-click window before treating its
-  // first release as Confirm. Other touch boards can use the release directly.
-  if (BoardConfig::isX4Pro()) return powerConfirmClickFrame;
+  // first release as Confirm. With the shortcut disabled, and on other touch
+  // boards, the release counts directly.
+  if (BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight) return powerConfirmClickFrame;
   return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
 }
 #endif

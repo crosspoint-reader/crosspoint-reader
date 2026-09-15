@@ -216,7 +216,7 @@ void toggleFrontlight() {
 }
 
 bool handleX4ProFrontlightDoubleClick() {
-  if (!BoardConfig::isX4Pro() || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
+  if (!BoardConfig::isX4Pro() || !SETTINGS.doubleClickPwrLight || !gpio.wasReleased(HalGPIO::BTN_POWER)) {
     return false;
   }
 
