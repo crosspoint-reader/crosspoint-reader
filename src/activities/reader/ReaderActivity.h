@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "EndOfBookOptions.h"
+#include "ReaderSession.h"
 #include "activities/Activity.h"
 
 class ReaderActivity : public Activity {
@@ -16,6 +17,7 @@ class ReaderActivity : public Activity {
 
   std::unique_ptr<EndOfBookOptions> endOfBookOptions;
   std::atomic<bool> endOfBookOptionsReady{false};
+  ReaderSession readerSession;
 
   explicit ReaderActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput,
                           std::string bookPath, bool allowFastInitialRefresh);
@@ -27,6 +29,17 @@ class ReaderActivity : public Activity {
   virtual std::string getBookTitle() const = 0;
   virtual std::string getBookAuthor() const { return ""; }
   virtual std::string getBookThumbBmpPath() const { return ""; }
+  // Whole-book progress for the reader.exit plugin event, reusing the
+  // per-reader ScreenshotInfo implementations.
+  //
+  // Upstream added this helper in d3e55c53 with an earlier slice of this
+  // feature, then removed it in c1e1fec3 as dead code once no caller remained
+  // ("removes unnecessary wrapper structs"). It is reinstated here because this
+  // change reintroduces the callers: ReaderActivity.cpp uses it for the progress
+  // string and for the session's render-complete basis points, and
+  // EpubReaderActivity overrides getProgressBasisPoints() and falls back to it.
+  int getProgressPercent() const { return getScreenshotInfo().progressPercent; }
+  virtual int getProgressBasisPoints() const { return getProgressPercent() * 100; }
 
   virtual bool handleFormatInput() { return false; }
   virtual bool pageTurn(bool isForward) = 0;
@@ -45,6 +58,8 @@ class ReaderActivity : public Activity {
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
   void clearEndOfBookOptionsIfNeeded();
   void disableFastInitialRefresh();
+  void notePageTurn(bool forward, bool succeeded);
+  void flushReaderSession();
 
  public:
   ~ReaderActivity() override = default;
@@ -54,6 +69,7 @@ class ReaderActivity : public Activity {
 
   void onEnter() override;
   void onExit() override;
+  void prepareForSleep() override;
   void loop() override;
   void render(RenderLock&& lock) override;
 

@@ -20,6 +20,12 @@
 #include <new>
 
 #include "MappedInputManager.h"
+// ReaderActivity is needed for the readme-open path below
+// (ReaderActivity::create at the Background/readme branch). Upstream's refactor
+// dropped SilentRestart.h, WifiSelectionActivity.h, and
+// KeyboardEntryActivity.h; none of them is referenced in this file any more, so
+// they stay dropped.
+#include "activities/reader/ReaderActivity.h"
 #include "components/CatalogScreens.h"
 #include "components/UITheme.h"
 #include "network/HttpDownloader.h"
@@ -343,18 +349,27 @@ class XmlListParser {
 }  // namespace
 
 namespace {
-// Reads "title"/"description" from a plugin JSON file into the ref, only
-// overwriting non-empty values (so device.json wins over manifest.json).
-void readTitleDesc(const std::string& path, PluginRef& ref) {
+// Reads picker metadata, and classifies device manifests without making an
+// events-only plugin look like an invalid catalog.
+void readPluginMetadata(const std::string& path, PluginRef& ref, const bool classifyDevice = false) {
   std::string raw;
   if (!Storage.readFileToString("PCAT", path, MAX_MANIFEST_SIZE, raw)) return;
   JsonDocument filter;
   filter["title"] = true;
   filter["description"] = true;
+  if (classifyDevice) {
+    filter["browse"]["url"] = true;
+    filter["events"] = true;
+  }
   JsonDocument doc;
   if (deserializeJson(doc, raw, DeserializationOption::Filter(filter)) != DeserializationError::Ok) return;
   if (doc["title"].is<const char*>()) ref.title = doc["title"].as<const char*>();
   if (doc["description"].is<const char*>()) ref.description = doc["description"].as<const char*>();
+  if (classifyDevice) {
+    const char* browseUrl = doc["browse"]["url"] | "";
+    const bool hasEvents = !doc["events"].as<JsonObjectConst>().isNull() && doc["events"].size() > 0;
+    ref.deviceKind = PluginLocations::classifyDeviceManifest(browseUrl[0] != '\0', hasEvents);
+  }
 }
 }  // namespace
 
@@ -369,9 +384,11 @@ std::vector<PluginRef> discoverPlugins() {
     // Browser-only plugins (no device.json) stay listed so an install is
     // visibly installed, but carry no manifest to open (empty manifestPath).
     if (e.hasDevice) ref.manifestPath = e.dir + "/device.json";
+    const std::string readmePath = e.dir + "/README.md";
+    if (Storage.exists(readmePath.c_str())) ref.readmePath = readmePath;
     // manifest.json first, then device.json overrides (on-device authority).
-    if (e.hasManifest) readTitleDesc(e.dir + "/manifest.json", ref);
-    if (e.hasDevice) readTitleDesc(ref.manifestPath, ref);
+    if (e.hasManifest) readPluginMetadata(e.dir + "/manifest.json", ref);
+    if (e.hasDevice) readPluginMetadata(ref.manifestPath, ref, true);
     plugins.push_back(std::move(ref));
   }
   return plugins;
@@ -1216,8 +1233,16 @@ void PluginCatalogActivity::activateIndex(const int index) {
       return;
     }
     const PluginRef& plugin = installedPlugins[index - (showOpds ? 1 : 0)];
-    if (plugin.manifestPath.empty()) return;  // web-only: nothing to open
-    app.clearTapFlash();                      // the row leaves this screen
+    const auto action = PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty());
+    if (action == PluginLocations::PickerAction::Readme) {
+      auto reader = ReaderActivity::create(renderer, mappedInput, plugin.readmePath, false);
+      if (!reader) return;
+      app.clearTapFlash();
+      startActivityForResult(std::move(reader), [](const ActivityResult&) {});
+      return;
+    }
+    if (action != PluginLocations::PickerAction::Catalog) return;
+    app.clearTapFlash();  // the row leaves this screen
     pickerReturnRow = index;
     manifestPath = plugin.manifestPath;
     catalogTitle = plugin.title;
@@ -1272,8 +1297,12 @@ void PluginCatalogActivity::drawFooter() {
         // A selected web-only plugin row has nothing to open.
         if (state == State::PLUGIN_PICKER && nav.selected >= 0 && nav.selected < count) {
           const int pi = nav.selected - (showOpds ? 1 : 0);
-          if (pi >= 0 && pi < static_cast<int>(installedPlugins.size()) && installedPlugins[pi].manifestPath.empty()) {
-            confirmLabel = "";
+          if (pi >= 0 && pi < static_cast<int>(installedPlugins.size())) {
+            const auto& plugin = installedPlugins[pi];
+            if (PluginLocations::pickerAction(plugin.deviceKind, !plugin.readmePath.empty()) ==
+                PluginLocations::PickerAction::None) {
+              confirmLabel = "";
+            }
           }
         }
       } else {
@@ -1417,9 +1446,26 @@ void PluginCatalogActivity::rebuildRowItems() {
   if (state == State::PLUGIN_PICKER) {
     if (showOpds) addRow(tr(STR_OPDS_BROWSER), tr(STR_OPDS_SERVERS));
     for (const auto& plugin : installedPlugins) {
-      const bool webOnly = plugin.manifestPath.empty();
-      addRow(plugin.title.c_str(), webOnly ? tr(STR_PLUGIN_WEB_ONLY) : plugin.description.c_str(),
-             webOnly ? nullptr : ">");
+      // Three-way classification from PluginLocations::classifyDeviceManifest(),
+      // expressed through upstream's addRow lambda. Upstream's
+      // `manifestPath.empty()` test only distinguishes web-only from catalog and
+      // predates events-only device manifests, which this change adds:
+      //   None       -> listed but inert, web-only hint, no chevron
+      //   Catalog    -> browsable, own description, chevron
+      //   Background -> events-only, own description, chevron ONLY with a readme
+      // tests/plugin_manifest_classification covers all three.
+      const char* subtitle = plugin.description.empty() ? nullptr : plugin.description.c_str();
+      switch (plugin.deviceKind) {
+        case PluginLocations::DeviceKind::None:
+          addRow(plugin.title.c_str(), tr(STR_PLUGIN_WEB_ONLY));
+          break;
+        case PluginLocations::DeviceKind::Catalog:
+          addRow(plugin.title.c_str(), subtitle, ">");
+          break;
+        case PluginLocations::DeviceKind::Background:
+          addRow(plugin.title.c_str(), subtitle, plugin.readmePath.empty() ? nullptr : ">");
+          break;
+      }
     }
   } else if (state == State::LIST_PICKER) {
     for (const auto& list : manifest.browseLists) addRow(list.title.c_str());
