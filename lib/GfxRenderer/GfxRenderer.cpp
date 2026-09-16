@@ -14,6 +14,7 @@
 #include "../Memory/Memory.h"
 #include "DisplayWindowGeometry.h"
 #include "FontCacheManager.h"
+#include "GrayscaleGlyphPlanes.h"
 
 using display_window::AlignedMemRect;
 using display_window::rotateCoordinates;
@@ -440,13 +441,11 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
           if (renderMode == GfxRenderer::BW && bmpVal < 3) {
             // Black (also paints over the grays in BW mode)
             renderer.drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
+          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && grayscaleGlyph::marksMsb(bmpVal)) {
+            // Both edge shades use the MSB mask. The LSB mask below selects
+            // which one is darker, reversing for white text on a black base.
             renderer.drawPixel(screenX, screenY, false);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
+          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && grayscaleGlyph::marksLsb(bmpVal, pixelState)) {
             renderer.drawPixel(screenX, screenY, false);
           }
         }

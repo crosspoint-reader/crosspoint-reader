@@ -106,6 +106,12 @@ CardState cardState(const Card& card);
 bool isHighlighted(const Card& card);
 bool allRowsEmpty(const DashboardSnapshot& snapshot);
 uint8_t bodyLineBudget(uint8_t titleLines);
+constexpr bool textAntiAliasingAvailable(const bool settingEnabled, const bool supported, const bool stripUploads) {
+  return settingEnabled && supported && stripUploads;
+}
+constexpr bool shouldRenderAntiAliasedText(const bool available, const bool spinnerOnly, const bool cleanupDue) {
+  return available && (!spinnerOnly || cleanupDue);
+}
 bool spinnerDue(uint32_t lastStepMs, uint32_t nowMs, bool hasActiveRow);
 bool partialCleanupDue(uint8_t partialRefreshCount);
 

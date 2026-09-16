@@ -6,6 +6,7 @@
 #include <freertos/queue.h>
 
 #include <atomic>
+
 #include "AgentcloudProtocol.h"
 #include "activities/Activity.h"
 
@@ -25,9 +26,14 @@ class AgentcloudActivity final : public Activity {
   bool preventAutoSleep() override { return true; }
   bool honorsScreenInversion() const override { return false; }
   bool handleForcedRefresh() override {
-    partialRefreshCount = 0;
-    spinnerOnly = false;
-    return false;
+    {
+      RenderLock lock(*this);
+      dirtyRows = 0x0f;
+      spinnerOnly = false;
+      partialRefreshCount = agentcloud::MAX_PARTIAL_REFRESHES;
+    }
+    requestUpdate();
+    return true;
   }
 
  private:
@@ -38,7 +44,12 @@ class AgentcloudActivity final : public Activity {
   void connectionClosed(uint16_t connectionHandle);
   void renderMessage(const char* message);
   void renderRow(size_t index, const agentcloud::Rect& rect);
+  void renderRowText(size_t index, const agentcloud::Rect& rect);
   void renderStateOnly(size_t index, const agentcloud::Rect& rowRect);
+  void renderCenteredText(const char* title, const char* body);
+  void renderTextLayer();
+  bool renderAntiAliasedText(HalDisplay::RefreshMode baseMode);
+  bool antiAliasedTextAvailable() const;
   uint8_t drawWrappedText(int fontId, EpdFontFamily::Style style, int x, int y, int width, int lineStep,
                           uint8_t maxLines, const char* text, bool ink, bool centered = false);
   void drawStateIcon(agentcloud::CardState state, int x, int y, bool ink) const;

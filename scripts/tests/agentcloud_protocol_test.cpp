@@ -2,9 +2,10 @@
 #include <cstdio>
 #include <cstring>
 
-#include "AgentcloudProtocol.h"
 #include "AgentcloudMaterialIcons.h"
+#include "AgentcloudProtocol.h"
 #include "DisplayWindowGeometry.h"
+#include "GrayscaleGlyphPlanes.h"
 
 namespace {
 
@@ -108,16 +109,13 @@ void testPayload() {
   CHECK(!agentcloud::parsePayload(missingId, strlen(missingId), rejected, error));
   constexpr char trailing[] = R"({"u":0,"a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]}x)";
   CHECK(!agentcloud::parsePayload(trailing, strlen(trailing), rejected, error));
-  constexpr char maxCounters[] =
-      R"({"u":4294967295,"a":4294967295,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
+  constexpr char maxCounters[] = R"({"u":4294967295,"a":4294967295,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
   CHECK(agentcloud::parsePayload(maxCounters, strlen(maxCounters), rejected, error));
   constexpr char negativeCounter[] = R"({"u":-1,"a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
   CHECK(!agentcloud::parsePayload(negativeCounter, strlen(negativeCounter), rejected, error));
-  constexpr char fractionalCounter[] =
-      R"({"u":1.5,"a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
+  constexpr char fractionalCounter[] = R"({"u":1.5,"a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
   CHECK(!agentcloud::parsePayload(fractionalCounter, strlen(fractionalCounter), rejected, error));
-  constexpr char overflowCounter[] =
-      R"({"u":4294967296,"a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
+  constexpr char overflowCounter[] = R"({"u":4294967296,"a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
   CHECK(!agentcloud::parsePayload(overflowCounter, strlen(overflowCounter), rejected, error));
   constexpr char typedCounter[] = R"({"u":"1","a":0,"r":[{"t":""},{"t":""},{"t":""},{"t":""}]})";
   CHECK(!agentcloud::parsePayload(typedCounter, strlen(typedCounter), rejected, error));
@@ -163,6 +161,14 @@ void testUpdates() {
   CHECK(!agentcloud::spinnerDue(1000, 20000, false));
   CHECK(!agentcloud::partialCleanupDue(59));
   CHECK(agentcloud::partialCleanupDue(60));
+  CHECK(agentcloud::textAntiAliasingAvailable(true, true, true));
+  CHECK(!agentcloud::textAntiAliasingAvailable(false, true, true));
+  CHECK(!agentcloud::textAntiAliasingAvailable(true, false, true));
+  CHECK(!agentcloud::textAntiAliasingAvailable(true, true, false));
+  CHECK(agentcloud::shouldRenderAntiAliasedText(true, false, false));
+  CHECK(!agentcloud::shouldRenderAntiAliasedText(true, true, false));
+  CHECK(agentcloud::shouldRenderAntiAliasedText(true, true, true));
+  CHECK(!agentcloud::shouldRenderAntiAliasedText(false, true, true));
 }
 
 void testGeometry() {
@@ -269,6 +275,15 @@ void testPresentationContracts() {
   CHECK(sizeof(state_icon_working_6_bits) == STATE_ICON_BYTES);
   CHECK(sizeof(state_icon_working_7_bits) == STATE_ICON_BYTES);
   CHECK(sizeof(state_icon_working_frames) / sizeof(state_icon_working_frames[0]) == 8);
+
+  CHECK(grayscaleGlyph::marksMsb(1));
+  CHECK(grayscaleGlyph::marksMsb(2));
+  CHECK(!grayscaleGlyph::marksMsb(0));
+  CHECK(!grayscaleGlyph::marksMsb(3));
+  CHECK(grayscaleGlyph::marksLsb(1, true));
+  CHECK(!grayscaleGlyph::marksLsb(2, true));
+  CHECK(!grayscaleGlyph::marksLsb(1, false));
+  CHECK(grayscaleGlyph::marksLsb(2, false));
 }
 
 }  // namespace

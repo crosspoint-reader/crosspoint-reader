@@ -14,6 +14,7 @@
 
 #include "AgentcloudAuth.h"
 #include "AgentcloudMaterialIcons.h"
+#include "CrossPointSettings.h"
 #include "fontIds.h"
 
 namespace {
@@ -27,6 +28,11 @@ constexpr uint32_t CALLBACK_DRAIN_DELAY_MS = 10;
 constexpr uint32_t CALLBACK_DRAIN_WARNING_MS = 5000;
 constexpr int MESSAGE_TITLE_Y = 318;
 constexpr int MESSAGE_BODY_Y = 386;
+constexpr int AA_STRIP_ROWS = 20;
+constexpr size_t AA_STRIP_BYTES = static_cast<size_t>(HalDisplay::DISPLAY_WIDTH_BYTES) * AA_STRIP_ROWS;
+static_assert(AA_STRIP_BYTES == 2000, "Agentcloud AA strips must be 20 physical X4 rows");
+static_assert(AA_STRIP_BYTES <= sizeof(((agentcloud::PayloadMessage*)nullptr)->bytes),
+              "Agentcloud payload workspace is too small for an AA strip");
 // The retained SSD1677 driver builds a temporary vector for each partial
 // window. Preserve room for NimBLE and the render task instead of risking an
 // abort from std::vector's throwing allocator in this no-exceptions build.
@@ -301,8 +307,7 @@ class AgentcloudBle final {
     bool warned = false;
     while (activeCallbacks.load() != 0) {
       if (!warned && waitedMs >= CALLBACK_DRAIN_WARNING_MS) {
-        LOG_ERR("ACBLE", "Still draining callbacks: %lu active",
-                static_cast<unsigned long>(activeCallbacks.load()));
+        LOG_ERR("ACBLE", "Still draining callbacks: %lu active", static_cast<unsigned long>(activeCallbacks.load()));
         warned = true;
       }
       vTaskDelay(pdMS_TO_TICKS(CALLBACK_DRAIN_DELAY_MS));
@@ -436,51 +441,65 @@ void AgentcloudActivity::loop() {
     return;
   }
 
-  if (payloadQueue != nullptr && xQueueReceive(payloadQueue, &queuedPayload, 0) == pdTRUE) {
-    agentcloud::ParseError error = agentcloud::ParseError::None;
-    if (!agentcloud::parsePayload(queuedPayload.bytes, queuedPayload.length, parsedDashboard, error)) {
-      LOG_ERR("ACD", "Rejected dashboard payload: %s", parseErrorName(error));
-    } else {
-      uint8_t changed = agentcloud::dirtyRowMask(dashboard, parsedDashboard);
-      if (changed == 0 && screenState == ScreenState::Dashboard) {
-        LOG_DBG("ACD", "Duplicate dashboard payload ignored");
-      } else {
-        const uint32_t now = millis();
-        const uint8_t previousActiveRows = agentcloud::activeRowMask(dashboard);
-        const uint8_t incomingActiveRows = agentcloud::activeRowMask(parsedDashboard);
-        if (agentcloud::hasNewSettledUnreadIdentity(dashboard, parsedDashboard)) forceFullRefresh = true;
-        if (screenState == ScreenState::Dashboard &&
-            agentcloud::allRowsEmpty(dashboard) != agentcloud::allRowsEmpty(parsedDashboard)) {
-          // The centred all-clear composition overlaps row boundaries, so a
-          // transition into or out of it necessarily invalidates the panel.
-          changed = 0x0f;
+  bool dashboardNeedsRender = false;
+  if (payloadQueue != nullptr && uxQueueMessagesWaiting(payloadQueue) != 0) {
+    {
+      RenderLock stateLock;
+      if (xQueueReceive(payloadQueue, &queuedPayload, 0) == pdTRUE) {
+        agentcloud::ParseError error = agentcloud::ParseError::None;
+        if (!agentcloud::parsePayload(queuedPayload.bytes, queuedPayload.length, parsedDashboard, error)) {
+          LOG_ERR("ACD", "Rejected dashboard payload: %s", parseErrorName(error));
+        } else {
+          uint8_t changed = agentcloud::dirtyRowMask(dashboard, parsedDashboard);
+          if (changed == 0 && screenState == ScreenState::Dashboard) {
+            LOG_DBG("ACD", "Duplicate dashboard payload ignored");
+          } else {
+            const uint32_t now = millis();
+            const uint8_t previousActiveRows = agentcloud::activeRowMask(dashboard);
+            const uint8_t incomingActiveRows = agentcloud::activeRowMask(parsedDashboard);
+            if (agentcloud::hasNewSettledUnreadIdentity(dashboard, parsedDashboard)) forceFullRefresh = true;
+            if (screenState == ScreenState::Dashboard &&
+                agentcloud::allRowsEmpty(dashboard) != agentcloud::allRowsEmpty(parsedDashboard)) {
+              // The centred all-clear composition overlaps row boundaries, so a
+              // transition into or out of it necessarily invalidates the panel.
+              changed = 0x0f;
+            }
+            dashboard = parsedDashboard;
+            dirtyRows = screenState == ScreenState::Dashboard
+                            ? agentcloud::applyContentSpinnerStep(changed, previousActiveRows, incomingActiveRows, now,
+                                                                  spinnerPhase, lastSpinnerStepMs)
+                            : 0x0f;
+            spinnerOnly = false;
+            screenState = ScreenState::Dashboard;
+            if (previousActiveRows == 0 && incomingActiveRows != 0) {
+              spinnerPhase = 0;
+              lastSpinnerStepMs = now;
+            }
+            dashboardNeedsRender = true;
+          }
         }
-        dashboard = parsedDashboard;
-        dirtyRows = screenState == ScreenState::Dashboard
-                        ? agentcloud::applyContentSpinnerStep(changed, previousActiveRows, incomingActiveRows, now,
-                                                             spinnerPhase, lastSpinnerStepMs)
-                        : 0x0f;
-        spinnerOnly = false;
-        screenState = ScreenState::Dashboard;
-        if (previousActiveRows == 0 && incomingActiveRows != 0) {
-          spinnerPhase = 0;
-          lastSpinnerStepMs = now;
-        }
-        requestUpdateAndWait();
       }
     }
+    if (dashboardNeedsRender) requestUpdateAndWait();
   }
+
+  bool spinnerNeedsRender = false;
+  {
+    RenderLock stateLock;
+    const uint32_t spinnerNow = millis();
+    const uint8_t activeRows = agentcloud::activeRowMask(dashboard);
+    if (screenState == ScreenState::Dashboard &&
+        agentcloud::spinnerDue(lastSpinnerStepMs, spinnerNow, activeRows != 0)) {
+      spinnerPhase = static_cast<uint8_t>((spinnerPhase + 1) & 7);
+      dirtyRows = activeRows;
+      spinnerOnly = true;
+      lastSpinnerStepMs = spinnerNow;
+      spinnerNeedsRender = true;
+    }
+  }
+  if (spinnerNeedsRender) requestUpdateAndWait();
 
   const uint32_t now = millis();
-  const uint8_t activeRows = agentcloud::activeRowMask(dashboard);
-  if (screenState == ScreenState::Dashboard && agentcloud::spinnerDue(lastSpinnerStepMs, now, activeRows != 0)) {
-    spinnerPhase = static_cast<uint8_t>((spinnerPhase + 1) & 7);
-    dirtyRows = activeRows;
-    spinnerOnly = true;
-    lastSpinnerStepMs = now;
-    requestUpdateAndWait();
-  }
-
   if (ble && static_cast<uint32_t>(now - lastAdvertisingCheckMs) >= ADVERTISING_WATCHDOG_MS) {
     lastAdvertisingCheckMs = now;
     ble->maintainAdvertising();
@@ -489,11 +508,14 @@ void AgentcloudActivity::loop() {
 
 void AgentcloudActivity::renderMessage(const char* message) {
   renderer.clearScreen();
+  renderCenteredText(tr(STR_AGENTCLOUD_TITLE), message);
+}
+
+void AgentcloudActivity::renderCenteredText(const char* title, const char* body) {
   const int width = renderer.getScreenWidth();
-  renderer.drawCenteredText(NOTOSANS_18_FONT_ID, MESSAGE_TITLE_Y, tr(STR_AGENTCLOUD_TITLE), true,
-                            EpdFontFamily::REGULAR);
+  renderer.drawCenteredText(NOTOSANS_18_FONT_ID, MESSAGE_TITLE_Y, title, true, EpdFontFamily::REGULAR);
   drawWrappedText(NOTOSANS_12_FONT_ID, EpdFontFamily::REGULAR, agentcloud::ROW_PADDING, MESSAGE_BODY_Y,
-                  width - agentcloud::ROW_PADDING * 2, agentcloud::BODY_LINE_HEIGHT, 3, message, true, true);
+                  width - agentcloud::ROW_PADDING * 2, agentcloud::BODY_LINE_HEIGHT, 3, body, true, true);
 }
 
 uint8_t AgentcloudActivity::drawWrappedText(const int fontId, const EpdFontFamily::Style style, const int x,
@@ -594,21 +616,30 @@ void AgentcloudActivity::renderRow(const size_t index, const agentcloud::Rect& r
   if (separator >= 0) renderer.drawLine(rect.x, separator, rect.x + rect.width - 1, separator, true);
   if (card.title[0] == '\0') return;
 
+  renderRowText(index, rect);
+  const agentcloud::Rect icon = agentcloud::stateIconRect(rect);
+  drawStateIcon(agentcloud::cardState(card), icon.x, icon.y, ink);
+}
+
+void AgentcloudActivity::renderRowText(const size_t index, const agentcloud::Rect& rect) {
+  const agentcloud::Card& card = dashboard.rows[index];
+  if (card.title[0] == '\0') return;
+
+  const bool ink = !agentcloud::isHighlighted(card);
   const agentcloud::Rect icon = agentcloud::stateIconRect(rect);
   const int textX = rect.x + agentcloud::ROW_PADDING;
   const int titleWidth = std::max(0, icon.x - agentcloud::STATE_ICON_GAP - textX);
   const int bodyWidth = std::max(0, rect.width - agentcloud::ROW_PADDING * 2);
   renderer.setClipRect(rect.x + agentcloud::ROW_PADDING, rect.y + agentcloud::ROW_PADDING, bodyWidth,
                        rect.height - agentcloud::ROW_PADDING * 2);
-  const uint8_t titleLines = drawWrappedText(NOTOSANS_14_FONT_ID, EpdFontFamily::BOLD, textX,
-                                             rect.y + agentcloud::ROW_PADDING, titleWidth,
-                                             agentcloud::TITLE_LINE_HEIGHT, agentcloud::TITLE_MAX_LINES, card.title, ink);
-  drawWrappedText(NOTOSANS_12_FONT_ID, EpdFontFamily::REGULAR, textX,
-                  rect.y + agentcloud::ROW_PADDING + titleLines * agentcloud::TITLE_LINE_HEIGHT +
-                      agentcloud::TITLE_BODY_GAP,
-                  bodyWidth, agentcloud::BODY_LINE_HEIGHT, agentcloud::bodyLineBudget(titleLines), card.headline, ink);
+  const uint8_t titleLines =
+      drawWrappedText(NOTOSANS_14_FONT_ID, EpdFontFamily::BOLD, textX, rect.y + agentcloud::ROW_PADDING, titleWidth,
+                      agentcloud::TITLE_LINE_HEIGHT, agentcloud::TITLE_MAX_LINES, card.title, ink);
+  drawWrappedText(
+      NOTOSANS_12_FONT_ID, EpdFontFamily::REGULAR, textX,
+      rect.y + agentcloud::ROW_PADDING + titleLines * agentcloud::TITLE_LINE_HEIGHT + agentcloud::TITLE_BODY_GAP,
+      bodyWidth, agentcloud::BODY_LINE_HEIGHT, agentcloud::bodyLineBudget(titleLines), card.headline, ink);
   renderer.setClipRect(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
-  drawStateIcon(agentcloud::cardState(card), icon.x, icon.y, ink);
 }
 
 void AgentcloudActivity::renderStateOnly(const size_t index, const agentcloud::Rect& rowRect) {
@@ -619,12 +650,88 @@ void AgentcloudActivity::renderStateOnly(const size_t index, const agentcloud::R
   drawStateIcon(agentcloud::cardState(card), icon.x, icon.y, !highlighted);
 }
 
+void AgentcloudActivity::renderTextLayer() {
+  if (screenState != ScreenState::Dashboard) {
+    const char* message = tr(STR_AGENTCLOUD_WAITING_FOR_MAC);
+    if (screenState == ScreenState::AuthError) message = tr(STR_AGENTCLOUD_AUTH_ERROR);
+    if (screenState == ScreenState::BleError) message = tr(STR_AGENTCLOUD_BLE_ERROR);
+    renderCenteredText(tr(STR_AGENTCLOUD_TITLE), message);
+    return;
+  }
+
+  if (agentcloud::allRowsEmpty(dashboard)) {
+    renderCenteredText(tr(STR_AGENTCLOUD_ALL_CLEAR), tr(STR_AGENTCLOUD_WAITING_FOR_ACTIVITY));
+    return;
+  }
+
+  const agentcloud::DashboardLayout layout =
+      agentcloud::makeLayout(renderer.getScreenWidth(), renderer.getScreenHeight());
+  for (size_t i = 0; i < agentcloud::ROW_COUNT; ++i) {
+    if (dashboard.rows[i].title[0] != '\0') renderRowText(i, layout.rows[i]);
+  }
+}
+
+bool AgentcloudActivity::antiAliasedTextAvailable() const {
+  const auto capabilities = renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Overlay);
+  return agentcloud::textAntiAliasingAvailable(SETTINGS.textAntiAliasing != 0, capabilities.supported(),
+                                               capabilities.stripUploads);
+}
+
+bool AgentcloudActivity::renderAntiAliasedText(const HalDisplay::RefreshMode baseMode) {
+  const int displayHeight = renderer.getDisplayHeight();
+  if (renderer.getDisplayWidthBytes() != HalDisplay::DISPLAY_WIDTH_BYTES || displayHeight <= 0) {
+    LOG_ERR("ACD", "Text AA strip geometry unavailable");
+    renderer.endStripTarget();
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+
+  if (!renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Overlay, baseMode)) {
+    LOG_ERR("ACD", "Could not start text AA; displaying B/W");
+    renderer.endStripTarget();
+    renderer.setRenderMode(GfxRenderer::BW);
+    return false;
+  }
+
+  // Parsing is complete and requestUpdateAndWait() excludes the main loop, so
+  // the queue receive workspace can hold one physical strip without new heap.
+  uint8_t* const scratch = reinterpret_cast<uint8_t*>(queuedPayload.bytes);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  for (int y = 0; y < displayHeight; y += AA_STRIP_ROWS) {
+    const int rows = std::min(AA_STRIP_ROWS, displayHeight - y);
+    renderer.beginStripTarget(scratch, y, rows);
+    renderer.clearScreen(0x00);
+    renderTextLayer();
+    renderer.endStripTarget();
+    renderer.writeGrayscalePlaneStrip(true, scratch, y, rows);
+  }
+
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  for (int y = 0; y < displayHeight; y += AA_STRIP_ROWS) {
+    const int rows = std::min(AA_STRIP_ROWS, displayHeight - y);
+    renderer.beginStripTarget(scratch, y, rows);
+    renderer.clearScreen(0x00);
+    renderTextLayer();
+    renderer.endStripTarget();
+    renderer.writeGrayscalePlaneStrip(false, scratch, y, rows);
+  }
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
+  renderer.cleanupGrayscaleWithFrameBuffer();
+  partialRefreshCount = 0;
+  forceFullRefresh = false;
+  LOG_DBG("ACD", "Rendered antialiased text in 20-row strips");
+  return true;
+}
+
 void AgentcloudActivity::render(RenderLock&&) {
   if (screenState != ScreenState::Dashboard) {
     const char* message = tr(STR_AGENTCLOUD_WAITING_FOR_MAC);
     if (screenState == ScreenState::AuthError) message = tr(STR_AGENTCLOUD_AUTH_ERROR);
     if (screenState == ScreenState::BleError) message = tr(STR_AGENTCLOUD_BLE_ERROR);
     renderMessage(message);
+    if (antiAliasedTextAvailable() && renderAntiAliasedText(HalDisplay::HALF_REFRESH)) return;
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     partialRefreshCount = 0;
     return;
@@ -636,11 +743,7 @@ void AgentcloudActivity::render(RenderLock&&) {
   agentcloud::Rect updateBounds{};
   if (agentcloud::allRowsEmpty(dashboard)) {
     renderer.clearScreen();
-    renderer.drawCenteredText(NOTOSANS_18_FONT_ID, MESSAGE_TITLE_Y, tr(STR_AGENTCLOUD_ALL_CLEAR), true,
-                              EpdFontFamily::REGULAR);
-    drawWrappedText(NOTOSANS_12_FONT_ID, EpdFontFamily::REGULAR, agentcloud::ROW_PADDING, MESSAGE_BODY_Y,
-                    renderer.getScreenWidth() - agentcloud::ROW_PADDING * 2, agentcloud::BODY_LINE_HEIGHT, 2,
-                    tr(STR_AGENTCLOUD_WAITING_FOR_ACTIVITY), true, true);
+    renderCenteredText(tr(STR_AGENTCLOUD_ALL_CLEAR), tr(STR_AGENTCLOUD_WAITING_FOR_ACTIVITY));
     updateBounds = {0, 0, renderer.getScreenWidth(), renderer.getScreenHeight()};
   } else {
     for (size_t i = 0; i < agentcloud::ROW_COUNT; ++i) {
@@ -665,11 +768,25 @@ void AgentcloudActivity::render(RenderLock&&) {
     if (!spinnerOnly || firstPaint) updateBounds = agentcloud::dirtyBounds(layout, rowsToDraw);
   }
 
+  const bool cleanupDue = agentcloud::partialCleanupDue(partialRefreshCount);
+  const bool aaAvailable = antiAliasedTextAvailable();
+  if (agentcloud::shouldRenderAntiAliasedText(aaAvailable, spinnerOnly, cleanupDue)) {
+    // Old gray edge pixels are absent from the B/W baseline, so every content
+    // change needs a clean HALF base; an attention flash may promote it to FULL.
+    const auto baseMode = forceFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
+    if (renderAntiAliasedText(baseMode)) {
+      firstPaint = false;
+      spinnerOnly = false;
+      dirtyRows = 0;
+      return;
+    }
+  }
+
   if (forceFullRefresh) {
     renderer.displayBuffer(HalDisplay::FULL_REFRESH);
     partialRefreshCount = 0;
     forceFullRefresh = false;
-  } else if (firstPaint || agentcloud::partialCleanupDue(partialRefreshCount)) {
+  } else if (firstPaint || cleanupDue) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     partialRefreshCount = 0;
   } else if (updateBounds.width > 0 && updateBounds.height > 0) {
@@ -682,10 +799,12 @@ void AgentcloudActivity::render(RenderLock&&) {
       renderer.displayWindow(updateBounds.x, updateBounds.y, updateBounds.width, updateBounds.height);
       ++partialRefreshCount;
     } else {
-      LOG_ERR("ACD", "Partial window unsafe: bytes=%zu largest=%zu; using half refresh", windowBytes,
+      LOG_ERR("ACD", "Partial window unsafe: bytes=%zu largest=%zu; using maintenance refresh", windowBytes,
               heap.largestBlockBytes);
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-      partialRefreshCount = 0;
+      if (!(spinnerOnly && aaAvailable && renderAntiAliasedText(HalDisplay::HALF_REFRESH))) {
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        partialRefreshCount = 0;
+      }
     }
   }
   firstPaint = false;
