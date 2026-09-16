@@ -65,9 +65,9 @@ def main() -> None:
     require("CALLBACK_DRAIN_ATTEMPTS" not in activity, "callback drain still has a timeout")
     require(activity.index("NimBLEDevice::deinit(false)") < activity.index("NimBLEDevice::deinit(true)"),
             "NimBLE objects can be cleared before the host stops")
-    on_exit = activity[activity.index("void AgentcloudActivity::onExit()"): 
+    on_exit = activity[activity.index("void AgentcloudActivity::onExit()"):
                        activity.index("void AgentcloudActivity::stopBle()")]
-    on_enter = activity[activity.index("void AgentcloudActivity::onEnter()"): 
+    on_enter = activity[activity.index("void AgentcloudActivity::onEnter()"):
                         activity.index("void AgentcloudActivity::onExit()")]
     require(on_exit.index("stopping.store(true)") < on_exit.index("stopBle()") < on_exit.index("vQueueDelete"),
             "owner detach/drain does not precede queue deletion")
@@ -97,9 +97,14 @@ def main() -> None:
             "startup/all-clear states do not share the HM391 centered text layout")
     require("UI_12_FONT_ID" not in activity and "UI_10_FONT_ID" not in activity,
             "legacy one-line dashboard typography remains")
-    require("renderer.drawPixel(x + column, y + row, ink)" in activity,
-            "state masks are not painted through the orientation-safe renderer")
-    require("AgentcloudMaterialIcons.h" in activity, "Material state masks are not wired into the dashboard")
+    require("AgentcloudMaterialIconsGray.h" in activity,
+            "2-bit Material state masks are not wired into the grayscale dashboard")
+    require("AgentcloudMaterialIcons.h" not in activity and "_bits" not in activity,
+            "obsolete 1-bit Material masks remain in the dashboard")
+    require(not (ROOT / "src/activities/agentcloud/AgentcloudMaterialIcons.h").exists(),
+            "obsolete 1-bit Material icon header remains in the tree")
+    require(not (ROOT / "src/activities/agentcloud/AgentcloudWorkingIcons.h").exists(),
+            "obsolete dedicated working-icon header remains in the tree")
     require("textLineScratch" in activity_header, "word wrapping does not use activity-owned fixed scratch")
     for heap_type in ("std::string ", "std::vector<", "std::unique_ptr<", "String "):
         require(heap_type not in activity and heap_type not in activity_header,
@@ -126,13 +131,15 @@ def main() -> None:
     protocol_header = (ROOT / "src/activities/agentcloud/AgentcloudProtocol.h").read_text()
     require("bool recent = false;" in protocol_header and "finished" not in protocol_header,
             "bridge recency is still treated as completion")
-    icons = (ROOT / "src/activities/agentcloud/AgentcloudMaterialIcons.h").read_text()
-    require("Material Symbols" in icons and "Apache License 2.0" in icons,
-            "Material Symbols provenance/license is missing")
-    require(icons.count("inline constexpr uint8_t state_icon_") == 11,
-            "dashboard must contain exactly eleven flash-resident icon masks")
-    require("STATE_ICON_BYTES = 34 * ((34 + 7) / 8)" in icons,
-            "state icon storage is not the exact 34x34 packed geometry")
+    gray_icons = (ROOT / "src/activities/agentcloud/AgentcloudMaterialIconsGray.h").read_text()
+    require("Material Symbols" in gray_icons and "Apache License 2.0" in gray_icons,
+            "grayscale Material Symbols provenance/license is missing")
+    require(gray_icons.count("inline constexpr uint8_t state_icon_") == 11 and
+            gray_icons.count("inline constexpr uint8_t state_icon_working_") == 8,
+            "grayscale header must retain all eleven state masks")
+    require("STATE_ICON_GRAY2_BYTES = (34 * 34 + 3) / 4" in gray_icons and
+            "STATE_ICON_GRAY2_IMAGE_COUNT = 11" in gray_icons,
+            "2-bit state icon storage is not the exact 34x34 packed geometry")
     require(on_enter.index("releaseSdFontCaches") < on_enter.index("hasValidAuthenticator") <
             on_enter.index("xQueueCreate") < on_enter.index("ble->begin") < on_enter.rindex("requestUpdateAndWait"),
             "waiting screen can repopulate font caches before BLE initialization")
@@ -140,16 +147,38 @@ def main() -> None:
             "displayWindow bypasses the shared orientation mapper")
 
     render_row_text = activity[activity.index("void AgentcloudActivity::renderRowText("):
-                               activity.index("void AgentcloudActivity::renderStateOnly(")]
+                               activity.index("void AgentcloudActivity::renderGrayscaleLayer(")]
     wrapped_text = activity[activity.index("uint8_t AgentcloudActivity::drawWrappedText("):
-                            activity.index("void AgentcloudActivity::drawStateIcon(")]
-    text_layer = activity[activity.index("void AgentcloudActivity::renderTextLayer()"):
+                            activity.index("const uint8_t* AgentcloudActivity::stateIconMask(")]
+    grayscale_layer = activity[activity.index("void AgentcloudActivity::renderGrayscaleLayer()"):
                           activity.index("bool AgentcloudActivity::antiAliasedTextAvailable()")]
     for forbidden in ("fillRect(", "drawLine(", "drawStateIcon(", "clearScreen(", "displayBuffer("):
-        require(forbidden not in centered_text + render_row_text + wrapped_text + text_layer,
-                f"grayscale text layer contains non-text drawing: {forbidden}")
-    require("renderCenteredText(" in text_layer and "renderRowText(" in text_layer,
-            "text-only pass does not cover centered and dashboard-row states")
+        require(forbidden not in centered_text + render_row_text + wrapped_text + grayscale_layer,
+                f"grayscale layer contains B/W structure drawing: {forbidden}")
+    require("renderCenteredText(" in grayscale_layer and "renderRowText(" in grayscale_layer and
+            "drawGrayscaleStateIcon(agentcloud::cardState(card)" in grayscale_layer and
+            "CardState::Working" not in grayscale_layer,
+            "grayscale pass does not cover centered text, dashboard text, and state icons")
+
+    gray_icon_painter = activity[activity.index("void AgentcloudActivity::drawGrayscaleStateIcon("):
+                                 activity.index("void AgentcloudActivity::renderRow(")]
+    require("renderMode == GfxRenderer::BW) return" in gray_icon_painter and
+            "grayscaleGlyph::marksMsb(level)" in gray_icon_painter and
+            "grayscaleGlyph::marksLsb(level, ink)" in gray_icon_painter and
+            "renderer.drawPixel(" in gray_icon_painter and ", false);" in gray_icon_painter,
+            "2-bit icon painter does not use the text-plane polarity contract")
+    mask_selector = activity[activity.index("const uint8_t* AgentcloudActivity::stateIconMask("):
+                             activity.index("void AgentcloudActivity::drawStateIcon(")]
+    bw_icon_painter = activity[activity.index("void AgentcloudActivity::drawStateIcon("):
+                               activity.index("void AgentcloudActivity::drawGrayscaleStateIcon(")]
+    require("stateIconMask(state)" in bw_icon_painter and "stateIconMask(state)" in gray_icon_painter and
+            "grayscaleGlyph::isBwInk(level)" in bw_icon_painter and
+            "renderer.drawPixel(" in bw_icon_painter,
+            "B/W and grayscale icon painters do not share the gray mask selector/threshold")
+    require("state_icon_unread_gray2" in mask_selector and "state_icon_read_gray2" in mask_selector and
+            "state_icon_question_gray2" in mask_selector and
+            "state_icon_working_gray2_frames[spinnerPhase & 7]" in mask_selector,
+            "shared gray icon selector does not cover every state/frame")
 
     aa_gate = activity[activity.index("bool AgentcloudActivity::antiAliasedTextAvailable() const"):
                        activity.index("bool AgentcloudActivity::renderAntiAliasedText(")]
@@ -173,27 +202,29 @@ def main() -> None:
     lsb = aa_render.index("renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB)", begin)
     lsb_begin = aa_render.index("renderer.beginStripTarget(scratch, y, rows)", lsb)
     lsb_clear = aa_render.index("renderer.clearScreen(0x00)", lsb_begin)
-    lsb_text = aa_render.index("renderTextLayer()", lsb_clear)
+    lsb_text = aa_render.index("renderGrayscaleLayer()", lsb_clear)
     lsb_end = aa_render.index("renderer.endStripTarget()", lsb_text)
     lsb_write = aa_render.index("renderer.writeGrayscalePlaneStrip(true, scratch, y, rows)", lsb_end)
     msb = aa_render.index("renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB)", lsb_write)
     msb_begin = aa_render.index("renderer.beginStripTarget(scratch, y, rows)", msb)
     msb_clear = aa_render.index("renderer.clearScreen(0x00)", msb_begin)
-    msb_text = aa_render.index("renderTextLayer()", msb_clear)
+    msb_text = aa_render.index("renderGrayscaleLayer()", msb_clear)
     msb_end = aa_render.index("renderer.endStripTarget()", msb_text)
     msb_write = aa_render.index("renderer.writeGrayscalePlaneStrip(false, scratch, y, rows)", msb_end)
     gray_display = aa_render.index("renderer.displayGrayBuffer()", msb_write)
     bw_restore = aa_render.index("renderer.setRenderMode(GfxRenderer::BW)", gray_display)
-    cleanup = aa_render.index("renderer.cleanupGrayscaleWithFrameBuffer()", bw_restore)
+    bw_plane_restore = aa_render.index("renderer.copyGrayscaleLsbBuffers()", bw_restore)
+    cleanup = aa_render.index("renderer.cleanupGrayscaleWithFrameBuffer()", bw_plane_restore)
     success_return = aa_render.index("return true;", cleanup)
     require(begin < lsb < lsb_begin < lsb_clear < lsb_text < lsb_end < lsb_write < msb < msb_begin <
-            msb_clear < msb_text < msb_end < msb_write < gray_display < bw_restore < cleanup < success_return,
-            "AA base/plane/display/cleanup ordering is broken")
+            msb_clear < msb_text < msb_end < msb_write < gray_display < bw_restore < bw_plane_restore < cleanup <
+            success_return, "grayscale base/planes/BW-restore/RED-cleanup ordering is broken")
     require(aa_render.count("renderer.endStripTarget();") >= 4 and
             aa_render.count("renderer.setRenderMode(GfxRenderer::BW);") >= 3,
             "AA failure paths do not restore strip and BW state")
-    require("partialRefreshCount = 0;" in aa_render and "forceFullRefresh = false;" in aa_render,
-            "successful AA does not reset refresh bookkeeping")
+    require("FAST_REFRESH" not in aa_render and "++partialRefreshCount;" not in aa_render and
+            "partialRefreshCount = 0;" in aa_render and "forceFullRefresh = false;" in aa_render,
+            "successful grayscale refresh does not reset maintenance bookkeeping")
     require("storeBwBuffer" not in aa_render, "dashboard AA allocates the 48KB reader backup")
 
     activity_loop = activity[activity.index("void AgentcloudActivity::loop()"):
@@ -207,28 +238,29 @@ def main() -> None:
             locked_payload.index("xQueueReceive(payloadQueue, &queuedPayload, 0)") + payload_lock,
             "payload receive can block on RenderLock before confirming queue work")
     for mutation in ("parsePayload(queuedPayload.bytes", "parsedDashboard", "dashboard = parsedDashboard",
-                     "dirtyRows =", "spinnerPhase", "spinnerOnly = false", "lastSpinnerStepMs"):
+                     "dirtyRows ="):
         require(mutation in locked_payload, f"payload state escapes RenderLock: {mutation}")
     require("requestUpdateAndWait" not in locked_payload and payload_unlock < payload_request,
             "payload render wait occurs while RenderLock is held")
 
-    spinner_start = activity_loop.index("bool spinnerNeedsRender = false;")
-    spinner_lock = activity_loop.index("RenderLock stateLock;", spinner_start)
-    spinner_unlock = activity_loop.index("\n  }\n  if (spinnerNeedsRender) requestUpdateAndWait();", spinner_lock)
-    spinner_request = activity_loop.index("if (spinnerNeedsRender) requestUpdateAndWait();", spinner_unlock)
-    locked_spinner = activity_loop[spinner_lock:spinner_unlock]
-    due_recheck = locked_spinner.index("agentcloud::spinnerDue(")
-    for mutation in ("spinnerPhase =", "dirtyRows = activeRows", "spinnerOnly = true", "lastSpinnerStepMs = spinnerNow"):
-        require(due_recheck < locked_spinner.index(mutation), f"spinner mutation precedes locked due recheck: {mutation}")
-    require("requestUpdateAndWait" not in locked_spinner and spinner_unlock < spinner_request,
-            "spinner render wait occurs while RenderLock is held")
-    require(activity_loop.count("requestUpdateAndWait();") == 2,
-            "Agentcloud loop has an unverified blocking render request")
+    duplicate = locked_payload[locked_payload.index("if (changed == 0 && screenState == ScreenState::Dashboard)"):
+                               locked_payload.index("} else {", locked_payload.index(
+                                   "if (changed == 0 && screenState == ScreenState::Dashboard)"))]
+    require("dashboardNeedsRender = true" not in duplicate,
+            "duplicate payload can schedule a render and rotate the working icon")
+    require(activity_loop.count("requestUpdateAndWait();") == 1,
+            "Agentcloud loop still contains a timer-driven render request")
     require("RenderLock" not in activity_loop[:payload_start],
             "button navigation is unnecessarily held behind RenderLock")
-    advertising = activity_loop[activity_loop.index("const uint32_t now = millis();", spinner_request):]
+    advertising = activity_loop[activity_loop.index("const uint32_t now = millis();", payload_request):]
     require("RenderLock" not in advertising and "maintainAdvertising()" in advertising,
             "BLE advertising maintenance is held behind RenderLock")
+
+    combined_spinner_sources = activity + activity_header + protocol_header + (
+        ROOT / "src/activities/agentcloud/AgentcloudProtocol.cpp").read_text()
+    for obsolete in ("SPINNER_INTERVAL_MS", "spinnerDue", "applyContentSpinnerStep", "lastSpinnerStepMs",
+                     "spinnerOnly"):
+        require(obsolete not in combined_spinner_sources, f"timer animation symbol remains: {obsolete}")
 
     dashboard_render = activity[activity.index("void AgentcloudActivity::render(RenderLock&&)"):
                                 activity.index("#endif", activity.index("void AgentcloudActivity::render(RenderLock&&)"))]
@@ -236,32 +268,48 @@ def main() -> None:
     waiting_bw = dashboard_render.index("renderer.displayBuffer(HalDisplay::HALF_REFRESH)", waiting_aa)
     cleanup_due = dashboard_render.index("const bool cleanupDue = agentcloud::partialCleanupDue(partialRefreshCount)")
     aa_available = dashboard_render.index("const bool aaAvailable = antiAliasedTextAvailable()", cleanup_due)
+    policy_call = dashboard_render.index(
+        "agentcloud::grayscaleRefreshPolicy(aaAvailable, firstPaint, forceFullRefresh)", aa_available)
     aa_call = dashboard_render.index(
-        "if (agentcloud::shouldRenderAntiAliasedText(aaAvailable, spinnerOnly, cleanupDue))", aa_available)
-    base_choice = dashboard_render.index(
-        "forceFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH", aa_call)
-    aa_success = dashboard_render.index("if (renderAntiAliasedText(baseMode))", base_choice)
+        "if (grayscalePolicy != agentcloud::GrayscaleRefreshPolicy::Unavailable)", policy_call)
+    full_mode = dashboard_render.index("HalDisplay::FULL_REFRESH", aa_call)
+    half_mode = dashboard_render.index("HalDisplay::HALF_REFRESH", full_mode)
+    fast_mode = dashboard_render.index("HalDisplay::FAST_REFRESH", half_mode)
+    aa_success = dashboard_render.index("if (renderAntiAliasedText(baseMode))", fast_mode)
     aa_return = dashboard_render.index("return;", aa_success)
     bw_full = dashboard_render.index("if (forceFullRefresh)", aa_success)
     partial_window = dashboard_render.index("renderer.displayWindow", bw_full)
-    unsafe_retry = dashboard_render.index(
-        "spinnerOnly && aaAvailable && renderAntiAliasedText(HalDisplay::HALF_REFRESH)", partial_window)
-    unsafe_bw = dashboard_render.index("renderer.displayBuffer(HalDisplay::HALF_REFRESH)", unsafe_retry)
-    require(waiting_aa < waiting_bw < cleanup_due < aa_available < aa_call < base_choice < aa_success < aa_return <
-            bw_full < partial_window < unsafe_retry < unsafe_bw,
-            "AA success/fallback does not precede the unchanged B/W refresh paths")
-    require("FAST_REFRESH" not in aa_render and "FAST_REFRESH" not in dashboard_render[aa_call:bw_full],
-            "dashboard text AA uses a differential FAST base")
+    unsafe_bw = dashboard_render.index("renderer.displayBuffer(HalDisplay::HALF_REFRESH)", partial_window)
+    require(waiting_aa < waiting_bw < cleanup_due < aa_available < policy_call < aa_call < full_mode < half_mode <
+            fast_mode < aa_success < aa_return < bw_full < partial_window < unsafe_bw,
+            "grayscale FULL/HALF/FAST selection or B/W fallback ordering is broken")
+    require("cleanupDue" not in dashboard_render[policy_call:aa_success],
+            "B/W partial cleanup incorrectly promotes an ordinary AA render to HALF")
+    require("return;" in dashboard_render[aa_success:partial_window],
+            "successful grayscale rendering can fall through to displayWindow")
+    require(aa_call < aa_success < aa_return < partial_window,
+            "AA-off fallback cannot retain the partial displayWindow path")
     require("else if (firstPaint || cleanupDue)" in dashboard_render,
             "failed AA maintenance does not retain the B/W cleanup fallback")
+
+    layout_setup = dashboard_render.index("agentcloud::makeLayout(")
+    rows_setup = dashboard_render.index("uint8_t rowsToDraw = firstPaint ? 0x0f : dirtyRows", layout_setup)
+    active_mask = dashboard_render.index("const uint8_t activeRows = agentcloud::activeRowMask(dashboard)", rows_setup)
+    phase_gate = dashboard_render.index("if (!firstPaint && activeRows != 0)", active_mask)
+    phase_advance = dashboard_render.index("spinnerPhase = static_cast<uint8_t>((spinnerPhase + 1) & 7)", phase_gate)
+    expand_rows = dashboard_render.index("rowsToDraw |= activeRows", phase_advance)
+    row_paint = dashboard_render.index("renderRow(i, layout.rows[i])", expand_rows)
+    require(layout_setup < rows_setup < active_mask < phase_gate < phase_advance < expand_rows < row_paint,
+            "working phase is not advanced solely by post-first dashboard renders")
+    require("spinnerPhase" not in activity_loop and "spinnerPhase" not in on_enter,
+            "working phase is mutated outside the render task")
 
     forced_refresh = activity_header[activity_header.index("bool handleForcedRefresh() override"):
                                      activity_header.index(" private:")]
     forced_lock = forced_refresh.index("RenderLock lock(*this);")
     forced_unlock = forced_refresh.index("\n    }\n    requestUpdate();", forced_lock)
     require(forced_lock < forced_refresh.index("dirtyRows = 0x0f;") < forced_unlock and
-            forced_lock < forced_refresh.index("spinnerOnly = false;") < forced_unlock and
-            "partialRefreshCount = agentcloud::MAX_PARTIAL_REFRESHES;" in forced_refresh,
+            "partialRefreshCount" not in forced_refresh,
             "manual refresh state is not synchronized before scheduling its redraw")
     require(forced_unlock < forced_refresh.index("requestUpdate();") and
             "requestUpdateAndWait" not in forced_refresh and

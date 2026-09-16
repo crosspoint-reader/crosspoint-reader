@@ -3,6 +3,7 @@
 #ifdef AGENTCLOUD_DASHBOARD
 
 #include <FontCacheManager.h>
+#include <GrayscaleGlyphPlanes.h>
 #include <HalDisplay.h>
 #include <HalMemory.h>
 #include <I18n.h>
@@ -13,7 +14,7 @@
 #include <cstring>
 
 #include "AgentcloudAuth.h"
-#include "AgentcloudMaterialIcons.h"
+#include "AgentcloudMaterialIconsGray.h"
 #include "CrossPointSettings.h"
 #include "fontIds.h"
 
@@ -349,11 +350,8 @@ void AgentcloudActivity::onEnter() {
   firstPaint = true;
   dirtyRows = 0;
   partialRefreshCount = 0;
-  spinnerPhase = 0;
-  spinnerOnly = false;
   forceFullRefresh = false;
-  lastSpinnerStepMs = millis();
-  lastAdvertisingCheckMs = lastSpinnerStepMs;
+  lastAdvertisingCheckMs = millis();
 
   logInternalHeap("heap before BLE preparation");
   if (auto* cache = renderer.getFontCacheManager()) cache->releaseSdFontCaches();
@@ -454,9 +452,6 @@ void AgentcloudActivity::loop() {
           if (changed == 0 && screenState == ScreenState::Dashboard) {
             LOG_DBG("ACD", "Duplicate dashboard payload ignored");
           } else {
-            const uint32_t now = millis();
-            const uint8_t previousActiveRows = agentcloud::activeRowMask(dashboard);
-            const uint8_t incomingActiveRows = agentcloud::activeRowMask(parsedDashboard);
             if (agentcloud::hasNewSettledUnreadIdentity(dashboard, parsedDashboard)) forceFullRefresh = true;
             if (screenState == ScreenState::Dashboard &&
                 agentcloud::allRowsEmpty(dashboard) != agentcloud::allRowsEmpty(parsedDashboard)) {
@@ -465,16 +460,8 @@ void AgentcloudActivity::loop() {
               changed = 0x0f;
             }
             dashboard = parsedDashboard;
-            dirtyRows = screenState == ScreenState::Dashboard
-                            ? agentcloud::applyContentSpinnerStep(changed, previousActiveRows, incomingActiveRows, now,
-                                                                  spinnerPhase, lastSpinnerStepMs)
-                            : 0x0f;
-            spinnerOnly = false;
+            dirtyRows = screenState == ScreenState::Dashboard ? changed : 0x0f;
             screenState = ScreenState::Dashboard;
-            if (previousActiveRows == 0 && incomingActiveRows != 0) {
-              spinnerPhase = 0;
-              lastSpinnerStepMs = now;
-            }
             dashboardNeedsRender = true;
           }
         }
@@ -482,22 +469,6 @@ void AgentcloudActivity::loop() {
     }
     if (dashboardNeedsRender) requestUpdateAndWait();
   }
-
-  bool spinnerNeedsRender = false;
-  {
-    RenderLock stateLock;
-    const uint32_t spinnerNow = millis();
-    const uint8_t activeRows = agentcloud::activeRowMask(dashboard);
-    if (screenState == ScreenState::Dashboard &&
-        agentcloud::spinnerDue(lastSpinnerStepMs, spinnerNow, activeRows != 0)) {
-      spinnerPhase = static_cast<uint8_t>((spinnerPhase + 1) & 7);
-      dirtyRows = activeRows;
-      spinnerOnly = true;
-      lastSpinnerStepMs = spinnerNow;
-      spinnerNeedsRender = true;
-    }
-  }
-  if (spinnerNeedsRender) requestUpdateAndWait();
 
   const uint32_t now = millis();
   if (ble && static_cast<uint32_t>(now - lastAdvertisingCheckMs) >= ADVERTISING_WATCHDOG_MS) {
@@ -577,32 +548,55 @@ uint8_t AgentcloudActivity::drawWrappedText(const int fontId, const EpdFontFamil
   return lines;
 }
 
-void AgentcloudActivity::drawStateIcon(const agentcloud::CardState state, const int x, const int y,
-                                       const bool ink) const {
+const uint8_t* AgentcloudActivity::stateIconMask(const agentcloud::CardState state) const {
   const uint8_t* mask = nullptr;
   switch (state) {
     case agentcloud::CardState::Unread:
-      mask = state_icon_unread_bits;
+      mask = state_icon_unread_gray2;
       break;
     case agentcloud::CardState::Read:
-      mask = state_icon_read_bits;
+      mask = state_icon_read_gray2;
       break;
     case agentcloud::CardState::Waiting:
-      mask = state_icon_question_bits;
+      mask = state_icon_question_gray2;
       break;
     case agentcloud::CardState::Working:
-      mask = state_icon_working_frames[spinnerPhase & 7];
+      mask = state_icon_working_gray2_frames[spinnerPhase & 7];
       break;
     case agentcloud::CardState::Empty:
       break;
   }
+  return mask;
+}
+
+void AgentcloudActivity::drawStateIcon(const agentcloud::CardState state, const int x, const int y,
+                                       const bool ink) const {
+  const uint8_t* const mask = stateIconMask(state);
   if (mask == nullptr) return;
-  constexpr int ROW_BYTES = (STATE_ICON_UNREAD_W + 7) / 8;
-  for (int row = 0; row < STATE_ICON_UNREAD_H; ++row) {
-    for (int column = 0; column < STATE_ICON_UNREAD_W; ++column) {
-      if ((mask[row * ROW_BYTES + column / 8] & (0x80u >> (column & 7))) != 0) {
-        renderer.drawPixel(x + column, y + row, ink);
-      }
+  for (size_t pixel = 0; pixel < 34 * 34; ++pixel) {
+    const uint8_t packed = mask[pixel / 4];
+    const uint8_t level = static_cast<uint8_t>((packed >> ((3 - (pixel & 3)) * 2)) & 0x03);
+    if (grayscaleGlyph::isBwInk(level)) {
+      renderer.drawPixel(x + static_cast<int>(pixel % 34), y + static_cast<int>(pixel / 34), ink);
+    }
+  }
+}
+
+void AgentcloudActivity::drawGrayscaleStateIcon(const agentcloud::CardState state, const int x, const int y,
+                                                const bool ink) const {
+  const auto renderMode = renderer.getRenderMode();
+  if (renderMode == GfxRenderer::BW) return;
+
+  const uint8_t* const mask = stateIconMask(state);
+  if (mask == nullptr) return;
+
+  for (size_t pixel = 0; pixel < 34 * 34; ++pixel) {
+    const uint8_t packed = mask[pixel / 4];
+    const uint8_t level = static_cast<uint8_t>((packed >> ((3 - (pixel & 3)) * 2)) & 0x03);
+    const bool marked = renderMode == GfxRenderer::GRAYSCALE_MSB ? grayscaleGlyph::marksMsb(level)
+                                                                 : grayscaleGlyph::marksLsb(level, ink);
+    if (marked) {
+      renderer.drawPixel(x + static_cast<int>(pixel % 34), y + static_cast<int>(pixel / 34), false);
     }
   }
 }
@@ -642,15 +636,7 @@ void AgentcloudActivity::renderRowText(const size_t index, const agentcloud::Rec
   renderer.setClipRect(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
 }
 
-void AgentcloudActivity::renderStateOnly(const size_t index, const agentcloud::Rect& rowRect) {
-  const agentcloud::Card& card = dashboard.rows[index];
-  const bool highlighted = agentcloud::isHighlighted(card);
-  const agentcloud::Rect icon = agentcloud::stateIconRect(rowRect);
-  renderer.fillRect(icon.x, icon.y, icon.width, icon.height, highlighted);
-  drawStateIcon(agentcloud::cardState(card), icon.x, icon.y, !highlighted);
-}
-
-void AgentcloudActivity::renderTextLayer() {
+void AgentcloudActivity::renderGrayscaleLayer() {
   if (screenState != ScreenState::Dashboard) {
     const char* message = tr(STR_AGENTCLOUD_WAITING_FOR_MAC);
     if (screenState == ScreenState::AuthError) message = tr(STR_AGENTCLOUD_AUTH_ERROR);
@@ -667,7 +653,11 @@ void AgentcloudActivity::renderTextLayer() {
   const agentcloud::DashboardLayout layout =
       agentcloud::makeLayout(renderer.getScreenWidth(), renderer.getScreenHeight());
   for (size_t i = 0; i < agentcloud::ROW_COUNT; ++i) {
-    if (dashboard.rows[i].title[0] != '\0') renderRowText(i, layout.rows[i]);
+    const agentcloud::Card& card = dashboard.rows[i];
+    if (card.title[0] == '\0') continue;
+    renderRowText(i, layout.rows[i]);
+    const agentcloud::Rect icon = agentcloud::stateIconRect(layout.rows[i]);
+    drawGrayscaleStateIcon(agentcloud::cardState(card), icon.x, icon.y, !agentcloud::isHighlighted(card));
   }
 }
 
@@ -701,7 +691,7 @@ bool AgentcloudActivity::renderAntiAliasedText(const HalDisplay::RefreshMode bas
     const int rows = std::min(AA_STRIP_ROWS, displayHeight - y);
     renderer.beginStripTarget(scratch, y, rows);
     renderer.clearScreen(0x00);
-    renderTextLayer();
+    renderGrayscaleLayer();
     renderer.endStripTarget();
     renderer.writeGrayscalePlaneStrip(true, scratch, y, rows);
   }
@@ -711,17 +701,22 @@ bool AgentcloudActivity::renderAntiAliasedText(const HalDisplay::RefreshMode bas
     const int rows = std::min(AA_STRIP_ROWS, displayHeight - y);
     renderer.beginStripTarget(scratch, y, rows);
     renderer.clearScreen(0x00);
-    renderTextLayer();
+    renderGrayscaleLayer();
     renderer.endStripTarget();
     renderer.writeGrayscalePlaneStrip(false, scratch, y, rows);
   }
 
   renderer.displayGrayBuffer();
   renderer.setRenderMode(GfxRenderer::BW);
+  // Overlay grayscale leaves BW controller RAM holding the LSB edge mask.
+  // Restore the intact host BW frame there before RED is restored as the
+  // differential baseline, otherwise a later window refresh exposes the mask
+  // outside its dirty rectangle as a dark flash.
+  renderer.copyGrayscaleLsbBuffers();
   renderer.cleanupGrayscaleWithFrameBuffer();
   partialRefreshCount = 0;
   forceFullRefresh = false;
-  LOG_DBG("ACD", "Rendered antialiased text in 20-row strips");
+  LOG_DBG("ACD", "Rendered grayscale text/icons in 20-row strips");
   return true;
 }
 
@@ -740,6 +735,11 @@ void AgentcloudActivity::render(RenderLock&&) {
   const agentcloud::DashboardLayout layout =
       agentcloud::makeLayout(renderer.getScreenWidth(), renderer.getScreenHeight());
   uint8_t rowsToDraw = firstPaint ? 0x0f : dirtyRows;
+  const uint8_t activeRows = agentcloud::activeRowMask(dashboard);
+  if (!firstPaint && activeRows != 0) {
+    spinnerPhase = static_cast<uint8_t>((spinnerPhase + 1) & 7);
+    rowsToDraw |= activeRows;
+  }
   agentcloud::Rect updateBounds{};
   if (agentcloud::allRowsEmpty(dashboard)) {
     renderer.clearScreen();
@@ -748,35 +748,20 @@ void AgentcloudActivity::render(RenderLock&&) {
   } else {
     for (size_t i = 0; i < agentcloud::ROW_COUNT; ++i) {
       if ((rowsToDraw & (1u << i)) == 0) continue;
-      if (spinnerOnly && !firstPaint) {
-        renderStateOnly(i, layout.rows[i]);
-        const agentcloud::Rect icon = agentcloud::stateIconRect(layout.rows[i]);
-        if (updateBounds.width == 0) {
-          updateBounds = icon;
-        } else {
-          const int right = std::max(updateBounds.x + updateBounds.width, icon.x + icon.width);
-          const int bottom = std::max(updateBounds.y + updateBounds.height, icon.y + icon.height);
-          updateBounds.x = std::min(updateBounds.x, icon.x);
-          updateBounds.y = std::min(updateBounds.y, icon.y);
-          updateBounds.width = right - updateBounds.x;
-          updateBounds.height = bottom - updateBounds.y;
-        }
-      } else {
-        renderRow(i, layout.rows[i]);
-      }
+      renderRow(i, layout.rows[i]);
     }
-    if (!spinnerOnly || firstPaint) updateBounds = agentcloud::dirtyBounds(layout, rowsToDraw);
+    updateBounds = agentcloud::dirtyBounds(layout, rowsToDraw);
   }
 
   const bool cleanupDue = agentcloud::partialCleanupDue(partialRefreshCount);
   const bool aaAvailable = antiAliasedTextAvailable();
-  if (agentcloud::shouldRenderAntiAliasedText(aaAvailable, spinnerOnly, cleanupDue)) {
-    // Old gray edge pixels are absent from the B/W baseline, so every content
-    // change needs a clean HALF base; an attention flash may promote it to FULL.
-    const auto baseMode = forceFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
+  const auto grayscalePolicy = agentcloud::grayscaleRefreshPolicy(aaAvailable, firstPaint, forceFullRefresh);
+  if (grayscalePolicy != agentcloud::GrayscaleRefreshPolicy::Unavailable) {
+    const auto baseMode = grayscalePolicy == agentcloud::GrayscaleRefreshPolicy::Full   ? HalDisplay::FULL_REFRESH
+                          : grayscalePolicy == agentcloud::GrayscaleRefreshPolicy::Half ? HalDisplay::HALF_REFRESH
+                                                                                        : HalDisplay::FAST_REFRESH;
     if (renderAntiAliasedText(baseMode)) {
       firstPaint = false;
-      spinnerOnly = false;
       dirtyRows = 0;
       return;
     }
@@ -801,14 +786,11 @@ void AgentcloudActivity::render(RenderLock&&) {
     } else {
       LOG_ERR("ACD", "Partial window unsafe: bytes=%zu largest=%zu; using maintenance refresh", windowBytes,
               heap.largestBlockBytes);
-      if (!(spinnerOnly && aaAvailable && renderAntiAliasedText(HalDisplay::HALF_REFRESH))) {
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        partialRefreshCount = 0;
-      }
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      partialRefreshCount = 0;
     }
   }
   firstPaint = false;
-  spinnerOnly = false;
   dirtyRows = 0;
 }
 

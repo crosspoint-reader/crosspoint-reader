@@ -11,7 +11,6 @@ inline constexpr size_t ROW_COUNT = 4;
 inline constexpr size_t MAX_ID_BYTES = 40;
 inline constexpr size_t MAX_TITLE_BYTES = 40;
 inline constexpr size_t MAX_HEADLINE_BYTES = 120;
-inline constexpr uint32_t SPINNER_INTERVAL_MS = 15000;
 inline constexpr uint8_t MAX_PARTIAL_REFRESHES = 60;
 inline constexpr uint16_t NO_CONNECTION = UINT16_MAX;
 inline constexpr int DASHBOARD_WIDTH = 480;
@@ -78,6 +77,7 @@ enum class ParseError : uint8_t {
 };
 
 enum class CardState : uint8_t { Empty, Unread, Read, Waiting, Working };
+enum class GrayscaleRefreshPolicy : uint8_t { Unavailable, Fast, Half, Full };
 
 struct Card {
   char id[MAX_ID_BYTES + 1]{};
@@ -100,8 +100,6 @@ bool sameIdentity(const Card& lhs, const Card& rhs);
 bool hasNewSettledUnreadIdentity(const DashboardSnapshot& previous, const DashboardSnapshot& incoming);
 uint8_t dirtyRowMask(const DashboardSnapshot& current, const DashboardSnapshot& incoming);
 uint8_t activeRowMask(const DashboardSnapshot& snapshot);
-uint8_t applyContentSpinnerStep(uint8_t changedRows, uint8_t previousActiveRows, uint8_t incomingActiveRows,
-                                uint32_t nowMs, uint8_t& spinnerPhase, uint32_t& lastSpinnerStepMs);
 CardState cardState(const Card& card);
 bool isHighlighted(const Card& card);
 bool allRowsEmpty(const DashboardSnapshot& snapshot);
@@ -109,10 +107,12 @@ uint8_t bodyLineBudget(uint8_t titleLines);
 constexpr bool textAntiAliasingAvailable(const bool settingEnabled, const bool supported, const bool stripUploads) {
   return settingEnabled && supported && stripUploads;
 }
-constexpr bool shouldRenderAntiAliasedText(const bool available, const bool spinnerOnly, const bool cleanupDue) {
-  return available && (!spinnerOnly || cleanupDue);
+constexpr GrayscaleRefreshPolicy grayscaleRefreshPolicy(const bool available, const bool firstPaint,
+                                                        const bool forceFullRefresh) {
+  if (!available) return GrayscaleRefreshPolicy::Unavailable;
+  if (forceFullRefresh) return GrayscaleRefreshPolicy::Full;
+  return firstPaint ? GrayscaleRefreshPolicy::Half : GrayscaleRefreshPolicy::Fast;
 }
-bool spinnerDue(uint32_t lastStepMs, uint32_t nowMs, bool hasActiveRow);
 bool partialCleanupDue(uint8_t partialRefreshCount);
 
 struct Rect {

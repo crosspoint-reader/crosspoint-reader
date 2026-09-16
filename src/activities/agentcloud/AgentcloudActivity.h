@@ -29,8 +29,6 @@ class AgentcloudActivity final : public Activity {
     {
       RenderLock lock(*this);
       dirtyRows = 0x0f;
-      spinnerOnly = false;
-      partialRefreshCount = agentcloud::MAX_PARTIAL_REFRESHES;
     }
     requestUpdate();
     return true;
@@ -45,14 +43,15 @@ class AgentcloudActivity final : public Activity {
   void renderMessage(const char* message);
   void renderRow(size_t index, const agentcloud::Rect& rect);
   void renderRowText(size_t index, const agentcloud::Rect& rect);
-  void renderStateOnly(size_t index, const agentcloud::Rect& rowRect);
   void renderCenteredText(const char* title, const char* body);
-  void renderTextLayer();
+  void renderGrayscaleLayer();
   bool renderAntiAliasedText(HalDisplay::RefreshMode baseMode);
   bool antiAliasedTextAvailable() const;
   uint8_t drawWrappedText(int fontId, EpdFontFamily::Style style, int x, int y, int width, int lineStep,
                           uint8_t maxLines, const char* text, bool ink, bool centered = false);
+  const uint8_t* stateIconMask(agentcloud::CardState state) const;
   void drawStateIcon(agentcloud::CardState state, int x, int y, bool ink) const;
+  void drawGrayscaleStateIcon(agentcloud::CardState state, int x, int y, bool ink) const;
   void stopBle();
   void showError(ScreenState errorState);
   void logInternalHeap(const char* stage) const;
@@ -67,13 +66,11 @@ class AgentcloudActivity final : public Activity {
   agentcloud::DashboardSnapshot parsedDashboard{};
   std::atomic<bool> stopping{false};
   ScreenState screenState = ScreenState::Waiting;
-  uint32_t lastSpinnerStepMs = 0;
   uint32_t lastAdvertisingCheckMs = 0;
   uint8_t dirtyRows = 0;
   uint8_t spinnerPhase = 0;
   uint8_t partialRefreshCount = 0;
   bool firstPaint = true;
-  bool spinnerOnly = false;
   bool forceFullRefresh = false;
   // Largest wire text is 120 bytes; three UTF-8 ellipsis bytes plus NUL fit.
   char textLineScratch[agentcloud::MAX_HEADLINE_BYTES + 4]{};

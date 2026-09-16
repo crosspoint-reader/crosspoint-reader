@@ -452,21 +452,6 @@ uint8_t activeRowMask(const DashboardSnapshot& snapshot) {
   return mask;
 }
 
-uint8_t applyContentSpinnerStep(const uint8_t changedRows, const uint8_t previousActiveRows,
-                                const uint8_t incomingActiveRows, const uint32_t nowMs, uint8_t& spinnerPhase,
-                                uint32_t& lastSpinnerStepMs) {
-  if (incomingActiveRows == 0) return changedRows;
-  if (previousActiveRows == 0) {
-    spinnerPhase = 0;
-    lastSpinnerStepMs = nowMs;
-    return changedRows;
-  }
-  if (!spinnerDue(lastSpinnerStepMs, nowMs, true)) return changedRows;
-  spinnerPhase = static_cast<uint8_t>((spinnerPhase + 1) & 7);
-  lastSpinnerStepMs = nowMs;
-  return static_cast<uint8_t>(changedRows | incomingActiveRows);
-}
-
 bool isHighlighted(const Card& card) { return card.title[0] != '\0' && card.unread && !card.active; }
 
 bool allRowsEmpty(const DashboardSnapshot& snapshot) {
@@ -478,10 +463,6 @@ bool allRowsEmpty(const DashboardSnapshot& snapshot) {
 
 uint8_t bodyLineBudget(const uint8_t titleLines) {
   return titleLines <= 1 ? BODY_LINES_AFTER_ONE_TITLE : BODY_LINES_AFTER_TWO_TITLES;
-}
-
-bool spinnerDue(const uint32_t lastStepMs, const uint32_t nowMs, const bool hasActiveRow) {
-  return hasActiveRow && static_cast<uint32_t>(nowMs - lastStepMs) >= SPINNER_INTERVAL_MS;
 }
 
 bool partialCleanupDue(const uint8_t partialRefreshCount) { return partialRefreshCount >= MAX_PARTIAL_REFRESHES; }

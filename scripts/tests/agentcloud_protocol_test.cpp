@@ -2,7 +2,7 @@
 #include <cstdio>
 #include <cstring>
 
-#include "AgentcloudMaterialIcons.h"
+#include "AgentcloudMaterialIconsGray.h"
 #include "AgentcloudProtocol.h"
 #include "DisplayWindowGeometry.h"
 #include "GrayscaleGlyphPlanes.h"
@@ -22,6 +22,25 @@ int failures = 0;
 constexpr uint8_t AUTH[agentcloud::AUTH_BYTES] = {1, 2, 3, 4, 5, 6, 7, 8};
 constexpr char LIVE_PAYLOAD[] =
     R"({"u":2,"a":1,"r":[{"i":"one","t":"Build","h":"Compiling","n":true,"l":true,"q":false,"d":null,"s":1,"v":2,"p":3},{"i":"two","t":"Review","h":"Needs input","n":true,"l":true,"q":true,"d":null},{"i":"three","t":"Done","h":"Ready","n":true,"l":false,"q":false,"d":null},{"t":""}]})";
+
+template <size_t N>
+constexpr bool hasDarkAndLightLevels(const uint8_t (&image)[N]) {
+  bool hasDark = false;
+  bool hasLight = false;
+  for (const uint8_t packed : image) {
+    for (uint8_t shift = 0; shift < 8; shift += 2) {
+      const uint8_t level = static_cast<uint8_t>((packed >> shift) & 0x03);
+      hasDark = hasDark || level == 1;
+      hasLight = hasLight || level == 2;
+    }
+  }
+  return hasDark && hasLight;
+}
+
+template <size_t N>
+constexpr uint8_t grayLevelAt(const uint8_t (&image)[N], const size_t pixel) {
+  return static_cast<uint8_t>((image[pixel / 4] >> ((3 - (pixel & 3)) * 2)) & 0x03);
+}
 
 void testFrames() {
   agentcloud::FrameAssembler assembler;
@@ -137,38 +156,17 @@ void testUpdates() {
   auto idleRowChanged = before;
   memcpy(idleRowChanged.rows[2].headline, "New", 4);
   CHECK(agentcloud::dirtyRowMask(before, idleRowChanged) == 0x04);
-  uint8_t phase = 3;
-  uint32_t deadlineBase = 1000;
-  CHECK(agentcloud::applyContentSpinnerStep(0x04, 0x01, 0x01, 5000, phase, deadlineBase) == 0x04);
-  CHECK(phase == 3);
-  CHECK(deadlineBase == 1000);
-  CHECK(agentcloud::applyContentSpinnerStep(0x08, 0x01, 0x01, 15999, phase, deadlineBase) == 0x08);
-  CHECK(phase == 3);
-  CHECK(deadlineBase == 1000);
-  CHECK(agentcloud::applyContentSpinnerStep(0x04, 0x01, 0x01, 16000, phase, deadlineBase) == 0x05);
-  CHECK(phase == 4);
-  CHECK(deadlineBase == 16000);
-  CHECK(agentcloud::applyContentSpinnerStep(0x08, 0x01, 0x01, 20000, phase, deadlineBase) == 0x08);
-  CHECK(phase == 4);
-  CHECK(deadlineBase == 16000);
-  phase = 6;
-  deadlineBase = 0;
-  CHECK(agentcloud::applyContentSpinnerStep(0x01, 0, 0x01, 500, phase, deadlineBase) == 0x01);
-  CHECK(phase == 0);
-  CHECK(deadlineBase == 500);
-  CHECK(!agentcloud::spinnerDue(1000, 15999, true));
-  CHECK(agentcloud::spinnerDue(1000, 16000, true));
-  CHECK(!agentcloud::spinnerDue(1000, 20000, false));
   CHECK(!agentcloud::partialCleanupDue(59));
   CHECK(agentcloud::partialCleanupDue(60));
   CHECK(agentcloud::textAntiAliasingAvailable(true, true, true));
   CHECK(!agentcloud::textAntiAliasingAvailable(false, true, true));
   CHECK(!agentcloud::textAntiAliasingAvailable(true, false, true));
   CHECK(!agentcloud::textAntiAliasingAvailable(true, true, false));
-  CHECK(agentcloud::shouldRenderAntiAliasedText(true, false, false));
-  CHECK(!agentcloud::shouldRenderAntiAliasedText(true, true, false));
-  CHECK(agentcloud::shouldRenderAntiAliasedText(true, true, true));
-  CHECK(!agentcloud::shouldRenderAntiAliasedText(false, true, true));
+  CHECK(agentcloud::grayscaleRefreshPolicy(false, false, false) == agentcloud::GrayscaleRefreshPolicy::Unavailable);
+  CHECK(agentcloud::grayscaleRefreshPolicy(true, false, false) == agentcloud::GrayscaleRefreshPolicy::Fast);
+  CHECK(agentcloud::grayscaleRefreshPolicy(true, true, false) == agentcloud::GrayscaleRefreshPolicy::Half);
+  CHECK(agentcloud::grayscaleRefreshPolicy(true, false, true) == agentcloud::GrayscaleRefreshPolicy::Full);
+  CHECK(agentcloud::grayscaleRefreshPolicy(true, true, true) == agentcloud::GrayscaleRefreshPolicy::Full);
 }
 
 void testGeometry() {
@@ -261,21 +259,40 @@ void testPresentationContracts() {
   readRecent.rows[0].recent = true;
   CHECK(!agentcloud::hasNewSettledUnreadIdentity(empty, readRecent));
 
-  CHECK(STATE_ICON_BYTES == 170);
-  CHECK(STATE_ICON_IMAGE_COUNT == 11);
-  CHECK(sizeof(state_icon_unread_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_read_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_question_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_0_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_1_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_2_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_3_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_4_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_5_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_6_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_7_bits) == STATE_ICON_BYTES);
-  CHECK(sizeof(state_icon_working_frames) / sizeof(state_icon_working_frames[0]) == 8);
+  CHECK(STATE_ICON_GRAY2_BYTES == 289);
+  CHECK(STATE_ICON_GRAY2_IMAGE_COUNT == 11);
+  CHECK(sizeof(state_icon_unread_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_read_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_question_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_0_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_1_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_2_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_3_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_4_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_5_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_6_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_7_gray2) == STATE_ICON_GRAY2_BYTES);
+  CHECK(sizeof(state_icon_working_gray2_frames) / sizeof(state_icon_working_gray2_frames[0]) == 8);
+  CHECK(hasDarkAndLightLevels(state_icon_unread_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_read_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_question_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_0_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_1_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_2_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_3_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_4_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_5_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_6_gray2));
+  CHECK(hasDarkAndLightLevels(state_icon_working_7_gray2));
+  CHECK(grayLevelAt(state_icon_unread_gray2, 0) == 3);
+  CHECK(grayLevelAt(state_icon_unread_gray2, 120) == 0);
+  CHECK(grayLevelAt(state_icon_unread_gray2, 122) == 1);
+  CHECK(grayLevelAt(state_icon_unread_gray2, 123) == 2);
 
+  CHECK(grayscaleGlyph::isBwInk(0));
+  CHECK(grayscaleGlyph::isBwInk(1));
+  CHECK(grayscaleGlyph::isBwInk(2));
+  CHECK(!grayscaleGlyph::isBwInk(3));
   CHECK(grayscaleGlyph::marksMsb(1));
   CHECK(grayscaleGlyph::marksMsb(2));
   CHECK(!grayscaleGlyph::marksMsb(0));
