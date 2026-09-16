@@ -1170,7 +1170,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   LOG_ERR("EHP", "Failed to create ImageBlock");
                   return;
                 }
-                int xPos = (self->viewportWidth - displayWidth) / 2;
+                // Without a containing block there is nothing to align against, so fall back
+                // to the default style: no insets and Justify, which centres the image.
+                BlockStyle defaultStyle;
+                const BlockStyle& imageStyle =
+                    self->currentTextBlock ? self->currentTextBlock->getBlockStyle() : defaultStyle;
+                const int16_t xPos =
+                    imageStyle.alignedContentX(self->viewportWidth, static_cast<int16_t>(displayWidth));
                 auto pageImage = makeUniqueNoThrow<PageImage>(std::move(imageBlock), xPos, self->currentPageNextY);
                 if (!pageImage) {
                   LOG_ERR("EHP", "Failed to create PageImage");
