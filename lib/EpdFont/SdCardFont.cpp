@@ -1387,6 +1387,10 @@ bool SdCardFont::hasAdvanceTable() const {
   return false;
 }
 
+bool SdCardFont::tryGetAdvance(uint32_t codepoint, uint8_t style, uint16_t& advance) const {
+  return advanceTableLookup(style & (MAX_STYLES - 1), codepoint, &advance);
+}
+
 uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {
   style &= (MAX_STYLES - 1);
   if (!advanceTable_[style]) return 0;

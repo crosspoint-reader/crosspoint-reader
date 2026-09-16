@@ -12,6 +12,7 @@ struct SdFontTestEsp {
   size_t largestBlock = 200 * 1024;
   size_t getFreeHeap() const { return 200 * 1024; }
   size_t getMaxAllocHeap() const { return largestBlock; }
+  void restart() const;
 };
 inline SdFontTestEsp ESP;
 inline uint32_t millis() { return 0; }
