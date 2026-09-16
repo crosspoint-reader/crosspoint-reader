@@ -12,7 +12,16 @@
 #include <algorithm>
 
 #include "../Memory/Memory.h"
+#include "DisplayWindowGeometry.h"
 #include "FontCacheManager.h"
+
+using display_window::AlignedMemRect;
+using display_window::rotateCoordinates;
+using display_window::screenRectToAlignedMemRect;
+
+static_assert(GfxRenderer::Portrait == 0 && GfxRenderer::LandscapeClockwise == 1 &&
+                  GfxRenderer::PortraitInverted == 2 && GfxRenderer::LandscapeCounterClockwise == 3,
+              "DisplayWindowGeometry orientation order must match GfxRenderer");
 
 namespace {
 
@@ -277,95 +286,6 @@ void GfxRenderer::ensureSdGlyphsResident(const int fontId, const char* text, con
   // in prewarmStyle without re-reading glyphs.
   const uint8_t styleMask = static_cast<uint8_t>(1u << (static_cast<uint8_t>(style) & 0x03));
   sdIt->second->prewarm(text, styleMask, metadataOnly, /*loadKernLig=*/false);
-}
-
-// Translate logical (x,y) coordinates to physical panel coordinates based on current orientation
-// This should always be inlined for better performance
-static inline void rotateCoordinates(const GfxRenderer::Orientation orientation, const int x, const int y, int* phyX,
-                                     int* phyY, const uint16_t panelWidth, const uint16_t panelHeight) {
-  switch (orientation) {
-    case GfxRenderer::Portrait: {
-      // Logical portrait (480x800) → panel (800x480)
-      // Rotation: 90 degrees clockwise
-      *phyX = y;
-      *phyY = panelHeight - 1 - x;
-      break;
-    }
-    case GfxRenderer::LandscapeClockwise: {
-      // Logical landscape (800x480) rotated 180 degrees (swap top/bottom and left/right)
-      *phyX = panelWidth - 1 - x;
-      *phyY = panelHeight - 1 - y;
-      break;
-    }
-    case GfxRenderer::PortraitInverted: {
-      // Logical portrait (480x800) → panel (800x480)
-      // Rotation: 90 degrees counter-clockwise
-      *phyX = panelWidth - 1 - y;
-      *phyY = x;
-      break;
-    }
-    case GfxRenderer::LandscapeCounterClockwise: {
-      // Logical landscape (800x480) aligned with panel orientation
-      *phyX = x;
-      *phyY = y;
-      break;
-    }
-  }
-}
-
-// Output of screenRectToAlignedMemRect: a rectangle in panel-memory
-// coordinates whose x and width are guaranteed to be multiples of 8 (the
-// SDK's EInkDisplay::displayWindow alignment requirement). `valid == false`
-// means the input was empty or fully outside the panel.
-struct AlignedMemRect {
-  uint16_t x = 0;
-  uint16_t y = 0;
-  uint16_t w = 0;
-  uint16_t h = 0;
-  bool valid = false;
-};
-
-// Translate a screen-coordinate rectangle (the coordinate system used by
-// fillRect / drawText / the rest of the renderer's public API) into a
-// panel-memory rectangle suitable for direct framebuffer indexing. Rotates
-// the rectangle's two opposite corners with rotateCoordinates(), takes the
-// bounding box (which naturally swaps width/height in Portrait /
-// PortraitInverted), then snaps the x extent outward to multiples of 8 and
-// clamps to panel bounds. Precondition: panel dims are multiples of 8 (true
-// for the 800x480 panel), so clamping cannot re-break alignment.
-static AlignedMemRect screenRectToAlignedMemRect(GfxRenderer::Orientation orientation, int sx, int sy, int sw, int sh,
-                                                 uint16_t panelWidth, uint16_t panelHeight) {
-  AlignedMemRect out;
-  if (sw <= 0 || sh <= 0) return out;
-
-  int x0, y0, x1, y1;
-  rotateCoordinates(orientation, sx, sy, &x0, &y0, panelWidth, panelHeight);
-  rotateCoordinates(orientation, sx + sw - 1, sy + sh - 1, &x1, &y1, panelWidth, panelHeight);
-
-  const int memXLo = std::min(x0, x1);
-  const int memYLo = std::min(y0, y1);
-  const int memXHi = std::max(x0, x1) + 1;  // exclusive upper bound
-  const int memYHi = std::max(y0, y1) + 1;
-
-  // Snap x outward to multiples of 8.
-  int alignedXLo = memXLo & ~0x7;        // round down
-  int alignedXHi = (memXHi + 7) & ~0x7;  // round up
-
-  if (alignedXLo < 0) alignedXLo = 0;
-  if (alignedXHi > panelWidth) alignedXHi = panelWidth;
-  int clampedYLo = memYLo;
-  int clampedYHi = memYHi;
-  if (clampedYLo < 0) clampedYLo = 0;
-  if (clampedYHi > panelHeight) clampedYHi = panelHeight;
-
-  if (alignedXHi <= alignedXLo || clampedYHi <= clampedYLo) return out;
-
-  out.x = static_cast<uint16_t>(alignedXLo);
-  out.y = static_cast<uint16_t>(clampedYLo);
-  out.w = static_cast<uint16_t>(alignedXHi - alignedXLo);
-  out.h = static_cast<uint16_t>(clampedYHi - clampedYLo);
-  out.valid = true;
-  return out;
 }
 
 enum class TextRotation { None, Rotated90CW };
@@ -1690,6 +1610,14 @@ void GfxRenderer::displayBuffer(HalDisplay::RefreshMode refreshMode) const {
   refreshMode = applyPromotedRefresh(refreshMode);
   display.displayBuffer(refreshMode, fadingFix);
 }
+
+void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
+  const AlignedMemRect mem = screenRectToAlignedMemRect(orientation, x, y, width, height, panelWidth, panelHeight);
+  if (!mem.valid) return;
+  display.displayWindow(mem.x, mem.y, mem.w, mem.h, fadingFix);
+}
+
+void GfxRenderer::setInverted(const bool inverted) const { display.setInverted(inverted); }
 
 void GfxRenderer::displayBufferAsync(HalDisplay::RefreshMode refreshMode) const {
   refreshMode = applyPromotedRefresh(refreshMode);

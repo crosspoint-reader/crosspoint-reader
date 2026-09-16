@@ -79,7 +79,7 @@ def get_base_version(project_dir):
 def inject_version(env):
     # Only applies to development environments; release envs set the
     # version via build_flags in platformio.ini and are unaffected.
-    if env['PIOENV'] not in ('default', 'sticky'):
+    if env['PIOENV'] not in ('default', 'sticky', 'agentcloud_x4'):
         return
 
     project_dir = env['PROJECT_DIR']

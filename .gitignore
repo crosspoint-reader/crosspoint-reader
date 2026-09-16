@@ -16,7 +16,14 @@ build
 /.cache
 .history/
 /.venv
+/.platformio/
 *.local*
+src/activities/agentcloud/AgentcloudAuth.local.h
+.venv/
+.platformio/
+.cache/
+.cx-logs/
+.agentcloud-*.txt
 *.cpfont
 lib/EpdFont/scripts/downloaded_fonts/
 lib/EpdFont/scripts/instanced_fonts/

@@ -26,6 +26,9 @@
 #include "util/BmpViewerActivity.h"
 #include "util/FrontlightPanelActivity.h"
 #include "util/FullScreenMessageActivity.h"
+#ifdef AGENTCLOUD_DASHBOARD
+#include "agentcloud/AgentcloudActivity.h"
+#endif
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
@@ -60,7 +63,7 @@ void ActivityManager::renderTaskLoop() {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       // Night mode is a global output polarity applied to every activity.
       // The sleep screen forces normal polarity itself (SleepActivity).
-      display.setInverted(SETTINGS.screenInverted != 0);
+      renderer.setInverted(currentActivity->honorsScreenInversion() && SETTINGS.screenInverted != 0);
       currentActivity->render(std::move(lock));
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
@@ -319,6 +322,17 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
   replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem, cleanInitialRefresh));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
+
+#ifdef AGENTCLOUD_DASHBOARD
+void ActivityManager::goToAgentcloud() {
+  auto activity = makeUniqueNoThrow<AgentcloudActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: Agentcloud activity");
+    return;
+  }
+  replaceActivity(std::move(activity));
+}
+#endif
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
   mappedInput.resetHomeButtonInput();
