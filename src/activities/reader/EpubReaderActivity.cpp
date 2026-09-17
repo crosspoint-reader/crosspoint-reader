@@ -636,9 +636,24 @@ void EpubReaderActivity::loop() {
       if (!built) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
+        pendingBuildError = true;
         requestUpdate();
-      } else if (section->isBuildComplete() && applyDeferredReposition()) {
-        requestUpdate();
+      } else if (section->isBuildComplete()) {
+        bool repositioned = false;
+        if (pendingPercentJump && section->pageCount > 0) {
+          int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
+          if (newPage >= section->pageCount) newPage = section->pageCount - 1;
+          section->currentPage = newPage;
+          pendingPercentJump = false;
+          repositioned = true;
+        } else if (pendingLastPageJump && section->pageCount > 0) {
+          section->currentPage = section->pageCount - 1;
+          pendingLastPageJump = false;
+          repositioned = true;
+        } else {
+          repositioned = applyDeferredReposition();
+        }
+        if (repositioned) requestUpdate();
       }
     }
   }
@@ -966,7 +981,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
   for (int i = 0; i < spineCount; i++) {
     const size_t cumulative = epub->getCumulativeSpineItemSize(i);
-    if (targetSize <= cumulative) {
+    if (targetSize < cumulative) {
       targetSpineIndex = i;
       prevCumulative = (i > 0) ? epub->getCumulativeSpineItemSize(i - 1) : 0;
       break;
@@ -984,6 +999,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
     clearDeferredReposition();
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
+    pendingLastPageJump = false;
     pendingPercentJump = true;
     section.reset();
   }
@@ -1349,7 +1365,8 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
       nextPageNumber = 0;
-      pendingPageJump = std::numeric_limits<uint16_t>::max();
+      pendingPercentJump = false;
+      pendingLastPageJump = true;
       currentSpineIndex--;
       section.reset();
       lastPageTurnTime = millis();
@@ -1460,15 +1477,19 @@ bool EpubReaderActivity::isAtEndOfBook() const { return epub && currentSpineInde
 
 void EpubReaderActivity::onReturnFromEndOfBook() {
   if (epub && epub->getSpineItemsCount() > 0) {
+    RenderLock lock;
     currentSpineIndex = epub->getSpineItemsCount() - 1;
     nextPageNumber = 0;
-    pendingPageJump = std::numeric_limits<uint16_t>::max();
+    pendingPercentJump = false;
+    pendingLastPageJump = true;
+    section.reset();
   }
 }
 
 bool EpubReaderActivity::backgroundBuildWanted() const {
   return section && section->isBuilding() &&
-         (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+         (pendingPercentJump || pendingLastPageJump || section->isPartial() ||
+          static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
 }
 
 bool EpubReaderActivity::skipLoopDelay() {
@@ -1496,6 +1517,12 @@ void EpubReaderActivity::renderBook() {
     GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
     automaticPageTurnActive = false;
   };
+
+  if (pendingBuildError) {
+    pendingBuildError = false;
+    showBuildError();
+    return;
+  }
 
   if (currentSpineIndex < 0) currentSpineIndex = 0;
   if (currentSpineIndex > epub->getSpineItemsCount()) currentSpineIndex = epub->getSpineItemsCount();
@@ -1544,7 +1571,8 @@ void EpubReaderActivity::renderBook() {
     const bool explicitOffsetJump = pendingOffsetJump.has_value();
     const std::optional<uint32_t> offsetJump =
         explicitOffsetJump ? pendingOffsetJump
-        : (pendingPageJump.has_value() || !pendingAnchor.empty() || currentSpineIndex != cachedSpineIndex)
+        : (pendingPageJump.has_value() || pendingPercentJump || pendingLastPageJump || !pendingAnchor.empty() ||
+           currentSpineIndex != cachedSpineIndex)
             ? std::nullopt
             : cachedVisibleTextOffset;
     if (!cacheComplete) {
@@ -1554,91 +1582,80 @@ void EpubReaderActivity::renderBook() {
         LOG_DBG("ERS", "Cache not found, building...");
       }
 
-      const bool needsFullBuild = pendingPercentJump;
-      if (needsFullBuild) {
-        GUI.drawPopup(renderer, tr(STR_INDEXING));
-        pagesUntilFullRefresh = 1;
-        const auto popupFn = [this]() {
-          if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
-        };
-        GfxRenderer::FrameBufferLoan loan(renderer);
-        if (!section->createSectionFile(renderSpec, popupFn)) {
-          LOG_ERR("ERS", "Failed to persist page data to SD");
+      // Percent/last-page navigation is handled by the regular incremental
+      // builder and the heap-gated background build instead of blocking here.
+      const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
+      const bool anchorJump = !pendingAnchor.empty();
+      if (section->isPartial() && !pendingPercentJump && !pendingLastPageJump &&
+          (anchorJump ? section->getPageForAnchor(pendingAnchor).has_value()
+                      : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+        LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
+      } else {
+        const size_t spineBytes = epub->getCumulativeSpineItemSize(currentSpineIndex) -
+                                  (currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
+        const bool willInflate = !section->hasHtmlCache();
+        bool showPopup;
+        if (anchorJump) {
+          showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
+        } else {
+          const bool targetAvailable = target < static_cast<int>(section->pageCount);
+          showPopup = !targetAvailable &&
+                      ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) || target > BUILD_POPUP_PAGE_THRESHOLD);
+        }
+        if (showPopup) {
+          GUI.drawPopup(renderer, tr(STR_INDEXING));
+          pagesUntilFullRefresh = 1;
+        }
+        buildPopupPending = !showPopup;
+
+        // Section (re)builds are the heap-hungriest path (per-word
+        // allocations for the whole section). Under TTF heap pressure, shed
+        // every rebuildable font cache first — dropped glyphs re-fault on
+        // demand after the build. Skipped for cpfont/builtin reading: the
+        // release drops the persistent advance table and mini tables, which
+        // would force SD metric re-reads on every fresh chapter for no gain.
+        if (!renderer.getTtfFonts().empty()) {
+          if (auto* fcm = renderer.getFontCacheManager()) {
+            fcm->releaseSdFontCaches();
+          }
+        }
+
+        LOG_DBG("ERS", "Heap before section build: %u (max block %u)", (unsigned)ESP.getFreeHeap(),
+                (unsigned)ESP.getMaxAllocHeap());
+
+        const unsigned long buildStartMs = millis();
+        bool started;
+        {
+          GfxRenderer::FrameBufferLoan loan(renderer);
+          started = section->startBuild(renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); });
+        }
+
+        if (!started) {
+          LOG_ERR("ERS", "Failed to start section build");
           section.reset();
-          loan.end();
+          buildPopupPending = false;
           showBuildError();
           return;
         }
-        loan.end();
-      } else {
-        const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
-        const bool anchorJump = !pendingAnchor.empty();
 
-        if (section->isPartial() &&
-            (anchorJump ? section->getPageForAnchor(pendingAnchor).has_value()
-                        : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
-          LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
-        } else {
-          const size_t spineBytes =
-              epub->getCumulativeSpineItemSize(currentSpineIndex) -
-              (currentSpineIndex > 0 ? epub->getCumulativeSpineItemSize(currentSpineIndex - 1) : 0);
-          const bool willInflate = !section->hasHtmlCache();
-          bool showPopup;
-          if (anchorJump) {
-            showPopup = !section->findAnchor(pendingAnchor).has_value() && spineBytes > BUILD_POPUP_BYTE_THRESHOLD;
-          } else {
-            const bool targetAvailable = target < static_cast<int>(section->pageCount);
-            showPopup = !targetAvailable && ((spineBytes > BUILD_POPUP_BYTE_THRESHOLD && willInflate) ||
-                                             target > BUILD_POPUP_PAGE_THRESHOLD);
+        while (!section->isBuildComplete() &&
+               (anchorJump               ? !section->findAnchor(pendingAnchor)
+                : offsetJump.has_value() ? !section->buildReachedVisibleTextOffset(*offsetJump)
+                                         : static_cast<int>(section->pageCount) <= target)) {
+          if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
+            showBuildPopup(renderer, pagesUntilFullRefresh);
           }
-          if (showPopup) {
-            GUI.drawPopup(renderer, tr(STR_INDEXING));
-            pagesUntilFullRefresh = 1;
-          }
-          buildPopupPending = !showPopup;
-          // Section (re)builds are the heap-hungriest path (per-word
-          // allocations for the whole section). Under TTF heap pressure, shed
-          // every rebuildable font cache first — dropped glyphs re-fault on
-          // demand after the build. Skipped for cpfont/builtin reading: the
-          // release drops the persistent advance table and mini tables, which
-          // would force SD metric re-reads on every fresh chapter for no gain.
-          if (!renderer.getTtfFonts().empty()) {
-            if (auto* fcm = renderer.getFontCacheManager()) {
-              fcm->releaseSdFontCaches();
-            }
-          }
-          LOG_DBG("ERS", "Heap before section build: %u (max block %u)", (unsigned)ESP.getFreeHeap(),
-                  (unsigned)ESP.getMaxAllocHeap());
-          const unsigned long buildStartMs = millis();
-          bool started;
-          {
-            GfxRenderer::FrameBufferLoan loan(renderer);
-            started = section->startBuild(renderSpec, [this] { showBuildPopup(renderer, pagesUntilFullRefresh); });
-          }
-          if (!started) {
-            LOG_ERR("ERS", "Failed to start section build");
+
+          if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+            LOG_ERR("ERS", "Failed during incremental section build");
             section.reset();
             buildPopupPending = false;
             showBuildError();
             return;
           }
-          while (!section->isBuildComplete() &&
-                 (anchorJump               ? !section->findAnchor(pendingAnchor)
-                  : offsetJump.has_value() ? !section->buildReachedVisibleTextOffset(*offsetJump)
-                                           : static_cast<int>(section->pageCount) <= target)) {
-            if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
-              showBuildPopup(renderer, pagesUntilFullRefresh);
-            }
-            if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-              LOG_ERR("ERS", "Failed during incremental section build");
-              section.reset();
-              buildPopupPending = false;
-              showBuildError();
-              return;
-            }
-          }
-          buildPopupPending = false;
         }
+
+        buildPopupPending = false;
       }
     } else {
       LOG_DBG("ERS", "Cache found, skipping build...");
@@ -1672,11 +1689,30 @@ void EpubReaderActivity::renderBook() {
       pendingAnchor.clear();
     }
 
-    if (pendingPercentJump && section->pageCount > 0) {
-      int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
-      if (newPage >= section->pageCount) newPage = section->pageCount - 1;
-      section->currentPage = newPage;
+    if (pendingPercentJump) {
+      if (section->isBuilding() || section->isPartial()) {
+        GUI.drawPopup(renderer, tr(STR_INDEXING));
+        pagesUntilFullRefresh = 1;
+        return;
+      }
+      if (section->pageCount > 0) {
+        int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
+        if (newPage >= section->pageCount) newPage = section->pageCount - 1;
+        section->currentPage = newPage;
+      }
       pendingPercentJump = false;
+    }
+
+    if (pendingLastPageJump) {
+      if (section->isBuilding() || section->isPartial()) {
+        GUI.drawPopup(renderer, tr(STR_INDEXING));
+        pagesUntilFullRefresh = 1;
+        return;
+      }
+      if (section->pageCount > 0) {
+        section->currentPage = section->pageCount - 1;
+      }
+      pendingLastPageJump = false;
     }
   }
 
