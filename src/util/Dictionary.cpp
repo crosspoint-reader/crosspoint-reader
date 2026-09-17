@@ -391,6 +391,14 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
 
   // Linear scan of at most SAMPLE_INTERVAL entries: headword NUL, BE32 offset,
   // BE32 size. The index is sorted, so stop at the first headword > target.
+  //
+  // Headwords equal under asciiCaseCmp sit in a contiguous run, ordered among
+  // themselves by StarDict's strcmp tiebreak — which puts "Pate" ahead of
+  // "pate", since uppercase sorts first in ASCII. Taking the first of the run
+  // would answer a lookup of "pate" with the proper noun, so walk the run and
+  // prefer the entry matching target byte for byte, keeping the first
+  // case-insensitive hit as the fallback for a run with no exact-case member
+  // (a query for "paris" against a dictionary holding only "Paris").
   if (!session.idx.seekSet(startByte)) {
     LOG_ERR("DICT", "Index seek to %lu failed", static_cast<unsigned long>(startByte));
     result.readError = true;
@@ -407,11 +415,15 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
 
     const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
     if (cmp == 0) {
-      result.offset = readBe32(suffix);
-      result.size = readBe32(suffix + 4);
-      result.found = true;
-      if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
-      return result;
+      const bool exactCase = strcmp(wordBuf, target) == 0;
+      if (exactCase || !result.found) {
+        result.offset = readBe32(suffix);
+        result.size = readBe32(suffix + 4);
+        result.found = true;
+        if (matchedHeadwordOut) *matchedHeadwordOut = wordBuf;
+      }
+      if (exactCase) return result;
+      continue;  // keep scanning the run for an exact-case entry
     }
     if (cmp > 0) break;
   }
