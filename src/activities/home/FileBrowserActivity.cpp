@@ -72,10 +72,10 @@ FileBrowserActivity::FileBrowserActivity(GfxRenderer& renderer, MappedInputManag
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
+  prewarmedStart = -1;  // new folder contents: re-prewarm the visible window
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
-    rebuildRowItems();  // files is empty; also drops any now-stale cached rows
     return;
   }
 
@@ -84,9 +84,17 @@ void FileBrowserActivity::loadFiles() {
   if (!fileNameBuffer) {
     LOG_ERR("FileBrowser", "fileNameBuffer not allocated");
     root.close();
-    rebuildRowItems();
     return;
   }
+
+  // Size `files` once before the fill loop: doubling growth on a large folder
+  // holds the old and new string blocks live across the final realloc. The
+  // count-only pass reads no names, so filtered-out entries just over-reserve
+  // by a few slots.
+  size_t entryCount = 0;
+  for (auto file = root.openNextFile(); file; file = root.openNextFile()) ++entryCount;
+  root.rewindDirectory();
+  files.reserve(entryCount);
 
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
@@ -114,48 +122,66 @@ void FileBrowserActivity::loadFiles() {
   }
   root.close();
   FsHelpers::sortFileList(files);
-  rebuildRowItems();
 }
 
-// Derives rowNames/rowExtensions/rowItems from `files`. Called whenever
-// `files` changes (end of loadFiles()) so buildScreen() can reuse the cached
-// rows on every repaint instead of re-deriving a name/extension string (and a
-// ListItem) per file each time it's called.
-void FileBrowserActivity::rebuildRowItems() {
-  rowsUseFileIcons = UITheme::getInstance().getTheme().showsFileIcons();
-  rowNames.resize(files.size());
-  rowExtensions.resize(files.size());
-  rowItems.clear();
-  rowItems.reserve(files.size());
-  for (size_t i = 0; i < files.size(); i++) {
-    rowNames[i] = getFileName(files[i]);
-    rowExtensions[i] = getFileExtension(files[i]);
-    fui::ListItem item;
-    item.label = rowNames[i].c_str();
-    if (!rowExtensions[i].empty()) item.value = rowExtensions[i].c_str();
-    item.icon = listIconFor(UITheme::getFileIcon(files[i]));
-    item.actionValue = static_cast<int16_t>(i);
-    rowItems.push_back(item);
+// fui::ListProps::rowProvider — formats row `index` from files[index] into the
+// activity's scratch buffers on demand. Runs on the render task only for the
+// rows the list actually lays out, so nothing per-file is materialized beyond
+// `files` itself. The label/value pointers stay valid until the next call,
+// which is all the provider contract requires. getFileName()'s "[folder]"
+// bracket format is theme-dependent, but it's re-derived here on every
+// repaint, so a theme change picked up while this activity was paused
+// underneath another screen needs no cache invalidation.
+void FileBrowserActivity::provideRow(void* ctx, const uint16_t index, fui::ListItem& item) {
+  auto* self = static_cast<FileBrowserActivity*>(ctx);
+  if (index >= self->files.size()) return;
+  const std::string& entry = self->files[index];
+  snprintf(self->rowNameBuf, sizeof(self->rowNameBuf), "%s", getFileName(entry).c_str());
+  item.label = self->rowNameBuf;
+  const std::string extension = getFileExtension(entry);
+  if (!extension.empty()) {
+    snprintf(self->rowExtBuf, sizeof(self->rowExtBuf), "%s", extension.c_str());
+    item.value = self->rowExtBuf;
   }
+  item.icon = listIconFor(UITheme::getFileIcon(entry));
+  item.actionValue = static_cast<int16_t>(index);
+}
 
-  // One SD pass for every CJK filename in the folder; repaints then hit the
-  // resident tables instead of re-reading per-string. Getter form: no
-  // concatenated copy (a bare-new string append aborts under heap pressure).
-  // The last index covers the bottom path band: basepath (possibly a CJK
-  // folder name) draws in the same small font, so it must live in the same
-  // batch or it would evict the rows' glyphs when the heap gate disables
-  // union merging. (prewarmFallbackText appends the truncation ellipsis.)
+// Batch-prewarm the CJK fallback glyphs for a bounded window of display names
+// starting at the viewport top — one SD pass per list page (the reader TOC's
+// refreshTocWindow pattern) instead of one unbounded pass over the whole
+// folder. Getter form: no concatenated copy (a bare-new string append aborts
+// under heap pressure). The last index covers the bottom path band: basepath
+// (possibly a CJK folder name) draws in the same small font, so it must live
+// in the same batch or it would evict the rows' glyphs when the heap gate
+// disables union merging. (prewarmFallbackText appends the truncation
+// ellipsis.)
+void FileBrowserActivity::prewarmRowGlyphs(const int start) {
+  const int total = static_cast<int>(files.size());
+  int clamped = start;
+  if (clamped > total - PREWARM_WINDOW) clamped = total - PREWARM_WINDOW;
+  if (clamped < 0) clamped = 0;
+  if (clamped == prewarmedStart) return;
+  prewarmedStart = clamped;
+  const int count = total - clamped < PREWARM_WINDOW ? total - clamped : PREWARM_WINDOW;
+
   struct PrewarmCtx {
-    const std::vector<std::string>* names;
-    const std::string* path;
-  } prewarmCtx{&rowNames, &basepath};
+    FileBrowserActivity* self;
+    int first;
+    int count;
+    std::string scratch;  // reused per getter call; prewarm consumes each string before the next
+  } prewarmCtx{this, clamped, count, {}};
   renderer.prewarmFallbackText(
       uiScaleSpec().smallFontId,
       [](const void* ctx, uint32_t i) -> const char* {
-        const auto* c = static_cast<const PrewarmCtx*>(ctx);
-        return i < c->names->size() ? (*c->names)[i].c_str() : c->path->c_str();
+        auto* c = const_cast<PrewarmCtx*>(static_cast<const PrewarmCtx*>(ctx));
+        if (i < static_cast<uint32_t>(c->count)) {
+          c->scratch = getFileName(c->self->files[c->first + i]);
+          return c->scratch.c_str();
+        }
+        return c->self->basepath.c_str();
       },
-      &prewarmCtx, static_cast<uint32_t>(rowNames.size()) + 1);
+      &prewarmCtx, static_cast<uint32_t>(count) + 1);
 }
 
 void FileBrowserActivity::onEnter() {
@@ -188,9 +214,6 @@ void FileBrowserActivity::onEnter() {
 void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
-  rowNames.clear();
-  rowExtensions.clear();
-  rowItems.clear();
   fileNameBuffer.reset();
 }
 
@@ -313,9 +336,8 @@ void FileBrowserActivity::activateSelected() {
     return;
   }
 
-  // buildScreen() runs on the render task and reads basepath plus the
-  // ListItem label/value pointers into rowNames/rowExtensions that
-  // rebuildRowItems() frees; mutate only under the render lock.
+  // buildScreen() runs on the render task and reads basepath plus `files`
+  // through the row provider; mutate only under the render lock.
   RenderLock lock(*this);
   if (basepath.back() != '/') basepath += "/";
 
@@ -480,8 +502,8 @@ bool FileBrowserActivity::handleCustomInput() {
   if (mode == Mode::Books && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/") {
     {
-      // buildScreen() runs on the render task and reads basepath plus the
-      // row caches rebuildRowItems() frees; mutate only under the render lock.
+      // buildScreen() runs on the render task and reads basepath plus `files`
+      // through the row provider; mutate only under the render lock.
       RenderLock lock(*this);
       basepath = "/";
       loadFiles();
@@ -514,8 +536,8 @@ bool FileBrowserActivity::handleButtons() {
         const std::string oldPath = basepath;
 
         {
-          // buildScreen() runs on the render task and reads basepath plus the
-          // row caches rebuildRowItems() frees; mutate only under the render lock.
+          // buildScreen() runs on the render task and reads basepath plus `files`
+          // through the row provider; mutate only under the render lock.
           RenderLock lock(*this);
           basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
           if (basepath.empty()) basepath = "/";
@@ -617,17 +639,10 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
     return;
   }
 
-  // rowNames/rowExtensions/rowItems are built once per loadFiles() call (see
-  // rebuildRowItems()) and reused here. getFileName()'s folder-bracket format
-  // depends on the theme, so a theme change picked up while this activity was
-  // paused underneath another screen invalidates the cache before it's read.
-  if (rowsUseFileIcons != UITheme::getInstance().getTheme().showsFileIcons()) {
-    rebuildRowItems();
-  }
-
   fui::ListProps props;
-  props.items = rowItems.data();
-  props.count = static_cast<uint16_t>(rowItems.size());
+  props.rowProvider = &FileBrowserActivity::provideRow;
+  props.rowProviderCtx = this;
+  props.count = static_cast<uint16_t>(files.size());
   props.action = ACTION_ROW;
   // Tap opens/navigates; long-press shows entry actions (physical buttons stay in loop()).
   props.inputMask = fui::InputTouch | fui::InputLongPress;
@@ -641,6 +656,10 @@ void FileBrowserActivity::buildScreen(UiScreen& screen) {
   // 60%-band wrap cap and let both name lines run the full width before it.
   props.balanceWrappedLabelWithValue = false;
   syncListViewport(screen, props);
+  // Prewarm the window at the final viewport (syncListViewport just applied
+  // follow/clamping to nav.top) before the list resolves rows through the
+  // provider.
+  prewarmRowGlyphs(nav.top);
   screen.list(props);
 }
 
