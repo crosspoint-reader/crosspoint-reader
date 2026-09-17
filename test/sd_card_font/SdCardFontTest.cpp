@@ -214,3 +214,51 @@ TEST(SdCardFontTest, BitmapAllocationRetriesAfterEvictingRebuildableAdvances) {
     EXPECT_EQ(32 << 4, font.getAdvance(cp, 0));
   }
 }
+
+namespace {
+// Two-style font containing only a space: regular advances 10.5 px, bold advances zero.
+void makeSpaceOnlyFont() {
+  constexpr size_t DATA_OFFSET = 32 + 2 * 32;
+  constexpr size_t STYLE_BYTES = sizeof(EpdUnicodeInterval) + sizeof(EpdGlyph);
+  sdFontTestFile.assign(DATA_OFFSET + 2 * STYLE_BYTES, 0);
+  std::memcpy(sdFontTestFile.data(), "CPFONT\0\0", 8);
+  put16(8, CPFONT_VERSION);
+  sdFontTestFile[12] = 2;
+  for (uint8_t style = 0; style < 2; ++style) {
+    const size_t toc = 32 + style * 32;
+    const size_t data = DATA_OFFSET + style * STYLE_BYTES;
+    sdFontTestFile[toc] = style;
+    put32(toc + 4, 1);  // interval count
+    put32(toc + 8, 1);  // glyph count
+    sdFontTestFile[toc + 12] = 16;
+    put16(toc + 13, 16);
+    put32(toc + 24, data);
+    put32(data, ' ');
+    put32(data + 4, ' ');
+    EpdGlyph glyph{};
+    glyph.advanceX = style == 0 ? 168 : 0;
+    std::memcpy(sdFontTestFile.data() + data + sizeof(EpdUnicodeInterval), &glyph, sizeof(glyph));
+  }
+}
+}  // namespace
+
+TEST(SdCardFontTest, TryGetAdvanceMissesStyleWithoutTable) {
+  makeSpaceOnlyFont();
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_EQ(0, font.buildAdvanceTable(" ", 1 << 1));
+  ASSERT_TRUE(font.hasAdvanceTable());
+  uint16_t advance = 0xFFFF;
+  EXPECT_FALSE(font.tryGetAdvance(' ', 0, advance));
+  EXPECT_EQ(0xFFFF, advance);
+}
+
+TEST(SdCardFontTest, TryGetAdvanceReportsCachedZeroAsHit) {
+  makeSpaceOnlyFont();
+  SdCardFont font;
+  ASSERT_TRUE(font.load("fixture"));
+  ASSERT_EQ(0, font.buildAdvanceTable(" ", 1 << 1));
+  uint16_t advance = 0xFFFF;
+  EXPECT_TRUE(font.tryGetAdvance(' ', 1, advance));
+  EXPECT_EQ(0, advance);
+}

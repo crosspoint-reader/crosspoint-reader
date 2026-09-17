@@ -71,4 +71,3 @@ add_subdirectory(fs_helpers)
 add_subdirectory(absolute_grayscale)
 
 add_subdirectory(sd_card_font)
-add_subdirectory(gfx_space)
