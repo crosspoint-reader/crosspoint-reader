@@ -6,6 +6,8 @@
 #include <XmlParserUtils.h>
 
 #include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <cstring>
 
 #include "Epub/BookMetadataCache.h"
@@ -63,6 +65,48 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
     spacePending = false;
     out.push_back(c);
   }
+}
+
+std::string lowerAscii(std::string value) {
+  for (char& c : value) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  return value;
+}
+
+std::string boundedMetadataValue(const XML_Char* value) {
+  if (!value) return {};
+  std::string result(value);
+  if (result.size() > MAX_METADATA_TEXT) result.resize(MAX_METADATA_TEXT);
+  return result;
+}
+
+bool hasMetadataPrefix(const std::string& value, const char* prefix) {
+  const std::string lower = lowerAscii(value);
+  const std::string wanted = lowerAscii(prefix);
+  return lower.rfind(wanted, 0) == 0 || lower.rfind("urn:" + wanted + ":", 0) == 0;
+}
+
+std::string stripMetadataPrefix(const std::string& value, const char* prefix) {
+  const std::string lower = lowerAscii(value);
+  const std::string wanted = lowerAscii(prefix);
+  size_t offset = 0;
+  const std::string urnPrefix = "urn:" + wanted + ":";
+  if (lower.rfind(urnPrefix, 0) == 0) {
+    offset = urnPrefix.size();
+  } else if (lower.rfind(wanted, 0) == 0) {
+    offset = wanted.size();
+  } else {
+    return value;
+  }
+  while (offset < value.size() && (value[offset] == ':' || value[offset] == ' ' || value[offset] == '	')) ++offset;
+  return value.substr(offset);
+}
+
+std::optional<float> parseFiniteFloat(const std::string& value) {
+  if (value.empty()) return std::nullopt;
+  char* end = nullptr;
+  const float parsed = std::strtof(value.c_str(), &end);
+  if (end == value.c_str() || *end != '\0' || !std::isfinite(parsed)) return std::nullopt;
+  return parsed;
 }
 }  // namespace
 
@@ -135,8 +179,6 @@ size_t ContentOpfParser::write(const uint8_t* buffer, const size_t size) {
 
 void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
   auto* self = static_cast<ContentOpfParser*>(userData);
-  (void)atts;
-
   if (self->metadataOnly && self->metadataComplete) {
     return;
   }
@@ -178,6 +220,17 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     return;
   }
 
+  if (self->state == IN_METADATA && xmlLocalNameEquals(name, "identifier")) {
+    self->state = IN_BOOK_IDENTIFIER;
+    self->identifierText.clear();
+    self->identifierScheme.clear();
+    self->metadataSpacePending = false;
+    for (int i = 0; atts[i]; i += 2) {
+      if (xmlLocalNameEquals(atts[i], "scheme")) self->identifierScheme = boundedMetadataValue(atts[i + 1]);
+    }
+    return;
+  }
+
   if (self->state == IN_PACKAGE && xmlLocalNameEquals(name, "manifest")) {
     self->state = IN_MANIFEST;
     if (self->cache && !Storage.openFileForWrite("COF", self->cachePath + itemCacheFile, self->tempItemStore)) {
@@ -216,19 +269,39 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
   }
 
   if (self->state == IN_METADATA && xmlLocalNameEquals(name, "meta")) {
-    bool isCover = false;
-    std::string coverItemId;
+    std::string metaName;
+    std::string content;
+    self->metaProperty.clear();
+    self->metaRefines.clear();
+    self->metaId.clear();
+    self->metaText.clear();
 
     for (int i = 0; atts[i]; i += 2) {
-      if (strcmp(atts[i], "name") == 0 && strcmp(atts[i + 1], "cover") == 0) {
-        isCover = true;
-      } else if (strcmp(atts[i], "content") == 0) {
-        coverItemId = atts[i + 1];
+      if (xmlLocalNameEquals(atts[i], "name")) {
+        metaName = boundedMetadataValue(atts[i + 1]);
+      } else if (xmlLocalNameEquals(atts[i], "content")) {
+        content = boundedMetadataValue(atts[i + 1]);
+      } else if (xmlLocalNameEquals(atts[i], "property")) {
+        self->metaProperty = boundedMetadataValue(atts[i + 1]);
+      } else if (xmlLocalNameEquals(atts[i], "refines")) {
+        self->metaRefines = boundedMetadataValue(atts[i + 1]);
+        if (!self->metaRefines.empty() && self->metaRefines[0] == '#') self->metaRefines.erase(0, 1);
+      } else if (xmlLocalNameEquals(atts[i], "id")) {
+        self->metaId = boundedMetadataValue(atts[i + 1]);
       }
     }
 
-    if (isCover) {
-      self->coverItemId = coverItemId;
+    const std::string lowerName = lowerAscii(metaName);
+    if (lowerName == "cover") self->coverItemId = content;
+    if (lowerName == "calibre:series" && self->series.empty()) self->series = content;
+    if (lowerName == "calibre:series_index" && !self->seriesIndex.has_value()) {
+      self->seriesIndex = parseFiniteFloat(content);
+    }
+
+    const std::string property = lowerAscii(self->metaProperty);
+    if (property == "belongs-to-collection" || property == "collection-type" || property == "group-position") {
+      self->state = IN_META_TEXT;
+      self->metadataSpacePending = false;
     }
     return;
   }
@@ -413,6 +486,16 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     appendMetadataText(self->language, s, len, self->metadataSpacePending);
     return;
   }
+
+  if (self->state == IN_BOOK_IDENTIFIER) {
+    appendMetadataText(self->identifierText, s, len, self->metadataSpacePending);
+    return;
+  }
+
+  if (self->state == IN_META_TEXT) {
+    appendMetadataText(self->metaText, s, len, self->metadataSpacePending);
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -452,6 +535,44 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_LANGUAGE && xmlLocalNameEquals(name, "language")) {
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_IDENTIFIER && xmlLocalNameEquals(name, "identifier")) {
+    const std::string scheme = lowerAscii(self->identifierScheme);
+    if (self->isbn.empty() &&
+        (scheme.find("isbn") != std::string::npos || hasMetadataPrefix(self->identifierText, "isbn"))) {
+      self->isbn = stripMetadataPrefix(self->identifierText, "isbn");
+    }
+    if (self->asin.empty() && (scheme.find("asin") != std::string::npos || scheme == "amazon" ||
+                               hasMetadataPrefix(self->identifierText, "asin"))) {
+      self->asin = stripMetadataPrefix(self->identifierText, "asin");
+    }
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_META_TEXT && xmlLocalNameEquals(name, "meta")) {
+    const std::string property = lowerAscii(self->metaProperty);
+    if (property == "belongs-to-collection") {
+      self->collectionCandidateId = self->metaId;
+      self->collectionCandidateTitle = self->metaText;
+      self->collectionCandidateIndex.reset();
+      self->collectionCandidateIsSeries = false;
+    } else if (!self->collectionCandidateId.empty() && self->metaRefines == self->collectionCandidateId) {
+      if (property == "collection-type" && lowerAscii(self->metaText) == "series") {
+        self->collectionCandidateIsSeries = true;
+      } else if (property == "group-position") {
+        self->collectionCandidateIndex = parseFiniteFloat(self->metaText);
+      }
+    }
+    if (self->collectionCandidateIsSeries && !self->collectionCandidateTitle.empty()) {
+      if (self->series.empty()) self->series = self->collectionCandidateTitle;
+      if (!self->seriesIndex.has_value() && self->collectionCandidateIndex.has_value()) {
+        self->seriesIndex = self->collectionCandidateIndex;
+      }
+    }
     self->state = IN_METADATA;
     return;
   }
