@@ -37,9 +37,9 @@ class FileBrowserActivity final : public UiListActivity {
   // when the contiguous blocks no longer fit). The label/value strings for
   // the row being laid out live in these scratch buffers; the provider
   // contract only needs them valid until the next provideRow() call.
-  static constexpr size_t ROW_NAME_BUF_SIZE = 512;  // NAME_BUFFER_SIZE + "[]" + NFC slack
-  char rowNameBuf[ROW_NAME_BUF_SIZE];
-  char rowExtBuf[16];
+  static constexpr size_t ROW_NAME_BUF_SIZE = 512;  // NAME_BUFFER_SIZE + "[]" + terminator slack
+  char rowNameBuf[ROW_NAME_BUF_SIZE]{};
+  char rowExtBuf[16]{};
   static void provideRow(void* ctx, uint16_t index, freeink::ui::ListItem& item);
 
   // CJK fallback glyphs are prewarmed for a bounded window of rows around the

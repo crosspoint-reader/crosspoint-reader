@@ -61,8 +61,25 @@ void rollBackStatePath(const std::string& oldPath, const std::string& newPath, c
 }
 }  // namespace
 
-std::string getFileName(std::string filename);
 std::string getFileExtension(const std::string& filename);
+
+void formatFileName(const std::string& filename, char* buffer, const size_t bufferSize) {
+  if (filename.empty()) {
+    buffer[0] = '\0';
+    return;
+  }
+  const bool isDirectory = filename.back() == '/';
+  const size_t dot = isDirectory ? filename.size() - 1 : filename.rfind('.');
+  const int length = static_cast<int>(dot == std::string::npos ? filename.size() : dot);
+  const char* format = isDirectory && !UITheme::getInstance().getTheme().showsFileIcons() ? "[%.*s]" : "%.*s";
+  snprintf(buffer, bufferSize, format, length, filename.c_str());
+}
+
+void formatFileExtension(const std::string& filename, char* buffer, const size_t bufferSize) {
+  buffer[0] = '\0';
+  if (filename.empty() || filename.back() == '/') return;
+  if (const char* extension = strrchr(filename.c_str(), '.')) snprintf(buffer, bufferSize, "%s", extension);
+}
 
 FileBrowserActivity::FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                          std::string initialPath, const Mode mode)
@@ -128,19 +145,18 @@ void FileBrowserActivity::loadFiles() {
 // activity's scratch buffers on demand. Runs on the render task only for the
 // rows the list actually lays out, so nothing per-file is materialized beyond
 // `files` itself. The label/value pointers stay valid until the next call,
-// which is all the provider contract requires. getFileName()'s "[folder]"
-// bracket format is theme-dependent, but it's re-derived here on every
+// which is all the provider contract requires. The "[folder]" format is
+// theme-dependent, but it's re-derived here on every
 // repaint, so a theme change picked up while this activity was paused
 // underneath another screen needs no cache invalidation.
 void FileBrowserActivity::provideRow(void* ctx, const uint16_t index, fui::ListItem& item) {
   auto* self = static_cast<FileBrowserActivity*>(ctx);
   if (index >= self->files.size()) return;
   const std::string& entry = self->files[index];
-  snprintf(self->rowNameBuf, sizeof(self->rowNameBuf), "%s", getFileName(entry).c_str());
+  formatFileName(entry, self->rowNameBuf, sizeof(self->rowNameBuf));
   item.label = self->rowNameBuf;
-  const std::string extension = getFileExtension(entry);
-  if (!extension.empty()) {
-    snprintf(self->rowExtBuf, sizeof(self->rowExtBuf), "%s", extension.c_str());
+  formatFileExtension(entry, self->rowExtBuf, sizeof(self->rowExtBuf));
+  if (self->rowExtBuf[0] != '\0') {
     item.value = self->rowExtBuf;
   }
   item.icon = listIconFor(UITheme::getFileIcon(entry));
@@ -169,15 +185,14 @@ void FileBrowserActivity::prewarmRowGlyphs(const int start) {
     FileBrowserActivity* self;
     int first;
     int count;
-    std::string scratch;  // reused per getter call; prewarm consumes each string before the next
-  } prewarmCtx{this, clamped, count, {}};
+  } prewarmCtx{this, clamped, count};
   renderer.prewarmFallbackText(
       uiScaleSpec().smallFontId,
       [](const void* ctx, uint32_t i) -> const char* {
         auto* c = const_cast<PrewarmCtx*>(static_cast<const PrewarmCtx*>(ctx));
         if (i < static_cast<uint32_t>(c->count)) {
-          c->scratch = getFileName(c->self->files[c->first + i]);
-          return c->scratch.c_str();
+          formatFileName(c->self->files[c->first + i], c->self->rowNameBuf, sizeof(c->self->rowNameBuf));
+          return c->self->rowNameBuf;
         }
         return c->self->basepath.c_str();
       },
@@ -570,23 +585,6 @@ bool FileBrowserActivity::handleButtons() {
 void FileBrowserActivity::render(RenderLock&& lock) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
   UiListActivity::render(std::move(lock));
-}
-
-std::string getFileName(std::string filename) {
-  // Display copy only — `files[]` keeps the raw directory-entry bytes, because
-  // FAT long-filename lookup is byte-exact: an NFC-normalized path would fail
-  // to open the NFD entry macOS wrote. Composing here fixes rendering (fonts
-  // carry precomposed syllables / letters only) without touching paths.
-  filename = utf8ComposeNfc(filename);
-  if (filename.back() == '/') {
-    filename.pop_back();
-    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
-      return "[" + filename + "]";
-    }
-    return filename;
-  }
-  const auto pos = filename.rfind('.');
-  return filename.substr(0, pos);
 }
 
 std::string getFileExtension(const std::string& filename) {
