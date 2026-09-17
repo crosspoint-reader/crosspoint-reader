@@ -131,6 +131,11 @@ void SdCardFont::resetStyleMiniData(PerStyle& s) {
 }
 
 void SdCardFont::freeStyleKernLigatureData(PerStyle& s) {
+  // Both font views borrow the resident ligature table.
+  s.stubData.ligaturePairs = nullptr;
+  s.stubData.ligaturePairCount = 0;
+  s.miniData.ligaturePairs = nullptr;
+  s.miniData.ligaturePairCount = 0;
   delete[] s.kernLeftClasses;
   s.kernLeftClasses = nullptr;
   delete[] s.kernRightClasses;
@@ -1385,10 +1390,6 @@ bool SdCardFont::hasAdvanceTable() const {
     if (advanceTable_[i]) return true;
   }
   return false;
-}
-
-bool SdCardFont::tryGetAdvance(uint32_t codepoint, uint8_t style, uint16_t& advance) const {
-  return advanceTableLookup(style & (MAX_STYLES - 1), codepoint, &advance);
 }
 
 uint16_t SdCardFont::getAdvance(uint32_t codepoint, uint8_t style) const {

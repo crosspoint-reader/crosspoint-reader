@@ -26,10 +26,11 @@ uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style st
 
 uint16_t getSdCardSpaceAdvance(SdCardFont& font, const EpdFontFamily::Style style) {
   const uint8_t resolvedStyle = resolveSdCardStyle(font, style);
-  uint16_t advance = 0;
-  if (font.tryGetAdvance(' ', resolvedStyle, advance)) return advance;
+  const uint16_t advance = font.getAdvance(' ', resolvedStyle);
+  if (advance != 0) return advance;
 
-  // A full table or failed per-style preparation can leave space uncached.
+  // Zero means uncached (full table, style not prewarmed, or failed
+  // preparation): read the glyph, as the per-codepoint slow path does.
   const EpdFont* epdFont = font.getEpdFont(resolvedStyle);
   const EpdGlyph* glyph = epdFont ? epdFont->getGlyph(' ') : nullptr;
   return glyph ? glyph->advanceX : 0;

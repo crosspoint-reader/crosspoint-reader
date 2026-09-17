@@ -80,10 +80,6 @@ class SdCardFont {
   // Returns the 12.4 fixed-point advance, or 0 if not found.
   uint16_t getAdvance(uint32_t codepoint, uint8_t style) const;
 
-  // Returns true on a cache hit, including a genuine zero advance.
-  // On a miss, leaves advance unchanged. Style must already be resolved.
-  bool tryGetAdvance(uint32_t codepoint, uint8_t style, uint16_t& advance) const;
-
   // Returns true if advance table is populated for at least one style.
   bool hasAdvanceTable() const;
 
