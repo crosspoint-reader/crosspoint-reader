@@ -879,6 +879,20 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::PREVIOUS_BOOK: {
+      if (RECENT_BOOKS.pruneMissing()) {
+        RECENT_BOOKS.saveToFile();
+      }
+      for (const auto& book : RECENT_BOOKS.getBooks()) {
+        if (book.path != bookPath) {
+          onSelectBook(book.path);
+          return;
+        }
+      }
+      LOG_DBG("ERS", "No previous book available");
+      requestUpdate();
+      return;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();
       return;
