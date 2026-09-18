@@ -20,6 +20,12 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 // language.
 uint32_t utf8ToLowerSimple(uint32_t cp);
 
+// True if cp is a Letter, Number, or Mark (Unicode general category L*, N*,
+// or M*) — i.e. part of a word rather than incidental punctuation/symbols at
+// its edges. Table-driven from Unicode category data, so it works for any
+// script without a hand-picked list of punctuation ranges to keep up to date.
+bool utf8IsWordChar(uint32_t cp);
+
 // Canonical composition (NFC) for the Latin / Vietnamese range and Hangul:
 // precomposes a base letter followed by combining diacritical mark(s), and
 // conjoining Hangul jamo sequences (L+V[+T]), into single codepoints. Needed
