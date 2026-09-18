@@ -7,7 +7,6 @@
 #include <Utf8.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <string_view>
@@ -65,6 +64,7 @@ uint32_t readBe32(const uint8_t* p) {
          (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
 }
 
+<<<<<<< HEAD
 // Punctuation/symbol codepoint blocks stripped from word edges before lookup:
 // Latin-1 Supplement symbols (guillemets, inverted ?/!, ...), General and
 // Supplemental Punctuation (curly quotes, dashes, ...), CJK and fullwidth
@@ -81,6 +81,10 @@ bool isWordCodepoint(const uint32_t cp) {
 }
 
 // Facts read from the .ifo at open time.
+=======
+// Facts read from the .ifo at open time. Only the first 2KB is scanned — .ifo
+// headers are tiny and both keys always appear early when present.
+>>>>>>> 8fabe275 (fix: improves non-alpha character detection)
 struct IfoFacts {
   bool offsets64 = false;        // idxoffsetbits=64 (unsupported)
   bool htmlDefinitions = false;  // sametypesequence=h or x (HTML or XDXF)
@@ -782,16 +786,17 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
 
 std::string Dictionary::cleanWord(const char* word) {
   if (!word) return "";
-  // Single forward pass so multi-byte punctuation (quotes, guillemets, ...) is
-  // decoded and classified as a whole codepoint, not peeked at byte-by-byte:
-  // a byte-level check can't tell a punctuation lead byte from a letter's.
+  // Single forward pass: decode codepoints and keep the span from the first
+  // to the last one classified as a word character, dropping any
+  // punctuation/symbol run at either edge (utf8IsWordChar is Unicode-category
+  // driven, so this works uniformly across scripts).
   const auto* p = reinterpret_cast<const unsigned char*>(word);
   const unsigned char* wordStart = nullptr;
   const unsigned char* wordEnd = nullptr;
   while (*p != 0) {
     const unsigned char* cpStart = p;
     const uint32_t cp = utf8NextCodepoint(&p);
-    if (!isWordCodepoint(cp)) continue;
+    if (!utf8IsWordChar(cp)) continue;
     // CJK opening/closing punctuation is only stripped at the matching edge.
     if (!wordStart && !CjkBreaks::isNoBreakAfterCjkPunctuation(cp)) wordStart = cpStart;
     if (wordStart && !CjkBreaks::isNoBreakBeforeCjkPunctuation(cp)) wordEnd = p;
