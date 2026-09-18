@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <MD5Builder.h>
 
+#include <algorithm>
+
 namespace {
 // Extract filename from path (everything after last '/')
 std::string getFilename(const std::string& path) {
@@ -70,18 +72,22 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
 
     // Seek to offset
     if (!file.seekSet(offset)) {
-      LOG_DBG("KODoc", "Failed to seek to offset %zu", offset);
-      continue;
+      LOG_ERR("KODoc", "Failed to seek to hash sample at offset %zu", offset);
+      return "";
     }
 
     // Read up to CHUNK_SIZE bytes
     const size_t bytesToRead = std::min(CHUNK_SIZE, fileSize - offset);
-    const size_t bytesRead = file.read(buffer, bytesToRead);
-
-    if (bytesRead > 0) {
-      md5.add(buffer, bytesRead);
-      totalBytesRead += bytesRead;
+    const int bytesRead = file.read(buffer, bytesToRead);
+    // Preserve the HAL's signed error result until it has been checked. An ID
+    // is valid only when every selected sample was read in full; hashing a
+    // prefix after an I/O failure could identify the book as a different file.
+    if (bytesRead < 0 || static_cast<size_t>(bytesRead) != bytesToRead) {
+      LOG_ERR("KODoc", "Incomplete hash sample at %zu: read %d of %zu bytes", offset, bytesRead, bytesToRead);
+      return "";
     }
+    md5.add(buffer, static_cast<size_t>(bytesRead));
+    totalBytesRead += static_cast<size_t>(bytesRead);
   }
 
   // Calculate final hash
