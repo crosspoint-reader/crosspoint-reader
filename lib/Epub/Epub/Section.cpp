@@ -52,7 +52,9 @@ namespace {
 // v46: Ordered lists number their items, list-style-type: none suppresses markers,
 //      and <ul>/<ol> containers contribute their own margins/padding to child insets.
 // v47: Word and character spacing in the header (cache validation); cached BlockStyle stores only character spacing.
-constexpr uint8_t SECTION_FILE_VERSION = 47;
+// v48: CJK line-break prohibitions cover the JLREQ classes (hyphens, middle dots, iteration marks,
+//      prolonged sound mark, small kana, prefixed/postfixed abbreviations), so cached layouts change.
+constexpr uint8_t SECTION_FILE_VERSION = 48;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
