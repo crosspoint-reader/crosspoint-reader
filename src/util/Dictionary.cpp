@@ -14,7 +14,6 @@
 #include "../../lib/Epub/Epub/CjkBreaks.h"
 #include "DictZip.h"
 #include "DictionaryRegistry.h"
-#include "StringUtils.h"
 #include "TxtToHtml.h"
 
 namespace {
@@ -550,7 +549,7 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
     // before the last sample that is <= the target. Landing on a sample whose
     // word equals the target would start the scan inside the run and miss its
     // earlier entries, so the descent stops at the last sample below it.
-    if (StringUtils::asciiCaseCmp(wordBuf, target) < 0) {
+    if (utf8CaseInsensitiveCmp(wordBuf, target) < 0) {
       lo = mid;
     } else {
       hi = mid - 1;
@@ -587,7 +586,7 @@ void Dictionary::locateAll(LookupSession& session, const char* target, DictEntry
     uint8_t suffix[8];
     if (session.idx.read(suffix, 8) != 8) break;
 
-    const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
+    const int cmp = utf8CaseInsensitiveCmp(wordBuf, target);
     if (cmp == 0) {
       DictLocation location;
       location.offset = readBe32(suffix);
@@ -666,7 +665,7 @@ bool Dictionary::locateSynonyms(LookupSession& session, const char* target, Dict
     uint8_t ordBytes[4];
     if (session.syn.read(ordBytes, 4) != 4) break;
 
-    const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
+    const int cmp = utf8CaseInsensitiveCmp(wordBuf, target);
     if (cmp == 0) {
       const DictLocation location = locateByOrdinal(session, readBe32(ordBytes));
       if (location.readError && readError) *readError = true;
@@ -807,7 +806,7 @@ std::string Dictionary::cleanWord(const char* word) {
   result.reserve(static_cast<size_t>(wordEnd - wordStart));
   const unsigned char* rp = wordStart;
   while (rp < wordEnd) {
-    utf8AppendCodepoint(utf8ToLowerSimple(utf8NextCodepoint(&rp)), result);
+    utf8AppendCodepoint(utf8SimpleCaseFold(utf8NextCodepoint(&rp)), result);
   }
   return result;
 }
