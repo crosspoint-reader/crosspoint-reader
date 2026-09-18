@@ -46,10 +46,10 @@ class DictionaryWordSelectActivity final : public Activity {
   // The word to look up for a box, joining a hyphenated pair back together. Returns a reference
   // into `scratch` when a join happened, so the caller owns the storage.
   const char* lookupTextFor(size_t index, std::string& scratch) const;
-  // The other half of a hyphenated pair, or nullptr. Both halves are highlighted together: the
-  // reader selected one word, and showing only the half they pointed at makes the selection look
-  // like it stopped at the line break.
-  const WordBox* joinedPartner(size_t index) const;
+  // True when the word is one fragment of a hyphenated chain.
+  bool isJoined(size_t index) const;
+  // Index of the first fragment of the chain containing `index`.
+  int chainHead(size_t index) const;
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
 
