@@ -65,9 +65,20 @@ uint32_t readBe32(const uint8_t* p) {
          (static_cast<uint32_t>(p[2]) << 8) | static_cast<uint32_t>(p[3]);
 }
 
-// Word characters for cleaning: ASCII alphanumerics plus any UTF-8
-// continuation/lead byte, so accented words keep their edges.
-bool isWordByte(unsigned char c) { return c >= 0x80 || std::isalnum(c) != 0; }
+// Punctuation/symbol codepoint blocks stripped from word edges before lookup:
+// Latin-1 Supplement symbols (guillemets, inverted ?/!, ...), General and
+// Supplemental Punctuation (curly quotes, dashes, ...), CJK and fullwidth
+// punctuation. Scripts outside these blocks (Greek, Cyrillic, combining
+// marks, ...) are left alone so accented words keep their edges.
+bool isPunctuationCodepoint(const uint32_t cp) {
+  return (cp >= 0x00A0 && cp <= 0x00BF) || (cp >= 0x2000 && cp <= 0x206F) || (cp >= 0x2E00 && cp <= 0x2E7F) ||
+         (cp >= 0x3000 && cp <= 0x303F) || (cp >= 0xFE10 && cp <= 0xFE6F) || (cp >= 0xFF01 && cp <= 0xFF0F) ||
+         (cp >= 0xFF1A && cp <= 0xFF20) || (cp >= 0xFF3B && cp <= 0xFF40) || (cp >= 0xFF5B && cp <= 0xFF65);
+}
+
+bool isWordCodepoint(const uint32_t cp) {
+  return cp < 0x80 ? std::isalnum(static_cast<int>(cp)) != 0 : !isPunctuationCodepoint(cp);
+}
 
 // Facts read from the .ifo at open time.
 struct IfoFacts {
@@ -771,50 +782,23 @@ bool Dictionary::readDefinition(const DictLocation& location, std::string& out, 
 
 std::string Dictionary::cleanWord(const char* word) {
   if (!word) return "";
-  const auto* b = reinterpret_cast<const unsigned char*>(word);
-  size_t start = 0;
-  size_t end = strlen(word);
-  // Curly quotes and dashes (General Punctuation U+2000-U+206F = E2 80/81 xx)
-  // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
-  // from the edges too, or EPUB text like garage.” never matches a headword.
-  while (start < end) {
-    if (!isWordByte(b[start]))
-      start++;
-    else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
-      start += 3;
-    else {
-      const unsigned char* p = b + start;
-      const uint32_t cp = utf8NextCodepoint(&p);
-
-      if (CjkBreaks::isNoBreakAfterCjkPunctuation(cp)) {
-        start += static_cast<size_t>(p - (b + start));
-      } else {
-        break;
-      }
-    }
+  // Single forward pass so multi-byte punctuation (quotes, guillemets, ...) is
+  // decoded and classified as a whole codepoint, not peeked at byte-by-byte:
+  // a byte-level check can't tell a punctuation lead byte from a letter's.
+  const auto* p = reinterpret_cast<const unsigned char*>(word);
+  const unsigned char* wordStart = nullptr;
+  const unsigned char* wordEnd = nullptr;
+  while (*p != 0) {
+    const unsigned char* cpStart = p;
+    const uint32_t cp = utf8NextCodepoint(&p);
+    if (!isWordCodepoint(cp)) continue;
+    // CJK opening/closing punctuation is only stripped at the matching edge.
+    if (!wordStart && !CjkBreaks::isNoBreakAfterCjkPunctuation(cp)) wordStart = cpStart;
+    if (wordStart && !CjkBreaks::isNoBreakBeforeCjkPunctuation(cp)) wordEnd = p;
   }
-  while (end > start) {
-    if (!isWordByte(b[end - 1]))
-      end--;
-    else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
-      end -= 3;
-    else {
-      size_t lastCharStart = end - 1;
-      while (lastCharStart > start && (b[lastCharStart] & 0xC0) == 0x80) {
-        lastCharStart--;
-      }
-      const unsigned char* p = b + lastCharStart;
-      const uint32_t cp = utf8NextCodepoint(&p);
-      if (CjkBreaks::isNoBreakBeforeCjkPunctuation(cp)) {
-        end = lastCharStart;
-      } else {
-        break;
-      }
-    }
-  }
-  if (start >= end) return "";
+  if (!wordStart || !wordEnd) return "";
 
-  std::string result(word + start, end - start);
+  std::string result(reinterpret_cast<const char*>(wordStart), wordEnd - wordStart);
   std::transform(result.begin(), result.end(), result.begin(),
                  [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
   return result;
