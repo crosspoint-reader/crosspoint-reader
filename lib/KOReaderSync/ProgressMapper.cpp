@@ -41,8 +41,9 @@ int parseCharOffset(const std::string& xpath) {
   return val;
 }
 
-// Parse the N from text()[N] in the XPath (1-based; defaults to 1 if absent or 1).
+// Text nodes are 1-based; zero identifies an element anchor without text().
 int parseTextNodeIndex(const std::string& xpath) {
+  if (xpath.rfind("text()") == std::string::npos) return 0;
   const size_t textPos = xpath.rfind("text()[");
   if (textPos == std::string::npos) return 1;
   const size_t numStart = textPos + 7;  // strlen("text()[")
@@ -226,6 +227,7 @@ class ParagraphStreamer final : public Print {
   int liCountAtMatch = 0;
   int targetTextNode = 1;
   int currentTextNode = 0;
+  bool currentTextNodeOpen = false;
   int paragraphHtmlDepth = -1;
 
   // --- Ancestry-aware reverse mode ---
@@ -396,18 +398,25 @@ class ParagraphStreamer final : public Print {
   void onVisibleCodepoint() {
     totalVisChars++;
     if (revPFound && !revDone) {
-      // Ancestry mode: count only while inside the fully-matched element and in the target text node.
-      // Legacy mode: count only while still inside the matched paragraph and in the target text node.
-      const bool inTargetNode =
-          (stepCount > 0)
-              ? (matchedDepth == stepCount && htmlDepth == stepEnteredAtDepth[stepCount - 1] &&
-                 currentTextNode == targetTextNode)
-              : (paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth && currentTextNode == targetTextNode);
-      if (inTargetNode) {
-        revVisChars++;
-        if (revVisChars >= revChar) {
-          targetVisChars = totalVisChars;
-          revDone = true;
+      const bool inTargetElement = (stepCount > 0)
+                                       ? (matchedDepth == stepCount && htmlDepth == stepEnteredAtDepth[stepCount - 1])
+                                       : (paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth);
+      if (inTargetElement) {
+        // A child element splits direct text, but consecutive/leading children
+        // do not create empty text nodes.
+        if (!currentTextNodeOpen) {
+          currentTextNode++;
+          currentTextNodeOpen = true;
+          revVisChars = 0;
+        }
+        if (currentTextNode == std::max(1, targetTextNode)) {
+          if (revChar <= 0) {
+            targetVisChars = totalVisChars - 1;
+            revDone = true;
+          } else if (++revVisChars >= revChar) {
+            targetVisChars = totalVisChars;
+            revDone = true;
+          }
         }
       }
     }
@@ -447,8 +456,8 @@ class ParagraphStreamer final : public Print {
       revPFound = true;
       revVisChars = 0;
       paragraphHtmlDepth = htmlDepth;
-      currentTextNode = 1;
-      if (revChar <= 0 && targetTextNode <= 1) {
+      currentTextNode = 0;
+      if (revChar <= 0 && targetTextNode == 0) {
         targetVisChars = totalVisChars;
         revDone = true;
       }
@@ -457,6 +466,7 @@ class ParagraphStreamer final : public Print {
 
   void onOpenTag() {
     htmlDepth++;
+    currentTextNodeOpen = false;
 
     if (strcasecmp(tagName, "body") == 0) {
       insideBody = true;
@@ -464,8 +474,8 @@ class ParagraphStreamer final : public Print {
       if (targetBodyText) {
         revPFound = true;
         paragraphHtmlDepth = htmlDepth;
-        currentTextNode = 1;
-        if (revChar <= 0 && targetTextNode <= 1) {
+        currentTextNode = 0;
+        if (revChar <= 0 && targetTextNode == 0) {
           targetVisChars = totalVisChars;
           revDone = true;
         }
@@ -514,8 +524,8 @@ class ParagraphStreamer final : public Print {
             revPFound = true;
             capturedAnchorIdLen = 0;
             revVisChars = 0;
-            currentTextNode = 1;  // Reset text node counter for this element
-            if (revChar <= 0 && targetTextNode <= 1) {
+            currentTextNode = 0;
+            if (revChar <= 0 && targetTextNode == 0) {
               targetVisChars = totalVisChars;
               revDone = true;
             }
@@ -526,6 +536,7 @@ class ParagraphStreamer final : public Print {
   }
 
   void onCloseTag() {
+    currentTextNodeOpen = false;
     if (strcasecmp(tagName, "body") == 0) {
       insideBody = false;
       if (htmlDepth > 0) htmlDepth--;
@@ -542,30 +553,10 @@ class ParagraphStreamer final : public Print {
       return;
     }
 
-    // Legacy mode: each direct child element closing advances the text node index.
-    if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth + 1) {
-      currentTextNode++;
-      if (currentTextNode == targetTextNode && revChar <= 0) {
-        targetVisChars = totalVisChars;
-        revDone = true;
-      }
-    }
     // Legacy mode: stop tracking when the matched paragraph itself closes.
     if (stepCount == 0 && revPFound && !revDone && paragraphHtmlDepth >= 0 && htmlDepth == paragraphHtmlDepth) {
       revPFound = false;
       paragraphHtmlDepth = -1;
-    }
-
-    // Ancestry mode: advance text node when a direct child of the fully-matched element closes.
-    if (stepCount > 0 && matchedDepth == stepCount && revPFound && !revDone) {
-      const int elementDepth = stepEnteredAtDepth[stepCount - 1];
-      if (htmlDepth == elementDepth + 1) {
-        currentTextNode++;
-        if (currentTextNode == targetTextNode && revChar <= 0) {
-          targetVisChars = totalVisChars;
-          revDone = true;
-        }
-      }
     }
 
     if (stepCount > 0 && matchedDepth > 0) {
