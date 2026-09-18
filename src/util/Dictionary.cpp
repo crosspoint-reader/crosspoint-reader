@@ -138,6 +138,7 @@ IfoFacts readIfoFacts(const std::string& ifoPath) {
   return facts;
 }
 
+<<<<<<< HEAD
 bool readInlineField(std::string_view& input, char& type, std::string_view& field, bool truncated) {
   type = input.front();
   input.remove_prefix(1);
@@ -219,6 +220,17 @@ Dictionary::LookupResult decodeInlineFields(std::string& text, size_t start, boo
   }
   text.swap(decoded);
   return Dictionary::LookupResult::Found;
+=======
+// Matches the .idx/.syn's actual on-disk sort order: primary key is
+// StringUtils::asciiCaseCmp (ASCII-insensitive, non-ASCII bytes compared raw),
+// with ties — entries that differ only by ASCII case, e.g. a proper noun
+// sharing a spelling with a common noun — broken by exact byte value. Without
+// this tiebreak, a case-insensitive-only comparator would report a tied entry
+// as an exact match regardless of which one it lands on first.
+int diskOrderCmp(const char* a, const char* b) {
+  const int primary = StringUtils::asciiCaseCmp(a, b);
+  return primary != 0 ? primary : strcmp(a, b);
+>>>>>>> 5366aa31 (chore: addresses coderabbit comment "Use an exact-byte tie-break and always run the folded fallback after an exact miss.")
 }
 
 }  // namespace
@@ -533,7 +545,8 @@ bool Dictionary::openSynonyms(LookupSession& session) {
 // word starts after it and the caller's scan sees all of them.
 // cmp must match how the source is sorted on disk: StarDict sorts with an
 // ASCII-insensitive comparison, non-ASCII bytes raw, so the exact-case attempt
-// passes StringUtils::asciiCaseCmp. The case-folded retry (only made on a miss)
+// passes diskOrderCmp (asciiCaseCmp plus an exact-byte tiebreak for entries that
+// differ only by case). The case-folded retry (always made on a miss)
 // passes utf8CaseInsensitiveCmp, trading exact on-disk order for finding a
 // lowercase headword from a query merely capitalized by sentence position.
 // That fold disagrees with the on-disk order, so with cmpMatchesOrder=false
@@ -944,16 +957,14 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
     // Try the word exactly as selected first, with the comparator matching the
     // .idx/.syn's on-disk sort order (see bisectSamples). Only if that misses,
     // and folding changes the word (it has an uppercase letter), retry fully
-    // case-folded.
-    lookupKey(session, cleaned, StringUtils::asciiCaseCmp, /*cmpMatchesOrder=*/true, group, matchedHeadwordOut,
+    // case-folded — the exact-byte tiebreak can walk past a case variant.
+    lookupKey(session, cleaned, diskOrderCmp, /*cmpMatchesOrder=*/true, group, matchedHeadwordOut,
               groupFromSynonyms, searchFailed);
 
     if (group.empty() && !group.lowMemory()) {
       const std::string folded = foldCase(cleaned);
-      if (folded != cleaned) {
-        lookupKey(session, folded, utf8CaseInsensitiveCmp, /*cmpMatchesOrder=*/false, group, matchedHeadwordOut,
-                  groupFromSynonyms, searchFailed);
-      }
+      lookupKey(session, folded, utf8CaseInsensitiveCmp, /*cmpMatchesOrder=*/false, group, matchedHeadwordOut,
+                groupFromSynonyms, searchFailed);
     }
   }
   if (group.lowMemory()) {

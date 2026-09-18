@@ -148,7 +148,7 @@ class Dictionary {
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
   // Comparator used to scan an index. lookup() picks which one to pass:
-  // StringUtils::asciiCaseCmp (ASCII-insensitive, non-ASCII bytes compared raw
+  // diskOrderCmp (ASCII-insensitive with an exact-byte tiebreak, non-ASCII bytes compared raw
   // — matches the .idx/.syn's actual on-disk order) for the exact-case
   // attempt, or utf8CaseInsensitiveCmp (full Unicode fold) for the case-folded
   // retry. Passed through explicitly rather than hardcoded so the same
