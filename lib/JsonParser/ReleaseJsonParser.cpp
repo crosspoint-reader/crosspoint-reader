@@ -98,6 +98,11 @@ void ReleaseJsonParser::sOnString(void* ctx, const char* value, size_t len) {
   switch (self->lastKey) {
     case LastKey::TAG_NAME:
       if (self->position == Position::TOP_LEVEL && self->depth == 1) {
+        if (len >= sizeof(self->tagName) || memchr(value, '\0', len) != nullptr) {
+          self->tagName[0] = '\0';
+          self->tagFound = false;
+          break;
+        }
         safeCopy(self->tagName, sizeof(self->tagName), value, len);
         self->tagFound = true;
       }
