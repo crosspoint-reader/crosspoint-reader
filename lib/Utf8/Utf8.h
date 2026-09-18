@@ -12,6 +12,14 @@ size_t utf8RemoveLastChar(std::string& str);
 // Truncate string by removing N UTF-8 codepoints from the end.
 void utf8TruncateChars(std::string& str, size_t numChars);
 
+// Simple (single-codepoint) case fold: returns the lowercase form of cp, or
+// cp unchanged if it has no case or its lowercase mapping isn't a single
+// codepoint. Table-driven from Unicode data rather than per-script logic, so
+// it covers any script with a simple case pairing (Latin, Greek, Cyrillic,
+// Armenian, Cherokee, Deseret, ...) without the caller special-casing a
+// language.
+uint32_t utf8ToLowerSimple(uint32_t cp);
+
 // Canonical composition (NFC) for the Latin / Vietnamese range and Hangul:
 // precomposes a base letter followed by combining diacritical mark(s), and
 // conjoining Hangul jamo sequences (L+V[+T]), into single codepoints. Needed

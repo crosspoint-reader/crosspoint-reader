@@ -798,9 +798,12 @@ std::string Dictionary::cleanWord(const char* word) {
   }
   if (!wordStart || !wordEnd) return "";
 
-  std::string result(reinterpret_cast<const char*>(wordStart), wordEnd - wordStart);
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return c >= 0x80 ? c : static_cast<unsigned char>(std::tolower(c)); });
+  std::string result;
+  result.reserve(static_cast<size_t>(wordEnd - wordStart));
+  const unsigned char* rp = wordStart;
+  while (rp < wordEnd) {
+    utf8AppendCodepoint(utf8ToLowerSimple(utf8NextCodepoint(&rp)), result);
+  }
   return result;
 }
 
