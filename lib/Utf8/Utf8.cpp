@@ -2,6 +2,7 @@
 
 #include <cstring>
 
+#include "Utf8CaseFoldTable.h"
 #include "Utf8ComposeTable.h"
 
 namespace {
@@ -222,4 +223,23 @@ void utf8TruncateChars(std::string& str, const size_t numChars) {
   for (size_t i = 0; i < numChars && !str.empty(); ++i) {
     utf8RemoveLastChar(str);
   }
+}
+
+uint32_t utf8ToLowerSimple(const uint32_t cp) {
+  if (cp < 'A') return cp;  // below any cased codepoint in the table
+  int lo = 0;
+  int hi = kUtf8CaseFoldTableSize - 1;
+  while (lo <= hi) {
+    const int mid = (lo + hi) / 2;
+    const Utf8CaseFoldRange& r = kUtf8CaseFoldTable[mid];
+    if (cp < r.start) {
+      hi = mid - 1;
+    } else if (cp > r.end) {
+      lo = mid + 1;
+    } else {
+      // In range but off-step (e.g. a step=2 range's already-lowercase entries): no mapping.
+      return (cp - r.start) % r.step == 0 ? static_cast<uint32_t>(cp + r.delta) : cp;
+    }
+  }
+  return cp;
 }
