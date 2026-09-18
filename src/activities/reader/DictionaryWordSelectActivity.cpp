@@ -107,8 +107,9 @@ void DictionaryWordSelectActivity::extractWords() {
       box.row = rowCount;
       box.text = text;
       // Link a hyphenated pair as it is discovered: the prefix was remembered when its line ended,
-      // and this is the first selectable word of the next line -- the remainder.
-      if (pendingHyphen >= 0) {
+      // and this is the first selectable word of the next line -- the remainder. Links are int16_t
+      // to keep WordBox small; a page past INT16_MAX words just loses the join, never wraps.
+      if (pendingHyphen >= 0 && words.size() <= INT16_MAX) {
         words[static_cast<size_t>(pendingHyphen)].joinNext = static_cast<int16_t>(words.size());
         box.joinPrev = pendingHyphen;
         pendingHyphen = -1;
@@ -118,7 +119,8 @@ void DictionaryWordSelectActivity::extractWords() {
       // Remember it so the next line's first word can be joined to it.
       if (i == lastWordIndex) {
         const size_t len = strlen(text);
-        if (len > 1 && text[len - 1] == '-') pendingHyphen = static_cast<int16_t>(words.size() - 1);
+        if (len > 1 && text[len - 1] == '-' && words.size() <= INT16_MAX)
+          pendingHyphen = static_cast<int16_t>(words.size() - 1);
       }
       rowHasWords = true;
 
