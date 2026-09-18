@@ -336,20 +336,30 @@ Response:
     "name": "My Catalog",
     "url": "http://calibre.local:8080/opds",
     "username": "reader",
+    "downloadFolder": "/books/calibre",
     "hasPassword": true
   }
 ]
 ```
 
+`downloadFolder` is this server's own download destination. An empty string
+means the server inherits the device-wide `opdsDownloadFolder` setting, which
+is itself the SD card root when empty.
+
 ### `POST /api/opds`
 
 Adds or updates an OPDS server. Include `index` to update an existing entry.
 If `password` is omitted during an update, the existing password is preserved.
+`downloadFolder` follows the same rule: omit it to keep the stored folder, or
+send an explicit `""` to reset the server back to the device-wide default. For
+non-empty values, leading and trailing spaces or tabs are removed, a leading
+`/` is added when missing, and trailing `/` characters are removed. A bare `/`
+also resets the server to the device-wide default.
 
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
-  -d '{"name":"My Catalog","url":"http://calibre.local:8080/opds","username":"reader","password":"secret"}' \
+  -d '{"name":"My Catalog","url":"http://calibre.local:8080/opds","username":"reader","password":"secret","downloadFolder":"/books/calibre"}' \
   http://crosspoint.local/api/opds
 ```
 
