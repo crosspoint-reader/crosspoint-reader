@@ -9,6 +9,7 @@
 #include <cctype>
 #include <climits>
 #include <cstdlib>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "DictionaryDefinitionActivity.h"
@@ -72,14 +73,26 @@ void DictionaryWordSelectActivity::extractWords() {
   std::string pageText;
   pageText.reserve(2048);
   uint8_t styleMask = 0;
+  int16_t pendingHyphen = -1;  // line-final word ending in '-', awaiting its remainder
 
   for (const auto& element : page->elements) {
-    if (element->getTag() != TAG_PageLine) continue;
+    // Layout hyphenation only ever continues onto the IMMEDIATELY following text line, so
+    // anything else in between (an image, a line with no usable block) disarms the join.
+    if (element->getTag() != TAG_PageLine) {
+      pendingHyphen = -1;
+      continue;
+    }
     const auto* line = static_cast<const PageLine*>(element.get());
     const auto* block = line->getBlock();
-    if (!block || !block->valid()) continue;
+    if (!block || !block->valid()) {
+      // Reset the pending hyphen too: a skipped line must not let a hyphenated word join across
+      // the gap it leaves.
+      pendingHyphen = -1;
+      continue;
+    }
 
     bool rowHasWords = false;
+    const uint16_t lastWordIndex = block->wordCount() > 0 ? static_cast<uint16_t>(block->wordCount() - 1) : 0;
     const int ascender = renderer.getFontAscenderSize(fontId);
     const int rubyShift = block->getRubyShift(ascender);
     for (uint16_t i = 0; i < block->wordCount(); i++) {
@@ -93,14 +106,32 @@ void DictionaryWordSelectActivity::extractWords() {
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
       box.text = text;
+      // Link a hyphenated pair as it is discovered: the prefix was remembered when its line ended,
+      // and this is the first selectable word of the next line -- the remainder.
+      if (pendingHyphen >= 0) {
+        words[static_cast<size_t>(pendingHyphen)].joinNext = static_cast<int16_t>(words.size());
+        box.joinPrev = pendingHyphen;
+        pendingHyphen = -1;
+      }
       words.push_back(box);
+      // A trailing hyphen on the LINE'S last word is layout hyphenation, not the author's text.
+      // Remember it so the next line's first word can be joined to it.
+      if (i == lastWordIndex) {
+        const size_t len = strlen(text);
+        if (len > 1 && text[len - 1] == '-') pendingHyphen = static_cast<int16_t>(words.size() - 1);
+      }
       rowHasWords = true;
 
       pageText.append(text);
       pageText.push_back(' ');
       styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(box.style) & 0x03));
     }
-    if (rowHasWords) rowCount++;
+    if (rowHasWords) {
+      rowCount++;
+    } else {
+      // A line with nothing selectable on it: same rule, the pending prefix cannot reach past it.
+      pendingHyphen = -1;
+    }
   }
 
   if (styleMask == 0) styleMask = 0x01;  // REGULAR
@@ -108,6 +139,36 @@ void DictionaryWordSelectActivity::extractWords() {
   for (auto& word : words) {
     word.width = static_cast<int16_t>(renderer.getTextAdvanceX(fontId, word.text, word.style));
   }
+}
+
+// Either half of a hyphenated pair looks up the whole word: "any-" joins the remainder that
+// follows it, "one" joins the prefix before it. The hyphen itself is dropped -- layout put it
+// there, the author did not. Words that are not part of a split are returned untouched, with no
+// allocation.
+const char* DictionaryWordSelectActivity::lookupTextFor(const size_t index, std::string& scratch) const {
+  const WordBox& box = words[index];
+  const WordBox* prefix = nullptr;
+  const WordBox* remainder = nullptr;
+  if (box.joinNext >= 0 && static_cast<size_t>(box.joinNext) < words.size()) {
+    prefix = &box;
+    remainder = &words[static_cast<size_t>(box.joinNext)];
+  } else if (box.joinPrev >= 0 && static_cast<size_t>(box.joinPrev) < words.size()) {
+    prefix = &words[static_cast<size_t>(box.joinPrev)];
+    remainder = &box;
+  } else {
+    return box.text;
+  }
+  scratch.assign(prefix->text);
+  if (!scratch.empty() && scratch.back() == '-') scratch.pop_back();
+  scratch.append(remainder->text);
+  return scratch.c_str();
+}
+
+const DictionaryWordSelectActivity::WordBox* DictionaryWordSelectActivity::joinedPartner(const size_t index) const {
+  const WordBox& box = words[index];
+  const int16_t other = box.joinNext >= 0 ? box.joinNext : box.joinPrev;
+  if (other < 0 || static_cast<size_t>(other) >= words.size()) return nullptr;
+  return &words[static_cast<size_t>(other)];
 }
 
 // Index of the word whose box (with finger-sized slop) contains the touch
@@ -175,7 +236,9 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  std::string joined;
+  const bool found =
+      ok && dict.lookup(lookupTextFor(static_cast<size_t>(selected), joined), definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -299,6 +362,11 @@ void DictionaryWordSelectActivity::loop() {
 // next cursor move must do a full repaint.
 bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   const WordBox& word = words[selected];
+  // A hyphenated word is highlighted in both halves, so the reader sees the whole word they are
+  // looking up rather than the fragment on this line. The second box sits on another line, which
+  // one saved region cannot restore -- so the snapshot fast path is skipped and the next cursor
+  // move repaints fully. That costs a refresh only on the rare split word.
+  const WordBox* partner = joinedPartner(static_cast<size_t>(selected));
   int hx = word.x - 2;
   int hy = word.y - 2;
   int hw = word.width + 4;
@@ -314,7 +382,7 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   }
 
   bool saved = false;
-  if (snapshot && hw > 0 && hh > 0) {
+  if (!partner && snapshot && hw > 0 && hh > 0) {
     saved = renderer.readFramebufferRegion(hx, hy, hw, hh, snapshot.get(), SNAPSHOT_CAPACITY) > 0;
   }
   snapshotX = static_cast<int16_t>(hx);
@@ -325,6 +393,24 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
 
   renderer.fillRect(hx, hy, hw, hh, true);
   renderer.drawText(fontId, word.x, word.y, word.text, false, word.style);
+  if (partner) {
+    int px = partner->x - 2;
+    int py = partner->y - 2;
+    int pw = partner->width + 4;
+    int ph = lineHeight + 4;
+    if (px < 0) {
+      pw += px;
+      px = 0;
+    }
+    if (py < 0) {
+      ph += py;
+      py = 0;
+    }
+    if (pw > 0 && ph > 0) {
+      renderer.fillRect(px, py, pw, ph, true);
+      renderer.drawText(fontId, partner->x, partner->y, partner->text, false, partner->style);
+    }
+  }
   return saved;
 }
 

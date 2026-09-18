@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "activities/Activity.h"
@@ -36,7 +37,19 @@ class DictionaryWordSelectActivity final : public Activity {
     uint16_t row;
     const char* text;
     EpdFontFamily::Style style;
+    // Layout hyphenation splits a word across a line break ("any-" / "one"), and each half reaches
+    // this list as its own selectable token. These link the two halves so either one looks up the
+    // whole word; -1 when the word is not part of a split. Indices into `words`.
+    int16_t joinNext = -1;  // set on the "any-" half: index of the remainder
+    int16_t joinPrev = -1;  // set on the "one" half: index of the hyphenated prefix
   };
+  // The word to look up for a box, joining a hyphenated pair back together. Returns a reference
+  // into `scratch` when a join happened, so the caller owns the storage.
+  const char* lookupTextFor(size_t index, std::string& scratch) const;
+  // The other half of a hyphenated pair, or nullptr. Both halves are highlighted together: the
+  // reader selected one word, and showing only the half they pointed at makes the selection look
+  // like it stopped at the line break.
+  const WordBox* joinedPartner(size_t index) const;
 
   enum class Popup : uint8_t { None, Busy, NotFound, Error };
 
