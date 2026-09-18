@@ -147,12 +147,14 @@ class Dictionary {
  private:
   static constexpr uint32_t SAMPLE_INTERVAL = 256;
 
-  // Comparator used to bisect/scan an index. lookup() picks which one to pass:
+  // Comparator used to scan an index. lookup() picks which one to pass:
   // StringUtils::asciiCaseCmp (ASCII-insensitive, non-ASCII bytes compared raw
   // — matches the .idx/.syn's actual on-disk order) for the exact-case
   // attempt, or utf8CaseInsensitiveCmp (full Unicode fold) for the case-folded
   // retry. Passed through explicitly rather than hardcoded so the same
-  // bisect/scan code serves both without duplicating it.
+  // bisect/scan code serves both without duplicating it. Only the former
+  // matches the on-disk sort order (see cmpMatchesOrder on locateAll() /
+  // locateSynonyms() / lookupKey()).
   using WordCmp = int (*)(const char*, const char*);
 
   // Longest "<basePath><suffix>" the lookup path builds, rounded up. basePath is
@@ -221,7 +223,8 @@ class Dictionary {
   // sorted, so the entries of one headword are adjacent and one scan collects
   // them all. *readError is set when the scan was cut short by an IO failure,
   // which is a read failure rather than a miss.
-  void locateAll(LookupSession& session, const char* target, WordCmp cmp, DictEntryList& out, bool* readError);
+  void locateAll(LookupSession& session, const char* target, WordCmp cmp, bool cmpMatchesOrder,
+                 DictEntryList& out, bool* readError);
 
   // Resolve an ordinal (the N-th .idx entry, 0-based) to its .dict location via
   // the .qidx samples. Leaves the resolved headword in wordBuf.
@@ -230,14 +233,15 @@ class Dictionary {
   // Scan every .syn/.sidx record for target, following each ordinal through
   // locateByOrdinal(). Every resolved entry is returned in dictionary order; a
   // failed synonym read is reported separately from a genuine miss.
-  bool locateSynonyms(LookupSession& session, const char* target, WordCmp cmp, DictEntryList& out,
-                      bool* readError);
+  bool locateSynonyms(LookupSession& session, const char* target, WordCmp cmp, bool cmpMatchesOrder,
+                      DictEntryList& out, bool* readError);
 
   // The shared probe sequence lookup() runs once for the exact-case key and once
   // (only if needed) for the case-folded key: exact headword, then synonyms, then
   // English stem variants. OR's read failures into searchFailed.
-  void lookupKey(LookupSession& session, const std::string& key, WordCmp cmp, DictEntryList& group,
-                 std::string& matchedHeadwordOut, bool& groupFromSynonyms, bool& searchFailed);
+  void lookupKey(LookupSession& session, const std::string& key, WordCmp cmp, bool cmpMatchesOrder,
+                 DictEntryList& group, std::string& matchedHeadwordOut, bool& groupFromSynonyms,
+                 bool& searchFailed);
 
   // One streaming pass over sourcePath writing a sampled-offset sidecar. Each
   // source entry is a NUL-terminated word followed by suffixBytes fixed bytes
