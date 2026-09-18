@@ -226,7 +226,7 @@ void utf8TruncateChars(std::string& str, const size_t numChars) {
   }
 }
 
-uint32_t utf8ToLowerSimple(const uint32_t cp) {
+uint32_t utf8SimpleCaseFold(const uint32_t cp) {
   if (cp < 'A') return cp;  // below any cased codepoint in the table
   int lo = 0;
   int hi = kUtf8CaseFoldTableSize - 1;
@@ -238,11 +238,22 @@ uint32_t utf8ToLowerSimple(const uint32_t cp) {
     } else if (cp > r.end) {
       lo = mid + 1;
     } else {
-      // In range but off-step (e.g. a step=2 range's already-lowercase entries): no mapping.
+      // In range but off-step (e.g. a step=2 range's already-folded entries): no mapping.
       return (cp - r.start) % r.step == 0 ? static_cast<uint32_t>(cp + r.delta) : cp;
     }
   }
   return cp;
+}
+
+int utf8CaseInsensitiveCmp(const char* a, const char* b) {
+  const auto* pa = reinterpret_cast<const unsigned char*>(a);
+  const auto* pb = reinterpret_cast<const unsigned char*>(b);
+  for (;;) {
+    const uint32_t ca = utf8SimpleCaseFold(utf8NextCodepoint(&pa));
+    const uint32_t cb = utf8SimpleCaseFold(utf8NextCodepoint(&pb));
+    if (ca != cb) return ca < cb ? -1 : 1;
+    if (ca == 0) return 0;
+  }
 }
 
 bool utf8IsWordChar(const uint32_t cp) {

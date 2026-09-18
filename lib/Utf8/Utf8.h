@@ -12,13 +12,22 @@ size_t utf8RemoveLastChar(std::string& str);
 // Truncate string by removing N UTF-8 codepoints from the end.
 void utf8TruncateChars(std::string& str, size_t numChars);
 
-// Simple (single-codepoint) case fold: returns the lowercase form of cp, or
-// cp unchanged if it has no case or its lowercase mapping isn't a single
-// codepoint. Table-driven from Unicode data rather than per-script logic, so
-// it covers any script with a simple case pairing (Latin, Greek, Cyrillic,
-// Armenian, Cherokee, Deseret, ...) without the caller special-casing a
-// language.
-uint32_t utf8ToLowerSimple(uint32_t cp);
+// Simple (single-codepoint) case fold: returns a canonical case-insensitive
+// form of cp (per Unicode's case-folding data, not necessarily its display
+// lowercase — e.g. Greek final sigma U+03C2 folds to U+03C3), or cp unchanged
+// if it has no case or its fold isn't a single codepoint. Table-driven from
+// Unicode data rather than per-script logic, so it covers any script with a
+// simple case pairing (Latin, Greek, Cyrillic, Armenian, Cherokee, Deseret,
+// ...) without the caller special-casing a language. For comparison keys
+// only — not for display text.
+uint32_t utf8SimpleCaseFold(uint32_t cp);
+
+// Case-insensitive strcmp over UTF-8 strings: decodes both sides codepoint by
+// codepoint and compares their utf8SimpleCaseFold() values. Use this (not
+// StringUtils::asciiCaseCmp, which only folds ASCII) wherever a stored
+// on-disk key may contain non-ASCII text and must compare/sort equal
+// regardless of case in any script — e.g. dictionary index lookups.
+int utf8CaseInsensitiveCmp(const char* a, const char* b);
 
 // True if cp is a Letter, Number, or Mark (Unicode general category L*, N*,
 // or M*) — i.e. part of a word rather than incidental punctuation/symbols at
