@@ -23,10 +23,13 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 uint32_t utf8SimpleCaseFold(uint32_t cp);
 
 // Case-insensitive strcmp over UTF-8 strings: decodes both sides codepoint by
-// codepoint and compares their utf8SimpleCaseFold() values. Use this (not
+// codepoint and compares their utf8SimpleCaseFold() values, so two codepoints
+// compare equal only when they share a simple, single-codepoint case fold —
+// per utf8SimpleCaseFold's own caveats, a codepoint with no case or whose fold
+// isn't a single codepoint compares by its own value instead. Use this (not
 // StringUtils::asciiCaseCmp, which only folds ASCII) wherever a stored
-// on-disk key may contain non-ASCII text and must compare/sort equal
-// regardless of case in any script — e.g. dictionary index lookups.
+// on-disk key may contain non-ASCII text and needs case-insensitive
+// comparison — e.g. dictionary index lookups.
 int utf8CaseInsensitiveCmp(const char* a, const char* b);
 
 // True if cp is a Letter, Number, or Mark (Unicode general category L*, N*,
