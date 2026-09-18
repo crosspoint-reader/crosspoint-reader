@@ -596,7 +596,8 @@ int main() {
   assert(Dictionary::cleanWord("\u0591 !\u05B0").empty());
   assert(Dictionary::cleanWord("בְּרֵאשִׁ֖ית בָּרָ֣א") == "בראשית ברא");
   assert(Dictionary::cleanWord("שלום") == "שלום");
-  assert(Dictionary::cleanWord("שָׁלוֹם ABC 😀 café e\u0301 日本語") == "שלום abc 😀 café e\u0301 日本語");
+  // Case is preserved; the lookup itself falls back to foldCase on a miss.
+  assert(Dictionary::cleanWord("שָׁלוֹם ABC 😀 café e\u0301 日本語") == "שלום ABC 😀 café e\u0301 日本語");
   assert(Dictionary::cleanWord("😀שָׁלוֹם😀") == "שלום");
   assert(Dictionary::cleanWord("א־ב׀ג׃ד׆ה׳ו״ז") == "א־ב׀ג׃ד׆ה׳ו״ז");
   assert(Dictionary::cleanWord("\u0591\u05BD\u05BF\u05C1\u05C2\u05C4\u05C5\u05C7\u05C8\u05C9\uFB1E").empty());
