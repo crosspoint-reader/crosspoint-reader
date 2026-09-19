@@ -1269,7 +1269,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
   const uint32_t lineVisibleOffset = visibleOffsetAt(lastBreakAt);
-  const bool endsInLayoutHyphen =
+  const bool logicalLastHasLayoutHyphen =
       lineBreak > lastBreakAt && lineBreak - 1 < wordHyphenInserted.size() && wordHyphenInserted[lineBreak - 1];
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
@@ -1345,6 +1345,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const bool shouldResolveVisualOrder = blockStyle.isRtl || hasRtlWord;
   const bool willReorder =
       shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
+  // The TextBlock flag describes its last STORED word. After a BiDi reorder that may not be the
+  // logically last word, and then the flag must not be set on a word it does not describe.
+  const bool endsInLayoutHyphen =
+      logicalLastHasLayoutHyphen &&
+      (!willReorder || (!visualOrderScratch.empty() && visualOrderScratch.back() == lineWordCount - 1));
 
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);

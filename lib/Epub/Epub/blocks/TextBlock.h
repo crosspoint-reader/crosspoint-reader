@@ -52,7 +52,8 @@ class TextBlock final : public Block {
   uint16_t numWords = 0;
   uint16_t textBytes = 0;  // total size of the text region, including NULs
   bool focusPresent = false;
-  // The last word's trailing '-' was added by layout hyphenation, not written by the author.
+  // The last stored word (index wordCount() - 1, after any BiDi reorder) ends in a '-' added by
+  // layout hyphenation, not written by the author.
   bool endsInLayoutHyphen = false;
   bool isValid = true;
   // The ONLY allocation: makeUniqueNoThrow, so OOM yields an invalid block
