@@ -583,7 +583,10 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     LOG_ERR("EHP", "Failed to create PageHorizontalRule");
     return;
   }
-  currentPage->elements.push_back(std::move(pageRule));
+  if (!currentPage->elements.push_back(std::move(pageRule))) {
+    failLayout();
+    return;
+  }
   setCurrentPageVisibleOffset(visibleTextOffset);
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
@@ -659,7 +662,7 @@ void ChapterHtmlSlimParser::closeTableCell() {
     return;
   }
 
-  tableRowCells.push_back(std::move(currentTextBlock));
+  if (!tableRowCells.push_back(std::move(currentTextBlock))) failLayout();
 }
 
 void ChapterHtmlSlimParser::addTableRowSeparator() {
@@ -677,10 +680,10 @@ void ChapterHtmlSlimParser::addTableRowSeparator() {
     failLayout();
     return;
   }
-  if (currentPage->elements.capacity() == currentPage->elements.size()) {
-    currentPage->elements.reserve(currentPage->elements.size() + 1);
+  if (!currentPage->elements.push_back(std::move(separator))) {
+    failLayout();
+    return;
   }
-  currentPage->elements.push_back(std::move(separator));
   currentPageNextY += TABLE_ROW_SEPARATOR_GAP;
   tablePreviousRowEndedWithSeparator = true;
 }
@@ -696,15 +699,12 @@ bool ChapterHtmlSlimParser::addTableGridSegment(const uint8_t columnCount, const
     LOG_ERR("EHP", "OOM: table grid row");
     return false;
   }
-  if (currentPage->elements.capacity() == currentPage->elements.size()) {
-    currentPage->elements.reserve(currentPage->elements.size() + 1);
-  }
-  currentPage->elements.push_back(std::move(grid));
-  return true;
+  return currentPage->elements.push_back(std::move(grid));
 }
 
 void ChapterHtmlSlimParser::finishTableRow() {
   closeTableCell();
+  if (layoutFailed) return;
   collectPendingTableAnchor();
 
   if (!tableRowStacked && tableRowAnchorCount > 0) {
@@ -740,30 +740,35 @@ void ChapterHtmlSlimParser::finishTableRow() {
     lines.clear();
   }
   tableLineVisibleOffsets.clear();
-  if (tableLineVisibleOffsets.capacity() < MAX_GRID_TABLE_CELL_WORDS * 2) {
-    tableLineVisibleOffsets.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+  if (!tableLineVisibleOffsets.reserve(MAX_GRID_TABLE_CELL_WORDS * 2)) {
+    failLayout();
+    return;
   }
   size_t maxLineCount = 0;
   const bool rowRtl = tableRowRtl;
 
   for (size_t column = 0; column < columnCount; ++column) {
     auto& lines = tableCellLines[column];
-    // Two wrapped lines per buffered word avoids normal vector growth (max 64).
-    if (lines.capacity() < MAX_GRID_TABLE_CELL_WORDS * 2) {
-      lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+    // Reserve an estimate; unusually long words may need more wrapped lines.
+    if (!lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2)) {
+      failLayout();
+      return;
     }
     if (!tableRowCells[column]->layoutAndExtractLines(
             renderer, fontId, textWidth, [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
+              if (layoutFailed) return;
               const size_t lineIndex = lines.size();
-              lines.push_back(std::move(line));
-              if (tableLineVisibleOffsets.size() <= lineIndex) {
-                tableLineVisibleOffsets.resize(lineIndex + 1, UINT32_MAX);
+              if (!lines.push_back(std::move(line)) ||
+                  (tableLineVisibleOffsets.size() <= lineIndex && !tableLineVisibleOffsets.push_back(UINT32_MAX))) {
+                failLayout();
+                return;
               }
               tableLineVisibleOffsets[lineIndex] = std::min(tableLineVisibleOffsets[lineIndex], offset);
             })) {
       failLayout();
       return;
     }
+    if (layoutFailed) return;
     maxLineCount = std::max(maxLineCount, lines.size());
   }
   tableRowCells.clear();
@@ -896,7 +901,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
           std::max<int16_t>(0, static_cast<int16_t>(viewportHeight - currentPageNextY - TABLE_GRID_VERTICAL_PADDING)));
       const size_t linesThatFit = std::max<size_t>(1, availableHeight / rowLineHeight);
       const size_t linesToReserve = std::min(maxLineCount - lineIndex, linesThatFit);
-      currentPage->elements.reserve(currentPage->elements.size() + linesToReserve * columnCount + 1);
+      if (!currentPage->elements.reserve(currentPage->elements.size() + linesToReserve * columnCount + 1)) {
+        failLayout();
+        clearLayoutLines();
+        return;
+      }
     }
     for (size_t column = 0; column < columnCount; ++column) {
       if (lineIndex >= tableCellLines[column].size()) {
@@ -913,6 +922,10 @@ void ChapterHtmlSlimParser::finishTableRow() {
       // Reset Y so every cell in this slice shares one baseline.
       currentPageNextY = rowY;
       addLineToPage(std::move(line), lineVisibleOffset);
+      if (layoutFailed) {
+        clearLayoutLines();
+        return;
+      }
     }
     currentPageNextY = static_cast<int16_t>(rowY + rowLineHeight);
     gridHasLines = true;
@@ -1084,7 +1097,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
-    self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS);
+    if (!self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS)) {
+      self->failLayout();
+      return;
+    }
     self->tableRowAnchorCount = 0;
     self->tableRowAnchorBytes = 0;
     self->tableAnchorCellPendingLine = UINT8_MAX;
@@ -1447,7 +1463,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   LOG_ERR("EHP", "Failed to create PageImage");
                   return;
                 }
-                self->currentPage->elements.push_back(std::move(pageImage));
+                if (!self->currentPage->elements.push_back(std::move(pageImage))) {
+                  self->failLayout();
+                  return;
+                }
                 self->setCurrentPageVisibleOffset(self->visibleTextOffset);
                 self->currentPageNextY += displayHeight + imageMarginBottom;
 
@@ -2483,7 +2502,10 @@ void ChapterHtmlSlimParser::addLineToPage(std::unique_ptr<TextBlock> line, const
     failLayout();
     return;
   }
-  currentPage->elements.push_back(std::move(pageLine));
+  if (!currentPage->elements.push_back(std::move(pageLine))) {
+    failLayout();
+    return;
+  }
   currentPageNextY += lineHeight;
 }
 

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "Epub/FootnoteEntry.h"
+#include "Epub/LayoutBuffer.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
@@ -101,9 +102,9 @@ class ChapterHtmlSlimParser {
   bool tablePreviousRowEndedWithSeparator = false;
   uint16_t tableRowsSpannedRemaining = 0;
   size_t tableCellTextBytes = 0;
-  std::vector<std::unique_ptr<ParsedText>> tableRowCells;
-  std::array<std::vector<std::unique_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
-  std::vector<uint32_t> tableLineVisibleOffsets;
+  LayoutBuffer<std::unique_ptr<ParsedText>> tableRowCells;
+  std::array<LayoutBuffer<std::unique_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
+  LayoutBuffer<uint32_t> tableLineVisibleOffsets;
   std::array<char, MAX_GRID_TABLE_ANCHOR_BYTES> tableRowAnchorStorage{};
   size_t tableRowAnchorCount = 0;
   size_t tableRowAnchorBytes = 0;

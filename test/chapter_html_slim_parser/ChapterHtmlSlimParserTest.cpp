@@ -14,6 +14,7 @@
 #undef class
 
 static thread_local bool failNextArrayAllocation = false;
+static thread_local size_t arrayAllocationsToSkip = 0;
 static thread_local size_t allocationSizeToFail = 0;
 static thread_local size_t matchingAllocationsToSkip = 0;
 void* operator new(size_t size, const std::nothrow_t&) noexcept {
@@ -30,8 +31,12 @@ void* operator new(size_t size, const std::nothrow_t&) noexcept {
 
 void* operator new[](size_t size, const std::nothrow_t&) noexcept {
   if (failNextArrayAllocation) {
-    failNextArrayAllocation = false;
-    return nullptr;
+    if (arrayAllocationsToSkip > 0) {
+      --arrayAllocationsToSkip;
+    } else {
+      failNextArrayAllocation = false;
+      return nullptr;
+    }
   }
   return ::operator new[](size);
 }
@@ -69,6 +74,8 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     EXPECT_EQ(allocationSizeToFail, 0u);
     EXPECT_EQ(matchingAllocationsToSkip, 0u);
     EXPECT_FALSE(failNextArrayAllocation);
+    EXPECT_EQ(arrayAllocationsToSkip, 0u);
+    arrayAllocationsToSkip = 0;
     allocationSizeToFail = 0;
     matchingAllocationsToSkip = 0;
     failNextArrayAllocation = false;
@@ -105,7 +112,7 @@ TEST_F(ChapterHtmlSlimParserTest, RubySurvivesPartialParagraphExtraction) {
 TEST_F(ChapterHtmlSlimParserTest, UnequalTableCellsAndRubySurvivePageBreaks) {
   parser.viewportWidth = 240;
   parser.viewportHeight = 32;
-  parser.tableRowCells.reserve(2);
+  ASSERT_TRUE(parser.tableRowCells.reserve(2));
   std::multiset<std::string> expected;
   for (int column = 0; column < 2; ++column) {
     auto cell = std::make_unique<ParsedText>(false);
@@ -115,7 +122,7 @@ TEST_F(ChapterHtmlSlimParserTest, UnequalTableCellsAndRubySurvivePageBreaks) {
       cell->addWord(word, EpdFontFamily::REGULAR);
     }
     if (column == 0) cell->setRubyGroupAt(0, 2, "reading");
-    parser.tableRowCells.push_back(std::move(cell));
+    ASSERT_TRUE(parser.tableRowCells.push_back(std::move(cell)));
   }
   std::multiset<std::string> actual;
   unsigned pages = 0;
@@ -177,9 +184,10 @@ TEST_F(ChapterHtmlSlimParserTest, PageElementReserveIsNotASerializedCountLimit) 
   constexpr size_t count = 257;
   {
     Page page;
-    page.elements.reserve(count);
+    ASSERT_TRUE(page.elements.reserve(count));
     for (size_t i = 0; i < count; ++i) {
-      page.elements.push_back(std::make_unique<PageTableGridRow>(240, 2, 2, 0, static_cast<int16_t>(i * 2)));
+      ASSERT_TRUE(
+          page.elements.push_back(std::make_unique<PageTableGridRow>(240, 2, 2, 0, static_cast<int16_t>(i * 2))));
     }
     HalFile output;
     ASSERT_TRUE(output.open(path.c_str(), "wb"));
@@ -295,7 +303,7 @@ TEST_F(ChapterHtmlSlimParserTest, MapsCellAliasesAfterItsTocPageBreak) {
   parser.insideTableCell = true;
   parser.tocAnchors = {"chapter"};
   parser.currentPage = std::make_unique<Page>();
-  parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0));
+  ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
   parser.completePageFn = [](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) {};
   parser.pendingAnchorId = "alias";
   parser.collectPendingTableAnchor();
@@ -308,36 +316,35 @@ TEST_F(ChapterHtmlSlimParserTest, MapsCellAliasesAfterItsTocPageBreak) {
   EXPECT_EQ(parser.pendingAnchorId, "next-cell");
 }
 
-TEST_F(ChapterHtmlSlimParserTest, DoesNotConsumeTextWhenItsArenaAllocationFails) {
-  parser.currentTextBlock->addWord("preserved", EpdFontFamily::REGULAR);
+TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenItsArenaAllocationFails) {
+  parser.currentTextBlock->addWord("a-word-longer-than-small-string-storage", EpdFontFamily::REGULAR);
   bool emitted = false;
   failNextArrayAllocation = true;
   EXPECT_FALSE(parser.currentTextBlock->layoutAndExtractLines(
-      renderer, 0, 100, [&](std::unique_ptr<TextBlock>, uint32_t) { emitted = true; }));
+      renderer, 0, 1000, [&](std::unique_ptr<TextBlock>, uint32_t) { emitted = true; }));
   EXPECT_FALSE(emitted);
   EXPECT_EQ(parser.currentTextBlock->size(), 1u);
-  EXPECT_EQ(parser.currentTextBlock->words.front(), "preserved");
 }
 
-TEST_F(ChapterHtmlSlimParserTest, DoesNotConsumeTextWhenBlockAllocationFails) {
-  parser.currentTextBlock->addWord("preserved", EpdFontFamily::REGULAR);
+TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenBlockAllocationFails) {
+  parser.currentTextBlock->addWord("a-word-longer-than-small-string-storage", EpdFontFamily::REGULAR);
   bool emitted = false;
   allocationSizeToFail = sizeof(TextBlock);
   EXPECT_FALSE(parser.currentTextBlock->layoutAndExtractLines(
-      renderer, 0, 100, [&](std::unique_ptr<TextBlock>, uint32_t) { emitted = true; }));
+      renderer, 0, 1000, [&](std::unique_ptr<TextBlock>, uint32_t) { emitted = true; }));
   EXPECT_FALSE(emitted);
   EXPECT_EQ(parser.currentTextBlock->size(), 1u);
-  EXPECT_EQ(parser.currentTextBlock->words.front(), "preserved");
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridCellArenaFailure) {
-  parser.tableRowCells.reserve(2);
+  ASSERT_TRUE(parser.tableRowCells.reserve(2));
   for (int i = 0; i < 2; ++i) {
     auto cell = std::make_unique<ParsedText>(false);
     cell->addWord("cell", EpdFontFamily::REGULAR);
-    parser.tableRowCells.push_back(std::move(cell));
+    ASSERT_TRUE(parser.tableRowCells.push_back(std::move(cell)));
   }
   failNextArrayAllocation = true;
+  arrayAllocationsToSkip = 2;  // Visible offsets and the first cell's line slots.
   parser.finishTableRow();
   EXPECT_TRUE(parser.layoutFailed);
   EXPECT_EQ(parser.parseStep(), ChapterHtmlSlimParser::ParseStatus::Error);
@@ -440,11 +447,11 @@ TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterPageLineAllocationFailure) 
 }
 
 TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridAllocationFailure) {
-  parser.tableRowCells.reserve(2);
+  ASSERT_TRUE(parser.tableRowCells.reserve(2));
   for (int i = 0; i < 2; ++i) {
     auto cell = std::make_unique<ParsedText>(false);
     cell->addWord("cell", EpdFontFamily::REGULAR);
-    parser.tableRowCells.push_back(std::move(cell));
+    ASSERT_TRUE(parser.tableRowCells.push_back(std::move(cell)));
   }
   allocationSizeToFail = sizeof(PageTableGridRow);
   // Each one-word cell emits one PageLine before the grid allocation.
@@ -457,8 +464,8 @@ TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridAllocationFailure) {
 
 TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterTableSeparatorAllocationFailure) {
   parser.currentPage = std::make_unique<Page>();
-  parser.currentPage->elements.reserve(1);
-  parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0));
+  ASSERT_TRUE(parser.currentPage->elements.reserve(1));
+  ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
   parser.tableRowStacked = true;
   allocationSizeToFail = sizeof(PageHorizontalRule);
   parser.finishTableRow();
@@ -466,5 +473,109 @@ TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterTableSeparatorAllocationFai
   EXPECT_FALSE(parser.tablePreviousRowEndedWithSeparator);
   EXPECT_EQ(parser.currentPage->elements.size(), 1u);
   EXPECT_FALSE(parser.finishParse());
+}
+TEST_F(ChapterHtmlSlimParserTest, LayoutBufferGrowthFailurePreservesExistingEntries) {
+  LayoutBuffer<std::unique_ptr<int>> buffer;
+  ASSERT_TRUE(buffer.reserve(1));
+  ASSERT_TRUE(buffer.push_back(std::make_unique<int>(42)));
+  const auto* retained = buffer[0].get();
+  failNextArrayAllocation = true;
+  EXPECT_FALSE(buffer.push_back(std::make_unique<int>(7)));
+  ASSERT_EQ(buffer.size(), 1u);
+  EXPECT_EQ(buffer.capacity(), 1u);
+  EXPECT_EQ(buffer[0].get(), retained);
+  EXPECT_EQ(*buffer[0], 42);
+  ASSERT_TRUE(buffer.push_back(std::make_unique<int>(7)));
+  EXPECT_EQ(buffer.size(), 2u);
+  EXPECT_EQ(*buffer[1], 7);
+  buffer.clear();
+  EXPECT_TRUE(buffer.empty());
+  EXPECT_EQ(buffer.begin(), buffer.end());
+  EXPECT_EQ(buffer.capacity(), 2u);
+  ASSERT_TRUE(buffer.push_back(std::make_unique<int>(9)));
+  EXPECT_EQ(*buffer[0], 9);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, LayoutBufferRejectsOverflow) {
+  LayoutBuffer<uint32_t> buffer;
+  EXPECT_EQ(buffer.begin(), buffer.end());
+  EXPECT_FALSE(buffer.reserve(std::numeric_limits<size_t>::max()));
+  EXPECT_TRUE(buffer.empty());
+  EXPECT_EQ(buffer.capacity(), 0u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsTableWhenCellSlotsCannotBeAllocated) {
+  failNextArrayAllocation = true;
+  ChapterHtmlSlimParser::startElement(&parser, "table", nullptr);
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsGridWhenVisibleOffsetsCannotBeAllocated) {
+  ASSERT_TRUE(parser.tableRowCells.reserve(2));
+  for (int i = 0; i < 2; ++i) {
+    auto cell = std::make_unique<ParsedText>(false);
+    cell->addWord("cell", EpdFontFamily::REGULAR);
+    ASSERT_TRUE(parser.tableRowCells.push_back(std::move(cell)));
+  }
+  failNextArrayAllocation = true;
+  parser.finishTableRow();
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsGridWhenLineSlotsCannotBeAllocated) {
+  ASSERT_TRUE(parser.tableRowCells.reserve(2));
+  for (int i = 0; i < 2; ++i) {
+    auto cell = std::make_unique<ParsedText>(false);
+    cell->addWord("cell", EpdFontFamily::REGULAR);
+    ASSERT_TRUE(parser.tableRowCells.push_back(std::move(cell)));
+  }
+  failNextArrayAllocation = true;
+  arrayAllocationsToSkip = 1;  // Visible offsets succeed; first cell's slots fail.
+  parser.finishTableRow();
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, GridElementGrowthFailurePreservesExistingPage) {
+  parser.currentPage = std::make_unique<Page>();
+  ASSERT_TRUE(parser.currentPage->elements.reserve(1));
+  ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
+  const auto* retained = parser.currentPage->elements[0].get();
+  failNextArrayAllocation = true;
+  EXPECT_FALSE(parser.addTableGridSegment(2, 0, 16));
+  ASSERT_EQ(parser.currentPage->elements.size(), 1u);
+  EXPECT_EQ(parser.currentPage->elements[0].get(), retained);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionWhenPageLineSlotsCannotGrow) {
+  parser.currentPage = std::make_unique<Page>();
+  auto line =
+      std::make_unique<TextBlock>(std::vector<std::string>{}, std::vector<int16_t>{},
+                                  std::vector<EpdFontFamily::Style>{}, std::vector<uint8_t>{}, std::vector<uint16_t>{});
+  failNextArrayAllocation = true;
+  parser.addLineToPage(std::move(line), 0);
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_TRUE(parser.currentPage->elements.empty());
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PageDeserializeRejectsElementStorageFailure) {
+  const auto path = std::filesystem::temp_directory_path() / "crosspoint-page-slot-failure.bin";
+  {
+    Page page;
+    ASSERT_TRUE(page.elements.push_back(std::make_unique<PageTableGridRow>(240, 20, 2, 0, 0)));
+    HalFile output;
+    ASSERT_TRUE(output.open(path.c_str(), "wb"));
+    ASSERT_TRUE(page.serialize(output));
+  }
+  {
+    HalFile input;
+    ASSERT_TRUE(input.open(path.c_str(), "rb"));
+    failNextArrayAllocation = true;
+    EXPECT_EQ(Page::deserialize(input), nullptr);
+  }
+  std::filesystem::remove(path);
 }
 }  // namespace

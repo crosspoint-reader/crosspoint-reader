@@ -8,7 +8,7 @@
 namespace {
 
 template <typename Predicate>
-void renderFilteredPageElements(const std::vector<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
+void renderFilteredPageElements(const LayoutBuffer<std::unique_ptr<PageElement>>& elements, GfxRenderer& renderer,
                                 const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
   for (const auto& element : elements) {
     if (predicate(*element)) {
@@ -252,15 +252,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   uint16_t count;
   serialization::readPod(file, count);
 
-  // Reserve up front so a page load costs one allocation for the element vector
-  // instead of a grow-copy-free cycle every doubling. `count` is untrusted (it
-  // comes straight off the SD cache), so clamp it: a real page holds a few dozen
-  // elements, while a corrupt header could ask for 65535 * sizeof(unique_ptr) and
-  // abort() on the failed allocation (vector's operator new is throwing, and this
-  // firmware builds with -fno-exceptions). Under-reserving is harmless -- the
-  // push_back path below still grows normally.
+  // Limit speculative allocation for untrusted cache counts. Larger valid pages
+  // grow through checked allocations as their elements are decoded.
   static constexpr uint16_t RESERVE_CAP = 256;
-  page->elements.reserve(std::min(count, RESERVE_CAP));
+  if (!page->elements.reserve(std::min(count, RESERVE_CAP))) return nullptr;
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
@@ -271,25 +266,25 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
       if (!pl) {
         return nullptr;
       }
-      page->elements.push_back(std::move(pl));
+      if (!page->elements.push_back(std::move(pl))) return nullptr;
     } else if (tag == TAG_PageImage) {
       auto pi = PageImage::deserialize(file);
       if (!pi) {
         return nullptr;
       }
-      page->elements.push_back(std::move(pi));
+      if (!page->elements.push_back(std::move(pi))) return nullptr;
     } else if (tag == TAG_PageHorizontalRule) {
       auto rule = PageHorizontalRule::deserialize(file);
       if (!rule) {
         return nullptr;
       }
-      page->elements.push_back(std::move(rule));
+      if (!page->elements.push_back(std::move(rule))) return nullptr;
     } else if (tag == TAG_PageTableGridRow) {
       auto grid = PageTableGridRow::deserialize(file);
       if (!grid) {
         return nullptr;
       }
-      page->elements.push_back(std::move(grid));
+      if (!page->elements.push_back(std::move(grid))) return nullptr;
     } else {
       LOG_ERR("PGE", "Deserialization failed: Unknown tag %u", tag);
       return nullptr;

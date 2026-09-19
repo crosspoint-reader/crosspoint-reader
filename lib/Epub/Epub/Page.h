@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "FootnoteEntry.h"
+#include "LayoutBuffer.h"
 #include "PageLink.h"
 #include "blocks/ImageBlock.h"
 #include "blocks/TextBlock.h"
@@ -95,7 +96,7 @@ class PageTableGridRow final : public PageElement {
 class Page {
  public:
   // the list of block index and line numbers on this page
-  std::vector<std::unique_ptr<PageElement>> elements;
+  LayoutBuffer<std::unique_ptr<PageElement>> elements;
   std::vector<FootnoteEntry> footnotes;
   static constexpr uint16_t MAX_FOOTNOTES_PER_PAGE = 16;
   std::vector<PageLink> links;
