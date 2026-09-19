@@ -25,6 +25,9 @@ constexpr char BACKUP_PATH[] = "/.crosspoint/library.bak";
 constexpr char STAGE_PATH[] = "/.crosspoint/library.stage";
 constexpr char DIRTY_PATH[] = "/.crosspoint/library.dirty";
 constexpr char CACHE_DIR[] = "/.crosspoint";
+// Sticky fallback when the marker could not be persisted (card unavailable at
+// write time): callers must still see the index as stale until a rebuild clears it.
+bool dirtyInMemory = false;
 constexpr size_t LIBRARY_IO_BUFFER_SIZE = 4096;
 
 // Matches lib/FileIndex's buffer so a name this walk accepts is one the file
@@ -176,6 +179,7 @@ bool installNewIndex() {
 }
 
 void clearLibraryIndexDirty() {
+  dirtyInMemory = false;
   if (Storage.exists(DIRTY_PATH) && !Storage.remove(DIRTY_PATH)) {
     LOG_ERR("LIBIDX", "cannot clear dirty marker");
   }
@@ -1043,17 +1047,19 @@ bool markLibraryIndexDirty() {
   if (Storage.exists(DIRTY_PATH)) return true;
   if (!Storage.exists(CACHE_DIR) && !Storage.mkdir(CACHE_DIR)) {
     LOG_ERR("LIBIDX", "cannot create cache directory for dirty marker");
-    return false;
+    dirtyInMemory = true;  // not persisted: stay dirty until the next rebuild
+    return true;
   }
   HalFile marker;
   if (!Storage.openFileForWrite("LIBIDX", DIRTY_PATH, marker)) {
     LOG_ERR("LIBIDX", "cannot create dirty marker");
-    return false;
+    dirtyInMemory = true;
+    return true;
   }
   return true;
 }
 
-bool isLibraryIndexDirty() { return Storage.exists(DIRTY_PATH); }
+bool isLibraryIndexDirty() { return dirtyInMemory || Storage.exists(DIRTY_PATH); }
 
 bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata) {
   const uint32_t startMs = millis();

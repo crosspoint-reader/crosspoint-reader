@@ -309,6 +309,7 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
 void LibraryListActivity::promptRebuildIndex() {
   RenderLock lock(*this);
   GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+  index.close();
   rebuildIndex();
   if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
   resetAfterRebuild();
@@ -985,8 +986,8 @@ void LibraryListActivity::drawHoldHelp() const {
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);
-  else if (!tabsFocused() && selectedEntry() < pinnedCount())
-    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // pinned recents: hold opens the row menu
+  else if (!tabsFocused() && isRecentSort(sortOrder) && listCount() > 0)
+    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // recent rows: hold opens the row menu
   else if (!tabsFocused() && deleteEligible() && listCount() > 0)
     help = tr(STR_HOLD_OPEN_TO_DELETE);
   else if (!tabsFocused() && groupable())
