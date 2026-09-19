@@ -65,8 +65,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-v2-${{ runner.os }}-
 
       - name: Install cppcheck runtime dependency
         run: |
@@ -126,8 +126,23 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-v2-${{ runner.os }}-
+
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          # Envs with custom_sdkconfig (default, sticky) run a nested `pio run` from
+          # ~/.platformio/penv. The platform bootstraps that penv with an open-ended
+          # "pioarduino>=6.1.19", which now resolves to 6.2.0. That core wants
+          # tool-scons 4.11.1 while platform 55.03.311 pins 4.8.1; the two keep
+          # reinstalling over each other and the running SCons loses its package
+          # mid-build ("No module named 'SCons.Tool.FortranCommon'"). Keep the penv
+          # core on the same version as the outer core installed above.
+          # See https://github.com/pioarduino/platform-espressif32/issues/529
+          pio pkg install -e ${{ matrix.env }}
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          ~/.platformio/penv/bin/pio --version
 
       - name: Build ${{ matrix.env }} firmware
         run: |

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 
+#include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 
 namespace {
@@ -21,6 +22,18 @@ namespace {
  */
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
   return font.resolveStyle(static_cast<uint8_t>(style));
+}
+
+uint16_t getSdCardSpaceAdvance(SdCardFont& font, const EpdFontFamily::Style style) {
+  const uint8_t resolvedStyle = resolveSdCardStyle(font, style);
+  const uint16_t advance = font.getAdvance(' ', resolvedStyle);
+  if (advance != 0) return advance;
+
+  // Zero means uncached (full table, style not prewarmed, or failed
+  // preparation): read the glyph, as the per-codepoint slow path does.
+  const EpdFont* epdFont = font.getEpdFont(resolvedStyle);
+  const EpdGlyph* glyph = epdFont ? epdFont->getGlyph(' ') : nullptr;
+  return glyph ? glyph->advanceX : 0;
 }
 }  // namespace
 
@@ -1345,7 +1358,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 }
 
 bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, const bool whiteAsTransparent) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
@@ -1384,15 +1397,16 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   // Calculate output row size (2 bits per pixel, packed into bytes)
   // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
-
-  if (!outputRow || !rowBytes) {
+  const auto rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
+  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(outputRowSize) + rowBytesSize);
+  if (!rowScratch) {
     LOG_ERR("GFX", "!! Failed to allocate BMP row buffers");
-    free(outputRow);
-    free(rowBytes);
+
     return false;
   }
+
+  auto* outputRow = rowScratch.get();
+  auto* rowBytes = rowScratch.get() + outputRowSize;
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
@@ -1408,8 +1422,7 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
-      free(outputRow);
-      free(rowBytes);
+
       return false;
     }
 
@@ -1436,6 +1449,7 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+      if (whiteAsTransparent && val == 3) continue;
 
       if (renderMode == BW && val < 3) {
         drawPixel(screenX, screenY);
@@ -1445,9 +1459,6 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       }
     }
   }
-
-  free(outputRow);
-  free(rowBytes);
 
   const int sourceWidth = bitmap.getWidth() - cropPixX * 2;
   const int sourceHeight = bitmap.getHeight() - cropPixY * 2;
@@ -1472,22 +1483,22 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 
   // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
-
-  if (!outputRow || !rowBytes) {
+  const auto rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
+  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(outputRowSize) + rowBytesSize);
+  if (!rowScratch) {
     LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
-    free(outputRow);
-    free(rowBytes);
+
     return false;
   }
+
+  auto* outputRow = rowScratch.get();
+  auto* rowBytes = rowScratch.get() + outputRowSize;
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
-      free(outputRow);
-      free(rowBytes);
+
       return false;
     }
 
@@ -1521,9 +1532,6 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
       // White pixels (val == 3) are not drawn (leave background)
     }
   }
-
-  free(outputRow);
-  free(rowBytes);
 
   const int renderedWidth =
       isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
@@ -1587,7 +1595,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
 
   // Allocate node buffer for scanline algorithm
-  auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
+  auto nodeX = makeUniqueNoThrow<int[]>(numPoints);
   if (!nodeX) {
     LOG_ERR("GFX", "!! Failed to allocate polygon node buffer");
     return;
@@ -1611,7 +1619,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
     }
 
     // Sort nodes by X
-    std::sort(nodeX, nodeX + nodes);
+    std::sort(nodeX.get(), nodeX.get() + nodes);
 
     // Fill between pairs of nodes
     for (int i = 0; i < nodes - 1; i += 2) {
@@ -1628,8 +1636,6 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       }
     }
   }
-
-  free(nodeX);
 }
 
 // For performance measurement (using static to allow "const" methods)
@@ -1984,8 +1990,7 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   // Advance table fast-path for SD card fonts during layout
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
-    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+    return fp4::toPixel(getSdCardSpaceAdvance(*sdIt->second, style));
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -2005,8 +2010,7 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   // so we return just the space advance without kerning.
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
-    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+    return fp4::toPixel(getSdCardSpaceAdvance(*sdIt->second, style));
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -2229,7 +2233,7 @@ void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
   if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
-  absoluteGrayPlanes = mode == HalDisplay::GrayscaleMode::Absolute;
+  absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
   return true;
 }
 

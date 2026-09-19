@@ -166,7 +166,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       const uint8_t fieldDefault = s.*(info.valuePtr);  // struct-initializer default, read before we overwrite it
       uint8_t v = doc[info.key] | fieldDefault;
       if (info.type == SettingType::ENUM) {
-        v = clamp(v, (uint8_t)info.enumValues.size(), fieldDefault);
+        v = clamp(v, (uint8_t)info.enumLabels().size(), fieldDefault);
       } else if (info.type == SettingType::TOGGLE) {
         v = clamp(v, (uint8_t)2, fieldDefault);
       } else if (info.type == SettingType::VALUE) {
@@ -208,6 +208,17 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
   fontFamily = clamp(storedFontFamily, BUILTIN_FONT_COUNT, 0);
+  if (BoardConfig::hasHomeKey() && doc["homeButtonLongPressAction"].isNull() &&
+      !doc["longPressMenuFunction"].isNull()) {
+    static constexpr HomeButtonAction LEGACY[] = {HomeButtonAction::Sync, HomeButtonAction::Ignore,
+                                                  HomeButtonAction::Bookmark, HomeButtonAction::Dictionary,
+                                                  HomeButtonAction::ReaderMenu};
+    if (s.longPressMenuFunction < sizeof(LEGACY) / sizeof(LEGACY[0])) {
+      s.homeButtonLongPressAction = static_cast<uint8_t>(LEGACY[s.longPressMenuFunction]);
+      needsResave = true;
+    }
+  }
+
   // SD card font family name — not in SettingsList, load manually
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
@@ -252,7 +263,6 @@ CrossPointSettings::StatusBarSpec CrossPointSettings::statusBarSpec() const {
   spec.showBatteryPercent = hideBatteryPercentage == HIDE_NEVER;
   spec.clockMode = statusBarClock;
   spec.clock12h = clockFormat == 1;
-  spec.clockUtcOffsetQ = clockUtcOffsetQ;
   spec.progressBarMode = statusBarProgressBar;
   spec.progressBarHeightPx =
       statusBarProgressBar != HIDE_PROGRESS ? static_cast<uint8_t>((statusBarProgressBarThickness + 1) * 2) : 0;

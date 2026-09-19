@@ -13,8 +13,26 @@
 
 namespace fui = freeink::ui;
 
-void MappedInputManager::update() const {
+void MappedInputManager::update(const bool deferHomeButtonAction) const {
   gpio.update();
+  homeAction = HomeButtonAction::Ignore;
+  if (gpio.hasHomeKey()) {
+    homeAction = homeButtonInput.update(millis(), gpio.wasHomeKeyTapped(), gpio.wasHomeKeyLongPressed(),
+                                        wasSwipe() != SwipeDir::None, gpio.wasHomeKeyPressed(),
+                                        static_cast<HomeButtonAction>(SETTINGS.homeButtonTapAction),
+                                        static_cast<HomeButtonAction>(SETTINGS.homeButtonDoubleTapAction),
+                                        static_cast<HomeButtonAction>(SETTINGS.homeButtonLongPressAction));
+  }
+  if (deferHomeButtonAction) {
+    // Keep the first action observed during a synchronous transfer. Home must
+    // still be visible now so the transfer can cancel and unwind promptly.
+    if (homeAction != HomeButtonAction::Ignore && deferredHomeAction == HomeButtonAction::Ignore) {
+      deferredHomeAction = homeAction;
+    }
+  } else if (deferredHomeAction != HomeButtonAction::Ignore) {
+    homeAction = deferredHomeAction;
+    deferredHomeAction = HomeButtonAction::Ignore;
+  }
   for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
     if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
   }
@@ -285,10 +303,8 @@ bool MappedInputManager::wasMenuGesture() const { return wasTopEdgeDownSwipe(); 
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 bool MappedInputManager::wasHomeGesture() const {
-  return gpio.hasHomeKey() ? gpio.wasHomeKeyTapped() : wasBottomEdgeUpSwipe();
+  return gpio.hasHomeKey() ? homeAction == HomeButtonAction::Home : wasBottomEdgeUpSwipe();
 }
-
-bool MappedInputManager::wasHomeKeyHold() const { return gpio.hasHomeKey() && gpio.wasHomeKeyLongPressed(); }
 
 bool MappedInputManager::wasLightPanelGesture() const {
   // On lightless boards the same edge remains available to the reader menu.
@@ -299,13 +315,15 @@ bool MappedInputManager::wasLightPanelGesture() const {
 bool MappedInputManager::wasPowerConfirmClick() const {
   if (!gpio.hasTouch() || SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::PWR_CONFIRM) return false;
   // Wait out the X4 Pro's frontlight double-click window before treating its
-  // first release as Confirm. Other touch boards can use the release directly.
-  if (BoardConfig::isX4Pro()) return powerConfirmClickFrame;
+  // first release as Confirm. With the shortcut disabled, and on other touch
+  // boards, the release counts directly.
+  if (BoardConfig::isX4Pro() && SETTINGS.doubleClickPwrLight) return powerConfirmClickFrame;
   return gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.getPowerButtonHeldTime() <= SETTINGS.getPowerButtonDuration();
 }
 #endif
 
 bool MappedInputManager::wasPressed(const Button button) const {
+  if (button == Button::Confirm && homeAction == HomeButtonAction::Confirm) return true;
   if (button == Button::Back && wasBackGesture()) return true;
 #if FREEINK_CAP_TOUCH
   if (button == Button::Confirm && wasPowerConfirmClick()) return true;
@@ -314,6 +332,7 @@ bool MappedInputManager::wasPressed(const Button button) const {
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  if (button == Button::Confirm && homeAction == HomeButtonAction::Confirm) return true;
   if (button == Button::Back && wasBackGesture()) return true;
 #if FREEINK_CAP_TOUCH
   if (button == Button::Confirm && wasPowerConfirmClick()) return true;
@@ -353,6 +372,8 @@ bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
 
 unsigned long MappedInputManager::getHeldTime() const {
+  // A mapped action has its own meaning, independent of the contact duration.
+  if (homeAction != HomeButtonAction::Ignore) return 0;
   if (!gpio.wasAnyPressed() && !gpio.wasAnyReleased() && touchHeldOverrideValid &&
       millis() - touchHeldOverrideAt <= TOUCH_HELD_OVERRIDE_WINDOW_MS) {
     return touchHeldOverrideMs;

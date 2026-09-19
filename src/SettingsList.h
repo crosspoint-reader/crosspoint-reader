@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "HomeButtonSettings.h"
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
@@ -319,6 +320,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                           buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
+        // Erased below unless the board is an X4 Pro.
+        SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
+                            "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
 #if FREEINK_CAP_TOUCH
         SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
                           {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
@@ -330,6 +334,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
             "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
+        // Erased below unless the QMI8658 IMU is present (X3).
+        SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
+                          {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
+                          StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
@@ -433,45 +441,48 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_XTC_STATUS_BAR, &CrossPointSettings::xtcStatusBarMode,
                           {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
-        // Clock entries (web settings only; device UI uses ClockOffsetActivity for the offset).
-        // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
+        // Clock entries (persistence + web settings; the device UI is
+        // ClockSettingsActivity under System settings).
         SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::statusBarClock, std::move(statusBarClockValues),
                           "statusBarClock", StrId::STR_CUSTOMISE_STATUS_BAR),
-        SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
-                           "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR),
+        // LEGACY: retired quarter-hour UTC offset (biased by 48). Persisted so
+        // timezones::activeIndex() can migrate it into clockTimezone.
+        SettingInfo::Value(StrId::STR_CLOCK, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1}, "clockUtcOffsetQ",
+                           StrId::STR_CUSTOMISE_STATUS_BAR),
         SettingInfo::Enum(StrId::STR_CLOCK_FORMAT, &CrossPointSettings::clockFormat,
                           {StrId::STR_CLOCK_FORMAT_24H, StrId::STR_CLOCK_FORMAT_12H}, "clockFormat",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
+        // Index into the append-only table in src/util/Timezones.cpp; 255 = unset.
+        SettingInfo::Value(StrId::STR_TIMEZONE, &CrossPointSettings::clockTimezone, {0, 255, 1}, "clockTimezone",
+                           StrId::STR_CUSTOMISE_STATUS_BAR),
+        SettingInfo::Enum(StrId::STR_CLOCK_DST, &CrossPointSettings::clockDst,
+                          {StrId::STR_CLOCK_DST_AUTO, StrId::STR_STATE_ON, StrId::STR_STATE_OFF}, "clockDst",
+                          StrId::STR_CUSTOMISE_STATUS_BAR),
+        SettingInfo::Toggle(StrId::STR_CLOCK_IN_HEADER, &CrossPointSettings::clockShowInHeader, "clockShowHeader",
+                            StrId::STR_CUSTOMISE_STATUS_BAR),
         // Persistence flag for NTP debounce. Resetting from the web UI forces a re-sync
         // on next WiFi connect, which is useful when crossing time zones.
         SettingInfo::Toggle(StrId::STR_CLOCK_SYNCED, &CrossPointSettings::clockHasBeenSynced, "clockHasBeenSynced",
                             StrId::STR_CUSTOMISE_STATUS_BAR),
     };
-    // Only show tilt page turn setting when the QMI8658 IMU is present (X3)
-    if (halTiltSensor.isAvailable()) {
-      // Insert after the short power button setting (end of Controls section)
-      for (auto it = v.begin(); it != v.end(); ++it) {
-        if (it->nameId == StrId::STR_SHORT_PWR_BTN) {
-          v.insert(it + 1, SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
-                                             {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED},
-                                             "tiltPageTurn", StrId::STR_CAT_CONTROLS));
-          break;
-        }
-      }
-    }
+    // Erasing keeps the list at its initial allocation; inserting into a full
+    // vector would reallocate it at double capacity for the process lifetime.
+    const auto eraseEntry = [&v](const StrId nameId) {
+      v.erase(std::find_if(v.begin(), v.end(), [nameId](const SettingInfo& s) { return s.nameId == nameId; }));
+    };
+    // Double-click power frontlight shortcut only exists on the X4 Pro.
+    if (!BoardConfig::isX4Pro()) eraseEntry(StrId::STR_DBL_CLICK_PWR_LIGHT);
+    // Tilt page turn needs the QMI8658 IMU (X3).
+    if (!halTiltSensor.isAvailable()) eraseEntry(StrId::STR_TILT_PAGE_TURN);
     return v;
   }();
 
   std::vector<SettingInfo> v = baseList;
   if (!BoardConfig::hasTouch()) {
-    // The toolbar reader menu is touch-first chrome: button boards keep the
-    // classic list menu, so the style choice is hidden along with the touch
-    // controls.
+    // The reader menu style stays available on button boards (the toolbar
+    // chrome is button-navigable); only the touch controls are hidden.
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) {
-                             return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
-                                    s.nameId == StrId::STR_READER_MENU_STYLE;
-                           }),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_TOUCH_READER_CONTROLS; }),
             v.end());
   }
   // The reader-menu gesture choice only makes sense where the menu stays
@@ -482,6 +493,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_SHOW_READER_MENU; }),
             v.end());
+  }
+  if (BoardConfig::hasHomeKey()) {
+    v.reserve(v.size() + 3);
+    for (unsigned i = 0; i < 3; ++i) {
+      v.push_back(SettingInfo::StaticEnum(home_button::GESTURE_LABELS[i], home_button::FIELDS[i],
+                                          home_button::ACTION_LABELS, home_button::KEYS[i], StrId::STR_CAT_CONTROLS));
+    }
   }
   if (BoardConfig::hasTouch()) {
     v.erase(std::remove_if(v.begin(), v.end(),

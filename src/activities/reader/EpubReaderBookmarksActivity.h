@@ -39,14 +39,16 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   void onRowLongPress(int index) override;
   // Popup handling runs before everything else each pass.
   bool handleCustomInput() override;
-  // Back cancels with a result; Confirm opens on RELEASE (a hold is "delete").
+  // Back cancels with a result; Confirm opens on release and a hold shows actions.
   bool handleButtons() override;
 
   // Open the selected bookmark: finishes with a ProgressChangeResult for the reader.
   void openSelectedBookmark();
 
-  // Opens the Cancel/Delete confirmation for the selected bookmark; shared by
-  // the physical Confirm hold and the touch row long-press.
+  void startRename();
+  void showBookmarkActions();
+
+  // Opens the Cancel/Delete confirmation for the selected bookmark.
   void showDeleteConfirmation();
 
   // Delete the currently selected bookmark and persist the list
