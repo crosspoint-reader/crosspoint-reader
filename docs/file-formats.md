@@ -90,6 +90,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 47
+
+Each `TextBlock`'s flags byte (previously `hasFocus`, 0 or 1) now carries two
+bits: bit 0 = focus arrays present, bit 1 = the line's last word ends in a
+hyphen inserted by layout hyphenation rather than written by the author. The
+byte count is unchanged. Older caches would read bit 1 as clear on every line,
+so the version was bumped to rebuild them.
+
 ### Version 46
 
 Version 46 keeps the version 45 serialized layout unchanged. It was bumped

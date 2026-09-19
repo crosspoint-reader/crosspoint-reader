@@ -413,6 +413,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordStyles.push_back(baseStyle);
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
+    wordHyphenInserted.push_back(false);
     wordFocusBoundary.push_back(focusBoundary);
     wordLinkIds.push_back(linkId);
     pushVisibleOffset(tokenOffset);
@@ -451,6 +452,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordStyles.reserve(newCapacity);
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
+    wordHyphenInserted.reserve(newCapacity);
     wordFocusBoundary.reserve(newCapacity);
     wordLinkIds.reserve(newCapacity);
     wordVisibleOffsetDeltas.reserve(newCapacity);
@@ -523,6 +525,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordStyles.push_back(baseStyle);
       wordContinues.push_back(attach);
       wordNoSpaceBefore.push_back(noSpaceBefore);
+      wordHyphenInserted.push_back(false);
       wordFocusBoundary.push_back(0);
       wordLinkIds.push_back(linkId);
       pushVisibleOffset(segmentOffset);
@@ -547,6 +550,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
+        wordHyphenInserted.push_back(false);
         wordFocusBoundary.push_back(0);
         wordLinkIds.push_back(linkId);
         pushVisibleOffset(segmentOffset);
@@ -563,6 +567,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordStyles.push_back(baseStyle);
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
+        wordHyphenInserted.push_back(false);
         wordFocusBoundary.push_back(static_cast<uint8_t>(std::min<size_t>(splitByteOffset, 255)));
         wordLinkIds.push_back(linkId);
         pushVisibleOffset(segmentOffset);
@@ -744,6 +749,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
+    wordHyphenInserted.erase(wordHyphenInserted.begin(), wordHyphenInserted.begin() + consumed);
     wordFocusBoundary.erase(wordFocusBoundary.begin(), wordFocusBoundary.begin() + consumed);
     wordLinkIds.erase(wordLinkIds.begin(), wordLinkIds.begin() + consumed);
     eraseVisibleOffsetPrefix(consumed);
@@ -1243,6 +1249,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // wordContinues[wordIndex] is intentionally left unchanged — the prefix keeps its original attachment.
   wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
   wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, false);
+  wordHyphenInserted.insert(wordHyphenInserted.begin() + wordIndex + 1, false);
+  wordHyphenInserted[wordIndex] = chosenNeedsHyphen;
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
@@ -1261,6 +1269,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
   const uint32_t lineVisibleOffset = visibleOffsetAt(lastBreakAt);
+  const bool logicalLastHasLayoutHyphen =
+      lineBreak > lastBreakAt && lineBreak - 1 < wordHyphenInserted.size() && wordHyphenInserted[lineBreak - 1];
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 
@@ -1335,6 +1345,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const bool shouldResolveVisualOrder = blockStyle.isRtl || hasRtlWord;
   const bool willReorder =
       shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
+  // The TextBlock flag describes its last STORED word. After a BiDi reorder that may not be the
+  // logically last word, and then the flag must not be set on a word it does not describe.
+  const bool endsInLayoutHyphen =
+      logicalLastHasLayoutHyphen &&
+      (!willReorder || (!visualOrderScratch.empty() && visualOrderScratch.back() == lineWordCount - 1));
 
   std::vector<int16_t> lineXPos;
   lineXPos.reserve(lineWordCount);
@@ -1607,6 +1622,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
       return;
     }
+    block->setEndsInLayoutHyphen(endsInLayoutHyphen);
     processLine(std::move(block), lineVisibleOffset);
     return;
   }
@@ -1630,5 +1646,6 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
     return;
   }
+  block->setEndsInLayoutHyphen(endsInLayoutHyphen);
   processLine(std::move(block), lineVisibleOffset);
 }
