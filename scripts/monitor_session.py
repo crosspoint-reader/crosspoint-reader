@@ -49,7 +49,7 @@ class DeviceSession:
         baud,
         output_dir,
         serial_factory=open_serial,
-        event_capacity=4096,
+        event_capacity=65536,
     ):
         self.port = port
         self.baud = baud
