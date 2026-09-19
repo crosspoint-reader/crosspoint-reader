@@ -181,3 +181,26 @@ int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*
   // that font's ID. ensureLoaded() must have run for the current settings first.
   return manager_.getFontId(familyName);
 }
+
+bool SdCardFontSystem::loadDictionaryFont(GfxRenderer& renderer) {
+  const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
+  if (registryWasDirty) registry_.discover();
+  const auto* family = registry_.findFamily(SETTINGS.dictionarySdFontFamilyName);
+  if (!family) {
+    LOG_ERR("SDFS", "Dictionary font not found: %s", SETTINGS.dictionarySdFontFamilyName);
+    return false;
+  }
+  const auto* size = family->findNearestSize(SETTINGS.fontPointSize);
+  if (!registryWasDirty && size && manager_.currentFamilyName() == family->name &&
+      manager_.currentPointSize() == size->pointSize) {
+    return true;
+  }
+  manager_.unloadAll(renderer);
+  if (!manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
+    LOG_ERR("SDFS", "Failed to load dictionary font: %s", SETTINGS.dictionarySdFontFamilyName);
+    ensureLoaded(renderer);
+    return false;
+  }
+  setupUiFallbacks(renderer);
+  return true;
+}

@@ -198,6 +198,8 @@ inline std::vector<StrId> buildLongPressMenuValues() {
 // from the active family rather than a fixed enum.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
                                                 const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+  static constexpr StrId dictionaryFontValues[] = {StrId::STR_SAME_AS_READER, StrId::STR_NOTO_SERIF,
+                                                   StrId::STR_NOTO_SANS, StrId::STR_SD_FONT};
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -299,6 +301,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_READER_MENU_STYLE, &CrossPointSettings::readerMenuStyle,
                           {StrId::STR_MENU_STYLE_LIST, StrId::STR_MENU_STYLE_TOOLBAR}, "readerMenuStyle",
                           StrId::STR_CAT_READER),
+        SettingInfo::StaticEnum(StrId::STR_DICTIONARY_FONT_FAMILY, &CrossPointSettings::dictionaryFontFamily,
+                                dictionaryFontValues, "dictionaryFontFamily", StrId::STR_CAT_READER),
         // --- Controls ---
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",

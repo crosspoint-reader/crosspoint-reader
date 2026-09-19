@@ -96,6 +96,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  if (dictionarySdFontFamilyName[0] != '\0') {
+    doc["dictionarySdFontFamilyName"] = dictionarySdFontFamilyName;
+  }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
@@ -233,6 +236,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+  copyToField(dictionarySdFontFamilyName, doc["dictionarySdFontFamilyName"] | "", sizeof(dictionarySdFontFamilyName));
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {
@@ -380,6 +384,32 @@ int CrossPointSettings::getReaderFontId() const {
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
   const bool sans = (fontFamily == NOTOSANS);
+  switch (pt) {
+    case 12:
+      return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
+    case 16:
+      return sans ? NOTOSANS_16_FONT_ID : NOTOSERIF_16_FONT_ID;
+    case 18:
+      return sans ? NOTOSANS_18_FONT_ID : NOTOSERIF_18_FONT_ID;
+    case 14:
+    default:
+      return sans ? NOTOSANS_14_FONT_ID : NOTOSERIF_14_FONT_ID;
+  }
+}
+
+int CrossPointSettings::getDictionaryFontId() const {
+  if (dictionaryFontFamily == DICTIONARY_FONT_READER) return getReaderFontId();
+  if (dictionaryFontFamily == DICTIONARY_FONT_SD) {
+    if (dictionarySdFontFamilyName[0] != '\0' && sdFontIdResolver) {
+      const int id = sdFontIdResolver(sdFontResolverCtx, dictionarySdFontFamilyName, fontPointSize);
+      if (id != 0) return id;
+    }
+    return getReaderFontId();
+  }
+
+  const uint8_t pt =
+      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  const bool sans = dictionaryFontFamily == DICTIONARY_FONT_SANS;
   switch (pt) {
     case 12:
       return sans ? NOTOSANS_12_FONT_ID : NOTOSERIF_12_FONT_ID;
