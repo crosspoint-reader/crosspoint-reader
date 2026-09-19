@@ -1,94 +1,94 @@
-# Recovering a Bricked Xteink
+# Recover a non-working Xteink
 
 ![proceed at your own risk](./images/spiflash/fix_bricked.jpg)
 
-This guide covers installing CrossPoint on an Xteink that's bricked, or stuck on firmware with no path to flash a replacement. It works by writing firmware directly to the SPI flash chip with an external programmer, bypassing the ESP32-C3 entirely.
+Use this guide only if USB installation cannot work. It writes firmware directly to the reader's flash memory chip with a separate programmer.
 
-If your device isn't USB-locked, flash it over USB instead — it's safer and much less invasive. What follows should only be a last resort.
+If you can install firmware over USB, use that method instead. This repair can damage the reader.
 
 *Example: a device stuck on Biscuit firmware, unresponsive to a normal USB flash.*
 
 ![biscuit](./images/spiflash/stuck_on_biscuit.jpg)
 
-## Required Tools
+## What you need
 
-- Acetone or another nail polish remover.
-- A SPI flash programmer. On this guide we use a CH341a; A Bus Pirate, Raspberry Pi/Pico or suitable Arduino, also works.
-- Programmer software. flashrom (with libftdi) work on all OSs.
-- esptool.py, but only if you intend to dump firmware from another device to use as your source image.
+- Acetone or nail polish remover.
+- A flash programmer, such as a CH341a, Bus Pirate, Raspberry Pi, Raspberry Pi Pico, or suitable Arduino.
+- Programmer software, such as flashrom with libftdi.
+- `esptool.py` only if you copy firmware from another working reader.
   
-## Before You Start
+## Read this first
 
-- Lithium batteries are dangerous, do not short or puncture. Be careful.
-- The display is fragile, don't bend or flex it. do not force the ZIF connector.
-- There is no undo here. A mis-wired clip or a short circuit can turn a bricked device into a dead one. Proceed at your own risk.
+- Do not short, cut, or puncture a lithium battery. It can catch fire.
+- Do not bend the display or force its connector. The display is fragile.
+- Stop if you are not confident with electronics repair. A wrong connection or short circuit can permanently damage the reader.
 
 
-## Procedure
+## Repair steps
 
-### 1. Obtain a Firmware Image
+### 1. Get a firmware image
 
-Two options:
+Use one of these options:
 
-- Use the backup provided by @Uri-Tauber at `crosspoint-reader/docs/images/spiflash/crosspoint_spiflash_backup.tar.xz`, and extract the `.bin` file. (⚠️ WARNING: This firmware file is for xteink x4/x3 alone! ⚠️)
-- Dump one yourself from a working, unlocked device over USB:
-    - Turn the device on, connect the USB cable and do:
+- Use the backup from @Uri-Tauber at `crosspoint-reader/docs/images/spiflash/crosspoint_spiflash_backup.tar.xz`. Extract the `.bin` file. Do not use it on a device other than an Xteink X4 or X3.
+- Copy a backup from a working, unlocked reader over USB:
+    - Turn on the working reader and connect its USB cable. Then run:
     ```bash
     ~$ pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32c3 -p /dev/ttyACM0 -b 921600 read_flash 0x000000     0x1000000 crosspoint_backup.bin
      # or
     ~$ esptool.py --chip esp32c3 -p /dev/ttyACM0 -b 921600 read_flash 0x000000 0x1000000 crosspoint_backup.bin
     ```
 
-### 2. Disconnect Power Sources and Accessories
+### 2. Disconnect power and accessories
 
-- Remove and set the SD card aside for reinsertion later.
-- Remove any USB cable.
-- Confirm nothing else is supplying power to the board.
+- Remove the SD card and keep it safe.
+- Remove the USB cable.
+- Make sure that nothing else supplies power to the board.
 
-### 3. Remove the Screen
+### 3. Remove the screen
 
-Ordinary nail polish remover softens the adhesive under the screen's edges — it takes some patience, and there's no clean way around that.
+Nail polish remover softens the glue under the screen edge. This takes time.
 
-- In a well ventilated space, free of any ignition source, apply acetone or nail polish remover to the borders of the screen.
-- Check it from time to time, make sure the borders of the screen stay wet for around 2 hours.
-- Start to pry open from a lower corner, and move around.
-- If necessary, use a non-conductive tool to help you.
-- Flip open the ZIF connector to release the screen from the board.
+- Work in a well-ventilated place with no flame or ignition source. Apply acetone or nail polish remover around the screen edge.
+- Keep the edge wet for about two hours.
+- Start at a lower corner and slowly lift the screen edge.
+- Use a non-conductive tool if needed.
+- Lift the ZIF connector latch to release the screen cable.
 
 ![screen](./images/spiflash/remove_screen.jpg)
 ![inside](./images/spiflash/inside.jpg)
 
-### 4. Disconnect the Battery
+### 4. Disconnect the battery
 
-Cut a single battery wire close to the board, then cover the cut end with tape to prevent shorting.
+Cut one battery wire close to the board. Cover the cut end with tape so it cannot short circuit.
 
 ![battery](./images/spiflash/disconnect_battery_and_sd_card.jpg)
 
-### 5. Hold the Reset Button Down
+### 5. Hold Reset
 
-Keeping reset held prevents the ESP32-C3 from interfering with SPI communication during the read/write. A piece of pointed plastic works well as a holder.
+Keep **Reset** pressed while you read or write the chip. A small piece of pointed plastic can hold it.
 
 ![reset](./images/spiflash/press_and_hold_reset.jpg)
 
-### 6. Attach the Test Clip
+### 6. Attach the test clip
 
-Connect the test clip to the flash chip before connecting the programmer to USB. Notes:
+Connect the test clip to the flash chip before you connect the programmer to USB:
 
-- The clip's red wire aligns with pin 1, marked with a dot on both the chip and the board silkscreen.
-- Confirm each lead is making contact with a chip pin and not the epoxy body.
-- If the programmer has a voltage selector, set it to 3.3V.
-- Verify no other power source is connected — use a multimeter if there's any doubt.
+- Align the clip red wire with pin 1. A dot marks pin 1 on the chip and board.
+- Make sure that every clip lead touches a chip pin.
+- If the programmer has a voltage setting, select 3.3V.
+- Make sure that no other power source is connected. Use a multimeter if you are unsure.
   
 ![chip](./images/spiflash/spi_flash_chip.jpg)
 ![connect](./images/spiflash/connect_clip_to_spiflash_chip.jpg)
 
-### 7. Connect the Programmer to the PC
+### 7. Connect the programmer to the computer
 
 ![ready](./images/spiflash/ready.jpg)
 
-### 8. Verify the Connection by Reading Twice
+### 8. Read the chip twice
 
-Read the chip twice and compare hashes. If they don't match, something in the clip connection is off — fix that before writing anything to the chip.
+Read the chip twice and compare the hash values. If they differ, fix the clip connection before you write anything to the chip.
 
 ```bash
 ~$ sudo flashrom --programmer ch341a_spi -r backup_0.bin
@@ -104,7 +104,7 @@ Read the chip twice and compare hashes. If they don't match, something in the cl
     211522e56616ea46ac9bcf82d3451eb2  backup_1.bin
 ```
 
-### 9. Flash the Chip
+### 9. Write the firmware
 
 ```bash
 ~$ sudo flashrom --programmer ch341a_spi -w crosspoint_backup.bin
@@ -114,18 +114,17 @@ Read the chip twice and compare hashes. If they don't match, something in the cl
     Verifying flash... VERIFIED.
 ```
 
-### 10. Power and Test The Device
+### 10. Start and test the reader
 
-- Disconnect the programmer from the USB port.
+- Disconnect the programmer from USB.
 - Remove the test clip.
-- Release the reset button.
-- Reinsert the SD card.
+- Release **Reset**.
+- Insert the SD card.
 - Reconnect the screen.
-- Power the device via USB cable, no need to solder the battery yet.
-- Press the power button for a couple seconds.
+- Connect the reader to USB power. Do not reconnect the battery yet.
+- Hold **Power** for a few seconds.
 
 ![success 0](./images/spiflash/success_0.jpg)
 ![success 1](./images/spiflash/success_1.jpg)
 
-If CrossPoint boots successfully, the device can be fully reassembled.
-
+If CrossPoint starts, fully reassemble the reader.

@@ -1,42 +1,34 @@
-# SD Card Fonts
+# Fonts on the SD card
 
-CrossPoint supports loading additional fonts from the SD card, including fonts
-with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
+You can add fonts to the reader with its SD card. This lets you choose a different look and read languages that the built-in fonts do not cover.
 
-## Installing Fonts
+## Add a font
 
-There are three ways to install fonts:
+Choose one of these methods:
 
-### Option 1: Download from device (recommended)
+### Download on the reader
 
-1. Connect your CrossPoint reader to Wi-Fi
-2. Go to **Settings > Reader > Manage Fonts**
-3. Browse available font families and tap to download
-4. Downloaded fonts appear immediately in **Settings > Reader > Font Family**
+1. Connect the reader to Wi-Fi.
+2. Open **Settings → Reader → Manage Fonts**.
+3. Select a font family to download.
+4. Select the font in **Settings → Reader → Font Family**.
 
-### Option 2: Upload via web browser
+### Upload from a browser
 
-1. Start **File Transfer** and connect through **Join Network** or **Create Hotspot**
-2. Open the web interface URL shown on the reader
-3. Navigate to the **Fonts** tab
-4. Upload `.cpfont` files using the upload form
+1. Start **File Transfer** and select **Join Network** or **Create Hotspot**.
+2. Open the address shown on the reader in a browser.
+3. Open **Fonts**.
+4. Upload the `.cpfont` files.
 
-### Option 3: Manual SD card copy
+### Copy files to the SD card
 
-1. Download font files from the
-   [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts)
-2. Copy font family folders to one of two locations on your SD card:
+1. Download a font family from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
+2. Copy its folder to one of these locations on the SD card:
 
-   - `/.fonts/` — hidden directory (preferred; keeps the SD root tidy
-     when mounted on a desktop)
-   - `/fonts/` — visible directory (use this if your OS hides dot-files
-     and you'd rather see the folder in your file manager)
+   - `/.fonts/` is hidden in most file managers.
+   - `/fonts/` is visible in most file managers.
 
-   Both roots are always scanned at boot and the results are merged: a
-   family installed in `/fonts/` shows up even when `/.fonts/` also
-   exists, and vice versa. The two roots only collide if the same family
-   name appears in both — in that case the copy in `/.fonts/` wins and
-   the duplicate in `/fonts/` is ignored.
+   CrossPoint reads both locations each time it starts. If the same family exists in both, it uses the copy in `/.fonts/`.
 
        SD Card Root/
        ├── .fonts/                     ← Hidden root (preferred)
@@ -50,33 +42,17 @@ There are three ways to install fonts:
                ├── Merriweather_12.cpfont
                └── ...
 
-3. Insert the SD card and power on your CrossPoint reader
+3. Insert the SD card and start the reader.
 
-## CJK in the User Interface
+## Read Chinese, Japanese, or Korean
 
-The built-in UI fonts are Latin-only, so by default the interface (book titles
-in the library, file names in the browser, list rows, headers) shows
-replacement boxes for Chinese/Japanese/Korean text even when book *content*
-renders correctly with a selected SD-card font.
+The built-in interface font does not contain Chinese, Japanese, or Korean characters. Without a suitable SD card font, book titles and file names can show empty boxes.
 
-To avoid shipping a large CJK glyph set in flash, CrossPoint instead reuses the
-SD-card font you already selected: when a UI string contains a CJK character
-the built-in font cannot draw, that whole string is rendered with your selected
-SD-card font instead.
+CrossPoint uses your selected SD card font for an interface line that contains these characters.
 
-The fallback is **size-matched**. The built-in UI fonts render at 8 pt
-(small/author lines), 10 pt (list rows) and 12 pt (book-cover titles, headers),
-so CrossPoint loads your SD family at those sizes too and maps each UI font to
-its same-size SD font. CJK book names therefore appear at the same size as the
-Latin text around them. For this to work the family must contain `.cpfont`
-files at sizes **8, 10 and 12** (in addition to the reader sizes 12–18); any UI
-size missing from the family simply keeps showing boxes for CJK at that size.
+For Chinese, Japanese, or Korean in the interface, the font family needs `.cpfont` files at 8, 10, and 12 points. Use these sizes in addition to your preferred reading sizes.
 
-Note that **Settings > Reader > Font Size** lists every size the family ships,
-so a family built at 8,10,12,14,16,18 offers all six as reading sizes — the UI
-sizes are not hidden from the list. Reading at 8 pt is your call; if you would
-rather not see the small sizes there, convert two families (one with the UI
-sizes for fallback, one with only the reading sizes you want).
+**Settings → Reader → Font Size** lists every size in the family. If you do not want to see 8, 10, and 12 as reading choices, make one family for the interface and another for reading.
 
 When converting your own font, include the UI sizes:
 
@@ -88,36 +64,28 @@ When converting your own font, include the UI sizes:
       --name MyCJKFont \
       --output-dir ./MyCJKFont/
 
-What this means in practice:
+Remember these points:
 
-- Select a CJK-capable SD font under **Settings > Reader > Font Family**
-  (see [Installing Fonts](#installing-fonts) and the `cjk` / `hangul` presets
-  under [Converting Custom Fonts](#converting-custom-fonts)). That single
-  selection drives both book content *and* size-matched CJK fallback in the UI.
-- Pure-Latin UI strings keep the crisp built-in font; only strings that
-  actually contain CJK are routed to the SD font.
-- The fallback is per *string*, not per glyph: a mixed title such as
-  `三体 Vol.1` renders entirely in the SD font (including the Latin part). If
-  that SD font is a `Mono` family, the Latin portion will appear half/full
-  width.
-- If no SD font is selected (a built-in reading font is active), there is no
-  CJK fallback and the UI again shows boxes for CJK — pick a CJK SD font to
-  restore it.
+- Select a suitable SD card font in **Settings → Reader → Font Family**.
+- A line that contains Chinese, Japanese, or Korean uses the SD card font for the entire line. For example, `三体 Vol.1` uses it for both parts.
+- If you select a built-in reading font, CrossPoint cannot use the SD card font in the interface. The empty boxes return.
 
-## Available Pre-Built Fonts
+## Find ready-made fonts
 
 The current list of pre-built fonts is maintained in the
 [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
 
-## Converting Custom Fonts
+## Advanced: convert your own font
+
+This section is for people who use a computer command line. Most readers can download or upload a ready-made font instead.
 
 To convert your own TrueType/OpenType fonts:
 
-### Prerequisites
+### Install the required tools
 
     pip install freetype-py fonttools
 
-### Single font (one style)
+### Convert one style
 
     python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
       MyFont-Regular.ttf \
@@ -127,7 +95,7 @@ To convert your own TrueType/OpenType fonts:
       --name MyFont \
       --output-dir ./MyFont/
 
-### Multi-style font
+### Convert several styles
 
     python3 lib/EpdFont/scripts/fontconvert_sdcard.py \
       --regular MyFont-Regular.ttf \
@@ -139,7 +107,7 @@ To convert your own TrueType/OpenType fonts:
       --name MyFont \
       --output-dir ./MyFont/
 
-### Available Unicode interval presets
+### Choose a character range
 
 | Preset | Coverage |
 |--------|----------|
@@ -173,8 +141,8 @@ To list all presets with codepoint counts:
 
     python3 lib/EpdFont/scripts/fontconvert_sdcard.py --list-presets
 
-### Additional options
+### Other option
 
-`--force-autohint` — force FreeType's auto-hinter instead of the font's native hinting (useful when a font's built-in hints produce poor results at small sizes).
+`--force-autohint` uses FreeType's automatic hinting instead of the font's own hinting. Use it if small text looks poor.
 
 Install custom fonts via the web interface or manual SD card copy.
