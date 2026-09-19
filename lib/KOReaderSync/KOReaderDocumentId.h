@@ -8,11 +8,10 @@
  * The algorithm reads 1024 bytes at specific offsets and computes the MD5 hash
  * of the concatenated data.
  *
- * Offsets are calculated as: 1024 << (2*i) for i = -1 to 10
- * Producing: 256, 1024, 4096, 16384, 65536, 262144, 1048576, 4194304,
- *            16777216, 67108864, 268435456, 1073741824 bytes
+ * The first offset is 0. The remaining 11 offsets are 1024 << (2*i),
+ * for i = 0 to 10 (1024 bytes through 1 GiB).
  *
- * If an offset is beyond the file size, it is skipped.
+ * Offsets beyond the file size are skipped.
  */
 class KOReaderDocumentId {
  public:
@@ -40,6 +39,6 @@ class KOReaderDocumentId {
   // Number of offsets to try (i = -1 to 10, so 12 offsets)
   static constexpr int OFFSET_COUNT = 12;
 
-  // Calculate offset for index i: 1024 << (2*i)
+  // Calculate offset for index i: 0 for -1, otherwise 1024 << (2*i)
   static size_t getOffset(int i);
 };
