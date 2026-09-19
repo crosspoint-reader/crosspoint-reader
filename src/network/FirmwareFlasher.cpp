@@ -12,6 +12,7 @@
 #include <cstring>
 #include <memory>
 
+#include "FirmwareBoardTag.h"
 #include "OtaBootSwitch.h"
 
 namespace firmware_flash {
@@ -46,6 +47,10 @@ const char* resultName(Result r) {
       return "BAD_CHECKSUM";
     case Result::BAD_SHA:
       return "BAD_SHA";
+    case Result::BAD_CHIP:
+      return "BAD_CHIP";
+    case Result::WRONG_BOARD:
+      return "WRONG_BOARD";
     case Result::BAD_SIZE:
       return "BAD_SIZE";
     case Result::NO_PARTITION:
@@ -64,17 +69,35 @@ const char* resultName(Result r) {
   return "?";
 }
 
+uint16_t runningPartitionChipId() {
+  // esp_partition_read hits SPI flash; cache the running slot's chip_id so we
+  // only pay that cost once per boot. The running image is immutable at
+  // runtime, so a function-local static is safe here.
+  static uint16_t cached = [] {
+    const esp_partition_t* run = esp_ota_get_running_partition();
+    if (!run) return static_cast<uint16_t>(0xFFFF);
+    uint16_t id = 0xFFFF;
+    // chip_id sits at offset 12 of esp_image_header_t. memcpy target is a
+    // uint16_t local, so RISC-V alignment is guaranteed.
+    if (esp_partition_read(run, 12, &id, sizeof(id)) != ESP_OK) return static_cast<uint16_t>(0xFFFF);
+    return id;
+  }();
+  return cached;
+}
+
 namespace {
 // Stream `length` bytes from `file` starting at the current read offset, feeding them through
 // both the XOR-checksum and SHA256 accumulators. Used by validateImageFile so the whole image
 // is verified end-to-end without holding it in RAM (ESP32-C3 only has ~380 KB).
-Result feedHashAndChecksum(HalFile& file, size_t length, uint8_t* xorAccum, mbedtls_sha256_context* sha, uint8_t* buf) {
+Result feedHashAndChecksum(HalFile& file, size_t length, uint8_t* xorAccum, mbedtls_sha256_context* sha, uint8_t* buf,
+                           board_tag::Scanner* tagScanner) {
   size_t remaining = length;
   while (remaining > 0) {
     const size_t want = std::min<size_t>(CHUNK, remaining);
     const int got = file.read(buf, want);
     if (got <= 0 || static_cast<size_t>(got) != want) return Result::READ_FAIL;
     if (sha) mbedtls_sha256_update(sha, buf, want);
+    if (tagScanner) tagScanner->feed(buf, want);
     if (xorAccum) {
       uint8_t acc = *xorAccum;
       for (size_t i = 0; i < want; i++) acc ^= buf[i];
@@ -117,6 +140,17 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
     file.close();
     return Result::BAD_MAGIC;
   }
+  // Reject an image built for a different MCU family before it can brick the
+  // device. chip_id lives at esp_image_header_t offset 12; compare it against
+  // the running slot's own chip_id (self-describing, no chip enumeration).
+  uint16_t imageChip;
+  std::memcpy(&imageChip, header + 12, sizeof(imageChip));
+  const uint16_t deviceChip = runningPartitionChipId();
+  if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+    LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+    file.close();
+    return Result::BAD_CHIP;
+  }
   const uint8_t segCount = header[1];
   const bool hashAppended = header[23] != 0;
 
@@ -133,6 +167,10 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
 
   uint8_t xorAccum = CHECKSUM_SEED;
   size_t pos = HEADER_SIZE;
+  // Board tag: scanned from the same segment stream the hash pass already
+  // reads, so the check is free of extra I/O. Only a present-and-mismatched
+  // tag rejects; untagged images (forks, other projects) pass.
+  board_tag::Scanner tagScanner;
 
   for (uint8_t i = 0; i < segCount; i++) {
     if (pos + SEG_HEADER_SIZE > fileSize) {
@@ -160,13 +198,21 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
       return Result::BAD_SEGMENTS;
     }
 
-    const Result feedRes = feedHashAndChecksum(file, dataLen, &xorAccum, &shaCtx, buf.get());
+    const Result feedRes = feedHashAndChecksum(file, dataLen, &xorAccum, &shaCtx, buf.get(), &tagScanner);
     if (feedRes != Result::OK) {
       mbedtls_sha256_free(&shaCtx);
       file.close();
       return feedRes;
     }
     pos += dataLen;
+  }
+
+  if (tagScanner.mismatch()) {
+    LOG_ERR("FLASH", "validate: wrong board: image=%s device=%.*s", tagScanner.foundName(),
+            static_cast<int>(board_tag::boardNameLen()), board_tag::boardName());
+    mbedtls_sha256_free(&shaCtx);
+    file.close();
+    return Result::WRONG_BOARD;
   }
 
   // pad_end is the 16-byte aligned offset at which the checksum byte sits at pad_end - 1.

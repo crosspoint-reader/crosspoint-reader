@@ -2,13 +2,13 @@
 #include <I18n.h>
 
 #include <functional>
+#include <span>
 #include <string>
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/Activity.h"
+#include "activities/UiTabListActivity.h"
 #include "components/OptionPopup.h"
-#include "util/ButtonNavigator.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
@@ -16,14 +16,20 @@ enum class SettingAction {
   None,
   RemapFrontButtons,
   CustomiseStatusBar,
+  ClockSettings,
   KOReaderSync,
   OPDSBrowser,
   Network,
   ClearCache,
+  RebuildLibraryIndex,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
   DownloadFonts,
+  TextSettings,
+  KeyboardLayouts,
+  HomeButton,
+  About,
 };
 
 struct SettingInfo {
@@ -31,6 +37,7 @@ struct SettingInfo {
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr = nullptr;
   std::vector<StrId> enumValues;
+  std::span<const StrId> staticEnumValues;
   std::vector<std::string> enumStringValues;  // runtime alternative to StrId enumValues (for SD card fonts etc.)
   SettingAction action = SettingAction::None;
 
@@ -44,6 +51,7 @@ struct SettingInfo {
   const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
+  bool inTextSettings = false;           // Surfaced in the Text Settings screen; hidden from the flat Reader list
 
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
@@ -58,6 +66,15 @@ struct SettingInfo {
   SettingInfo& withObfuscated() {
     obfuscated = true;
     return *this;
+  }
+
+  SettingInfo& withTextSettings() {
+    inTextSettings = true;
+    return *this;
+  }
+
+  std::span<const StrId> enumLabels() const {
+    return staticEnumValues.empty() ? std::span<const StrId>(enumValues) : staticEnumValues;
   }
 
   static SettingInfo Toggle(StrId nameId, uint8_t CrossPointSettings::* ptr, const char* key = nullptr,
@@ -83,6 +100,18 @@ struct SettingInfo {
     return s;
   }
 
+  static SettingInfo StaticEnum(StrId nameId, uint8_t CrossPointSettings::* ptr, std::span<const StrId> values,
+                                const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
+    SettingInfo s;
+    s.nameId = nameId;
+    s.type = SettingType::ENUM;
+    s.valuePtr = ptr;
+    s.staticEnumValues = values;
+    s.key = key;
+    s.category = category;
+    return s;
+  }
+
   static SettingInfo Action(StrId nameId, SettingAction action) {
     SettingInfo s;
     s.nameId = nameId;
@@ -103,7 +132,7 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo String(StrId nameId, char* ptr, size_t maxLen, const char* key = nullptr,
+  static SettingInfo String(StrId nameId, const char* ptr, size_t maxLen, const char* key = nullptr,
                             StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
     s.nameId = nameId;
@@ -143,11 +172,8 @@ struct SettingInfo {
   }
 };
 
-class SettingsActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
-
+class SettingsActivity final : public UiTabListActivity {
   int selectedCategoryIndex = 0;  // Currently selected category
-  int selectedSettingIndex = 0;
   int settingsCount = 0;
 
   // Per-category settings derived from shared list + device-only actions
@@ -162,20 +188,46 @@ class SettingsActivity final : public Activity {
 
   OptionPopup optionPopup;
 
+  // Row structure (label/actionValue) for *currentSettings, rebuilt only when
+  // the active category or a category's setting list changes
+  // (rebuildRowItems(), called from selectCategory()/rebuildSettingsLists())
+  // — not on every repaint. rowValues_ holds the live per-row value text,
+  // refreshed every buildScreen() call by assigning into the existing
+  // strings (no vector growth).
+  std::vector<std::string> rowValues_;
+  std::vector<freeink::ui::ListItem> rowItems_;
+  void rebuildRowItems();
+
   static constexpr int categoryCount = 4;
-  static const StrId categoryNames[categoryCount];
+  static constexpr StrId categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
+                                                         StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
+
+  // --- UiTabListActivity contract ---
+  int listCount() const override { return settingsCount; }
+  int tabCount() const override { return categoryCount; }
+  int activeTab() const override { return selectedCategoryIndex; }
+  const char* tabLabel(int index) const override { return I18N.get(categoryNames[index]); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onTabAction(int index) override;
+  void stepTab(int direction) override;
+  bool handleButtons() override;
+  bool handleCustomInput() override;
+
+  static std::string settingValueText(const SettingInfo& setting);
+  void selectCategory(int categoryIndex);
+  void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
 
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
+  void rebuildLibraryIndex();
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Settings", renderer, mappedInput) {}
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
   void onExit() override;
-  void loop() override;
   void render(RenderLock&&) override;
 };

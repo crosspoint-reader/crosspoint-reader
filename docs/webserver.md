@@ -32,9 +32,14 @@ networks or in hotspot mode when you control who is connected.
 ## Join Network Mode
 
 1. Select **Join Network**.
-2. Pick a 2.4 GHz Wi-Fi network from the scan results.
-3. Enter the password if prompted.
-4. Save credentials if you want the reader to reconnect automatically next time.
+2. If you have saved Wi-Fi credentials, CrossPoint first tries the last
+   connected network, then other visible saved networks in signal-strength
+   order. Press **Back** to cancel or **Confirm** to stop auto-connect and show
+   the network list.
+3. If the network list is shown, pick a 2.4 GHz Wi-Fi network from the scan
+   results.
+4. Enter the password if prompted.
+5. Save credentials if you want the reader to reconnect automatically next time.
 
 After connection, the reader shows:
 

@@ -1,13 +1,14 @@
 # SD Card Font Families for CrossPoint Reader
 #
 # This file is the single source of truth for which fonts are generated,
-# how they're sourced, and how they're described in the download manifest.
+# how they're sourced, and how they're presented in the download manifest.
 #
 # Adding a new font family = adding a block here. No code changes needed.
 #
 # Fields:
 #   name:        Output family name (used in filenames and on-device UI)
 #   description: Human-readable description (shown in download UI and manifest)
+#   scripts:     Browser groups this family appears under (declared in scriptGroups)
 #   intervals:   Comma-separated Unicode interval presets for fontconvert_sdcard.py
 #   sizes:       Point sizes to generate
 #   force_autohint: (optional) Force FreeType auto-hinter instead of native hinting
@@ -30,12 +31,27 @@
 #   Extracted static fonts are cached in instanced_fonts/ (gitignored).
 #   Requires fonttools: pip install -r requirements.txt
 
+scriptGroups:
+  - {tag: latin, label: Latin}
+  - {tag: cyrillic, label: Cyrillic}
+  - {tag: greek, label: Greek}
+  - {tag: hebrew, label: Hebrew}
+  - {tag: arabic, label: Arabic}
+  - {tag: georgian, label: Georgian}
+  - {tag: armenian, label: Armenian}
+  - {tag: ethiopic, label: Ethiopic}
+  - {tag: cjk, label: CJK}
+  - {tag: hangul, label: Korean}
+  - {tag: cherokee, label: Cherokee}
+  - {tag: tifinagh, label: Tifinagh}
+
 families:
   # ── Serif ──────────────────────────────────────────────────────────────
 
   - name: Literata
     description: "Screen-optimized serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/googlefonts/literata/main/fonts/ttf/Literata-Regular.ttf"}
@@ -45,7 +61,8 @@ families:
 
   - name: SourceSerif4
     description: "Adobe transitional serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-serif/release/TTF/SourceSerif4-Regular.ttf"}
@@ -55,7 +72,8 @@ families:
 
   - name: NotoSerifExtended
     description: "Serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/notofonts/NotoSerif/main/fonts/ttf/unhinted/instance_ttf/NotoSerif-Regular.ttf"}
@@ -65,7 +83,8 @@ families:
 
   - name: Merriweather
     description: "Warm serif for long-form reading (Latin, Cyrillic)"
-    intervals: latin-ext,cyrillic
+    scripts: [latin, cyrillic]
+    intervals: latin-ext,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/SorkinType/Merriweather/master/fonts/ttf/Merriweather-Regular.ttf"}
@@ -75,7 +94,8 @@ families:
 
   - name: Lora
     description: "Calligraphic serif for literary reading (Latin, Cyrillic)"
-    intervals: latin-ext,cyrillic
+    scripts: [latin, cyrillic]
+    intervals: latin-ext,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/cyrealtype/Lora-Cyrillic/main/fonts/ttf/Lora-Regular.ttf"}
@@ -85,7 +105,8 @@ families:
 
   - name: GentiumBookPlus
     description: "Scholarly serif with wide Unicode coverage (Latin, Greek, Cyrillic, IPA)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gentiumbookplus/GentiumBookPlus-Regular.ttf"}
@@ -95,7 +116,8 @@ families:
 
   - name: IBMPlexSerif
     description: "Professional serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexserif/IBMPlexSerif-Regular.ttf"}
@@ -105,7 +127,8 @@ families:
 
   - name: Bitter
     description: "Slab serif designed for e-ink (Latin, Cyrillic)"
-    intervals: latin-ext,cyrillic
+    scripts: [latin, cyrillic]
+    intervals: latin-ext,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/bitter/Bitter%5Bwght%5D.ttf", variable: {wght: 500}}
@@ -115,7 +138,8 @@ families:
 
   - name: Domitian
     description: "A humanist serif for literary reading (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://mirrors.ctan.org/fonts/domitian/opentype/Domitian-Roman.otf"}
@@ -125,7 +149,8 @@ families:
 
   - name: LibreBaskerville
     description: "A serif reimplementing the classic Baskerville (Latin)"
-    intervals: latin-ext
+    scripts: [latin]
+    intervals: latin-ext,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/impallari/Libre-Baskerville/master/fonts/ttf/LibreBaskerville-Regular.ttf"}
@@ -135,7 +160,8 @@ families:
 
   - name: Vollkorn
     description: "A serif for bread and butter use by Friedrich Althausen (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/vollkorn/Vollkorn%5Bwght%5D.ttf", variable: {wght: 400}}
@@ -147,7 +173,8 @@ families:
 
   - name: NotoSansExtended
     description: "Sans-serif (Latin, Greek, Cyrillic, Georgian, Armenian, Ethiopic)"
-    intervals: latin-ext,greek,cyrillic,georgian,armenian,ethiopic
+    scripts: [latin, cyrillic, greek, georgian, armenian, ethiopic]
+    intervals: latin-ext,greek,cyrillic,georgian,armenian,ethiopic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {path: "builtinFonts/source/NotoSans/NotoSans-Regular.ttf"}
@@ -157,7 +184,8 @@ families:
 
   - name: Inter
     description: "Modern sans-serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf", variable: {wght: 400, opsz: 14}}
@@ -167,7 +195,8 @@ families:
 
   - name: SourceSans3
     description: "Adobe humanist sans-serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-sans/release/TTF/SourceSans3-Regular.ttf"}
@@ -177,7 +206,8 @@ families:
 
   - name: IBMPlexSans
     description: "IBM corporate sans-serif (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/IBM/plex/master/packages/plex-sans/fonts/complete/ttf/IBMPlexSans-Regular.ttf"}
@@ -187,7 +217,8 @@ families:
 
   - name: Alegreya
     description: "Calligraphic serif/display (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alegreya/Alegreya%5Bwght%5D.ttf", variable: {wght: 400}}
@@ -199,7 +230,8 @@ families:
 
   - name: IBMPlexMono
     description: "Monospace for code and technical reading (Latin, Greek, Cyrillic)"
-    intervals: latin-ext,greek,cyrillic
+    scripts: [latin, cyrillic, greek]
+    intervals: latin-ext,greek,cyrillic,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexmono/IBMPlexMono-Regular.ttf"}
@@ -209,7 +241,8 @@ families:
 
   - name: SourceCodePro
     description: "Adobe monospace with excellent hinting (Latin)"
-    intervals: latin-ext
+    scripts: [latin]
+    intervals: latin-ext,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/adobe-fonts/source-code-pro/release/TTF/SourceCodePro-Regular.ttf"}
@@ -221,7 +254,8 @@ families:
 
   - name: OpenDyslexic
     description: "Dyslexia-friendly font (Latin)"
-    intervals: latin-ext
+    scripts: [latin]
+    intervals: latin-ext,ipa-chars
     sizes: [8, 10, 12, 14]
     styles:
       regular:    {path: "builtinFonts/source/OpenDyslexic/OpenDyslexic-Regular.otf"}
@@ -233,7 +267,8 @@ families:
 
   - name: AtkinsonHyperlegibleNext
     description: "Accessibility font for low vision (Latin)"
-    intervals: latin-ext
+    scripts: [latin]
+    intervals: latin-ext,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible-next/main/fonts/ttf/AtkinsonHyperlegibleNext-Regular.ttf"}
@@ -243,7 +278,8 @@ families:
 
   - name: LexicaUltralegible
     description: "Accessibility font for low vision / dyslexia (Latin)"
-    intervals: latin-ext
+    scripts: [latin]
+    intervals: latin-ext,ipa-chars
     sizes: [12, 14, 16, 18]
     styles:
       regular:    {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Regular.ttf"}
@@ -251,3 +287,117 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
 
+  # ── Hebrew ─────────────────────────────────────────────────────────────
+
+  - name: FrankRuhlLibre
+    description: "Hebrew serif (Hebrew, Latin)"
+    scripts: [hebrew, latin]
+    intervals: hebrew,latin-ext,ipa-chars,punctuation,reading,symbols
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/FrankRuhlLibre%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/FrankRuhlLibre%5Bwght%5D.ttf", variable: {wght: 700}}
+
+  - name: DavidLibre
+    description: "Traditional Hebrew serif (Hebrew, Latin)"
+    scripts: [hebrew, latin]
+    intervals: hebrew,latin-ext,ipa-chars,punctuation,reading,symbols
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/davidlibre/DavidLibre-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/davidlibre/DavidLibre-Bold.ttf"}
+
+  - name: Alef
+    description: "Simple, legible Hebrew sans-serif (Hebrew, Latin)"
+    scripts: [hebrew, latin]
+    intervals: hebrew,latin-ext,ipa-chars,punctuation,reading,symbols
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alef/Alef-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alef/Alef-Bold.ttf"}
+
+  # ── Arabic ─────────────────────────────────────────────────────────────
+
+  - name: Amiri
+    description: "Arabic naskh-style serif (Arabic, Latin)"
+    scripts: [arabic, latin]
+    intervals: arabic,latin-ext,ipa-chars
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-BoldItalic.ttf"}
+
+  - name: NotoNaskhArabicUI
+    description: "Arabic naskh tuned for screen reading (Arabic)"
+    scripts: [arabic]
+    intervals: arabic,ascii,latin1,punctuation
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+
+  - name: NotoNaskhArabicUISemiBold
+    description: "Noto Naskh Arabic UI at SemiBold weight, heavier body text (Arabic)"
+    scripts: [arabic]
+    intervals: arabic,ascii,latin1,punctuation
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-SemiBold.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+
+  - name: NotoKufiArabic
+    description: "Arabic kufi-style sans-serif (Arabic, Latin)"
+    scripts: [arabic, latin]
+    intervals: arabic,latin-ext,ipa-chars
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 700}}
+
+  # ── Korean ─────────────────────────────────────────────────────────────
+
+  - name: Pretendard
+    description: "Modern Korean sans-serif (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Bold.otf"}
+
+  - name: PretendardMedium
+    description: "Pretendard at Medium weight, slightly heavier body text (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Medium.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-ExtraBold.otf"}
+
+  - name: RIDIBatang
+    description: "RIDI's e-book serif, single weight (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/RIDIBatang/f1628238e56fd41c12451dfc7d975527b61ebfc7/RIDIBatang.otf"}
+
+  - name: MaruBuri
+    description: "Naver's serif for screen reading (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
+
+  - name: MaruBuriSemiBold
+    description: "MaruBuri at SemiBold weight, heavier body text (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-SemiBold.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}

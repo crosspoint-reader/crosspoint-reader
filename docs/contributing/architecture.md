@@ -154,9 +154,11 @@ Typical persisted areas on SD:
   state.json
 ```
 
-`sections/*.bin` contains rendered pages plus anchor, paragraph, and list-item
-lookup tables used for TOC/footnote jumps and KOReader sync refinement. For
-binary cache formats, see `docs/file-formats.md`.
+`sections/*.bin` contains rendered pages plus anchor, paragraph, list-item, and
+page-start visible-text-offset lookup tables. The offset table makes reading
+positions content-based: KOReader XPaths resolve to an exact chapter offset,
+and the current layout derives the corresponding page. For binary cache
+formats, see `docs/file-formats.md`.
 
 ## Networking architecture
 

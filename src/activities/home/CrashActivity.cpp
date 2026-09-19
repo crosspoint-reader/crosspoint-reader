@@ -14,13 +14,14 @@ void CrashActivity::onEnter() {
   if (panicMessage.empty()) {
     panicMessage = tr(STR_CRASH_NO_REASON);
   }
-  HalSystem::clearPanic();
 
   requestUpdateAndWait();
 }
 
 void CrashActivity::loop() {
-  if (mappedInput.isPressed(MappedInputManager::Button::Back)) {
+  int x = 0;
+  int y = 0;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
     finish();
   }
 }

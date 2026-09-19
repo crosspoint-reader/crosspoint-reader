@@ -2,6 +2,8 @@
 .idea
 .DS_Store
 .vscode
+open-x4-sdk
+fs_
 lib/EpdFont/fontsrc
 lib/I18n/I18nKeys.h
 lib/I18n/I18nStrings.h
@@ -19,7 +21,13 @@ build
 lib/EpdFont/scripts/downloaded_fonts/
 lib/EpdFont/scripts/instanced_fonts/
 lib/EpdFont/scripts/output/
-# Claude Code: share project skills with the team, keep local agent state
-# (worktrees, scheduled-task locks, settings.local, scout CLEANUP.md) out.
+# Claude Code: keep local agent state out (worktrees, scheduled-task
+# locks, settings.local, scout CLEANUP.md).
 .claude/*
-!.claude/skills/
+/managed_components
+/.dummy
+/CMakeLists.txt
+/dependencies.lock
+/sdkconfig.*
+sdkconfig.sticky
+flake.*

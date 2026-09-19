@@ -15,6 +15,9 @@ class ReleaseJsonParser {
   void reset();
   void feed(const char* data, size_t len);
 
+  // Release-asset filename to match (default "firmware.bin").
+  void setFirmwareAssetName(const char* name);
+
   bool foundTag() const;
   bool foundFirmware() const;
   const char* getTagName() const;
@@ -62,7 +65,9 @@ class ReleaseJsonParser {
   bool tagFound;
   bool firmwareFound;
 
-  char currentAssetName[32];
+  char currentAssetName[48];
   char currentAssetUrl[512];
   size_t currentAssetSize;
+
+  char firmwareAssetName[48];
 };

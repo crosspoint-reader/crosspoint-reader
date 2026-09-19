@@ -5,147 +5,74 @@
 #include <esp_sntp.h>
 #include <time.h>
 
-#include <cassert>
-
 HalClock halClock;  // Singleton instance
 
-// DS3231 register layout (BCD encoded):
-//   0x00: Seconds  (bits 6-4 = tens, bits 3-0 = ones)
-//   0x01: Minutes  (bits 6-4 = tens, bits 3-0 = ones)
-//   0x02: Hours    (bit 6 = 12/24 mode, bits 5-4 = tens, bits 3-0 = ones)
-
-static uint8_t bcdToDec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0x0F); }
-static uint8_t decToBcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
-
 void HalClock::begin() {
-  if (!gpio.deviceIsX3()) {
-    _available = false;
-    return;
-  }
-
-  // I2C is already initialised by HalPowerManager::begin() for X3.
-  // Probe the DS3231 by reading the seconds register.
-  Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);
-  if (Wire.endTransmission(false) != 0) {
-    LOG_INF("CLK", "DS3231 RTC not found");
-    _available = false;
-    return;
-  }
-  Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)1);
-  if (Wire.available() < 1) {
-    _available = false;
-    return;
-  }
-  Wire.read();  // discard — just testing connectivity
-
-  _available = true;
-  LOG_INF("CLK", "DS3231 RTC found");
-
-  // Prime the cache with an initial read
-  uint8_t h, m;
-  getTime(h, m);
+  _available = _sdkRtc.begin();
+  LOG_INF("CLK", _available ? "SDK RTC found" : "RTC not found");
 }
 
-bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
+namespace {
+// UTC calendar date -> Unix epoch, no timezone involvement (newlib has no
+// timegm). Days-from-civil per Howard Hinnant's algorithm.
+time_t epochFromUtc(const Rtc::DateTime& dt) {
+  int y = dt.year;
+  const int m = dt.month;
+  y -= m <= 2;
+  const int era = (y >= 0 ? y : y - 399) / 400;
+  const unsigned yoe = static_cast<unsigned>(y - era * 400);
+  const unsigned doy = (153u * static_cast<unsigned>(m + (m > 2 ? -3 : 9)) + 2u) / 5u + dt.day - 1u;
+  const unsigned doe = yoe * 365u + yoe / 4u - yoe / 100u + doy;
+  const long days = static_cast<long>(era) * 146097L + static_cast<long>(doe) - 719468L;
+  return static_cast<time_t>(days) * 86400 + dt.hour * 3600L + dt.minute * 60L + dt.second;
+}
+}  // namespace
+
+void HalClock::setTimezone(const char* posixTz) {
+  setenv("TZ", posixTz && posixTz[0] != '\0' ? posixTz : "UTC0", 1);
+  tzset();
+  _lastPollMs = 0;  // re-derive local time under the new rule immediately
+}
+
+bool HalClock::localTime(struct tm& out) const {
   if (!_available) return false;
 
   const unsigned long now = millis();
-  if (_lastPollMs != 0 && (now - _lastPollMs) < CLOCK_POLL_MS) {
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
+  if (_lastPollMs == 0 || (now - _lastPollMs) >= CLOCK_POLL_MS) {
+    Rtc::DateTime dt;
+    if (_sdkRtc.now(dt)) {
+      _cachedUtc = epochFromUtc(dt);
+      _hasCachedTime = true;
+    } else if (!_hasCachedTime) {
+      return false;
+    }
+    _lastPollMs = now != 0 ? now : 1;  // 0 doubles as the invalidation sentinel
   }
-
-  // Read 3 bytes starting at register 0x00: seconds, minutes, hours
-  Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);
-  if (Wire.endTransmission(false) != 0) {
-    if (!_hasCachedTime) return false;
-    _lastPollMs = now;
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
-  }
-  Wire.requestFrom(I2C_ADDR_DS3231, (uint8_t)3);
-  if (Wire.available() < 3) {
-    if (!_hasCachedTime) return false;
-    _lastPollMs = now;
-    hour = _cachedHour;
-    minute = _cachedMinute;
-    return true;
-  }
-
-  Wire.read();  // seconds — not needed
-  const uint8_t rawMin = Wire.read();
-  const uint8_t rawHour = Wire.read();
-
-  _cachedMinute = bcdToDec(rawMin & 0x7F);
-  // Handle 12/24h mode: bit 6 high = 12h mode
-  if (rawHour & 0x40) {
-    // 12h mode: bit 5 = PM, bits 4-0 = hours (1-12)
-    uint8_t h12 = bcdToDec(rawHour & 0x1F);
-    bool pm = rawHour & 0x20;
-    if (h12 == 12) h12 = 0;
-    _cachedHour = pm ? (h12 + 12) : h12;
-  } else {
-    // 24h mode: bits 5-0 = hours (0-23)
-    _cachedHour = bcdToDec(rawHour & 0x3F);
-  }
-  _lastPollMs = now;
-  _hasCachedTime = true;
-
-  hour = _cachedHour;
-  minute = _cachedMinute;
+  localtime_r(&_cachedUtc, &out);
   return true;
 }
 
-bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour) const {
+bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
+  struct tm local;
+  if (!localTime(local)) return false;
+  hour = static_cast<uint8_t>(local.tm_hour);
+  minute = static_cast<uint8_t>(local.tm_min);
+  return true;
+}
+
+bool HalClock::formatTime(char* buf, size_t bufSize, bool use12Hour) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
-  uint8_t h, m;
-  if (!getTime(h, m)) return false;
+  struct tm local;
+  if (!localTime(local)) return false;
 
-  // Apply UTC offset: convert biased value to signed quarter-hours.
-  // Clamp against corrupted persisted values so display time can't drift outside [-12:00, +14:00].
-  if (utcOffsetQuarterHoursBiased > 104) utcOffsetQuarterHoursBiased = 104;
-  int offsetQuarterHours = static_cast<int>(utcOffsetQuarterHoursBiased) - 48;
-  int totalMinutes = static_cast<int>(h) * 60 + static_cast<int>(m) + offsetQuarterHours * 15;
-
-  // Wrap around 24 hours
-  totalMinutes = ((totalMinutes % 1440) + 1440) % 1440;
-
-  const int hour24 = totalMinutes / 60;
-  const int min = totalMinutes % 60;
   if (use12Hour) {
-    const bool pm = hour24 >= 12;
-    int hour12 = hour24 % 12;
+    const bool pm = local.tm_hour >= 12;
+    int hour12 = local.tm_hour % 12;
     if (hour12 == 0) hour12 = 12;
-    snprintf(buf, bufSize, "%d:%02d %s", hour12, min, pm ? "PM" : "AM");
+    snprintf(buf, bufSize, "%d:%02d %s", hour12, local.tm_min, pm ? "PM" : "AM");
   } else {
-    snprintf(buf, bufSize, "%02d:%02d", hour24, min);
+    snprintf(buf, bufSize, "%02d:%02d", local.tm_hour, local.tm_min);
   }
-  return true;
-}
-
-bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
-  assert(hour < 24);
-  assert(minute < 60);
-  assert(second < 60);
-  Wire.beginTransmission(I2C_ADDR_DS3231);
-  Wire.write(DS3231_SEC_REG);    // Start at register 0x00
-  Wire.write(decToBcd(second));  // 0x00: Seconds
-  Wire.write(decToBcd(minute));  // 0x01: Minutes
-  Wire.write(decToBcd(hour));    // 0x02: Hours (24h mode, bit 6 = 0)
-  if (Wire.endTransmission() != 0) {
-    LOG_ERR("CLK", "Failed to write time to DS3231");
-    return false;
-  }
-
-  // Invalidate cache so next read fetches fresh data
-  _lastPollMs = 0;
-  _cachedHour = hour;
-  _cachedMinute = minute;
-  _hasCachedTime = true;
   return true;
 }
 
@@ -158,6 +85,11 @@ bool HalClock::syncFromNTP() {
   }
 
   LOG_INF("CLK", "Starting NTP sync...");
+  // configTzTime overwrites the process TZ with UTC0 for the SNTP exchange;
+  // remember the display timezone so it can be restored below.
+  const char* tzBefore = getenv("TZ");
+  char savedTz[64] = {0};
+  if (tzBefore) snprintf(savedTz, sizeof(savedTz), "%s", tzBefore);
   configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
 
   // Wait for SNTP sync to complete (up to 5 seconds)
@@ -168,15 +100,29 @@ bool HalClock::syncFromNTP() {
       struct tm timeinfo;
       gmtime_r(&now, &timeinfo);
 
-      if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
-        LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-        return true;
+      Rtc::DateTime dt;
+      dt.year = static_cast<uint16_t>(timeinfo.tm_year + 1900);
+      dt.month = static_cast<uint8_t>(timeinfo.tm_mon + 1);
+      dt.day = static_cast<uint8_t>(timeinfo.tm_mday);
+      dt.hour = static_cast<uint8_t>(timeinfo.tm_hour);
+      dt.minute = static_cast<uint8_t>(timeinfo.tm_min);
+      dt.second = static_cast<uint8_t>(timeinfo.tm_sec);
+      dt.weekday = static_cast<uint8_t>(timeinfo.tm_wday);
+      const bool ok = _sdkRtc.set(dt);
+      if (ok) {
+        _cachedUtc = epochFromUtc(dt);
+        _hasCachedTime = true;
+        _lastPollMs = 0;
+        LOG_INF("CLK", "RTC set to %04u-%02u-%02u %02u:%02u:%02u UTC", dt.year, dt.month, dt.day, dt.hour, dt.minute,
+                dt.second);
       }
-      return false;
+      setTimezone(savedTz);
+      return ok;
     }
     delay(100);
   }
 
   LOG_ERR("CLK", "NTP sync timed out");
+  setTimezone(savedTz);
   return false;
 }

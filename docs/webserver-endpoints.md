@@ -211,13 +211,19 @@ Example item:
 ```json
 {
   "key": "fontSize",
-  "name": "Font Size",
+  "name": "Reader Font Size",
   "category": "Reader",
   "type": "enum",
   "value": 1,
-  "options": ["Small", "Medium", "Large"]
+  "options": ["12 pt", "14 pt", "16 pt", "18 pt"]
 }
 ```
+
+`value` is always an index into `options`, never the option's text. `fontSize`
+is one of the settings whose `options` are built at request time — they are the
+point sizes the selected font family actually ships, so a family installed at
+10/12/14 offers three options. (`fontFamily` and `dictionaryName` vary the same
+way, from the SD card contents.)
 
 Types:
 

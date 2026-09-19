@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Scope or Roadmap Question (start here if unsure)
+    url: https://github.com/crosspoint-reader/crosspoint-reader/discussions
+    about: |
+      Not sure if your idea fits CrossPoint's scope? Start a Discussion before filing an issue.
+      See SCOPE.md and ROADMAP.md for what is in, out, and currently paused.
+  - name: Read the Scope document
+    url: https://github.com/crosspoint-reader/crosspoint-reader/blob/master/SCOPE.md
+    about: The authoritative list of what CrossPoint will and will not accept.
+  - name: Read the Roadmap
+    url: https://github.com/crosspoint-reader/crosspoint-reader/blob/master/ROADMAP.md
+    about: Current phase, what is being closed out, and what comes next.
