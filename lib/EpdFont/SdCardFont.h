@@ -184,6 +184,11 @@ class SdCardFont {
     static_assert(sizeof(BmpInterval16) == 6, "BmpInterval16 must remain compact");
     BmpInterval16* bmpIntervals = nullptr;
     bool intervalsAreBmp16 = false;
+    // True when bmpIntervals/fullIntervals above points at another style's table rather than
+    // this style's own allocation. Regular/bold/italic weights of the same family almost always
+    // cover the identical codepoint set, so a CJK font's multi-KB-per-style table is otherwise
+    // paid for once per style. Only the owning style frees it -- see freeStyleAll().
+    bool intervalsShared = false;
 
     // Persistent kern-class + ligature tables (lazy-loaded on first prewarm).
     // The full kern MATRIX is NOT resident — on Literata-class fonts a single

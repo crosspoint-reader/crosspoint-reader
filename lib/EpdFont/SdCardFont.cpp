@@ -163,10 +163,15 @@ void SdCardFont::freeStyleMiniKern(PerStyle& s) {
 
 void SdCardFont::freeStyleAll(PerStyle& s) {
   freeStyleMiniData(s);
-  delete[] s.fullIntervals;
+  // A shared table is owned by the style it was aliased from -- that style's own
+  // freeStyleAll() call frees it. Deleting it here too would double-free.
+  if (!s.intervalsShared) {
+    delete[] s.fullIntervals;
+    delete[] s.bmpIntervals;
+  }
   s.fullIntervals = nullptr;
-  delete[] s.bmpIntervals;
   s.bmpIntervals = nullptr;
+  s.intervalsShared = false;
   s.intervalsAreBmp16 = false;
   freeStyleKernLigatureData(s);
   s.present = false;
@@ -671,7 +676,68 @@ bool SdCardFont::load(const char* path) {
       return false;
     }
 
-    if (canUseBmp16) {
+    // Regular/bold/italic weights of the same family almost always cover the identical codepoint
+    // set, so a later style's table is usually a byte-for-byte copy of an earlier one's. Compare
+    // BEFORE allocating and alias on a match: allocating first and de-duplicating afterwards
+    // costs a PEAK of one table per style for a copy that is about to be freed, and on a broad
+    // CJK font that peak is what fails. Measured on NotoSansJP at 20pt: 4432 intervals = 26592 B
+    // per style against a largest free block of ~32 KB -- one table fits, two never do, so the
+    // font could not load at all for a duplicate it would have discarded a moment later.
+    // freeStyleAll() skips delete[] when intervalsShared is set, so only the owner frees.
+    for (uint8_t k = 0; k < i && !s.intervalsShared; k++) {
+      auto& owner = styles_[k];
+      if (!owner.present || owner.header.intervalCount != s.header.intervalCount) continue;
+      if (owner.intervalsAreBmp16 != canUseBmp16) continue;
+      if (!owner.bmpIntervals && !owner.fullIntervals) continue;
+
+      // Streamed in small batches: the whole point is to not need a second table's worth of
+      // heap, so the comparison buffer stays on the stack and well inside the task's budget.
+      static constexpr uint32_t CMP_BATCH = 16;
+      EpdUnicodeInterval cmp[CMP_BATCH];
+      bool identical = true;
+      for (uint32_t done = 0; done < s.header.intervalCount && identical;) {
+        const uint32_t batch = std::min(CMP_BATCH, s.header.intervalCount - done);
+        const size_t wantBytes = batch * sizeof(EpdUnicodeInterval);
+        if (file.read(reinterpret_cast<uint8_t*>(cmp), wantBytes) != static_cast<int>(wantBytes)) {
+          identical = false;
+          break;
+        }
+        for (uint32_t b = 0; b < batch; ++b) {
+          const EpdUnicodeInterval& f = cmp[b];
+          const uint32_t at = done + b;
+          const bool same = canUseBmp16
+                                ? (owner.bmpIntervals[at].first == f.first && owner.bmpIntervals[at].last == f.last &&
+                                   owner.bmpIntervals[at].offset == f.offset)
+                                : (owner.fullIntervals[at].first == f.first && owner.fullIntervals[at].last == f.last &&
+                                   owner.fullIntervals[at].offset == f.offset);
+          if (!same) {
+            identical = false;
+            break;
+          }
+        }
+        done += batch;
+      }
+
+      if (identical) {
+        s.bmpIntervals = owner.bmpIntervals;
+        s.fullIntervals = owner.fullIntervals;
+        s.intervalsAreBmp16 = owner.intervalsAreBmp16;
+        s.intervalsShared = true;
+        LOG_DBG("SDCF", "Style %u: sharing style %u's %u-interval table (%u B not allocated)", i, k,
+                s.header.intervalCount,
+                s.header.intervalCount * (canUseBmp16 ? 6u : static_cast<uint32_t>(sizeof(EpdUnicodeInterval))));
+      }
+      // Either way the compare consumed the table; the allocate-and-read path below re-seeks.
+      if (!identical && !file.seekSet(s.intervalsFileOffset)) {
+        LOG_ERR("SDCF", "Failed to re-seek intervals for style %u", i);
+        freeAll();
+        return false;
+      }
+    }
+
+    if (s.intervalsShared) {
+      // Aliased above; fall through to the stub/metadata setup without touching the table.
+    } else if (canUseBmp16) {
       s.bmpIntervals = new (std::nothrow) PerStyle::BmpInterval16[s.header.intervalCount];
       if (!s.bmpIntervals) {
         LOG_ERR("SDCF", "Failed to allocate compact intervals for style %u", i);
