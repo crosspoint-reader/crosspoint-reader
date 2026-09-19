@@ -12,7 +12,7 @@ seq:
     type: u2
   - id: chapter_total_page_count
     type: u2
-    if: _io.size >= 6
+    if: _io.size == 6 or _io.size == 10
   - id: visible_text_offset
     type: u4
     if: _io.size == 10
