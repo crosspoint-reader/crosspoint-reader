@@ -7,7 +7,10 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
-#include <OpdsStream.h>
+#include <OpdsAuthDoc.h>
+#include <OpdsFeedParser.h>
+#include <OpdsSearchTemplate.h>
+#include <OpenSearchDescParser.h>
 #include <WiFi.h>
 
 #include "CrossPointSettings.h"
@@ -33,6 +36,24 @@ constexpr fui::ActionId ACTION_SEARCH = 2;
 constexpr fui::ActionId ACTION_CANCEL = 3;
 constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
 constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
+// OPDS authentication documents are small; cap the 401-body capture.
+constexpr size_t MAX_AUTH_DOC_BYTES = 8192;
+
+// Percent-encode a value for a query string or form-urlencoded body.
+std::string percentEncode(const std::string& s) {
+  std::string out;
+  out.reserve(s.size() * 3);
+  for (const unsigned char c : s) {
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      out += static_cast<char>(c);
+    } else {
+      char buf[4];
+      snprintf(buf, sizeof(buf), "%%%02X", c);
+      out += buf;
+    }
+  }
+  return out;
+}
 
 }  // namespace
 
@@ -50,7 +71,19 @@ void OpdsBookBrowserActivity::onEnter() {
   entries.clear();
   navigationHistory.clear();
   searchTemplate = "";
+  searchDescriptionUrl = "";
+  searchTemplateBase = "";
+  bearerToken = "";
   currentPath = "";
+  searchQuery.clear();
+  headerSearchTitle.clear();
+  searchQueryHistory.clear();
+  pageNextHref.clear();
+  pagePrevHref.clear();
+  pageFirstHref.clear();
+  pageLastHref.clear();
+  feedTitle.clear();
+  pageLabel[0] = '\0';
   selectorIndex = 0;
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
@@ -109,6 +142,11 @@ void OpdsBookBrowserActivity::onCancelEvent(const fui::ActionEvent&, void* user)
   self->cancelDownload = true;
 }
 
+void OpdsBookBrowserActivity::setSearchQuery(const std::string& query) {
+  searchQuery = query;
+  headerSearchTitle = query.empty() ? std::string() : "\u201c" + query + "\u201d";
+}
+
 void OpdsBookBrowserActivity::loop() {
   if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
     return;
@@ -147,7 +185,7 @@ void OpdsBookBrowserActivity::loop() {
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
+      if (hasSearch() && selectorIndex == 0) launchSearch();
     }
 
     // Touch goes through the FreeInkApp: render() registered every tap target
@@ -231,9 +269,16 @@ void OpdsBookBrowserActivity::screenHeader(UiScreen& screen, const bool withSear
   // the rest of the firmware's screens.
   screen.spacer(static_cast<int16_t>(UITheme::getInstance().getMetrics().topPadding));
   fui::HeaderProps header;
-  header.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
+  // An active search replaces the server name with the quoted query, like the
+  // library view, so the reader can see what produced the current list. With
+  // no search, a navigated feed's own title beats the server name.
+  header.title = !headerSearchTitle.empty() ? headerSearchTitle.c_str()
+                 : !feedTitle.empty()       ? feedTitle.c_str()
+                 : server.name.empty()      ? tr(STR_OPDS_BROWSER)
+                                            : server.name.c_str();
+  if (state == BrowserState::BROWSING && pageLabel[0] != '\0') header.subtitle = pageLabel;
   header.borderEdges = fui::EdgeBottom;
-  if (withSearch && !searchTemplate.empty()) {
+  if (withSearch && hasSearch()) {
     header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
     header.trailingAction = ACTION_SEARCH;
     // Optically align the icon with the title glyphs: text hangs low in its
@@ -336,7 +381,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     case BrowserState::BROWSING: {
       const char* confirmLabel =
           (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
-      const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
+      const char* searchLabel = (hasSearch() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
       labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
       break;
     }
@@ -366,41 +411,109 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
 
   std::string url = UrlUtils::buildUrl(server.url, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
-  OpdsParser parser;
-  {
-    OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
+  OpdsFeedParser parser;
+  for (int authAttempt = 0;; ++authAttempt) {
+    int status = 0;
+    HttpDownloader::FetchOptions options;
+    options.username = server.username;
+    options.password = server.password;
+    options.bearer = bearerToken;
+    // Prefer OPDS 2.0 JSON from servers that content-negotiate (e.g.
+    // Mayberry); Atom-only servers ignore this and serve their usual feed.
+    options.accept = "application/opds+json,application/atom+xml;q=0.9,*/*;q=0.8";
+    options.statusOut = &status;
+    const bool fetched = HttpDownloader::fetchUrl(
+        url,
+        [&parser](const uint8_t* data, const size_t len) {
+          parser.write(data, len);
+          return !parser.error();  // abort the transfer on a parse error
+        },
+        options);
+    parser.flush();
+
+    if (!fetched && status == 401) {
+      // Authentication for OPDS: the 401 body is an authentication document
+      // describing the server's flows. One re-auth attempt (covers both a
+      // missing and an expired token), then give up.
+      bearerToken.clear();
+      if (authAttempt == 0 && authenticateWithServer(url)) {
+        parser.reset();  // drop any finalized backend before the retry
+        continue;
+      }
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_OPDS_AUTH_FAILED);
+      requestUpdate();
+      return;
+    }
+    if (parser.error()) {
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_PARSE_FEED_FAILED);
+      requestUpdate();
+      return;
+    }
+    if (!fetched) {
       state = BrowserState::ERROR;
       errorMessage = tr(STR_FETCH_FEED_FAILED);
       requestUpdate();
       return;
     }
-  }
-
-  if (!parser) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_PARSE_FEED_FAILED);
-    requestUpdate();
-    return;
+    break;
   }
 
   searchTemplate = parser.getSearchTemplate();
+  searchDescriptionUrl = parser.getSearchDescriptionUrl();
+  searchTemplateBase = "";  // feed-inline template resolves against the feed URL
+  feedTitle = parser.getFeedTitle();
+
+  // "Page X of Y" from the feed's pagination metadata (OPDS 2.0 metadata
+  // object or the opensearch:* elements of an Atom feed).
+  pageLabel[0] = '\0';
+  const uint32_t itemsPerPage = parser.getItemsPerPage();
+  const uint32_t totalItems = parser.getNumberOfItems();
+  const uint32_t page = parser.getCurrentPage();
+  const uint32_t totalPages = itemsPerPage > 0 ? (totalItems + itemsPerPage - 1) / itemsPerPage : 0;
+  if (page > 0 && totalPages > 1) {
+    snprintf(pageLabel, sizeof(pageLabel), tr(STR_OPDS_PAGE_POSITION), static_cast<unsigned long>(page),
+             static_cast<unsigned long>(totalPages));
+  }
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
+  pageNextHref = nextUrl;
+  pagePrevHref = prevUrl;
+  // First/Last rows only when they reach further than Previous/Next.
+  pageFirstHref = (!parser.getFirstPageUrl().empty() && !prevUrl.empty() && parser.getFirstPageUrl() != prevUrl)
+                      ? parser.getFirstPageUrl()
+                      : "";
+  pageLastHref = (!parser.getLastPageUrl().empty() && !nextUrl.empty() && parser.getLastPageUrl() != nextUrl)
+                     ? parser.getLastPageUrl()
+                     : "";
   const bool feedTruncated = parser.truncated();
   // Reset the selection before the swap: the render task reads
   // entries[selectorIndex] under only an empty() guard, and the new feed can
   // be shorter than the old selection.
   selectorIndex = 0;
   listNav.reset();
-  entries = std::move(parser).getEntries();
+  entries = parser.takeEntries();
 
-  entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
+  auto facetRows = parser.takeFacetEntries();
+  entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1) +
+                  (pageFirstHref.empty() ? 0 : 1) + (pageLastHref.empty() ? 0 : 1) + facetRows.size());
   if (!prevUrl.empty()) {
     entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl, ""});
   }
+  if (!pageFirstHref.empty()) {
+    entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_FIRST_PAGE), "", pageFirstHref, ""});
+  }
   if (!nextUrl.empty()) {
     entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
+  }
+  if (!pageLastHref.empty()) {
+    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_LAST_PAGE), "", pageLastHref, ""});
+  }
+  // Facet groups (sort orders, filters) come after the catalog content, each
+  // under its own section heading.
+  for (auto& facet : facetRows) {
+    entries.push_back(std::move(facet));
   }
   if (feedTruncated) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
@@ -420,9 +533,12 @@ void OpdsBookBrowserActivity::rebuildRowItems() {
   rowItems.reserve(entries.size());
   for (const auto& entry : entries) {
     fui::ListItem item;
-    item.label = entry.title.c_str();
+    // A group's "see all" self link carries no title of its own; the UI
+    // supplies the label (the group name is the section heading above it).
+    item.label = entry.id == OPDS_SEE_ALL_ID ? tr(STR_OPDS_SEE_ALL) : entry.title.c_str();
+    if (!entry.heading.empty()) item.sectionHeading = entry.heading.c_str();
     if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) item.subtitle = entry.author.c_str();
-    if (entry.type == OpdsEntryType::NAVIGATION) item.value = ">";
+    if (entry.type == OpdsEntryType::NAVIGATION) item.value = entry.detail.empty() ? ">" : entry.detail.c_str();
     item.actionValue = static_cast<int16_t>(rowItems.size());
     rowItems.push_back(item);
   }
@@ -438,6 +554,10 @@ void OpdsBookBrowserActivity::releaseEntries() {
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
+  searchQueryHistory.push_back(searchQuery);
+  // Following a results page (first/previous/next/last) stays within the
+  // same search; any other navigation leaves it.
+  if (!isPaginationHref(entry.href)) setSearchQuery("");
   // Resolve to a full URL so sub-sub-navigation retains parent path context
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   currentPath = UrlUtils::buildUrl(feedUrl, entry.href);
@@ -456,6 +576,10 @@ void OpdsBookBrowserActivity::navigateBack() {
   } else {
     currentPath = navigationHistory.back();
     navigationHistory.pop_back();
+    if (!searchQueryHistory.empty()) {
+      setSearchQuery(searchQueryHistory.back());
+      searchQueryHistory.pop_back();
+    }
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     releaseEntries();
@@ -548,7 +672,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
           requestUpdate(true);
         }
       },
-      &cancelDownload, server.username, server.password);
+      &cancelDownload, server.username, server.password, false, bearerToken);
 
   if (result == HttpDownloader::OK) {
     clearBookCache(filename);
@@ -580,7 +704,7 @@ void OpdsBookBrowserActivity::launchSearch() {
   state = BrowserState::SEARCH_INPUT;
   requestUpdate();
 
-  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH));
+  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH), searchQuery);
   startActivityForResult(std::move(keyboard), [this](const ActivityResult& result) {
     state = BrowserState::BROWSING;
     if (!result.isCancelled) {
@@ -591,34 +715,121 @@ void OpdsBookBrowserActivity::launchSearch() {
   });
 }
 
+// Authentication for OPDS 1.0: re-request the resource capturing the 401 body
+// (the authentication document), pick a flow the device can drive, and obtain
+// credentials for retrying.
+//  - basic: already sent preemptively when credentials are stored, so landing
+//    here means they are missing or wrong.
+//  - oauth/password: POST the stored credentials to the "authenticate" link
+//    and keep the returned access token as a Bearer header.
+//  - oauth/implicit: needs a browser; cannot be driven from the device.
+bool OpdsBookBrowserActivity::authenticateWithServer(const std::string& resourceUrl) {
+  std::string body;
+  body.reserve(1024);
+  int status = 0;
+  HttpDownloader::FetchOptions options;
+  options.statusOut = &status;
+  options.captureErrorBody = true;
+  HttpDownloader::fetchUrl(
+      resourceUrl,
+      [&body](const uint8_t* data, const size_t len) {
+        const size_t room = MAX_AUTH_DOC_BYTES - body.size();
+        body.append(reinterpret_cast<const char*>(data), len < room ? len : room);
+        return true;
+      },
+      options);
+  if (status != 401 || body.empty()) return false;
+
+  OpdsAuthDoc doc;
+  if (!parseOpdsAuthDocument(body.data(), body.size(), doc)) {
+    LOG_ERR("OPDS", "401 without a usable authentication document");
+    return false;
+  }
+
+  if (doc.hasOauthPassword && !doc.tokenUrl.empty() && !server.username.empty() && !server.password.empty()) {
+    const std::string tokenUrl = UrlUtils::buildUrl(resourceUrl, doc.tokenUrl);
+    const std::string form = "grant_type=password&username=" + percentEncode(server.username) +
+                             "&password=" + percentEncode(server.password);
+    std::string response;
+    int tokenStatus = 0;
+    if (HttpDownloader::postForm(tokenUrl, form, response, &tokenStatus)) {
+      std::string token;
+      if (extractJsonStringField(response.data(), response.size(), "access_token", token) && !token.empty()) {
+        bearerToken = std::move(token);
+        LOG_INF("OPDS", "OAuth password grant succeeded");
+        return true;
+      }
+    }
+    LOG_ERR("OPDS", "OAuth token request failed (status %d)", tokenStatus);
+    return false;
+  }
+
+  if (doc.hasOauthImplicit && !doc.hasBasic && !doc.hasOauthPassword) {
+    LOG_ERR("OPDS", "Server only offers browser-based OAuth (implicit)");
+  }
+  return false;
+}
+
+// Resolves the search template lazily: OPDS 1.x servers such as calibre-web,
+// COPS and Kavita publish it in a separate OpenSearch description document
+// instead of inlining it in the feed.
+bool OpdsBookBrowserActivity::ensureSearchTemplate() {
+  if (!searchTemplate.empty()) return true;
+  if (searchDescriptionUrl.empty()) return false;
+
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  const std::string descUrl = UrlUtils::buildUrl(feedUrl, searchDescriptionUrl);
+  LOG_DBG("OPDS", "Fetching OpenSearch description: %s", descUrl.c_str());
+  OpenSearchDescParser parser;
+  HttpDownloader::FetchOptions options;
+  options.username = server.username;
+  options.password = server.password;
+  options.bearer = bearerToken;
+  const bool fetched = HttpDownloader::fetchUrl(
+      descUrl,
+      [&parser](const uint8_t* data, const size_t len) {
+        parser.write(data, len);
+        return !parser.error();
+      },
+      options);
+  parser.flush();
+  if (!fetched || parser.error() || parser.getTemplate().empty()) {
+    LOG_ERR("OPDS", "OpenSearch description unusable");
+    return false;
+  }
+  searchTemplate = parser.getTemplate();
+  searchTemplateBase = descUrl;  // relative templates resolve against the description doc
+  return true;
+}
+
 void OpdsBookBrowserActivity::performSearch(const std::string& query) {
-  if (query.empty() || searchTemplate.empty()) {
+  if (query.empty()) {
     state = BrowserState::BROWSING;
     requestUpdate();
     return;
   }
 
-  auto urlEncode = [](const std::string& s) {
-    std::string out;
-    out.reserve(s.size() * 3);
-    for (unsigned char c : s) {
-      if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
-        out += static_cast<char>(c);
-      else {
-        char buf[4];
-        snprintf(buf, sizeof(buf), "%%%02X", c);
-        out += buf;
-      }
-    }
-    return out;
-  };
+  state = BrowserState::LOADING;
+  statusMessage = tr(STR_LOADING);
+  requestUpdate();
 
-  std::string url = searchTemplate;
-  const std::string placeholder = "{searchTerms}";
-  const size_t pos = url.find(placeholder);
-  if (pos != std::string::npos) url.replace(pos, placeholder.length(), urlEncode(query));
+  if (!ensureSearchTemplate()) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_FETCH_FEED_FAILED);
+    requestUpdate();
+    return;
+  }
+
+  // Expand the template first: buildUrl percent-encodes braces, so a raw
+  // template must never pass through URL resolution.
+  const std::string expanded = expandOpdsSearchTemplate(searchTemplate, percentEncode(query));
+  const std::string base =
+      searchTemplateBase.empty() ? UrlUtils::buildUrl(server.url, currentPath) : searchTemplateBase;
+  const std::string url = UrlUtils::buildUrl(base, expanded);
 
   navigationHistory.push_back(currentPath);
+  searchQueryHistory.push_back(searchQuery);
+  setSearchQuery(query);
   currentPath = url;
 
   state = BrowserState::LOADING;

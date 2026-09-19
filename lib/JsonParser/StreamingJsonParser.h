@@ -18,7 +18,10 @@ struct JsonCallbacks {
 
 class StreamingJsonParser {
  public:
-  static constexpr size_t TOKEN_BUF_SIZE = 512;
+  // Sized so the longest value the OPDS parsers accept (768-char hrefs and
+  // search templates, see OpdsLimits) fits without tripping tokenOverflow,
+  // which drops the whole string.
+  static constexpr size_t TOKEN_BUF_SIZE = 832;
   static constexpr size_t MAX_NESTING = 32;
 
   explicit StreamingJsonParser(const JsonCallbacks& callbacks);
@@ -51,6 +54,9 @@ class StreamingJsonParser {
   void handleSkipString(char c);
 
   void appendToken(char c);
+  void appendUtf8(uint32_t codepoint);
+  void finishUnicodeEscape();
+  void flushPendingSurrogate();
   void emitToken();
 
   bool inArray() const { return nestingDepth > 0 && nestingStack[nestingDepth - 1] == Container::ARRAY; }
@@ -70,4 +76,9 @@ class StreamingJsonParser {
   char literalExpected[6];
   uint8_t literalLen;
   uint8_t literalPos;
+
+  // \uXXXX escape decoding (UTF-16, including surrogate pairs) to UTF-8.
+  uint8_t unicodeDigitsLeft;
+  uint16_t unicodeValue;
+  uint16_t pendingHighSurrogate;
 };

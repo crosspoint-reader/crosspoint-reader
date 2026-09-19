@@ -46,6 +46,35 @@ class HttpDownloader {
                        const std::string& password = "");
 
   /**
+   * Authentication and response inspection options for fetchUrl/postForm.
+   * `bearer`, when set, sends "Authorization: Bearer <token>" and overrides
+   * Basic credentials. `statusOut` receives the final HTTP status (0 when the
+   * request never reached a response). `captureErrorBody` also streams a 401
+   * response body to the callback — OPDS authentication documents are served
+   * as 401 bodies.
+   */
+  struct FetchOptions {
+    std::string username;
+    std::string password;
+    std::string bearer;
+    // Accept header for content negotiation (e.g. preferring OPDS 2.0 JSON
+    // from servers that also speak Atom); empty sends none.
+    std::string accept;
+    int* statusOut = nullptr;
+    bool captureErrorBody = false;
+  };
+
+  static bool fetchUrl(const std::string& url, const DataCallback& onData, const FetchOptions& options);
+
+  /**
+   * POST an application/x-www-form-urlencoded body (e.g. an OAuth token
+   * request) and collect the response body (any status) into outResponse,
+   * capped at a few KB. Returns true when the response status is 2xx.
+   */
+  static bool postForm(const std::string& url, const std::string& formBody, std::string& outResponse,
+                       int* statusOut = nullptr);
+
+  /**
    * Download a file to the SD card with optional credentials.
    *
    * downgradeRedirectsToHttp rewrites followed redirect targets from https to
@@ -55,5 +84,5 @@ class HttpDownloader {
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      bool downgradeRedirectsToHttp = false);
+                                      bool downgradeRedirectsToHttp = false, const std::string& bearer = "");
 };

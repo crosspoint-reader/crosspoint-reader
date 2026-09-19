@@ -3,18 +3,10 @@
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
+#include <cstdlib>
 #include <cstring>
 
-namespace {
-constexpr size_t ENTRY_STORAGE_CAPACITY = 64;
-constexpr size_t MAX_ENTRIES = ENTRY_STORAGE_CAPACITY - 2;
-constexpr size_t MAX_TITLE_CHARS = 160;
-constexpr size_t MAX_AUTHOR_CHARS = 120;
-constexpr size_t MAX_ID_CHARS = 128;
-constexpr size_t MAX_HREF_CHARS = 768;
-constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
-constexpr size_t MAX_PAGE_URL_CHARS = 768;
-}  // namespace
+using namespace OpdsLimits;
 
 OpdsParser::OpdsParser() {
   parser = XML_ParserCreate(nullptr);
@@ -78,8 +70,17 @@ bool OpdsParser::error() const { return errorOccured; }
 void OpdsParser::clear() {
   entries.clear();
   searchTemplate.clear();
+  searchDescriptionUrl.clear();
   nextPageUrl.clear();
   prevPageUrl.clear();
+  firstPageUrl.clear();
+  lastPageUrl.clear();
+  feedTitle.clear();
+  totalResults = startIndex = itemsPerPage = 0;
+  metaField = MetaField::NONE;
+  inFeedTitle = false;
+  entryAcqRank = -1;
+  entryHasPlainEpub = false;
   currentEntry = OpdsEntry{};
   currentText.clear();
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
@@ -126,6 +127,8 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     self->currentEntry = OpdsEntry{};
     self->currentText.clear();
     self->inTitle = self->inAuthor = self->inAuthorName = self->inId = false;
+    self->entryAcqRank = -1;
+    self->entryHasPlainEpub = false;
     return;
   }
 
@@ -138,25 +141,34 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
       if (rel && strcmp(rel, "search") == 0) {
         if (strstr(href, "{searchTerms}") != nullptr) {
           assignBounded(self->searchTemplate, href, MAX_SEARCH_TEMPLATE_CHARS);
+        } else {
+          // No inline template: href points at an OpenSearch description
+          // document (calibre-web, COPS, Kavita).
+          assignBounded(self->searchDescriptionUrl, href, MAX_SEARCH_TEMPLATE_CHARS);
         }
       } else if (rel && strcmp(rel, "next") == 0 && !self->inEntry) {
         assignBounded(self->nextPageUrl, href, MAX_PAGE_URL_CHARS);
-      } else if (rel && strcmp(rel, "previous") == 0 && !self->inEntry) {
+      } else if (rel && (strcmp(rel, "previous") == 0 || strcmp(rel, "prev") == 0) && !self->inEntry) {
         assignBounded(self->prevPageUrl, href, MAX_PAGE_URL_CHARS);
+      } else if (rel && strcmp(rel, "first") == 0 && !self->inEntry) {
+        assignBounded(self->firstPageUrl, href, MAX_PAGE_URL_CHARS);
+      } else if (rel && strcmp(rel, "last") == 0 && !self->inEntry) {
+        assignBounded(self->lastPageUrl, href, MAX_PAGE_URL_CHARS);
       }
 
       if (self->inEntry && self->collectCurrentEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-            strcmp(type, "application/epub+zip") == 0) {
-          // Prefer plain EPUB links over derived formats when multiple
-          // acquisition links are present for one entry.
+        const int rank = rel ? opdsAcquisitionRank(rel) : -1;
+        if (rank >= 0 && type && strcmp(type, "application/epub+zip") == 0) {
+          // Prefer higher-ranked acquisitions (open-access over borrow,
+          // never buy/sample); at equal rank prefer a plain EPUB path over
+          // derived formats.
           const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;
-          const bool alreadyHasPlainEpub = self->currentEntry.type == OpdsEntryType::BOOK &&
-                                           (self->currentEntry.href.find(".epub") != std::string::npos ||
-                                            self->currentEntry.href.find("/epub/") != std::string::npos);
-          if (self->currentEntry.type != OpdsEntryType::BOOK || (isPlainEpub && !alreadyHasPlainEpub)) {
+          if (self->currentEntry.type != OpdsEntryType::BOOK || rank > self->entryAcqRank ||
+              (rank == self->entryAcqRank && isPlainEpub && !self->entryHasPlainEpub)) {
             self->currentEntry.type = OpdsEntryType::BOOK;
             assignBounded(self->currentEntry.href, href, MAX_HREF_CHARS);
+            self->entryAcqRank = rank;
+            self->entryHasPlainEpub = isPlainEpub;
           }
         } else if (type && strstr(type, "application/atom+xml") != nullptr) {
           if (self->currentEntry.type != OpdsEntryType::BOOK) {
@@ -168,7 +180,23 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
     }
   }
 
-  if (!self->inEntry || !self->collectCurrentEntry) return;
+  if (!self->inEntry) {
+    if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
+      self->inFeedTitle = true;
+      self->currentText.clear();
+    } else if (strstr(name, "totalResults") != nullptr) {
+      self->metaField = MetaField::TOTAL_RESULTS;
+      self->currentText.clear();
+    } else if (strstr(name, "startIndex") != nullptr) {
+      self->metaField = MetaField::START_INDEX;
+      self->currentText.clear();
+    } else if (strstr(name, "itemsPerPage") != nullptr) {
+      self->metaField = MetaField::ITEMS_PER_PAGE;
+      self->currentText.clear();
+    }
+    return;
+  }
+  if (!self->collectCurrentEntry) return;
 
   if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
     self->inTitle = true;
@@ -193,6 +221,25 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     }
     self->inEntry = false;
     self->collectCurrentEntry = false;
+  } else if (!self->inEntry && self->inFeedTitle && (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr)) {
+    self->feedTitle = self->currentText;
+    self->inFeedTitle = false;
+  } else if (!self->inEntry && self->metaField != MetaField::NONE) {
+    const uint32_t parsed = static_cast<uint32_t>(strtoul(self->currentText.c_str(), nullptr, 10));
+    switch (self->metaField) {
+      case MetaField::TOTAL_RESULTS:
+        self->totalResults = parsed;
+        break;
+      case MetaField::START_INDEX:
+        self->startIndex = parsed;
+        break;
+      case MetaField::ITEMS_PER_PAGE:
+        self->itemsPerPage = parsed;
+        break;
+      case MetaField::NONE:
+        break;
+    }
+    self->metaField = MetaField::NONE;
   } else if (self->inEntry) {
     if (strcmp(name, "title") == 0 || strstr(name, ":title") != nullptr) {
       if (self->inTitle) self->currentEntry.title = self->currentText;
@@ -211,6 +258,14 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
 
 void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<OpdsParser*>(userData);
+  if (!self->inEntry) {
+    if (self->inFeedTitle) {
+      appendBounded(self->currentText, s, len, MAX_TITLE_CHARS);
+    } else if (self->metaField != MetaField::NONE) {
+      appendBounded(self->currentText, s, len, 16);
+    }
+    return;
+  }
   if (!self->collectCurrentEntry) return;
   if (self->inTitle) {
     appendBounded(self->currentText, s, len, MAX_TITLE_CHARS);

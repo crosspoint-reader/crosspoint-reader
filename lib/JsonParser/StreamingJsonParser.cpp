@@ -14,6 +14,9 @@ void StreamingJsonParser::reset() {
   nestingDepth = 0;
   literalLen = 0;
   literalPos = 0;
+  unicodeDigitsLeft = 0;
+  unicodeValue = 0;
+  pendingHighSurrogate = 0;
 }
 
 void StreamingJsonParser::feed(const char* data, size_t len) {
@@ -123,8 +126,30 @@ void StreamingJsonParser::handleScanning(char c) {
 }
 
 void StreamingJsonParser::handleStringChar(char c) {
+  if (unicodeDigitsLeft > 0) {
+    int digit;
+    if (c >= '0' && c <= '9') {
+      digit = c - '0';
+    } else if (c >= 'a' && c <= 'f') {
+      digit = c - 'a' + 10;
+    } else if (c >= 'A' && c <= 'F') {
+      digit = c - 'A' + 10;
+    } else {
+      // Malformed escape: drop it (and any pending surrogate half), then
+      // reprocess this character normally.
+      unicodeDigitsLeft = 0;
+      flushPendingSurrogate();
+      handleStringChar(c);
+      return;
+    }
+    unicodeValue = static_cast<uint16_t>(unicodeValue << 4 | digit);
+    if (--unicodeDigitsLeft == 0) finishUnicodeEscape();
+    return;
+  }
+
   if (escaped) {
     escaped = false;
+    if (c != 'u') flushPendingSurrogate();
     switch (c) {
       case '"':
       case '\\':
@@ -147,10 +172,8 @@ void StreamingJsonParser::handleStringChar(char c) {
         appendToken('\t');
         break;
       case 'u':
-        // Pass \uXXXX through as literal characters -- we don't decode
-        // Unicode escapes since our use case only needs ASCII field matching.
-        appendToken('\\');
-        appendToken('u');
+        unicodeDigitsLeft = 4;
+        unicodeValue = 0;
         break;
       default:
         appendToken('\\');
@@ -161,9 +184,12 @@ void StreamingJsonParser::handleStringChar(char c) {
   }
 
   if (c == '\\') {
+    // Keep a pending high surrogate: this may be the "\u" of its low half.
     escaped = true;
     return;
   }
+
+  flushPendingSurrogate();
 
   if (c == '"') {
     emitToken();
@@ -171,6 +197,53 @@ void StreamingJsonParser::handleStringChar(char c) {
   }
 
   appendToken(c);
+}
+
+void StreamingJsonParser::finishUnicodeEscape() {
+  uint32_t codepoint = unicodeValue;
+  if (pendingHighSurrogate != 0) {
+    if (codepoint >= 0xDC00 && codepoint <= 0xDFFF) {
+      codepoint = 0x10000 + ((static_cast<uint32_t>(pendingHighSurrogate) - 0xD800) << 10) + (codepoint - 0xDC00);
+      pendingHighSurrogate = 0;
+      appendUtf8(codepoint);
+      return;
+    }
+    flushPendingSurrogate();
+  }
+  if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
+    pendingHighSurrogate = static_cast<uint16_t>(codepoint);
+    return;
+  }
+  if (codepoint >= 0xDC00 && codepoint <= 0xDFFF) {
+    appendUtf8(0xFFFD);  // lone low surrogate
+    return;
+  }
+  appendUtf8(codepoint);
+}
+
+void StreamingJsonParser::flushPendingSurrogate() {
+  if (pendingHighSurrogate != 0) {
+    pendingHighSurrogate = 0;
+    appendUtf8(0xFFFD);
+  }
+}
+
+void StreamingJsonParser::appendUtf8(uint32_t codepoint) {
+  if (codepoint < 0x80) {
+    appendToken(static_cast<char>(codepoint));
+  } else if (codepoint < 0x800) {
+    appendToken(static_cast<char>(0xC0 | (codepoint >> 6)));
+    appendToken(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else if (codepoint < 0x10000) {
+    appendToken(static_cast<char>(0xE0 | (codepoint >> 12)));
+    appendToken(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    appendToken(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  } else {
+    appendToken(static_cast<char>(0xF0 | (codepoint >> 18)));
+    appendToken(static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)));
+    appendToken(static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)));
+    appendToken(static_cast<char>(0x80 | (codepoint & 0x3F)));
+  }
 }
 
 void StreamingJsonParser::handleNumber(char c) {
@@ -232,6 +305,7 @@ void StreamingJsonParser::appendToken(char c) {
 }
 
 void StreamingJsonParser::emitToken() {
+  flushPendingSurrogate();
   if (state == State::IN_STRING_KEY) {
     if (!tokenOverflow && cb.onKey) {
       tokenBuf[tokenLen] = '\0';
