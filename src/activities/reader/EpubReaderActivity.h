@@ -24,6 +24,7 @@ class EpubReaderActivity final : public ReaderActivity {
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
+  bool pendingLastPageJump = false;
   std::string pendingAnchor;
   int cachedSpineIndex = 0;
   int cachedChapterTotalPageCount = 0;

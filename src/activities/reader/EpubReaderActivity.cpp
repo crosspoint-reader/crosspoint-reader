@@ -389,7 +389,8 @@ void EpubReaderActivity::loop() {
   }
 
   if (section && section->isBuilding() && !RenderLock::peek() &&
-      (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
+      (pendingPercentJump || pendingLastPageJump || section->isPartial() ||
+       static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
       buildTickHeapGate()) {
     RenderLock lock;
     if (section->isBuilding() && buildTickHeapGate()) {
@@ -397,8 +398,22 @@ void EpubReaderActivity::loop() {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
         requestUpdate();
-      } else if (section->isBuildComplete() && applyDeferredReposition()) {
-        requestUpdate();
+      } else if (section->isBuildComplete()) {
+        bool repositioned = false;
+        if (pendingPercentJump && section->pageCount > 0) {
+          int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
+          if (newPage >= section->pageCount) newPage = section->pageCount - 1;
+          section->currentPage = newPage;
+          pendingPercentJump = false;
+          repositioned = true;
+        } else if (pendingLastPageJump && section->pageCount > 0) {
+          section->currentPage = section->pageCount - 1;
+          pendingLastPageJump = false;
+          repositioned = true;
+        } else {
+          repositioned = applyDeferredReposition();
+        }
+        if (repositioned) requestUpdate();
       }
     }
   }
@@ -699,7 +714,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 
   for (int i = 0; i < spineCount; i++) {
     const size_t cumulative = epub->getCumulativeSpineItemSize(i);
-    if (targetSize <= cumulative) {
+    if (targetSize < cumulative) {
       targetSpineIndex = i;
       prevCumulative = (i > 0) ? epub->getCumulativeSpineItemSize(i - 1) : 0;
       break;
@@ -717,6 +732,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
     clearDeferredReposition();
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
+    pendingLastPageJump = false;
     pendingPercentJump = true;
     section.reset();
   }
@@ -1074,7 +1090,8 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     } else if (currentSpineIndex > 0) {
       RenderLock lock;
       nextPageNumber = 0;
-      pendingPageJump = std::numeric_limits<uint16_t>::max();
+      pendingPercentJump = false;
+      pendingLastPageJump = true;
       currentSpineIndex--;
       section.reset();
       lastPageTurnTime = millis();
@@ -1111,15 +1128,19 @@ bool EpubReaderActivity::isAtEndOfBook() const { return epub && currentSpineInde
 
 void EpubReaderActivity::onReturnFromEndOfBook() {
   if (epub && epub->getSpineItemsCount() > 0) {
+    RenderLock lock;
     currentSpineIndex = epub->getSpineItemsCount() - 1;
     nextPageNumber = 0;
-    pendingPageJump = std::numeric_limits<uint16_t>::max();
+    pendingPercentJump = false;
+    pendingLastPageJump = true;
+    section.reset();
   }
 }
 
 bool EpubReaderActivity::skipLoopDelay() {
   return section && section->isBuilding() && !buildHeapPaused &&
-         (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+         (pendingPercentJump || pendingLastPageJump || section->isPartial() ||
+          static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
 }
 
 void EpubReaderActivity::renderBook() {
@@ -1186,11 +1207,11 @@ void EpubReaderActivity::renderBook() {
     }
     const bool cacheComplete = cacheLoaded && !section->isPartial();
     const bool explicitOffsetJump = pendingOffsetJump.has_value();
-    const std::optional<uint32_t> offsetJump =
-        explicitOffsetJump ? pendingOffsetJump
-        : (pendingPageJump.has_value() || !pendingAnchor.empty() || currentSpineIndex != cachedSpineIndex)
-            ? std::nullopt
-            : cachedVisibleTextOffset;
+    const std::optional<uint32_t> offsetJump = explicitOffsetJump ? pendingOffsetJump
+                                               : (pendingPageJump.has_value() || pendingLastPageJump ||
+                                                  !pendingAnchor.empty() || currentSpineIndex != cachedSpineIndex)
+                                                   ? std::nullopt
+                                                   : cachedVisibleTextOffset;
     if (!cacheComplete) {
       if (section->isPartial()) {
         LOG_DBG("ERS", "Partial cache found (%d pages), resuming build...", section->pageCount);
@@ -1198,7 +1219,9 @@ void EpubReaderActivity::renderBook() {
         LOG_DBG("ERS", "Cache not found, building...");
       }
 
-      const bool needsFullBuild = pendingPercentJump;
+      // Percent/last-page navigation is completed by the regular incremental
+      // builder and the heap-gated background build instead of blocking here.
+      const bool needsFullBuild = false;
       if (needsFullBuild) {
         GUI.drawPopup(renderer, tr(STR_INDEXING));
         pagesUntilFullRefresh = 1;
@@ -1303,11 +1326,30 @@ void EpubReaderActivity::renderBook() {
       pendingAnchor.clear();
     }
 
-    if (pendingPercentJump && section->pageCount > 0) {
-      int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
-      if (newPage >= section->pageCount) newPage = section->pageCount - 1;
-      section->currentPage = newPage;
+    if (pendingPercentJump) {
+      if (section->isBuilding() || section->isPartial()) {
+        GUI.drawPopup(renderer, tr(STR_INDEXING));
+        pagesUntilFullRefresh = 1;
+        return;
+      }
+      if (section->pageCount > 0) {
+        int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
+        if (newPage >= section->pageCount) newPage = section->pageCount - 1;
+        section->currentPage = newPage;
+      }
       pendingPercentJump = false;
+    }
+
+    if (pendingLastPageJump) {
+      if (section->isBuilding() || section->isPartial()) {
+        GUI.drawPopup(renderer, tr(STR_INDEXING));
+        pagesUntilFullRefresh = 1;
+        return;
+      }
+      if (section->pageCount > 0) {
+        section->currentPage = section->pageCount - 1;
+      }
+      pendingLastPageJump = false;
     }
   }
 
