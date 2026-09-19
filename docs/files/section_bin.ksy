@@ -8,7 +8,9 @@ meta:
 
 seq: 
   - id: version
-    contents: [46]
+    type: u1
+    valid:
+      any-of: [45, 46, 236]
   - id: font_id
     type: s4
   - id: line_compression
@@ -142,6 +144,8 @@ types:
         type: str
         encoding: UTF-8
         size: 256
+        terminator: 0
+        include: false
       - id: x_pos
         type: s2
       - id: y_pos
@@ -298,8 +302,16 @@ types:
     seq:
       - id: number
         size: 32
+        type: str
+        encoding: UTF-8
+        terminator: 0
+        include: false
       - id: href
         size: 256
+        type: str
+        encoding: UTF-8
+        terminator: 0
+        include: false
 
 enums: 
   text_align:

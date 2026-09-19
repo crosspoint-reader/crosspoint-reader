@@ -9,7 +9,7 @@ meta:
 seq:
   - id: version
     contents: [12]
-  - id: is_complete
+  - id: is_incomplete
     type: u1
   - id: rule_count
     type: u2
@@ -98,6 +98,8 @@ types:
         enum: unit
 
   defined_bits:
+    meta:
+      bit-endian: le
     seq:
       - id: text_align_defined
         type: b1

@@ -82,12 +82,12 @@ types:
         meta:
           bit-endian: le
         seq:
-          - id: reserved
-            type: b6
-          - id: dedup_degraded
-            type: b1
           - id: ranks_degraded
             type: b1
+          - id: dedup_degraded
+            type: b1
+          - id: reserved
+            type: b6
 
   folder_section:
     seq:
