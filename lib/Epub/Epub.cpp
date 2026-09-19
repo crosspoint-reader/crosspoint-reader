@@ -687,12 +687,18 @@ namespace {
 StaticSemaphore_t gifGenerationMutexStorage;
 const SemaphoreHandle_t gifGenerationMutex = xSemaphoreCreateMutexStatic(&gifGenerationMutexStorage);
 
+void removeGifTemporaryFile(const std::string& path) {
+  if (!Storage.remove(path.c_str()) && Storage.exists(path.c_str())) {
+    LOG_ERR("EBP", "Failed to remove GIF temporary file: %s", path.c_str());
+  }
+}
+
 bool extractGifCover(const Epub& epub, const std::string& href, const std::string& path) {
   HalFile file;
   bool success = false;
   const ScopedCleanup cleanup{[&]() {
     file.close();
-    if (!success) Storage.remove(path.c_str());
+    if (!success) removeGifTemporaryFile(path);
   }};
   if (!Storage.openFileForWrite("EBP", path, file)) {
     LOG_ERR("EBP", "Failed to create GIF extraction file: %s", path.c_str());
@@ -817,7 +823,7 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     HalFile coverGif;
     if (!Storage.openFileForRead("EBP", coverGifTempPath, coverGif)) {
       LOG_ERR("EBP", "Failed to open extracted GIF: %s", coverGifTempPath.c_str());
-      Storage.remove(coverGifTempPath.c_str());
+      removeGifTemporaryFile(coverGifTempPath);
       return false;
     }
 
@@ -825,15 +831,15 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
     if (!Storage.openFileForWrite("EBP", bmpTempPath, coverBmp)) {
       LOG_ERR("EBP", "Failed to create GIF BMP: %s", coverBmpPath.c_str());
       coverGif.close();
-      Storage.remove(coverGifTempPath.c_str());
-      Storage.remove(bmpTempPath.c_str());
+      removeGifTemporaryFile(coverGifTempPath);
+      removeGifTemporaryFile(bmpTempPath);
       return false;
     }
     bool success = GifToBmpConverter::gifFileToBmpStream(coverGif, coverBmp, cropped, originalThresholds);
     const bool sourceClosed = coverGif.close();
     const bool closed = coverBmp.close();
     success = success && sourceClosed && closed;
-    Storage.remove(coverGifTempPath.c_str());
+    removeGifTemporaryFile(coverGifTempPath);
 
     if (success && !Storage.rename(bmpTempPath.c_str(), coverBmpPath.c_str())) {
       LOG_ERR("EBP", "Failed to publish GIF cover BMP: %s", coverBmpPath.c_str());
@@ -842,7 +848,7 @@ bool Epub::generateCoverBmp(bool cropped, bool originalThresholds) const {
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate BMP from GIF cover image");
-      Storage.remove(bmpTempPath.c_str());
+      removeGifTemporaryFile(bmpTempPath);
     }
     LOG_DBG("EBP", "Generated BMP from GIF cover image, success: %s", success ? "yes" : "no");
     return success;
@@ -964,7 +970,7 @@ bool Epub::generateThumbBmp(int height) const {
     HalFile coverGif;
     if (!Storage.openFileForRead("EBP", coverGifTempPath, coverGif)) {
       LOG_ERR("EBP", "Failed to open extracted GIF: %s", coverGifTempPath.c_str());
-      Storage.remove(coverGifTempPath.c_str());
+      removeGifTemporaryFile(coverGifTempPath);
       return false;
     }
 
@@ -972,8 +978,8 @@ bool Epub::generateThumbBmp(int height) const {
     if (!Storage.openFileForWrite("EBP", bmpTempPath, thumbBmp)) {
       LOG_ERR("EBP", "Failed to create GIF BMP: %s", thumbBmpPath.c_str());
       coverGif.close();
-      Storage.remove(coverGifTempPath.c_str());
-      Storage.remove(bmpTempPath.c_str());
+      removeGifTemporaryFile(coverGifTempPath);
+      removeGifTemporaryFile(bmpTempPath);
       return false;
     }
     int THUMB_TARGET_WIDTH = height * 0.6;
@@ -983,7 +989,7 @@ bool Epub::generateThumbBmp(int height) const {
     const bool sourceClosed = coverGif.close();
     const bool closed = thumbBmp.close();
     success = success && sourceClosed && closed;
-    Storage.remove(coverGifTempPath.c_str());
+    removeGifTemporaryFile(coverGifTempPath);
 
     if (success && !Storage.rename(bmpTempPath.c_str(), thumbBmpPath.c_str())) {
       LOG_ERR("EBP", "Failed to publish GIF thumbnail BMP: %s", thumbBmpPath.c_str());
@@ -992,7 +998,7 @@ bool Epub::generateThumbBmp(int height) const {
 
     if (!success) {
       LOG_ERR("EBP", "Failed to generate thumb BMP from GIF cover image");
-      Storage.remove(bmpTempPath.c_str());
+      removeGifTemporaryFile(bmpTempPath);
     }
     LOG_DBG("EBP", "Generated thumb BMP from GIF cover image, success: %s", success ? "yes" : "no");
     return success;
