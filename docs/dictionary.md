@@ -23,6 +23,21 @@ Not supported: dictionaries with 64-bit index offsets (`idxoffsetbits=64` in the
 
 The Dictionary setting only appears when at least one usable dictionary folder exists. Folders containing more than one dictionary (multiple `.idx` stems) are skipped as ambiguous.
 
+## Dictionary Font
+
+Use **Settings → Reader → Dictionary Font Family** to choose **Same as Reader**
+(the default), **Noto Serif**, **Noto Sans**, or **SD Font** for definition text. This applies
+to both plain-text and HTML definitions without changing the book font.
+
+**Same as Reader** uses the current book font, including SD card fonts. The
+built-in choices use the reader's point size, rounded to the nearest supported
+size (12, 14, 16, or 18 pt).
+
+**SD Font** opens a list of installed SD card font families. Select a family to
+save it, or press **Back** to keep the current setting. The dictionary uses the
+nearest installed size to the reader's point size. If the selected font is
+missing or cannot be loaded, definitions use the reader font instead.
+
 ## Looking Up a Word
 
 Two ways to start a lookup while reading:
