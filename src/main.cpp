@@ -747,6 +747,24 @@ void loop() {
     }
   }
 
+#if FREEINK_CAP_TOUCH
+  // Toggle which outer tap zone pages forward, so a one-handed reader can
+  // switch thumbs without visiting Settings. Only meaningful in a tap mode;
+  // Off and Swipe are left untouched.
+  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SWAP_TAP_ZONES &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    const uint8_t touchMode = SETTINGS.touchReaderControls;
+    if (touchMode == CrossPointSettings::TOUCH_READER_ON ||
+        touchMode == CrossPointSettings::TOUCH_READER_INVERTED_TAP) {
+      SETTINGS.touchReaderControls = (touchMode == CrossPointSettings::TOUCH_READER_ON)
+                                         ? CrossPointSettings::TOUCH_READER_INVERTED_TAP
+                                         : CrossPointSettings::TOUCH_READER_ON;
+      SETTINGS.saveToFile();
+      LOG_DBG("MAIN", "Tap zones swapped (mode %d)", SETTINGS.touchReaderControls);
+    }
+  }
+#endif
+
   // Refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
   // Not while reading: there a repaint is a full page re-render (visible
