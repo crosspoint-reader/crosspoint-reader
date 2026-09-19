@@ -23,7 +23,11 @@ constexpr char INDEX_PATH[] = "/.crosspoint/library.idx";
 constexpr char NEW_PATH[] = "/.crosspoint/library.new";
 constexpr char BACKUP_PATH[] = "/.crosspoint/library.bak";
 constexpr char STAGE_PATH[] = "/.crosspoint/library.stage";
+constexpr char DIRTY_PATH[] = "/.crosspoint/library.dirty";
 constexpr char CACHE_DIR[] = "/.crosspoint";
+// Sticky fallback when the marker could not be persisted (card unavailable at
+// write time): callers must still see the index as stale until a rebuild clears it.
+bool dirtyInMemory = false;
 constexpr size_t LIBRARY_IO_BUFFER_SIZE = 4096;
 
 // Matches lib/FileIndex's buffer so a name this walk accepts is one the file
@@ -172,6 +176,13 @@ bool installNewIndex() {
     LOG_ERR("LIBIDX", "new index installed but stale backup cleanup failed");
   }
   return true;
+}
+
+void clearLibraryIndexDirty() {
+  dirtyInMemory = false;
+  if (Storage.exists(DIRTY_PATH) && !Storage.remove(DIRTY_PATH)) {
+    LOG_ERR("LIBIDX", "cannot clear dirty marker");
+  }
 }
 
 bool isBookName(const std::string& name) {
@@ -1032,6 +1043,24 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
 
 const char* libraryIndexPath() { return INDEX_PATH; }
 
+bool markLibraryIndexDirty() {
+  if (Storage.exists(DIRTY_PATH)) return true;
+  if (!Storage.exists(CACHE_DIR) && !Storage.mkdir(CACHE_DIR)) {
+    LOG_ERR("LIBIDX", "cannot create cache directory for dirty marker");
+    dirtyInMemory = true;  // not persisted: stay dirty until the next rebuild
+    return true;
+  }
+  HalFile marker;
+  if (!Storage.openFileForWrite("LIBIDX", DIRTY_PATH, marker)) {
+    LOG_ERR("LIBIDX", "cannot create dirty marker");
+    dirtyInMemory = true;
+    return true;
+  }
+  return true;
+}
+
+bool isLibraryIndexDirty() { return dirtyInMemory || Storage.exists(DIRTY_PATH); }
+
 bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata) {
   const uint32_t startMs = millis();
   uint32_t serviceUnits = 0;
@@ -1160,6 +1189,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
     LOG_INF("LIBIDX", "unchanged: %u reused, %u parsed, no replacement, %ums",
             static_cast<unsigned>(stats.metadataReused), static_cast<unsigned>(stats.parsed),
             static_cast<unsigned>(stats.walkMs));
+    clearLibraryIndexDirty();
     return true;
   }
 
@@ -1342,6 +1372,7 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
           static_cast<unsigned>(stats.parsed), static_cast<unsigned>(stats.metadataReused),
           static_cast<unsigned>(stats.indexReplaced), static_cast<unsigned>(stats.duplicatesDropped),
           static_cast<unsigned>(stats.unreadableSkipped), static_cast<unsigned>(stats.walkMs));
+  if (ok) clearLibraryIndexDirty();
   return ok;
 }
 
