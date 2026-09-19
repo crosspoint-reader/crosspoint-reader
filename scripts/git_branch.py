@@ -100,7 +100,9 @@ try:
     inject_version(env)     # noqa: F821  # type: ignore[name-defined]
 except NameError:
     class _Env(dict):
-        def Append(self, **_): pass
+        def Append(self, **_):
+            # Validation mode does not need SCons state; this stub only satisfies inject_version().
+            return None
 
     _project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     inject_version(_Env({'PIOENV': 'default', 'PROJECT_DIR': _project_dir}))
