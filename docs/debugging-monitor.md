@@ -43,7 +43,7 @@ by Git). Override the parent with `--output-dir`. It contains:
 
 `--filter` and `--suppress` affect terminal output only. They do not filter saved
 logs, API events, or graph data. Logs grow on disk for the duration of the run;
-the in-memory event history is bounded to 4096 events.
+the in-memory event history is bounded to 65536 events.
 
 ## API
 
