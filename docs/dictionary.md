@@ -38,6 +38,18 @@ One word on the page becomes highlighted:
 
 On the very first lookup with a dictionary (and again whenever the `.idx` or `.syn` source file changes), the reader shows *"Indexing dictionary…"* while it builds small sidecar files next to them — a `.qidx` for the word index, and a `.sidx` when a `.syn` synonym file is present. Each sidecar is rebuilt independently, only when its own source changes. This takes a few seconds for large dictionaries and makes all subsequent lookups fast. The sidecars can be deleted safely at any time — they will simply be rebuilt.
 
+## Looking Up a Phrase
+
+You can select a sequence of words to look up as a phrase. This is also useful for languages that doesn't use spaces between words like Chinese, Japanese, or a language where spaces separate syllables instead of words like Vietnamese.
+
+When you are in single-word select mode:
+
+1. Navigate to the first word of the phrase.
+1. Long-press Confirm (for >= 600ms) to anchor on that word.
+1. Use the navigation buttons to extend (or shrink) the selection to cover the full phrase.
+1. Short-press Confirm to look up the selected phrase.
+1. Press Back to cancel and return to single-word select mode.
+
 ### How Lookup Works
 
 1. **Direct match** — the word is found as-is (case-insensitive) in the dictionary index. Surrounding punctuation is ignored.

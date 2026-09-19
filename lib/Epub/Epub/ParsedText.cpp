@@ -19,50 +19,6 @@
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
-namespace {
-
-// Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
-constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
-constexpr size_t SOFT_HYPHEN_BYTES = 2;
-// Paragraph-level direction: scan the first N words to find base direction.
-constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
-// Per-word: scan enough chars to see through leading neutrals (quotes, numbers)
-// before giving up. 64 is a hedge for pathological cases like long numeric tokens.
-constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
-constexpr size_t MIN_JUSTIFY_GAPS = 1;
-
-// Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
-bool mayContainRtlBytes(const char* str) {
-  for (const auto* p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
-    if (*p >= 0xD6 && *p <= 0xDB) return true;
-  }
-  return false;
-}
-
-// Returns the first rendered codepoint of a word (skipping leading soft hyphens).
-uint32_t firstCodepoint(const std::string& word) {
-  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str());
-  while (true) {
-    const uint32_t cp = utf8NextCodepoint(&ptr);
-    if (cp == 0) return 0;
-    if (cp != 0x00AD) return cp;  // skip soft hyphens
-  }
-}
-
-// Returns the last codepoint of a word by scanning backward for the start of the last UTF-8 sequence.
-uint32_t lastCodepoint(const std::string& word) {
-  if (word.empty()) return 0;
-  // UTF-8 continuation bytes start with 10xxxxxx; scan backward to find the leading byte.
-  size_t i = word.size() - 1;
-  while (i > 0 && (static_cast<uint8_t>(word[i]) & 0xC0) == 0x80) {
-    --i;
-  }
-  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + i);
-  return utf8NextCodepoint(&ptr);
-}
-
-bool containsSoftHyphen(const std::string& word) { return word.find(SOFT_HYPHEN_UTF8) != std::string::npos; }
-
 bool isNoBreakBeforeCjkPunctuation(const uint32_t cp) {
   switch (cp) {
     case '.':
@@ -128,6 +84,50 @@ bool isNoBreakAfterCjkPunctuation(const uint32_t cp) {
       return false;
   }
 }
+
+namespace {
+
+// Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
+constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
+constexpr size_t SOFT_HYPHEN_BYTES = 2;
+// Paragraph-level direction: scan the first N words to find base direction.
+constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
+// Per-word: scan enough chars to see through leading neutrals (quotes, numbers)
+// before giving up. 64 is a hedge for pathological cases like long numeric tokens.
+constexpr int RTL_PER_WORD_PROBE_DEPTH = 64;
+constexpr size_t MIN_JUSTIFY_GAPS = 1;
+
+// Byte-level pre-check: Hebrew UTF-8 lead bytes 0xD6-0xD7, Arabic/Syriac 0xD8-0xDB.
+bool mayContainRtlBytes(const char* str) {
+  for (const auto* p = reinterpret_cast<const unsigned char*>(str); *p; ++p) {
+    if (*p >= 0xD6 && *p <= 0xDB) return true;
+  }
+  return false;
+}
+
+// Returns the first rendered codepoint of a word (skipping leading soft hyphens).
+uint32_t firstCodepoint(const std::string& word) {
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str());
+  while (true) {
+    const uint32_t cp = utf8NextCodepoint(&ptr);
+    if (cp == 0) return 0;
+    if (cp != 0x00AD) return cp;  // skip soft hyphens
+  }
+}
+
+// Returns the last codepoint of a word by scanning backward for the start of the last UTF-8 sequence.
+uint32_t lastCodepoint(const std::string& word) {
+  if (word.empty()) return 0;
+  // UTF-8 continuation bytes start with 10xxxxxx; scan backward to find the leading byte.
+  size_t i = word.size() - 1;
+  while (i > 0 && (static_cast<uint8_t>(word[i]) & 0xC0) == 0x80) {
+    --i;
+  }
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + i);
+  return utf8NextCodepoint(&ptr);
+}
+
+bool containsSoftHyphen(const std::string& word) { return word.find(SOFT_HYPHEN_UTF8) != std::string::npos; }
 
 bool containsCjkBreakableCodepoint(const std::string& text) {
   const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
