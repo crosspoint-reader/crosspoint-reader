@@ -1,8 +1,10 @@
 #include "Dictionary.h"
 
 #include <Arduino.h>
+#include <Epub/ParsedText.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Utf8.h>
 
 #include <algorithm>
 #include <cctype>
@@ -574,20 +576,38 @@ std::string Dictionary::cleanWord(const char* word) {
   // are all >= 0x80, so isWordByte keeps them; strip those 3-byte codepoints
   // from the edges too, or EPUB text like garage.” never matches a headword.
   while (start < end) {
-    if (!isWordByte(b[start]))
+    if (!isWordByte(b[start])) {
       start++;
-    else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81))
+    } else if (end - start >= 3 && b[start] == 0xE2 && (b[start + 1] == 0x80 || b[start + 1] == 0x81)) {
       start += 3;
-    else
-      break;
+    } else {
+      const unsigned char* p = b + start;
+      const uint32_t cp = utf8NextCodepoint(&p);
+      if (isCjkPunctuation(cp)) {
+        start += static_cast<size_t>(p - (b + start));
+      } else {
+        break;
+      }
+    }
   }
   while (end > start) {
-    if (!isWordByte(b[end - 1]))
+    if (!isWordByte(b[end - 1])) {
       end--;
-    else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81))
+    } else if (end - start >= 3 && b[end - 3] == 0xE2 && (b[end - 2] == 0x80 || b[end - 2] == 0x81)) {
       end -= 3;
-    else
-      break;
+    } else {
+      size_t lastCharStart = end - 1;
+      while (lastCharStart > start && (b[lastCharStart] & 0xC0) == 0x80) {
+        lastCharStart--;
+      }
+      const unsigned char* p = b + lastCharStart;
+      const uint32_t cp = utf8NextCodepoint(&p);
+      if (isCjkPunctuation(cp)) {
+        end = lastCharStart;
+      } else {
+        break;
+      }
+    }
   }
   if (start >= end) return "";
 
@@ -635,6 +655,8 @@ bool Dictionary::lookup(const char* word, std::string& definitionOut, std::strin
   setResult(LookupResult::NotFound);
   const std::string cleaned = cleanWord(word);
   if (cleaned.empty() || !isOpen()) return false;
+
+  LOG_INF("DICT", "Looking up: '%s'", cleaned.c_str());
 
   // One set of open handles for the exact-match probe, the synonym probe and
   // every stem variant, scoped so .idx/.qidx (and .syn/.sidx) close before

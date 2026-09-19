@@ -134,3 +134,10 @@ class ParsedText {
                              bool includeLastLine = true, int8_t characterSpacing = 0,
                              uint8_t wordSpacingPercent = 100);
 };
+
+bool isNoBreakBeforeCjkPunctuation(uint32_t cp);
+bool isNoBreakAfterCjkPunctuation(uint32_t cp);
+
+inline bool isCjkPunctuation(const uint32_t cp) {
+  return isNoBreakBeforeCjkPunctuation(cp) || isNoBreakAfterCjkPunctuation(cp);
+}

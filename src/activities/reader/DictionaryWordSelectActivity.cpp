@@ -93,6 +93,7 @@ void DictionaryWordSelectActivity::extractWords() {
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
       box.text = text;
+      box.joinWithoutSpaceBefore = !block->wordHasSpaceBefore(i);
       words.push_back(box);
       rowHasWords = true;
 
@@ -152,7 +153,18 @@ void DictionaryWordSelectActivity::moveVertical(const int direction) {
   }
 }
 
-void DictionaryWordSelectActivity::performLookup() {
+std::string DictionaryWordSelectActivity::buildPhrase(const int fromIdx, const int toIdx) const {
+  const int lo = std::min(fromIdx, toIdx);
+  const int hi = std::max(fromIdx, toIdx);
+  std::string phrase;
+  for (int i = lo; i <= hi && i < static_cast<int>(words.size()); i++) {
+    if (!phrase.empty() && !words[i].joinWithoutSpaceBefore) phrase += ' ';
+    phrase += words[i].text;
+  }
+  return phrase;
+}
+
+void DictionaryWordSelectActivity::performLookup(const char* phrase) {
   popup = Popup::Busy;
   if (!dictOpenAttempted) {
     dictOpenAttempted = true;
@@ -175,7 +187,7 @@ void DictionaryWordSelectActivity::performLookup() {
   std::string definition;
   std::string headword;
   Dictionary::LookupResult result = Dictionary::LookupResult::NotFound;
-  const bool found = ok && dict.lookup(words[selected].text, definition, headword, &result);
+  const bool found = ok && dict.lookup(phrase, definition, headword, &result);
 
   if (found) {
     popup = Popup::None;
@@ -238,19 +250,68 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !words.empty()) {
-    performLookup();
-    return;
+  // Multi-select mode: Back cancels, a fresh Confirm press-then-release confirms phrase.
+  if (inMultiSelectMode_) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      inMultiSelectMode_ = false;
+      selectAnchor_ = -1;
+      confirmHoldStart_ = 0;
+      snapshotIdx = -1;
+      requestUpdate();
+      return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      confirmHoldStart_ = millis();
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !words.empty()) {
+      if (confirmHoldStart_ > 0) {
+        // confirmHoldStart_ > 0 means the press started while already in multi-select
+        // (not the release of the long-press that entered multi-select, which resets it to 0).
+        const std::string phrase = buildPhrase(selectAnchor_, selected);
+        inMultiSelectMode_ = false;
+        selectAnchor_ = -1;
+        confirmHoldStart_ = 0;
+        performLookup(phrase.c_str());
+      }
+      return;
+    }
+    // Navigation in multi-select moves the selection end (falls through below).
+  } else {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+      finish();
+      return;
+    }
+
+    if (!words.empty()) {
+      if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+        confirmHoldStart_ = millis();
+      }
+      if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        if (confirmHoldStart_ > 0) {
+          const unsigned long held = millis() - confirmHoldStart_;
+          // Detect long vs short press at release time — avoids relying on
+          // isPressed() which is unreliable for remappable front buttons.
+          if (held >= MULTI_SELECT_HOLD_MS) {
+            inMultiSelectMode_ = true;
+            selectAnchor_ = selected;
+            snapshotIdx = -1;
+            // Reset to 0 so the upcoming wasReleased in the multi-select branch
+            // is treated as "no press started in multi-select yet" and ignored.
+            confirmHoldStart_ = 0;
+            requestUpdate();
+          } else {
+            confirmHoldStart_ = 0;
+            performLookup(words[selected].text);
+          }
+        }
+        return;
+      }
+    }
   }
 
   if (words.empty()) return;
 
-  // Touch: a touch-down moves the highlight to the touched word (differential
-  // repaint), a tap on a word selects and looks it up in one go.
+  // Touch: unchanged — single-word lookup only.
   int tx = 0;
   int ty = 0;
   if (mappedInput.wasScreenTouchDown(tx, ty)) {
@@ -265,7 +326,7 @@ void DictionaryWordSelectActivity::loop() {
     const int hit = wordAt(tx, ty);
     if (hit >= 0) {
       selected = hit;
-      performLookup();
+      performLookup(words[selected].text);
     }
     return;
   }
@@ -298,6 +359,22 @@ void DictionaryWordSelectActivity::loop() {
 // (no buffer / oversize box) — the highlight is drawn regardless, but the
 // next cursor move must do a full repaint.
 bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
+  if (inMultiSelectMode_) {
+    // Draw inverted highlight for every word in [lo, hi]. No snapshot is
+    // taken — always forces the full-repaint path (snapshotIdx stays -1).
+    const int lo = std::min(selectAnchor_, selected);
+    const int hi = std::max(selectAnchor_, selected);
+    for (int i = lo; i <= hi && i < static_cast<int>(words.size()); i++) {
+      const WordBox& w = words[i];
+      const int hx = std::max(0, static_cast<int>(w.x) - 2);
+      const int hy = std::max(0, static_cast<int>(w.y) - 2);
+      renderer.fillRect(hx, hy, w.width + 4, lineHeight + 4, true);
+      renderer.drawText(fontId, w.x, w.y, w.text, false, w.style);
+    }
+    snapshotIdx = -1;
+    return false;
+  }
+
   const WordBox& word = words[selected];
   int hx = word.x - 2;
   int hy = word.y - 2;
@@ -339,6 +416,12 @@ void DictionaryWordSelectActivity::drawHints() const {
   // anything and only Back is hinted.
   if (words.empty()) {
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    return;
+  }
+  if (inMultiSelectMode_) {
+    // Back cancels phrase selection; Confirm confirms and looks up the phrase.
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_LOOKUP), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     return;
   }
