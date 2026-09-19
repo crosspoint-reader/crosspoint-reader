@@ -42,6 +42,9 @@ class DictionaryWordSelectActivity final : public Activity {
     // whole word; -1 when the word is not part of a split. Indices into `words`.
     int16_t joinNext = -1;  // set on the "any-" half: index of the remainder
     int16_t joinPrev = -1;  // set on the "one" half: index of the hyphenated prefix
+    // The trailing '-' was inserted by layout, so the joined lookup drops it. An author's own
+    // hyphen at a line end ("US-" / "Satellitensystems") is kept.
+    bool layoutHyphen = false;
   };
   // The word to look up for a box, joining a hyphenated pair back together. Returns a reference
   // into `scratch` when a join happened, so the caller owns the storage.

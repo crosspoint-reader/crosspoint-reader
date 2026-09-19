@@ -10,6 +10,11 @@
 
 #include "../../../../src/fontIds.h"
 
+namespace {
+constexpr uint8_t FLAG_FOCUS = 0x01;
+constexpr uint8_t FLAG_LAYOUT_HYPHEN = 0x02;
+}  // namespace
+
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
   size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
@@ -308,7 +313,9 @@ bool TextBlock::serialize(HalFile& file) const {
   // exactly the on-disk layout (see TextBlock.h), so one write covers all
   // per-word arrays and the text blob.
   serialization::writePod(file, numWords);
-  serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
+  // Flags: bit 0 = focus arrays present, bit 1 = last word ends in a layout-inserted hyphen.
+  serialization::writePod(
+      file, static_cast<uint8_t>((focusPresent ? FLAG_FOCUS : 0) | (endsInLayoutHyphen ? FLAG_LAYOUT_HYPHEN : 0)));
   serialization::writePod(file, textBytes);
   if (numWords > 0) {
     const size_t size = arenaSize(numWords, focusPresent, textBytes);
@@ -344,10 +351,10 @@ bool TextBlock::serialize(HalFile& file) const {
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint16_t wc;
-  uint8_t hasFocus;
+  uint8_t flags;
   uint16_t textBytes;
   serialization::readPod(file, wc);
-  serialization::readPod(file, hasFocus);
+  serialization::readPod(file, flags);
   serialization::readPod(file, textBytes);
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
@@ -368,7 +375,8 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   }
   block->numWords = wc;
   block->textBytes = textBytes;
-  block->focusPresent = hasFocus != 0;
+  block->focusPresent = (flags & FLAG_FOCUS) != 0;
+  block->endsInLayoutHyphen = (flags & FLAG_LAYOUT_HYPHEN) != 0;
 
   if (wc > 0) {
     const size_t size = arenaSize(wc, block->focusPresent, textBytes);

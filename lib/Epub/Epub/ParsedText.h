@@ -32,6 +32,8 @@ class ParsedText {
   //   continues=true,  noSpace=true:  breakable zero-width, non-stretching attachment
   std::vector<bool> wordContinues;
   std::vector<bool> wordNoSpaceBefore;
+  // True when layout hyphenation appended the word's trailing '-' (not the author's own hyphen).
+  std::vector<bool> wordHyphenInserted;
   // Focus Reading emphasis: bytes [0, wordFocusBoundary) render bold, the rest at wordStyles.
   // 0 = none. An annotation rather than a token split, so the hyphenator and line breaker still
   // see whole words; TextBlock stores emphasis the same way, so extractLine passes it through.

@@ -114,9 +114,10 @@ void DictionaryWordSelectActivity::extractWords() {
         box.joinPrev = pendingHyphen;
         pendingHyphen = -1;
       }
+      // A word ending the line in '-' continues on the next line, whether layout inserted the
+      // hyphen or the author wrote it. Remember it so the next line's first word can be joined.
+      if (i == lastWordIndex) box.layoutHyphen = block->lastWordHasLayoutHyphen();
       words.push_back(box);
-      // A trailing hyphen on the LINE'S last word is layout hyphenation, not the author's text.
-      // Remember it so the next line's first word can be joined to it.
       if (i == lastWordIndex) {
         const size_t len = strlen(text);
         if (len > 1 && text[len - 1] == '-' && words.size() <= INT16_MAX)
@@ -145,14 +146,15 @@ void DictionaryWordSelectActivity::extractWords() {
 
 // Any fragment of a hyphenated word looks up the whole word. A long word can be split across
 // several lines ("extraor-" / "dinar-" / "y"), so this walks the full chain from its first
-// fragment, dropping each layout hyphen. Unsplit words are returned untouched, with no allocation.
+// fragment, dropping each hyphen layout inserted and keeping the author's own. Unsplit words are
+// returned untouched, with no allocation.
 const char* DictionaryWordSelectActivity::lookupTextFor(const size_t index, std::string& scratch) const {
   if (!isJoined(index)) return words[index].text;
   scratch.clear();
   for (int i = chainHead(index); i >= 0; i = words[static_cast<size_t>(i)].joinNext) {
     const WordBox& part = words[static_cast<size_t>(i)];
     scratch.append(part.text);
-    if (part.joinNext >= 0 && !scratch.empty() && scratch.back() == '-') scratch.pop_back();
+    if (part.joinNext >= 0 && part.layoutHyphen && !scratch.empty() && scratch.back() == '-') scratch.pop_back();
   }
   return scratch.c_str();
 }
