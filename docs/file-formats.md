@@ -90,6 +90,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 47
+
+Version 47 keeps the version 46 serialized layout unchanged. It was bumped
+because images now honour the horizontal alignment and insets of their
+containing block instead of always centring on the full viewport, so cached
+pages hold image positions that no longer match what the layout produces.
+
 ### Version 46
 
 Version 46 keeps the version 45 serialized layout unchanged. It was bumped
