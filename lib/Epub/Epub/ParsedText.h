@@ -121,3 +121,11 @@ class ParsedText {
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                              bool includeLastLine = true);
 };
+
+bool isNoBreakBeforeCjkPunctuation(uint32_t cp);
+bool isNoBreakAfterCjkPunctuation(uint32_t cp);
+
+inline bool isCjkPunctuation(const uint32_t cp) {
+  return isNoBreakBeforeCjkPunctuation(cp) || isNoBreakAfterCjkPunctuation(cp);
+}
+
