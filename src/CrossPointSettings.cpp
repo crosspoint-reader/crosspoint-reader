@@ -100,6 +100,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
   }
+  // The displayed option list varies by board, so this setting uses a dynamic
+  // display-index mapping and is skipped by the generic persistence loop.
+  doc["longPressMenuFunction"] = longPressMenuFunction;
 
   // Language -- managed by LanguageSelectActivity, not in SettingsList.
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
@@ -233,6 +236,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+  // Keep persisted raw action IDs stable even though boards with a Home key
+  // expose one extra display option in the settings UI.
+  longPressMenuFunction = clamp(doc["longPressMenuFunction"] | (uint8_t)LP_MENU_DISABLED,
+                                (uint8_t)(LP_MENU_CREATE_CLIPPING + 1), (uint8_t)LP_MENU_DISABLED);
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {

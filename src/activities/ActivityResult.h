@@ -40,6 +40,15 @@ struct PageResult {
   uint32_t page = 0;
 };
 
+struct ClippingResult {
+  std::string text;
+  uint16_t startPageOffset = 0;
+  uint16_t endPageOffset = 0;
+  uint16_t startWordIndex = 0;
+  uint16_t endWordIndex = 0;
+  uint16_t wordCount = 0;
+};
+
 struct ProgressChangeResult {
   int spineIndex = 0;
   int page = 0;
@@ -69,7 +78,7 @@ struct FilePathResult {
 
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+                 PageResult, ClippingResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
 
 struct ActivityResult {
   bool isCancelled = false;

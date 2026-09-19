@@ -22,3 +22,24 @@ struct ReaderRenderSpec {
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
 };
+
+// Stable signature for clipping anchors. Page-local word ordinals are valid
+// only for the exact layout that produced them.
+inline uint32_t readerRenderSpecSignature(const ReaderRenderSpec& spec) {
+  uint32_t signature = 2166136261U;
+  const auto mix = [&signature](const uint32_t value) {
+    signature ^= value;
+    signature *= 16777619U;
+  };
+  mix(static_cast<uint32_t>(spec.fontId));
+  mix(static_cast<uint32_t>(spec.lineCompression * 1000.0f));
+  mix(spec.extraParagraphSpacing);
+  mix(spec.paragraphAlignment);
+  mix(spec.viewportWidth);
+  mix(spec.viewportHeight);
+  mix(spec.hyphenationEnabled);
+  mix(spec.embeddedStyle);
+  mix(spec.imageRendering);
+  mix(spec.focusReadingEnabled);
+  return signature == 0 ? 1 : signature;
+}
