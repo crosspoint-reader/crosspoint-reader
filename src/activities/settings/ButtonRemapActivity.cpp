@@ -170,9 +170,6 @@ void ButtonRemapActivity::buildScreen(UiScreen& screen) {
   props.selectedIndex = currentStep;
   props.inputMask = fui::InputNone;
   props.scrollIndicator = false;
-  if (!mappedInput.hasTouch()) {
-    props.rowHeight = static_cast<int16_t>(metrics.listRowHeight);
-  }
   // Label at the value's font size: both sides of the row read as one unit.
   // maxLines=2 also marks the style caller-owned (see textStyleUnset).
   props.labelText = screen.theme().smallText;

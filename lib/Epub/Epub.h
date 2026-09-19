@@ -30,8 +30,9 @@ class Epub {
   // CSS files
   std::vector<std::string> cssFiles;
 
-  bool findContentOpfFile(std::string* contentOpfFile) const;
-  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
+  bool findContentOpfFile(std::string* contentOpfFile, ZipFile* sharedZip = nullptr) const;
+  bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true,
+                       bool metadataOnly = false, ZipFile* sharedZip = nullptr);
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
@@ -45,6 +46,7 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  bool loadMetadata(std::string& title, std::string& author);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

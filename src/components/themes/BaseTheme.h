@@ -134,7 +134,8 @@ enum UIIcon {
   Wifi,
   Hotspot,
   Bookmark,
-  Usb
+  Usb,
+  Blocks
 };
 
 // Default theme implementation (Classic Theme)
@@ -235,6 +236,8 @@ class BaseTheme {
   // grid from this, so hit bands always match the visuals (RoundedRaff derives
   // its row height from the font, not the metrics table).
   virtual int getMenuRowHeight(const GfxRenderer& renderer) const;
+  // Also draws the wall clock opposite the battery when the user enabled
+  // SETTINGS.clockShowInHeader and an RTC is present.
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,

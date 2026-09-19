@@ -131,6 +131,11 @@ void SdCardFont::resetStyleMiniData(PerStyle& s) {
 }
 
 void SdCardFont::freeStyleKernLigatureData(PerStyle& s) {
+  // Both font views borrow the resident ligature table.
+  s.stubData.ligaturePairs = nullptr;
+  s.stubData.ligaturePairCount = 0;
+  s.miniData.ligaturePairs = nullptr;
+  s.miniData.ligaturePairCount = 0;
   delete[] s.kernLeftClasses;
   s.kernLeftClasses = nullptr;
   delete[] s.kernRightClasses;

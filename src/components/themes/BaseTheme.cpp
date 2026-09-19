@@ -310,6 +310,17 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
         ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, percentText, tokens.smallText).width);
   }
 
+  // Header clock, opposite the battery, on every screen that draws this
+  // header band (SETTINGS.clockShowInHeader).
+  char clockText[10] = {0};
+  int16_t clockWidth = 0;
+  if (SETTINGS.clockShowInHeader && halClock.isAvailable() &&
+      halClock.formatTime(clockText, sizeof(clockText), SETTINGS.clockFormat == 1)) {
+    clockWidth = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, clockText, tokens.smallText).width;
+  } else {
+    clockText[0] = '\0';
+  }
+
   fui::HeaderProps props;
   props.title = title;
   props.rightLabel = subtitle;  // firmware headers right-align the secondary text
@@ -347,6 +358,16 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     } else {
       props.rightReserve = reserve;
     }
+    // The clock sits opposite the battery on the shared line; keep the title
+    // clear of it too.
+    if (clockText[0] != '\0') {
+      const int16_t clockReserve = static_cast<int16_t>(clockWidth + tokens.spaceMd);
+      if (batteryLeft) {
+        props.rightReserve = static_cast<int16_t>(props.rightReserve + clockReserve);
+      } else {
+        props.leftReserve = static_cast<int16_t>(props.leftReserve + clockReserve);
+      }
+    }
   }
   // Underline only under a titled header: an untitled band (Lyra home screen)
   // historically drew no rule, and the old themes keyed the line on the title.
@@ -374,6 +395,14 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                                        : static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
   const int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);
   fui::batteryIndicator(ui.frame, fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
+
+  if (clockText[0] != '\0') {
+    // Same top strip and edge inset as the battery, mirrored to the other
+    // side, so the two read as one balanced status line.
+    const int16_t clockX = batteryLeft ? static_cast<int16_t>(band.right() - batteryEdgeInset - clockWidth)
+                                       : static_cast<int16_t>(band.x + batteryEdgeInset);
+    ui.target.text(fui::Rect{clockX, band.y, clockWidth, batteryH}, clockText, tokens.smallText);
+  }
 
   if (manualRightLabel) {
     const fui::Size labelSize = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, subtitle, tokens.smallText);
@@ -808,10 +837,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     leftClusterWidth += batteryWidth;
   }
 
-  // Draw Clock (X3 only — DS3231 RTC)
+  // Draw Clock (any board whose RTC probe succeeded)
   if (sb.showsClock() && halClock.isAvailable()) {
     char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clockUtcOffsetQ, sb.clock12h)) {
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clock12h)) {
       int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
       int clockX = 0;
       // Position to the left or right of the progress text (with a small gap)
