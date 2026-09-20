@@ -44,6 +44,41 @@ struct BlockStyle {
   [[nodiscard]] int16_t topInset() const { return marginTop + paddingTop; }
   [[nodiscard]] int16_t bottomInset() const { return marginBottom + paddingBottom; }
 
+  // Horizontal position for content of the given width placed inside this block. The
+  // block's insets are removed first, so aligned content lines up with the block's text
+  // rather than with the screen edge.
+  //
+  // Only a CSS-declared alignment places content. Without one, `alignment` carries the
+  // reader's Paragraph Alignment setting -- a choice about text -- and following it would
+  // move content in books that never asked for it. That also keeps ParsedText's implicit-RTL
+  // rule out of this path: it rewrites undeclared Left, which never reaches the switch.
+  // A declared text-align:left stays left in RTL blocks, as it does for text.
+  [[nodiscard]] int16_t alignedContentX(const uint16_t viewportWidth, const int16_t contentWidth) const {
+    const int16_t available = std::max<int16_t>(1, static_cast<int16_t>(viewportWidth - totalHorizontalInset()));
+
+    // Declared Center, and every undeclared or non-horizontal alignment, stay centred.
+    int16_t x = static_cast<int16_t>(leftInset() + (available - contentWidth) / 2);
+    if (textAlignDefined) {
+      switch (alignment) {
+        case CssTextAlign::Left:
+          x = leftInset();
+          break;
+        case CssTextAlign::Right:
+          x = static_cast<int16_t>(leftInset() + available - contentWidth);
+          break;
+        case CssTextAlign::Center:
+        case CssTextAlign::Justify:
+        case CssTextAlign::None:
+          break;
+      }
+    }
+    // Insets accumulate through nested blocks, so they can exceed the viewport and push
+    // content past the screen edge, where the renderer's bounds check drops it. Keep the
+    // content on screen; a block that leaves no room falls back to the left edge.
+    const auto maxX = std::max<int16_t>(0, static_cast<int16_t>(viewportWidth - contentWidth));
+    return std::clamp<int16_t>(x, 0, maxX);
+  }
+
   // Return a copy with bottom margins/padding zeroed out.
   [[nodiscard]] BlockStyle withoutBottom() const {
     BlockStyle result = *this;
