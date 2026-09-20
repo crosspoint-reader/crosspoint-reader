@@ -1069,9 +1069,8 @@ if __name__ == "__main__":
         args.builtin_langs,
     )
 else:
-    scons_import = globals().get("Import")
-    if callable(scons_import):
-        scons_import("env")
+    if "Import" in globals():
+        Import("env")
         main(
             strip_unused=True,
             builtin_langs=env.GetProjectOption("custom_i18n_builtin_langs", "all"),
