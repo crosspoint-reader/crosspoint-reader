@@ -180,10 +180,16 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 }
 
 inline std::vector<StrId> buildLongPressMenuValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
-                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
-  const size_t count = BoardConfig::hasHomeKey() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  // Indexed by the persisted enum value, so this must stay in LONG_PRESS_MENU_FUNCTION order.
+  // This used to trim the last label on boards without a home key (Reader Menu, which those boards
+  // reach with a short Confirm press). That made the tail of this array unusable — a new option
+  // appended here was invisible on the X3/X4, and there was no way to add one without renumbering
+  // saved values. Reader Menu is a real long-press action on those boards now instead.
+  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC,     StrId::STR_DISABLED,    StrId::STR_BOOKMARK_OPTION,
+                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU, StrId::STR_FILE_TRANSFER};
+  static_assert(std::size(VALUES) == CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT,
+                "one label per LONG_PRESS_MENU_FUNCTION value, in enum order");
+  return {VALUES, VALUES + std::size(VALUES)};
 }
 
 // Shared settings list used by both the device settings UI and the web settings API.
