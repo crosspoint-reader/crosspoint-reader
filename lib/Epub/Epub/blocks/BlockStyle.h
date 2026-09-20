@@ -32,8 +32,12 @@ struct BlockStyle {
   bool isRtl = false;              // true if resolved direction is RTL
   bool directionDefined = false;   // true if direction was explicitly set in CSS/HTML
 
-  // Set when this block was created by a <br> element. Used by startNewTextBlock to inject
-  // a full line-height gap when the <br> block stays empty (section-break use case).
+  // Set when this block was created by a <br> element. Used by startNewTextBlock two ways:
+  // as the incoming block's style, it tells makePages() to withhold the "Extra paragraph
+  // spacing" half-line gap after the block it's laying out, since the two blocks are
+  // consecutive lines of one paragraph, not a paragraph boundary; as the outgoing (still
+  // empty) block's stored style, it injects a full line-height gap (plus that withheld
+  // half-line, given back) when the <br> block stays empty (section-break use case).
   // NOT propagated through getCombinedBlockStyle so it can't leak into sibling blocks.
   bool fromBrElement = false;
 
