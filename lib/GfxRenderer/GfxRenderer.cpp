@@ -13,6 +13,7 @@
 
 #include "../Memory/Memory.h"
 #include "FontCacheManager.h"
+#include "GlyphBitmap.h"
 
 namespace {
 
@@ -497,6 +498,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
 
   if (bitmap != nullptr) {
+    // Fast path for unrotated text: clip and transform once per glyph
+    // instead of going through drawPixel() for every ink pixel.
+    if constexpr (rotation == TextRotation::None) {
+      renderer.drawGlyphBitmap(bitmap, width, height, cursorX + left, cursorY - top, is2Bit, pixelState);
+      return;
+    }
     // For Normal:  outer loop advances screenY, inner loop advances screenX
     // For Rotated: outer loop advances screenX, inner loop advances screenY (in reverse)
     int outerBase, innerBase;
@@ -567,6 +574,42 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
       }
     }
   }
+}
+
+// Fast path for drawing a glyph at logical (x, y). Equivalent to calling
+// drawPixel() for each ink pixel, but the clip test, orientation rotation,
+// strip-band check and address math are resolved once per glyph rather than
+// once per pixel.
+void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const int height, const int x, const int y,
+                                  const bool twoBit, const bool state) const {
+  // Writes go to the framebuffer, or to the strip scratch in tiled grayscale
+  // mode; getWriteOriginY()/getWriteRows() bound the rows that exist there.
+  glyphBitmap::Target target{
+      getWriteTarget(), panelWidth, panelWidthBytes, getWriteOriginY(), getWriteRows(), 0, 0, 0, 0, 0, 0};
+  // Rotate the glyph origin once, then derive the two unit axes by rotating
+  // its x and y neighbours. Together these encode the orientation as an
+  // orthogonal transform the rasterizer can step through without rotating.
+  rotateCoordinates(orientation, x, y, &target.x, &target.y, panelWidth, panelHeight);
+  int nextX, nextY;
+  rotateCoordinates(orientation, x + 1, y, &nextX, &nextY, panelWidth, panelHeight);
+  target.dxX = nextX - target.x;
+  target.dxY = nextY - target.y;
+  rotateCoordinates(orientation, x, y + 1, &nextX, &nextY, panelWidth, panelHeight);
+  target.dyX = nextX - target.x;
+  target.dyY = nextY - target.y;
+
+  // Select which source ink values this plane paints, mirroring the rotated
+  // per-pixel path. 1bpp: only ink 1. 2bpp source values are 0=white,
+  // 1=light gray, 2=dark gray, 3=black. BW paints everything non-white; the
+  // MSB gray plane paints both grays; the LSB plane paints dark gray only.
+  const RenderMode mode = grayPlanesAreAbsolute() ? BW : renderMode;
+  const uint8_t levels = !twoBit ? 0x02 : mode == BW ? 0x0e : mode == GRAYSCALE_MSB ? 0x06 : 0x04;
+  // BW honours the caller's ink state; gray planes always set bits, because
+  // there 0 means leave alone and 1 means update.
+  const bool clearBits = !twoBit || mode == BW ? state : false;
+  // Clip is passed in glyph-local coordinates.
+  glyphBitmap::draw(bitmap, width, height, twoBit, levels, clearBits, target,
+                    {clipLeft_ - x, clipTop_ - y, clipRight_ - x, clipBottom_ - y});
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and

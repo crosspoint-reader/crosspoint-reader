@@ -265,6 +265,8 @@ class GfxRenderer {
     clipBottom_ = y + height;
   }
   void drawPixel(int x, int y, bool state = true) const;
+  // Fast path for unrotated glyphs: same result as drawPixel() per ink pixel, clipped and rotated once per glyph.
+  void drawGlyphBitmap(const uint8_t* bitmap, int width, int height, int x, int y, bool twoBit, bool state) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
   void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
