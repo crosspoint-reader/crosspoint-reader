@@ -43,6 +43,17 @@ inline void clipAxis(int base, int step, int lower, int upper, int& start, int& 
   }
 }
 
+// Keep pixel writes inline when decoding a group of four pixels.
+__attribute__((always_inline)) inline void paint(uint8_t* buffer, int destination, uint8_t ink, uint8_t levels,
+                                                 bool clearBits) {
+  if ((levels & (1u << ink)) == 0) return;
+  const uint8_t mask = 0x80u >> (destination & 7);
+  if (clearBits)
+    buffer[destination >> 3] &= static_cast<uint8_t>(~mask);
+  else
+    buffer[destination >> 3] |= mask;
+}
+
 // Paint the selected ink values of a packed glyph into target.
 //
 // bitmap: rows are contiguous, MSB first, 1 or 2 bits per pixel; widths need
@@ -81,17 +92,33 @@ inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, uint
   for (int y = clip.top; y < clip.bottom; ++y, rowBit += stepY) {
     int source = y * width + clip.left;
     int destination = rowBit;
-    for (int x = clip.left; x < clip.right; ++x, ++source, destination += stepX) {
-      // Hot loop: decode one ink value, test it against levels, touch one bit.
+    int remaining = clip.right - clip.left;
+    if (twoBit) {
+      // Rows are bit-contiguous, not byte-padded. Align after any clipped prefix.
+      while (remaining && (source & 3)) {
+        paint(target.buffer, destination, (bitmap[source >> 2] >> (6 - (source & 3) * 2)) & 3, levels, clearBits);
+        ++source;
+        destination += stepX;
+        --remaining;
+      }
+      while (remaining >= 4) {
+        const uint8_t packed = bitmap[source >> 2];
+        paint(target.buffer, destination, packed >> 6, levels, clearBits);
+        paint(target.buffer, destination + stepX, (packed >> 4) & 3, levels, clearBits);
+        paint(target.buffer, destination + 2 * stepX, (packed >> 2) & 3, levels, clearBits);
+        paint(target.buffer, destination + 3 * stepX, packed & 3, levels, clearBits);
+        source += 4;
+        destination += 4 * stepX;
+        remaining -= 4;
+      }
+    }
+    // One-bit glyphs and the clipped tail use scalar decoding.
+    while (remaining--) {
       const uint8_t ink = twoBit ? ((bitmap[source >> 2] >> (6 - (source & 3) * 2)) & 3)
                                  : ((bitmap[source >> 3] >> (7 - (source & 7))) & 1);
-      if ((levels & (1u << ink)) == 0) continue;
-      const uint8_t mask = 0x80u >> (destination & 7);
-      if (clearBits) {
-        target.buffer[destination >> 3] &= static_cast<uint8_t>(~mask);
-      } else {
-        target.buffer[destination >> 3] |= mask;
-      }
+      paint(target.buffer, destination, ink, levels, clearBits);
+      ++source;
+      destination += stepX;
     }
   }
 }
