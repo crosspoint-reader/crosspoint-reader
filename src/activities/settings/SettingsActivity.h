@@ -208,6 +208,8 @@ class SettingsActivity final : public UiTabListActivity {
   int activeTab() const override { return selectedCategoryIndex; }
   const char* tabLabel(int index) const override { return I18N.get(categoryNames[index]); }
   void buildScreen(UiScreen& screen) override;
+  void drawChrome() override;
+  void drawFooter() override;
   void activateIndex(int index) override;
   void onTabAction(int index) override;
   void stepTab(int direction) override;
