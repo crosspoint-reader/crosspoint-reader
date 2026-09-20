@@ -12,36 +12,15 @@ enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 
 class GfxRenderer {
  public:
-  class TextSpacingScope {
-   public:
-    TextSpacingScope(const GfxRenderer& renderer, const int8_t characterSpacing, const uint8_t wordSpacingPercent)
-        : renderer_(renderer),
-          savedCharacterSpacing_(renderer.characterSpacing_),
-          savedWordSpacingPercent_(renderer.wordSpacingPercent_) {
-      renderer.characterSpacing_ = characterSpacing;
-      renderer.wordSpacingPercent_ = wordSpacingPercent;
-    }
-    ~TextSpacingScope() {
-      renderer_.characterSpacing_ = savedCharacterSpacing_;
-      renderer_.wordSpacingPercent_ = savedWordSpacingPercent_;
-    }
-
-   private:
-    const GfxRenderer& renderer_;
-    int8_t savedCharacterSpacing_;
-    uint8_t savedWordSpacingPercent_;
-  };
+  enum class TextMeasureMode { Layout, Rendered };
   // Fixture metrics: every glyph is 8 px wide, a space is 4 px, kerning is zero.
-  mutable int8_t characterSpacing_ = 0;
-  mutable uint8_t wordSpacingPercent_ = 100;
-  int trackingBetween(const uint32_t left, const uint32_t right) const {
-    return left == 0 || left == ' ' || right == ' ' ? 0 : characterSpacing_;
+  static int trackingBetween(uint32_t left, uint32_t right, int8_t tracking) {
+    return left == 0 || left == ' ' || right == ' ' ? 0 : tracking;
   }
-  int scaleSpace(const int px) const { return (px * wordSpacingPercent_ + 50) / 100; }
   bool isFontCacheScanning() const { return false; }
   void drawLine(int, int, int, int, int, bool) const {}
   void drawText(int, int, int, const char*, bool, EpdFontFamily::Style,
-                BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO) const {}
+                BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO, int8_t = 0) const {}
   int getTextWidth(int font, const char* text, EpdFontFamily::Style style,
                    BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO) const {
     return getTextAdvanceX(font, text, style);
@@ -50,21 +29,23 @@ class GfxRenderer {
   int getScreenHeight() const { return 800; }
   int getLineHeight(int, float = 1.0f) const { return 16; }
   int getFontAscenderSize(int) const { return 12; }
-  int getSpaceWidth(int, EpdFontFamily::Style) const { return scaleSpace(4); }
-  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style) const {
+  int getSpaceWidth(int, EpdFontFamily::Style) const { return 4; }
+  int getTextAdvanceX(int, const char* text, EpdFontFamily::Style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode = TextMeasureMode::Layout) const {
     int width = 0;
     uint32_t previous = 0;
     while (const uint32_t cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&text))) {
       if (utf8IsCombiningMark(cp)) continue;
-      width += 8 + trackingBetween(previous, cp);
+      width += 8 + trackingBetween(previous, cp, tracking);
       previous = cp;
     }
     return width;
   }
-  int getKerning(int, uint32_t left, uint32_t right, EpdFontFamily::Style) const {
-    return trackingBetween(left, right);
+  int getKerning(int, uint32_t left, uint32_t right, EpdFontFamily::Style, int8_t tracking = 0) const {
+    return trackingBetween(left, right, tracking);
   }
-  int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return scaleSpace(4); }
+  int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 4; }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const std::deque<std::string>&, bool, uint8_t) const {}
 };

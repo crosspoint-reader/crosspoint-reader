@@ -94,9 +94,9 @@ if (parsedSize != fileSize) {
 
 The section header adds signed `characterSpacing` (pixels) and unsigned
 `wordSpacingPercent` after `focusReadingEnabled`; both participate in cache
-validation. Each TextBlock's BlockStyle stores the same two values after
-`directionDefined`, so cached pages render with the spacing they were laid
-out with. Sections from earlier versions are rebuilt.
+validation. Each TextBlock's BlockStyle stores only `characterSpacing` after
+`directionDefined`. Word spacing is resolved into cached word positions during
+layout. Sections from earlier versions are rebuilt.
 
 ### Version 46
 
@@ -249,7 +249,6 @@ struct BlockStyle {
     bool isRtl;
     bool directionDefined;
     s8 characterSpacing;
-    u8 wordSpacingPercent;
 };
 
 struct TextBlock {

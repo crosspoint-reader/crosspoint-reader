@@ -17,7 +17,7 @@ struct BlockStyle {
 
   CssTextAlign alignment = CssTextAlign::Justify;
 
-  // Reader spacing settings: extra pixels between glyphs, percent of the space advance.
+  // Extra pixels between glyphs during layout and drawing.
   int8_t characterSpacing = 0;
   // Spacing (in pixels)
   int16_t marginTop = 0;
@@ -38,7 +38,6 @@ struct BlockStyle {
   // a full line-height gap when the <br> block stays empty (section-break use case).
   // NOT propagated through getCombinedBlockStyle so it can't leak into sibling blocks.
   bool fromBrElement = false;
-  uint8_t wordSpacingPercent = 100;
 
   // Combined insets (margin + padding)
   [[nodiscard]] int16_t leftInset() const { return marginLeft + paddingLeft; }

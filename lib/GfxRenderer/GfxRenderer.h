@@ -88,20 +88,6 @@ class GfxRenderer {
   mutable int clipRight_ = 32767;
   mutable int clipBottom_ = 32767;
 
-  // Reader text spacing, honoured by every text measure/draw call while a
-  // TextSpacingScope is active. Mutable because layout and rendering hold a
-  // const GfxRenderer&; UI text outside a scope keeps the font's native spacing.
-  mutable int8_t characterSpacing_ = 0;
-  mutable uint8_t wordSpacingPercent_ = 100;
-  static constexpr bool isSpaceCp(const uint32_t cp) { return cp == ' ' || cp == 0xA0 || cp == 0x3000; }
-  // Extra pixels between two adjacent glyphs; whitespace keeps its own advance.
-  int trackingBetween(const uint32_t leftCp, const uint32_t rightCp) const {
-    return leftCp == 0 || isSpaceCp(leftCp) || isSpaceCp(rightCp) ? 0 : characterSpacing_;
-  }
-  int scaleSpace(const int advancePx) const {
-    return wordSpacingPercent_ == 100 ? advancePx : (advancePx * wordSpacingPercent_ + 50) / 100;
-  }
-
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
   // or measured with a mapped primary font contains a CJK codepoint the primary
@@ -313,28 +299,8 @@ class GfxRenderer {
   void writeFramebufferRegion(int x, int y, int w, int h, const uint8_t* src);
 
   // Text
-  // Applies word/character spacing to text calls for its lifetime, then restores the previous values.
-  class TextSpacingScope {
-   public:
-    TextSpacingScope(const GfxRenderer& renderer, const int8_t characterSpacing, const uint8_t wordSpacingPercent)
-        : renderer_(renderer),
-          savedCharacterSpacing_(renderer.characterSpacing_),
-          savedWordSpacingPercent_(renderer.wordSpacingPercent_) {
-      renderer.characterSpacing_ = characterSpacing;
-      renderer.wordSpacingPercent_ = wordSpacingPercent;
-    }
-    ~TextSpacingScope() {
-      renderer_.characterSpacing_ = savedCharacterSpacing_;
-      renderer_.wordSpacingPercent_ = savedWordSpacingPercent_;
-    }
-    TextSpacingScope(const TextSpacingScope&) = delete;
-    TextSpacingScope& operator=(const TextSpacingScope&) = delete;
-
-   private:
-    const GfxRenderer& renderer_;
-    int8_t savedCharacterSpacing_;
-    uint8_t savedWordSpacingPercent_;
-  };
+  // Layout may use advance-only SD font tables; rendered measurement includes kerning and ligatures.
+  enum class TextMeasureMode { Layout, Rendered };
   int getTextWidth(int fontId, const char* text, EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                    BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
@@ -342,15 +308,17 @@ class GfxRenderer {
                         BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
-                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+                BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO, int8_t tracking = 0) const;
   int getSpaceWidth(int fontId, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   /// Returns the total inter-word advance: fp4::toPixel(spaceAdvance + kern(leftCp,' ') + kern(' ',rightCp)).
   /// Using a single snap avoids the +/-1 px rounding error that arises when space advance and kern are
   /// snapped separately and then added as integers.
   int getSpaceAdvance(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
-  /// Returns the kerning adjustment between two adjacent codepoints.
-  int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
-  int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
+  /// Returns kerning plus optional tracking between two adjacent codepoints.
+  int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style, int8_t tracking = 0) const;
+  int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style, int8_t tracking = 0,
+                      BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO,
+                      TextMeasureMode mode = TextMeasureMode::Layout) const;
   int getFontAscenderSize(int fontId) const;
   int getLineHeight(int fontId) const;
   int getLineHeight(int fontId, float compression) const;

@@ -224,8 +224,8 @@ TEST(TextSpacingLayout, TrackingSeparatesCjkTokensAndScalesWordSpaces) {
         true, -1, 150);
     EXPECT_EQ(lines, 1u);
   }
-  EXPECT_EQ(renderer.characterSpacing_, 0);  // scope restored
-  EXPECT_EQ(renderer.wordSpacingPercent_, 100);
+  EXPECT_EQ(renderer.getTextAdvanceX(0, "ab", EpdFontFamily::REGULAR), 16);
+  EXPECT_EQ(renderer.getSpaceWidth(0, EpdFontFamily::REGULAR), 4);
 }
 
 TEST(TextSpacingLayout, WordSpacingChangesWrapThreshold) {
@@ -250,6 +250,7 @@ TEST(TextSpacingLayout, CachedPageRestoresSpacing) {
   style.textIndentDefined = true;
   ParsedText text(false, false, false, style);
   text.addWord("가나다", EpdFontFamily::REGULAR);
+  text.addWord("라마", EpdFontFamily::REGULAR);
   const auto path = (std::filesystem::temp_directory_path() / "crosspoint-text-spacing.bin").string();
   unsigned lines = 0;
   text.layoutAndExtractLines(
@@ -272,7 +273,8 @@ TEST(TextSpacingLayout, CachedPageRestoresSpacing) {
         const auto* cached = static_cast<const PageLine&>(*cachedPage->elements[0]).getBlock();
         ASSERT_NE(cached, nullptr);
         EXPECT_EQ(cached->getBlockStyle().characterSpacing, -2);
-        EXPECT_EQ(cached->getBlockStyle().wordSpacingPercent, 50);
+        ASSERT_EQ(cached->wordCount(), 5);
+        EXPECT_EQ(cached->wordXpos(3) - cached->wordXpos(2), 10);  // 8 + half-width space
         EXPECT_EQ(file.position(), file.size());
         ASSERT_EQ(cached->wordCount(), original->wordCount());
         for (uint16_t i = 0; i < original->wordCount(); ++i) EXPECT_EQ(cached->wordXpos(i), original->wordXpos(i));
@@ -298,7 +300,6 @@ TEST_F(ChapterHtmlSlimParserTest, ParserAppliesTextSpacingToParagraphs) {
     ++lines;
     ASSERT_EQ(block.wordCount(), 5);
     EXPECT_EQ(block.getBlockStyle().characterSpacing, -1);
-    EXPECT_EQ(block.getBlockStyle().wordSpacingPercent, 150);
     EXPECT_EQ(block.wordXpos(1) - block.wordXpos(0), 7);   // 8 px syllable, -1 px tracking
     EXPECT_EQ(block.wordXpos(3) - block.wordXpos(2), 14);  // syllable plus 150% of a 4 px space
   }
