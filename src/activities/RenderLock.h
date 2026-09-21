@@ -7,11 +7,13 @@ class RenderLock {
   bool isLocked = false;
 
  public:
-  explicit RenderLock();
+  enum class Mode { Blocking, Try };
+  explicit RenderLock(Mode mode = Mode::Blocking);
   explicit RenderLock(Activity&);  // unused for now, but keep for compatibility
   RenderLock(const RenderLock&) = delete;
   RenderLock& operator=(const RenderLock&) = delete;
   ~RenderLock();
+  bool ownsLock() const { return isLocked; }
   void unlock();
   static bool peek();
 };

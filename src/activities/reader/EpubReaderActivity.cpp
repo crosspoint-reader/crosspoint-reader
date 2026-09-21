@@ -1117,6 +1117,9 @@ void EpubReaderActivity::onReturnFromEndOfBook() {
 }
 
 bool EpubReaderActivity::skipLoopDelay() {
+  // Background building cannot advance while the render task owns the section.
+  RenderLock lock(RenderLock::Mode::Try);
+  if (!lock.ownsLock()) return false;
   return section && section->isBuilding() && !buildHeapPaused &&
          (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
 }
