@@ -36,6 +36,7 @@ class OptionPopup {
     }
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
+    message.clear();
     uiReady = false;
     active = true;
   }
@@ -50,6 +51,7 @@ class OptionPopup {
     }
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
+    message.clear();
     uiReady = false;
     active = true;
   }
@@ -62,6 +64,14 @@ class OptionPopup {
     headline = headlineStr ? headlineStr : "";
   }
 
+  // Message dialog: a wrapped body under the (optional) title, like the
+  // Wi-Fi forget-network prompt. Pass an empty title for a message-only look.
+  void showMessage(const char* titleStr, const char* messageStr, const char* const* options, int optionCount,
+                   int currentIndex, std::function<void(int)> onSelect) {
+    show(titleStr, options, optionCount, currentIndex, std::move(onSelect));
+    message = messageStr ? messageStr : "";
+  }
+
   void show(StrId titleId, const std::vector<std::string>& options, int currentIndex,
             std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
@@ -69,6 +79,7 @@ class OptionPopup {
     ownedStrings = options;
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
+    message.clear();
     uiReady = false;
     active = true;
   }
@@ -188,8 +199,14 @@ class OptionPopup {
     }
 
     fui::OptionDialogProps props;
-    props.title = title.c_str();
+    props.title = title.empty() ? nullptr : title.c_str();
     props.headline = headline.empty() ? nullptr : headline.c_str();
+    if (!message.empty()) {
+      props.message = message.c_str();
+      props.messageText.font = fui::GfxRendererTarget::FONT_BODY;
+      props.messageText.align = fui::TextAlign::Center;
+      props.messageText.maxLines = 6;
+    }
     props.options = options;
     props.optionCount = count;
     props.verticalOptions = true;
@@ -266,6 +283,7 @@ class OptionPopup {
   bool active = false;
   std::string title;
   std::string headline;
+  std::string message;
   std::vector<std::string> ownedStrings;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;

@@ -27,6 +27,7 @@ enum class SettingAction {
   Language,
   DownloadFonts,
   TextSettings,
+  Plugins,
   KeyboardLayouts,
   HomeButton,
   About,
