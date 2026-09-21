@@ -32,9 +32,10 @@ uint32_t readLe32(const uint8_t* p) {
 
 CoverGridHomeUi::CoverGridHomeUi(GfxRenderer& renderer) : UiAppHost(renderer), renderer(renderer) {}
 
-void CoverGridHomeUi::begin(const std::vector<RecentBook>& recent, bool opds) {
+void CoverGridHomeUi::begin(const std::vector<RecentBook>& recent, bool opds, bool continuing) {
   books = &recent;
   hasOpds = opds;
+  hasContinueReading = continuing;
   if (!recent.empty()) {
     // Cover regions do not overlap. Each may widen by one physical byte per row.
     coverCacheCapacity = renderer.getRegionByteSize(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight()) +
@@ -52,7 +53,7 @@ void CoverGridHomeUi::begin(const std::vector<RecentBook>& recent, bool opds) {
   app.setScreen(&CoverGridHomeUi::screenFn, this);
   if (lastThumbSpecOrientation == static_cast<int>(renderer.getOrientation())) thumbHeights = lastThumbHeights;
   refreshCoverPaths();
-  progress = loadProgress();
+  progress = hasContinueReading ? loadProgress() : -1;
   if (progress >= 0) snprintf(progressText, sizeof(progressText), "%d%%", progress);
 }
 
@@ -143,7 +144,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   auto headingText = theme.titleText;
   headingText.bold = true;
   screen.target().text(screen.takeTop(screen.target().lineHeight(headingText.font), theme.spaceSm),
-                       tr(STR_CONTINUE_READING), headingText);
+                       hasContinueReading ? tr(STR_CONTINUE_READING) : tr(STR_START_READING), headingText);
   // Bound the featured section while leaving room for its metadata.
   const int16_t featuredHeight = std::min<int>(
       screen.body().height, std::max<int>(std::min<int>(240, screen.body().height * 3 / 10),
