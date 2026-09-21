@@ -28,12 +28,12 @@ namespace library {
 inline constexpr char CLIX_MAGIC[4] = {'C', 'L', 'X', '1'};
 // Bumping this is the whole migration: an index from an older version fails
 // validation and is rebuilt. No previous development format is accepted.
-inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
+inline constexpr uint8_t CLIX_FORMAT_VERSION = 3;  // v3: author reading in the name blob
 
 // Bump when the fold, the article table, or a permutation's sort key changes.
 // Forces fold and ranks to be rebuilt while firstSeen values are preserved, so
 // arrival history survives.
-inline constexpr uint8_t CLIX_FOLD_VERSION = 3;
+inline constexpr uint8_t CLIX_FOLD_VERSION = 4;  // v4: file-as readings, kana fold, packed keys
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
 inline constexpr size_t CLIX_FOLD_BYTES = 96;
@@ -100,8 +100,8 @@ struct ClixRecord {
   uint8_t foldLen;
   uint8_t authorKeyLen;
   uint8_t metadataStatus;
-  char fold[CLIX_FOLD_BYTES];
-  char authorKey[CLIX_AUTHOR_KEY_BYTES];
+  char fold[CLIX_FOLD_BYTES];             // folded title (or its file-as reading), UTF-8
+  char authorKey[CLIX_AUTHOR_KEY_BYTES];  // grouping key in packSortKey() byte form
   uint32_t modificationTime;
 };
 static_assert(sizeof(ClixRecord) == 128, "ClixRecord must be exactly 128 bytes");

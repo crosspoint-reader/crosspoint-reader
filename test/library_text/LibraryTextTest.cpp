@@ -274,3 +274,97 @@ TEST(LibraryPath, RootDoesNotGainASecondSeparator) {
 TEST(LibraryPath, NestedFolderGetsOneSeparator) {
   EXPECT_EQ(library::joinLibraryPath("/Books", "book.epub"), "/Books/book.epub");
 }
+
+// --- Japanese readings ---------------------------------------------------------
+//
+// A Japanese title or name sorts by its kana READING (EPUB file-as), which
+// publishers write in katakana or hiragana as they please. The fold has to make
+// both spellings one key, keep the prolonged sound mark inside a word, and head
+// the shelf's groups by gojūon row.
+
+TEST(LibraryFold, KatakanaAndHiraganaReadingsFoldAlike) {
+  // リアデイル / りあでいる — the same reading in both scripts.
+  EXPECT_EQ(fold("リアデイル"), "りあでいる");
+  EXPECT_EQ(fold("りあでいる"), "りあでいる");
+  EXPECT_EQ(fold("リアデイル"), fold("りあでいる"));
+}
+
+TEST(LibraryFold, ProlongedSoundMarkAndIterationMarksStayInsideTheWord) {
+  // ラーメン: ー is part of the word, not punctuation.
+  EXPECT_EQ(fold("ラーメン"), "らーめん");
+  // 人々: 々 repeats the kanji before it.
+  EXPECT_EQ(fold("人々"), "人々");
+}
+
+TEST(LibraryFold, FullwidthAsciiFoldsToAscii) {
+  // ７ and 7 must agree, and ＡＢＣ is a Latin word.
+  EXPECT_EQ(fold("だいち７"), "だいち7");
+  EXPECT_EQ(fold("ＡＢＣ"), "abc");
+}
+
+TEST(LibraryFold, IdeographicSpaceSeparatesWords) {
+  // ヤマダ　タロウ: the U+3000 space between family and given name.
+  EXPECT_EQ(fold("ヤマダ\xE3\x80\x80タロウ"), "やまだ たろう");
+}
+
+TEST(LibraryFold, DecomposedVoicingMarkIsDropped) {
+  // か + U+3099 (NFD が): the mark is dropped rather than turned into a word break.
+  EXPECT_EQ(fold("か\xE3\x82\x99な"), "かな");
+}
+
+TEST(LibraryFold, KanaGroupInitialIsTheHeadOfItsRow) {
+  using library::foldedGroupInitial;
+  EXPECT_EQ(foldedGroupInitial(fold("あさ")), 0x3042u);          // あ
+  EXPECT_EQ(foldedGroupInitial(fold("がくえん")), 0x304Bu);      // が -> か
+  EXPECT_EQ(foldedGroupInitial(fold("ぱん")), 0x306Fu);          // ぱ -> は
+  EXPECT_EQ(foldedGroupInitial(fold("ゃ")), 0x3084u);            // small ゃ -> や
+  EXPECT_EQ(foldedGroupInitial(fold("んー")), 0x308Fu);          // ん -> わ row
+  EXPECT_EQ(foldedGroupInitial(fold("ヴァイオリン")), 0x3042u);  // ヴ -> あ row
+  EXPECT_EQ(foldedGroupInitial(fold("リアデイル")), 0x3089u);    // katakana リ -> ら
+  // Kanji without a reading still heads a group of its own.
+  EXPECT_EQ(foldedGroupInitial(fold("漢字")), 0x6F22u);
+  EXPECT_EQ(foldedGroupInitial(fold("Emma")), static_cast<uint32_t>('e'));
+}
+
+TEST(PackSortKey, LatinKeysAreTheFoldBytes) {
+  char out[12];
+  const std::string key = authorKey("Wollstonecraft, Mary");
+  const size_t n = library::packSortKey(key, out, sizeof(out));
+  EXPECT_EQ(std::string(out, n), key);
+}
+
+TEST(PackSortKey, TwelveBytesHoldTwelveKana) {
+  // Twelve kana in UTF-8 are 36 bytes; packed they fit the 12-byte key whole.
+  const std::string folded = fold("りあでいるのだいちにてな");
+  char out[12];
+  EXPECT_EQ(library::packSortKey(folded, out, sizeof(out)), 12u);
+  // A thirteenth kana no longer fits and the key stays a whole-codepoint prefix.
+  char shorter[11];
+  EXPECT_EQ(library::packSortKey(folded, shorter, sizeof(shorter)), 11u);
+}
+
+TEST(PackSortKey, KanaKeepTheirOrderAndSortAfterLatin) {
+  char a[12], ka[12], latin[12], kanji[12];
+  const size_t na = library::packSortKey(fold("あ"), a, sizeof(a));
+  const size_t nka = library::packSortKey(fold("か"), ka, sizeof(ka));
+  const size_t nl = library::packSortKey(fold("zoo"), latin, sizeof(latin));
+  const size_t nk = library::packSortKey(fold("漢"), kanji, sizeof(kanji));
+  EXPECT_EQ(na, 1u);
+  EXPECT_EQ(nka, 1u);
+  EXPECT_LT(std::string(a, na), std::string(ka, nka));
+  EXPECT_LT(std::string(latin, nl), std::string(a, na));
+  EXPECT_LT(std::string(ka, nka), std::string(kanji, nk));
+}
+
+TEST(PackSortKey, NeverSplitsAMultiByteCodepoint) {
+  char out[4];
+  // Two kanji: 3 bytes each; the second does not fit in the remaining byte.
+  EXPECT_EQ(library::packSortKey(fold("漢字"), out, sizeof(out)), 3u);
+}
+
+TEST(AuthorKeyFromReading, KeepsThePublishersWordOrder) {
+  // ヤマダ タロウ (family, given) stays family first, unlike authorKey()'s sort.
+  EXPECT_EQ(library::authorKeyFromReading("ヤマダ タロウ"), "やまだ たろう");
+  EXPECT_EQ(library::authorKeyFromReading("Tolkien, J. R. R."), "tolkien");
+  EXPECT_TRUE(library::authorKeyFromReading("").empty());
+}

@@ -5,9 +5,26 @@
 
 #include "HalStorage.h"
 
+// The one piece of BookMetadataCache the builder sees: the package metadata
+// loadMetadata() fills.
+class BookMetadataCache {
+ public:
+  struct BookMetadata {
+    std::string title;
+    std::string author;
+    std::string titleFileAs;
+    std::string authorFileAs;
+    std::string language;
+    std::string coverItemHref;
+    std::string textReferenceHref;
+  };
+};
+
 struct FakeMetadata {
   std::string title = "Title";
   std::string author = "Author";
+  std::string titleFileAs;
+  std::string authorFileAs;
   bool success = true;
 };
 
@@ -19,12 +36,15 @@ class Epub {
  public:
   Epub(const std::string& path, const char*) : path(path) {}
 
-  bool loadMetadata(std::string& title, std::string& author) {
+  bool loadMetadata(BookMetadataCache::BookMetadata& out) {
     ++fake::parses;
     const auto& metadata = bookMetadata[path];
     if (!metadata.success) return false;
-    title = metadata.title;
-    author = metadata.author;
+    out = BookMetadataCache::BookMetadata{};
+    out.title = metadata.title;
+    out.author = metadata.author;
+    out.titleFileAs = metadata.titleFileAs;
+    out.authorFileAs = metadata.authorFileAs;
     return true;
   }
 };
