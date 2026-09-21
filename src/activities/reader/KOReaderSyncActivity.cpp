@@ -25,6 +25,7 @@
 #include "components/UiAppHelpers.h"  // list icons for the compare rows
 #include "fontIds.h"
 #include "network/WifiPowerSaveGuard.h"
+#include "util/PluginEvents.h"
 #include "util/PluginHttp.h"
 
 namespace fui = freeink::ui;
@@ -52,7 +53,8 @@ const char* matchMethodName(const DocumentMatchMethod method) {
 
 KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const std::string& epubPath, CrossPointPosition localPosition,
-                                           SavedProgressPosition localKoPos, std::string localChapterName)
+                                           SavedProgressPosition localKoPos, std::string localChapterName,
+                                           const bool pluginEventsOnly)
     : Activity("KOReaderSync", renderer, mappedInput),
       UiAppHost(renderer),
       epubPath(epubPath),
@@ -60,7 +62,8 @@ KOReaderSyncActivity::KOReaderSyncActivity(GfxRenderer& renderer, MappedInputMan
       localPosition(localPosition),
       remoteProgress{},
       remotePosition{},
-      localProgress(std::move(localKoPos)) {}
+      localProgress(std::move(localKoPos)),
+      pluginEventsOnly(pluginEventsOnly) {}
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
@@ -128,6 +131,19 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   // stalls that surface as HTTP timeouts. WiFi is torn down when this activity exits.
   WiFi.setSleep(false);
   LOG_DBG("KOSync", "WiFi sleep disabled for sync");
+
+  if (pluginEventsOnly) {
+    {
+      RenderLock lock(*this);
+      state = SYNCING;
+      statusMessage = tr(STR_SYNC_PROGRESS);
+    }
+    requestUpdate(true);
+
+    pluginevents::drain(&renderer);
+    completeAlreadySynced();
+    return;
+  }
 
   {
     RenderLock lock(*this);
@@ -399,8 +415,8 @@ void KOReaderSyncActivity::onEnter() {
   app.on(ACTION_ROW, &KOReaderSyncActivity::onResultRow, this);
   app.setScreen(&KOReaderSyncActivity::resultScreen, this);
 
-  // Check for credentials first
-  if (!KOREADER_STORE.hasCredentials()) {
+  // Check for credentials first (plugin-events-only mode needs none).
+  if (!pluginEventsOnly && !KOREADER_STORE.hasCredentials()) {
     state = NO_CREDENTIALS;
     requestUpdate();
     return;
