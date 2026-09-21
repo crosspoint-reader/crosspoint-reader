@@ -172,11 +172,16 @@ void TtfEpdFont::initFace(Face& f) {
     f.ready = f.ft.init(s.data, s.len, f.sizePx, f.weight, f.wantItalic);
   }
   if (f.ready) {
-    // Rendering uses FtFont's defaults (unhinted grayscale AA): Light
-    // hinting and monochrome need the opt-in FreeType modules
-    // (FREEINK_FONT_ENABLE_AUTOHINT / _MONOCHROME), deliberately not
-    // compiled — ~55KB of flash for differences that 2-bit rendering at
-    // reader ppem largely quantizes away.
+    // Light auto-hinting (FREEINK_FONT_ENABLE_AUTOHINT): snaps stems to the
+    // pixel grid so their coverage quantizes evenly at 2-bit — unhinted
+    // rendering shows visibly uneven letter weights at reader ppem. Stem
+    // darkening counters e-ink's erosion of the remaining light strokes.
+    freeink::font::FtFont::RenderOptions ro;
+    ro.hinting = freeink::font::FtFont::HintingMode::Light;
+    ro.stemDarkening = true;
+    if (!f.ft.setRenderOptions(ro)) {
+      LOG_ERR("TTF", "Light hinting unavailable (FREEINK_FONT_ENABLE_AUTOHINT not compiled)");
+    }
     // GPOS kerning for RESIDENT faces only (they borrow a view into the font
     // bytes — free). Unlike GSUB, GPOS must stay resident for render-time
     // pair queries, and a STREAMED face would need an owned DRAM copy exactly
