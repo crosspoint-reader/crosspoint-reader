@@ -411,10 +411,7 @@ RenderLock::RenderLock(Mode mode) {
   isLocked = xSemaphoreTake(activityManager.renderingMutex, mode == Mode::Try ? 0 : portMAX_DELAY) == pdTRUE;
 }
 
-RenderLock::RenderLock([[maybe_unused]] Activity&) {
-  xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
-  isLocked = true;
-}
+RenderLock::RenderLock(Activity&) : RenderLock(Mode::Blocking) {}
 
 RenderLock::~RenderLock() {
   if (isLocked) {
