@@ -68,6 +68,10 @@ class SdCardFontRegistry {
   // Style role (0=regular, 1=bold, 2=italic, 3=bold-italic) inferred from a
   // vector font's base name (case-insensitive "bold"/"italic"/"oblique" tokens).
   static uint8_t parseVectorStyle(const char* baseName, size_t baseLen);
+  // Refine each vector file's style role from its real face metadata
+  // (FtFont::inspectStream: OS/2 weight + italic flag), keeping the
+  // filename-derived role when the face can't be read. Then dedup by role.
+  static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
   // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
   static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);

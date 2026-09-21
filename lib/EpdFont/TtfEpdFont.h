@@ -38,13 +38,13 @@
 // e.g. an open SD file) is BORROWED and must outlive this object, which must
 // outlive any GfxRenderer registration.
 
+#include <FontPsram.h>
+#include <FtFont.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <string>
-
-#include <FontPsram.h>
-#include <FtFont.h>
 
 #include "EpdFont.h"
 #include "EpdFontData.h"
@@ -113,14 +113,28 @@ class TtfEpdFont {
     uint16_t maxGlyphs = 0;
     bool twoBit = true;
     uint16_t sizePx = 0;
-    uint8_t srcIndex = 0;    // which Source this face initializes from
-    int weight = 400;        // design weight requested (wght axis / faux bold)
+    uint8_t srcIndex = 0;     // which Source this face initializes from
+    int weight = 400;         // design weight requested (wght axis / faux bold)
     bool wantItalic = false;  // request italic from the source (axis or oblique)
-    bool inited = false;     // init attempted (lazy)
-    bool ready = false;      // FreeType face live
+    bool inited = false;      // init attempted (lazy)
+    bool ready = false;       // FreeType face live
+    // GSUB 'liga' resolution (fi fl ff ffi ffl), resolved once at initFace():
+    // ligGid[i] is the raw glyph ID for U+FB00+i (0 = none), and ligPairs is
+    // the EpdFont pair table (sorted by key) that routes applyLigatures() to
+    // those presentation codepoints; faultGlyph() then rasterizes them by
+    // glyph ID even when the face's cmap has no entry for them.
+    uint32_t ligGid[5] = {0, 0, 0, 0, 0};
+    EpdLigaturePair ligPairs[5] = {};
+    uint8_t ligPairCount = 0;
     freeink::font::PsramVector<EpdGlyph> glyphs;
     freeink::font::PsramVector<uint32_t> cps;
     freeink::font::PsramVector<uint16_t> slot;
+    // Kern pair cache ((left<<32)|right → 4.4 value), sorted by key. Kerning
+    // resolves through FtFont (legacy 'kern' table, then the GPOS 'kern'
+    // feature) once per pair, then serves from here — getKerning runs for
+    // every adjacent glyph pair on every draw/measure pass.
+    freeink::font::PsramVector<uint64_t> kernKeys;
+    freeink::font::PsramVector<int8_t> kernVals;
     EpdFontData data{};
     EpdFont font{&data};
   };
@@ -128,15 +142,19 @@ class TtfEpdFont {
   static const EpdGlyph* missThunk(void* ctx, uint32_t codepoint);
   static const uint8_t* bitmapThunk(void* ctx, const EpdGlyph* glyph);
   static bool coverageThunk(void* ctx, uint32_t codepoint);
+  static int8_t kernThunk(void* ctx, uint32_t leftCp, uint32_t rightCp);
 
-  void resolveFaces();          // map the 4 faces onto the configured sources
-  void initFace(Face& f);       // lazy: create the FT face on first use
-  void setupFace(Face& f);      // wire data handlers + metrics
+  void resolveFaces();             // map the 4 faces onto the configured sources
+  void initFace(Face& f);          // lazy: create the FT face on first use
+  void setupFace(Face& f);         // wire data handlers + metrics
+  void resolveLigatures(Face& f);  // query GSUB once, build ligGid/ligPairs
   const EpdGlyph* faultGlyph(Face& f, uint32_t codepoint);
+  int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
 
   Source sources_[4];  // indexed by Style role
   Face faces_[4];      // 0=regular 1=bold 2=italic 3=bold-italic
   uint16_t sizePx_ = 0;
+  uint32_t size26_6_ = 0;  // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
   bool loaded_ = false;
 };

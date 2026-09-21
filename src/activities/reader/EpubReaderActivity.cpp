@@ -1233,6 +1233,14 @@ void EpubReaderActivity::renderBook() {
             pagesUntilFullRefresh = 1;
           }
           buildPopupPending = !showPopup;
+          // Section (re)builds are the heap-hungriest path (per-word
+          // allocations for the whole section). Shed every rebuildable font
+          // cache first — dropped glyphs re-fault on demand after the build.
+          if (auto* fcm = renderer.getFontCacheManager()) {
+            fcm->releaseSdFontCaches();
+          }
+          LOG_DBG("ERS", "Heap before section build: %u (max block %u)", (unsigned)ESP.getFreeHeap(),
+                  (unsigned)ESP.getMaxAllocHeap());
           const unsigned long buildStartMs = millis();
           bool started;
           {

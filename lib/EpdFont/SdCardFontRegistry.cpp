@@ -1,11 +1,12 @@
 #include "SdCardFontRegistry.h"
 
+#include <FtFont.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <strings.h>  // strcasecmp
 
 #include <algorithm>
 #include <cstring>
-#include <strings.h>  // strcasecmp
 
 // --- SdCardFontFamilyInfo helpers ---
 
@@ -125,6 +126,63 @@ uint8_t SdCardFontRegistry::parseVectorStyle(const char* baseName, size_t baseLe
   return static_cast<uint8_t>((bold ? 1 : 0) | (ital ? 2 : 0));
 }
 
+namespace {
+// FtFont::ReadFn over a HalFile (absolute-offset reads; count 0 is a seek probe).
+unsigned long inspectRead(void* ctx, const unsigned long offset, unsigned char* buffer, const unsigned long count) {
+  auto* f = static_cast<HalFile*>(ctx);
+  if (f == nullptr || !*f) return 0;
+  if (!f->seek(static_cast<size_t>(offset))) return 0;
+  if (count == 0) return 0;
+  const int n = f->read(buffer, count);
+  return n < 0 ? 0 : static_cast<unsigned long>(n);
+}
+}  // namespace
+
+void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
+  using freeink::font::FtFont;
+  // The face's own metadata beats filename token guessing (e.g. "-BdIt", "-Md"
+  // suffixes): OS/2 weight ≥ 600 → bold bit, italic flag → italic bit.
+  // inspectStream reads only the sfnt header tables, no face is retained.
+  for (auto& info : files) {
+    HalFile f = Storage.open(info.path.c_str());
+    if (!f || f.isDirectory()) continue;
+    FtFont::FaceInfo face;
+    if (FtFont::inspectStream(&inspectRead, &f, static_cast<unsigned long>(f.size()), face) !=
+        FtFont::InspectResult::Ok) {
+      continue;  // unreadable/unsupported face: keep the filename-derived role
+    }
+    info.style = static_cast<uint8_t>((face.weight >= 600 ? 1 : 0) | (face.italic ? 2 : 0));
+  }
+  // A family needs a regular anchor (TtfEpdFont derives the other styles from
+  // it). If metadata reclassified every file — e.g. a lone Bold-weight face —
+  // promote the first non-italic file (else the first file) back to regular.
+  bool haveRegular = false;
+  for (const auto& info : files) haveRegular = haveRegular || info.style == 0;
+  if (!haveRegular && !files.empty()) {
+    SdCardFontFileInfo* pick = &files.front();
+    for (auto& info : files) {
+      if ((info.style & 2) == 0) {
+        pick = &info;
+        break;
+      }
+    }
+    LOG_DBG("SDREG", "No regular face in %s — promoting %s", dirPath, pick->path.c_str());
+    pick->style = 0;
+  }
+  // Dedup by final role — first file wins (directory order), as for .cpfont.
+  for (size_t i = 0; i < files.size(); ++i) {
+    for (size_t j = i + 1; j < files.size();) {
+      if (files[j].style == files[i].style) {
+        LOG_ERR("SDREG", "Duplicate %s style in %s (%s) — skipping", files[i].style == 0 ? "regular" : "styled",
+                dirPath, files[j].path.c_str());
+        files.erase(files.begin() + j);
+      } else {
+        ++j;
+      }
+    }
+  }
+}
+
 void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
   HalFile dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return;
@@ -176,25 +234,13 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
 
     size_t baseLen = 0;
     if (parseVectorFontName(nameBuffer, baseLen)) {
-      // Vector file in a family folder: its style role comes from the filename.
-      // e.g. Merriweather/Merriweather-Italic.ttf → italic. Dedup by role.
-      const uint8_t role = parseVectorStyle(nameBuffer, baseLen);
-      bool duplicate = false;
-      for (const auto& existing : vectorFiles) {
-        if (existing.style == role) {
-          duplicate = true;
-          break;
-        }
-      }
-      if (duplicate) {
-        LOG_ERR("SDREG", "Duplicate %s style in %s (%s) — skipping", role == 0 ? "regular" : "styled", dirPath,
-                nameBuffer);
-        continue;
-      }
+      // Vector file in a family folder: seed the style role from the filename
+      // (e.g. Merriweather/Merriweather-Italic.ttf → italic); refineVectorStyles
+      // upgrades it from the face's own metadata and dedups by role afterwards.
       SdCardFontFileInfo info;
       info.path = std::string(dirPath) + "/" + nameBuffer;
       info.pointSize = 0;  // size-free
-      info.style = role;
+      info.style = parseVectorStyle(nameBuffer, baseLen);
       vectorFiles.push_back(std::move(info));
     }
   }
@@ -203,6 +249,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     family.vector = false;
     family.files = std::move(cpfontFiles);
   } else if (!vectorFiles.empty()) {
+    refineVectorStyles(dirPath, vectorFiles);
     family.vector = true;
     family.files = std::move(vectorFiles);
   }

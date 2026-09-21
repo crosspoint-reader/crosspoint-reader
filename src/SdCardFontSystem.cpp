@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <TtfEpdFont.h>
+#include <esp_heap_caps.h>
 
 #include <iterator>
 
@@ -28,7 +29,7 @@ int computeTtfFontId(const char* familyName, uint8_t pointSize) {
   return id != 0 ? id : 1;
 }
 
-}  // namespace (helper)
+}  // namespace
 
 // Out-of-line ctor/dtor: TtfEpdFont is complete here, so unique_ptr<TtfEpdFont>
 // can be constructed/destroyed. (Declared in the header where it is only
@@ -272,6 +273,9 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
   // present). Large fonts (e.g. multi-MB variable/CJK) STREAM from SD so the
   // whole file never sits in RAM — the handle is kept open for the font's life.
   static constexpr size_t kResidentMax = 1024 * 1024;
+  // Working headroom that must remain in internal DRAM after a resident load
+  // (FreeType face setup, glyph caches, and the rest of the system).
+  static constexpr size_t kInternalHeadroom = 96 * 1024;
   HalFile f = Storage.open(path.c_str());
   if (!f) {
     LOG_ERR("SDFS", "Failed to open TTF: %s", path.c_str());
@@ -284,7 +288,20 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
     return false;
   }
   TtfSource& s = ttfSources_[style];
-  if (len <= kResidentMax) {
+  // A resident buffer lands in PSRAM when fiFontMalloc can place it there;
+  // otherwise it competes with everything else in internal DRAM. PsramAlloc
+  // aborts on OOM, so this gate is load-bearing on no-PSRAM boards (X4/C3):
+  // fall back to streaming instead of attempting an allocation that can fail.
+  bool resident = len <= kResidentMax;
+  if (resident && heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) < len) {
+    const size_t internalFree = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (internalFree < len + kInternalHeadroom) {
+      LOG_DBG("SDFS", "TTF %s (%u KB) too large for DRAM (largest block %u KB), streaming", path.c_str(),
+              static_cast<unsigned>(len / 1024), static_cast<unsigned>(internalFree / 1024));
+      resident = false;
+    }
+  }
+  if (resident) {
     s.bytes.resize(len);
     const int got = f.read(s.bytes.data(), len);
     f.close();
@@ -322,11 +339,25 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
   // but LAZY, so only the regular face is ever built for UI text — the bold/
   // italic faces cost nothing. All faces share the reader's sources (streamed
   // handles or resident bytes), so no extra copy of any font file.
+  // Each fallback instance carries its own FreeType face and lazy glyph
+  // arena. Without PSRAM those compete with the reader's section build for
+  // internal DRAM, and the build must win: below this floor, skip the
+  // fallback (built-in bitmap UI fonts keep covering Latin UI text).
+  static constexpr size_t kUiFallbackMinInternalHeap = 160 * 1024;
   for (const auto& ui : kUiFontSizes) {
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) == 0) {
+      const size_t internalFree = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+      if (internalFree < kUiFallbackMinInternalHeap) {
+        LOG_DBG("SDFS", "Skipping TTF UI fallback @%upt (%u KB internal free)", ui.pointSize,
+                static_cast<unsigned>(internalFree / 1024));
+        continue;
+      }
+    }
     auto f = std::unique_ptr<TtfEpdFont>(new TtfEpdFont());
     addTtfSources(*f);
     const bool ok = f->load(ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
     if (!ok) continue;
+    LOG_DBG("SDFS", "TTF UI fallback @%upt loaded (heap free %u)", ui.pointSize, (unsigned)ESP.getFreeHeap());
     // Distinct id from the reader-size font: a UI size can equal the reader size
     // (e.g. both 12pt), which would collide on computeTtfFontId and be dropped
     // as a duplicate. Salt the UI family name to separate the id spaces.
@@ -391,6 +422,8 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   renderer.registerTtfFont(ttfFontId_, ttf_.get());
   ttfFamily_ = family.name;
   ttfPointSize_ = size;
+  LOG_DBG("SDFS", "Reader TTF face loaded (heap free %u, max block %u)", (unsigned)ESP.getFreeHeap(),
+          (unsigned)ESP.getMaxAllocHeap());
   setupTtfUiFallbacks(renderer);  // CJK/script UI fallback at the built-in UI sizes
   LOG_DBG("SDFS", "Loaded TTF font: %s @ %upt (id %d)", family.name.c_str(), size, ttfFontId_);
 }

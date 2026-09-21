@@ -248,4 +248,11 @@ typedef struct {
   /// (via glyphMissHandler) without pre-warming. nullptr for every other font,
   /// so the SD/built-in bitmap paths are unaffected (all fonts zero-init this).
   const uint8_t* (*vectorBitmapHandler)(void* ctx, const EpdGlyph* glyph);
+
+  /// Dynamic kerning for handler-backed fonts (TTF via FreeInkFont): returns
+  /// the 4.4 fixed-point pixel adjustment for the pair, 0 when none. Checked
+  /// by getKerning() before the static class tables (handler fonts carry
+  /// none). Shares glyphMissCtx. nullptr for built-in and SD fonts, whose
+  /// kerning is baked into the tables above (all fonts zero-init this).
+  int8_t (*kernHandler)(void* ctx, uint32_t leftCp, uint32_t rightCp);
 } EpdFontData;
