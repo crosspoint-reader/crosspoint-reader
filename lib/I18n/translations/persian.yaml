@@ -396,7 +396,6 @@ STR_PWR_BTN_FOOTNOTE_BACK: "بازگشت از پاورقی با دکمه‌ی پ
 STR_BACK_SHORT_TO_FILE_BROWSER: "فشار کوتاه دکمه‌ی برگشت: مرور فایل‌ها"
 STR_SET_SLEEP_COVER: "انتخاب جلد"
 STR_FOOTNOTES: "پاورقی‌ها"
-STR_NO_FOOTNOTES: "در این صفحه پاورقی‌ای نیست"
 STR_LINK: "[لینک]"
 STR_SCREENSHOT_BUTTON: "گرفتن اسکرین‌شات"
 STR_SLEEP_TIMER_VALUE_FORMAT: "%u دقیقه"

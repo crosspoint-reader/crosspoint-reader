@@ -395,7 +395,7 @@ STR_PWR_BTN_FOOTNOTE_BACK: "Быстрый возврат из примечан�
 STR_BACK_SHORT_TO_FILE_BROWSER: "Быстрый возврат к файлам"
 STR_SET_SLEEP_COVER: "На экран сна"
 STR_FOOTNOTES: "Примечания"
-STR_NO_FOOTNOTES: "На данной странице нет примечаний"
+STR_GO_TO_FOOTNOTE: "Перейти к сноске"
 STR_LINK: "[ссылка]"
 STR_SCREENSHOT_BUTTON: "Сделать снимок экрана"
 STR_SLEEP_TIMER_VALUE_FORMAT: "%u мин"
