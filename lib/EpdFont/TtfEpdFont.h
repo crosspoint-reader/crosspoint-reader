@@ -157,4 +157,8 @@ class TtfEpdFont {
   uint16_t sizePx_ = 0;
   uint32_t size26_6_ = 0;  // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
   bool loaded_ = false;
+  // Set while a glyph fault runs MemoryManager::ensureFree(): the eviction
+  // sink calls releaseResidentCaches() on every TTF font, and tearing down
+  // the very faces mid-fault would be use-after-free.
+  bool evictionLocked_ = false;
 };

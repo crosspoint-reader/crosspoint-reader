@@ -35,11 +35,11 @@ void ActivityManager::begin() {
 #else
   constexpr BaseType_t renderTaskCore = 0;
 #endif
-  // 16KB: FreeType rasterization runs on this task; the scan converter keeps
-  // its FT_RENDER_POOL_SIZE (4KB) band pool on the stack, on top of ~6KB of
-  // measured load/render call-chain depth (TTF autofit + glyph loading).
+  // FreeType rasterization runs on this task: its scan converter keeps the
+  // FT_RENDER_POOL_SIZE (4KB) band pool on the stack. Measured TTF peak is
+  // ~6.5KB (raster frame + ~1.6KB call chain), within 8KB with margin.
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
-                          16384,              // Stack size
+                          8192,               // Stack size
                           this,               // Parameters
                           1,                  // Priority
                           &renderTaskHandle,  // Task handle

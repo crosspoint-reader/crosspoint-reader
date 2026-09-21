@@ -1,6 +1,7 @@
 #include "TtfEpdFont.h"
 
 #include <Logging.h>
+#include <MemoryManager.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
@@ -169,23 +170,17 @@ void TtfEpdFont::initFace(Face& f) {
     f.ready = f.ft.init(s.data, s.len, f.sizePx, f.weight, f.wantItalic);
   }
   if (f.ready) {
-    // Light auto-hinting snaps stems vertically without distorting advances,
-    // and stem darkening counters e-ink's erosion of thin strokes — both need
-    // FREEINK_FONT_ENABLE_AUTOHINT. 1-bit faces render through FreeType's
-    // native monochrome raster (stem-aware dropout control) instead of
-    // thresholding grayscale at alpha 128 — needs FREEINK_FONT_ENABLE_MONOCHROME.
-    freeink::font::FtFont::RenderOptions ro;
-    ro.hinting = freeink::font::FtFont::HintingMode::Light;
-    ro.stemDarkening = true;
-    ro.monochrome = !f.twoBit;
-    if (!f.ft.setRenderOptions(ro)) {
-      LOG_ERR("TTF", "Render options degraded: FreeType module missing (check FREEINK_FONT_ENABLE_* flags)");
-    }
-    // GPOS kerning table cap for STREAMED faces (resident faces borrow a view
-    // into the font bytes — free). Unlike GSUB, GPOS must stay resident for
-    // render-time pair queries, so on the no-PSRAM C3 an oversized table
-    // (typical of big CJK faces) degrades to no-kerning rather than eat DRAM.
-    f.ft.setGposByteBudget(24 * 1024);
+    // Rendering uses FtFont's defaults (unhinted grayscale AA): Light
+    // hinting and monochrome need the opt-in FreeType modules
+    // (FREEINK_FONT_ENABLE_AUTOHINT / _MONOCHROME), deliberately not
+    // compiled — ~55KB of flash for differences that 2-bit rendering at
+    // reader ppem largely quantizes away.
+    // GPOS kerning for RESIDENT faces only (they borrow a view into the font
+    // bytes — free). Unlike GSUB, GPOS must stay resident for render-time
+    // pair queries, and a STREAMED face would need an owned DRAM copy exactly
+    // when the C3 is poorest (a font big enough to stream, i.e. CJK, where
+    // Latin pair kerning barely matters). Budget 0 = streamed faces skip it.
+    f.ft.setGposByteBudget(0);
     resolveLigatures(f);
   }
   // Caches are NOT pre-reserved: the byte arena (f.bmp) and the glyph tables
@@ -272,6 +267,7 @@ void TtfEpdFont::clearCache() {
 }
 
 void TtfEpdFont::releaseResidentCaches() {
+  if (evictionLocked_) return;  // mid-fault: this font's faces are live
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
     // Actually RELEASE the caches (swap-with-empty frees capacity; clear() alone
@@ -326,18 +322,33 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
   }
   if (f.glyphs.size() >= f.maxGlyphs || f.used + bytes > f.cap) flushFace(f);
 
-  // All growth below is exact and heap-checked (see reserveChecked): a failed
-  // table grow is an uncached miss (caller skips the glyph this pass); a
-  // failed arena grow degrades to an advance-only glyph so layout survives.
+  // All growth below is exact and heap-checked (see reserveChecked). On a
+  // failed grow, ask the memory manager to evict rebuildable caches (render
+  // glyph cache, other fonts' arenas — evictionLocked_ keeps THIS font's
+  // faces alive) and retry once. After that: a failed table grow is an
+  // uncached miss (caller skips the glyph this pass); a failed arena grow
+  // degrades to an advance-only glyph so layout survives.
   static constexpr size_t kTableStep = 64;
-  if (!reserveChecked(f.glyphs, f.glyphs.size() + 1, kTableStep, f.maxGlyphs) ||
-      !reserveChecked(f.cps, f.cps.size() + 1, kTableStep, f.maxGlyphs) ||
-      !reserveChecked(f.slot, f.slot.size() + 1, kTableStep, f.maxGlyphs)) {
-    return nullptr;
+  const auto growTables = [&]() {
+    return reserveChecked(f.glyphs, f.glyphs.size() + 1, kTableStep, f.maxGlyphs) &&
+           reserveChecked(f.cps, f.cps.size() + 1, kTableStep, f.maxGlyphs) &&
+           reserveChecked(f.slot, f.slot.size() + 1, kTableStep, f.maxGlyphs);
+  };
+  const auto evictOthers = [&]() {
+    evictionLocked_ = true;
+    freeink::MemoryManager::instance().ensureFree(16 * 1024);
+    evictionLocked_ = false;
+  };
+  if (!growTables()) {
+    evictOthers();
+    if (!growTables()) return nullptr;
   }
   if (px && !reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
-    bytes = 0;
-    px = 0;
+    evictOthers();
+    if (!reserveChecked(f.bmp, f.used + bytes, 4096, f.cap)) {
+      bytes = 0;
+      px = 0;
+    }
   }
 
   EpdGlyph eg{};
