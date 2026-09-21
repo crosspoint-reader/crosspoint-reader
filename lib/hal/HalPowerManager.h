@@ -22,10 +22,7 @@ class HalPowerManager {
 
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
-  SemaphoreHandle_t modeMutex = nullptr;  // Protect mode, frequency state, and clock transitions.
-
-  // Requires modeMutex.
-  void setPowerSavingLocked(bool enabled);
+  SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
 
  public:
 #if BOARD_HAS_PSRAM
