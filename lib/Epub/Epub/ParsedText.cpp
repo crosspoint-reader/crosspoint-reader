@@ -1230,12 +1230,21 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // fresh arena entry (with its visible hyphen, so it stays NUL-terminated);
   // the remainder aliases the original word's tail bytes and inherits the
   // original entry's release obligation via WordStore::suffix().
-  std::string prefix = word.substr(0, chosenOffset);
+  // Stack buffer, not std::string: this runs mid-pagination, exactly when the
+  // heap is under section-build pressure. The parser caps words at
+  // MAX_WORD_SIZE (200) bytes; anything larger skips the split rather than
+  // overflow (the word then breaks whole, as when no breakpoint fits).
+  char prefixBuf[208];
+  if (chosenOffset + 1 > sizeof(prefixBuf)) {
+    return false;
+  }
+  memcpy(prefixBuf, word.data(), chosenOffset);
+  size_t prefixLen = chosenOffset;
   if (chosenNeedsHyphen) {
-    prefix.push_back('-');
+    prefixBuf[prefixLen++] = '-';
   }
   WordStore::StoredWord prefixStored;
-  if (!wordStore.append(prefix.data(), prefix.size(), prefixStored)) {
+  if (!wordStore.append(prefixBuf, prefixLen, prefixStored)) {
     // OOM: skip the split; the word stays whole and the line breaks without it.
     return false;
   }
@@ -1253,7 +1262,11 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordFocusBoundary[wordIndex] = focusBoundaryBefore(focusBoundary, chosenOffset);
   // Invariant: a boundary is always strictly inside its token, so an all-bold part carries BOLD in
   // its style with boundary 0 and nothing downstream special-cases boundary == size.
-  if (wordFocusBoundary[wordIndex] >= words[wordIndex].len) {
+  // An inserted '-' counts as covered: measureFocusWordWidth() measured the
+  // hyphen bold whenever the boundary spans the whole text before it, so the
+  // rendered styling must match or justified spacing drifts by the bold/
+  // regular hyphen advance delta.
+  if (wordFocusBoundary[wordIndex] + (chosenNeedsHyphen ? 1u : 0u) >= words[wordIndex].len) {
     wordStyles[wordIndex] = static_cast<EpdFontFamily::Style>(wordStyles[wordIndex] | EpdFontFamily::BOLD);
     wordFocusBoundary[wordIndex] = 0;
   }
