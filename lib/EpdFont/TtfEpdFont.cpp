@@ -172,15 +172,20 @@ void TtfEpdFont::initFace(Face& f) {
     f.ready = f.ft.init(s.data, s.len, f.sizePx, f.weight, f.wantItalic);
   }
   if (f.ready) {
-    // Light auto-hinting (FREEINK_FONT_ENABLE_AUTOHINT): snaps stems to the
-    // pixel grid so their coverage quantizes evenly at 2-bit — unhinted
-    // rendering shows visibly uneven letter weights at reader ppem. Stem
-    // darkening counters e-ink's erosion of the remaining light strokes.
+    // Full auto-hinting + stem darkening pair with the BW-aware quantizer in
+    // faultGlyph: the 50% ink threshold needs stems snapped to full-coverage
+    // pixels or strokes break up / vary per letter on BW page turns (see
+    // platformio.ini's FREEINK_FONT_ENABLE_AUTOHINT note). Auto (both axes)
+    // rather than Light (vertical only): Light leaves stem WIDTHS fractional,
+    // so the ink threshold prints the same-width stem as 1px or 2px depending
+    // on each glyph's horizontal phase — visibly uneven letter weights. Auto
+    // equalizes stem widths across the face. Darkening nudges borderline-thin
+    // strokes over the threshold.
     freeink::font::FtFont::RenderOptions ro;
-    ro.hinting = freeink::font::FtFont::HintingMode::Light;
+    ro.hinting = freeink::font::FtFont::HintingMode::Auto;
     ro.stemDarkening = true;
     if (!f.ft.setRenderOptions(ro)) {
-      LOG_ERR("TTF", "Light hinting unavailable (FREEINK_FONT_ENABLE_AUTOHINT not compiled)");
+      LOG_ERR("TTF", "Auto hinting unavailable (FREEINK_FONT_ENABLE_AUTOHINT not compiled)");
     }
     // GPOS kerning for RESIDENT faces only (they borrow a view into the font
     // bytes — free). Unlike GSUB, GPOS must stay resident for render-time
@@ -371,7 +376,12 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     for (uint32_t i = 0; i < px; ++i) {
       const uint8_t a = g->pixels[i];
       if (f.twoBit) {
-        const uint8_t v = static_cast<uint8_t>((a * 3u + 127u) / 255u);
+        // BW-aware quantization: the renderer's BW page-turn pass inks ANY
+        // nonzero level, so level 1 must not start until ~50% coverage or
+        // every AA edge pixel prints black and text turns faux-bold on every
+        // turn. Levels grade 50/67/83%+ so the grayscale refresh pass still
+        // shades the inner half of each edge.
+        const uint8_t v = a < 128 ? 0 : a < 170 ? 1 : a < 213 ? 2 : 3;
         dst[i >> 2] |= static_cast<uint8_t>(v << ((3 - (i & 3)) * 2));
       } else if (a >= 128) {
         dst[i >> 3] |= static_cast<uint8_t>(1u << (7 - (i & 7)));

@@ -82,7 +82,16 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   if (SETTINGS.sdFontFamilyName[0] != '\0') {
     const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
     if (family) {
-      if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
+#if CROSSPOINT_VECTOR_FONTS
+      if (family->vector) {
+        // Vector (.ttf/.otf) families load through the FreeInkFont path; the
+        // .cpfont manager below rejects them ("Invalid magic bytes") and would
+        // wipe the user's selection on every boot. loadTtfFamily keeps the
+        // selection on transient failures and registers UI fallbacks itself.
+        loadTtfFamily(*family, renderer, /*registryWasDirty=*/false);
+      } else
+#endif
+          if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
         snapFontPointSizeTo(manager_.currentPointSize());
         setupUiFallbacks(renderer);
         LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
@@ -281,7 +290,13 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
   // Small fonts are read fully into RAM (fastest, fewest SD reads; PSRAM when
   // present). Large fonts (e.g. multi-MB variable/CJK) STREAM from SD so the
   // whole file never sits in RAM — the handle is kept open for the font's life.
-  static constexpr size_t kResidentMax = 1024 * 1024;
+  // PSRAM boards only (this whole path is vector-font gated), so size the
+  // resident cap for the 8MB parts: a 4.5MB variable font held resident gets
+  // GPOS kerning (streamed faces skip it, and GPOS-only fonts like
+  // Merriweather VF lose ALL kerning when streamed) and skips per-glyph SD
+  // reads. The heap gate below still falls back to streaming when PSRAM
+  // can't fund the buffer.
+  static constexpr size_t kResidentMax = 6 * 1024 * 1024;
   // Working headroom that must remain in internal DRAM after a resident load
   // (FreeType face setup, glyph caches, and the rest of the system).
   static constexpr size_t kInternalHeadroom = 96 * 1024;
@@ -411,9 +426,10 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     openTtfSource(role, file.path);
   }
   if (!ttfSources_[0].present) {
-    LOG_ERR("SDFS", "Vector family %s has no regular file (clearing)", family.name.c_str());
+    // Possibly a transient SD read failure: keep the user's selection so the
+    // next ensureLoaded() retries; this session falls back to the built-in.
+    LOG_ERR("SDFS", "Vector family %s: regular file failed to open (keeping selection)", family.name.c_str());
     freeTtfSources();
-    SETTINGS.clearSdFontFamily();
     return;
   }
 
@@ -428,10 +444,13 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   addTtfSources(*ttf_);
   const bool ok = ttf_->load(size);
   if (!ok) {
-    LOG_ERR("SDFS", "FreeInkFont could not parse %s (clearing)", family.name.c_str());
+    // init failure is ambiguous (corrupt font vs. transient OOM inside
+    // FreeType): keep the selection and retry next ensureLoaded() rather than
+    // silently reverting the user to the built-in font. A genuinely broken
+    // font costs one failed load per reader entry, visible in the log.
+    LOG_ERR("SDFS", "FreeInkFont could not parse %s (keeping selection)", family.name.c_str());
     ttf_.reset();
     freeTtfSources();
-    SETTINGS.clearSdFontFamily();
     return;
   }
   // Seed the regular face's glyph cache; other styles + glyphs fault on demand.
