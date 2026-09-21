@@ -409,6 +409,7 @@ void ActivityManager::requestUpdateAndWait() {
 
 RenderLock::RenderLock(Mode mode) {
   isLocked = xSemaphoreTake(activityManager.renderingMutex, mode == Mode::Try ? 0 : portMAX_DELAY) == pdTRUE;
+  assert((mode == Mode::Try || isLocked) && "Blocking render lock acquisition failed");
 }
 
 RenderLock::RenderLock(Activity&) : RenderLock(Mode::Blocking) {}
