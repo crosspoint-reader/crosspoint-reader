@@ -137,19 +137,16 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   screen.insetContent(fui::Insets{theme.spaceSm, theme.spaceLg, theme.spaceSm, theme.spaceLg});
   const bool landscape = renderer.getScreenWidth() > renderer.getScreenHeight();
   const auto header = screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight);
-  // Full-width band: every other screen passes drawHeader an uninset rect, so
-  // the clock and battery must sit at the same edge offsets here too.
-  GUI.drawHeader(renderer, Rect{0, header.y, renderer.getScreenWidth(), header.height}, nullptr);
-  const auto tabRect = screen.takeBottom(56, theme.spaceSm);
-  drawTabs(screen, tabRect);
+  auto tabRect = screen.takeBottom(56, theme.spaceSm);
   if (books->empty()) {
+    drawTabs(screen, tabRect.inset(fui::Insets{0, 6, 0, 6}));
     drawEmpty(screen);
+    drawHeaderBand(header, tabRect.x + 6, tabRect.x + tabRect.width - 6);
     return;
   }
   auto headingText = theme.titleText;
   headingText.bold = true;
-  screen.target().text(screen.takeTop(screen.target().lineHeight(headingText.font), theme.spaceSm),
-                       hasContinueReading ? tr(STR_CONTINUE_READING) : tr(STR_START_READING), headingText);
+  auto headingRect = screen.takeTop(screen.target().lineHeight(headingText.font), theme.spaceSm);
   // Bound the featured section while leaving room for its metadata.
   const int16_t featuredHeight = std::min<int>(
       screen.body().height, std::max<int>(std::min<int>(240, screen.body().height * 3 / 10),
@@ -157,6 +154,26 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
                                               screen.target().lineHeight(theme.smallText.font) * 2 + 32));
   drawCurrent(screen, screen.takeTop(featuredHeight, theme.spaceMd));
   drawGrid(screen, screen.body());
+  const auto gridRect = layoutGrid(screen, screen.body());
+  tabRect.x = gridRect.x + grid.cellInset.left;
+  tabRect.width = gridRect.width - grid.cellInset.left - grid.cellInset.right;
+  headingRect.x = tabRect.x;
+  headingRect.width = tabRect.width;
+  screen.target().text(headingRect, hasContinueReading ? tr(STR_CONTINUE_READING) : tr(STR_START_READING), headingText);
+  drawTabs(screen, tabRect);
+  // Drawn last so it can borrow the grid geometry, like the tab bar above.
+  drawHeaderBand(header, tabRect.x, tabRect.x + tabRect.width);
+}
+
+void CoverGridHomeUi::drawHeaderBand(fui::Rect header, int coverLeft, int coverRight) {
+  // Same alignment trick as the tabs: the clock's left edge and the battery's
+  // right edge sit on the outer cover columns. drawHeader anchors both at
+  // headerStatusInset() from the band edges, and the clock text is
+  // left-anchored, so 1- vs 2-digit hours never move it.
+  const int inset = GUI.headerStatusInset();
+  const int headerX = std::max(0, coverLeft - inset);
+  const int headerRight = std::min<int>(renderer.getScreenWidth(), coverRight + inset);
+  GUI.drawHeader(renderer, Rect{headerX, header.y, headerRight - headerX, header.height}, nullptr);
 }
 
 void CoverGridHomeUi::drawEmpty(UiScreen& screen) {
@@ -197,6 +214,7 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   card.authorText = theme.smallText;
   card.progressText = theme.smallText;
   card.padding = fui::Insets{6, 6, 6, 6};
+  card.gap = theme.spaceLg + theme.spaceSm;
   card.coverSize.height = std::max(1, std::min(rect.height - 12, (rect.width / 3) * 5 / 3));
   card.coverSize.width = std::max(1, card.coverSize.height * 3 / 5);
   noteThumbHeight(0, card.coverSize.width, card.coverSize.height);
@@ -207,6 +225,9 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
     card.coverSize.width = std::max(1, static_cast<int>(featuredCoverWidth * scale));
     card.coverSize.height = std::max(1, static_cast<int>(featuredCoverHeight * scale));
   }
+  const auto gridRect = layoutGrid(screen, screen.body());
+  rect.x = gridRect.x;
+  rect.width = gridRect.width;
   card.coverPainterUserData = this;
   card.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::BookCardProps&, void* user) {
     return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, 0);
@@ -214,8 +235,21 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   fui::bookCard(screen.frame(), rect, card);
 }
 
-void CoverGridHomeUi::drawGrid(UiScreen& screen, fui::Rect rect) {
+fui::Rect CoverGridHomeUi::layoutGrid(UiScreen& screen, fui::Rect rect) {
   const auto& theme = screen.theme();
+  grid.gap = std::max<int>(theme.spaceSm, rect.width * 2 / 100);
+  grid.rowGap = theme.spaceSm;
+  grid.cellInset = fui::Insets{6, 6, 6, 6};
+  const int maxCoverWidth = std::max(1, (rect.width - (GRID_COLUMNS - 1) * grid.gap) / GRID_COLUMNS - 12);
+  const int maxCoverHeight = std::max(1, (rect.height - (GRID_ROWS - 1) * grid.rowGap) / GRID_ROWS - 12);
+  grid.coverSize.height = std::max(1, std::min({maxCoverHeight, maxCoverWidth * 5 / 3, card.coverSize.height * 3 / 2}));
+  grid.coverSize.width = std::max(1, grid.coverSize.height * 3 / 5);
+  grid.rowHeight = grid.coverSize.height + 12;
+  rect.height = GRID_ROWS * grid.rowHeight + (GRID_ROWS - 1) * grid.rowGap;
+  return rect;
+}
+
+void CoverGridHomeUi::drawGrid(UiScreen& screen, fui::Rect rect) {
   grid.count = books->size() > 1 ? books->size() - 1 : 0;
   grid.columns = GRID_COLUMNS;
   grid.action = SELECT;
@@ -224,17 +258,7 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen, fui::Rect rect) {
   grid.selectionIndicator = fui::CoverGridSelectionIndicator::CoverFrame;
   grid.labelHeight = 0;
   grid.labelGap = 0;
-  grid.gap = theme.spaceSm;
-  grid.rowGap = theme.spaceSm;
-  grid.cellInset = fui::Insets{6, 6, 6, 6};
-  const int maxCoverWidth = std::max(1, (rect.width - (GRID_COLUMNS - 1) * grid.gap) / GRID_COLUMNS - 12);
-  const int maxCoverHeight = std::max(1, (rect.height - (GRID_ROWS - 1) * grid.rowGap) / GRID_ROWS - 12);
-  grid.coverSize.height = std::max(1, std::min({maxCoverHeight, maxCoverWidth * 5 / 3, card.coverSize.height * 3 / 2}));
-  grid.coverSize.width = std::max(1, grid.coverSize.height * 3 / 5);
-  grid.rowHeight = grid.coverSize.height + 12;
-  // Exact-width cells keep the first cover on the featured card's left inset.
-  rect.width = GRID_COLUMNS * (grid.coverSize.width + 12) + (GRID_COLUMNS - 1) * grid.gap;
-  rect.height = GRID_ROWS * grid.rowHeight + (GRID_ROWS - 1) * grid.rowGap;
+  rect = layoutGrid(screen, rect);
   for (size_t i = 1; i < thumbHeights.size(); ++i) noteThumbHeight(i, grid.coverSize.width, grid.coverSize.height);
   grid.scrollIndicator = false;
   grid.itemProvider = [](uint16_t index, void*) { return fui::coverGridItem(nullptr, index + 1); };
@@ -243,7 +267,21 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen, fui::Rect rect) {
                          void* user) {
     return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, index + 1);
   };
-  fui::coverGrid(screen.frame(), rect, grid);
+  // Distribute the unused width between columns, keeping both outside edges fixed.
+  const int16_t cellWidth = grid.coverSize.width + grid.cellInset.left + grid.cellInset.right;
+  const int16_t travel = std::max<int>(0, rect.width - cellWidth);
+  grid.columns = 1;
+  for (uint16_t index = 0; index < grid.count; ++index) {
+    const int column = index % GRID_COLUMNS;
+    const int row = index / GRID_COLUMNS;
+    grid.topIndex = index;
+    const fui::Rect cell{static_cast<int16_t>(rect.x + column * travel / (GRID_COLUMNS - 1)),
+                         static_cast<int16_t>(rect.y + row * (grid.rowHeight + grid.rowGap)), cellWidth,
+                         grid.rowHeight};
+    fui::coverGrid(screen.frame(), cell, grid);
+  }
+  grid.topIndex = 0;
+  grid.columns = GRID_COLUMNS;
 }
 
 void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
@@ -257,14 +295,14 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
     tab.label = nullptr;
     ++count;
   }
-  tabs.tabs = tabItems.data();
-  tabs.count = count;
+  tabs.count = 1;
   tabs.action = SELECT;
   tabs.inputMask = fui::InputTouch;
   tabs.iconSize = 32;
   tabs.iconPainterUserData = this;
-  tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem&, uint8_t index, void* user) {
+  tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem& tab, uint8_t, void* user) {
     auto& self = *static_cast<CoverGridHomeUi*>(user);
+    const int index = tab.value - static_cast<int>(self.books->size());
     const int icon = !self.hasOpds && index >= 2 ? index + 1 : index;
     self.renderer.drawIcon(ICONS[icon], iconRect.x, iconRect.y, iconRect.width);
     return true;
@@ -272,7 +310,14 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.tabStyles.normal.background = fui::Paint::solid(fui::Color::White);
   tabs.tabStyles.selected.background = fui::Paint::solid(fui::Color::White);
   tabs.selectedUnderline = 2;
-  fui::tabBar(screen.frame(), rect, tabs);
+  const int16_t slotWidth = std::max<int16_t>(tabs.minTouchSize, tabs.iconSize);
+  const int16_t slotInset = (slotWidth - tabs.iconSize) / 2;
+  const int16_t travel = std::max<int16_t>(0, rect.width - tabs.iconSize);
+  for (int i = 0; i < count; ++i) {
+    tabs.tabs = &tabItems[i];
+    const int16_t x = rect.x - slotInset + i * travel / (count - 1);
+    fui::tabBar(screen.frame(), fui::Rect{x, rect.y, slotWidth, rect.height}, tabs);
+  }
 }
 
 bool CoverGridHomeUi::paintFramedCover(fui::DrawTarget& target, fui::Rect rect, size_t index) {

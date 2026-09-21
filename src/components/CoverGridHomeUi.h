@@ -34,9 +34,11 @@ class CoverGridHomeUi final : public UiAppHost {
   static void screenFn(UiScreen& screen, void* user);
   static void onAction(const freeink::ui::ActionEvent& event, void* user);
   void draw(UiScreen& screen);
+  void drawHeaderBand(freeink::ui::Rect header, int coverLeft, int coverRight);
   void drawEmpty(UiScreen& screen);
   void drawCurrent(UiScreen& screen, freeink::ui::Rect rect);
   void drawGrid(UiScreen& screen, freeink::ui::Rect rect);
+  freeink::ui::Rect layoutGrid(UiScreen& screen, freeink::ui::Rect rect);
   void drawTabs(UiScreen& screen, freeink::ui::Rect rect);
   bool paintCover(freeink::ui::Rect rect, size_t index);
   bool paintFramedCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect, size_t index);

@@ -55,6 +55,9 @@ struct ThemeMetrics {
   // the lower sub-band spanning the full width (Lyra), vs sharing the title
   // line with a width reserve (Classic, RoundedRaff).
   bool headerBatteryDetached;
+  // Header clock opt-out for themes whose title layout can't spare the left
+  // reserve (RoundedRaff); the user setting still governs the themes that can.
+  bool headerShowsClock = true;
   int menuRowHeight;
   int menuSpacing;
 
@@ -245,6 +248,9 @@ class BaseTheme {
   // SETTINGS.clockShowInHeader and an RTC is present.
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
+  // Edge inset drawHeader uses for the clock/battery status line (detached
+  // layouts hug the corner with a legacy 12px inset instead of the padding).
+  int headerStatusInset() const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
