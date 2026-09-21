@@ -35,7 +35,7 @@ class CoverGridHomeUi final : public UiAppHost {
   void drawHeaderBand(freeink::ui::Rect header, int coverLeft, int coverRight);
   void drawEmpty(UiScreen& screen);
   void drawCurrent(UiScreen& screen, freeink::ui::Rect rect);
-  void drawGrid(UiScreen& screen, freeink::ui::Rect rect);
+  void drawGrid(UiScreen& screen);
   freeink::ui::Rect layoutGrid(UiScreen& screen, freeink::ui::Rect rect);
   void drawTabs(UiScreen& screen, freeink::ui::Rect rect);
   bool paintFramedCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect, size_t index);
@@ -63,6 +63,7 @@ class CoverGridHomeUi final : public UiAppHost {
   // Component styles and interaction tables stay off the render task's stack.
   freeink::ui::BookCardProps card;
   freeink::ui::CoverGridProps grid;
+  freeink::ui::Rect gridBounds{};
   freeink::ui::TabBarProps tabs;
   std::array<freeink::ui::TabItem, 5> tabItems;
 };
