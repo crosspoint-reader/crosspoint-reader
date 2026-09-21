@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+class Bitmap;
 class GfxRenderer;
 struct RecentBook;
 
@@ -221,6 +222,10 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
+  static void drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect);
+  // Draws a pre-dithered cover thumb 1:1, centered and clipped to fill the
+  // slot. Rescaling a dithered bitmap aliases badly, so overflow is cropped.
+  static bool drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bitmap, Rect slot);
   static void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total);
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                        bool showPercentage = true) const;  // Left aligned (reader mode)
@@ -258,6 +263,9 @@ class BaseTheme {
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual bool showsFileIcons() const { return false; }
+  // Thumb generation height for home covers; 0 means use metrics.homeCoverHeight.
+  // Themes with slots wider than 0.6 aspect override this so covers still fill.
+  virtual int homeCoverThumbHeight(const GfxRenderer&) const { return 0; }
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;

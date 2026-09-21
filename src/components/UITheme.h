@@ -8,6 +8,8 @@
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
 
+class CoverGridHomeUi;
+
 class UITheme {
   // Static instance
   static UITheme instance;
@@ -29,6 +31,9 @@ class UITheme {
                                       int maxLines, bool black = true,
                                       EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                                       TextVerticalAlignment verticalAlignment = TextVerticalAlignment::CENTER);
+  static bool supportsCoverGrid();
+  bool hasCoverGridHome() const;
+  void drawCoverGridHome(CoverGridHomeUi& home) const;
   void reload();
   void setTheme(CrossPointSettings::UI_THEME type);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);

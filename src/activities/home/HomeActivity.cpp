@@ -7,6 +7,7 @@
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -60,8 +61,11 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   int progress = 0;
   for (RecentBook& book : recentBooks) {
+    // The cover grid draws each slot at its own size; generating at any other
+    // height would rescale the dithered thumb at draw time and alias badly.
+    const int thumbHeight = coverGridUi ? coverGridUi->thumbHeightFor(progress) : coverHeight;
     if (!book.coverBmpPath.empty()) {
-      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight);
       if (!Storage.exists(coverPath.c_str())) {
         // If epub, try to load the metadata for title/author and cover
         if (FsHelpers::hasEpubExtension(book.path)) {
@@ -75,7 +79,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
             popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
           }
           GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(coverHeight);
+          bool success = epub.generateThumbBmp(thumbHeight);
           if (!success) {
             RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
             book.coverBmpPath = "";
@@ -92,7 +96,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
               popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
             }
             GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(coverHeight);
+            bool success = xtc.generateThumbBmp(thumbHeight);
             if (!success) {
               RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
               book.coverBmpPath = "";
@@ -116,7 +120,13 @@ void HomeActivity::onEnter() {
   hasOpdsServers = OPDS_STORE.hasServers();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  loadRecentBooks(metrics.homeRecentBooksCount);
+  if (UITheme::getInstance().hasCoverGridHome()) {
+    // Screen-lifetime interaction tables and component properties exceed the stack budget.
+    coverGridUi = makeUniqueNoThrow<CoverGridHomeUi>(renderer);
+    if (!coverGridUi) LOG_ERR("HOME", "OOM: cover grid UI; using standard home");
+  }
+  loadRecentBooks(coverGridUi ? CoverGridHomeUi::MAX_BOOKS : metrics.homeRecentBooksCount);
+  if (coverGridUi) coverGridUi->begin(recentBooks, hasOpdsServers);
 
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
@@ -127,6 +137,8 @@ void HomeActivity::onEnter() {
 
 void HomeActivity::onExit() {
   Activity::onExit();
+
+  coverGridUi.reset();
 
   // Free the stored cover buffer if any
   freeCoverBuffer();
@@ -229,6 +241,17 @@ void HomeActivity::loop() {
     return;
   }
 
+  if (coverGridUi) {
+    const int touched = coverGridUi->selectedAction(mappedInput);
+    if (touched >= 0 && touched < menuCount) {
+      selectorIndex = touched;
+      activateSelection();
+      return;
+    }
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) activateSelection();
+    return;
+  }
+
   const int coverColumnCount = std::max(1, metrics.homeRecentBooksCount);
   const int recentCount = std::min(static_cast<int>(recentBooks.size()), coverColumnCount);
   const int coverColumnWidth = (renderer.getScreenWidth() - 2 * metrics.contentSidePadding) / coverColumnCount;
@@ -284,6 +307,33 @@ void HomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
+  if (coverGridUi) {
+    coverGridUi->setSelection(selectorIndex);
+    UITheme::getInstance().drawCoverGridHome(*coverGridUi);
+    const auto labels = mappedInput.mapLabels(recentBooks.empty() ? "" : tr(STR_RESUME), tr(STR_SELECT), tr(STR_DIR_UP),
+                                              tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
+                                                                   : HalDisplay::FAST_REFRESH);
+    // Slot heights are recorded during the draw above; a change (first layout
+    // pass, orientation switch) means the paths must point at those sizes and
+    // any missing thumbs must be generated. Refreshing the paths right away
+    // lets the next pass draw already-cached thumbs before generation runs.
+    const bool coverSpecChanged = coverGridUi->takeThumbHeightsChanged();
+    if (coverSpecChanged) {
+      coverGridUi->refreshCoverPaths();
+      recentsLoaded = false;
+    }
+    if (!firstRenderDone) {
+      firstRenderDone = true;
+      requestUpdate();
+    } else if (!recentsLoaded && !recentsLoading) {
+      loadRecentCovers(CoverGridHomeUi::THUMB_HEIGHT);
+      coverGridUi->refreshCoverPaths();
+      requestUpdate();
+    }
+    return;
+  }
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
   // Band spans topPadding..homeTopPadding: the cover tile starts at the fixed
@@ -341,7 +391,8 @@ void HomeActivity::render(RenderLock&&) {
     requestUpdate();
   } else if (!recentsLoaded && !recentsLoading) {
     recentsLoading = true;
-    loadRecentCovers(metrics.homeCoverHeight);
+    const int themeThumbHeight = GUI.homeCoverThumbHeight(renderer);
+    loadRecentCovers(themeThumbHeight > 0 ? themeThumbHeight : metrics.homeCoverHeight);
   }
 }
 

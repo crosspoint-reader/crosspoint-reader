@@ -1,0 +1,81 @@
+#pragma once
+
+#include <Bitmap.h>
+#include <HalMemory.h>
+#include <HalStorage.h>
+
+#include <array>
+#include <string>
+#include <vector>
+
+#include "RecentBooksStore.h"
+#include "UiAppHost.h"
+#include "components/bars/tab-bar.h"
+#include "components/media/book-card.h"
+#include "components/media/cover-grid.h"
+
+class CoverGridHomeUi final : public UiAppHost {
+ public:
+  static constexpr int THUMB_HEIGHT = 400;
+  static constexpr int GRID_COLUMNS = 3;
+  static constexpr int GRID_ROWS = 2;
+  static constexpr int MAX_BOOKS = 1 + GRID_COLUMNS * GRID_ROWS;
+  explicit CoverGridHomeUi(GfxRenderer& renderer);
+  void begin(const std::vector<RecentBook>& books, bool hasOpds);
+  void refreshCoverPaths();
+  void setSelection(int selection) { selected = selection; }
+  int selectedAction(const MappedInputManager& input);
+  // Exact generation height for a slot, recorded during draw. Thumbs must be
+  // generated at the drawn size: rescaling a dithered 1-bit image aliases badly.
+  int thumbHeightFor(size_t index) const;
+  bool takeThumbHeightsChanged();
+
+ private:
+  static void screenFn(UiScreen& screen, void* user);
+  static void onAction(const freeink::ui::ActionEvent& event, void* user);
+  void draw(UiScreen& screen);
+  void drawEmpty(UiScreen& screen);
+  void drawCurrent(UiScreen& screen, freeink::ui::Rect rect);
+  void drawGrid(UiScreen& screen, freeink::ui::Rect rect);
+  void drawTabs(UiScreen& screen, freeink::ui::Rect rect);
+  bool paintCover(freeink::ui::Rect rect, size_t index);
+  int loadProgress() const;
+  void invalidateCoverCache();
+  void noteThumbHeight(size_t index, int slotWidth, int slotHeight);
+
+  struct CachedCover {
+    freeink::ui::Rect rect{};
+    size_t offset = 0;
+    size_t bytes = 0;
+    bool valid = false;
+  };
+  HalMemory::PsramBuffer coverCache;
+  std::array<CachedCover, MAX_BOOKS> cachedCovers{};
+  size_t coverCacheCapacity = 0;
+  size_t coverCacheUsed = 0;
+  int coverCacheOrientation = -1;
+
+  HalFile coverFile;
+  Bitmap coverBitmap{coverFile};
+  GfxRenderer& renderer;
+  const std::vector<RecentBook>* books = nullptr;
+  std::array<std::string, MAX_BOOKS> coverPaths;
+  int featuredCoverWidth = 0;
+  int featuredCoverHeight = 0;
+  std::array<int, MAX_BOOKS> thumbHeights{};
+  bool thumbHeightsChanged = false;
+  // Slot sizes survive re-entry (the activity is recreated each time) so the
+  // first paint can use exact thumb paths instead of flashing placeholders.
+  static inline int lastThumbSpecOrientation = -1;
+  static inline std::array<int, MAX_BOOKS> lastThumbHeights{};
+  int selected = 0;
+  int pending = -1;
+  int progress = -1;
+  bool hasOpds = false;
+  char progressText[12]{};
+  // Component styles and interaction tables stay off the render task's stack.
+  freeink::ui::BookCardProps card;
+  freeink::ui::CoverGridProps grid;
+  freeink::ui::TabBarProps tabs;
+  std::array<freeink::ui::TabItem, 5> tabItems;
+};

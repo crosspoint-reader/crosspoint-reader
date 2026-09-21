@@ -5,11 +5,13 @@
 #include "./FileBrowserActivity.h"
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
+#include "components/CoverGridHomeUi.h"
 #include "util/ButtonNavigator.h"
 
 struct Rect;
 
 class HomeActivity final : public Activity {
+  std::unique_ptr<CoverGridHomeUi> coverGridUi;
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
   bool recentsLoading = false;
