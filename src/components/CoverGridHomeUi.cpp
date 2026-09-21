@@ -1,14 +1,7 @@
 #include "CoverGridHomeUi.h"
 
-#include <Bitmap.h>
-#include <Epub.h>
-#include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <HalStorage.h>
 #include <I18n.h>
-#include <Memory.h>
-#include <Txt.h>
-#include <Xtc.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -21,68 +14,43 @@
 #include "icons/library.h"
 #include "icons/settings2.h"
 #include "icons/transfer.h"
+#include "util/BookProgress.h"
 
 namespace fui = freeink::ui;
 namespace {
 constexpr fui::ActionId SELECT = 1;
-uint32_t readLe32(const uint8_t* p) {
-  return uint32_t(p[0]) | (uint32_t(p[1]) << 8) | (uint32_t(p[2]) << 16) | (uint32_t(p[3]) << 24);
-}
 }  // namespace
 
-CoverGridHomeUi::CoverGridHomeUi(GfxRenderer& renderer) : UiAppHost(renderer), renderer(renderer) {}
+CoverGridHomeUi::CoverGridHomeUi(GfxRenderer& renderer)
+    : UiAppHost(renderer), coverCache(renderer), renderer(renderer) {}
 
 void CoverGridHomeUi::begin(const std::vector<RecentBook>& recent, bool opds, bool continuing) {
   books = &recent;
   hasOpds = opds;
   hasContinueReading = continuing;
-  if (!recent.empty()) {
-    // Cover regions do not overlap. Each may widen by one physical byte per row.
-    coverCacheCapacity = renderer.getRegionByteSize(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight()) +
-                         coverPaths.size() * std::max(renderer.getScreenWidth(), renderer.getScreenHeight());
-    coverCache = HalMemory::allocatePsram(coverCacheCapacity);
-    if (!coverCache) {
-      LOG_ERR("HOME", "PSRAM cover cache unavailable (%u bytes); rendering uncached", unsigned(coverCacheCapacity));
-      coverCacheCapacity = 0;
-    } else {
-      LOG_DBG("HOME", "Cover cache: %u bytes in PSRAM", unsigned(coverCacheCapacity));
-    }
-  }
+  if (!recent.empty()) coverCache.begin();
   resetUi();
   app.on(SELECT, &CoverGridHomeUi::onAction, this);
   app.setScreen(&CoverGridHomeUi::screenFn, this);
   if (lastThumbSpecOrientation == static_cast<int>(renderer.getOrientation())) thumbHeights = lastThumbHeights;
   refreshCoverPaths();
-  progress = hasContinueReading ? loadProgress() : -1;
+  progress = hasContinueReading && !books->empty() ? loadBookProgress(books->front().path) : -1;
   if (progress >= 0) snprintf(progressText, sizeof(progressText), "%d%%", progress);
 }
 
-void CoverGridHomeUi::invalidateCoverCache() {
-  coverCacheUsed = 0;
-  for (auto& cached : cachedCovers) cached = CachedCover{};
-}
-
 void CoverGridHomeUi::refreshCoverPaths() {
-  invalidateCoverCache();
+  coverCache.invalidate();
   for (size_t i = 0; i < books->size() && i < coverPaths.size(); ++i) refreshCoverPath(i);
 }
 
 void CoverGridHomeUi::refreshCoverPath(size_t index) {
   if (index >= books->size() || index >= coverPaths.size()) return;
-  cachedCovers[index].valid = false;
+  coverCache.invalidate(index);
   coverPaths[index] = thumbHeights[index] > 0
                           ? UITheme::getCoverThumbPath((*books)[index].coverBmpPath, thumbHeights[index])
                           : std::string();
   if (index != 0) return;
-  featuredCoverWidth = featuredCoverHeight = 0;
-  if (!coverPaths[0].empty() && Storage.exists(coverPaths[0].c_str()) &&
-      Storage.openFileForRead("HOME", coverPaths[0], coverFile)) {
-    if (coverBitmap.parseHeaders() == BmpReaderError::Ok) {
-      featuredCoverWidth = coverBitmap.getWidth();
-      featuredCoverHeight = coverBitmap.getHeight();
-    }
-    coverFile.close();
-  }
+  coverCache.readSize(coverPaths[0], featuredCoverWidth, featuredCoverHeight);
 }
 
 int CoverGridHomeUi::thumbHeightFor(size_t index) const {
@@ -98,7 +66,7 @@ bool CoverGridHomeUi::takeThumbHeightsChanged() {
 void CoverGridHomeUi::noteThumbHeight(size_t index, int slotWidth, int slotHeight) {
   if (index >= thumbHeights.size()) return;
   // Thumbs cover a (0.6*h, h) target box, so a height of max(h, w*5/3) makes
-  // every cover overfill the slot; paintCover crops the overflow (full bleed).
+  // every cover overfill the slot; the cover renderer crops the overflow (full bleed).
   const int height = std::max({1, slotHeight, slotWidth * 5 / 3 + 2});
   if (thumbHeights[index] != height) {
     thumbHeights[index] = height;
@@ -124,11 +92,7 @@ int CoverGridHomeUi::selectedAction(const MappedInputManager& input) {
 void CoverGridHomeUi::screenFn(UiScreen& screen, void* user) { static_cast<CoverGridHomeUi*>(user)->draw(screen); }
 
 void CoverGridHomeUi::draw(UiScreen& screen) {
-  const int orientation = static_cast<int>(renderer.getOrientation());
-  if (coverCacheOrientation != orientation) {
-    invalidateCoverCache();
-    coverCacheOrientation = orientation;
-  }
+  coverCache.prepare();
   const auto& theme = screen.theme();
   const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, true);
   screen.setContentMarginFromScreen(fui::Insets{
@@ -325,104 +289,7 @@ bool CoverGridHomeUi::paintFramedCover(fui::DrawTarget& target, fui::Rect rect, 
   const auto ink = fui::Paint::solid(fui::Color::Black);
   target.fill(fui::Rect{rect.right(), static_cast<int16_t>(rect.y + SHADOW_OFFSET), SHADOW_OFFSET, rect.height}, ink);
   target.fill(fui::Rect{static_cast<int16_t>(rect.x + SHADOW_OFFSET), rect.bottom(), rect.width, SHADOW_OFFSET}, ink);
-  const bool drawn = paintCover(rect, index);
+  const bool drawn = index < coverPaths.size() && coverCache.paint(rect, index, coverPaths[index]);
   target.stroke(rect, ink, 1, 0);
   return drawn;
-}
-
-bool CoverGridHomeUi::paintCover(fui::Rect rect, size_t index) {
-  if (index >= cachedCovers.size()) return false;
-  auto& cached = cachedCovers[index];
-  if (coverCache && cached.valid && cached.rect.x == rect.x && cached.rect.y == rect.y &&
-      cached.rect.width == rect.width && cached.rect.height == rect.height &&
-      renderer.copyBufferToRegion(rect.x, rect.y, rect.width, rect.height, coverCache.get() + cached.offset,
-                                  cached.bytes)) {
-    return true;
-  }
-  cached.valid = false;
-  bool drawn = false;
-  if (index < coverPaths.size() && !coverPaths[index].empty() &&
-      Storage.openFileForRead("HOME", coverPaths[index], coverFile)) {
-    if (coverBitmap.parseHeaders() == BmpReaderError::Ok && coverBitmap.getWidth() > 0 && coverBitmap.getHeight() > 0) {
-      drawn = GUI.drawCoverThumbFill(renderer, coverBitmap, Rect{rect.x, rect.y, rect.width, rect.height});
-    }
-    coverFile.close();
-  }
-  if (!drawn) GUI.drawCoverPlaceholder(renderer, Rect{rect.x, rect.y, rect.width, rect.height});
-  if (coverCache) {
-    const size_t needed = renderer.getRegionByteSize(rect.x, rect.y, rect.width, rect.height);
-    if (needed > cached.bytes && needed <= coverCacheCapacity - coverCacheUsed) {
-      cached.offset = coverCacheUsed;
-      cached.bytes = needed;
-      coverCacheUsed += needed;
-    }
-    if (needed > 0 && needed <= cached.bytes) {
-      cached.rect = rect;
-      cached.valid = renderer.copyRegionToBuffer(rect.x, rect.y, rect.width, rect.height,
-                                                 coverCache.get() + cached.offset, cached.bytes);
-    }
-  }
-  return true;  // The cover slot is painted, including fallback art.
-}
-
-int CoverGridHomeUi::loadProgress() const {
-  if (books->empty()) return -1;
-  const auto& path = books->front().path;
-  uint8_t data[10]{};
-  if (FsHelpers::hasEpubExtension(path)) {
-    // Metadata objects exceed the stack budget; only the featured book is loaded, once per entry.
-    auto epub = makeUniqueNoThrow<Epub>(path, "/.crosspoint");
-    if (!epub) {
-      LOG_ERR("HOME", "OOM: progress metadata");
-      return -1;
-    }
-    if (!epub->load(false, true)) return -1;
-    HalFile file;
-    if (!Storage.openFileForRead("HOME", epub->getCachePath() + "/progress.bin", file)) return -1;
-    const int size = file.read(data, sizeof(data));
-    if (size != 4 && size != 6 && size != 10) return -1;
-    const int spine = data[0] | (data[1] << 8);
-    const int page = data[2] | (data[3] << 8);
-    const int total = size >= 6 ? data[4] | (data[5] << 8) : 0;
-    if (epub->getSpineItemsCount() <= 0 || epub->getBookSize() == 0) return -1;
-    if (spine == epub->getSpineItemsCount()) return 100;
-    if (spine > epub->getSpineItemsCount()) return -1;
-    const float fraction = total > 0 && page != UINT16_MAX ? std::clamp(float(page) / total, 0.0f, 1.0f) : 0;
-    return std::clamp(static_cast<int>(epub->calculateProgress(spine, fraction) * 100 + 0.5f), 0, 100);
-  }
-  if (FsHelpers::hasXtcExtension(path)) {
-    auto xtc = makeUniqueNoThrow<Xtc>(path, "/.crosspoint");
-    if (!xtc) {
-      LOG_ERR("HOME", "OOM: XTC progress metadata");
-      return -1;
-    }
-    if (!xtc->load()) return -1;
-    HalFile file;
-    if (!Storage.openFileForRead("HOME", xtc->getCachePath() + "/progress.bin", file) || file.read(data, 4) != 4)
-      return -1;
-    const uint32_t page = readLe32(data);
-    if (xtc->getPageCount() == 0) return -1;
-    if (page >= xtc->getPageCount()) return 100;
-    return xtc->calculateProgress(page);
-  }
-  if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
-    Txt txt(path, "/.crosspoint");
-    HalFile file;
-    if (!Storage.openFileForRead("HOME", txt.getCachePath() + "/progress.bin", file) || file.read(data, 4) != 4)
-      return -1;
-    const uint32_t page = data[0] | (data[1] << 8);
-    HalFile index;
-    // TXT index v3: magic, version, file size, four layout fields, alignment, page count.
-    uint8_t header[30];
-    if (!Storage.openFileForRead("HOME", txt.getCachePath() + "/index.bin", index) ||
-        index.read(header, sizeof(header)) != sizeof(header))
-      return -1;
-    if (readLe32(header) != 0x54585449 || header[4] != 3) return -1;
-    const uint32_t pages = readLe32(header + 26);
-    if (pages == 0 || pages > (index.size() - sizeof(header)) / 4) return -1;
-    HalFile source;
-    if (!Storage.openFileForRead("HOME", path, source) || source.size() != readLe32(header + 5)) return -1;
-    return std::min<int>(100, static_cast<int>((page + 1) * 100ULL / pages));
-  }
-  return -1;
 }

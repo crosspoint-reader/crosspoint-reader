@@ -1,13 +1,10 @@
 #pragma once
 
-#include <Bitmap.h>
-#include <HalMemory.h>
-#include <HalStorage.h>
-
 #include <array>
 #include <string>
 #include <vector>
 
+#include "HomeCoverCache.h"
 #include "RecentBooksStore.h"
 #include "UiAppHost.h"
 #include "components/bars/tab-bar.h"
@@ -20,6 +17,7 @@ class CoverGridHomeUi final : public UiAppHost {
   static constexpr int GRID_COLUMNS = 3;
   static constexpr int GRID_ROWS = 2;
   static constexpr int MAX_BOOKS = 1 + GRID_COLUMNS * GRID_ROWS;
+  static_assert(MAX_BOOKS <= HomeCoverCache::MAX_COVERS);
   explicit CoverGridHomeUi(GfxRenderer& renderer);
   void begin(const std::vector<RecentBook>& books, bool hasOpds, bool hasContinueReading);
   void refreshCoverPaths();
@@ -40,27 +38,11 @@ class CoverGridHomeUi final : public UiAppHost {
   void drawGrid(UiScreen& screen, freeink::ui::Rect rect);
   freeink::ui::Rect layoutGrid(UiScreen& screen, freeink::ui::Rect rect);
   void drawTabs(UiScreen& screen, freeink::ui::Rect rect);
-  bool paintCover(freeink::ui::Rect rect, size_t index);
   bool paintFramedCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect, size_t index);
-  int loadProgress() const;
-  void invalidateCoverCache();
   void refreshCoverPath(size_t index);
   void noteThumbHeight(size_t index, int slotWidth, int slotHeight);
 
-  struct CachedCover {
-    freeink::ui::Rect rect{};
-    size_t offset = 0;
-    size_t bytes = 0;
-    bool valid = false;
-  };
-  HalMemory::PsramBuffer coverCache;
-  std::array<CachedCover, MAX_BOOKS> cachedCovers{};
-  size_t coverCacheCapacity = 0;
-  size_t coverCacheUsed = 0;
-  int coverCacheOrientation = -1;
-
-  HalFile coverFile;
-  Bitmap coverBitmap{coverFile};
+  HomeCoverCache coverCache;
   GfxRenderer& renderer;
   const std::vector<RecentBook>* books = nullptr;
   std::array<std::string, MAX_BOOKS> coverPaths;
