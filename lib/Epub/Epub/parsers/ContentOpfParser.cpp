@@ -92,7 +92,12 @@ void ContentOpfParser::resolveFileAs(const std::string& id, const std::string& t
 }
 
 void ContentOpfParser::finishMetadata() {
-  for (const auto& pending : pendingFileAs) resolveFileAs(pending.id, pending.fileAs);
+  // Resolve from a moved-out copy: resolveFileAs() re-queues an id that is
+  // still unknown, which would otherwise grow the vector being iterated. An id
+  // that never appeared refines nothing, so the re-queued leftovers are dropped.
+  const std::vector<Creator> pending = std::move(pendingFileAs);
+  pendingFileAs.clear();
+  for (const auto& entry : pending) resolveFileAs(entry.id, entry.fileAs);
   pendingFileAs.clear();
 
   // One reading per creator, in `author` order. Without one for the first
