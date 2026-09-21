@@ -229,3 +229,21 @@ TEST(ContentOpfParserMetadata, FileAsIsStillReadWhenParsingStopsAtTheManifest) {
   EXPECT_EQ(parser.titleFileAs, "かんじ");
   EXPECT_EQ(Storage.writeOpens, 0);
 }
+
+TEST(ContentOpfParserMetadata, FileAsRefiningAnUnknownIdIsDroppedWithoutHarm) {
+  // A refinement whose target never appears stays queued until </metadata>;
+  // resolving it there must not re-queue it into the vector being walked.
+  const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
+    <meta refines="#nobody" property="file-as">Ghost</meta>
+    <meta refines="#missing-too" property="file-as">Wraith</meta>
+    <dc:title id="t">Emma</dc:title>
+    <meta refines="#t" property="file-as">Emma</meta>
+    <dc:creator id="c">Jane Austen</dc:creator>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.titleFileAs, "Emma");
+  EXPECT_TRUE(parser.authorFileAs.empty());
+}
