@@ -2283,6 +2283,13 @@ void ChapterHtmlSlimParser::makePages() {
                                             addLineToPage(std::move(textBlock), offset);
                                           });
 
+  // Latch again after layout: extractLine can drop a whole line (TextBlock
+  // arena OOM) during the call above, after the pre-layout latch ran, and the
+  // block is replaced right after this returns.
+  if (currentTextBlock->hadDroppedWords()) {
+    layoutOom = true;
+  }
+
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches
   // edge cases where a footnote's word index equals the exact block size.
