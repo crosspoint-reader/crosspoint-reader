@@ -2163,6 +2163,12 @@ bool ChapterHtmlSlimParser::finishParse() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
+    // Re-check: makePages() latches layoutOom for lines dropped DURING this
+    // final layout, which the entry check above cannot have seen.
+    if (layoutOom) {
+      LOG_ERR("EHP", "Text layout dropped content (OOM); failing section build");
+      return false;
+    }
     if (!pendingAnchorId.empty()) {
       anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
       pendingAnchorId.clear();
