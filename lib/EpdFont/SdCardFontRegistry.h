@@ -60,6 +60,13 @@ class SdCardFontRegistry {
   int getFamilyIndex(const std::string& name) const;
   int getFamilyCount() const { return static_cast<int>(families_.size()); }
 
+#if CROSSPOINT_VECTOR_FONTS
+  // FtFont::ReadFn over a HalFile* ctx (absolute-offset reads; count 0 is a
+  // seek probe). Shared by face inspection here and streamed TTF sources
+  // (SdCardFontSystem).
+  static unsigned long halFileRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
+#endif
+
  private:
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 

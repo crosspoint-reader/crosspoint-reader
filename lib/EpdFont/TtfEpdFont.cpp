@@ -4,6 +4,7 @@
 
 #include <Logging.h>
 #include <MemoryManager.h>
+#include <Utf8.h>
 #include <esp_heap_caps.h>
 
 #include <algorithm>
@@ -31,31 +32,6 @@ bool reserveChecked(V& v, const size_t need, const size_t step, const size_t cei
   if (!canGrow(newCap * sizeof(typename V::value_type))) return false;
   v.reserve(newCap);
   return true;
-}
-uint32_t nextCodepoint(const char*& p) {
-  const auto b0 = static_cast<uint8_t>(*p);
-  if (b0 < 0x80) {
-    ++p;
-    return b0;
-  }
-  auto cont = [&](int i) { return static_cast<uint8_t>(p[i]) & 0x3F; };
-  if ((b0 & 0xE0) == 0xC0 && (p[1] & 0xC0) == 0x80) {
-    const uint32_t cp = ((b0 & 0x1Fu) << 6) | cont(1);
-    p += 2;
-    return cp;
-  }
-  if ((b0 & 0xF0) == 0xE0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
-    const uint32_t cp = ((b0 & 0x0Fu) << 12) | (cont(1) << 6) | cont(2);
-    p += 3;
-    return cp;
-  }
-  if ((b0 & 0xF8) == 0xF0 && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 && (p[3] & 0xC0) == 0x80) {
-    const uint32_t cp = ((b0 & 0x07u) << 18) | (cont(1) << 12) | (cont(2) << 6) | cont(3);
-    p += 4;
-    return cp;
-  }
-  ++p;
-  return 0xFFFDu;
 }
 }  // namespace
 
@@ -134,11 +110,10 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
   // FT_Set_Char_Size(size, size, 150, 150)); FreeInkFont speaks pixels. Convert
   // so vector fonts match the on-glyph size and metrics of the bitmap fonts:
   //   ppem = pointSize * 150 / 72, kept in 26.6 so the fractional part survives
-  // (glyphs raster and advance at the exact ppem; sizePx_ is the rounded form
-  // for the integer-pixel Font API).
+  // (glyphs raster and advance at the exact ppem; the per-face sizePx is the
+  // rounded form for the integer-pixel Font API).
   size26_6_ = (static_cast<uint32_t>(pointSize) * 150u * 64u + 36u) / 72u;
   const uint16_t sizePx = static_cast<uint16_t>((size26_6_ + 32u) >> 6);
-  sizePx_ = sizePx;
   resolveFaces();
   for (int i = 0; i < 4; ++i) {
     Face& f = faces_[i];
@@ -479,22 +454,10 @@ bool TtfEpdFont::build(const char* utf8) {
   flushFace(faces_[0]);
   return addCoverage(utf8);
 }
-bool TtfEpdFont::build(const std::deque<std::string>& words, const bool includeHyphen) {
-  if (!loaded_) return false;
-  flushFace(faces_[0]);
-  return addCoverage(words, includeHyphen);
-}
 bool TtfEpdFont::addCoverage(const char* utf8) {
   if (!loaded_ || utf8 == nullptr) return false;
-  for (const char* p = utf8; *p != '\0';) faultGlyph(faces_[0], nextCodepoint(p));
-  return true;
-}
-bool TtfEpdFont::addCoverage(const std::deque<std::string>& words, const bool includeHyphen) {
-  if (!loaded_) return false;
-  for (const std::string& w : words) {
-    for (const char* p = w.c_str(); *p != '\0';) faultGlyph(faces_[0], nextCodepoint(p));
-  }
-  if (includeHyphen) faultGlyph(faces_[0], '-');
+  const auto* p = reinterpret_cast<const unsigned char*>(utf8);
+  while (*p != '\0') faultGlyph(faces_[0], utf8NextCodepoint(&p));
   return true;
 }
 

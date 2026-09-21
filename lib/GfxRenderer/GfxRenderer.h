@@ -185,8 +185,6 @@ class GfxRenderer {
   // font prewarm. The TtfEpdFont is owned by the caller (SdCardFontSystem).
   void registerTtfFont(int fontId, TtfEpdFont* font) { ttfFonts_[fontId] = font; }
   void unregisterTtfFont(int fontId) { ttfFonts_.erase(fontId); }
-  void clearTtfFonts() { ttfFonts_.clear(); }
-  bool isTtfFont(int fontId) const { return ttfFonts_.count(fontId) > 0; }
   const std::map<int, TtfEpdFont*>& getTtfFonts() const { return ttfFonts_; }
   // Register/clear size-matched CJK UI fallbacks (see fallbackFontMap_).
   // setFallbackFont maps a primary UI font id to an SD font id of the same size.

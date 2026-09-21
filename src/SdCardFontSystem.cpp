@@ -277,14 +277,6 @@ void SdCardFontSystem::unloadTtf(GfxRenderer& renderer) {
   ttfPointSize_ = 0;
 }
 
-unsigned long SdCardFontSystem::ttfRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count) {
-  auto* f = static_cast<HalFile*>(ctx);
-  if (f == nullptr || !*f) return 0;
-  if (!f->seek(static_cast<size_t>(offset))) return 0;
-  const int n = f->read(buffer, count);
-  return n < 0 ? 0 : static_cast<unsigned long>(n);
-}
-
 bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& path) {
   if (style >= 4) return false;
   // Small fonts are read fully into RAM (fastest, fewest SD reads; PSRAM when
@@ -336,7 +328,7 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
     }
     s.streamed = false;
   } else {
-    s.file = std::move(f);  // kept open; ttfRead() reads it on demand
+    s.file = std::move(f);  // kept open; halFileRead() reads it on demand
     s.streamed = true;
     LOG_DBG("SDFS", "Streaming TTF %s (%u KB) from SD", path.c_str(), static_cast<unsigned>(len / 1024));
   }
@@ -350,7 +342,7 @@ void SdCardFontSystem::addTtfSources(TtfEpdFont& font) {
     TtfSource& s = ttfSources_[st];
     if (!s.present) continue;
     if (s.streamed) {
-      font.addStreamSource(st, &SdCardFontSystem::ttfRead, &s.file, s.size);
+      font.addStreamSource(st, &SdCardFontRegistry::halFileRead, &s.file, s.size);
     } else {
       font.addResidentSource(st, s.bytes.data(), static_cast<uint32_t>(s.bytes.size()));
     }

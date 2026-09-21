@@ -81,9 +81,6 @@ class SdCardFontSystem {
   // text (book titles, list rows, menus, status bar) in scripts the built-in
   // fonts lack renders in the chosen TTF. Mirrors setupUiFallbacks for .cpfont.
   void setupTtfUiFallbacks(GfxRenderer& renderer);
-  // FreeType stream io: reads a source's open file at an absolute offset (ctx is
-  // a HalFile*).
-  static unsigned long ttfRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
   // Open one style source file (resident if small, streamed if large) into
   // ttfSources_[style]. Returns false on open/read failure.
   bool openTtfSource(uint8_t style, const std::string& path);

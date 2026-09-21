@@ -130,9 +130,9 @@ uint8_t SdCardFontRegistry::parseVectorStyle(const char* baseName, size_t baseLe
   return static_cast<uint8_t>((bold ? 1 : 0) | (ital ? 2 : 0));
 }
 
-namespace {
 // FtFont::ReadFn over a HalFile (absolute-offset reads; count 0 is a seek probe).
-unsigned long inspectRead(void* ctx, const unsigned long offset, unsigned char* buffer, const unsigned long count) {
+unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long offset, unsigned char* buffer,
+                                              const unsigned long count) {
   auto* f = static_cast<HalFile*>(ctx);
   if (f == nullptr || !*f) return 0;
   if (!f->seek(static_cast<size_t>(offset))) return 0;
@@ -140,7 +140,6 @@ unsigned long inspectRead(void* ctx, const unsigned long offset, unsigned char* 
   const int n = f->read(buffer, count);
   return n < 0 ? 0 : static_cast<unsigned long>(n);
 }
-}  // namespace
 
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
   using freeink::font::FtFont;
@@ -151,7 +150,7 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
     HalFile f = Storage.open(info.path.c_str());
     if (!f || f.isDirectory()) continue;
     FtFont::FaceInfo face;
-    if (FtFont::inspectStream(&inspectRead, &f, static_cast<unsigned long>(f.size()), face) !=
+    if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) !=
         FtFont::InspectResult::Ok) {
       continue;  // unreadable/unsupported face: keep the filename-derived role
     }

@@ -47,8 +47,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <deque>
-#include <string>
 
 #include "EpdFont.h"
 #include "EpdFontData.h"
@@ -69,11 +67,7 @@ class TtfEpdFont {
   // Returns false if the regular source is missing or unparseable.
   bool load(uint16_t pointSize, bool twoBit = true, size_t glyphCacheBytes = 32 * 1024, uint16_t maxGlyphs = 768);
 
-  bool ready() const { return loaded_; }
-  uint16_t sizePx() const { return sizePx_; }
-
   EpdFontFamily family() const;
-  const EpdFont* epdFont() const { return loaded_ ? &faces_[0].font : nullptr; }
 
   // Per-scope reset (mirrors SdCardFont::clearCache): drop every face's cached
   // page glyphs but KEEP the allocations (byte arena + vector capacity), so a
@@ -92,9 +86,7 @@ class TtfEpdFont {
 
   // Optional batch pre-warm of the REGULAR face (other styles fault lazily).
   bool build(const char* utf8);
-  bool build(const std::deque<std::string>& words, bool includeHyphen);
   bool addCoverage(const char* utf8);
-  bool addCoverage(const std::deque<std::string>& words, bool includeHyphen);
 
  private:
   // A borrowed source file (one per style role that the caller supplies).
@@ -156,9 +148,8 @@ class TtfEpdFont {
   int8_t faultKern(Face& f, uint32_t leftCp, uint32_t rightCp);
   static void flushFace(Face& f);
 
-  Source sources_[4];  // indexed by Style role
-  Face faces_[4];      // 0=regular 1=bold 2=italic 3=bold-italic
-  uint16_t sizePx_ = 0;
+  Source sources_[4];      // indexed by Style role
+  Face faces_[4];          // 0=regular 1=bold 2=italic 3=bold-italic
   uint32_t size26_6_ = 0;  // exact 26.6 ppem (pt @150DPI), no whole-pixel rounding
   bool loaded_ = false;
   // Set while a glyph fault runs MemoryManager::ensureFree(): the eviction
