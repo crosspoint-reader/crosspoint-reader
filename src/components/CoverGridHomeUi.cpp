@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 #include "MappedInputManager.h"
 #include "UITheme.h"
@@ -32,7 +33,6 @@ void CoverGridHomeUi::begin(const std::vector<RecentBook>& recent, bool opds, bo
   resetUi();
   app.on(SELECT, &CoverGridHomeUi::onAction, this);
   app.setScreen(&CoverGridHomeUi::screenFn, this);
-  if (lastThumbSpecOrientation == static_cast<int>(renderer.getOrientation())) thumbHeights = lastThumbHeights;
   refreshCoverPaths();
   progress = hasContinueReading && !books->empty() ? loadBookProgress(books->front().path) : -1;
   if (progress >= 0) snprintf(progressText, sizeof(progressText), "%d%%", progress);
@@ -57,11 +57,7 @@ int CoverGridHomeUi::thumbHeightFor(size_t index) const {
   return index < thumbHeights.size() && thumbHeights[index] > 0 ? thumbHeights[index] : THUMB_HEIGHT;
 }
 
-bool CoverGridHomeUi::takeThumbHeightsChanged() {
-  const bool changed = thumbHeightsChanged;
-  thumbHeightsChanged = false;
-  return changed;
-}
+bool CoverGridHomeUi::takeThumbHeightsChanged() { return std::exchange(thumbHeightsChanged, false); }
 
 void CoverGridHomeUi::noteThumbHeight(size_t index, int slotWidth, int slotHeight) {
   if (index >= thumbHeights.size()) return;
@@ -73,8 +69,6 @@ void CoverGridHomeUi::noteThumbHeight(size_t index, int slotWidth, int slotHeigh
     thumbHeightsChanged = true;
     refreshCoverPath(index);
   }
-  lastThumbHeights[index] = height;
-  lastThumbSpecOrientation = static_cast<int>(renderer.getOrientation());
 }
 
 void CoverGridHomeUi::onAction(const fui::ActionEvent& event, void* user) {
@@ -121,7 +115,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   const auto& gridRect = gridBounds;
   tabRect.x = gridRect.x + grid.cellInset.left;
   tabRect.width = gridRect.width - grid.cellInset.left - grid.cellInset.right;
-  headingRect.x = tabRect.x - 1;
+  headingRect.x = tabRect.x - 3;
   headingRect.width = tabRect.width;
   screen.target().text(headingRect, hasContinueReading ? tr(STR_CONTINUE_READING) : tr(STR_START_READING), headingText);
   drawTabs(screen, tabRect);

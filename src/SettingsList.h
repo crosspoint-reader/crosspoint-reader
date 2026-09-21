@@ -188,14 +188,10 @@ inline std::vector<StrId> buildLongPressMenuValues() {
 }
 
 inline std::vector<StrId> homeThemeValues() {
-  std::vector<StrId> values;
-  values.reserve(5);
-  values.push_back(StrId::STR_THEME_CLASSIC);
-  values.push_back(StrId::STR_THEME_LYRA);
-  values.push_back(StrId::STR_THEME_LYRA_EXTENDED);
-  values.push_back(StrId::STR_THEME_ROUNDEDRAFF);
-  if (UITheme::supportsCoverGrid()) values.push_back(StrId::STR_THEME_COVER_GRID);
-  return values;
+  static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
+  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
+  return {VALUES, VALUES + count};
 }
 
 // Shared settings list used by both the device settings UI and the web settings API.

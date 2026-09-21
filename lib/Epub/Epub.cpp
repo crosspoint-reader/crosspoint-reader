@@ -799,7 +799,6 @@ bool Epub::generateThumbBmpFromSource(int height) {
   if (!parseContentOpf(*metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/false, zip.get())) return false;
   zip.reset();
   setupCacheDir();
-  LOG_DBG("EBP", "Generating thumbnail without reading index");
   return generateThumbBmpForCover(height, metadata->coverItemHref);
 }
 

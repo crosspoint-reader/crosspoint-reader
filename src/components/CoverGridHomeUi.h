@@ -50,10 +50,6 @@ class CoverGridHomeUi final : public UiAppHost {
   int featuredCoverHeight = 0;
   std::array<int, MAX_BOOKS> thumbHeights{};
   bool thumbHeightsChanged = false;
-  // Slot sizes survive re-entry (the activity is recreated each time) so the
-  // first paint can use exact thumb paths instead of flashing placeholders.
-  static inline int lastThumbSpecOrientation = -1;
-  static inline std::array<int, MAX_BOOKS> lastThumbHeights{};
   int selected = 0;
   int pending = -1;
   int progress = -1;

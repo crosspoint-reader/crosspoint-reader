@@ -161,7 +161,6 @@ void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoad
 
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
-  const uint32_t startedAt = millis();
   bool showingLoading = false;
   Rect popupRect;
 
@@ -222,7 +221,6 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
-  if (coverGridUi) LOG_DBG("HOME", "Cover batch completed in %lu ms", millis() - startedAt);
   recentsLoaded = true;
   recentsLoading = false;
 }

@@ -17,8 +17,6 @@ void HomeCoverCache::begin() {
   if (!coverCache) {
     LOG_ERR("HOME", "PSRAM cover cache unavailable (%u bytes); rendering uncached", unsigned(coverCacheCapacity));
     coverCacheCapacity = 0;
-  } else {
-    LOG_DBG("HOME", "Cover cache: %u bytes in PSRAM", unsigned(coverCacheCapacity));
   }
 }
 

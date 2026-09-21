@@ -47,23 +47,19 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
       currentTheme = std::make_unique<BaseTheme>();
       currentMetrics = &BaseMetrics::values;
       break;
-    case CrossPointSettings::UI_THEME::COVER_GRID: {
+    case CrossPointSettings::UI_THEME::COVER_GRID:
+    case CrossPointSettings::UI_THEME::LYRA: {
       // The cover home owns its screen-lifetime UI state; other screens retain Lyra styling.
       auto theme = makeUniqueNoThrow<LyraTheme>();
       if (!theme) {
-        LOG_ERR("UI", "OOM: cover grid theme");
+        LOG_ERR("UI", "OOM: Lyra theme");
         return;
       }
       currentTheme = std::move(theme);
       currentMetrics = &LyraMetrics::values;
-      LOG_DBG("UI", "Using Cover Grid theme");
+      LOG_DBG("UI", "Using Lyra theme");
       break;
     }
-    case CrossPointSettings::UI_THEME::LYRA:
-      LOG_DBG("UI", "Using Lyra theme");
-      currentTheme = std::make_unique<LyraTheme>();
-      currentMetrics = &LyraMetrics::values;
-      break;
     case CrossPointSettings::UI_THEME::ROUNDEDRAFF:
       LOG_DBG("UI", "Using RoundedRaff theme");
       currentTheme = std::make_unique<RoundedRaffTheme>();
