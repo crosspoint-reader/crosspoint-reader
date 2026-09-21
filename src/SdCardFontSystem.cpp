@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <TtfEpdFont.h>
 #include <esp_heap_caps.h>
 
@@ -361,7 +362,11 @@ void SdCardFontSystem::setupTtfUiFallbacks(GfxRenderer& renderer) {
         continue;
       }
     }
-    auto f = std::unique_ptr<TtfEpdFont>(new TtfEpdFont());
+    auto f = makeUniqueNoThrow<TtfEpdFont>();
+    if (!f) {
+      LOG_ERR("SDFS", "OOM: TtfEpdFont for UI fallback @%upt", ui.pointSize);
+      continue;  // built-in bitmap UI fonts keep covering this size
+    }
     addTtfSources(*f);
     const bool ok = f->load(ui.pointSize, /*twoBit=*/true, /*glyphCacheBytes=*/16 * 1024, /*maxGlyphs=*/384);
     if (!ok) continue;
@@ -412,7 +417,14 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     return;
   }
 
-  ttf_.reset(new TtfEpdFont());
+  ttf_ = makeUniqueNoThrow<TtfEpdFont>();
+  if (!ttf_) {
+    // Transient OOM: keep the user's selection (unlike a parse failure) so the
+    // next ensureLoaded() can retry once heap pressure passes.
+    LOG_ERR("SDFS", "OOM: TtfEpdFont for %s", family.name.c_str());
+    freeTtfSources();
+    return;
+  }
   addTtfSources(*ttf_);
   const bool ok = ttf_->load(size);
   if (!ok) {

@@ -530,6 +530,13 @@ void ChapterHtmlSlimParser::closeTableCell() {
     return;
   }
 
+  // Latch before the cell leaves currentTextBlock: parseStep()'s dropped-word
+  // check only inspects currentTextBlock, so a cell parsed and moved (or reset
+  // while empty) within one XML buffer would otherwise lose its OOM flag.
+  if (currentTextBlock->hadDroppedWords()) {
+    layoutOom = true;
+  }
+
   if (!tableRowStacked &&
       (tableRowCells.size() >= MAX_GRID_TABLE_COLUMNS || currentTextBlock->size() > MAX_GRID_TABLE_CELL_WORDS)) {
     fallbackTableRowToStacked();
@@ -619,6 +626,11 @@ void ChapterHtmlSlimParser::finishTableRow() {
           tableLineVisibleOffsets[lineIndex] = std::min(tableLineVisibleOffsets[lineIndex], offset);
         });
     maxLineCount = std::max(maxLineCount, lines.size());
+  }
+  // Cell layout itself can drop lines (TextBlock arena OOM in extractLine);
+  // latch that before the cells are destroyed.
+  for (const auto& cell : tableRowCells) {
+    if (cell && cell->hadDroppedWords()) layoutOom = true;
   }
   tableRowCells.clear();
   const auto clearLayoutLines = [this]() {
@@ -1401,6 +1413,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                                                                                   BlockStyle::CombineAxis::Horizontal);
       self->blockStyleStack.push_back(accumulated);
       self->startNewTextBlock(accumulated.withoutBottom());
+      if (!self->currentTextBlock) {
+        // OOM: layoutOom is latched; bail before the <li> marker path below
+        // dereferences the missing block. parseStep() fails the build.
+        return;
+      }
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0) {

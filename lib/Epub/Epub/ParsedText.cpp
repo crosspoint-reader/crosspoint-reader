@@ -216,15 +216,19 @@ void stripSoftHyphensInPlace(std::string& word) {
 // Returns the advance width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
 // Uses advance width (sum of glyph advances + kerning) rather than bounding box width so that italic glyph overhangs
 // don't inflate inter-word spacing.
-// `word` must be NUL-terminated at data()[size()] — arena entries and std::string
-// arguments both guarantee this — so the fast path can feed the C API.
+// `word` is usually NUL-terminated at data()[size()] (arena entries and
+// std::string arguments), but focus-split candidates pass PREFIX views of a
+// stored word. Probing data()[size()] is in-bounds for every caller (it is
+// either the word's own NUL or a mid-word byte of the same arena entry) and
+// routes unterminated views through the copying path so the C API never
+// measures past the view.
 uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string_view word,
                           const EpdFontFamily::Style style, const bool appendHyphen = false) {
   if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
     return renderer.getSpaceWidth(fontId, style);
   }
   const bool hasSoftHyphen = containsSoftHyphen(word);
-  if (!hasSoftHyphen && !appendHyphen) {
+  if (!hasSoftHyphen && !appendHyphen && word.data()[word.size()] == '\0') {
     return renderer.getTextAdvanceX(fontId, word.data(), style);
   }
 
@@ -279,9 +283,9 @@ uint16_t measureFocusWordWidth(const GfxRenderer& renderer, const int fontId, co
     return measureWordWidth(renderer, fontId, word, static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD),
                             appendHyphen);
   }
-  const uint16_t suffixWidth =
-      appendHyphen ? measureWordWidth(renderer, fontId, word.substr(focusBoundary), style, true)
-                   : static_cast<uint16_t>(renderer.getTextAdvanceX(fontId, word.data() + focusBoundary, style));
+  // Through measureWordWidth (not getTextAdvanceX directly): `word` itself can
+  // be an unterminated prefix view here, and the suffix view inherits that.
+  const uint16_t suffixWidth = measureWordWidth(renderer, fontId, word.substr(focusBoundary), style, appendHyphen);
   return measureFocusPrefixAdvance(renderer, fontId, word, style, focusBoundary) + suffixWidth;
 }
 
@@ -1644,6 +1648,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                               std::move(lineLinks));
     if (!block || !block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
+      // Latch through the same flag as addWord() OOM: the caller releases the
+      // consumed words right after this returns, so without it the section
+      // would commit with this line silently missing.
+      droppedWords = true;
       return;
     }
     processLine(std::move(block), lineVisibleOffset);
@@ -1667,6 +1675,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                                             std::move(lineRubyTexts), std::move(lineLinks));
   if (!block || !block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
+    droppedWords = true;  // see the non-focus branch above
     return;
   }
   processLine(std::move(block), lineVisibleOffset);
