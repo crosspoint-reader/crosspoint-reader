@@ -7,6 +7,7 @@
 #include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <WiFi.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -28,6 +29,7 @@
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
+#include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -371,9 +373,28 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::OPDSBrowser:
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
         break;
-      case SettingAction::Network:
-        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+      case SettingAction::Network: {
+        auto activity = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput, false);
+        if (!activity) {
+          LOG_ERR("SETTINGS", "OOM: WifiSelectionActivity");
+          return;
+        }
+        startActivityForResult(std::move(activity), [](const ActivityResult&) {
+          SETTINGS.saveToFile();
+          // Every other WiFi consumer hands the radio to a session it owns;
+          // these rows only save credentials, so nothing here would ever
+          // release the driver's heap. The scan alone brings it up, so tear
+          // down whether or not the user joined a network.
+          if (WiFi.getMode() == WIFI_MODE_NULL) return;
+          WiFi.disconnect(false);
+          delay(30);
+          // Unlike the onExit() teardowns, this runs from the loop task with
+          // no lock held; the restart popup paints straight to the panel.
+          RenderLock lock;
+          silentRestartToSettings();
+        });
         break;
+      }
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
