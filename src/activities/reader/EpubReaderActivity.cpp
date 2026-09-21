@@ -1121,9 +1121,8 @@ bool EpubReaderActivity::backgroundBuildWanted() const {
 }
 
 bool EpubReaderActivity::skipLoopDelay() {
-  // Background building cannot advance while the render task owns the section.
-  RenderLock lock(RenderLock::Mode::Try);
-  return lock.ownsLock() && !buildHeapPaused && backgroundBuildWanted();
+  // The main loop holds the render lock while querying this hint.
+  return !buildHeapPaused && backgroundBuildWanted();
 }
 
 void EpubReaderActivity::renderBook() {
