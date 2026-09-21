@@ -49,9 +49,11 @@ TEST(FontCacheManagerTest, PrewarmScopeBatchesEachFontAndResolvedStyleSeparately
   const auto* regularCall = findCall(readerFont, 0x01);
   ASSERT_NE(nullptr, regularCall);
   EXPECT_STREQ("A", regularCall->text);
+  EXPECT_FALSE(regularCall->accumulate);
   const auto* boldCall = findCall(readerFont, 0x02);
   ASSERT_NE(nullptr, boldCall);
   EXPECT_STREQ("B", boldCall->text);
+  EXPECT_FALSE(boldCall->accumulate);
 
   ASSERT_EQ(1, fallbackFont.prewarmCallCount);
   EXPECT_STREQ("C", fallbackFont.prewarmCalls[0].text);
@@ -128,4 +130,14 @@ TEST(FontCacheManagerTest, PrewarmScanDoesNotAllocateHeapMemory) {
   countHeapAllocations = false;
 
   EXPECT_EQ(0U, heapAllocationCount);
+}
+
+TEST(FontCacheManagerTest, IncrementalPrewarmRequestsAccumulation) {
+  SdCardFont font;
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> sdFonts{{7, &font}};
+  FontCacheManager manager(noBuiltinFonts, sdFonts);
+  manager.prewarmCache(7, "title", 1);
+  ASSERT_EQ(1, font.prewarmCallCount);
+  EXPECT_TRUE(font.prewarmCalls[0].accumulate);
 }

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 
+#include "../Memory/Memory.h"
 #include "FontCacheManager.h"
 
 namespace {
@@ -21,6 +22,18 @@ namespace {
  */
 uint8_t resolveSdCardStyle(const SdCardFont& font, const EpdFontFamily::Style style) {
   return font.resolveStyle(static_cast<uint8_t>(style));
+}
+
+uint16_t getSdCardSpaceAdvance(SdCardFont& font, const EpdFontFamily::Style style) {
+  const uint8_t resolvedStyle = resolveSdCardStyle(font, style);
+  const uint16_t advance = font.getAdvance(' ', resolvedStyle);
+  if (advance != 0) return advance;
+
+  // Zero means uncached (full table, style not prewarmed, or failed
+  // preparation): read the glyph, as the per-codepoint slow path does.
+  const EpdFont* epdFont = font.getEpdFont(resolvedStyle);
+  const EpdGlyph* glyph = epdFont ? epdFont->getGlyph(' ') : nullptr;
+  return glyph ? glyph->advanceX : 0;
 }
 }  // namespace
 
@@ -199,11 +212,13 @@ int GfxRenderer::resolveTextFontId(const int fontId, const char* text, const Epd
   const char* cursor = text;
   uint32_t cp;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
-    // Only redirect for CJK the primary font cannot draw but the fallback can.
-    // Latin/symbol strings the built-in UI fonts already cover are left
-    // untouched, and a partial-coverage fallback (e.g. kana-only) is not worth
+    // Redirect whenever the primary font cannot draw a codepoint the fallback
+    // can — otherwise the string renders with holes. Not just CJK: Greek,
+    // Cyrillic, or any script the built-in UI fonts lack qualifies. ASCII is
+    // skipped outright (every registered font covers it), keeping Latin
+    // strings on the fast path, and a partial-coverage fallback is not worth
     // dragging the whole string into for glyphs it would also miss.
-    if (utf8IsCjkCodepoint(cp) && !primary.hasCodepoint(cp, style) && fallback.hasCodepoint(cp, style)) {
+    if (cp >= 0x80 && !primary.hasCodepoint(cp, style) && fallback.hasCodepoint(cp, style)) {
       return fallbackFontId;
     }
   }
@@ -557,6 +572,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  if (x < clipLeft_ || y < clipTop_ || x >= clipRight_ || y >= clipBottom_) return;
   int phyX = 0;
   int phyY = 0;
 
@@ -990,10 +1006,10 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
   // Clip in logical space.
   const int screenW = getScreenWidth();
   const int screenH = getScreenHeight();
-  const int lx0 = std::max(0, x);
-  const int ly0 = std::max(0, y);
-  const int lx1 = std::min(screenW, x + width);
-  const int ly1 = std::min(screenH, y + height);
+  const int lx0 = std::max({0, x, clipLeft_});
+  const int ly0 = std::max({0, y, clipTop_});
+  const int lx1 = std::min({screenW, x + width, clipRight_});
+  const int ly1 = std::min({screenH, y + height, clipBottom_});
   if (lx0 >= lx1 || ly0 >= ly1) return;
 
   // Rotate the two opposing logical corners into physical-framebuffer space.
@@ -1342,7 +1358,7 @@ void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, con
 }
 
 bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, const int maxWidth, const int maxHeight,
-                             const float cropX, const float cropY) const {
+                             const float cropX, const float cropY, const bool whiteAsTransparent) const {
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return false;
   // For 1-bit bitmaps, use optimized 1-bit rendering path (no crop support for 1-bit)
   if (bitmap.is1Bit() && cropX == 0.0f && cropY == 0.0f) {
@@ -1381,15 +1397,16 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
   // Calculate output row size (2 bits per pixel, packed into bytes)
   // IMPORTANT: Use int, not uint8_t, to avoid overflow for images > 1020 pixels wide
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
-
-  if (!outputRow || !rowBytes) {
+  const auto rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
+  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(outputRowSize) + rowBytesSize);
+  if (!rowScratch) {
     LOG_ERR("GFX", "!! Failed to allocate BMP row buffers");
-    free(outputRow);
-    free(rowBytes);
+
     return false;
   }
+
+  auto* outputRow = rowScratch.get();
+  auto* rowBytes = rowScratch.get() + outputRowSize;
 
   for (int bmpY = 0; bmpY < (bitmap.getHeight() - cropPixY); bmpY++) {
     // The BMP's (0, 0) is the bottom-left corner (if the height is positive, top-left if negative).
@@ -1405,8 +1422,7 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
 
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from bitmap", bmpY);
-      free(outputRow);
-      free(rowBytes);
+
       return false;
     }
 
@@ -1433,6 +1449,7 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       }
 
       const uint8_t val = outputRow[bmpX / 4] >> (6 - ((bmpX * 2) % 8)) & 0x3;
+      if (whiteAsTransparent && val == 3) continue;
 
       if (renderMode == BW && val < 3) {
         drawPixel(screenX, screenY);
@@ -1442,9 +1459,6 @@ bool GfxRenderer::drawBitmap(const Bitmap& bitmap, const int x, const int y, con
       }
     }
   }
-
-  free(outputRow);
-  free(rowBytes);
 
   const int sourceWidth = bitmap.getWidth() - cropPixX * 2;
   const int sourceHeight = bitmap.getHeight() - cropPixY * 2;
@@ -1469,22 +1483,22 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 
   // For 1-bit BMP, output is still 2-bit packed (for consistency with readNextRow)
   const int outputRowSize = (bitmap.getWidth() + 3) / 4;
-  auto* outputRow = static_cast<uint8_t*>(malloc(outputRowSize));
-  auto* rowBytes = static_cast<uint8_t*>(malloc(bitmap.getRowBytes()));
-
-  if (!outputRow || !rowBytes) {
+  const auto rowBytesSize = static_cast<size_t>(bitmap.getRowBytes());
+  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(outputRowSize) + rowBytesSize);
+  if (!rowScratch) {
     LOG_ERR("GFX", "!! Failed to allocate 1-bit BMP row buffers");
-    free(outputRow);
-    free(rowBytes);
+
     return false;
   }
+
+  auto* outputRow = rowScratch.get();
+  auto* rowBytes = rowScratch.get() + outputRowSize;
 
   for (int bmpY = 0; bmpY < bitmap.getHeight(); bmpY++) {
     // Read rows sequentially using readNextRow
     if (bitmap.readNextRow(outputRow, rowBytes) != BmpReaderError::Ok) {
       LOG_ERR("GFX", "Failed to read row %d from 1-bit bitmap", bmpY);
-      free(outputRow);
-      free(rowBytes);
+
       return false;
     }
 
@@ -1519,9 +1533,6 @@ bool GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
     }
   }
 
-  free(outputRow);
-  free(rowBytes);
-
   const int renderedWidth =
       isScaled ? static_cast<int>(std::floor((bitmap.getWidth() - 1) * scale)) + 1 : bitmap.getWidth();
   const int renderedHeight =
@@ -1535,9 +1546,15 @@ void GfxRenderer::preserveImagePolarity(const int x, const int y, const int widt
     return;
   }
 
+  const int lx0 = std::max(x, clipLeft_);
+  const int ly0 = std::max(y, clipTop_);
+  const int lx1 = std::min(x + width, clipRight_);
+  const int ly1 = std::min(y + height, clipBottom_);
+  if (lx0 >= lx1 || ly0 >= ly1) return;
+
   int ax, ay, bx, by;
-  rotateCoordinates(orientation, x, y, &ax, &ay, panelWidth, panelHeight);
-  rotateCoordinates(orientation, x + width - 1, y + height - 1, &bx, &by, panelWidth, panelHeight);
+  rotateCoordinates(orientation, lx0, ly0, &ax, &ay, panelWidth, panelHeight);
+  rotateCoordinates(orientation, lx1 - 1, ly1 - 1, &bx, &by, panelWidth, panelHeight);
 
   int left = std::max(0, std::min(ax, bx));
   int right = std::min(static_cast<int>(panelWidth) - 1, std::max(ax, bx));
@@ -1578,7 +1595,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
   if (maxY >= getScreenHeight()) maxY = getScreenHeight() - 1;
 
   // Allocate node buffer for scanline algorithm
-  auto* nodeX = static_cast<int*>(malloc(numPoints * sizeof(int)));
+  auto nodeX = makeUniqueNoThrow<int[]>(numPoints);
   if (!nodeX) {
     LOG_ERR("GFX", "!! Failed to allocate polygon node buffer");
     return;
@@ -1602,7 +1619,7 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
     }
 
     // Sort nodes by X
-    std::sort(nodeX, nodeX + nodes);
+    std::sort(nodeX.get(), nodeX.get() + nodes);
 
     // Fill between pairs of nodes
     for (int i = 0; i < nodes - 1; i += 2) {
@@ -1619,8 +1636,6 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
       }
     }
   }
-
-  free(nodeX);
 }
 
 // For performance measurement (using static to allow "const" methods)
@@ -1798,26 +1813,28 @@ std::vector<std::string> GfxRenderer::wrappedText(const int fontId, const char* 
 
     if (getTextWidth(fontId, testLine.c_str(), style) <= maxWidth) {
       currentLine = testLine;
+    } else if (!currentLine.empty()) {
+      lines.push_back(currentLine);
+      currentLine.clear();
+      // Requeue the word instead of deciding its fate here: the loop top then
+      // applies the last-line ellipsis or the overlong split with the correct
+      // remaining line budget.
+      remaining = remaining.empty() ? word : word + " " + remaining;
     } else {
-      if (!currentLine.empty()) {
-        lines.push_back(currentLine);
-        // If the carried-over word itself exceeds maxWidth, truncate it and
-        // push it as a complete line immediately — storing it in currentLine
-        // would allow a subsequent short word to be appended after the ellipsis.
-        if (getTextWidth(fontId, word.c_str(), style) > maxWidth) {
-          lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
-          currentLine.clear();
-          if (static_cast<int>(lines.size()) >= maxLines) return lines;
-        } else {
-          currentLine = word;
-        }
-      } else {
-        // Single word wider than maxWidth: truncate and stop to avoid complicated
-        // splitting rules (different between languages). Results in an aesthetically
-        // pleasing end.
-        lines.push_back(truncatedText(fontId, word.c_str(), maxWidth, style));
-        return lines;
+      // Single word wider than the line — a no-space filename or a CJK run,
+      // which has no space boundaries at all. Hard-split at the widest UTF-8
+      // prefix that fits (never below one codepoint, so the loop advances) and
+      // requeue the rest to keep wrapping.
+      size_t fit = 0;
+      while (fit < word.size()) {
+        size_t next = fit + 1;
+        while (next < word.size() && (static_cast<unsigned char>(word[next]) & 0xC0) == 0x80) next++;
+        if (fit > 0 && getTextWidth(fontId, word.substr(0, next).c_str(), style) > maxWidth) break;
+        fit = next;
       }
+      lines.push_back(word.substr(0, fit));
+      const std::string rest = word.substr(fit);
+      if (!rest.empty()) remaining = remaining.empty() ? rest : rest + " " + remaining;
     }
   }
 
@@ -1973,8 +1990,7 @@ int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style styl
   // Advance table fast-path for SD card fonts during layout
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
-    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+    return fp4::toPixel(getSdCardSpaceAdvance(*sdIt->second, style));
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -1994,8 +2010,7 @@ int GfxRenderer::getSpaceAdvance(const int fontId, const uint32_t leftCp, const 
   // so we return just the space advance without kerning.
   auto sdIt = sdCardFonts_.find(fontId);
   if (sdIt != sdCardFonts_.end() && sdIt->second->hasAdvanceTable()) {
-    const uint8_t resolvedStyle = resolveSdCardStyle(*sdIt->second, style);
-    return fp4::toPixel(sdIt->second->getAdvance(' ', resolvedStyle));
+    return fp4::toPixel(getSdCardSpaceAdvance(*sdIt->second, style));
   }
 
   const auto fontIt = fontMap.find(fontId);
@@ -2218,7 +2233,7 @@ void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
 bool GfxRenderer::displayGrayscaleBase(HalDisplay::GrayscaleMode mode, HalDisplay::RefreshMode fallback) const {
   absoluteGrayPlanes = false;
   if (!display.displayGrayscaleBase(mode, fallback, fadingFix)) return false;
-  absoluteGrayPlanes = mode == HalDisplay::GrayscaleMode::Absolute;
+  absoluteGrayPlanes = mode != HalDisplay::GrayscaleMode::Overlay;
   return true;
 }
 

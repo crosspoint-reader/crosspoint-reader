@@ -64,6 +64,7 @@ jobs:
               { name: 'firmware.bin', device: 'X3 / X4' },
               { name: 'firmware-sticky.bin', device: 'Sticky' },
               { name: 'firmware-x4pro.bin', device: 'X4 Pro' },
+              { name: 'firmware-x4c.bin', device: 'X4 Classic' },
               { name: 'firmware-papermono.bin', device: 'Paper Mono' },
             ];
             const { data: artifactResponse } =

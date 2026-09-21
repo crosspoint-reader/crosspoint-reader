@@ -17,7 +17,7 @@
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
-#include "home/RecentBooksActivity.h"
+#include "library/LibraryListActivity.h"
 #include "network/CrossPointWebServerActivity.h"
 #include "network/UsbDriveActivity.h"
 #include "reader/ReaderActivity.h"
@@ -212,6 +212,7 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
 }
 
 void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  mappedInput.resetHomeButtonInput();
   // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
@@ -248,8 +249,13 @@ void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
-void ActivityManager::goToRecentBooks() {
-  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
+void ActivityManager::goToLibrary() {
+  auto activity = makeUniqueNoThrow<LibraryListActivity>(renderer, mappedInput);
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: library activity");
+    return;
+  }
+  replaceActivity(std::move(activity));
 }
 
 void ActivityManager::goToBrowser() {
@@ -300,8 +306,8 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "RecentBooks") {
-      initialMenuItem = HomeMenuItem::RECENTS;
+    } else if (activityName == "Library") {
+      initialMenuItem = HomeMenuItem::LIBRARY;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
@@ -315,6 +321,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefr
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
+  mappedInput.resetHomeButtonInput();
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");
@@ -325,6 +332,7 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
 }
 
 void ActivityManager::popActivity() {
+  mappedInput.resetHomeButtonInput();
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while popActivity is not expected");

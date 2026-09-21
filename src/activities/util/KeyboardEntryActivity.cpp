@@ -976,7 +976,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       (symbols || (inputType == InputType::Url && urlPanel)) ? tr(STR_KEY_MODE_ABC) : tr(STR_KEY_MODE_SYMBOLS);
   props.inputMask = static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress);
   props.selectedIndex = cursorMode ? -1 : static_cast<int16_t>(selectedLogicalIndex());
-  props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
+  // The 12-column Arabic rows need the smaller font for wide isolated letters.
+  props.labelText.font = layoutId == fui::KeyboardLayoutId::ArabicAr && !symbols ? fui::GfxRendererTarget::FONT_SMALL
+                                                                                 : fui::GfxRendererTarget::FONT_BODY;
   props.altText.font = fui::GfxRendererTarget::FONT_SMALL;
   props.gap = static_cast<int16_t>(metrics.keyboardKeySpacing);
   props.padding = fui::Insets{0, 0, 0, 0};

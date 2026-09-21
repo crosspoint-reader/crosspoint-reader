@@ -1,9 +1,12 @@
 #pragma once
+
 #include <ArduinoJson.h>
 #include <Epub/ReaderRenderSpec.h>
 #include <PersistableStore.h>
 
 #include <cstdint>
+
+#include "util/HomeButtonInput.h"
 
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
@@ -57,6 +60,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     STATUS_BAR_CLOCK_LEFT = 2,
     STATUS_BAR_CLOCK_MODE_COUNT
   };
+
+  // Auto follows the timezone's baked DST rule; On/Off override it — the
+  // escape hatch for a zone whose law changed before the firmware caught up.
+  enum CLOCK_DST_MODE { CLOCK_DST_AUTO = 0, CLOCK_DST_ON = 1, CLOCK_DST_OFF = 2, CLOCK_DST_MODE_COUNT };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -213,14 +220,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock display in status bar (X3 only, requires DS3231 RTC)
+  // Clock display in status bar (any board whose RTC probe succeeds)
   uint8_t statusBarClock = STATUS_BAR_CLOCK_HIDE;
-  // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
-  // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
-  // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
+  // LEGACY, kept for migration only: quarter-hour UTC offset biased by 48
+  // (48 = UTC+0). Superseded by clockTimezone; read once by
+  // timezones::activeIndex() when clockTimezone is unset.
   uint8_t clockUtcOffsetQ = 48;
   // Clock display format: 0 = 24-hour, 1 = 12-hour
   uint8_t clockFormat = 0;
+  // Index into the timezone table (src/util/Timezones.cpp, append-only).
+  // 255 = never chosen; falls back to the legacy UTC offset, then UTC.
+  uint8_t clockTimezone = 255;
+  // CLOCK_DST_MODE: follow the zone's DST rule, or force it on/off.
+  uint8_t clockDst = CLOCK_DST_AUTO;
+  // Show the clock opposite the battery in every header band that draws one.
+  uint8_t clockShowInHeader = 0;
   // Set once an NTP sync succeeds. Used to skip re-syncing on every WiFi connect.
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;
@@ -229,6 +243,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // X4 Pro: double-click power toggles the frontlight. Disabling frees the
+  // power button for shortPwrBtn actions without the double-click wait.
+  uint8_t doubleClickPwrLight = 1;
+  uint8_t homeButtonTapAction = static_cast<uint8_t>(HomeButtonAction::Home);
+  uint8_t homeButtonDoubleTapAction = static_cast<uint8_t>(HomeButtonAction::ToggleFrontlight);
+  uint8_t homeButtonLongPressAction = static_cast<uint8_t>(HomeButtonAction::ReaderMenu);
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -293,6 +313,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char dictionaryName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // Show the title and author read from inside each book rather than its
+  // filename. Users can disable this to make index rebuilds skip EPUB parsing.
+  uint8_t libraryUseMetadata = 1;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
@@ -366,7 +389,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     bool showBatteryPercent = false;
     uint8_t clockMode = STATUS_BAR_CLOCK_HIDE;  // STATUS_BAR_CLOCK_MODE
     bool clock12h = false;
-    uint8_t clockUtcOffsetQ = 48;             // 48 = UTC+0
     uint8_t progressBarMode = HIDE_PROGRESS;  // STATUS_BAR_PROGRESS_BAR
     uint8_t progressBarHeightPx = 0;          // (thickness+1)*2; 0 when the bar is hidden
     uint8_t xtcMode = XTC_STATUS_BAR_HIDE;    // XTC_STATUS_BAR_MODE

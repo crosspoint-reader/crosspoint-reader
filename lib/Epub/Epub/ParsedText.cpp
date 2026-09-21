@@ -3,6 +3,7 @@
 #include <BidiUtils.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -678,7 +679,7 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
 }
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
-                                       const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
+                                       const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                                        const bool includeLastLine) {
   if (words.empty()) {
     return;
@@ -1254,7 +1255,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
                              const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                              const std::vector<size_t>& lineBreakIndices,
-                             const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
+                             const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                              const GfxRenderer& renderer, const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
@@ -1599,11 +1600,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
-    auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                             std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts),
-                                             std::move(lineLinks));
-    if (!block->valid()) {
-      LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
+    auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
+                                              std::vector<uint16_t>{}, blockStyle, std::move(lineRubyTexts),
+                                              std::move(lineLinks));
+    if (!block || !block->valid()) {
+      LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
       return;
     }
     processLine(std::move(block), lineVisibleOffset);
@@ -1623,10 +1624,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         boundary == 0 ? 0 : measureFocusPrefixAdvance(renderer, fontId, lineWords[i], lineWordStyles[i], boundary));
   }
 
-  auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
-                                           std::move(lineRubyTexts), std::move(lineLinks));
-  if (!block->valid()) {
-    LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
+  auto block = makeUniqueNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, outBoundaries, outSuffixX, blockStyle,
+                                            std::move(lineRubyTexts), std::move(lineLinks));
+  if (!block || !block->valid()) {
+    LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
     return;
   }
   processLine(std::move(block), lineVisibleOffset);
