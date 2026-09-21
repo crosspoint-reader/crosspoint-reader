@@ -131,9 +131,13 @@ bool BaseTheme::drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bi
   if (slot.width <= 0 || slot.height <= 0) return false;
   const int x = slot.x + (slot.width - bitmap.getWidth()) / 2;
   const int y = slot.y + (slot.height - bitmap.getHeight()) / 2;
-  renderer.setClipRect(slot.x, slot.y, slot.width, slot.height);
+  const auto clip = renderer.getClipRect();
+  const int left = std::max(slot.x, clip[0]);
+  const int top = std::max(slot.y, clip[1]);
+  renderer.setClipRect(left, top, std::max(0, std::min(slot.x + slot.width, clip[0] + clip[2]) - left),
+                       std::max(0, std::min(slot.y + slot.height, clip[1] + clip[3]) - top));
   const bool drawn = renderer.drawBitmap(bitmap, x, y, bitmap.getWidth(), bitmap.getHeight());
-  renderer.setClipRect(0, 0, renderer.getScreenWidth(), renderer.getScreenHeight());
+  renderer.setClipRect(clip[0], clip[1], clip[2], clip[3]);
   return drawn;
 }
 

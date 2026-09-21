@@ -352,7 +352,7 @@ void HomeActivity::loop() {
   // Back is otherwise unused on the home menu: open the most recently read
   // book directly (recentBooks is most-recent-first and already pruned of
   // files missing from the SD card).
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && !recentBooks.empty()) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && hasContinueReading && !recentBooks.empty()) {
     onSelectBook(recentBooks[0].path);
     return;
   }
@@ -426,9 +426,8 @@ void HomeActivity::render(RenderLock&&) {
   if (coverGridUi) {
     coverGridUi->setSelection(selectorIndex);
     UITheme::getInstance().drawCoverGridHome(*coverGridUi);
-    const auto labels =
-        mappedInput.mapLabels(recentBooks.empty() ? "" : (hasContinueReading ? tr(STR_RESUME) : tr(STR_SELECT)),
-                              tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    const auto labels = mappedInput.mapLabels(hasContinueReading ? tr(STR_RESUME) : "", tr(STR_SELECT), tr(STR_DIR_UP),
+                                              tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(cleanInitialRefresh && !firstRenderDone ? HalDisplay::HALF_REFRESH
                                                                    : HalDisplay::FAST_REFRESH);

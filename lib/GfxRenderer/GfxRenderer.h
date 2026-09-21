@@ -14,6 +14,7 @@ enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
 class FontCacheManager;
 class SdCardFont;
 
+#include <array>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -258,6 +259,9 @@ class GfxRenderer {
 
   // Drawing
   // UI drawing clip in logical coordinates; independent of panel orientation.
+  std::array<int, 4> getClipRect() const {
+    return {clipLeft_, clipTop_, clipRight_ - clipLeft_, clipBottom_ - clipTop_};
+  }
   void setClipRect(int x, int y, int width, int height) const {
     clipLeft_ = x;
     clipTop_ = y;
