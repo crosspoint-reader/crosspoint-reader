@@ -148,11 +148,31 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
   // its UI sizes would be dead weight in RAM.
   const auto readerIt = renderer.getFontMap().find(manager_.getFontId(familyName));
   if (readerIt == renderer.getFontMap().end()) return;
-  // One representative codepoint per script the built-in fonts may lack:
-  // Han, Hiragana, Katakana, Hangul, Greek, Cyrillic, Hebrew, Arabic, Thai,
-  // Devanagari.
-  static constexpr uint32_t kFallbackProbes[] = {0x4E00, 0x3042, 0x30A2, 0xAC00, 0x03B1,
-                                                 0x0430, 0x05D0, 0x0627, 0x0E01, 0x0905};
+  // One representative codepoint per script the built-in fonts may lack,
+  // matching the non-Latin interval presets the SD-font converter ships
+  // (docs/sd-card-fonts.md). Vietnamese is excluded: its precomposed
+  // characters are already covered by the built-in Latin fonts. Bengali is
+  // excluded too: crosspoint has no Indic script rendering support.
+  // Devanagari is still probed despite that — treat it as legacy, not a
+  // signal that Indic scripts are otherwise supported.
+  static constexpr uint32_t kFallbackProbes[] = {
+      0x4E00,  // CJK Unified Ideographs (Han)
+      0x3042,  // Hiragana
+      0x30A2,  // Katakana
+      0xAC00,  // Hangul Syllables
+      0x03B1,  // Greek
+      0x0430,  // Cyrillic
+      0x05D0,  // Hebrew
+      0x0627,  // Arabic
+      0x0E01,  // Thai
+      0x0905,  // Devanagari
+      0x0531,  // Armenian
+      0x10D0,  // Georgian
+      0x1200,  // Ethiopic
+      0x13A0,  // Cherokee
+      0x2D30,  // Tifinagh
+      0x0259,  // IPA Extensions (ə)
+  };
   bool hasFallbackScript = false;
   for (const uint32_t cp : kFallbackProbes) {
     if (readerIt->second.hasCodepoint(cp)) {
