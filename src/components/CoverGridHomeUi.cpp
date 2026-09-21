@@ -131,7 +131,9 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   screen.insetContent(fui::Insets{theme.spaceSm, theme.spaceLg, theme.spaceSm, theme.spaceLg});
   const bool landscape = renderer.getScreenWidth() > renderer.getScreenHeight();
   const auto header = screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight);
-  GUI.drawHeader(renderer, Rect{header.x, header.y, header.width, header.height}, nullptr);
+  // Full-width band: every other screen passes drawHeader an uninset rect, so
+  // the clock and battery must sit at the same edge offsets here too.
+  GUI.drawHeader(renderer, Rect{0, header.y, renderer.getScreenWidth(), header.height}, nullptr);
   const auto tabRect = screen.takeBottom(56, theme.spaceSm);
   drawTabs(screen, tabRect);
   if (books->empty()) {
