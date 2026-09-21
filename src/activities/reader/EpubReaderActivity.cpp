@@ -390,9 +390,7 @@ void EpubReaderActivity::loop() {
 
   {
     RenderLock lock(RenderLock::Mode::Try);
-    if (lock.ownsLock() && section && section->isBuilding() &&
-        (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD) &&
-        buildTickHeapGate()) {
+    if (lock.ownsLock() && backgroundBuildWanted() && buildTickHeapGate()) {
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
@@ -1117,12 +1115,15 @@ void EpubReaderActivity::onReturnFromEndOfBook() {
   }
 }
 
+bool EpubReaderActivity::backgroundBuildWanted() const {
+  return section && section->isBuilding() &&
+         (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+}
+
 bool EpubReaderActivity::skipLoopDelay() {
   // Background building cannot advance while the render task owns the section.
   RenderLock lock(RenderLock::Mode::Try);
-  if (!lock.ownsLock()) return false;
-  return section && section->isBuilding() && !buildHeapPaused &&
-         (section->isPartial() || static_cast<int>(section->pageCount) < section->currentPage + BUILD_WINDOW_AHEAD);
+  return lock.ownsLock() && !buildHeapPaused && backgroundBuildWanted();
 }
 
 void EpubReaderActivity::renderBook() {
