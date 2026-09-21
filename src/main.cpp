@@ -16,6 +16,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <SPI.h>
+#include <VectorFontSupport.h>
 #include <WiFi.h>
 #include <XteinkDetect.h>
 #include <builtinFonts/all.h>
@@ -40,11 +41,15 @@
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
+#if CROSSPOINT_VECTOR_FONTS
 // Rendering (incl. FreeType TTF rasterization) runs on the Arduino loop task.
 // The default 8 KB stack overflows inside FreeType's FT_Open_Face / variable-font
 // parsing. This runtime override applies even with the prebuilt (dio_opi) core,
 // where CONFIG_ARDUINO_LOOP_STACK_SIZE from sdkconfig is baked in and ignored.
+// Vector-font boards only: without TTF the stock loop stack has always sufficed,
+// and non-PSRAM boards need the 16KB back in DRAM.
 SET_LOOP_TASK_STACK_SIZE(24 * 1024)
+#endif
 
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);

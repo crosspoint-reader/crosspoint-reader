@@ -174,6 +174,7 @@ void GfxRenderer::begin() {
                                 const size_t after = freeink::MemoryManager::instance().freeBytes();
                                 return after > before ? after - before : 0;
                               }});
+#if CROSSPOINT_VECTOR_FONTS
   // TTF glyph arenas are safe to shed mid-layout, unlike the SD-font advance
   // table: metrics re-fault through FreeType with identical values, so layout
   // cannot silently corrupt — the cost is re-rasterizing on the next draw.
@@ -185,6 +186,7 @@ void GfxRenderer::begin() {
                                 const size_t after = freeink::MemoryManager::instance().freeBytes();
                                 return after > before ? after - before : 0;
                               }});
+#endif
 }
 
 void GfxRenderer::releaseFrameBufferForBuild() {

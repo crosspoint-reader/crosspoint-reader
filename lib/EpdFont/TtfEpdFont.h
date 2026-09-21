@@ -38,6 +38,10 @@
 // e.g. an open SD file) is BORROWED and must outlive this object, which must
 // outlive any GfxRenderer registration.
 
+#include "VectorFontSupport.h"
+
+#if CROSSPOINT_VECTOR_FONTS
+
 #include <FontPsram.h>
 #include <FtFont.h>
 
@@ -162,3 +166,5 @@ class TtfEpdFont {
   // the very faces mid-fault would be use-after-free.
   bool evictionLocked_ = false;
 };
+
+#endif  // CROSSPOINT_VECTOR_FONTS

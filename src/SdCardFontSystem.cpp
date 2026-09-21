@@ -14,6 +14,7 @@
 
 namespace {
 
+#if CROSSPOINT_VECTOR_FONTS
 // Stable, non-zero renderer font id for a vector family at a size (FNV-1a of
 // name + size). 0 is the "not found" sentinel, so bump collisions to 1.
 int computeTtfFontId(const char* familyName, uint8_t pointSize) {
@@ -28,6 +29,7 @@ int computeTtfFontId(const char* familyName, uint8_t pointSize) {
   const int id = static_cast<int>(hash);
   return id != 0 ? id : 1;
 }
+#endif  // CROSSPOINT_VECTOR_FONTS
 
 }  // namespace
 
@@ -109,6 +111,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
 
   const char* wantedFamily = SETTINGS.sdFontFamilyName;
 
+#if CROSSPOINT_VECTOR_FONTS
   // Vector (.ttf/.otf) family selected: route through the FreeInkFont path and
   // drop any pre-rasterized (.cpfont) font that was loaded.
   if (wantedFamily[0] != '\0') {
@@ -122,6 +125,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   // Not on a vector family — ensure any previously-loaded TTF font is released
   // before the pre-rasterized/built-in path below takes over.
   if (!ttfFamily_.empty()) unloadTtf(renderer);
+#endif
 
   const std::string& currentFamily = manager_.currentFamilyName();
 
@@ -219,13 +223,17 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*pointSize*/) const {
+#if CROSSPOINT_VECTOR_FONTS
   // A loaded vector (.ttf) family answers first — it isn't in the .cpfont manager.
   if (ttfFontId_ != 0 && familyName && ttfFamily_ == familyName) return ttfFontId_;
+#endif
   // The manager holds exactly one reader-size font, already selected for
   // SETTINGS.fontPointSize, so the size argument is implicit — always return
   // that font's ID. ensureLoaded() must have run for the current settings first.
   return manager_.getFontId(familyName);
 }
+
+#if CROSSPOINT_VECTOR_FONTS
 
 void SdCardFontSystem::freeTtfSources() {
   for (auto& s : ttfSources_) {
@@ -427,3 +435,5 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   setupTtfUiFallbacks(renderer);  // CJK/script UI fallback at the built-in UI sizes
   LOG_DBG("SDFS", "Loaded TTF font: %s @ %upt (id %d)", family.name.c_str(), size, ttfFontId_);
 }
+
+#endif  // CROSSPOINT_VECTOR_FONTS

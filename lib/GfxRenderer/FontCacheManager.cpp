@@ -44,9 +44,11 @@ void FontCacheManager::clearCache() {
   for (auto& [id, font] : sdCardFonts_) {
     font->clearCache();
   }
+#if CROSSPOINT_VECTOR_FONTS
   for (auto& [id, font] : ttfFonts_) {
     if (font) font->clearCache();
   }
+#endif
 }
 
 void FontCacheManager::releaseSdFontCaches() {
@@ -54,9 +56,11 @@ void FontCacheManager::releaseSdFontCaches() {
   for (auto& [id, font] : sdCardFonts_) {
     font->releaseResidentCaches();
   }
+#if CROSSPOINT_VECTOR_FONTS
   for (auto& [id, font] : ttfFonts_) {
     if (font) font->releaseResidentCaches();
   }
+#endif
 }
 
 void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask, bool accumulate) {
@@ -65,6 +69,7 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
   // so building here covers them all. accumulate=false means "this is the whole
   // glyph set for this render" → replace; accumulate=true → add incrementally.
   // styleMask is ignored: a TTF face has no synthesized bold/italic here.
+#if CROSSPOINT_VECTOR_FONTS
   auto tit = ttfFonts_.find(fontId);
   if (tit != ttfFonts_.end() && tit->second) {
     if (accumulate) {
@@ -74,6 +79,7 @@ void FontCacheManager::prewarmCache(int fontId, const char* utf8Text, uint8_t st
     }
     return;
   }
+#endif
 
   // SD card font prewarm path: prewarm all requested styles in one call
   auto it = sdCardFonts_.find(fontId);

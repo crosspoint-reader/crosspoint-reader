@@ -1,5 +1,7 @@
 #include "TtfEpdFont.h"
 
+#if CROSSPOINT_VECTOR_FONTS
+
 #include <Logging.h>
 #include <MemoryManager.h>
 #include <esp_heap_caps.h>
@@ -480,3 +482,5 @@ bool TtfEpdFont::addCoverage(const std::deque<std::string>& words, const bool in
   if (includeHyphen) faultGlyph(faces_[0], '-');
   return true;
 }
+
+#endif  // CROSSPOINT_VECTOR_FONTS

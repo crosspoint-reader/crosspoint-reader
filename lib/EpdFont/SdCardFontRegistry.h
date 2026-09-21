@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+#include "VectorFontSupport.h"
+
 struct SdCardFontFileInfo {
   std::string path;   // v4 on-disk naming: "/<root>/<Family>/<Family>_<size>.cpfont"
                       // where <root> is "/.fonts" (preferred, hidden) or "/fonts" (visible).
@@ -62,6 +64,7 @@ class SdCardFontRegistry {
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 
   static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
+#if CROSSPOINT_VECTOR_FONTS
   // Match a loose vector font filename (.ttf/.otf/.ttc, case-insensitive) and
   // return the length of the base name (extension stripped) in `baseLen`.
   static bool parseVectorFontName(const char* filename, size_t& baseLen);
@@ -72,6 +75,7 @@ class SdCardFontRegistry {
   // (FtFont::inspectStream: OS/2 weight + italic flag), keeping the
   // filename-derived role when the face can't be read. Then dedup by role.
   static void refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files);
+#endif
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
   // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
   static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);

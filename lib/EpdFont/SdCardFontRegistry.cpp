@@ -1,6 +1,8 @@
 #include "SdCardFontRegistry.h"
 
+#if CROSSPOINT_VECTOR_FONTS
 #include <FtFont.h>
+#endif
 #include <HalStorage.h>
 #include <Logging.h>
 #include <strings.h>  // strcasecmp
@@ -97,6 +99,8 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
   return true;
 }
 
+#if CROSSPOINT_VECTOR_FONTS
+
 bool SdCardFontRegistry::parseVectorFontName(const char* filename, size_t& baseLen) {
   static constexpr const char* kExts[] = {".ttf", ".otf", ".ttc"};
   const size_t nameLen = strlen(filename);
@@ -183,6 +187,8 @@ void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdC
   }
 }
 
+#endif  // CROSSPOINT_VECTOR_FONTS
+
 void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
   HalFile dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return;
@@ -232,6 +238,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
       continue;
     }
 
+#if CROSSPOINT_VECTOR_FONTS
     size_t baseLen = 0;
     if (parseVectorFontName(nameBuffer, baseLen)) {
       // Vector file in a family folder: seed the style role from the filename
@@ -243,16 +250,20 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
       info.style = parseVectorStyle(nameBuffer, baseLen);
       vectorFiles.push_back(std::move(info));
     }
+#endif
   }
 
   if (!cpfontFiles.empty()) {
     family.vector = false;
     family.files = std::move(cpfontFiles);
-  } else if (!vectorFiles.empty()) {
+  }
+#if CROSSPOINT_VECTOR_FONTS
+  else if (!vectorFiles.empty()) {
     refineVectorStyles(dirPath, vectorFiles);
     family.vector = true;
     family.files = std::move(vectorFiles);
   }
+#endif
 }
 
 // Scan a single root (e.g. "/.fonts") and append its families to `out`.
@@ -301,6 +312,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
                 static_cast<int>(out.back().files.size()), rootPath);
       }
     } else {
+#if CROSSPOINT_VECTOR_FONTS
       // Loose TrueType/OpenType file directly under the root (e.g.
       // /fonts/Bookerly.ttf). Rendered at any size via the FreeInkFont engine.
       entry.getName(nameBuffer, sizeof(nameBuffer));
@@ -329,6 +341,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       family.files.push_back(std::move(info));
       out.push_back(std::move(family));
       LOG_DBG("SDREG", "Found vector font: %s in %s", famName.c_str(), rootPath);
+#endif  // CROSSPOINT_VECTOR_FONTS — loose .ttf/.otf files are ignored without the engine
     }
   }
 }
