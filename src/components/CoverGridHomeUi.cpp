@@ -64,15 +64,19 @@ void CoverGridHomeUi::invalidateCoverCache() {
 
 void CoverGridHomeUi::refreshCoverPaths() {
   invalidateCoverCache();
-  for (size_t i = 0; i < books->size() && i < coverPaths.size(); ++i) {
-    // Until the first layout pass records the slot size there is no correct
-    // thumb to show; an empty path paints the placeholder instead of a stale
-    // wrong-size thumb (which would draw zoomed/cropped).
-    coverPaths[i] =
-        thumbHeights[i] > 0 ? UITheme::getCoverThumbPath((*books)[i].coverBmpPath, thumbHeights[i]) : std::string();
-  }
+  for (size_t i = 0; i < books->size() && i < coverPaths.size(); ++i) refreshCoverPath(i);
+}
+
+void CoverGridHomeUi::refreshCoverPath(size_t index) {
+  if (index >= books->size() || index >= coverPaths.size()) return;
+  cachedCovers[index].valid = false;
+  coverPaths[index] = thumbHeights[index] > 0
+                          ? UITheme::getCoverThumbPath((*books)[index].coverBmpPath, thumbHeights[index])
+                          : std::string();
+  if (index != 0) return;
   featuredCoverWidth = featuredCoverHeight = 0;
-  if (!books->empty() && !coverPaths[0].empty() && Storage.openFileForRead("HOME", coverPaths[0], coverFile)) {
+  if (!coverPaths[0].empty() && Storage.exists(coverPaths[0].c_str()) &&
+      Storage.openFileForRead("HOME", coverPaths[0], coverFile)) {
     if (coverBitmap.parseHeaders() == BmpReaderError::Ok) {
       featuredCoverWidth = coverBitmap.getWidth();
       featuredCoverHeight = coverBitmap.getHeight();
@@ -99,6 +103,7 @@ void CoverGridHomeUi::noteThumbHeight(size_t index, int slotWidth, int slotHeigh
   if (thumbHeights[index] != height) {
     thumbHeights[index] = height;
     thumbHeightsChanged = true;
+    refreshCoverPath(index);
   }
   lastThumbHeights[index] = height;
   lastThumbSpecOrientation = static_cast<int>(renderer.getOrientation());
@@ -204,9 +209,7 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   }
   card.coverPainterUserData = this;
   card.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::BookCardProps&, void* user) {
-    const bool drawn = static_cast<CoverGridHomeUi*>(user)->paintCover(cover, 0);
-    target.stroke(cover, fui::Paint::solid(fui::Color::Black), 1, 0);
-    return drawn;
+    return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, 0);
   };
   fui::bookCard(screen.frame(), rect, card);
 }
@@ -236,8 +239,9 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen, fui::Rect rect) {
   grid.scrollIndicator = false;
   grid.itemProvider = [](uint16_t index, void*) { return fui::coverGridItem(nullptr, index + 1); };
   grid.coverPainterUserData = this;
-  grid.coverPainter = [](fui::DrawTarget&, fui::Rect cover, const fui::CoverGridItem&, uint16_t index, void* user) {
-    return static_cast<CoverGridHomeUi*>(user)->paintCover(cover, index + 1);
+  grid.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::CoverGridItem&, uint16_t index,
+                         void* user) {
+    return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, index + 1);
   };
   fui::coverGrid(screen.frame(), rect, grid);
 }
@@ -269,6 +273,16 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.tabStyles.selected.background = fui::Paint::solid(fui::Color::White);
   tabs.selectedUnderline = 2;
   fui::tabBar(screen.frame(), rect, tabs);
+}
+
+bool CoverGridHomeUi::paintFramedCover(fui::DrawTarget& target, fui::Rect rect, size_t index) {
+  constexpr int16_t SHADOW_OFFSET = 2;
+  const auto ink = fui::Paint::solid(fui::Color::Black);
+  target.fill(fui::Rect{rect.right(), static_cast<int16_t>(rect.y + SHADOW_OFFSET), SHADOW_OFFSET, rect.height}, ink);
+  target.fill(fui::Rect{static_cast<int16_t>(rect.x + SHADOW_OFFSET), rect.bottom(), rect.width, SHADOW_OFFSET}, ink);
+  const bool drawn = paintCover(rect, index);
+  target.stroke(rect, ink, 1, 0);
+  return drawn;
 }
 
 bool CoverGridHomeUi::paintCover(fui::Rect rect, size_t index) {

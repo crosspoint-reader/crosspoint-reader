@@ -96,7 +96,30 @@ void HomeActivity::fillCoverGridFromLibrary() {
   }
 }
 
-void HomeActivity::loadGridCover(RecentBook& book, int height) {
+void HomeActivity::resolveGridCoverPaths() {
+  for (auto& book : recentBooks) {
+    if (!book.coverBmpPath.empty()) continue;
+    // Constructors only derive cache paths; no metadata parsing or image generation.
+    // Keep these large objects off the task stack and release each before the next book.
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      auto epub = makeUniqueNoThrow<Epub>(book.path, "/.crosspoint");
+      if (!epub) {
+        LOG_ERR("HOME", "OOM: EPUB thumbnail path");
+        continue;
+      }
+      book.coverBmpPath = epub->getThumbBmpPath();
+    } else if (FsHelpers::hasXtcExtension(book.path)) {
+      auto xtc = makeUniqueNoThrow<Xtc>(book.path, "/.crosspoint");
+      if (!xtc) {
+        LOG_ERR("HOME", "OOM: XTC thumbnail path");
+        continue;
+      }
+      book.coverBmpPath = xtc->getThumbBmpPath();
+    }
+  }
+}
+
+void HomeActivity::loadGridCover(RecentBook& book, int height, bool& showingLoading, Rect& popupRect) {
   if (!book.coverBmpPath.empty() && Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, height).c_str()))
     return;
   // Only one parser lives at a time; EPUB/XTC objects exceed the stack budget.
@@ -106,8 +129,14 @@ void HomeActivity::loadGridCover(RecentBook& book, int height) {
       LOG_ERR("HOME", "OOM: cover EPUB");
       return;
     }
-    if (epub->load(true, true) && epub->generateThumbBmp(height)) {
-      book.coverBmpPath = epub->getThumbBmpPath();
+    book.coverBmpPath = epub->getThumbBmpPath();
+    if (Storage.exists(epub->getThumbBmpPath(height).c_str())) return;
+    if (!showingLoading) {
+      showingLoading = true;
+      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+      GUI.fillPopupProgress(renderer, popupRect, 0);
+    }
+    if (epub->generateThumbBmpFromSource(height)) {
       return;
     }
   } else if (FsHelpers::hasXtcExtension(book.path)) {
@@ -116,8 +145,14 @@ void HomeActivity::loadGridCover(RecentBook& book, int height) {
       LOG_ERR("HOME", "OOM: cover XTC");
       return;
     }
+    book.coverBmpPath = xtc->getThumbBmpPath();
+    if (Storage.exists(xtc->getThumbBmpPath(height).c_str())) return;
+    if (!showingLoading) {
+      showingLoading = true;
+      popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+      GUI.fillPopupProgress(renderer, popupRect, 0);
+    }
     if (xtc->load() && xtc->generateThumbBmp(height)) {
-      book.coverBmpPath = xtc->getThumbBmpPath();
       return;
     }
   }
@@ -126,6 +161,7 @@ void HomeActivity::loadGridCover(RecentBook& book, int height) {
 
 void HomeActivity::loadRecentCovers(int coverHeight) {
   recentsLoading = true;
+  const uint32_t startedAt = millis();
   bool showingLoading = false;
   Rect popupRect;
 
@@ -135,17 +171,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     // height would rescale the dithered thumb at draw time and alias badly.
     const int thumbHeight = coverGridUi ? coverGridUi->thumbHeightFor(progress) : coverHeight;
     if (coverGridUi) {
-      if ((FsHelpers::hasEpubExtension(book.path) || FsHelpers::hasXtcExtension(book.path)) &&
-          (book.coverBmpPath.empty() ||
-           !Storage.exists(UITheme::getCoverThumbPath(book.coverBmpPath, thumbHeight).c_str()))) {
-        if (!showingLoading) {
-          showingLoading = true;
-          popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-        }
-        GUI.fillPopupProgress(renderer, popupRect, 10 + progress * 90 / recentBooks.size());
-        loadGridCover(book, thumbHeight);
-      }
+      loadGridCover(book, thumbHeight, showingLoading, popupRect);
       ++progress;
+      if (showingLoading) GUI.fillPopupProgress(renderer, popupRect, progress * 100 / recentBooks.size());
       continue;
     }
     if (!book.coverBmpPath.empty()) {
@@ -194,6 +222,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
     progress++;
   }
 
+  if (coverGridUi) LOG_DBG("HOME", "Cover batch completed in %lu ms", millis() - startedAt);
   recentsLoaded = true;
   recentsLoading = false;
 }
@@ -213,6 +242,7 @@ void HomeActivity::onEnter() {
   hasContinueReading = !recentBooks.empty();
   if (coverGridUi) {
     fillCoverGridFromLibrary();
+    resolveGridCoverPaths();
     coverGridUi->begin(recentBooks, hasOpdsServers, hasContinueReading);
   }
 

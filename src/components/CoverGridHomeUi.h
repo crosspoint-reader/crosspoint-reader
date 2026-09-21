@@ -39,8 +39,10 @@ class CoverGridHomeUi final : public UiAppHost {
   void drawGrid(UiScreen& screen, freeink::ui::Rect rect);
   void drawTabs(UiScreen& screen, freeink::ui::Rect rect);
   bool paintCover(freeink::ui::Rect rect, size_t index);
+  bool paintFramedCover(freeink::ui::DrawTarget& target, freeink::ui::Rect rect, size_t index);
   int loadProgress() const;
   void invalidateCoverCache();
+  void refreshCoverPath(size_t index);
   void noteThumbHeight(size_t index, int slotWidth, int slotHeight);
 
   struct CachedCover {
