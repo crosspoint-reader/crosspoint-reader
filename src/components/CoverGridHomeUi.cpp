@@ -200,8 +200,10 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
     card.coverSize.height = std::max(1, static_cast<int>(featuredCoverHeight * scale));
   }
   card.coverPainterUserData = this;
-  card.coverPainter = [](fui::DrawTarget&, fui::Rect cover, const fui::BookCardProps&, void* user) {
-    return static_cast<CoverGridHomeUi*>(user)->paintCover(cover, 0);
+  card.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::BookCardProps&, void* user) {
+    const bool drawn = static_cast<CoverGridHomeUi*>(user)->paintCover(cover, 0);
+    target.stroke(cover, fui::Paint::solid(fui::Color::Black), 1, 0);
+    return drawn;
   };
   fui::bookCard(screen.frame(), rect, card);
 }
@@ -261,7 +263,7 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
     return true;
   };
   tabs.tabStyles.normal.background = fui::Paint::solid(fui::Color::White);
-  tabs.tabStyles.selected.background = fui::Paint::dither(fui::Color::LightGray);
+  tabs.tabStyles.selected.background = fui::Paint::solid(fui::Color::White);
   tabs.selectedUnderline = 2;
   fui::tabBar(screen.frame(), rect, tabs);
 }
