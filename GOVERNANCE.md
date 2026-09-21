@@ -35,4 +35,4 @@ The maintainers are responsible for keeping the community a safe place to contri
 - We reserve the right to hide comments, lock threads, or block users who repeatedly violate these principles or engage
   in harassment.
 - **Reporting:** If you feel you are being harassed or see behavior that is damaging the community, please reach out
-  privately to @daveallie.
+  privately to @itsthisjustin or @Uri-Tauber.

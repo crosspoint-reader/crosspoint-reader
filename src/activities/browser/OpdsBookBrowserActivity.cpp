@@ -193,6 +193,21 @@ void OpdsBookBrowserActivity::loop() {
   }
 }
 
+bool OpdsBookBrowserActivity::preventAutoSleep() {
+  switch (state) {
+    case BrowserState::CHECK_WIFI:
+    case BrowserState::WIFI_SELECTION:
+    case BrowserState::LOADING:
+    case BrowserState::DOWNLOADING:
+    case BrowserState::SEARCH_INPUT:
+      return true;
+    case BrowserState::BROWSING:
+    case BrowserState::ERROR:
+      return false;
+  }
+  return false;
+}
+
 void OpdsBookBrowserActivity::rootScreen(UiScreen& screen, void* user) {
   auto* self = static_cast<OpdsBookBrowserActivity*>(user);
   switch (self->state) {
@@ -514,11 +529,10 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         downloadTotal = total;
         // The activity loop is blocked for the whole download; pump input here
         // so the Cancel button or a Back press can abort mid-transfer.
-        mappedInput.update();
+        mappedInput.update(true);
         if (mappedInput.wasReleased(MappedInputManager::Button::Back)) cancelDownload = true;
-        // This update() consumes the one-shot home event before the central
-        // ActivityManager dispatch can see it, so honor it here: abort the
-        // download, then exit to home once the abort unwinds.
+        // Home cancels immediately; other configured actions are deferred to
+        // the next main-loop pass by the transfer input pump.
         if (mappedInput.wasHomeGesture()) {
           cancelDownload = true;
           goHomeAfterCancel = true;

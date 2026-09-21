@@ -513,15 +513,14 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   ctx.rawRowBytes = rawRowBytes;
   ctx.paletteSize = 0;
 
-  // Allocate scanline buffers
-  ctx.currentRow = static_cast<uint8_t*>(malloc(rawRowBytes));
-  ctx.previousRow = static_cast<uint8_t*>(calloc(rawRowBytes, 1));
-  if (!ctx.currentRow || !ctx.previousRow) {
-    LOG_ERR("PNG", "Failed to allocate scanline buffers (%u bytes each)", rawRowBytes);
-    free(ctx.currentRow);
-    free(ctx.previousRow);
+  const size_t scanlineRowBytes = rawRowBytes;
+  auto scanlineRows = makeUniqueNoThrow<uint8_t[]>(scanlineRowBytes * 2);
+  if (!scanlineRows) {
+    LOG_ERR("PNG", "OOM: scanline buffers (%u bytes each)", rawRowBytes);
     return false;
   }
+  ctx.currentRow = scanlineRows.get();
+  ctx.previousRow = ctx.currentRow + scanlineRowBytes;
 
   // Scan for PLTE chunk (palette) and first IDAT chunk
   // We need to read chunks until we find IDAT, collecting PLTE along the way
@@ -555,16 +554,14 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   if (!foundIdat) {
     LOG_ERR("PNG", "No IDAT chunk found");
-    free(ctx.currentRow);
-    free(ctx.previousRow);
+
     return false;
   }
 
   // Initialize streaming decompressor with 32KB window for back-reference history
   if (!ctx.reader.init(true)) {
     LOG_ERR("PNG", "Failed to init inflate stream");
-    free(ctx.currentRow);
-    free(ctx.previousRow);
+
     return false;
   }
   ctx.reader.setFill(pngIdatFillCallback, &ctx);
@@ -615,14 +612,14 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
-  // Allocate BMP row buffer
-  auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
-  if (!rowBuffer) {
-    LOG_ERR("PNG", "Failed to allocate row buffer");
-    free(ctx.currentRow);
-    free(ctx.previousRow);
+  const size_t rowScratchBytes = static_cast<size_t>(bytesPerRow) + static_cast<size_t>(width);
+  auto rowScratch = makeUniqueNoThrow<uint8_t[]>(rowScratchBytes);
+  if (!rowScratch) {
+    LOG_ERR("PNG", "OOM: row scratch buffer (%u bytes)", static_cast<unsigned>(rowScratchBytes));
     return false;
   }
+  uint8_t* rowBuffer = rowScratch.get();
+  uint8_t* grayRow = rowBuffer + bytesPerRow;
 
   // Create ditherers (same as JpegToBmpConverter)
   std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
@@ -633,9 +630,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(outWidth);
     if (!atkinson1BitDitherer || !atkinson1BitDitherer->isValid()) {
       LOG_ERR("PNG", "OOM: Atkinson1BitDitherer or row buffers");
-      free(rowBuffer);
-      free(ctx.currentRow);
-      free(ctx.previousRow);
+
       return false;
     }
   } else if (!USE_8BIT_OUTPUT) {
@@ -643,46 +638,33 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth, originalThresholds);
       if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
         LOG_ERR("PNG", "OOM: AtkinsonDitherer or row buffers");
-        free(rowBuffer);
-        free(ctx.currentRow);
-        free(ctx.previousRow);
+
         return false;
       }
     } else if (USE_FLOYD_STEINBERG) {
       fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth, originalThresholds);
       if (!fsDitherer || !fsDitherer->isValid()) {
         LOG_ERR("PNG", "OOM: FloydSteinbergDitherer or row buffers");
-        free(rowBuffer);
-        free(ctx.currentRow);
-        free(ctx.previousRow);
+
         return false;
       }
     }
   }
 
   // Scaling accumulators
-  uint32_t* rowAccum = nullptr;
-  uint16_t* rowCount = nullptr;
+  std::unique_ptr<uint32_t[]> rowAccum;
+  std::unique_ptr<uint32_t[]> rowCount;
   int currentOutY = 0;
   uint32_t nextOutY_srcStart = 0;
 
   if (needsScaling) {
-    rowAccum = new uint32_t[outWidth]();
-    rowCount = new uint16_t[outWidth]();
+    rowAccum = makeUniqueNoThrow<uint32_t[]>(outWidth);
+    rowCount = makeUniqueNoThrow<uint32_t[]>(outWidth);
+    if (!rowAccum || !rowCount) {
+      LOG_ERR("PNG", "OOM: scaling accumulators");
+      return false;
+    }
     nextOutY_srcStart = scaleY_fp;
-  }
-
-  // Allocate grayscale row buffer - batch-convert each scanline to avoid
-  // per-pixel getPixelGray() switch overhead in the hot loops
-  auto* grayRow = static_cast<uint8_t*>(malloc(width));
-  if (!grayRow) {
-    LOG_ERR("PNG", "Failed to allocate grayscale row buffer");
-    delete[] rowAccum;
-    delete[] rowCount;
-    free(rowBuffer);
-    free(ctx.currentRow);
-    free(ctx.previousRow);
-    return false;
   }
 
   bool success = true;
@@ -818,8 +800,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
           continue;
         }
         // Moving to next source row - reset accumulators
-        memset(rowAccum, 0, outWidth * sizeof(uint32_t));
-        memset(rowCount, 0, outWidth * sizeof(uint16_t));
+        memset(rowAccum.get(), 0, outWidth * sizeof(uint32_t));
+        memset(rowCount.get(), 0, static_cast<size_t>(outWidth) * sizeof(uint32_t));
       }
     }
 
@@ -828,14 +810,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     ctx.previousRow = ctx.currentRow;
     ctx.currentRow = temp;
   }
-
-  // Clean up
-  free(grayRow);
-  delete[] rowAccum;
-  delete[] rowCount;
-  free(rowBuffer);
-  free(ctx.currentRow);
-  free(ctx.previousRow);
 
   if (success) {
     LOG_DBG("PNG", "Successfully converted PNG to BMP");

@@ -17,6 +17,8 @@ struct BlockStyle {
 
   CssTextAlign alignment = CssTextAlign::Justify;
 
+  // Extra pixels between glyphs during layout and drawing.
+  int8_t characterSpacing = 0;
   // Spacing (in pixels)
   int16_t marginTop = 0;
   int16_t marginBottom = 0;

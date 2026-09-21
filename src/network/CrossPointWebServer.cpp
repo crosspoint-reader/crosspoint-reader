@@ -1202,7 +1202,7 @@ void CrossPointWebServer::handleGetSettings() const {
             options.add(opt);
           }
         } else {
-          for (const auto& opt : s.enumValues) {
+          for (const auto& opt : s.enumLabels()) {
             options.add(I18N.get(opt));
           }
         }
@@ -1284,7 +1284,7 @@ void CrossPointWebServer::handlePostSettings() {
       }
       case SettingType::ENUM: {
         const int val = doc[s.key].as<int>();
-        const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
+        const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumLabels().size())
                                                       : static_cast<int>(s.enumStringValues.size());
         if (val >= 0 && val < maxVal) {
           if (s.valuePtr) {
