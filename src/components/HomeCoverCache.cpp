@@ -22,7 +22,7 @@ void HomeCoverCache::begin() {
 
 void HomeCoverCache::invalidate() {
   coverCacheUsed = 0;
-  for (auto& cached : cachedCovers) cached = CachedCover{};
+  cachedCovers.fill(CachedCover{});
 }
 
 void HomeCoverCache::invalidate(size_t index) {

@@ -302,7 +302,7 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-int BaseTheme::headerStatusInset() const {
+int BaseTheme::headerStatusInset() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   return metrics.headerBatteryDetached ? 12 : metrics.headerSidePadding;
 }

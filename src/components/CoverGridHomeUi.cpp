@@ -249,7 +249,7 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.iconSize = 32;
   tabs.iconPainterUserData = this;
   tabs.iconPainter = [](fui::DrawTarget&, fui::Rect iconRect, const fui::TabItem& tab, uint8_t, void* user) {
-    auto& self = *static_cast<CoverGridHomeUi*>(user);
+    const auto& self = *static_cast<CoverGridHomeUi*>(user);
     const int index = tab.value - static_cast<int>(self.books->size());
     const int icon = !self.hasOpds && index >= 2 ? index + 1 : index;
     self.renderer.drawIcon(ICONS[icon], iconRect.x, iconRect.y, iconRect.width);
