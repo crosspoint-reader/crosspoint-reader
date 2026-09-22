@@ -90,14 +90,24 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 47
+### Version 48
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 47 adds a fixed-size table-grid-row page element containing its bounds
+Version 48 adds a fixed-size table-grid-row page element containing its bounds
 and equal-width column count.
+
+### Version 47
+
+The section header adds signed `characterSpacing` (pixels) and unsigned
+`wordSpacingPercent` after `focusReadingEnabled`; both participate in cache
+validation. Each TextBlock's BlockStyle stores only `characterSpacing` after
+`directionDefined`. Word spacing is resolved into cached word positions during
+layout. Sections from earlier versions are rebuilt.
+
+### Version 46
 
 Version 46 keeps the version 45 serialized layout unchanged. It was bumped
 because ordered lists now number their items, `list-style-type: none`
@@ -182,7 +192,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 47
+#define EXPECTED_VERSION 48
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -240,6 +250,7 @@ struct BlockStyle {
     bool textIndentDefined;
     bool isRtl;
     bool directionDefined;
+    s8 characterSpacing;
 };
 
 struct TextBlock {
@@ -356,6 +367,8 @@ struct SectionBin {
     bool embeddedStyle;
     u8 imageRendering;
     bool focusReadingEnabled;
+    s8 characterSpacing;
+    u8 wordSpacingPercent;
 
     u16 pageCount;
     u32 pageLutOffset;

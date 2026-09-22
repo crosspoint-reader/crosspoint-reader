@@ -54,6 +54,7 @@ class ParsedText {
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
+  uint8_t wordSpacingPercent = 100;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
@@ -121,5 +122,6 @@ class ParsedText {
   // incomplete section, not retrying layout with this paragraph.
   bool layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
-                             bool includeLastLine = true);
+                             bool includeLastLine = true, int8_t characterSpacing = 0,
+                             uint8_t wordSpacingPercent = 100);
 };

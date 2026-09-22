@@ -20,6 +20,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -79,6 +80,7 @@ void LibraryListActivity::onEnter() {
   RenderLock lock(*this);
   UiTabListActivity::onEnter();
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
+  app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
 
   // Recent is backed by the resident store. Prune before opening the index so
   // its persistence write never overlaps the long-lived index reader.
@@ -87,7 +89,8 @@ void LibraryListActivity::onEnter() {
   // Rebuild when the index is missing, invalid, or was built with the other
   // metadata mode. Otherwise entering the screen stays instant.
   const bool readMetadata = SETTINGS.libraryUseMetadata != 0;
-  const bool rebuildNeeded = !index.open(library::libraryIndexPath()) || index.header().metadataEnabled != readMetadata;
+  const bool rebuildNeeded = library::isLibraryIndexDirty() || !index.open(library::libraryIndexPath()) ||
+                             index.header().metadataEnabled != readMetadata;
   if (rebuildNeeded) {
     index.close();
     GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
@@ -202,11 +205,15 @@ void LibraryListActivity::openSelectedBook() {
       return;
     }
   }
-  // The reader screen this opens has its own surfaces; a lingering tap flash
-  // would gray an unrelated element there.
+  openBookByPath(path);
+}
+
+// Shared by row activation and the options menu: the reader screen this opens
+// has its own surfaces; a lingering tap flash would gray an unrelated element
+// there. The index handle is released first — on hardware only one reader can
+// hold a file open at a time, and the reader is about to open files of its own.
+void LibraryListActivity::openBookByPath(const std::string& path) {
   app.clearTapFlash();
-  // Release the index handle first: on hardware only one reader can hold a file
-  // open at a time, and the reader is about to open files of its own.
   index.close();
   onSelectBook(path);
 }
@@ -220,18 +227,14 @@ void LibraryListActivity::activateIndex(const int index) {
 }
 
 // Row long-press prompts delete wherever grouping does not own the gesture:
-// the Recent sort has no groups, and an active search is already a flat list
-// the reader narrowed down on purpose ("find it, hold it, delete it").
-// Unfiltered Title/Author lists keep collapse-to-groups. Pinned rows are the
-// exception: holding one offers remove-from-recents, as the old Recent tab
-// did.
+// an active search is already a flat list the reader narrowed down on purpose
+// ("find it, hold it, delete it"). Unfiltered Title/Author lists keep
+// collapse-to-groups. The Recent shelf always opens the row options menu.
 bool LibraryListActivity::deleteEligible() const { return !groupsCollapsed && (!query.empty() || !groupable()); }
 
 void LibraryListActivity::onRowLongPress(const int index) {
-  if (index < pinnedCount()) {
-    const auto& books = RECENT_BOOKS.getBooks();
-    if (index < 0 || index >= static_cast<int>(books.size())) return;
-    promptRemoveRecentBook(books[static_cast<size_t>(index)].path, books[static_cast<size_t>(index)].title);
+  if (isRecentSort(sortOrder)) {
+    showRecentBookOptions(index);
   } else if (deleteEligible()) {
     promptDeleteBook(index);
   } else if (!groupsCollapsed && groupable()) {
@@ -239,6 +242,92 @@ void LibraryListActivity::onRowLongPress(const int index) {
   } else {
     activateIndex(index);
   }
+}
+
+// Recent-shelf long-press menu (button hold and touch long-press). The first
+// rows may come from RecentBooksStore; the rest are index rows sorted by
+// modification time. Only store rows can be removed from recents.
+void LibraryListActivity::showRecentBookOptions(const int entry) {
+  if (entry < 0 || entry >= listCount()) return;
+
+  std::string path;
+  std::string title;
+  const bool isStoreRow = entry < pinnedCount();
+  if (isStoreRow) {
+    const auto& books = RECENT_BOOKS.getBooks();
+    if (entry >= static_cast<int>(books.size())) return;
+    path = books[static_cast<size_t>(entry)].path;
+    title = books[static_cast<size_t>(entry)].title;
+  } else {
+    if (!index.isOpen()) return;
+    const uint16_t ordinal = index.ordinalForRow(sortOrder, static_cast<uint16_t>(rowFor(entry)));
+    library::ClixRecord record{};
+    std::string author;
+    if (ordinal == 0xFFFF || !index.readRecord(ordinal, record) || !index.readPath(record, path) ||
+        !rowTextFor(entry, title, author)) {
+      LOG_ERR("LIB", "cannot resolve Recent row %d", entry);
+      return;
+    }
+  }
+
+  const char* STORE_OPTIONS[] = {tr(STR_OPEN), tr(STR_REMOVE_FROM_RECENTS), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  const char* INDEX_OPTIONS[] = {tr(STR_OPEN), tr(STR_DELETE), tr(STR_LIBRARY_REBUILD)};
+  app.clearTapFlash();
+  optionPopup.show(tr(STR_LIBRARY), title.c_str(), isStoreRow ? STORE_OPTIONS : INDEX_OPTIONS, isStoreRow ? 4 : 3, 0,
+                   [this, path, title, isStoreRow](const int choice) {
+                     swallowHeldReleases();
+                     switch (choice) {
+                       case 0:
+                         openBookByPath(path);
+                         break;
+                       case 1:
+                         if (isStoreRow) {
+                           promptRemoveRecentBook(path, title);
+                         } else {
+                           promptDeleteBookByPath(path, title);
+                         }
+                         break;
+                       case 2:
+                         if (isStoreRow)
+                           promptDeleteBookByPath(path, title);
+                         else
+                           promptRebuildIndex();
+                         break;
+                       case 3:
+                         if (isStoreRow) promptRebuildIndex();
+                         break;
+                       default:
+                         break;
+                     }
+                   });
+  requestUpdate();
+}
+
+// Manual index refresh, same card discipline as the onEnter rebuild: the walk
+// wants the card to itself, and the render task must not read the index (or
+// the filter) around it.
+void LibraryListActivity::promptRebuildIndex() {
+  RenderLock lock(*this);
+  GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
+  index.close();
+  rebuildIndex();
+  if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot open library index");
+  resetAfterRebuild();
+  requestUpdate(true);
+}
+
+void LibraryListActivity::resetAfterRebuild() {
+  // Sort positions, group starts, and pinned rows all point into the old order.
+  applyFilter();
+  resolvePinned();
+  auto& nav = activeNav();
+  const int count = listCount();
+  if (count == 0) {
+    nav.selected = 0;
+  } else if (nav.selected > count) {
+    nav.selected = count;
+  }
+  nav.followOnBuild = true;
 }
 
 void LibraryListActivity::promptRemoveRecentBook(const std::string& path, const std::string& title) {
@@ -284,7 +373,10 @@ void LibraryListActivity::promptDeleteBook(const int entry) {
   std::string title;
   std::string author;
   rowTextFor(entry, title, author);
+  promptDeleteBookByPath(path, title);
+}
 
+void LibraryListActivity::promptDeleteBookByPath(const std::string& path, const std::string& title) {
   // The dialog and the delete both want the card; reopen when we resume.
   index.close();
   auto confirmation =
@@ -312,18 +404,7 @@ void LibraryListActivity::promptDeleteBook(const int entry) {
       }
       if (!index.open(library::libraryIndexPath())) LOG_ERR("LIB", "cannot reopen library index");
       if (!result.isCancelled) {
-        // Search positions, group starts, and pinned rows point into the old
-        // order.
-        applyFilter();
-        resolvePinned();
-        auto& nav = activeNav();
-        const int count = listCount();
-        if (count == 0) {
-          nav.selected = 0;
-        } else if (nav.selected > count) {
-          nav.selected = count;
-        }
-        nav.followOnBuild = true;
+        resetAfterRebuild();
       }
     }
     if (!result.isCancelled) {
@@ -569,6 +650,10 @@ void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent&, void* 
   static_cast<LibraryListActivity*>(user)->openSearch();
 }
 
+void LibraryListActivity::rebuildActionTrampoline(const fui::ActionEvent&, void* user) {
+  static_cast<LibraryListActivity*>(user)->promptRebuildIndex();
+}
+
 // Title and author for one entry, read straight from the index. Only ever
 // called for rows about to be drawn, so at most a screenful of strings exists
 // at once.
@@ -602,6 +687,8 @@ bool LibraryListActivity::rowTextFor(const int entry, std::string& title, std::s
 }
 
 bool LibraryListActivity::handleCustomInput() {
+  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
+
   if (lockNextConfirmRelease && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     lockNextConfirmRelease = false;
     return true;
@@ -626,12 +713,8 @@ bool LibraryListActivity::handleButtons() {
   if (mappedInput.wasLongPressed(MappedInputManager::Button::Confirm, LONG_PRESS_MS)) {
     if (tabsFocused()) {
       if (!degraded) toggleSortDirection();
-    } else if (selectedEntry() < pinnedCount()) {
-      const auto& books = RECENT_BOOKS.getBooks();
-      if (selectedEntry() < static_cast<int>(books.size())) {
-        const auto& book = books[static_cast<size_t>(selectedEntry())];
-        promptRemoveRecentBook(book.path, book.title);
-      }
+    } else if (isRecentSort(sortOrder)) {
+      showRecentBookOptions(selectedEntry());
     } else if (deleteEligible()) {
       if (count > 0) promptDeleteBook(selectedEntry());
     } else if (!groupsCollapsed && groupable()) {
@@ -830,8 +913,14 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   header.trailingStyles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
   header.borderEdges = fui::EdgeBottom;
   if (!degraded) {
+    // Keep both touch actions together on the right; button boards reach
+    // rebuild through the row options menu.
     header.trailingIcon = fui::bitmapFromIcon(icon_search_32);
     header.trailingAction = ACTION_SEARCH;
+    if (mappedInput.hasTouch()) {
+      header.trailingAdjacentIcon = fui::bitmapFromIcon(icon_refresh_cw_32);
+      header.trailingAdjacentAction = ACTION_REBUILD;
+    }
     const int titleFontId = uiScaleSpec().titleFontId;
     header.actionOffsetY =
         static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
@@ -897,8 +986,8 @@ void LibraryListActivity::drawHoldHelp() const {
   const char* help = nullptr;
   if (tabsFocused() && !degraded)
     help = tr(STR_LIBRARY_HOLD_SORT);
-  else if (!tabsFocused() && selectedEntry() < pinnedCount())
-    help = tr(STR_HOLD_OPEN_TO_REMOVE);  // pinned recents: hold removes from the list
+  else if (!tabsFocused() && isRecentSort(sortOrder) && listCount() > 0)
+    help = tr(STR_LIBRARY_HOLD_OPTIONS);  // recent rows: hold opens the row menu
   else if (!tabsFocused() && deleteEligible() && listCount() > 0)
     help = tr(STR_HOLD_OPEN_TO_DELETE);
   else if (!tabsFocused() && groupable())
@@ -909,6 +998,13 @@ void LibraryListActivity::drawHoldHelp() const {
   const int lineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   const int y = renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight;
   GUI.drawHelpText(renderer, Rect{SIDE_PADDING, y, renderer.getScreenWidth() / 2 - SIDE_PADDING, lineHeight}, help);
+}
+
+// OptionPopup is a self-contained modal: it owns the whole frame (hints
+// included) whenever it is up, mirroring the FileBrowser pattern.
+void LibraryListActivity::render(RenderLock&& lock) {
+  if (optionPopup.processRender(renderer, mappedInput)) return;
+  UiTabListActivity::render(std::move(lock));
 }
 
 void LibraryListActivity::drawFooter() {

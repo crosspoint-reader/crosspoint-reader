@@ -764,7 +764,8 @@ void ChapterHtmlSlimParser::finishTableRow() {
                 return;
               }
               tableLineVisibleOffsets[lineIndex] = std::min(tableLineVisibleOffsets[lineIndex], offset);
-            })) {
+            },
+            true, characterSpacing, wordSpacingPercent)) {
       failLayout();
       return;
     }
@@ -2053,7 +2054,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
             [self](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
               self->addLineToPage(std::move(textBlock), offset);
             },
-            false)) {
+            false, self->characterSpacing, self->wordSpacingPercent)) {
       self->failLayout();
     }
   }
@@ -2537,7 +2538,8 @@ void ChapterHtmlSlimParser::makePages() {
   if (!currentTextBlock->layoutAndExtractLines(renderer, fontId, effectiveWidth,
                                                [this](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
                                                  addLineToPage(std::move(textBlock), offset);
-                                               })) {
+                                               },
+                                               true, characterSpacing, wordSpacingPercent)) {
     failLayout();
     return;
   }
