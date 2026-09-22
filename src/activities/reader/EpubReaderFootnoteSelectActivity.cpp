@@ -88,8 +88,10 @@ bool EpubReaderFootnoteSelectActivity::drawHighlightWithSnapshot() {
   if (footnoteLinks.empty()) return false;
   const PageLink* link = footnoteLinks[selected];
 
-  int hx = link->x - 2;
-  int hy = link->y - 2;
+  const int x = link->x + marginLeft;
+  const int y = link->y + marginTop;
+  int hx = x - 2;
+  int hy = y - 2;
   int hw = link->width + 4;
   int hh = link->height + 4;
 
@@ -116,7 +118,7 @@ bool EpubReaderFootnoteSelectActivity::drawHighlightWithSnapshot() {
   // Draw a small marker (the footnote number) at the highlight position
   const char* number = page->footnotes[selected].number;
   if (number[0]) {
-    renderer.drawText(SETTINGS.getReaderFontId(), link->x, link->y - 1, number, false);
+    renderer.drawText(SETTINGS.getReaderFontId(), x, y - 1, number, false);
   }
   return saved;
 }
