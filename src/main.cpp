@@ -743,19 +743,28 @@ void loop() {
   }
 
 #if FREEINK_CAP_TOUCH
-  // Toggle which outer tap zone pages forward, so a one-handed reader can
-  // switch thumbs without visiting Settings. Only meaningful in a tap mode;
-  // Off and Swipe are left untouched.
+  // Toggle which tap zone pages forward, so a one-handed reader can switch
+  // thumbs without visiting Settings. Inversion is expressed by INVERTED_TAP
+  // (tap-only, see detectTouchPageTurn), so swapping back restores Tap & Swipe;
+  // swipe-only and disabled gestures are left untouched.
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SWAP_TAP_ZONES &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
-    const uint8_t touchMode = SETTINGS.touchReaderControls;
-    if (touchMode == CrossPointSettings::TOUCH_READER_ON ||
-        touchMode == CrossPointSettings::TOUCH_READER_INVERTED_TAP) {
-      SETTINGS.touchReaderControls = (touchMode == CrossPointSettings::TOUCH_READER_ON)
-                                         ? CrossPointSettings::TOUCH_READER_INVERTED_TAP
-                                         : CrossPointSettings::TOUCH_READER_ON;
+    const bool inverted = SETTINGS.pageTurnGesture == CrossPointSettings::INVERTED_TAP ||
+                          SETTINGS.previousPageGesture == CrossPointSettings::INVERTED_TAP;
+    const auto swapGesture = [inverted](uint8_t& gesture) {
+      if (inverted) {
+        if (gesture == CrossPointSettings::INVERTED_TAP) gesture = CrossPointSettings::TAP_AND_SWIPE;
+      } else if (gesture == CrossPointSettings::TAP_AND_SWIPE || gesture == CrossPointSettings::TAP_ONLY) {
+        gesture = CrossPointSettings::INVERTED_TAP;
+      }
+    };
+    const uint8_t prevNext = SETTINGS.pageTurnGesture;
+    const uint8_t prevPrevious = SETTINGS.previousPageGesture;
+    swapGesture(SETTINGS.pageTurnGesture);
+    swapGesture(SETTINGS.previousPageGesture);
+    if (SETTINGS.pageTurnGesture != prevNext || SETTINGS.previousPageGesture != prevPrevious) {
       SETTINGS.saveToFile();
-      LOG_DBG("MAIN", "Tap zones swapped (mode %d)", SETTINGS.touchReaderControls);
+      LOG_DBG("MAIN", "Tap zones swapped (next %d, prev %d)", SETTINGS.pageTurnGesture, SETTINGS.previousPageGesture);
     }
   }
 #endif
