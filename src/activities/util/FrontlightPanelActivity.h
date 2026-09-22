@@ -30,8 +30,8 @@ class FrontlightPanelActivity final : public Activity, private UiAppHost {
   bool lightOnChanged = false;
   bool draggingSlider = false;
   // The touch tile toggles SETTINGS.touchReaderControls between off and this
-  // remembered mode, so a Swipe or Inverted Tap user gets their mode back
-  // rather than the Tap default. Seeded from the setting in onEnter().
+  // remembered mode, so a Swipe, Inverted Tap or Forward Tap user gets their
+  // mode back rather than the Tap default. Seeded from the setting in onEnter().
   uint8_t touchModeRestore = CrossPointSettings::TOUCH_READER_ON;
   int panelBottom = 0;
 
