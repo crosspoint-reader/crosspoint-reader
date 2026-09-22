@@ -8,6 +8,7 @@
 #include <strings.h>  // strcasecmp
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 
 // --- SdCardFontFamilyInfo helpers ---
@@ -141,88 +142,92 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
   return n < 0 ? 0 : static_cast<unsigned long>(n);
 }
 
-namespace {
-bool ciContains(const char* hay, const char* needle) {
-  const size_t nl = strlen(needle);
-  for (const char* p = hay; *p; ++p)
-    if (strncasecmp(p, needle, nl) == 0) return true;
-  return false;
-}
-// A filename weight token that collapses into the regular or bold role already
-// covered by the plain Regular/Bold file. Google static families ship these as
-// extra files (Merriweather-Light/Black/...); the 4-role model never uses them.
-bool hasExtraWeightToken(const std::string& path) {
-  const size_t slash = path.rfind('/');
-  const char* base = path.c_str() + (slash == std::string::npos ? 0 : slash + 1);
-  static const char* const kTokens[] = {"thin", "light", "black", "heavy", "extrabold", "ultrabold"};
-  for (const char* t : kTokens)
-    if (ciContains(base, t)) return true;
-  return false;
-}
-// Drop extra-weight files (Light/Black/…) when a normal-weight sibling exists in
-// the same upright/italic bucket, BEFORE refineVectorStyles opens each file — so
-// Merriweather scans 4 faces, not 8. The have-normal guard keeps every file when
-// the family name itself contains the token (e.g. a "Starlight" family).
-void dropExtraWeightVariants(std::vector<SdCardFontFileInfo>& files) {
-  for (const uint8_t ital : {uint8_t{0}, uint8_t{2}}) {  // style bit 1 = italic
-    bool haveNormal = false;
-    for (const auto& f : files)
-      if ((f.style & 2) == ital && !hasExtraWeightToken(f.path)) {
-        haveNormal = true;
-        break;
-      }
-    if (!haveNormal) continue;
-    files.erase(std::remove_if(
-                    files.begin(), files.end(),
-                    [&](const SdCardFontFileInfo& f) { return (f.style & 2) == ital && hasExtraWeightToken(f.path); }),
-                files.end());
-  }
-}
-}  // namespace
-
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
   using freeink::font::FtFont;
-  // The face's own metadata beats filename token guessing (e.g. "-BdIt", "-Md"
-  // suffixes): OS/2 weight ≥ 600 → bold bit, italic flag → italic bit.
-  // inspectStream reads only the sfnt header tables, no face is retained.
-  for (auto& info : files) {
-    HalFile f = Storage.open(info.path.c_str());
-    if (!f || f.isDirectory()) continue;
-    FtFont::FaceInfo face;
-    if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) !=
-        FtFont::InspectResult::Ok) {
-      continue;  // unreadable/unsupported face: keep the filename-derived role
-    }
-    info.style = static_cast<uint8_t>((face.weight >= 600 ? 1 : 0) | (face.italic ? 2 : 0));
-  }
-  // A family needs a regular anchor (TtfEpdFont derives the other styles from
-  // it). If metadata reclassified every file — e.g. a lone Bold-weight face —
-  // promote the first non-italic file (else the first file) back to regular.
-  bool haveRegular = false;
-  for (const auto& info : files) haveRegular = haveRegular || info.style == 0;
-  if (!haveRegular && !files.empty()) {
-    SdCardFontFileInfo* pick = &files.front();
-    for (auto& info : files) {
-      if ((info.style & 2) == 0) {
-        pick = &info;
-        break;
-      }
-    }
-    LOG_DBG("SDREG", "No regular face in %s — promoting %s", dirPath, pick->path.c_str());
-    pick->style = 0;
-  }
-  // Dedup by final role — first file wins (directory order), as for .cpfont.
+  // Read each face's real weight + italic flag (inspectStream reads only the
+  // sfnt header tables, no face is retained), then pick the four roles
+  // DETERMINISTICALLY by design weight: the upright face nearest 400 is
+  // regular, nearest 700 is bold; same for the italics. This is independent of
+  // SD directory order — a Regular/Medium/Semibold/Bold/Black family always
+  // resolves to Regular + Bold, not to whichever file happened to enumerate
+  // first. An unreadable face falls back to its filename-derived role
+  // (Regular/Bold tokens → 400/700).
+  struct Candidate {
+    size_t index;  // into files
+    uint16_t weight;
+    bool italic;
+  };
+  std::vector<Candidate> cands;
+  cands.reserve(files.size());
   for (size_t i = 0; i < files.size(); ++i) {
-    for (size_t j = i + 1; j < files.size();) {
-      if (files[j].style == files[i].style) {
-        LOG_ERR("SDREG", "Duplicate %s style in %s (%s) — skipping", files[i].style == 0 ? "regular" : "styled",
-                dirPath, files[j].path.c_str());
-        files.erase(files.begin() + j);
-      } else {
-        ++j;
+    Candidate c{i, static_cast<uint16_t>((files[i].style & 1) ? 700 : 400), (files[i].style & 2) != 0};
+    HalFile f = Storage.open(files[i].path.c_str());
+    if (f && !f.isDirectory()) {
+      FtFont::FaceInfo face;
+      if (FtFont::inspectStream(&halFileRead, &f, static_cast<unsigned long>(f.size()), face) ==
+          FtFont::InspectResult::Ok) {
+        c.weight = face.weight;
+        c.italic = face.italic;
       }
     }
+    cands.push_back(c);
   }
+
+  // Nearest target weight within the upright/italic bucket; ties break to the
+  // lower weight, then the lexicographically smaller path — never enumeration
+  // order. `exclude` keeps bold from re-picking the regular file.
+  const auto pick = [&](const bool italic, const int target, const Candidate* exclude) -> const Candidate* {
+    const Candidate* best = nullptr;
+    for (const auto& c : cands) {
+      if (c.italic != italic || &c == exclude) continue;
+      if (!best) {
+        best = &c;
+        continue;
+      }
+      const int dc = std::abs(static_cast<int>(c.weight) - target);
+      const int db = std::abs(static_cast<int>(best->weight) - target);
+      if (dc < db || (dc == db && (c.weight < best->weight ||
+                                   (c.weight == best->weight && files[c.index].path < files[best->index].path)))) {
+        best = &c;
+      }
+    }
+    return best;
+  };
+
+  const Candidate* regular = pick(false, 400, nullptr);
+  if (!regular) {
+    // All faces italic: the italic nearest 400 anchors the family as regular
+    // (TtfEpdFont needs a regular source; it derives the rest).
+    regular = pick(true, 400, nullptr);
+    if (regular) LOG_DBG("SDREG", "No upright face in %s — promoting %s", dirPath, files[regular->index].path.c_str());
+    if (!regular) return;  // no usable files at all
+  }
+  // Bold must be a genuinely heavier face than the regular pick; otherwise the
+  // synthesizer derives it (a same-or-lighter file would render identically).
+  const Candidate* bold = pick(false, 700, regular);
+  if (bold && bold->weight <= regular->weight) bold = nullptr;
+  const Candidate* italic = regular->italic ? nullptr : pick(true, 400, nullptr);
+  const Candidate* boldItalic = pick(true, 700, italic ? italic : regular);
+  if (boldItalic && italic && boldItalic->weight <= italic->weight) boldItalic = nullptr;
+  if (boldItalic && !boldItalic->italic) boldItalic = nullptr;
+
+  std::vector<SdCardFontFileInfo> selected;
+  selected.reserve(4);
+  const auto add = [&](const Candidate* c, const uint8_t role) {
+    if (!c) return;
+    SdCardFontFileInfo info = files[c->index];
+    info.style = role;
+    selected.push_back(std::move(info));
+  };
+  add(regular, 0);
+  add(bold, 1);
+  add(italic, 2);
+  add(boldItalic, 3);
+  if (selected.size() < files.size()) {
+    LOG_DBG("SDREG", "%s: %u of %u faces selected by weight", dirPath, static_cast<unsigned>(selected.size()),
+            static_cast<unsigned>(files.size()));
+  }
+  files = std::move(selected);
 }
 
 #endif  // CROSSPOINT_VECTOR_FONTS
@@ -297,7 +302,6 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   }
 #if CROSSPOINT_VECTOR_FONTS
   else if (!vectorFiles.empty()) {
-    dropExtraWeightVariants(vectorFiles);  // skip Light/Black extras before inspecting
     refineVectorStyles(dirPath, vectorFiles);
     family.vector = true;
     family.files = std::move(vectorFiles);
