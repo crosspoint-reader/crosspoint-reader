@@ -496,120 +496,51 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
   }
 
   const uint8_t* bitmap = renderer.getGlyphBitmap(fontData, glyph);
+  if (bitmap == nullptr) return;
 
-  if (bitmap != nullptr) {
-    // Fast path for unrotated text: clip and transform once per glyph
-    // instead of going through drawPixel() for every ink pixel.
-    if constexpr (rotation == TextRotation::None) {
-      renderer.drawGlyphBitmap(bitmap, width, height, cursorX + left, cursorY - top, is2Bit, pixelState);
-      return;
-    }
-    // For Normal:  outer loop advances screenY, inner loop advances screenX
-    // For Rotated: outer loop advances screenX, inner loop advances screenY (in reverse)
-    int outerBase, innerBase;
-    if constexpr (rotation == TextRotation::Rotated90CW) {
-      outerBase = cursorX + fontData->ascender - top;  // screenX = outerBase + glyphY
-      innerBase = cursorY - left;                      // screenY = innerBase - glyphX
-    } else {
-      outerBase = cursorY - top;   // screenY = outerBase + glyphY
-      innerBase = cursorX + left;  // screenX = innerBase + glyphX
-    }
-
-    if (is2Bit) {
-      int pixelPosition = 0;
-      for (int glyphY = 0; glyphY < height; glyphY++) {
-        const int outerCoord = outerBase + glyphY;
-        for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
-          int screenX, screenY;
-          if constexpr (rotation == TextRotation::Rotated90CW) {
-            screenX = outerCoord;
-            screenY = innerBase - glyphX;
-          } else {
-            screenX = innerBase + glyphX;
-            screenY = outerCoord;
-          }
-
-          const uint8_t byte = bitmap[pixelPosition >> 2];
-          const uint8_t bit_index = (3 - (pixelPosition & 3)) * 2;
-          // the direct bit from the font is 0 -> white, 1 -> light gray, 2 -> dark gray, 3 -> black
-          // we swap this to better match the way images and screen think about colors:
-          // 0 -> black, 1 -> dark grey, 2 -> light grey, 3 -> white
-          const uint8_t bmpVal = 3 - ((byte >> bit_index) & 0x3);
-
-          if (renderMode == GfxRenderer::BW && bmpVal < 3) {
-            // Black (also paints over the grays in BW mode)
-            renderer.drawPixel(screenX, screenY, pixelState);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
-            // Light gray (also mark the MSB if it's going to be a dark gray too)
-            // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
-            // We have to flag pixels in reverse for the gray buffers, as 0 leave alone, 1 update
-            renderer.drawPixel(screenX, screenY, false);
-          } else if (renderMode == GfxRenderer::GRAYSCALE_LSB && bmpVal == 1) {
-            // Dark gray
-            renderer.drawPixel(screenX, screenY, false);
-          }
-        }
-      }
-    } else {
-      int pixelPosition = 0;
-      for (int glyphY = 0; glyphY < height; glyphY++) {
-        const int outerCoord = outerBase + glyphY;
-        for (int glyphX = 0; glyphX < width; glyphX++, pixelPosition++) {
-          int screenX, screenY;
-          if constexpr (rotation == TextRotation::Rotated90CW) {
-            screenX = outerCoord;
-            screenY = innerBase - glyphX;
-          } else {
-            screenX = innerBase + glyphX;
-            screenY = outerCoord;
-          }
-
-          const uint8_t byte = bitmap[pixelPosition >> 3];
-          const uint8_t bit_index = 7 - (pixelPosition & 7);
-
-          if ((byte >> bit_index) & 1) {
-            renderer.drawPixel(screenX, screenY, pixelState);
-          }
-        }
-      }
-    }
+  // Logical placement of glyph pixel (0, 0) and the logical step for one move
+  // along each glyph axis. Rotated text runs glyph x up the screen and glyph
+  // y to the right.
+  glyphBitmap::Frame frame;
+  if constexpr (rotation == TextRotation::Rotated90CW) {
+    frame = {cursorX + fontData->ascender - top, cursorY - left, 0, -1, 1, 0};
+  } else {
+    frame = {cursorX + left, cursorY - top, 1, 0, 0, 1};
   }
+  renderer.drawGlyphBitmap(bitmap, width, height, frame, is2Bit, renderMode, pixelState);
 }
 
-// Fast path for drawing a glyph at logical (x, y). Equivalent to calling
+// Draw an unscaled glyph placed by a logical frame. Equivalent to calling
 // drawPixel() for each ink pixel, but the clip test, orientation rotation,
 // strip-band check and address math are resolved once per glyph rather than
 // once per pixel.
-void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const int height, const int x, const int y,
-                                  const bool twoBit, const bool state) const {
+void GfxRenderer::drawGlyphBitmap(const uint8_t* bitmap, const int width, const int height,
+                                  const glyphBitmap::Frame& frame, const bool twoBit, const RenderMode mode,
+                                  const bool state) const {
+  // Apply the logical clip rectangle before rotating, in glyph-local pixels.
+  glyphBitmap::Clip clip{0, 0, width, height};
+  glyphBitmap::clipToRect(frame, clipLeft_, clipTop_, clipRight_, clipBottom_, clip);
+
   // Writes go to the framebuffer, or to the strip scratch in tiled grayscale
   // mode; getWriteOriginY()/getWriteRows() bound the rows that exist there.
-  glyphBitmap::Target target{
-      getWriteTarget(), panelWidth, panelWidthBytes, getWriteOriginY(), getWriteRows(), 0, 0, 0, 0, 0, 0};
-  // Rotate the glyph origin once, then derive the two unit axes by rotating
-  // its x and y neighbours. Together these encode the orientation as an
-  // orthogonal transform the rasterizer can step through without rotating.
-  rotateCoordinates(orientation, x, y, &target.x, &target.y, panelWidth, panelHeight);
+  glyphBitmap::Target target{getWriteTarget(), panelWidth, panelWidthBytes, getWriteOriginY(), getWriteRows(), {}};
+  // Rotate the glyph origin once, then derive the two physical axes by
+  // rotating its neighbours along each logical axis. Together these encode
+  // the text rotation and the panel orientation as one orthogonal transform.
+  glyphBitmap::Frame& physical = target.frame;
+  rotateCoordinates(orientation, frame.x, frame.y, &physical.x, &physical.y, panelWidth, panelHeight);
   int nextX, nextY;
-  rotateCoordinates(orientation, x + 1, y, &nextX, &nextY, panelWidth, panelHeight);
-  target.dxX = nextX - target.x;
-  target.dxY = nextY - target.y;
-  rotateCoordinates(orientation, x, y + 1, &nextX, &nextY, panelWidth, panelHeight);
-  target.dyX = nextX - target.x;
-  target.dyY = nextY - target.y;
+  rotateCoordinates(orientation, frame.x + frame.dxX, frame.y + frame.dxY, &nextX, &nextY, panelWidth, panelHeight);
+  physical.dxX = nextX - physical.x;
+  physical.dxY = nextY - physical.y;
+  rotateCoordinates(orientation, frame.x + frame.dyX, frame.y + frame.dyY, &nextX, &nextY, panelWidth, panelHeight);
+  physical.dyX = nextX - physical.x;
+  physical.dyY = nextY - physical.y;
 
-  // Select which source ink values this plane paints, mirroring the rotated
-  // per-pixel path. 1bpp: only ink 1. 2bpp source values are 0=white,
-  // 1=light gray, 2=dark gray, 3=black. BW paints everything non-white; the
-  // MSB gray plane paints both grays; the LSB plane paints dark gray only.
-  const RenderMode mode = grayPlanesAreAbsolute() ? BW : renderMode;
-  const uint8_t levels = !twoBit ? 0x02 : mode == BW ? 0x0e : mode == GRAYSCALE_MSB ? 0x06 : 0x04;
-  // BW honours the caller's ink state; gray planes always set bits, because
-  // there 0 means leave alone and 1 means update.
-  const bool clearBits = !twoBit || mode == BW ? state : false;
-  // Clip is passed in glyph-local coordinates.
-  glyphBitmap::draw(bitmap, width, height, twoBit, levels, clearBits, target,
-                    {clipLeft_ - x, clipTop_ - y, clipRight_ - x, clipBottom_ - y});
+  const glyphBitmap::Plane plane = mode == BW              ? glyphBitmap::Plane::BW
+                                   : mode == GRAYSCALE_MSB ? glyphBitmap::Plane::GrayMSB
+                                                           : glyphBitmap::Plane::GrayLSB;
+  glyphBitmap::draw(bitmap, width, height, twoBit, plane, state, target, clip);
 }
 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and

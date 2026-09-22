@@ -8,6 +8,21 @@
 // on GfxRenderer so it can be unit-tested on the host.
 namespace glyphBitmap {
 
+// Framebuffer plane a glyph is painted into.
+enum class Plane : uint8_t { BW, GrayLSB, GrayMSB };
+
+// Position of glyph pixel (0, 0) plus the step for one move along the glyph's
+// x and y axes, all in one coordinate space. The axes must describe an
+// orthogonal unit rotation: each is +/-1 on exactly one component.
+struct Frame {
+  int x;
+  int y;
+  int dxX;
+  int dxY;
+  int dyX;
+  int dyY;
+};
+
 // Where a glyph lands in physical framebuffer space.
 struct Target {
   uint8_t* buffer;  // First byte of row originY (framebuffer or strip scratch)
@@ -15,12 +30,7 @@ struct Target {
   int stride;       // Bytes per physical row
   int originY;      // First physical row held by buffer
   int rows;         // Number of physical rows held by buffer
-  int x;            // Physical position of glyph pixel (0, 0)
-  int y;
-  int dxX;  // Physical delta for one step along the glyph's x axis
-  int dxY;
-  int dyX;  // Physical delta for one step along the glyph's y axis
-  int dyY;
+  Frame frame;      // Physical placement of the glyph
 };
 
 // Half-open rectangle in glyph-local pixel coordinates.
@@ -43,6 +53,22 @@ inline void clipAxis(int base, int step, int lower, int upper, int& start, int& 
   }
 }
 
+// Narrow a glyph-local clip so every kept pixel maps inside the half-open
+// rectangle [left, right) x [top, bottom) of the space frame is expressed in.
+// Which glyph axis runs along that space's x depends on the rotation:
+// dxX != 0 means glyph x does. Runs twice per glyph, so it stays inline
+// under -Os.
+__attribute__((always_inline)) inline void clipToRect(const Frame& frame, int left, int top, int right, int bottom,
+                                                      Clip& clip) {
+  if (frame.dxX != 0) {
+    clipAxis(frame.x, frame.dxX, left, right, clip.left, clip.right);
+    clipAxis(frame.y, frame.dyY, top, bottom, clip.top, clip.bottom);
+  } else {
+    clipAxis(frame.x, frame.dyX, left, right, clip.top, clip.bottom);
+    clipAxis(frame.y, frame.dxY, top, bottom, clip.left, clip.right);
+  }
+}
+
 // Keep pixel writes inline when decoding a group of four pixels.
 __attribute__((always_inline)) inline void paint(uint8_t* buffer, int destination, uint8_t ink, uint8_t levels,
                                                  bool clearBits) {
@@ -54,41 +80,44 @@ __attribute__((always_inline)) inline void paint(uint8_t* buffer, int destinatio
     buffer[destination >> 3] |= mask;
 }
 
-// Paint the selected ink values of a packed glyph into target.
+// Paint a packed glyph into target.
 //
 // bitmap: rows are contiguous, MSB first, 1 or 2 bits per pixel; widths need
-//   not be byte-aligned.
-// levels: bitmask of source ink values to paint. Bit n set means ink value n
-//   is painted (for 2bpp, 0 is transparent and 3 is black).
-// clearBits: painted pixels clear their framebuffer bit (black in the BW
-//   plane) when true, otherwise set it (white in BW, "update" in gray planes).
-// Target axes must describe an orthogonal unit rotation. Clipping happens
-// before pixel decoding, so fully hidden glyphs cost nothing.
-inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, uint8_t levels, bool clearBits,
+//   not be byte-aligned. 2bpp values are 0=white, 1=light gray, 2=dark gray,
+//   3=black. 1bpp value 1 is ink.
+// plane: which 2bpp values are painted. BW paints every non-white value and
+//   honours state (true clears the bit, i.e. black). The gray planes only ever
+//   set bits, because there 0 means leave alone and 1 means update: MSB paints
+//   both grays, LSB paints dark gray only. 1bpp glyphs paint ink with state on
+//   every plane.
+// Clipping happens before pixel decoding, so fully hidden glyphs cost nothing.
+inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, Plane plane, bool state,
                  const Target& target, Clip clip) {
+  // Bit n of levels set means source value n is painted.
+  uint8_t levels = 0x02;
+  bool clearBits = state;
+  if (twoBit) {
+    levels = plane == Plane::BW ? 0x0e : plane == Plane::GrayMSB ? 0x06 : 0x04;
+    if (plane != Plane::BW) clearBits = false;
+  }
+
   // Intersect with the glyph bounds, then with the panel width and the
-  // buffered row band. Which glyph axis maps to physical x depends on the
-  // rotation: dxX != 0 means glyph x runs along physical x.
+  // buffered row band.
   clip.left = std::max(clip.left, 0);
   clip.top = std::max(clip.top, 0);
   clip.right = std::min(clip.right, width);
   clip.bottom = std::min(clip.bottom, height);
-  if (target.dxX != 0) {
-    clipAxis(target.x, target.dxX, 0, target.width, clip.left, clip.right);
-    clipAxis(target.y, target.dyY, target.originY, target.originY + target.rows, clip.top, clip.bottom);
-  } else {
-    clipAxis(target.x, target.dyX, 0, target.width, clip.top, clip.bottom);
-    clipAxis(target.y, target.dxY, target.originY, target.originY + target.rows, clip.left, clip.right);
-  }
+  clipToRect(target.frame, 0, target.originY, target.width, target.originY + target.rows, clip);
   if (clip.left >= clip.right || clip.top >= clip.bottom) return;
 
   // Walk the framebuffer as a flat bit index. One glyph column advances
   // stepX bits and one glyph row advances stepY bits; each is +/-1 for the
   // axis that maps to physical x, or +/-strideBits for physical y.
+  const Frame& frame = target.frame;
   const int strideBits = target.stride * 8;
-  const int stepX = target.dxY * strideBits + target.dxX;
-  const int stepY = target.dyY * strideBits + target.dyX;
-  int rowBit = (target.y - target.originY) * strideBits + target.x + clip.left * stepX + clip.top * stepY;
+  const int stepX = frame.dxY * strideBits + frame.dxX;
+  const int stepY = frame.dyY * strideBits + frame.dyX;
+  int rowBit = (frame.y - target.originY) * strideBits + frame.x + clip.left * stepX + clip.top * stepY;
   for (int y = clip.top; y < clip.bottom; ++y, rowBit += stepY) {
     int source = y * width + clip.left;
     int destination = rowBit;
