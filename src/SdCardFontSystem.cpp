@@ -432,6 +432,18 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // Already loaded, same family + size, and disk unchanged → nothing to do.
   if (!registryWasDirty && ttf_ && ttfFamily_ == family.name && ttfPointSize_ == size) return;
 
+  // Reader-face glyph-cache budget (used by both the resize fast path and the
+  // full load below): the default 32 KB holds ~90 CJK glyphs, but a CJK page
+  // uses 300+, so the cache flush-cycles mid-page and every page turn
+  // re-rasterizes the whole page through streamed SD reads (multi-second
+  // turns). The arenas are PSRAM-backed (FontPsram); 1 MB / 4096 glyphs holds
+  // a whole Japanese novel's working set (~3000 unique kanji+kana at ~350 B
+  // each), so the flush-everything ceiling is never hit and warm page turns
+  // are pure cache hits. Without PSRAM keep the internal-DRAM-safe default.
+  const bool havePsram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > 0;
+  const size_t cacheBytes = havePsram ? 1024 * 1024 : 32 * 1024;
+  const uint16_t maxGlyphs = havePsram ? 4096 : 768;
+
   // Same family, only the reader size changed (size preview): the open style
   // sources and the size-independent UI fallbacks don't need rebuilding — just
   // re-drive the reader face at the new size, reusing the already-open files
@@ -439,7 +451,7 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   if (!registryWasDirty && ttf_ && ttfFamily_ == family.name) {
     renderer.unregisterTtfFont(ttfFontId_);
     renderer.removeFont(ttfFontId_);
-    if (ttf_->load(size)) {
+    if (ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs)) {
       ttf_->build(" ");
       ttfFontId_ = computeTtfFontId(family.name.c_str(), size);
       renderer.insertFont(ttfFontId_, ttf_->family());
@@ -484,18 +496,6 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     return;
   }
   addTtfSources(*ttf_);
-  // Glyph-cache budget: the default 32 KB holds ~90 CJK glyphs, but a CJK page
-  // uses 300+, so the cache flush-cycles mid-page and every page turn
-  // re-rasterizes the whole page through streamed SD reads (multi-second
-  // turns). The arenas are PSRAM-backed (FontPsram), so when PSRAM exists give
-  // the reader face room for several full CJK pages; without PSRAM keep the
-  // internal-DRAM-safe default.
-  // 1 MB / 4096 glyphs holds a whole Japanese novel's working set (~3000
-  // unique kanji+kana at ~350 B each), so the flush-everything ceiling is
-  // never hit and warm page turns are pure cache hits.
-  const bool havePsram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > 0;
-  const size_t cacheBytes = havePsram ? 1024 * 1024 : 32 * 1024;
-  const uint16_t maxGlyphs = havePsram ? 4096 : 768;
   const bool ok = ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs);
   if (!ok) {
     // init failure is ambiguous (corrupt font vs. transient OOM inside

@@ -124,7 +124,11 @@ bool TtfEpdFont::load(const uint16_t pointSize, const bool twoBit, const size_t 
     f.maxGlyphs = maxGlyphs;
     f.inited = false;
     f.ready = false;
-    f.used = 0;
+    // Flush the glyph/kern caches, not just the arena cursor: faultGlyph
+    // consults the lookup tables before anything else, so entries rasterized
+    // at a previous size would serve stale metrics — and their bitmaps get
+    // overwritten as new-size glyphs refill the arena from offset 0.
+    flushFace(f);
     f.ligPairCount = 0;                  // re-resolved in initFace; stale pairs must not leak
     for (uint32_t& g : f.ligGid) g = 0;  // across a reload with new sources
   }
