@@ -282,12 +282,15 @@ TEST_F(ChapterHtmlSlimParserTest, PreservesCurrentAnchorWhenFlushingStoredCellAn
   parser.pendingAnchorId = "stored-anchor";
   parser.collectPendingTableAnchor();
 
-  parser.pendingAnchorId = "current-anchor";
+  const std::string currentAnchor(ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES + 1, 'x');
+  parser.pendingAnchorId = currentAnchor;
+  const char* pendingStorage = parser.pendingAnchorId.data();
   parser.flushTableRowAnchorsForCell(0);
 
   ASSERT_EQ(parser.anchorData.size(), 1u);
   EXPECT_EQ(parser.anchorData.front().first, "stored-anchor");
-  EXPECT_EQ(parser.pendingAnchorId, "current-anchor");
+  EXPECT_EQ(parser.pendingAnchorId, currentAnchor);
+  EXPECT_EQ(parser.pendingAnchorId.data(), pendingStorage);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, ReclaimsFlushedTableAnchorStorageBeforeCollectingAnother) {
@@ -332,7 +335,9 @@ TEST_F(ChapterHtmlSlimParserTest, MapsCellAliasesAfterItsTocPageBreak) {
   parser.tocAnchors = {"chapter"};
   parser.currentPage = std::make_unique<Page>();
   ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
-  parser.completePageFn = [](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) {};
+  parser.completePageFn = [&](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) {
+    EXPECT_EQ(parser.pendingAnchorId, "next-cell");
+  };
   parser.pendingAnchorId = "alias";
   parser.collectPendingTableAnchor();
   parser.pendingAnchorId = "chapter";

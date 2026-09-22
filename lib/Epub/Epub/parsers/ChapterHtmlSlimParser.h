@@ -168,7 +168,7 @@ class ChapterHtmlSlimParser {
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
-  void flushPendingAnchor();
+  void flushPendingAnchor(const char* storedAnchor = nullptr);
   void flushPartWordBuffer();
   void compactTableRowAnchors();
   void collectPendingTableAnchor();

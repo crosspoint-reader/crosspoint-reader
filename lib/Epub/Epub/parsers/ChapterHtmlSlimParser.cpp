@@ -294,12 +294,13 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
   }
 }
 
-void ChapterHtmlSlimParser::flushPendingAnchor() {
-  if (pendingAnchorId.empty()) return;
+void ChapterHtmlSlimParser::flushPendingAnchor(const char* storedAnchor) {
+  const char* anchor = storedAnchor ? storedAnchor : pendingAnchorId.c_str();
+  if (*anchor == '\0') return;
 
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
-  if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
+  if (std::find(tocAnchors.begin(), tocAnchors.end(), anchor) != tocAnchors.end()) {
     if (currentPage && !currentPage->elements.empty()) {
       completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
       completedPageCount++;
@@ -309,8 +310,13 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   }
 
   // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-  pendingAnchorId.clear();
+  if (storedAnchor) {
+    // The final anchor map owns the ID after the bounded row storage is reused.
+    anchorData.emplace_back(storedAnchor, static_cast<uint16_t>(completedPageCount));
+  } else {
+    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
+    pendingAnchorId.clear();
+  }
 }
 
 void ChapterHtmlSlimParser::collectPendingTableAnchor() {
@@ -364,7 +370,6 @@ void ChapterHtmlSlimParser::compactTableRowAnchors() {
 }
 
 void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) {
-  std::string savedPendingAnchor = std::move(pendingAnchorId);
   // Move all aliases of this cell past its TOC boundary before recording them.
   size_t tocOffset = 0;
   while (tocOffset < tableRowAnchorBytes) {
@@ -372,8 +377,7 @@ void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) 
     const char* anchor = tableRowAnchorStorage.data() + tocOffset + 1;
     const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - tocOffset - 1) + 2;
     if (storedCellIndex == cellIndex && std::find(tocAnchors.begin(), tocAnchors.end(), anchor) != tocAnchors.end()) {
-      pendingAnchorId.assign(anchor);
-      flushPendingAnchor();
+      flushPendingAnchor(anchor);
       storedCellIndex = UINT8_MAX;
       tableRowAnchorCount--;
     }
@@ -385,14 +389,12 @@ void ChapterHtmlSlimParser::flushTableRowAnchorsForCell(const size_t cellIndex) 
     const char* anchor = tableRowAnchorStorage.data() + offset + 1;
     const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - offset - 1) + 2;
     if (storedCellIndex == cellIndex) {
-      pendingAnchorId.assign(anchor);
-      flushPendingAnchor();
+      flushPendingAnchor(anchor);
       storedCellIndex = UINT8_MAX;
       tableRowAnchorCount--;
     }
     offset += recordBytes;
   }
-  pendingAnchorId = std::move(savedPendingAnchor);
 }
 
 void ChapterHtmlSlimParser::flushPendingTableCellAnchors() {
@@ -410,8 +412,7 @@ void ChapterHtmlSlimParser::flushTableRowAnchors() {
     const char* anchor = tableRowAnchorStorage.data() + offset + 1;
     const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - offset - 1) + 2;
     if (cellIndex != UINT8_MAX) {
-      pendingAnchorId.assign(anchor);
-      flushPendingAnchor();
+      flushPendingAnchor(anchor);
     }
     offset += recordBytes;
   }
@@ -755,7 +756,8 @@ void ChapterHtmlSlimParser::finishTableRow() {
       return;
     }
     if (!tableRowCells[column]->layoutAndExtractLines(
-            renderer, fontId, textWidth, [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
+            renderer, fontId, textWidth,
+            [this, &lines](std::unique_ptr<TextBlock> line, const uint32_t offset) {
               if (layoutFailed) return;
               const size_t lineIndex = lines.size();
               if (!lines.push_back(std::move(line)) ||
@@ -1456,12 +1458,14 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                     makeUniqueNoThrow<ImageBlock>(cachedImagePath, resolvedPath, displayWidth, displayHeight);
                 if (!imageBlock) {
                   LOG_ERR("EHP", "Failed to create ImageBlock");
+                  self->failLayout();
                   return;
                 }
                 int xPos = (self->viewportWidth - displayWidth) / 2;
                 auto pageImage = makeUniqueNoThrow<PageImage>(std::move(imageBlock), xPos, self->currentPageNextY);
                 if (!pageImage) {
                   LOG_ERR("EHP", "Failed to create PageImage");
+                  self->failLayout();
                   return;
                 }
                 if (!self->currentPage->elements.push_back(std::move(pageImage))) {
@@ -2535,11 +2539,12 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
-  if (!currentTextBlock->layoutAndExtractLines(renderer, fontId, effectiveWidth,
-                                               [this](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
-                                                 addLineToPage(std::move(textBlock), offset);
-                                               },
-                                               true, characterSpacing, wordSpacingPercent)) {
+  if (!currentTextBlock->layoutAndExtractLines(
+          renderer, fontId, effectiveWidth,
+          [this](std::unique_ptr<TextBlock> textBlock, const uint32_t offset) {
+            addLineToPage(std::move(textBlock), offset);
+          },
+          true, characterSpacing, wordSpacingPercent)) {
     failLayout();
     return;
   }
