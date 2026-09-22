@@ -166,7 +166,7 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   card.progressMax = progress >= 0 ? 100 : 0;
   card.action = SELECT;
   card.state = selected == 0 ? fui::StateSelected : fui::StateNormal;
-  card.selectionIndicator = fui::BookCardSelectionIndicator::Card;
+  card.selectionIndicator = fui::BookCardSelectionIndicator::CoverFrame;
   card.styles = theme.listRow;
   card.styles.selected.background = fui::Paint::dither(fui::Color::LightGray);
   card.styles.selected.foreground = fui::Paint::solid(fui::Color::Black);
