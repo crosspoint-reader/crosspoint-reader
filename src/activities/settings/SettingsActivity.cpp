@@ -18,6 +18,7 @@
 #include "ClearCacheActivity.h"
 #include "ClockSettingsActivity.h"
 #include "CrossPointSettings.h"
+#include "DictionaryFontSelectActivity.h"
 #include "FontDownloadActivity.h"
 #include "HomeButtonSettingsActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -298,6 +299,19 @@ void SettingsActivity::toggleCurrentSetting() {
       const auto valuePtr = setting.valuePtr;
       optionPopup.show(setting.nameId, enumLabels.data(), static_cast<int>(enumLabels.size()), currentValue,
                        [this, valuePtr, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
+                         if (valuePtr == &CrossPointSettings::dictionaryFontFamily &&
+                             idx == CrossPointSettings::DICTIONARY_FONT_SD) {
+                           auto picker = makeUniqueNoThrow<DictionaryFontSelectActivity>(renderer, mappedInput);
+                           if (!picker) {
+                             LOG_ERR("SET", "OOM: dictionary font picker");
+                             return;
+                           }
+                           startActivityForResult(std::move(picker), [this](const ActivityResult&) {
+                             rebuildSettingsLists();
+                             requestUpdate();
+                           });
+                           return;
+                         }
                          SETTINGS.*valuePtr = idx;
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
@@ -498,6 +512,11 @@ void SettingsActivity::openSleepTimeoutPicker() {
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) {
   if (setting.action == SettingAction::HomeButton) return tr(STR_CONFIGURE);
+  if (setting.valuePtr == &CrossPointSettings::dictionaryFontFamily &&
+      SETTINGS.dictionaryFontFamily == CrossPointSettings::DICTIONARY_FONT_SD &&
+      SETTINGS.dictionarySdFontFamilyName[0] != '\0') {
+    return SETTINGS.dictionarySdFontFamilyName;
+  }
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
   }
