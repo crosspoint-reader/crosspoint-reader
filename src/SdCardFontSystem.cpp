@@ -458,9 +458,12 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // turns). The arenas are PSRAM-backed (FontPsram), so when PSRAM exists give
   // the reader face room for several full CJK pages; without PSRAM keep the
   // internal-DRAM-safe default.
+  // 1 MB / 4096 glyphs holds a whole Japanese novel's working set (~3000
+  // unique kanji+kana at ~350 B each), so the flush-everything ceiling is
+  // never hit and warm page turns are pure cache hits.
   const bool havePsram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > 0;
-  const size_t cacheBytes = havePsram ? 256 * 1024 : 32 * 1024;
-  const uint16_t maxGlyphs = havePsram ? 2048 : 768;
+  const size_t cacheBytes = havePsram ? 1024 * 1024 : 32 * 1024;
+  const uint16_t maxGlyphs = havePsram ? 4096 : 768;
   const bool ok = ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs);
   if (!ok) {
     // init failure is ambiguous (corrupt font vs. transient OOM inside
