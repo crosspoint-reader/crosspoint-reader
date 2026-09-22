@@ -71,9 +71,11 @@ void ClockSyncActivity::runSync() {
     return;
   }
 
-  // Mark as synced so the auto-sync hook stops firing on future WiFi connects.
-  SETTINGS.clockHasBeenSynced = 1;
-  SETTINGS.saveToFile();
+  // Stop future RTC auto-sync attempts only after the RTC was updated.
+  if (halClock.isAvailable()) {
+    SETTINGS.clockHasBeenSynced = 1;
+    SETTINGS.saveToFile();
+  }
 
   // Read the freshly synced time back for the user-facing confirmation.
   char buf[9];
