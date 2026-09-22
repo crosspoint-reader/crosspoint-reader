@@ -88,6 +88,8 @@ class SdCardFontSystem {
   void addTtfSources(TtfEpdFont& font);
   // Close/free all style sources.
   void freeTtfSources();
+  // ReadFn for streamed sources: serves the PSRAM prefix cache first, SD after.
+  static unsigned long prefixRead(void* ctx, unsigned long offset, unsigned char* buffer, unsigned long count);
 #endif  // CROSSPOINT_VECTOR_FONTS
 
   SdCardFontRegistry registry_;
@@ -99,8 +101,10 @@ class SdCardFontSystem {
   // PSRAM when present); LARGE files stream from `file` (kept open) so a multi-MB
   // file never sits in RAM. All faces (reader + UI sizes) share these sources.
   struct TtfSource {
-    freeink::font::PsramVector<uint8_t> bytes;  // resident form (empty if streamed)
-    HalFile file;                               // open handle (streamed form)
+    // Resident form: the whole file. Streamed form: a PSRAM prefix cache of the
+    // file head (cmap/loca/hmtx) — empty when PSRAM couldn't fund it.
+    freeink::font::PsramVector<uint8_t> bytes;
+    HalFile file;  // open handle (streamed form)
     bool streamed = false;
     unsigned long size = 0;
     bool present = false;

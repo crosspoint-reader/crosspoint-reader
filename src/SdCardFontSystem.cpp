@@ -328,8 +328,22 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
     }
     s.streamed = false;
   } else {
-    s.file = std::move(f);  // kept open; halFileRead() reads it on demand
+    s.file = std::move(f);  // kept open; prefixRead() reads it on demand
     s.streamed = true;
+    // Cache the file's head in PSRAM: an sfnt's per-glyph-fault tables (cmap,
+    // loca, hmtx) sit before the multi-MB glyf table, so serving the first
+    // 1 MB from RAM turns each glyph fault's 4-6 scattered SD seeks into one
+    // glyf read. Gated per source so a small-PSRAM board takes what fits.
+    static constexpr size_t kStreamPrefix = 1024 * 1024;
+    const size_t prefix = len < kStreamPrefix ? len : kStreamPrefix;
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > prefix + 256 * 1024) {
+      s.bytes.resize(prefix);
+      if (s.file.seek(0) && static_cast<size_t>(s.file.read(s.bytes.data(), prefix)) == prefix) {
+        LOG_DBG("SDFS", "Cached %u KB TTF prefix in PSRAM", static_cast<unsigned>(prefix / 1024));
+      } else {
+        s.bytes.clear();  // fall back to pure streaming
+      }
+    }
     LOG_DBG("SDFS", "Streaming TTF %s (%u KB) from SD", path.c_str(), static_cast<unsigned>(len / 1024));
   }
   s.size = static_cast<unsigned long>(len);
@@ -337,12 +351,30 @@ bool SdCardFontSystem::openTtfSource(const uint8_t style, const std::string& pat
   return true;
 }
 
+// Streamed-source read: serve from the PSRAM prefix cache when the range is
+// there, hit SD only for the tail (glyf outlines). A read straddling the
+// boundary splits across both.
+unsigned long SdCardFontSystem::prefixRead(void* ctx, const unsigned long offset, unsigned char* buffer,
+                                           const unsigned long count) {
+  auto* s = static_cast<TtfSource*>(ctx);
+  const unsigned long cached = s->bytes.size();
+  if (offset < cached) {
+    const unsigned long fromCache = (offset + count <= cached) ? count : cached - offset;
+    if (count == 0) return 0;  // seek probe
+    memcpy(buffer, s->bytes.data() + offset, fromCache);
+    if (fromCache == count) return count;
+    return fromCache + SdCardFontRegistry::halFileRead(&s->file, offset + fromCache, buffer + fromCache,
+                                                       count - fromCache);
+  }
+  return SdCardFontRegistry::halFileRead(&s->file, offset, buffer, count);
+}
+
 void SdCardFontSystem::addTtfSources(TtfEpdFont& font) {
   for (uint8_t st = 0; st < 4; ++st) {
     TtfSource& s = ttfSources_[st];
     if (!s.present) continue;
     if (s.streamed) {
-      font.addStreamSource(st, &SdCardFontRegistry::halFileRead, &s.file, s.size);
+      font.addStreamSource(st, &SdCardFontSystem::prefixRead, &s, s.size);
     } else {
       font.addResidentSource(st, s.bytes.data(), static_cast<uint32_t>(s.bytes.size()));
     }
