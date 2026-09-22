@@ -363,8 +363,8 @@ unsigned long SdCardFontSystem::prefixRead(void* ctx, const unsigned long offset
     if (count == 0) return 0;  // seek probe
     memcpy(buffer, s->bytes.data() + offset, fromCache);
     if (fromCache == count) return count;
-    return fromCache + SdCardFontRegistry::halFileRead(&s->file, offset + fromCache, buffer + fromCache,
-                                                       count - fromCache);
+    return fromCache +
+           SdCardFontRegistry::halFileRead(&s->file, offset + fromCache, buffer + fromCache, count - fromCache);
   }
   return SdCardFontRegistry::halFileRead(&s->file, offset, buffer, count);
 }
