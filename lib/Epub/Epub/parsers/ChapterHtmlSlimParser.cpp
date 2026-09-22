@@ -540,14 +540,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     startNewTextBlock(parentBlockStyle);
   }
 
-  if (!currentPage) {
-    currentPage.reset(new (std::nothrow) Page());
-    if (!currentPage) {
-      LOG_ERR("EHP", "Failed to create page for horizontal rule");
-      return;
-    }
-    currentPageNextY = 0;
-  }
+  if (!ensureCurrentPage()) return;
 
   const int16_t lineHeight = static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression));
   const int16_t defaultVerticalSpacing = static_cast<int16_t>(lineHeight / 2);
@@ -568,13 +561,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
     setCurrentPageVisibleOffset(visibleTextOffset);
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
     completedPageCount++;
-    currentPage.reset(new (std::nothrow) Page());
-    if (!currentPage) {
-      LOG_ERR("EHP", "Failed to create page after horizontal-rule page break");
-      return;
-    }
-    currentPageNextY = 0;
-    currentPageVisibleOffsetSet = false;
+    if (!ensureCurrentPage()) return;
   }
 
   currentPageNextY += topSpacing;
@@ -832,6 +819,17 @@ void ChapterHtmlSlimParser::finishTableRow() {
     anchorOffset += recordBytes;
   }
   if (rowStartsToc) {
+    size_t tocAnchorOffset = 0;
+    while (tocAnchorOffset < tableRowAnchorBytes) {
+      const uint8_t cellIndex = static_cast<uint8_t>(tableRowAnchorStorage[tocAnchorOffset]);
+      const char* anchor = tableRowAnchorStorage.data() + tocAnchorOffset + 1;
+      const size_t recordBytes = strnlen(anchor, tableRowAnchorBytes - tocAnchorOffset - 1) + 2;
+      if (cellIndex != UINT8_MAX && std::find(tocAnchors.begin(), tocAnchors.end(), anchor) != tocAnchors.end()) {
+        flushPendingAnchor(anchor);
+        tableRowAnchorStorage[tocAnchorOffset] = static_cast<char>(UINT8_MAX);
+      }
+      tocAnchorOffset += recordBytes;
+    }
     flushTableRowAnchors();
   }
 
@@ -1423,21 +1421,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
                                        self->xpathListItemIndex, self->currentPageVisibleOffset);
                   self->completedPageCount++;
-                  self->currentPage.reset(new Page());
-                  if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create new page");
-                    return;
-                  }
-                  self->currentPageNextY = 0;
-                  self->currentPageVisibleOffsetSet = false;
+                  if (!self->ensureCurrentPage()) return;
                 } else if (!self->currentPage) {
-                  self->currentPage.reset(new Page());
-                  if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create initial page");
-                    return;
-                  }
-                  self->currentPageNextY = 0;
-                  self->currentPageVisibleOffsetSet = false;
+                  if (!self->ensureCurrentPage()) return;
                 }
 
                 // Apply top margin from container block. Clamp it so the image never

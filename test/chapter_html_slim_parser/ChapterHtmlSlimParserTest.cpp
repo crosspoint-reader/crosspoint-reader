@@ -349,6 +349,33 @@ TEST_F(ChapterHtmlSlimParserTest, MapsCellAliasesAfterItsTocPageBreak) {
   EXPECT_EQ(parser.pendingAnchorId, "next-cell");
 }
 
+TEST_F(ChapterHtmlSlimParserTest, MapsNormalTableAnchorAfterLaterTocAnchor) {
+  parser.tocAnchors = {"chapter"};
+  parser.currentPage = std::make_unique<Page>();
+  ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
+  parser.completePageFn = [](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) {};
+  ASSERT_TRUE(parser.tableRowCells.reserve(1));
+  auto cell = std::make_unique<ParsedText>(false);
+  cell->addWord("chapter", EpdFontFamily::REGULAR);
+  ASSERT_TRUE(parser.tableRowCells.push_back(std::move(cell)));
+
+  parser.pendingAnchorId = "alias";
+  parser.collectPendingTableAnchor();
+  parser.pendingAnchorId = "chapter";
+  parser.collectPendingTableAnchor();
+  parser.finishTableRow();
+
+  ASSERT_EQ(parser.anchorData.size(), 2u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, FailsLayoutWhenHorizontalRulePageAllocationFails) {
+  allocationSizeToFail = sizeof(Page);
+  parser.emitHorizontalRule(BlockStyle{});
+
+  EXPECT_TRUE(parser.layoutFailed);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenItsArenaAllocationFails) {
   parser.currentTextBlock->addWord("a-word-longer-than-small-string-storage", EpdFontFamily::REGULAR);
   bool emitted = false;
