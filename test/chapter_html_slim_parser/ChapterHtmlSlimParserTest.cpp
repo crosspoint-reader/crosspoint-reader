@@ -376,6 +376,13 @@ TEST_F(ChapterHtmlSlimParserTest, FailsLayoutWhenHorizontalRulePageAllocationFai
   EXPECT_TRUE(parser.layoutFailed);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, FailsLayoutWhenHorizontalRuleAllocationFails) {
+  allocationSizeToFail = sizeof(PageHorizontalRule);
+  parser.emitHorizontalRule(BlockStyle{});
+
+  EXPECT_TRUE(parser.layoutFailed);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenItsArenaAllocationFails) {
   parser.currentTextBlock->addWord("a-word-longer-than-small-string-storage", EpdFontFamily::REGULAR);
   bool emitted = false;
