@@ -103,6 +103,7 @@ class HalFile : public Print {
   bool seek64(uint64_t pos);
   bool seekCur(int64_t offset);
   bool seekSet(size_t offset);
+  bool truncate(uint64_t length);
   int available() const;
   size_t position() const;
   int read(void* buf, size_t count);

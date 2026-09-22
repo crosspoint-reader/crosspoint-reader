@@ -1,0 +1,4 @@
+add_executable(ClippingPreviewTest ClippingPreviewTest.cpp)
+target_link_libraries(ClippingPreviewTest PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(ClippingPreviewTest PRIVATE ${REPO_ROOT}/src)
+gtest_discover_tests(ClippingPreviewTest)

@@ -181,10 +181,66 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 }
 
 inline std::vector<StrId> buildLongPressMenuValues() {
-  static constexpr StrId VALUES[] = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
-                                     StrId::STR_DICTIONARY, StrId::STR_READER_MENU};
-  const size_t count = BoardConfig::hasHomeKey() ? std::size(VALUES) : std::size(VALUES) - 1;
-  return {VALUES, VALUES + count};
+  std::vector<StrId> values = {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION,
+                               StrId::STR_DICTIONARY};
+  if (BoardConfig::hasHomeKey()) values.push_back(StrId::STR_READER_MENU);
+  values.push_back(StrId::STR_SAVE_CLIPPING);
+  return values;
+}
+
+inline uint8_t longPressMenuDisplayValue() {
+  const uint8_t raw = SETTINGS.longPressMenuFunction;
+  if (raw <= CrossPointSettings::LP_MENU_DICTIONARY) return raw;
+  if (raw == CrossPointSettings::LP_MENU_READER_MENU) {
+    return BoardConfig::hasHomeKey() ? 4 : CrossPointSettings::LP_MENU_DISABLED;
+  }
+  if (raw == CrossPointSettings::LP_MENU_CREATE_CLIPPING) return BoardConfig::hasHomeKey() ? 5 : 4;
+  return CrossPointSettings::LP_MENU_DISABLED;
+}
+
+inline void setLongPressMenuFromDisplayValue(const uint8_t displayValue) {
+  if (displayValue <= CrossPointSettings::LP_MENU_DICTIONARY) {
+    SETTINGS.longPressMenuFunction = displayValue;
+  } else if (BoardConfig::hasHomeKey()) {
+    SETTINGS.longPressMenuFunction =
+        displayValue == 4 ? CrossPointSettings::LP_MENU_READER_MENU : CrossPointSettings::LP_MENU_CREATE_CLIPPING;
+  } else {
+    SETTINGS.longPressMenuFunction = CrossPointSettings::LP_MENU_CREATE_CLIPPING;
+  }
+}
+
+inline SettingInfo buildLongPressMenuSetting() {
+  return SettingInfo::DynamicEnum(StrId::STR_LONG_PRESS_MENU, buildLongPressMenuValues(), longPressMenuDisplayValue,
+                                  setLongPressMenuFromDisplayValue, "longPressMenuFunction", StrId::STR_CAT_CONTROLS);
+}
+
+inline std::vector<StrId> buildShortPowerButtonValues() {
+  std::vector<StrId> values = {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                               StrId::STR_FOOTNOTES};
+  if (BoardConfig::hasTouch()) values.push_back(StrId::STR_CONFIRM);
+  values.push_back(StrId::STR_SAVE_CLIPPING);
+  return values;
+}
+
+inline uint8_t shortPowerButtonDisplayValue() {
+  const uint8_t raw = SETTINGS.shortPwrBtn;
+  if (raw <= CrossPointSettings::FOOTNOTES) return raw;
+  if (raw == CrossPointSettings::CREATE_CLIPPING) return BoardConfig::hasTouch() ? 6 : 5;
+  if (raw == CrossPointSettings::PWR_CONFIRM && BoardConfig::hasTouch()) return 5;
+  return CrossPointSettings::IGNORE;
+}
+
+inline void setShortPowerButtonFromDisplayValue(const uint8_t displayValue) {
+  if (!BoardConfig::hasTouch() && displayValue == 5) {
+    SETTINGS.shortPwrBtn = CrossPointSettings::CREATE_CLIPPING;
+    return;
+  }
+  SETTINGS.shortPwrBtn = displayValue;
+}
+
+inline SettingInfo buildShortPowerButtonSetting() {
+  return SettingInfo::DynamicEnum(StrId::STR_SHORT_PWR_BTN, buildShortPowerButtonValues(), shortPowerButtonDisplayValue,
+                                  setShortPowerButtonFromDisplayValue, "shortPwrBtn", StrId::STR_CAT_CONTROLS);
 }
 
 inline std::vector<StrId> homeThemeValues() {
@@ -334,22 +390,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                          buildLongPressMenuValues(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
+        buildLongPressMenuSetting(),
         // Erased below unless the board is an X4 Pro.
         SettingInfo::Toggle(StrId::STR_DBL_CLICK_PWR_LIGHT, &CrossPointSettings::doubleClickPwrLight,
                             "doubleClickPwrLight", StrId::STR_CAT_CONTROLS),
-#if FREEINK_CAP_TOUCH
-        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
-                           StrId::STR_FOOTNOTES, StrId::STR_CONFIRM},
-                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
-#endif
+        buildShortPowerButtonSetting(),
         // Erased below unless the QMI8658 IMU is present (X3).
         SettingInfo::Enum(StrId::STR_TILT_PAGE_TURN, &CrossPointSettings::tiltPageTurn,
                           {StrId::STR_STATE_OFF, StrId::STR_NORMAL, StrId::STR_INVERTED}, "tiltPageTurn",
