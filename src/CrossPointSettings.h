@@ -53,6 +53,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     XTC_STATUS_BAR_TOP = 2,
     XTC_STATUS_BAR_MODE_COUNT
   };
+  enum STATUS_BAR_TIME_LEFT {
+    TIME_LEFT_HIDE = 0,
+    TIME_LEFT_CHAPTER = 1,
+    TIME_LEFT_BOOK = 2,
+    STATUS_BAR_TIME_LEFT_COUNT
+  };
 
   enum STATUS_BAR_CLOCK_MODE {
     STATUS_BAR_CLOCK_HIDE = 0,
@@ -215,6 +221,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Status bar settings
   uint8_t statusBarChapterPageCount = 1;
   uint8_t statusBarBookProgressPercentage = 1;
+  uint8_t statusBarTimeLeft = TIME_LEFT_HIDE;
   uint8_t statusBarProgressBar = HIDE_PROGRESS;
   uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
   uint8_t statusBarTitle = CHAPTER_TITLE;
@@ -399,14 +406,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     uint8_t progressBarMode = HIDE_PROGRESS;  // STATUS_BAR_PROGRESS_BAR
     uint8_t progressBarHeightPx = 0;          // (thickness+1)*2; 0 when the bar is hidden
     uint8_t xtcMode = XTC_STATUS_BAR_HIDE;    // XTC_STATUS_BAR_MODE
+    uint8_t timeLeftMode = TIME_LEFT_HIDE;    // STATUS_BAR_TIME_LEFT
 
     bool showsProgressBar() const { return progressBarMode != HIDE_PROGRESS; }
     bool showsTitle() const { return titleMode != HIDE_TITLE; }
     bool showsClock() const { return clockMode != STATUS_BAR_CLOCK_HIDE; }
+    bool showsTimeLeft() const { return timeLeftMode != TIME_LEFT_HIDE; }
     // Visibility of the text lane. Clock hardware presence is the caller's
     // concern: pass halClock.isAvailable(), or true for layout reservation.
     bool textLaneVisible(bool clockAvailable) const {
-      return showChapterPageCount || showBookProgressPercent || showsTitle() || showBattery ||
+      return showChapterPageCount || showBookProgressPercent || showsTitle() || showBattery || showsTimeLeft() ||
              (showsClock() && clockAvailable);
     }
   };

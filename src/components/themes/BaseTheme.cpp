@@ -753,7 +753,8 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 
 void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
                               const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) {
+                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated,
+                              const char* extraStatusText) {
   auto metrics = UITheme::getInstance().getMetrics();
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
@@ -770,19 +771,33 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   int leftClusterWidth = 0;
   int rightClusterWidth = 0;
 
-  if (sb.showBookProgressPercent || sb.showChapterPageCount) {
-    // Right aligned text for progress counter
-    char progressStr[32];
+  const bool hasExtra = extraStatusText != nullptr && extraStatusText[0] != '\0';
+  const bool hasProgress = sb.showBookProgressPercent || sb.showChapterPageCount;
+
+  if (hasProgress || hasExtra) {
+    // Right aligned text for progress counter and/or reading metrics
+    char progressStr[64];
 
     // Draw the estimate marker separately so it can use the next UI font size.
     const bool showEstimate = pageCountEstimated && sb.showChapterPageCount;
 
+    char countPercentBuf[32];
+    countPercentBuf[0] = '\0';
     if (sb.showBookProgressPercent && sb.showChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
+      snprintf(countPercentBuf, sizeof(countPercentBuf), "%d/%d  %.0f%%", currentPage, pageCount, bookProgress);
     } else if (sb.showBookProgressPercent) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
+      snprintf(countPercentBuf, sizeof(countPercentBuf), "%.0f%%", bookProgress);
+    } else if (sb.showChapterPageCount) {
+      snprintf(countPercentBuf, sizeof(countPercentBuf), "%d/%d", currentPage, pageCount);
+    }
+
+    if (countPercentBuf[0] != '\0' && hasExtra) {
+      snprintf(progressStr, sizeof(progressStr), "%s%s%s", countPercentBuf, tr(STR_STATUS_PROGRESS_SEPARATOR),
+               extraStatusText);
+    } else if (countPercentBuf[0] != '\0') {
+      snprintf(progressStr, sizeof(progressStr), "%s", countPercentBuf);
     } else {
-      snprintf(progressStr, sizeof(progressStr), "%d/%d", currentPage, pageCount);
+      snprintf(progressStr, sizeof(progressStr), "%s", extraStatusText);
     }
 
     int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
