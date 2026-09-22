@@ -7,6 +7,7 @@
 #include <LibraryBuilder.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <WiFi.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -28,6 +29,7 @@
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
+#include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -102,7 +104,6 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_LIBRARY_REBUILD, SettingAction::RebuildLibraryIndex));
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -371,14 +372,30 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::OPDSBrowser:
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
         break;
-      case SettingAction::Network:
-        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+      case SettingAction::Network: {
+        auto activity = makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput, false);
+        if (!activity) {
+          LOG_ERR("SETTINGS", "OOM: WifiSelectionActivity");
+          return;
+        }
+        startActivityForResult(std::move(activity), [](const ActivityResult&) {
+          SETTINGS.saveToFile();
+          // Every other WiFi consumer hands the radio to a session it owns;
+          // these rows only save credentials, so nothing here would ever
+          // release the driver's heap. The scan alone brings it up, so tear
+          // down whether or not the user joined a network.
+          if (WiFi.getMode() == WIFI_MODE_NULL) return;
+          WiFi.disconnect(false);
+          delay(30);
+          // Unlike the onExit() teardowns, this runs from the loop task with
+          // no lock held; the restart popup paints straight to the panel.
+          RenderLock lock;
+          silentRestartToSettings();
+        });
         break;
+      }
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
-        break;
-      case SettingAction::RebuildLibraryIndex:
-        rebuildLibraryIndex();
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
@@ -462,29 +479,6 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
     SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_NEVER;
     quickResumeTimeoutAutoEnabled = false;
   }
-}
-
-void SettingsActivity::rebuildLibraryIndex() {
-  // Prevent SD-backed fonts from opening a second reader while EPUB metadata is scanned.
-  // Keep the popup static because an e-ink refresh per folder would dominate the rebuild.
-  RenderLock lock(*this);
-  GUI.drawPopup(renderer, tr(STR_LIBRARY_REBUILDING));
-
-  library::BuildStats stats;
-  const bool ok = library::buildLibraryIndex("/", stats, SETTINGS.libraryUseMetadata != 0);
-  if (ok) {
-    LOG_INF("LIB", "rebuild: %u books (%u new, %u renamed, %u removed, %u enriched) in %ums",
-            static_cast<unsigned>(stats.books), static_cast<unsigned>(stats.added),
-            static_cast<unsigned>(stats.renamed), static_cast<unsigned>(stats.removed),
-            static_cast<unsigned>(stats.enriched), static_cast<unsigned>(stats.walkMs));
-    if (stats.dedupDegraded) LOG_ERR("LIB", "rebuild completed without duplicate detection");
-  } else {
-    LOG_ERR("LIB", "index rebuild failed");
-  }
-
-  GUI.drawPopup(renderer, ok ? tr(STR_LIBRARY_REBUILD_DONE) : tr(STR_LIBRARY_REBUILD_FAILED));
-  delay(1200);
-  requestUpdate(true);
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {

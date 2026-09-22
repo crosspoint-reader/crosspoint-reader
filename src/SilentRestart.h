@@ -7,8 +7,9 @@
 // comes back exactly as it was, regardless of the Restore Light on Wake
 // preference.
 
-void silentRestart();          // home screen
-void silentRestartToReader();  // currently-open EPUB (APP_STATE.openEpubPath)
+void silentRestart();            // home screen
+void silentRestartToReader();    // currently-open EPUB (APP_STATE.openEpubPath)
+void silentRestartToSettings();  // settings screen
 
 // Reboots immediately after an activity releases exclusive raw storage. The
 // RTC target ensures setup() lands on Home instead of resuming a reader.
