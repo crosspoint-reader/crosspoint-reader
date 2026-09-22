@@ -742,33 +742,6 @@ void loop() {
     }
   }
 
-#if FREEINK_CAP_TOUCH
-  // Toggle which tap zone pages forward, so a one-handed reader can switch
-  // thumbs without visiting Settings. Inversion is expressed by INVERTED_TAP
-  // (tap-only, see detectTouchPageTurn), so swapping back restores Tap & Swipe;
-  // swipe-only and disabled gestures are left untouched.
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SWAP_TAP_ZONES &&
-      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
-    const bool inverted = SETTINGS.pageTurnGesture == CrossPointSettings::INVERTED_TAP ||
-                          SETTINGS.previousPageGesture == CrossPointSettings::INVERTED_TAP;
-    const auto swapGesture = [inverted](uint8_t& gesture) {
-      if (inverted) {
-        if (gesture == CrossPointSettings::INVERTED_TAP) gesture = CrossPointSettings::TAP_AND_SWIPE;
-      } else if (gesture == CrossPointSettings::TAP_AND_SWIPE || gesture == CrossPointSettings::TAP_ONLY) {
-        gesture = CrossPointSettings::INVERTED_TAP;
-      }
-    };
-    const uint8_t prevNext = SETTINGS.pageTurnGesture;
-    const uint8_t prevPrevious = SETTINGS.previousPageGesture;
-    swapGesture(SETTINGS.pageTurnGesture);
-    swapGesture(SETTINGS.previousPageGesture);
-    if (SETTINGS.pageTurnGesture != prevNext || SETTINGS.previousPageGesture != prevPrevious) {
-      SETTINGS.saveToFile();
-      LOG_DBG("MAIN", "Tap zones swapped (next %d, prev %d)", SETTINGS.pageTurnGesture, SETTINGS.previousPageGesture);
-    }
-  }
-#endif
-
   // Refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
   // Not while reading: there a repaint is a full page re-render (visible

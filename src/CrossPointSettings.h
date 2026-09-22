@@ -145,8 +145,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     REFRESH_FREQUENCY_COUNT
   };
 
-  // Short power button press actions. PWR_CONFIRM and SWAP_TAP_ZONES are only
-  // offered on touch boards (see SettingsList.h).
+  // Short power button press actions. PWR_CONFIRM is only offered on touch
+  // boards (see SettingsList.h).
   enum SHORT_PWRBTN {
     IGNORE = 0,
     SLEEP = 1,
@@ -154,7 +154,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
     PWR_CONFIRM = 5,
-    SWAP_TAP_ZONES = 6,
     SHORT_PWRBTN_COUNT
   };
 
