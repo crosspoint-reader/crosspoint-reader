@@ -115,7 +115,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   const auto& gridRect = gridBounds;
   tabRect.x = gridRect.x + grid.cellInset.left;
   tabRect.width = gridRect.width - grid.cellInset.left - grid.cellInset.right;
-  headingRect.x = tabRect.x - 3;
+  headingRect.x = tabRect.x;
   headingRect.width = tabRect.width;
   screen.target().text(headingRect, hasContinueReading ? tr(STR_CONTINUE_READING) : tr(STR_START_READING), headingText);
   drawTabs(screen, tabRect);
@@ -166,7 +166,12 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   card.progressMax = progress >= 0 ? 100 : 0;
   card.action = SELECT;
   card.state = selected == 0 ? fui::StateSelected : fui::StateNormal;
-  card.selectionIndicator = fui::BookCardSelectionIndicator::CoverFrame;
+  card.selectionIndicator = fui::BookCardSelectionIndicator::Card;
+  card.styles = theme.listRow;
+  card.styles.selected.background = fui::Paint::dither(fui::Color::LightGray);
+  card.styles.selected.foreground = fui::Paint::solid(fui::Color::Black);
+  card.styles.selected.radius = theme.listRowRadius;
+  card.styles.active = card.styles.selected;
   card.titleText = theme.bodyText;
   card.titleText.maxLines = renderer.getScreenWidth() > renderer.getScreenHeight() ? 1 : 2;
   card.authorText = theme.smallText;
@@ -177,7 +182,7 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   card.coverSize.height = std::max(1, std::min(rect.height - 12, (rect.width / 3) * 5 / 3));
   card.coverSize.width = std::max(1, card.coverSize.height * 3 / 5);
   noteThumbHeight(0, card.coverSize.width, card.coverSize.height);
-  // Generation bounds stay stable; the selection frame follows the actual image.
+  // Generation bounds stay stable; the displayed cover follows the actual image.
   if (featuredCoverWidth > 0 && featuredCoverHeight > 0) {
     const float scale = std::min(1.0f, std::min(float(card.coverSize.width) / featuredCoverWidth,
                                                 float(card.coverSize.height) / featuredCoverHeight));
@@ -197,13 +202,16 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
 fui::Rect CoverGridHomeUi::layoutGrid(UiScreen& screen, fui::Rect rect) {
   const auto& theme = screen.theme();
   grid.gap = std::max<int>(theme.spaceSm, rect.width * 2 / 100);
-  grid.rowGap = theme.spaceSm;
+  grid.rowGap = grid.gap;
   grid.cellInset = fui::Insets{6, 6, 6, 6};
   const int maxCoverWidth = std::max(1, (rect.width - (GRID_COLUMNS - 1) * grid.gap) / GRID_COLUMNS - 12);
   const int maxCoverHeight = std::max(1, (rect.height - (GRID_ROWS - 1) * grid.rowGap) / GRID_ROWS - 12);
   grid.coverSize.height = std::max(1, std::min({maxCoverHeight, maxCoverWidth * 5 / 3, card.coverSize.height * 3 / 2}));
   grid.coverSize.width = std::max(1, grid.coverSize.height * 3 / 5);
   grid.rowHeight = grid.coverSize.height + 12;
+  const int gridWidth = GRID_COLUMNS * (grid.coverSize.width + 12) + (GRID_COLUMNS - 1) * grid.gap;
+  rect.x += (rect.width - gridWidth) / 2;
+  rect.width = gridWidth;
   rect.height = GRID_ROWS * grid.rowHeight + (GRID_ROWS - 1) * grid.rowGap;
   return rect;
 }
@@ -216,7 +224,8 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
   grid.action = SELECT;
   grid.inputMask = fui::InputTouch;
   grid.selectedIndex = selected > 0 && selected < static_cast<int>(books->size()) ? selected - 1 : -1;
-  grid.selectionIndicator = fui::CoverGridSelectionIndicator::CoverFrame;
+  grid.selectionIndicator = fui::CoverGridSelectionIndicator::Cell;
+  grid.cellStyles = card.styles;
   grid.labelHeight = 0;
   grid.labelGap = 0;
   for (size_t i = 1; i < thumbHeights.size(); ++i) noteThumbHeight(i, grid.coverSize.width, grid.coverSize.height);
