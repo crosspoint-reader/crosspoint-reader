@@ -95,7 +95,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   screen.insetContent(fui::Insets{theme.spaceSm, theme.spaceLg, theme.spaceSm, theme.spaceLg});
   const bool landscape = renderer.getScreenWidth() > renderer.getScreenHeight();
   const auto header = screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight);
-  auto tabRect = screen.takeBottom(UITheme::getInstance().getMetrics().coverGridTabBarHeight, theme.spaceSm);
+  auto tabRect = screen.takeBottom(UITheme::getInstance().getMetrics().coverGridTabBarHeight, theme.spaceMd);
   if (books->empty()) {
     drawTabs(screen, tabRect.inset(fui::Insets{0, 6, 0, 6}));
     drawEmpty(screen);
@@ -258,10 +258,7 @@ void CoverGridHomeUi::drawTabs(UiScreen& screen, fui::Rect rect) {
   tabs.tabStyles.normal.background = fui::Paint::solid(fui::Color::White);
   tabs.tabStyles.selected.background = fui::Paint::solid(fui::Color::White);
   tabs.selectedUnderline = 2;
-  tabs.distributedSlotWidth = std::max<int16_t>(tabs.minTouchSize, tabs.iconSize);
-  const int16_t slotInset = (tabs.distributedSlotWidth - tabs.iconSize) / 2;
-  rect.x -= slotInset;
-  rect.width += slotInset * 2;
+  tabs.distributedSlotWidth = 0;
   fui::tabBar(screen.frame(), rect, tabs);
 }
 
