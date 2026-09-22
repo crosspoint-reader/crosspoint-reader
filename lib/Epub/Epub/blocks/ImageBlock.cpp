@@ -315,6 +315,68 @@ void ImageBlock::renderPlaceholder(GfxRenderer& renderer, const int x, const int
   }
 }
 
+bool ImageBlock::positionOnScreen(GfxRenderer& renderer, const int x, const int y) const {
+  // Bounds check render position using logical screen dimensions
+  const int screenWidth = renderer.getScreenWidth();
+  const int screenHeight = renderer.getScreenHeight();
+  if (x < 0 || y < 0 || x + width > screenWidth || y + height > screenHeight) {
+    LOG_ERR("IMG", "Invalid render position: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
+            screenHeight);
+    return false;
+  }
+  return true;
+}
+
+bool ImageBlock::decodeImage(GfxRenderer& renderer, const int x, const int y, const std::string& cachePath,
+                             const bool cacheOnly) const {
+  // The build only header-probed the image for dimensions; pull the actual
+  // file out of the book now, on first visit to the page.
+  if (!srcPath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
+    LOG_DBG("IMG", "Lazy-extracting %s -> %s", srcPath.c_str(), imagePath.c_str());
+    if (!extractFn(extractCtx, srcPath.c_str(), imagePath.c_str())) {
+      LOG_ERR("IMG", "Lazy extraction failed: %s", srcPath.c_str());
+    }
+  }
+
+  // Scoped so the handle closes before the decoder reopens the file.
+  {
+    HalFile file;
+    if (!Storage.openFileForRead("IMG", imagePath, file)) {
+      LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
+      return false;
+    }
+    if (file.size() == 0) {
+      LOG_ERR("IMG", "Image file is empty: %s", imagePath.c_str());
+      return false;
+    }
+  }
+
+  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
+  if (!decoder) {
+    LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
+    return false;
+  }
+  LOG_DBG("IMG", "Using %s decoder", decoder->getFormatName());
+
+  RenderConfig config;
+  config.x = x;
+  config.y = y;
+  config.maxWidth = width;
+  config.maxHeight = height;
+  config.useGrayscale = true;
+  config.useDithering = true;
+  config.performanceMode = false;
+  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
+  config.cachePath = cachePath;      // Enable caching during decode
+  config.cacheOnly = cacheOnly;
+
+  if (!decoder->decodeToFramebuffer(imagePath, renderer, config)) {
+    LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
+    return false;
+  }
+  return true;
+}
+
 void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   // The font-prewarm scan pass only accumulates glyphs; an image contributes
   // none, and its DirectPixelWriter output bypasses the renderer's scan-mode
@@ -326,13 +388,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   LOG_DBG("IMG", "Rendering image at %d,%d: %s (%dx%d)", x, y, imagePath.c_str(), width, height);
 
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
-
-  // Bounds check render position using logical screen dimensions
-  if (x < 0 || y < 0 || x + width > screenWidth || y + height > screenHeight) {
-    LOG_ERR("IMG", "Invalid render position: (%d,%d) size (%dx%d) screen (%dx%d)", x, y, width, height, screenWidth,
-            screenHeight);
+  if (!positionOnScreen(renderer, x, y)) {
     return;
   }
 
@@ -358,60 +414,8 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
     return;  // Successfully rendered from cache
   }
 
-  // The build only header-probed the image for dimensions; pull the actual
-  // file out of the book now, on first visit to the page.
-  if (!srcPath.empty() && extractFn && !Storage.exists(imagePath.c_str())) {
-    LOG_DBG("IMG", "Lazy-extracting %s -> %s", srcPath.c_str(), imagePath.c_str());
-    if (!extractFn(extractCtx, srcPath.c_str(), imagePath.c_str())) {
-      LOG_ERR("IMG", "Lazy extraction failed: %s", srcPath.c_str());
-    }
-  }
-
-  // No cache - need to decode the image
-  // Check if image file exists
-  HalFile file;
-  if (!Storage.openFileForRead("IMG", imagePath, file)) {
-    LOG_ERR("IMG", "Image file not found: %s", imagePath.c_str());
-    rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
-    return;
-  }
-  size_t fileSize = file.size();
-  file.close();
-
-  if (fileSize == 0) {
-    LOG_ERR("IMG", "Image file is empty: %s", imagePath.c_str());
-    rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
-    return;
-  }
-
   LOG_DBG("IMG", "Decoding and caching: %s", imagePath.c_str());
-
-  RenderConfig config;
-  config.x = x;
-  config.y = y;
-  config.maxWidth = width;
-  config.maxHeight = height;
-  config.useGrayscale = true;
-  config.useDithering = true;
-  config.performanceMode = false;
-  config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
-  config.cachePath = cachePath;      // Enable caching during decode
-
-  ImageToFramebufferDecoder* decoder = ImageDecoderFactory::getDecoder(imagePath);
-  if (!decoder) {
-    LOG_ERR("IMG", "No decoder found for image: %s", imagePath.c_str());
-    rememberImageFailure(imagePath);
-    renderPlaceholder(renderer, x, y);
-    return;
-  }
-
-  LOG_DBG("IMG", "Using %s decoder", decoder->getFormatName());
-
-  bool success = decoder->decodeToFramebuffer(imagePath, renderer, config);
-  if (!success) {
-    LOG_ERR("IMG", "Failed to decode image: %s", imagePath.c_str());
+  if (!decodeImage(renderer, x, y, cachePath, false)) {
     rememberImageFailure(imagePath);
     renderPlaceholder(renderer, x, y);
     return;
@@ -419,6 +423,20 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
 
   renderer.preserveImagePolarity(x, y, width, height);
   LOG_DBG("IMG", "Decode successful");
+}
+
+bool ImageBlock::prefetch(GfxRenderer& renderer, const int x, const int y) const {
+  if (!needsDecode()) return true;
+  if (!positionOnScreen(renderer, x, y)) return false;
+
+  LOG_DBG("IMG", "Prefetching image to cache: %s (%dx%d)", imagePath.c_str(), width, height);
+  if (!decodeImage(renderer, x, y, getCachePath(imagePath), true)) {
+    LOG_ERR("IMG", "Failed to prefetch image: %s", imagePath.c_str());
+    return false;
+  }
+  // A decode can succeed without writing the cache (its stream start failed);
+  // report failure so the caller does not retry an unwritable image forever.
+  return hasValidCache();
 }
 
 bool ImageBlock::serialize(HalFile& file) {

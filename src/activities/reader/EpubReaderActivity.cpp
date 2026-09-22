@@ -8,6 +8,7 @@
 #include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -349,12 +350,15 @@ void EpubReaderActivity::loop() {
   }
 
   constexpr unsigned long IDLE_PREWARM_DEBOUNCE_MS = 400;
-  if (section && !section->isBuilding() && !RenderLock::peek() && renderer.hasFrameBuffer() &&
-      lastRenderCompleteMs != 0 && millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS &&
-      ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP && ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
+  // A window-paused build keeps build_ alive (isBuilding() true) while doing no
+  // work; skipLoopDelay() is true only while a build actually progresses, so
+  // idle work is not starved for the whole BUILD_WINDOW_AHEAD pause.
+  if (section && !skipLoopDelay() && !RenderLock::peek() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
+      millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
+      ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
       (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
     RenderLock lock;
-    if (section && !section->isBuilding() &&
+    if (section && !skipLoopDelay() &&
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
@@ -369,6 +373,48 @@ void EpubReaderActivity::loop() {
             LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
           }
         }
+      }
+    }
+  }
+
+  // Idle image prefetch: decode the next page's uncached images straight to
+  // their .pxc cache (framebuffer untouched), one image per tick, so the first
+  // view of an image page skips the placeholder + FAST_REFRESH pass in
+  // renderContents. A failed attempt gives up on the page; the real render
+  // retries it with placeholder fallback.
+  if (section && !skipLoopDelay() && !RenderLock::peek() && renderer.hasFrameBuffer() && lastRenderCompleteMs != 0 &&
+      millis() - lastRenderCompleteMs > IDLE_PREWARM_DEBOUNCE_MS && ESP.getFreeHeap() > RENDER_MIN_FREE_HEAP &&
+      ESP.getMaxAllocHeap() > BACKGROUND_BUILD_MIN_MAX_ALLOC &&
+      (idlePrefetchSpine != currentSpineIndex || idlePrefetchPage != section->currentPage)) {
+    RenderLock lock;
+    if (section && !skipLoopDelay() &&
+        (idlePrefetchSpine != currentSpineIndex || idlePrefetchPage != section->currentPage)) {
+      bool decodedOne = false;
+      const int nextPage = section->currentPage + 1;
+      if (nextPage < static_cast<int>(section->pageCount)) {
+        if (const auto p = section->loadPage(nextPage)) {
+          if (p->hasImagesNeedingDecode()) {
+            // Decode at the position the real render will use (same margin
+            // math as renderBook()) so the .pxc matches a decode at view time.
+            int mTop, mRight, mBottom, mLeft;
+            renderer.getOrientedViewableTRBL(&mTop, &mRight, &mBottom, &mLeft);
+            mTop += SETTINGS.screenMargin;
+            mLeft += SETTINGS.screenMargin;
+            // The decode starts after the 3s idle low-power drop; without the
+            // lock a ~1.5s JPEG would stretch to ~10s at 10 MHz.
+            HalPowerManager::Lock powerLock;
+            const auto t0 = millis();
+            decodedOne = p->prefetchOneImage(renderer, mLeft, mTop);
+            LOG_DBG("ERS", "Idle image prefetch: page %d %s in %lums", nextPage, decodedOne ? "decoded" : "failed",
+                    millis() - t0);
+          }
+        }
+      }
+      // A successful decode may leave more images for the next tick; anything
+      // else (nothing to do, or a failed attempt) marks the page handled.
+      if (!decodedOne) {
+        idlePrefetchSpine = currentSpineIndex;
+        idlePrefetchPage = section->currentPage;
       }
     }
   }
