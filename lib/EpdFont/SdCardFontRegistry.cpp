@@ -172,10 +172,9 @@ void dropExtraWeightVariants(std::vector<SdCardFontFileInfo>& files) {
         break;
       }
     if (!haveNormal) continue;
-    files.erase(std::remove_if(files.begin(), files.end(),
-                               [&](const SdCardFontFileInfo& f) {
-                                 return (f.style & 2) == ital && hasExtraWeightToken(f.path);
-                               }),
+    files.erase(std::remove_if(
+                    files.begin(), files.end(),
+                    [&](const SdCardFontFileInfo& f) { return (f.style & 2) == ital && hasExtraWeightToken(f.path); }),
                 files.end());
   }
 }
