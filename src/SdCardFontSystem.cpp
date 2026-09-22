@@ -452,7 +452,16 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
     return;
   }
   addTtfSources(*ttf_);
-  const bool ok = ttf_->load(size);
+  // Glyph-cache budget: the default 32 KB holds ~90 CJK glyphs, but a CJK page
+  // uses 300+, so the cache flush-cycles mid-page and every page turn
+  // re-rasterizes the whole page through streamed SD reads (multi-second
+  // turns). The arenas are PSRAM-backed (FontPsram), so when PSRAM exists give
+  // the reader face room for several full CJK pages; without PSRAM keep the
+  // internal-DRAM-safe default.
+  const bool havePsram = heap_caps_get_largest_free_block(MALLOC_CAP_SPIRAM) > 0;
+  const size_t cacheBytes = havePsram ? 256 * 1024 : 32 * 1024;
+  const uint16_t maxGlyphs = havePsram ? 2048 : 768;
+  const bool ok = ttf_->load(size, /*twoBit=*/true, cacheBytes, maxGlyphs);
   if (!ok) {
     // init failure is ambiguous (corrupt font vs. transient OOM inside
     // FreeType): keep the selection and retry next ensureLoaded() rather than

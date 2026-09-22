@@ -351,12 +351,13 @@ const EpdGlyph* TtfEpdFont::faultGlyph(Face& f, const uint32_t cp) {
     for (uint32_t i = 0; i < px; ++i) {
       const uint8_t a = g->pixels[i];
       if (f.twoBit) {
-        // BW-aware quantization: the renderer's BW page-turn pass inks ANY
-        // nonzero level, so level 1 must not start until ~50% coverage or
-        // every AA edge pixel prints black and text turns faux-bold on every
-        // turn. Levels grade 50/67/83%+ so the grayscale refresh pass still
-        // shades the inner half of each edge.
-        const uint8_t v = a < 128 ? 0 : a < 170 ? 1 : a < 213 ? 2 : 3;
+        // Same 25/50/75% level thresholds as the .cpfont converter
+        // (fontconvert_sdcard.py's 4-bit >=4/8/12 downsample), so a TTF face
+        // prints at the same stroke weight as its .cpfont rendition. The BW
+        // page-turn pass inks ANY nonzero level, so the 25% start is what
+        // gives CJK strokes their full weight; starting at 50% rendered
+        // visibly thinner than cpfont.
+        const uint8_t v = a < 64 ? 0 : a < 128 ? 1 : a < 192 ? 2 : 3;
         dst[i >> 2] |= static_cast<uint8_t>(v << ((3 - (i & 3)) * 2));
       } else if (a >= 128) {
         dst[i >> 3] |= static_cast<uint8_t>(1u << (7 - (i & 7)));
