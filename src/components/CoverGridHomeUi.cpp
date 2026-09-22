@@ -95,7 +95,7 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   screen.insetContent(fui::Insets{theme.spaceSm, theme.spaceLg, theme.spaceSm, theme.spaceLg});
   const bool landscape = renderer.getScreenWidth() > renderer.getScreenHeight();
   const auto header = screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight);
-  auto tabRect = screen.takeBottom(56, theme.spaceSm);
+  auto tabRect = screen.takeBottom(UITheme::getInstance().getMetrics().coverGridTabBarHeight, theme.spaceSm);
   if (books->empty()) {
     drawTabs(screen, tabRect.inset(fui::Insets{0, 6, 0, 6}));
     drawEmpty(screen);
