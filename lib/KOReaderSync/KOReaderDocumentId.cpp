@@ -3,6 +3,9 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <MD5Builder.h>
+#include <Memory.h>
+
+#include <algorithm>
 
 namespace {
 // Extract filename from path (everything after last '/')
@@ -55,8 +58,12 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
   MD5Builder md5;
   md5.begin();
 
-  // Buffer for reading chunks
-  uint8_t buffer[CHUNK_SIZE];
+  // Keep the 1 KiB scratch buffer off the constrained reader task stack.
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(CHUNK_SIZE);
+  if (!buffer) {
+    LOG_ERR("KODoc", "Out of memory allocating %zu-byte hash buffer", CHUNK_SIZE);
+    return "";
+  }
   size_t totalBytesRead = 0;
 
   // Read from each offset (i = -1 to 10)
@@ -76,10 +83,10 @@ std::string KOReaderDocumentId::calculate(const std::string& filePath) {
 
     // Read up to CHUNK_SIZE bytes
     const size_t bytesToRead = std::min(CHUNK_SIZE, fileSize - offset);
-    const size_t bytesRead = file.read(buffer, bytesToRead);
+    const size_t bytesRead = file.read(buffer.get(), bytesToRead);
 
     if (bytesRead > 0) {
-      md5.add(buffer, bytesRead);
+      md5.add(buffer.get(), bytesRead);
       totalBytesRead += bytesRead;
     }
   }
