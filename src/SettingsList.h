@@ -17,6 +17,7 @@
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
+#include "components/UITheme.h"
 #include "util/DictionaryRegistry.h"
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
@@ -186,6 +187,13 @@ inline std::vector<StrId> buildLongPressMenuValues() {
   return {VALUES, VALUES + count};
 }
 
+inline std::vector<StrId> homeThemeValues() {
+  static constexpr StrId VALUES[] = {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
+                                     StrId::STR_THEME_ROUNDEDRAFF, StrId::STR_THEME_COVER_GRID};
+  const size_t count = UITheme::supportsCoverGrid() ? std::size(VALUES) : std::size(VALUES) - 1;
+  return {VALUES, VALUES + count};
+}
+
 // Shared settings list used by both the device settings UI and the web settings API.
 // Each entry has a key (for JSON API) and category (for grouping).
 // ACTION-type entries and entries without a key are device-only.
@@ -235,10 +243,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                            StrId::STR_PAGES_30, StrId::STR_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_UI_THEME, &CrossPointSettings::uiTheme, homeThemeValues(), "uiTheme",
+                          StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 #if FREEINK_CAP_FRONTLIGHT
