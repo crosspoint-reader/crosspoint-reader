@@ -118,6 +118,9 @@ bool ReaderActivity::handleEndOfBookMenu(const bool suppressConfirmRelease) {
       requestUpdate();
       return true;
     case EndOfBookOptions::Action::None:
+      if (endOfBookOptions->marqueeUpdateDue(static_cast<uint32_t>(millis()))) {
+        requestUpdate();
+      }
       return false;
   }
 
