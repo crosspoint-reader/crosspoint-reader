@@ -275,6 +275,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     if (!parser) {
       LOG_ERR("DHTML", "OOM: ChapterHtmlSlimParser");
     } else {
+      parser->setTextSpacing(SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing);
       ok = parser->parseAndBuildPages();  // closes the file on both outcomes
     }
   }
