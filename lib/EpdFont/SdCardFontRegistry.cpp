@@ -141,6 +141,46 @@ unsigned long SdCardFontRegistry::halFileRead(void* ctx, const unsigned long off
   return n < 0 ? 0 : static_cast<unsigned long>(n);
 }
 
+namespace {
+bool ciContains(const char* hay, const char* needle) {
+  const size_t nl = strlen(needle);
+  for (const char* p = hay; *p; ++p)
+    if (strncasecmp(p, needle, nl) == 0) return true;
+  return false;
+}
+// A filename weight token that collapses into the regular or bold role already
+// covered by the plain Regular/Bold file. Google static families ship these as
+// extra files (Merriweather-Light/Black/...); the 4-role model never uses them.
+bool hasExtraWeightToken(const std::string& path) {
+  const size_t slash = path.rfind('/');
+  const char* base = path.c_str() + (slash == std::string::npos ? 0 : slash + 1);
+  static const char* const kTokens[] = {"thin", "light", "black", "heavy", "extrabold", "ultrabold"};
+  for (const char* t : kTokens)
+    if (ciContains(base, t)) return true;
+  return false;
+}
+// Drop extra-weight files (Light/Black/…) when a normal-weight sibling exists in
+// the same upright/italic bucket, BEFORE refineVectorStyles opens each file — so
+// Merriweather scans 4 faces, not 8. The have-normal guard keeps every file when
+// the family name itself contains the token (e.g. a "Starlight" family).
+void dropExtraWeightVariants(std::vector<SdCardFontFileInfo>& files) {
+  for (const uint8_t ital : {uint8_t{0}, uint8_t{2}}) {  // style bit 1 = italic
+    bool haveNormal = false;
+    for (const auto& f : files)
+      if ((f.style & 2) == ital && !hasExtraWeightToken(f.path)) {
+        haveNormal = true;
+        break;
+      }
+    if (!haveNormal) continue;
+    files.erase(std::remove_if(files.begin(), files.end(),
+                               [&](const SdCardFontFileInfo& f) {
+                                 return (f.style & 2) == ital && hasExtraWeightToken(f.path);
+                               }),
+                files.end());
+  }
+}
+}  // namespace
+
 void SdCardFontRegistry::refineVectorStyles(const char* dirPath, std::vector<SdCardFontFileInfo>& files) {
   using freeink::font::FtFont;
   // The face's own metadata beats filename token guessing (e.g. "-BdIt", "-Md"
@@ -258,6 +298,7 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   }
 #if CROSSPOINT_VECTOR_FONTS
   else if (!vectorFiles.empty()) {
+    dropExtraWeightVariants(vectorFiles);  // skip Light/Black extras before inspecting
     refineVectorStyles(dirPath, vectorFiles);
     family.vector = true;
     family.files = std::move(vectorFiles);

@@ -400,6 +400,24 @@ void SdCardFontSystem::loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRend
   // Already loaded, same family + size, and disk unchanged → nothing to do.
   if (!registryWasDirty && ttf_ && ttfFamily_ == family.name && ttfPointSize_ == size) return;
 
+  // Same family, only the reader size changed (size preview): the open style
+  // sources and the size-independent UI fallbacks don't need rebuilding — just
+  // re-drive the reader face at the new size, reusing the already-open files
+  // instead of reopening all four and rebuilding every UI fallback.
+  if (!registryWasDirty && ttf_ && ttfFamily_ == family.name) {
+    renderer.unregisterTtfFont(ttfFontId_);
+    renderer.removeFont(ttfFontId_);
+    if (ttf_->load(size)) {
+      ttf_->build(" ");
+      ttfFontId_ = computeTtfFontId(family.name.c_str(), size);
+      renderer.insertFont(ttfFontId_, ttf_->family());
+      renderer.registerTtfFont(ttfFontId_, ttf_.get());
+      ttfPointSize_ = size;
+      return;
+    }
+    // Resize failed: fall through to a clean full reload.
+  }
+
   unloadTtf(renderer);
 
   if (family.files.empty()) {
