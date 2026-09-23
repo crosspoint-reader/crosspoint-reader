@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <string_view>
 #include <type_traits>
 
@@ -108,14 +109,25 @@ bool tryParseNumber(std::string_view s, T& out) {
   if (begin < end && *begin == '+') ++begin;
   if constexpr (std::is_floating_point_v<T>) {
     const size_t len = static_cast<size_t>(end - begin);
-    char buf[32];
-    if (len == 0 || len >= sizeof(buf)) return false;
-    memcpy(buf, begin, len);
-    buf[len] = '\0';
+    if (len == 0) return false;
+    // Stack buffer covers every realistic CSS number; a heap fallback for the
+    // rare oversized/malformed token means strtof still gets a shot at it
+    // instead of an automatic reject.
+    char stackBuf[32];
+    std::string heapBuf;
+    const char* cstr;
+    if (len < sizeof(stackBuf)) {
+      memcpy(stackBuf, begin, len);
+      stackBuf[len] = '\0';
+      cstr = stackBuf;
+    } else {
+      heapBuf.assign(begin, len);
+      cstr = heapBuf.c_str();
+    }
     char* parseEnd = nullptr;
     errno = 0;
-    const float value = strtof(buf, &parseEnd);
-    if (parseEnd != buf + len || errno == ERANGE) return false;
+    const float value = strtof(cstr, &parseEnd);
+    if (parseEnd != cstr + len || errno == ERANGE) return false;
     out = static_cast<T>(value);
     return true;
   } else {
