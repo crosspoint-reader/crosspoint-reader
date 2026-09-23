@@ -28,5 +28,6 @@ ImageToFramebufferDecoder* ImageDecoderFactory::getDecoder(const std::string&) {
 void ImageBlock::render(GfxRenderer&, int, int) {}
 void ImageBlock::renderPlaceholder(GfxRenderer&, int, int) const {}
 bool ImageBlock::needsDecode() const { return false; }
+bool ImageBlock::prefetch(GfxRenderer&, int, int) const { return false; }
 bool ImageBlock::serialize(HalFile&) { return false; }
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile&) { return nullptr; }
