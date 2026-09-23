@@ -1,149 +1,124 @@
-# Web Server Guide
+# Transfer files over Wi-Fi
 
-This guide explains how to use CrossPoint Reader's built-in web server for file
-transfer, device settings, Wi-Fi/OPDS management, and SD-card font management.
+Use File Transfer to move books, fonts, screenshots, and other files between the reader and a phone, tablet, or computer. You use a web page in your browser. You do not need to install an app.
 
-## Overview
+## Before you start
 
-The web server is available while the device is in **File Transfer** or
-**Calibre Wireless** mode. It can:
+File Transfer is available while the reader is in **File Transfer** or **Calibre Wireless** mode. You can:
 
-- Upload, download, rename, move, and delete files on the SD card
-- Create folders
-- Edit many device settings from a browser
-- Manage saved Wi-Fi networks and OPDS servers
-- Upload and delete `.cpfont` SD-card font families
-- Accept WebDAV clients and Calibre wireless uploads
+- Upload, download, rename, move, and delete SD card files.
+- Create folders.
+- Change many reader settings in a browser.
+- Manage saved Wi-Fi networks and book catalogs.
+- Upload and delete `.cpfont` font families.
+- Send books from Calibre.
 
-The server does not require authentication. Use it only on trusted private
-networks or in hotspot mode when you control who is connected.
+The file-transfer page has no password. Use it only on a private network that you trust, or in hotspot mode when you control who connects.
 
-## Starting File Transfer
+## Start File Transfer
 
 1. From the Home screen, select **File Transfer**.
-2. Choose one of the available modes:
+2. Choose a connection mode:
 
 | Mode | Use when |
 |------|----------|
-| **Join Network** | You want the reader to join an existing Wi-Fi network. |
-| **Calibre Wireless** | You want to receive books from the CrossPoint Calibre plugin workflow. |
-| **Create Hotspot** | You want the reader to create its own open Wi-Fi network. |
+| **Join Network** | The reader joins your usual Wi-Fi network. |
+| **Calibre Wireless** | You want to send books from the CrossPoint Calibre plugin. |
+| **Create Hotspot** | The reader creates its own Wi-Fi network. |
 
-## Join Network Mode
+## Join your Wi-Fi network
 
 1. Select **Join Network**.
-2. If you have saved Wi-Fi credentials, CrossPoint first tries the last
-   connected network, then other visible saved networks in signal-strength
-   order. Press **Back** to cancel or **Confirm** to stop auto-connect and show
-   the network list.
-3. If the network list is shown, pick a 2.4 GHz Wi-Fi network from the scan
-   results.
+2. If the reader has saved networks, it first tries the most recent one. Press **Back** to cancel. Press **Confirm** to open the network list.
+3. Select a 2.4 GHz Wi-Fi network from the list.
 4. Enter the password if prompted.
-5. Save credentials if you want the reader to reconnect automatically next time.
+5. Save the password if you want the reader to reconnect next time.
 
-After connection, the reader shows:
+After it connects, the reader shows:
 
-- The connected SSID
-- A QR code for the web URL
-- The direct IP URL, for example `http://192.168.1.102/`
-- The mDNS fallback URL, usually `http://crosspoint.local/`
+- The Wi-Fi network name.
+- A QR code for the web page.
+- A number address, for example `http://192.168.1.102/`.
+- The usual local address, `http://crosspoint.local/`.
 
-Use either URL from a phone, tablet, or computer on the same network.
+Open either address on a phone, tablet, or computer that uses the same Wi-Fi network.
 
-## Create Hotspot Mode
+## Create a hotspot
 
 1. Select **Create Hotspot**.
-2. Connect your phone or computer to the open Wi-Fi network:
+2. Connect your phone or computer to this open Wi-Fi network:
 
 ```text
 CrossPoint-Reader
 ```
 
-3. Open the URL shown on the reader. `http://crosspoint.local/` is preferred
-   when supported; the fallback IP is typically `http://192.168.4.1/`.
+3. Open the address shown on the reader. Try `http://crosspoint.local/` first. If it does not work, use the number address, usually `http://192.168.4.1/`.
 
-The reader displays one QR code for joining the hotspot and another QR code for
-opening the web interface.
+The reader shows one QR code to join the hotspot and another to open the web page.
 
-## Calibre Wireless Mode
+## Send books from Calibre
 
-Calibre Wireless starts the same web server in station mode, then displays setup
-instructions and upload progress on the reader. Use this mode with the
-CrossPoint Calibre plugin or other clients that speak the documented WebSocket
-upload protocol.
+Calibre Wireless starts the same file-transfer service and shows setup instructions on the reader. Use it with the CrossPoint Calibre plugin. See the [User Guide](../USER_GUIDE.md#351-send-books-from-calibre) for setup.
 
-For Calibre OPDS browsing, add `/opds` to the catalog URL when configuring an
-OPDS server.
+If you use Calibre as a book catalog, add `/opds` to its catalog address.
 
-## Web Interface
+## Use the web page
 
-The browser UI has four primary pages.
+The web page has four main sections.
 
 ### Home
 
-The Home page shows firmware status, network mode, IP address, device type,
-uptime, and free heap.
+The Home page shows the reader status, connection type, address, device type, and running time.
 
 ### File Manager
 
-The File Manager page can:
+The File Manager page lets you:
 
-- Browse SD-card folders
-- Upload files, using WebSocket upload when available and HTTP upload as a fallback
-- Create folders
-- Download files
-- Rename files
-- Move files into existing folders
-- Delete one or more selected files or empty folders
+- Browse SD card folders.
+- Upload files.
+- Create folders.
+- Download files.
+- Rename files.
+- Move files into existing folders.
+- Delete selected files or empty folders.
 
-Existing files with the same name are overwritten by uploads. When EPUB files
-are overwritten, moved, renamed, or deleted through the web server, the matching
-book cache is cleared so stale metadata is not reused.
+If you upload a file with the same name, it replaces the existing file. When you replace, move, rename, or delete an EPUB, CrossPoint prepares its saved book information again.
 
 ### Settings
 
-The Settings page exposes many firmware settings in the browser. It also has
-cards for:
+The Settings page lets you change many reader settings. It also includes:
 
 - Saved Wi-Fi networks
 - OPDS servers
 
-Passwords are accepted when adding or editing entries, but saved passwords are
-not returned by the API.
+The page accepts passwords when you add or edit an entry. It does not show saved passwords.
 
 ### Fonts
 
-The Fonts page lists installed SD-card font families and lets you upload
-`.cpfont` files. Upload files from one font family at a time. The server validates
-the font family name, filename, and `.cpfont` magic bytes before accepting the
-upload.
+The Fonts page lists installed font families and accepts `.cpfont` files. Upload one font family at a time. CrossPoint checks the family name and font file before it saves the file.
 
-Installed fonts appear in **Settings > Reader > Font Family** after the font
-registry refreshes.
+Installed fonts appear in **Settings → Reader → Font Family** after the reader updates its font list.
 
-## Command Line Use
+## Advanced connection methods
 
-Power users can use `curl`, WebDAV clients, or WebSocket clients while the web
-server is running.
+Experienced users can use `curl`, WebDAV, or WebSocket clients while File Transfer is active.
 
 Endpoint details are documented in [webserver-endpoints.md](./webserver-endpoints.md).
 
-## Security Notes
+## Keep your files private
 
-- The HTTP server runs on port 80.
-- The WebSocket upload server runs on port 81.
-- There is no authentication.
-- Anyone on the same network can access the web interface while it is running.
-- The server stops when you exit File Transfer or Calibre Wireless mode.
-- Hotspot mode creates an open network for connectivity fallback; disconnect when done.
+- There is no password on the file-transfer page.
+- Anyone on the same network can use it while it is active.
+- File Transfer stops when you leave **File Transfer** or **Calibre Wireless**.
+- Hotspot mode creates an open Wi-Fi network. Disconnect when you finish.
 
 ## Tips
 
-1. Use **Create Hotspot** when no trusted network is available.
-2. Prefer `crosspoint.local` when available, but keep the displayed IP address as a fallback.
-3. Move closer to the router if upload progress stalls in Join Network mode.
-4. Upload custom fonts through the Fonts page or copy them to `/.fonts/` or `/fonts/` on the SD card.
-5. Exit File Transfer mode when finished to conserve battery.
+1. If you do not have a private Wi-Fi network, use **Create Hotspot**.
+2. Try `crosspoint.local` first. Keep the number address as a backup.
+3. If an upload stops in **Join Network** mode, move closer to the router.
+4. Upload custom fonts in the Fonts section, or copy them to `/.fonts/` or `/fonts/` on the SD card.
+5. Leave File Transfer when you finish. This saves battery.
 
 ## Related Documentation
 

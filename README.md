@@ -2,53 +2,50 @@
 
 [![Fund contributors](https://img.shields.io/badge/%F0%9F%91%91_Fund_contributors-royalty.dev-BB953A?style=for-the-badge&labelColor=1a1a1a)](https://app.royalty.dev/crosspoint-reader/crosspoint-reader)
 
-CrossPoint is open-source e-reader firmware - community-built, fully hackable, free forever. It's maintained by a growing community of developers and readers who believe your device should do what you want - not what a manufacturer decided for you.
+CrossPoint is free, community-made software for supported e-readers. It lets you read books from the SD card and change how the reader works.
 
-### Now running on:
-- **ESP32C3-based** Xteink X4 and X3.
-- **ESP32S3-based** Xteink X4Pro, Seeed reTerminal Sticky, M5PaperMono
+### Supported devices
+
+- Xteink X4 and X3.
+- Xteink X4Pro, Seeed reTerminal Sticky, and M5PaperMono.
 
 Check [our Devices page](https://crosspointreader.com/devices) for the full list.
 
 ![CrossPoint Reader running on Xteink device](./docs/images/cover.jpg)
 
-> If you're planning to buy an Xteink device, consider purchasing an **X3/X4 Developer Edition** through https://crosspointreader.com. CrossPoint receives a small share of each sale, helping fund development costs.
+> If you plan to buy an Xteink device, consider an **X3/X4 Developer Edition** from https://crosspointreader.com. CrossPoint receives part of each sale.
 
-## What can CrossPoint do?
+## What you can do
 
-- **Reader engine**: EPUB 2/3 rendering with embedded-style option, image handling, hyphenation, kerning, adaptive table layouts, native CJK ruby annotations, chapter navigation, footnotes, bookmarks, dictionary lookups ([StarDict](docs/dictionary.md)), go-to-percent, auto page turn, orientation control, focus reading, KOReader progress sync and more.
+- Read EPUB 2 and EPUB 3 books. CrossPoint supports chapter navigation, footnotes, bookmarks, dictionary lookup, automatic page turns, screen rotation, focus reading, and KOReader progress sync.
 
-- **Various formats**: native handling for `.epub`, `.xtc/.xtch`, `.txt`, and `.bmp`.
+- Open `.epub`, `.xtc`, `.xtch`, `.txt`, and `.bmp` files.
 
-- **Touch reading**: follow EPUB links and look up words in the dictionary on touch-enabled devices.
+- Follow links and look up words on touch-enabled devices.
 
-- **Screenshots.**
+- Save screenshots.
 
-- **Custom fonts**: install your favorite fonts on the SD card.
+- Install fonts from the SD card.
 
-- **Tilt page turn (X3 and Sticky)**.
+- Turn pages by tilting an X3 or Sticky.
 
-- **USB Drive mode (X4Pro)**: access the SD card as USB mass storage.
+- Use USB Drive mode on X4Pro to access the SD card from a computer.
 
-- **Library workflow**: indexed title/author search, recently-added and alphabetical views, multilingual grouping, folder browser, recent books, and SD-cache management.
+- Find books by title or author, browse folders, and reopen recent books.
 
-- **Wireless workflows**:
+- Transfer books wirelessly:
   
-  - File transfer web UI
-  - EPUB Optimizer
-  - Web settings UI/API (edit many device settings from browser)
-  - WebSocket fast uploads
-  - WebDAV handler
-  - AP mode (hotspot) and STA mode (join existing Wi-Fi), both with QR helpers
-  - Calibre wireless connect flow
-  - OPDS browser with saved servers (up to 8), search, pagination, and direct download
-  - OTA update checks and installs from GitHub releases
+  - Use the file-transfer page in a browser.
+  - Join Wi-Fi or create a hotspot.
+  - Send books from Calibre.
+  - Browse and download books from up to eight OPDS catalogs.
+  - Install firmware updates over Wi-Fi.
 
-- **Customization**: night mode, multiple themes (Classic, Lyra, Lyra Extended, RoundedRaff), sleep screen modes including transparent overlays, front/side button remapping, status bar controls, power-button behavior, refresh cadence, and more.
+- Choose a theme, sleep screen, button layout, status bar, power-button behavior, and screen-refresh interval.
 
-- **Localization**: 34 UI languages and counting, including CJK font fallback and RTL support.
+- Choose from 34 interface languages. You can install fonts for Chinese, Japanese, Korean, right-to-left languages, and other scripts.
 
-### Coming soon:
+### Planned features
 
 - More themes.
 
@@ -56,48 +53,42 @@ Check [our Devices page](https://crosspointreader.com/devices) for the full list
 
 - Bluetooth pageturner.
 
-- Much more! stay tuned.
 
 ---
 
-## USB-locked devices (Xteink Unlocker)
+## If your Xteink device is USB-locked
 
-Some Xteink units purchased from third-party stores (e.g. AliExpress) ship with USB flashing locked from the factory.
-If your device is locked, you will need to use the **Xteink Unlocker** tool available at
-https://crosspointreader.com/#unlock-tool before you can flash CrossPoint.
+Some Xteink units from third-party stores have USB installation locked. If your device is locked, use the **Xteink Unlocker** at https://crosspointreader.com/#unlock-tool before you install CrossPoint.
 
-**You do not need this tool if you bought your device directly from xteink.com.** Those units are not locked.
+You do not need this tool if you bought the device directly from xteink.com.
 
-**Not sure if your device is locked?** Power it on, connect the USB-C cable, and try flashing via the web flasher first (see
-[Install firmware](#install-firmware) below). If the browser's serial device picker does not show your device, try a different
-USB port or browser before assuming the device is locked. Only reach for the unlocker if the device still doesn't appear.
+If you do not know whether it is locked, try the web installer first. If the browser does not list the device, try another USB port or browser. Use the unlocker only if it still does not appear.
 
-> ### ⚠️ WARNING: READ THIS BEFORE USING THE UNLOCKER ⚠️
+> ### Warning
 > 
-> **The only officially supported firmwares in the unlock tool are CrossPoint and CrossInk.**
+> Use the unlocker only with CrossPoint or CrossInk firmware.
 > 
-> Flashing any other firmware on a USB-locked device may **permanently brick the device** or leave it **permanently
-> stuck on that firmware with no recovery path**. Once USB flashing is re-locked, your only way back is via OTA, and if
-> the firmware you flashed doesn't support OTA, **there is no way out**.
+> Do not use other firmware. It can permanently stop the device from working or leave it on firmware that you cannot replace.
 
-## Install firmware
+## Install CrossPoint
 
-### Web installer (recommended)
+### Use the web installer
 
-1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Go to https://crosspointreader.com/#flash-tools, select your device (X3, X4, Xteink X4Pro, Seeed reTerminal Sticky, or M5PaperMono), and choose an official CrossPoint release.
+1. Connect the device to your computer with a USB-C data cable. Wake or unlock the device.
+2. Go to https://crosspointreader.com/#flash-tools.
+3. Select your device and an official CrossPoint release.
 
-### Web installer (specific version)
+### Install a specific version
 
-1. Connect your device to your computer via USB-C and wake/unlock the device
-2. Download the firmware file for your device from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases), or compile yourself.
-3. Go to https://crosspointreader.com/#flash-tools, select your device, click "Custom .bin" and upload the firmware file.
+1. Download the matching firmware file from [Releases](https://github.com/crosspoint-reader/crosspoint-reader/releases).
+2. Connect and wake the device.
+3. Open https://crosspointreader.com/#flash-tools, select the device, choose **Custom .bin**, and select the file.
 
-### Revert to Official Firmware
+### Return to the official firmware
 
-To revert to the official firmware, you can also flash the latest official firmware using https://crosspointreader.com/#flash-tools.
+Use https://crosspointreader.com/#flash-tools to install the latest official firmware.
 
-### Command line
+### Advanced: command line installation
 
 1. Install [`esptool`](https://github.com/espressif/esptool):
 
@@ -125,34 +116,41 @@ esptool.py --chip esp32c3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 
 esptool.py --chip esp32s3 --port /dev/ttyACM0 --baud 921600 write_flash 0x10000 /path/to/firmware.bin
 ```
 
-### Manual
+### Build it yourself
 
-See [Development quick start](#development-quick-start) below.
+See [Development quick start](#development-quick-start). This section is for contributors.
 
 ---
 
-## Custom SD-card fonts
+## Make a custom font
 
-Convert your own TTF/OTF files into `.cpfont` files that load from the SD card. No firmware reflash is needed.
+You can convert TrueType (`.ttf`) or OpenType (`.otf`) fonts for the SD card. You do not need to reinstall CrossPoint.
 
 1. Go to https://crosspointreader.com/fonts and open the "SD-card font builder" form.
-2. Upload up to four styles (regular, bold, italic, bold-italic), set the family name, point sizes, and Unicode range.
+2. Upload up to four styles. Set the family name, text sizes, and character range.
 3. Download the generated `.cpfont` files.
 4. Copy them to your SD card under `/fonts/YourFont/` (or `/.fonts/YourFont/` to hide the folder).
-5. Select the font on the device from the font settings.
+5. Select the font in the reader font settings.
 
-Conversion runs the firmware repo's `lib/EpdFont/scripts/fontconvert_sdcard.py` script unmodified, so output matches a local host build.
+The web tool uses the same conversion tool as the firmware project.
 
 ---
 
-## Documentation
+## Guides for readers
 
 - [User Guide](./USER_GUIDE.md)
 - [Web server usage](./docs/webserver.md)
+- [Dictionary setup](./docs/dictionary.md)
+- [SD card fonts](./docs/sd-card-fonts.md)
+- [Troubleshooting](./docs/troubleshooting.md)
+- [Recover a bricked Xteink](./docs/fix-bricked-xteink.md)
+
+## Developer documentation
+
 - [Web server endpoints](./docs/webserver-endpoints.md)
 - [Project scope](./SCOPE.md)
 - [Contributing docs](./docs/contributing/README.md)
-- [Touch and UI development](./docs/contributing/touch-and-ui.md) - how to build new screens on the FreeInkUI activity bases (UiListActivity and friends), plus build envs for the non-Xteink touch devices
+- [Touch and UI development](./docs/contributing/touch-and-ui.md)
 
 ---
 
