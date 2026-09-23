@@ -170,10 +170,14 @@ void SdCardFont::freeStyleMiniKern(PerStyle& s) {
 
 void SdCardFont::freeStyleAll(PerStyle& s) {
   freeStyleMiniData(s);
-  psramDeleteArray(s.fullIntervals);
+  // An earlier style owns any shared interval table.
+  if (!s.intervalsShared) {
+    psramDeleteArray(s.fullIntervals);
+    psramDeleteArray(s.bmpIntervals);
+  }
   s.fullIntervals = nullptr;
-  psramDeleteArray(s.bmpIntervals);
   s.bmpIntervals = nullptr;
+  s.intervalsShared = false;
   s.intervalsAreBmp16 = false;
   freeStyleKernLigatureData(s);
   s.present = false;
@@ -640,6 +644,22 @@ bool SdCardFont::load(const char* path) {
     uint32_t expectedOffset = 0;
     uint32_t prevLast = 0;
     EpdUnicodeInterval iv{};
+
+    // Regular/bold/italic weights of the same family almost always cover the identical codepoint
+    // set, so a later style's table is usually a byte-for-byte copy of an earlier one's. Sharing
+    // it saves a full table per style, which on a broad CJK font is tens of KB, and saves the
+    // PEAK rather than just the residency: allocating first and de-duplicating afterwards still
+    // needs both tables at once, and that peak is what fails on a tight heap.
+    // The decision rides along with the validation read below -- every record is already being
+    // read here -- so it costs no second pass over the table and no buffer to hold one.
+    // A style stays a candidate only while its table has matched every record so far.
+    uint8_t shareCandidates = 0;
+    for (uint8_t k = 0; k < i; k++) {
+      const auto& owner = styles_[k];
+      if (!owner.present || owner.header.intervalCount != s.header.intervalCount) continue;
+      if (!owner.bmpIntervals && !owner.fullIntervals) continue;
+      shareCandidates |= static_cast<uint8_t>(1u << k);
+    }
     for (uint32_t j = 0; j < s.header.intervalCount; ++j) {
       if (file.read(reinterpret_cast<uint8_t*>(&iv), sizeof(iv)) != sizeof(iv)) {
         LOG_ERR("SDCF", "Failed to read interval %u for style %u", j, i);
@@ -668,17 +688,49 @@ bool SdCardFont::load(const char* path) {
       if (iv.first > UINT16_MAX || iv.last > UINT16_MAX || iv.offset > UINT16_MAX) {
         canUseBmp16 = false;
       }
+      for (uint8_t k = 0; k < i && shareCandidates != 0; k++) {
+        if ((shareCandidates & (1u << k)) == 0) continue;
+        const auto& owner = styles_[k];
+        // Compared by value, so an above-BMP record never equals a compact one and drops out here.
+        const bool same = owner.intervalsAreBmp16
+                              ? (owner.bmpIntervals[j].first == iv.first && owner.bmpIntervals[j].last == iv.last &&
+                                 owner.bmpIntervals[j].offset == iv.offset)
+                              : (owner.fullIntervals[j].first == iv.first && owner.fullIntervals[j].last == iv.last &&
+                                 owner.fullIntervals[j].offset == iv.offset);
+        if (!same) shareCandidates &= static_cast<uint8_t>(~(1u << k));
+      }
       expectedOffset += span;
       prevLast = iv.last;
     }
 
-    if (!file.seekSet(s.intervalsFileOffset)) {
+    // Survived every record: alias the earlier style's table instead of allocating a copy.
+    // freeStyleAll() releases the table through its owning style.
+    for (uint8_t k = 0; k < i && shareCandidates != 0; k++) {
+      if ((shareCandidates & (1u << k)) == 0) continue;
+      auto& owner = styles_[k];
+      // Identical content can still be held in the other resident form when the two styles
+      // disagree on glyph count; aliasing across forms would misread the table.
+      if (owner.intervalsAreBmp16 != canUseBmp16) continue;
+      s.bmpIntervals = owner.bmpIntervals;
+      s.fullIntervals = owner.fullIntervals;
+      s.intervalsAreBmp16 = owner.intervalsAreBmp16;
+      s.intervalsShared = true;
+      LOG_DBG("SDCF", "Style %u: sharing style %u's %u-interval table (%u B not allocated)", i, k,
+              s.header.intervalCount,
+              s.header.intervalCount * (canUseBmp16 ? 6u : static_cast<uint32_t>(sizeof(EpdUnicodeInterval))));
+      break;
+    }
+
+    // Only the allocate-and-read path below needs the records again; a shared style is done.
+    if (!s.intervalsShared && !file.seekSet(s.intervalsFileOffset)) {
       LOG_ERR("SDCF", "Failed to seek back to intervals for style %u", i);
       freeAll();
       return false;
     }
 
-    if (canUseBmp16) {
+    if (s.intervalsShared) {
+      // Aliased above; fall through to the stub/metadata setup without touching the table.
+    } else if (canUseBmp16) {
       s.bmpIntervals = psramNewArray<PerStyle::BmpInterval16>(s.header.intervalCount);
       if (!s.bmpIntervals) {
         LOG_ERR("SDCF", "Failed to allocate compact intervals for style %u", i);

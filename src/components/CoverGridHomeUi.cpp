@@ -1,5 +1,6 @@
 #include "CoverGridHomeUi.h"
 
+#include <BoardConfig.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
 
@@ -115,6 +116,10 @@ void CoverGridHomeUi::draw(UiScreen& screen) {
   const auto& gridRect = gridBounds;
   tabRect.x = gridRect.x + grid.cellInset.left;
   tabRect.width = gridRect.width - grid.cellInset.left - grid.cellInset.right;
+  // Heading shares the clock's alignment line (drawHeaderBand lands the
+  // status content on the outer cover columns, i.e. this same x). The
+  // selection ring extends left of this line by design — it reads as a frame
+  // around the cover, not as the column edge.
   headingRect.x = tabRect.x;
   headingRect.width = tabRect.width;
   screen.target().text(headingRect, hasContinueReading ? tr(STR_CONTINUE_READING) : tr(STR_START_READING), headingText);
@@ -165,10 +170,16 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
   card.progress = std::max(0, progress);
   card.progressMax = progress >= 0 ? 100 : 0;
   card.action = SELECT;
-  card.state = selected == 0 ? fui::StateSelected : fui::StateNormal;
-  card.selectionIndicator = fui::BookCardSelectionIndicator::CoverFrame;
+  // The featured card's selected state is a slim accent bar drawn after the
+  // card (see below), not a bookCard indicator: every ring/outline treatment
+  // tried here either overwhelmed the large cover or made the heading above
+  // read as misaligned.
+  card.state = fui::StateNormal;
   card.styles = theme.listRow;
   card.styles.selected.background = fui::Paint::dither(fui::Color::LightGray);
+  // The grid thumbs' selection ring draws with this border: gray like Lyra's
+  // selection box, not solid black.
+  card.styles.selected.border = fui::Paint::dither(fui::Color::LightGray);
   card.styles.selected.foreground = fui::Paint::solid(fui::Color::Black);
   card.styles.selected.radius = theme.listRowRadius;
   card.styles.active = card.styles.selected;
@@ -197,6 +208,17 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect) {
     return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, 0);
   };
   fui::bookCard(screen.frame(), rect, card);
+
+  if (selected == 0 && !BoardConfig::hasTouch()) {
+    // Button boards only: a vertical accent bar left of the card, cover-height
+    // and vertically centered on it, marks the featured card as the button
+    // cursor without framing the cover. Touch boards tap directly and need no
+    // cursor on the hero card.
+    const int16_t barH = card.coverSize.height;
+    screen.target().fill(
+        fui::Rect{static_cast<int16_t>(rect.x - 9), static_cast<int16_t>(rect.y + (rect.height - barH) / 2), 3, barH},
+        fui::Paint::dither(fui::Color::LightGray));
+  }
 }
 
 fui::Rect CoverGridHomeUi::layoutGrid(UiScreen& screen, fui::Rect rect) {
@@ -224,7 +246,13 @@ void CoverGridHomeUi::drawGrid(UiScreen& screen) {
   grid.action = SELECT;
   grid.inputMask = fui::InputTouch;
   grid.selectedIndex = selected > 0 && selected < static_cast<int>(books->size()) ? selected - 1 : -1;
-  grid.selectionIndicator = fui::CoverGridSelectionIndicator::Cell;
+  // Same thick cover ring as the featured card; the dithered Cell background
+  // was easy to miss behind a dark cover.
+  grid.selectionIndicator = fui::CoverGridSelectionIndicator::CoverFrame;
+  // Thick dithered ring sized for the small thumbs: 6px outside the cover,
+  // 2px over its edge.
+  grid.selectedCoverFrameGap = 6;
+  grid.selectedCoverFrameWidth = 8;
   grid.cellStyles = card.styles;
   grid.labelHeight = 0;
   grid.labelGap = 0;

@@ -270,11 +270,7 @@ const char* TextSettingsActivity::confirmLabelText() const {
   }
 }
 
-void TextSettingsActivity::render(RenderLock&&) {
-  if (optionPopup_.processRender(renderer, mappedInput)) return;  // picker draws over everything
-
-  renderer.clearScreen();
-
+void TextSettingsActivity::drawChrome() {
   const auto pageWidth = renderer.getScreenWidth();
 
   GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_TEXT_SETTINGS));
@@ -287,10 +283,9 @@ void TextSettingsActivity::render(RenderLock&&) {
                              : "";
   textsettings::renderPreview(renderer, previewLayout_, metrics_.previewPadding, metrics_.verticalSpacing, afterHeader,
                               previewHeight, familyName, sizeName);
+}
 
-  // Tab bar + active tab's list draw inside the screen builder.
-  renderUi();
-
+void TextSettingsActivity::drawFooter() {
   if (focusedRowHasNoPreview()) {
     const int captionHeight = renderer.getTextHeight(UI_10_FONT_ID) + metrics_.verticalSpacing;
     const int capY = afterHeader + usableHeight - captionHeight + metrics_.verticalSpacing;
@@ -299,8 +294,11 @@ void TextSettingsActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabelText(), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
 
-  renderer.displayBuffer();
+void TextSettingsActivity::render(RenderLock&& lock) {
+  if (optionPopup_.processRender(renderer, mappedInput)) return;  // picker draws over everything
+  UiListActivity::render(std::move(lock));
 }
 
 // Font switching runs on the main task from loop(), which deliberately holds no
