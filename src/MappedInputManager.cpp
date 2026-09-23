@@ -110,6 +110,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
         case CrossPointSettings::NEXT_PREV:
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
+        case CrossPointSettings::PREV_PREV:
+          return (gpio.*fn)(HalGPIO::BTN_UP) || (gpio.*fn)(HalGPIO::BTN_DOWN);
+        case CrossPointSettings::NEXT_NEXT:
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
@@ -121,6 +124,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_UP : HalGPIO::BTN_DOWN);
         case CrossPointSettings::NEXT_PREV:
           return (gpio.*fn)(isNavDirectionSwapped() ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP);
+        case CrossPointSettings::NEXT_NEXT:
+          return (gpio.*fn)(HalGPIO::BTN_UP) || (gpio.*fn)(HalGPIO::BTN_DOWN);
+        case CrossPointSettings::PREV_PREV:
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;

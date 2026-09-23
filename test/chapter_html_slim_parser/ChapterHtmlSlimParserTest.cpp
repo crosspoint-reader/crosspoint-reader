@@ -15,6 +15,7 @@
 
 static thread_local bool failNextArrayAllocation = false;
 static thread_local size_t arrayAllocationsToSkip = 0;
+static thread_local size_t additionalArrayFailures = 0;
 static thread_local size_t allocationSizeToFail = 0;
 static thread_local size_t matchingAllocationsToSkip = 0;
 void* operator new(size_t size, const std::nothrow_t&) noexcept {
@@ -34,7 +35,11 @@ void* operator new[](size_t size, const std::nothrow_t&) noexcept {
     if (arrayAllocationsToSkip > 0) {
       --arrayAllocationsToSkip;
     } else {
-      failNextArrayAllocation = false;
+      if (additionalArrayFailures > 0) {
+        --additionalArrayFailures;
+      } else {
+        failNextArrayAllocation = false;
+      }
       return nullptr;
     }
   }
@@ -75,6 +80,8 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     EXPECT_EQ(matchingAllocationsToSkip, 0u);
     EXPECT_FALSE(failNextArrayAllocation);
     EXPECT_EQ(arrayAllocationsToSkip, 0u);
+    EXPECT_EQ(additionalArrayFailures, 0u);
+    additionalArrayFailures = 0;
     arrayAllocationsToSkip = 0;
     allocationSizeToFail = 0;
     matchingAllocationsToSkip = 0;
@@ -387,10 +394,48 @@ TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenItsArenaAllocationFails) {
   parser.currentTextBlock->addWord("a-word-longer-than-small-string-storage", EpdFontFamily::REGULAR);
   bool emitted = false;
   failNextArrayAllocation = true;
+  additionalArrayFailures = 1;  // Fail the cache-eviction retry too.
   EXPECT_FALSE(parser.currentTextBlock->layoutAndExtractLines(
       renderer, 0, 1000, [&](std::unique_ptr<TextBlock>, uint32_t) { emitted = true; }));
   EXPECT_FALSE(emitted);
   EXPECT_EQ(parser.currentTextBlock->size(), 1u);
+  EXPECT_TRUE(parser.currentTextBlock->hadDroppedWords());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RecoversLineWhenArenaRetrySucceeds) {
+  parser.currentTextBlock->addWord("cell", EpdFontFamily::REGULAR);
+  size_t emitted = 0;
+  failNextArrayAllocation = true;
+  EXPECT_TRUE(parser.currentTextBlock->layoutAndExtractLines(renderer, 0, 1000,
+                                                             [&](std::unique_ptr<TextBlock>, uint32_t) { ++emitted; }));
+  EXPECT_EQ(emitted, 1u);
+  EXPECT_FALSE(parser.currentTextBlock->hadDroppedWords());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsDroppedWordsAfterGridCellIsBuffered) {
+  parser.insideTableCell = true;
+  failNextArrayAllocation = true;
+  additionalArrayFailures = 1;
+  parser.currentTextBlock->addWord("cell", EpdFontFamily::REGULAR);
+  ASSERT_TRUE(parser.currentTextBlock->hadDroppedWords());
+  parser.closeTableCell();
+  EXPECT_EQ(parser.currentTextBlock, nullptr);
+  EXPECT_TRUE(parser.layoutOom);
+  EXPECT_EQ(parser.parseStep(), ChapterHtmlSlimParser::ParseStatus::Error);
+  EXPECT_FALSE(parser.finishParse());
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsDroppedWordsAfterStackedCellIsDiscarded) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  failNextArrayAllocation = true;
+  additionalArrayFailures = 1;
+  parser.currentTextBlock->addWord("cell", EpdFontFamily::REGULAR);
+  ASSERT_TRUE(parser.currentTextBlock->hadDroppedWords());
+  parser.closeTableCell();
+  EXPECT_EQ(parser.currentTextBlock, nullptr);
+  EXPECT_TRUE(parser.layoutOom);
+  EXPECT_FALSE(parser.finishParse());
 }
 
 TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenBlockAllocationFails) {
@@ -412,6 +457,7 @@ TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridCellArenaFailure) {
   }
   failNextArrayAllocation = true;
   arrayAllocationsToSkip = 2;  // Visible offsets and the first cell's line slots.
+  additionalArrayFailures = 1;
   parser.finishTableRow();
   EXPECT_TRUE(parser.layoutFailed);
   EXPECT_EQ(parser.parseStep(), ChapterHtmlSlimParser::ParseStatus::Error);
@@ -423,6 +469,7 @@ TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterStackedCellArenaFailure) {
   parser.insideTableCell = true;
   parser.currentTextBlock->addWord("cell", EpdFontFamily::REGULAR);
   failNextArrayAllocation = true;
+  additionalArrayFailures = 1;
   parser.closeTableCell();
   EXPECT_TRUE(parser.layoutFailed);
   EXPECT_FALSE(parser.finishParse());
@@ -463,8 +510,8 @@ TEST_F(ChapterHtmlSlimParserTest, SpanWithHiddenAttributeShouldBeSkipped) {
   ChapterHtmlSlimParser::characterData(&parser, " After ", 7);
 
   ASSERT_EQ(parser.currentTextBlock->size(), 2);
-  ASSERT_EQ(parser.currentTextBlock->words[0], "Before");
-  ASSERT_EQ(parser.currentTextBlock->words[1], "After");
+  ASSERT_EQ(parser.currentTextBlock->wordAt(0), "Before");
+  ASSERT_EQ(parser.currentTextBlock->wordAt(1), "After");
 }
 
 TEST_F(ChapterHtmlSlimParserTest, DivWithHiddenAttributeContentShouldBeSkipped) {

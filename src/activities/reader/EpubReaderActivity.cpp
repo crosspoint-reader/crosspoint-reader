@@ -1239,6 +1239,19 @@ void EpubReaderActivity::renderBook() {
             pagesUntilFullRefresh = 1;
           }
           buildPopupPending = !showPopup;
+          // Section (re)builds are the heap-hungriest path (per-word
+          // allocations for the whole section). Under TTF heap pressure, shed
+          // every rebuildable font cache first — dropped glyphs re-fault on
+          // demand after the build. Skipped for cpfont/builtin reading: the
+          // release drops the persistent advance table and mini tables, which
+          // would force SD metric re-reads on every fresh chapter for no gain.
+          if (!renderer.getTtfFonts().empty()) {
+            if (auto* fcm = renderer.getFontCacheManager()) {
+              fcm->releaseSdFontCaches();
+            }
+          }
+          LOG_DBG("ERS", "Heap before section build: %u (max block %u)", (unsigned)ESP.getFreeHeap(),
+                  (unsigned)ESP.getMaxAllocHeap());
           const unsigned long buildStartMs = millis();
           bool started;
           {
@@ -2485,7 +2498,17 @@ void EpubReaderActivity::activateMoreRow(int row) {
   }
   // Leaf actions open their own screen / perform the action; close the overlay first.
   overlay = Overlay::None;
-  discardOverlayPage();
+  if (action == MA::GO_TO_PERCENT && overlayPageStored) {
+    // The percent dialog is a popup over the current frame: wipe the toolbar
+    // chrome back to the clean page first so the dialog draws over the page,
+    // not the sheet. No refresh push — the dialog's first frame carries it.
+    RenderLock lock;
+    settleOverlayRefresh();
+    renderer.restoreBwBuffer(/*resyncPanelBaseline=*/false);
+    overlayPageStored = false;
+  } else {
+    discardOverlayPage();
+  }
   if (action == MA::TOGGLE_BOOKMARK) {
     // No child activity here to trigger the re-render the list menu relies on:
     // show the same confirmation popup the long-press path does.

@@ -6,7 +6,7 @@ CrossPoint is open-source e-reader firmware - community-built, fully hackable, f
 
 ### Now running on:
 - **ESP32C3-based** Xteink X4 and X3.
-- **ESP32S3-based** Xteink X4Pro, Seeed reTerminal Sticky, M5PaperMono
+- **ESP32S3-based** Xteink X4Pro and X4Classic, Seeed reTerminal Sticky, M5PaperMono
 
 Check [our Devices page](https://crosspointreader.com/devices) for the full list.
 
@@ -133,7 +133,11 @@ See [Development quick start](#development-quick-start) below.
 
 ## Custom SD-card fonts
 
-Convert your own TTF/OTF files into `.cpfont` files that load from the SD card. No firmware reflash is needed.
+On devices with external RAM enabled in CrossPoint, copy `.ttf`, `.otf`, or `.ttc` files to the SD card and select them as reader fonts. Put one file in `/fonts/` or `/.fonts/`, or put one family's files in a subfolder. See the [SD card font guide](./docs/sd-card-fonts.md) for the folder layout and styles.
+
+On other devices, convert the font to `.cpfont` first. `.cpfont` files also work on devices with external RAM enabled and have better performance. No firmware reflash is needed to add fonts.
+
+To make `.cpfont` files:
 
 1. Go to https://crosspointreader.com/fonts and open the "SD-card font builder" form.
 2. Upload up to four styles (regular, bold, italic, bold-italic), set the family name, point sizes, and Unicode range.
