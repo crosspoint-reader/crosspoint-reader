@@ -121,8 +121,9 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
 
   // When the selection is already visible in the current viewport (based on
   // the measured drawnRows rather than the unweighted visibleRows estimate),
-  // keep the viewport anchored instead of jumping to top.
-  if (trusted && drawn > 0) {
+  // keep selection-follow anchored instead of jumping to top. Explicit swipe
+  // scrolling clears followPending and must retain its new viewport.
+  if (n.followPending && trusted && drawn > 0) {
     const int sel = props.selectedIndex;
     if (sel >= prevTop && sel < prevTop + drawn) {
       n.top = prevTop;
