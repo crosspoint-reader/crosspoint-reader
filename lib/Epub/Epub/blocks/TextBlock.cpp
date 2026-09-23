@@ -13,7 +13,8 @@
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
-  size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
+  size_t size =
+      static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t) + sizeof(uint8_t));
   if (hasFocus) {
     size += static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(uint8_t));
   }
@@ -36,6 +37,8 @@ void TextBlock::bindArenaPointers() {
     focusBoundaryArr = base + off;
     off += wc;
   }
+  hasSpaceArr = base + off;
+  off += wc;
   textArr = reinterpret_cast<const char*>(base + off);
 }
 

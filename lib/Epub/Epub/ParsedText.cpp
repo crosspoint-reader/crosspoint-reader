@@ -1735,6 +1735,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       droppedWords = true;
       return;
     }
+    for (size_t i = 0; i < lineWordCount; ++i) {
+      block->setWordHasSpaceBefore(static_cast<uint16_t>(i),
+                                   !continuesVec[lastBreakAt + i] && !noSpaceBeforeVec[lastBreakAt + i]);
+    }
     processLine(std::move(block), lineVisibleOffset);
     return;
   }
@@ -1759,6 +1763,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     LOG_ERR("PTX", "Dropping line: TextBlock or arena allocation failed");
     droppedWords = true;  // see the non-focus branch above
     return;
+  }
+  for (size_t i = 0; i < lineWordCount; ++i) {
+    block->setWordHasSpaceBefore(static_cast<uint16_t>(i),
+                                 !continuesVec[lastBreakAt + i] && !noSpaceBeforeVec[lastBreakAt + i]);
   }
   processLine(std::move(block), lineVisibleOffset);
 }
