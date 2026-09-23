@@ -38,16 +38,25 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def is_within(path, root):
+    # Path.is_relative_to() needs Python 3.9; the documented minimum is 3.8.
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
 def apply_patches(project_dir, dependency_dir):
     project = Path(project_dir).resolve()
     dependency = Path(dependency_dir).resolve()
     local_root = project / ".pio" / "libdeps"
-    if not dependency.is_relative_to(local_root):
+    if not is_within(dependency, local_root):
         raise RuntimeError("SdFat must be inside this project's .pio/libdeps")
     properties = dependency / "library.properties"
     targets = [properties] + [dependency / patch[1] for patch in PATCHES]
     for target in targets:
-        if not target.resolve().is_relative_to(dependency) or not target.is_file():
+        if not is_within(target.resolve(), dependency) or not target.is_file():
             raise RuntimeError("Missing or escaping SdFat patch target: " + target.name)
     if "version=2.3.1" not in properties.read_text().splitlines():
         raise RuntimeError("SdFat patches require version 2.3.1")
@@ -91,7 +100,7 @@ def patch_selected_dependency(env):
         raise RuntimeError("Expected exactly one selected SdFat dependency")
     dependency = Path(selected[0].path).resolve()
     environment_root = Path(env.subst("$PROJECT_LIBDEPS_DIR")) / env["PIOENV"]
-    if not dependency.is_relative_to(environment_root.resolve()):
+    if not is_within(dependency, environment_root.resolve()):
         raise RuntimeError("SdFat is outside the selected environment's dependencies")
     apply_patches(env["PROJECT_DIR"], dependency)
 
