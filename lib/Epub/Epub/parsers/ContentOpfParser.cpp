@@ -64,6 +64,27 @@ void appendMetadataText(std::string& out, const XML_Char* text, const int len, b
     out.push_back(c);
   }
 }
+
+// An EPUB 2 opf:file-as attribute is a reading like any other: same clamp.
+void assignFileAsAttribute(std::string& out, const char* value) {
+  out.clear();
+  bool spacePending = false;
+  appendMetadataText(out, value, static_cast<int>(strnlen(value, MAX_METADATA_TEXT + 1)), spacePending);
+}
+
+// Ids tie a file-as reading to the element it refines and are matched exactly,
+// so an overlong one is dropped (its reading is lost) rather than truncated,
+// which could make two ids collide. Real ids are short ("creator01", a UUID).
+constexpr size_t MAX_METADATA_ID = 64;
+
+const char* boundedId(const char* value) {
+  if (value == nullptr) return nullptr;
+  if (strnlen(value, MAX_METADATA_ID + 1) > MAX_METADATA_ID) {
+    LOG_DBG("COF", "Metadata id exceeds %u bytes; ignoring it", static_cast<unsigned>(MAX_METADATA_ID));
+    return nullptr;
+  }
+  return value;
+}
 }  // namespace
 
 // Attribute lookup by local name: expat is run without namespace processing,
@@ -210,8 +231,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     if (self->title.empty()) {
       self->state = IN_BOOK_TITLE;
       self->metadataSpacePending = false;
-      if (const char* id = attributeValue(atts, "id")) self->titleId = id;
-      if (const char* fileAs = attributeValue(atts, "file-as")) self->titleFileAs = fileAs;  // EPUB 2
+      if (const char* id = boundedId(attributeValue(atts, "id"))) self->titleId = id;
+      if (const char* fileAs = attributeValue(atts, "file-as")) assignFileAsAttribute(self->titleFileAs, fileAs);
     }
     return;
   }
@@ -224,8 +245,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     self->creatorTracked = self->creators.size() < MAX_CREATORS;
     if (self->creatorTracked) {
       Creator creator;
-      if (const char* id = attributeValue(atts, "id")) creator.id = id;
-      if (const char* fileAs = attributeValue(atts, "file-as")) creator.fileAs = fileAs;  // EPUB 2
+      if (const char* id = boundedId(attributeValue(atts, "id"))) creator.id = id;
+      if (const char* fileAs = attributeValue(atts, "file-as")) assignFileAsAttribute(creator.fileAs, fileAs);
       self->creators.push_back(std::move(creator));
     }
     return;
@@ -296,7 +317,8 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       self->coverItemId = coverItemId;
     }
     // EPUB 3 sort form: <meta refines="#title" property="file-as">reading</meta>
-    if (refines != nullptr && refines[0] == '#' && property != nullptr && strcmp(property, "file-as") == 0) {
+    if (refines != nullptr && refines[0] == '#' && boundedId(refines + 1) != nullptr && property != nullptr &&
+        strcmp(property, "file-as") == 0) {
       self->state = IN_FILE_AS;
       self->fileAsTarget = refines + 1;
       self->fileAsText.clear();

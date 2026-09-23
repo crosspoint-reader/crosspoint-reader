@@ -247,3 +247,43 @@ TEST(ContentOpfParserMetadata, FileAsRefiningAnUnknownIdIsDroppedWithoutHarm) {
   EXPECT_EQ(parser.titleFileAs, "Emma");
   EXPECT_TRUE(parser.authorFileAs.empty());
 }
+
+TEST(ContentOpfParserMetadata, OverlongIdsAreDroppedNotTruncated) {
+  // An id is matched exactly, so one past the bound is ignored whole: its
+  // reading is lost, but a truncated copy could never collide with another id.
+  const std::string longId(65, 'x');
+  const std::string okId(64, 'y');
+  const std::string xml = R"(<package xmlns:dc="urn:dc"><metadata>
+    <dc:title id=")" + longId +
+                          R"(">Emma</dc:title>
+    <meta refines="#)" + longId +
+                          R"(" property="file-as">Emma reading</meta>
+    <dc:creator id=")" + okId +
+                          R"(">Jane Austen</dc:creator>
+    <meta refines="#)" + okId +
+                          R"(" property="file-as">Austen, Jane</meta>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.title, "Emma");
+  EXPECT_TRUE(parser.titleFileAs.empty());
+  EXPECT_EQ(parser.authorFileAs, "Austen, Jane");
+}
+
+TEST(ContentOpfParserMetadata, ClampsOversizedEpub2FileAsAttribute) {
+  const std::string hugeReading(64 * 1024, 'R');
+  const std::string xml = R"(<package xmlns:dc="urn:dc" xmlns:opf="urn:opf"><metadata>
+    <dc:title opf:file-as=")" +
+                          hugeReading + R"(">Germinal</dc:title>
+    <dc:creator opf:file-as=")" +
+                          hugeReading + R"(">Emile Zola</dc:creator>
+  </metadata></package>)";
+  ContentOpfParser parser("", "", xml.size(), nullptr);
+
+  parse(parser, xml);
+
+  EXPECT_EQ(parser.titleFileAs.size(), 512u);
+  EXPECT_EQ(parser.authorFileAs.size(), 512u);
+}
