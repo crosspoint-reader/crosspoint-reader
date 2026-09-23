@@ -913,8 +913,14 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     tipCount = 1 + (inputType == InputType::Url ? 1 : 0) + (!text.empty() ? 1 : 0);
   }
 
-  if (tipCount > 0) {
-    int y = (underlineBottom + kbRect.y) / 2 - (tipCount + 1) * tipsLh / 2;
+  // Landscape leaves far less room between the input field and the keyboard
+  // than portrait (keyboardRect() sizes keys in fixed pixels regardless of
+  // orientation, so the keyboard eats a much bigger share of a short screen).
+  // Centering blindly there would overlap both; skip the tips rather than
+  // render over the field or the keys.
+  const int tipsNeededH = (tipCount + 1) * tipsLh;
+  if (tipCount > 0 && kbRect.y - underlineBottom >= tipsNeededH) {
+    int y = (underlineBottom + kbRect.y) / 2 - tipsNeededH / 2;
     drawTip(tr(STR_KB_TIPS), y);
     y += tipsLh;
     if (cursorMode) {
