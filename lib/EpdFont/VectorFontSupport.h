@@ -5,7 +5,7 @@
 // working set (FreeType face + table state, per-style glyph arenas, resident
 // or GPOS font bytes) competes with the reader's section build for the same
 // ~380KB of internal DRAM, and the ~110KB of FreeType flash rides along.
-// Gating on BOARD_HAS_PSRAM (defined by every PSRAM env in platformio.ini)
+// Gating on BOARD_HAS_PSRAM (from the board definition or platformio.ini)
 // compiles the whole path out: FreeType never links, .ttf/.otf files are
 // invisible to the font registry, and .cpfont SD fonts remain the only
 // sideloaded-font route on those boards.

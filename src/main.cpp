@@ -620,7 +620,8 @@ void loop() {
 
   renderer.setFadingFix(SETTINGS.fadingFix);
 
-  if (Serial && millis() - lastMemPrint >= 10000) {
+  // The ROM console does not depend on Arduino USB CDC's connection state.
+  if ((Serial || FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF) && millis() - lastMemPrint >= 10000) {
     const auto heap = HalMemory::getInternalHeap();
     LOG_INF("MEM", "Free: %zu bytes, Total: %zu bytes, Min Free: %zu bytes, MaxAlloc: %zu bytes", heap.freeBytes,
             heap.totalBytes, heap.minFreeBytes, heap.largestBlockBytes);
