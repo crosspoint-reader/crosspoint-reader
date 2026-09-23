@@ -35,6 +35,20 @@ uint32_t toLowerLatinImpl(const uint32_t cp) {
   }
 }
 
+// Turkish dotted/dotless I casing differs from the generic Latin pairing:
+// 'I' (U+0049) lowercases to dotless 'ı' (U+0131) and 'İ' (U+0130) to 'i',
+// while the Latin Extended-A even/odd pairing above would map them the other
+// way around. Everything else follows the generic Latin mapping.
+uint32_t toLowerTurkishImpl(const uint32_t cp) {
+  if (cp == 'I') {
+    return 0x0131;  // ı
+  }
+  if (cp == 0x0130) {  // İ
+    return 'i';
+  }
+  return toLowerLatinImpl(cp);
+}
+
 // Convert Cyrillic uppercase letters to lowercase
 // Cyrillic uppercase range 0x0410-0x042F maps to lowercase by adding 0x20
 // Special case: Cyrillic capital IO (0x0401) maps to lowercase io (0x0451)
@@ -51,6 +65,8 @@ uint32_t toLowerCyrillicImpl(const uint32_t cp) {
 }  // namespace
 
 uint32_t toLowerLatin(const uint32_t cp) { return toLowerLatinImpl(cp); }
+
+uint32_t toLowerTurkish(const uint32_t cp) { return toLowerTurkishImpl(cp); }
 
 uint32_t toLowerCyrillic(const uint32_t cp) { return toLowerCyrillicImpl(cp); }
 
