@@ -37,7 +37,11 @@ class EpubReaderFootnoteSelectActivity final : public Activity {
   const int marginLeft;
   const int marginTop;
 
-  std::vector<const PageLink*> footnoteLinks;
+  struct FootnoteLink {
+    const PageLink* link;
+    const FootnoteEntry* footnote;
+  };
+  std::vector<FootnoteLink> footnoteLinks;
   int selected = 0;
 
   // Differential highlight repaint: pixels under the current highlight box.

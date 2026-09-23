@@ -32,7 +32,7 @@ void EpubReaderFootnoteSelectActivity::buildFootnoteLinks() {
       return strcmp(candidate.href, footnote.href) == 0;
     });
     if (link != page->links.end()) {
-      footnoteLinks.push_back(&*link);
+      footnoteLinks.push_back({&*link, &footnote});
     }
   }
 }
@@ -40,7 +40,7 @@ void EpubReaderFootnoteSelectActivity::buildFootnoteLinks() {
 void EpubReaderFootnoteSelectActivity::performJump() {
   if (footnoteLinks.empty()) return;
   ActivityResult result;
-  result.data = FootnoteResult{footnoteLinks[selected]->href};
+  result.data = FootnoteResult{footnoteLinks[selected].footnote->href};
   setResult(std::move(result));
   finish();
 }
@@ -88,7 +88,7 @@ void EpubReaderFootnoteSelectActivity::loop() {
 
 bool EpubReaderFootnoteSelectActivity::drawHighlightWithSnapshot() {
   if (footnoteLinks.empty()) return false;
-  const PageLink* link = footnoteLinks[selected];
+  const PageLink* link = footnoteLinks[selected].link;
 
   const int x = link->x + marginLeft;
   const int y = link->y + marginTop;
@@ -118,7 +118,7 @@ bool EpubReaderFootnoteSelectActivity::drawHighlightWithSnapshot() {
 
   renderer.fillRect(hx, hy, hw, hh, true);
   // Draw a small marker (the footnote number) at the highlight position
-  const char* number = page->footnotes[selected].number;
+  const char* number = footnoteLinks[selected].footnote->number;
   if (number[0]) {
     renderer.drawText(SETTINGS.getReaderFontId(), x, y - 1, number, false);
   }
