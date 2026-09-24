@@ -43,6 +43,31 @@ class EpubTextExtractorTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "size limit"):
                     extract_text_from_epub(path)
 
+    def test_epub_trims_boundaries_across_members(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "boundaries.epub"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("00-preface.xhtml", "outside before")
+                archive.writestr(
+                    "01-start.xhtml",
+                    "*** START OF THE PROJECT GUTENBERG EBOOK TEST *** first",
+                )
+                archive.writestr("02-body.xhtml", "second")
+                archive.writestr(
+                    "03-end.xhtml",
+                    "third *** END OF THE PROJECT GUTENBERG EBOOK TEST ***",
+                )
+                archive.writestr("04-license.xhtml", "outside after")
+            self.assertEqual(extract_text_from_epub(path).split(), ["first", "second", "third"])
+
+    def test_epub_without_markers_preserves_all_members(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "unmarked.epub"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("01.xhtml", "first")
+                archive.writestr("02.xhtml", "second")
+            self.assertEqual(extract_text_from_epub(path).split(), ["first", "second"])
+
     def test_rejects_cumulative_expansion(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "large.epub"

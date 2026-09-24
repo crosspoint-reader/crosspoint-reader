@@ -139,10 +139,10 @@ def extract_text_from_epub(epub_path):
                 extractor = EpubTextExtractor()
                 extractor.feed(data)
                 extractor.close()
-                text = strip_gutenberg_boilerplate(extractor.text())
+                text = extractor.text()
                 if text.strip():
                     texts.append(text)
-    return "\n".join(texts)
+    return strip_gutenberg_boilerplate("\n".join(texts))
 
 
 def extract_words(text):
