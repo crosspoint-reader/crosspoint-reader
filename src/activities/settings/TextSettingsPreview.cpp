@@ -31,7 +31,7 @@ CssTextAlign toCssAlign(uint8_t align) {
 }
 
 // Lay the sample text out through the reader engine into layout.lines
-void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth) {
+bool relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth) {
   layout.lines.clear();
 
   BlockStyle style;
@@ -62,7 +62,9 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
           SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing)) {
     LOG_ERR("SET", "Failed to lay out text settings preview");
     layout.lines.clear();
+    return false;
   }
+  return true;
 }
 
 }  // namespace
@@ -116,8 +118,11 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
     if (auto* fcm = renderer.getFontCacheManager()) {
       fcm->prewarmCache(fontId, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), SETTINGS.focusReadingEnabled ? 0x03 : 0x01);
     }
-    relayout(layout, renderer, fontId, textWidth);
-    layout.key = key;
+    if (relayout(layout, renderer, fontId, textWidth)) {
+      layout.key = key;
+    } else {
+      layout.key = {};
+    }
   }
 
   // Draw the sample twice so the paragraph gap is visible
