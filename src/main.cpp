@@ -38,6 +38,7 @@
 #include "images/LoadingIcon.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
+#include "util/HeapTrace.h"
 #include "util/ScreenshotUtil.h"
 #include "util/Timezones.h"
 
@@ -360,6 +361,7 @@ void setup() {
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
 #endif
+  HeapTrace::begin();
 #endif
 
   HalSystem::begin();
@@ -641,12 +643,18 @@ void loop() {
       String cmd = line.substring(4);
       cmd.trim();
       if (cmd == "SCREENSHOT") {
+        HeapTrace::OutputLock traceLock;
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);
         uint8_t* buf = display.getFrameBuffer();
         logSerial.write(buf, bufferSize);
         logSerial.printf("SCREENSHOT_END\n");
       }
+#ifdef CROSSPOINT_HEAP_TRACE
+      else if (cmd.startsWith("HEAPTRACE")) {
+        HeapTrace::handleCommand(cmd.length() > 10 ? cmd.c_str() + 10 : nullptr);
+      }
+#endif
     }
   }
 
