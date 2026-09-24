@@ -73,6 +73,8 @@ void formatFileName(const std::string& filename, char* buffer, const size_t buff
   const int length = static_cast<int>(dot == std::string::npos ? filename.size() : dot);
   const char* format = isDirectory && !UITheme::getInstance().getTheme().showsFileIcons() ? "[%.*s]" : "%.*s";
   snprintf(buffer, bufferSize, format, length, filename.c_str());
+  // Compose only the display copy; filesystem lookup needs the raw entry bytes.
+  utf8ComposeNfcInPlace(buffer);
 }
 
 void formatFileExtension(const std::string& filename, char* buffer, const size_t bufferSize) {

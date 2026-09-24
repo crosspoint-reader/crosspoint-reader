@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
+#include <LibraryBuilder.h>
 #include <Logging.h>
 #include <WiFi.h>
 #include <esp_efuse.h>
@@ -32,6 +33,13 @@ namespace {
 // Folders/files to hide from the web interface file browser
 // Note: Items starting with "." are automatically hidden
 constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
+
+// Formats the library index tracks (LibraryIndex isBookName): an upload of any
+// of these must mark the index dirty so the next Library entry rebuilds it.
+bool isLibraryBookFile(const String& filename) {
+  return FsHelpers::checkFileExtension(filename, ".epub") || FsHelpers::checkFileExtension(filename, ".txt") ||
+         FsHelpers::checkFileExtension(filename, ".md") || FsHelpers::checkFileExtension(filename, ".xtc");
+}
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -781,6 +789,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
+        if (isLibraryBookFile(state.fileName)) library::markLibraryIndexDirty();
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1694,6 +1703,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
             clearBookCache(filePath.c_str());
+            if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -1763,6 +1773,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
         clearBookCache(filePath.c_str());
+        if (isLibraryBookFile(wsUploadFileName)) library::markLibraryIndexDirty();
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;

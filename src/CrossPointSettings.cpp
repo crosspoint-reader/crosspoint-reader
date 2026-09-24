@@ -179,6 +179,21 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
+  // Older files stored one combined touch mode under "touchReaderControls":
+  // 0=off, 1=tap, 2=swipe, 3=inverted tap. Split it into the master toggle
+  // plus the per-direction gesture pair (the generic loop above already folded
+  // out-of-range toggle values back to the On default).
+  if (doc["pageTurnGesture"].isNull() && doc["previousPageGesture"].isNull() &&
+      doc["touchReaderControls"].is<uint8_t>()) {
+    const uint8_t mode = doc["touchReaderControls"].as<uint8_t>();
+    if (mode >= 1 && mode <= 3) {
+      touchReaderControls = TOUCH_READER_ON;
+      pageTurnGesture = mode == 1 ? TAP_ONLY : mode == 2 ? SWIPE_ONLY : INVERTED_TAP;
+      previousPageGesture = pageTurnGesture;
+      needsResave = true;
+    }
+  }
+
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
     const uint8_t legacyValue =
         clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);
@@ -275,6 +290,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
   spec.lineCompression = getReaderLineCompression();
+  spec.characterSpacing = getCharacterSpacing();
+  spec.wordSpacingPercent = wordSpacing;
   spec.extraParagraphSpacing = extraParagraphSpacing != 0;
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
@@ -287,7 +304,11 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card fonts use same compression as Bookerly (the most neutral values)
+  // SD card and vector fonts get a wider scale than the built-ins: their
+  // faces carry their own (often generous) natural line height, so the old
+  // Bookerly-tuned 1.1/1.2 steps were visually near-indistinguishable. At
+  // 12pt in portrait (~760px viewport) this scale spans ~26/24/19/15 lines
+  // per page — each step reads as a clearly different density.
   if (sdFontFamilyName[0] != '\0') {
     switch (lineSpacing) {
       case TIGHT:
@@ -296,9 +317,9 @@ float CrossPointSettings::getReaderLineCompression() const {
       default:
         return 1.0f;
       case WIDE:
-        return 1.1f;
+        return 1.3f;
       case EXTRA_WIDE:
-        return 1.2f;
+        return 1.6f;
     }
   }
 

@@ -34,10 +34,7 @@ class OptionPopup {
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = I18N.get(optionIds[i]);
     }
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    uiReady = false;
-    active = true;
+    activate(currentIndex, std::move(onSelect));
   }
 
   void show(const char* titleStr, const char* const* options, int optionCount, int currentIndex,
@@ -48,10 +45,7 @@ class OptionPopup {
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = options[i];
     }
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    uiReady = false;
-    active = true;
+    activate(currentIndex, std::move(onSelect));
   }
 
   // As above, plus a subject line inside the dialog (a book or event title).
@@ -67,10 +61,7 @@ class OptionPopup {
     title = I18N.get(titleId);
     headline.clear();
     ownedStrings = options;
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    uiReady = false;
-    active = true;
+    activate(currentIndex, std::move(onSelect));
   }
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
@@ -262,6 +253,14 @@ class OptionPopup {
   static constexpr size_t INTERACTION_CAPACITY = MAX_OPTIONS + 1;
   static constexpr freeink::ui::ActionId ACTION_OPTION = 1;
   static constexpr freeink::ui::ActionId ACTION_CHROME = 2;
+
+  void activate(int currentIndex, std::function<void(int)> onSelect) {
+    const int count = std::min<int>(ownedStrings.size(), MAX_OPTIONS);
+    selectedIndex = currentIndex >= 0 && currentIndex < count ? currentIndex : 0;
+    onSelectCallback = std::move(onSelect);
+    uiReady = false;
+    active = count > 0;
+  }
 
   bool active = false;
   std::string title;

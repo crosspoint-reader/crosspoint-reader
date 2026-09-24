@@ -6,6 +6,7 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <Memory.h>
+#include <VectorFontSupport.h>
 
 #include <algorithm>
 
@@ -35,11 +36,21 @@ void ActivityManager::begin() {
 #else
   constexpr BaseType_t renderTaskCore = 0;
 #endif
+#if CROSSPOINT_VECTOR_FONTS
+  // FreeType rasterization runs on this task, and the deepest observed chain
+  // is a glyph fault DURING LAYOUT: expat + parser + line-layout frames
+  // (~3.5KB on Xtensa) with the scan converter's FT_RENDER_POOL_SIZE (4KB)
+  // stack-resident band pool on top — a measured ~8KB peak that trips the
+  // canary on an 8KB stack. Vector-font boards all have PSRAM-class RAM.
+  constexpr uint32_t renderTaskStackBytes = 16384;
+#else
+  constexpr uint32_t renderTaskStackBytes = 8192;
+#endif
   xTaskCreatePinnedToCore(&renderTaskTrampoline, "ActivityManagerRender",
-                          8192,               // Stack size
-                          this,               // Parameters
-                          1,                  // Priority
-                          &renderTaskHandle,  // Task handle
+                          renderTaskStackBytes,  // Stack size
+                          this,                  // Parameters
+                          1,                     // Priority
+                          &renderTaskHandle,     // Task handle
                           renderTaskCore  // Keep long renders/cover decodes off CPU 0's idle watchdog when available
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");

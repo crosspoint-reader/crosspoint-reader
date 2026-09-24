@@ -88,8 +88,11 @@ void RoundedRaffTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, con
           Bitmap bitmap(file);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             coverWidth = bitmap.getWidth();
-            renderer.drawBitmap(bitmap, tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
-                                RoundedRaffMetrics::values.homeCoverHeight);
+            // Narrow covers come out taller than the slot; fill 1:1 and crop
+            // vertically instead of rescaling the dither.
+            drawCoverThumbFill(renderer, bitmap,
+                               Rect{tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
+                                    RoundedRaffMetrics::values.homeCoverHeight});
             renderer.maskRoundedRectOutsideCorners(tileX + (tileWidth - coverWidth) / 2, imgY, coverWidth,
                                                    RoundedRaffMetrics::values.homeCoverHeight, kCoverRadius,
                                                    Color::LightGray);
