@@ -98,8 +98,10 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   // A slow swipe never becomes a long-press chapter skip.
   const auto dir = input.wasSwipe();
   if (dir != MappedInputManager::SwipeDir::None) {
-    result.next = dir == MappedInputManager::SwipeDir::Left && gestureAllowsSwipe(SETTINGS.pageTurnGesture);
-    result.prev = dir == MappedInputManager::SwipeDir::Right && gestureAllowsSwipe(SETTINGS.previousPageGesture);
+    result.next = dir == (rtlBook ? MappedInputManager::SwipeDir::Right : MappedInputManager::SwipeDir::Left) &&
+                  gestureAllowsSwipe(SETTINGS.pageTurnGesture);
+    result.prev = dir == (rtlBook ? MappedInputManager::SwipeDir::Left : MappedInputManager::SwipeDir::Right) &&
+                  gestureAllowsSwipe(SETTINGS.previousPageGesture);
     return result;
   }
 
