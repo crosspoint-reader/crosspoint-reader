@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
-#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -234,40 +233,3 @@ TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphe
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
 TEST(HyphenationEval, Portuguese) { runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.21); }
-
-namespace {
-std::vector<size_t> hangulBreakOffsets(const std::string& word) {
-  std::vector<size_t> offsets;
-  for (const auto& info : Hyphenator::breakOffsets(word, false)) {
-    EXPECT_FALSE(info.requiresInsertedHyphen) << word;
-    offsets.push_back(info.byteOffset);
-  }
-  return offsets;
-}
-}  // namespace
-
-TEST(HangulBreaks, SplitsBetweenAnySyllablesForAnyLanguage) {
-  for (const char* lang : {"", "en", "ko"}) {
-    Hyphenator::setPreferredLanguage(lang);
-    EXPECT_EQ(hangulBreakOffsets("사과를"), (std::vector<size_t>{3, 6})) << lang;
-    EXPECT_EQ(hangulBreakOffsets("대한민국의"), (std::vector<size_t>{3, 6, 9, 12})) << lang;
-    EXPECT_TRUE(hangulBreakOffsets("가").empty()) << lang;
-  }
-  Hyphenator::setPreferredLanguage("");
-}
-
-TEST(HangulBreaks, KeepsDigitsLatinAndPunctuationAttached) {
-  Hyphenator::setPreferredLanguage("");
-  EXPECT_EQ(hangulBreakOffsets("했다."), (std::vector<size_t>{3}));  // 했|다., the period stays attached
-  EXPECT_EQ(hangulBreakOffsets("3개를"), (std::vector<size_t>{4}));  // 3개|를
-  EXPECT_TRUE(hangulBreakOffsets("iPhone을").empty());
-  EXPECT_EQ(hangulBreakOffsets("“안녕”이라고"), (std::vector<size_t>{6, 15, 18}));  // not after ”
-  EXPECT_EQ(hangulBreakOffsets("소신(conviction)이"), (std::vector<size_t>{3}));    // 소|신(conviction)이
-}
-
-TEST(HangulBreaks, BreaksAfterVisibleHyphenTouchingHangul) {
-  Hyphenator::setPreferredLanguage("");
-  EXPECT_EQ(hangulBreakOffsets("서울-부산"), (std::vector<size_t>{3, 7, 10}));          // 서울-|부산
-  EXPECT_EQ(hangulBreakOffsets("Wi-Fi네트워크"), (std::vector<size_t>{3, 8, 11, 14}));  // Wi-|Fi네트워크
-  EXPECT_EQ(hangulBreakOffsets("서울\u2011부산"), (std::vector<size_t>{3, 12}));        // not after U+2011
-}

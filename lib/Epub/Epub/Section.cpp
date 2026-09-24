@@ -52,8 +52,8 @@ namespace {
 // v46: Ordered lists number their items, list-style-type: none suppresses markers,
 //      and <ul>/<ol> containers contribute their own margins/padding to child insets.
 // v47: Word and character spacing in the header (cache validation); cached BlockStyle stores only character spacing.
-// v48: Hangul words wrap at spaces; with hyphenation on they may also split between syllables at
-//      a line end. Justification no longer stretches between syllables.
+// v48: Hangul words wrap at spaces; with hyphenation on they may also split at a line end.
+//      Justification no longer stretches between syllables.
 constexpr uint8_t SECTION_FILE_VERSION = 48;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /

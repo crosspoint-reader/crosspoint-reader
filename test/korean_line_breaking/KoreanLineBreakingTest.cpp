@@ -77,10 +77,19 @@ TEST(KoreanLineBreaking, HyphenationOnSplitsShortWords) {
   EXPECT_EQ(wordsOf(lines), expected);
 }
 
-TEST(KoreanLineBreaking, HyphenationOnBreaksAfterVisibleHyphen) {
+TEST(KoreanLineBreaking, HyphenationOnSplitsWhereHangulMeetsOtherScriptsOrBrackets) {
   Hyphenator::setPreferredLanguage("ko");
-  // 가 + space leaves 44 px: 대한민국- (40 px) beats the syllable split 대한 (16 px).
-  const auto lines = layout({"가", "대한민국-서울"}, true, 56);
-  const std::vector<std::vector<std::string>> expected{{"가", "대한민국-"}, {"서울"}};
+  // 가 + space leaves 52 px. 소신(ab) (48 px) fits; the split may fall before "(" or after ")",
+  // never inside the brackets.
+  const auto lines = layout({"가", "소신(ab)이"}, true, 64);
+  const std::vector<std::vector<std::string>> expected{{"가", "소신(ab)"}, {"이"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
+
+TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenDigitAndHangul) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가나다 + space leaves 22 px: 12 (16 px) fits, 12월 (24 px) does not.
+  const auto lines = layout({"가나다", "12월부터", "자"}, true, 50);
+  const std::vector<std::vector<std::string>> expected{{"가나다", "12"}, {"월부터", "자"}};
   EXPECT_EQ(wordsOf(lines), expected);
 }

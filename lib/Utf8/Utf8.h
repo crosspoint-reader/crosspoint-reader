@@ -73,9 +73,6 @@ inline bool utf8IsHangul(const uint32_t cp) {
          || (cp >= 0xFFA0 && cp <= 0xFFDC);  // Halfwidth Hangul
 }
 
-// Precomposed Hangul syllables (U+AC00-D7A3): the units Korean may wrap between at a line end.
-inline bool utf8IsHangulSyllable(const uint32_t cp) { return cp >= 0xAC00 && cp <= 0xD7A3; }
-
 // Returns true for any codepoint in a CJK script block (Han, Kana, Hangul, Bopomofo,
 // radicals, and CJK punctuation/compatibility/enclosed forms). Used for fallback font
 // selection — deliberately broader than utf8IsCjkBreakable, whose ranges are tuned to

@@ -309,11 +309,11 @@ TEST_F(ChapterHtmlSlimParserTest, ParserAppliesTextSpacingToParagraphs) {
 
 TEST(KoreanLayout, HangulWordsStayWholeAndWrapAtSpaces) {
   GfxRenderer renderer;
-  for (bool hyphenation : {false, true}) {
+  {
     BlockStyle style;
     style.alignment = CssTextAlign::Left;
     style.textIndentDefined = true;
-    ParsedText text(false, hyphenation, false, style);
+    ParsedText text(false, false, false, style);
     text.addWord("가나다", EpdFontFamily::REGULAR);
     text.addWord("라마", EpdFontFamily::REGULAR);
     text.addWord("3개를", EpdFontFamily::REGULAR);

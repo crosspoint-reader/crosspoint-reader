@@ -82,30 +82,6 @@ std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<Cod
   return breaks;
 }
 
-// Korean needs no syllable rules: a word may wrap between any two Hangul syllables, or after a
-// visible hyphen touching Hangul (대한민국-|서울), without an inserted hyphen. Boundaries next to
-// digits, Latin letters, or other punctuation never split.
-bool isHangulHyphenNeighbor(const uint32_t cp) {
-  return utf8IsHangulSyllable(cp) || isAlphabetic(cp) || isAsciiDigit(cp);
-}
-
-std::vector<Hyphenator::BreakInfo> buildHangulBreakInfos(const std::vector<CodepointInfo>& cps) {
-  constexpr uint32_t NON_BREAKING_HYPHEN_CP = 0x2011;
-  std::vector<Hyphenator::BreakInfo> breaks;
-  for (size_t i = 1; i < cps.size(); ++i) {
-    const uint32_t prev = cps[i - 1].value;
-    const uint32_t cur = cps[i].value;
-    bool allowed = utf8IsHangulSyllable(prev) && utf8IsHangulSyllable(cur);
-    if (!allowed && i >= 2 && isExplicitHyphen(prev) && !isSoftHyphen(prev) && prev != NON_BREAKING_HYPHEN_CP) {
-      const uint32_t beforeHyphen = cps[i - 2].value;
-      allowed = (utf8IsHangulSyllable(beforeHyphen) || utf8IsHangulSyllable(cur)) &&
-                isHangulHyphenNeighbor(beforeHyphen) && isHangulHyphenNeighbor(cur);
-    }
-    if (allowed) breaks.push_back({cps[i].byteOffset, false});
-  }
-  return breaks;
-}
-
 bool isSegmentSeparator(const uint32_t cp) { return isExplicitHyphen(cp) || isApostrophe(cp); }
 
 void appendSegmentPatternBreaks(const std::vector<CodepointInfo>& cps, const LanguageHyphenator& hyphenator,
@@ -205,14 +181,6 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
-
-  // Hangul breaks do not depend on the publication language.
-  if (auto hangulBreaks = buildHangulBreakInfos(cps); !hangulBreaks.empty()) {
-    const auto explicitBreakInfos = buildExplicitBreakInfos(cps);
-    hangulBreaks.insert(hangulBreaks.end(), explicitBreakInfos.begin(), explicitBreakInfos.end());
-    sortAndDedupeBreakInfos(hangulBreaks);
-    return hangulBreaks;
-  }
 
   // Detect apostrophe-like separators early; used by both branches below.
   bool hasApostropheLikeSeparator = false;
