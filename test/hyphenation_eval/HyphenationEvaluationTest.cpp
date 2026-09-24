@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
+#include "lib/Epub/Epub/hyphenation/Hyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
 
@@ -233,3 +234,34 @@ TEST(HyphenationEval, Italian) { runLanguageEval("italian", "it", "italian_hyphe
 TEST(HyphenationEval, Polish) { runLanguageEval("polish", "pl", "polish_hyphenation_tests.txt", 98.92); }
 TEST(HyphenationEval, Swedish) { runLanguageEval("swedish", "sv", "swedish_hyphenation_tests.txt", 94.01); }
 TEST(HyphenationEval, Portuguese) { runLanguageEval("portuguese", "pt", "portuguese_hyphenation_tests.txt", 98.21); }
+
+namespace {
+std::vector<size_t> hangulBreakOffsets(const std::string& word) {
+  std::vector<size_t> offsets;
+  for (const auto& info : Hyphenator::breakOffsets(word, false)) {
+    EXPECT_FALSE(info.requiresInsertedHyphen) << word;
+    offsets.push_back(info.byteOffset);
+  }
+  return offsets;
+}
+}  // namespace
+
+TEST(HangulBreaks, KeepsTwoSyllablesOnEachSideForAnyLanguage) {
+  for (const char* lang : {"", "en", "ko"}) {
+    Hyphenator::setPreferredLanguage(lang);
+    EXPECT_TRUE(hangulBreakOffsets("사과를").empty()) << lang;
+    EXPECT_EQ(hangulBreakOffsets("대한민국"), (std::vector<size_t>{6})) << lang;
+    EXPECT_EQ(hangulBreakOffsets("대한민국의"), (std::vector<size_t>{6, 9})) << lang;
+    EXPECT_EQ(hangulBreakOffsets("아름다운사람"), (std::vector<size_t>{6, 9, 12})) << lang;
+  }
+  Hyphenator::setPreferredLanguage("");
+}
+
+TEST(HangulBreaks, CountsOnlyHangulRunsAndKeepsNeighborsAttached) {
+  Hyphenator::setPreferredLanguage("");
+  EXPECT_EQ(hangulBreakOffsets("했습니다."), (std::vector<size_t>{6}));  // 했습|니다.
+  EXPECT_TRUE(hangulBreakOffsets("3개를").empty());
+  EXPECT_TRUE(hangulBreakOffsets("iPhone을").empty());
+  EXPECT_EQ(hangulBreakOffsets("“대한민국”이라고"), (std::vector<size_t>{9}));  // 이라고 is too short
+  EXPECT_EQ(hangulBreakOffsets("12월부터는"), (std::vector<size_t>{8}));        // 월부|터는
+}

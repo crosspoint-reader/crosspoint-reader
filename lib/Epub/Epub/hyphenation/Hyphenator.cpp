@@ -82,6 +82,27 @@ std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<Cod
   return breaks;
 }
 
+// Korean needs no syllable rules: a run of 4+ Hangul syllables may split anywhere that leaves at
+// least MIN_HANGUL_PIECE syllables on each side, without a hyphen (4 -> 2+2, 5 -> 2+3 or 3+2).
+// Shorter runs, and boundaries next to digits, Latin letters, or punctuation, never split.
+constexpr size_t MIN_HANGUL_PIECE = 2;
+
+std::vector<Hyphenator::BreakInfo> buildHangulBreakInfos(const std::vector<CodepointInfo>& cps) {
+  std::vector<Hyphenator::BreakInfo> breaks;
+  size_t runStart = 0;
+  for (size_t i = 0; i <= cps.size(); ++i) {
+    if (i < cps.size() && utf8IsHangulSyllable(cps[i].value)) continue;
+    // [runStart, i) is a maximal run of Hangul syllables.
+    if (i - runStart >= 2 * MIN_HANGUL_PIECE) {
+      for (size_t split = runStart + MIN_HANGUL_PIECE; split + MIN_HANGUL_PIECE <= i; ++split) {
+        breaks.push_back({cps[split].byteOffset, false});
+      }
+    }
+    runStart = i + 1;
+  }
+  return breaks;
+}
+
 bool isSegmentSeparator(const uint32_t cp) { return isExplicitHyphen(cp) || isApostrophe(cp); }
 
 void appendSegmentPatternBreaks(const std::vector<CodepointInfo>& cps, const LanguageHyphenator& hyphenator,
@@ -181,6 +202,11 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
   auto cps = collectCodepoints(word);
   trimSurroundingPunctuationAndFootnote(cps);
   const auto* hyphenator = cachedHyphenator_;
+
+  // Hangul breaks do not depend on the publication language.
+  if (auto hangulBreaks = buildHangulBreakInfos(cps); !hangulBreaks.empty()) {
+    return hangulBreaks;
+  }
 
   // Detect apostrophe-like separators early; used by both branches below.
   bool hasApostropheLikeSeparator = false;

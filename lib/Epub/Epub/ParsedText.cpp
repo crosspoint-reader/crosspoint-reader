@@ -156,6 +156,9 @@ uint32_t countCodepoints(const std::string_view text) {
 
 bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp) {
   if (!utf8IsCjkBreakable(leftCp) && !utf8IsCjkBreakable(rightCp)) return false;
+  // Korean wraps at spaces only, so a Hangul word stays whole even when it touches Hanja,
+  // Latin letters, digits, or quotes.
+  if (utf8IsHangul(leftCp) || utf8IsHangul(rightCp)) return false;
   if (isNoBreakAfterCjkPunctuation(leftCp) || isNoBreakBeforeCjkPunctuation(rightCp)) return false;
   if (utf8IsCombiningMark(rightCp)) return false;
   return true;
