@@ -7,6 +7,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -55,10 +56,13 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
     }
   }
 
-  parsed.layoutAndExtractLines(
-      renderer, fontId, static_cast<uint16_t>(textWidth),
-      [&layout](std::unique_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); }, true,
-      SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing);
+  if (!parsed.layoutAndExtractLines(
+          renderer, fontId, static_cast<uint16_t>(textWidth),
+          [&layout](std::unique_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); }, true,
+          SETTINGS.getCharacterSpacing(), SETTINGS.wordSpacing)) {
+    LOG_ERR("SET", "Failed to lay out text settings preview");
+    layout.lines.clear();
+  }
 }
 
 }  // namespace

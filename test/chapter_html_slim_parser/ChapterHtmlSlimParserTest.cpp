@@ -500,6 +500,29 @@ TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitLineWhenBlockAllocationFails) {
   EXPECT_EQ(parser.currentTextBlock->size(), 1u);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, ReportsFailureAfterEmittingEarlierLines) {
+  parser.currentTextBlock->addWord("first", EpdFontFamily::REGULAR);
+  parser.currentTextBlock->addWord("second", EpdFontFamily::REGULAR);
+  size_t emitted = 0;
+  EXPECT_FALSE(
+      parser.currentTextBlock->layoutAndExtractLines(renderer, 0, 40, [&](std::unique_ptr<TextBlock>, uint32_t) {
+        ++emitted;
+        allocationSizeToFail = sizeof(TextBlock);
+      }));
+  EXPECT_EQ(emitted, 1u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterCharacterDataBlockAllocationFailure) {
+  parser.currentTextBlock.reset();
+  allocationSizeToFail = sizeof(ParsedText);
+  ChapterHtmlSlimParser::characterData(&parser, "caption ", 8);
+
+  EXPECT_EQ(allocationSizeToFail, 0u);
+  EXPECT_TRUE(parser.layoutFailed);
+  EXPECT_EQ(parser.parseStep(), ChapterHtmlSlimParser::ParseStatus::Error);
+  EXPECT_FALSE(parser.finishParse());
+}
+
 TEST_F(ChapterHtmlSlimParserTest, RejectsSectionAfterGridCellArenaFailure) {
   ASSERT_TRUE(parser.tableRowCells.reserve(2));
   for (int i = 0; i < 2; ++i) {

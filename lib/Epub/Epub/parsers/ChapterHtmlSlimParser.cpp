@@ -1902,6 +1902,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                                            self->focusReadingEnabled, flowStyle);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
+      self->failLayout();
       return;
     }
     self->wordsExtractedInBlock = 0;
