@@ -2,6 +2,7 @@ _language_name: "Bahasa Indonesia"
 _language_code: "ID"
 _order: "30"
 _bcp47: "id"
+_iso639_2: "ind"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "MEMULAI"

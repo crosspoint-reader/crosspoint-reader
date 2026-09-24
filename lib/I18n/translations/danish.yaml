@@ -2,6 +2,7 @@ _language_name: "Dansk"
 _language_code: "DA"
 _order: "15"
 _bcp47: "da"
+_iso639_2: "dan"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "STARTER"

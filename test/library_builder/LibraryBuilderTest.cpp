@@ -10,12 +10,35 @@
 #include "Epub.h"
 #include "LibraryBuilder.h"
 #include "LibraryIndexFile.h"
+#include "LibraryText.h"
 
 using namespace library;
 
 namespace {
 
 constexpr char INDEX[] = "/.crosspoint/library.idx";
+
+// Stand-in for the tables the firmware generates from the translation files.
+constexpr const char* ARTICLE_TAGS[] = {"en", "it"};
+constexpr const char* EN_CODES[] = {"eng"};
+constexpr const char* IT_CODES[] = {"ita"};
+constexpr const char* EN_ARTICLES[] = {"the", "a", "an"};
+constexpr const char* IT_ARTICLES[] = {"il", "lo", "la", "l'", "gli", "i", "un"};
+constexpr LanguageCodes ARTICLE_CODES[] = {EN_CODES, IT_CODES};
+constexpr Articles ARTICLE_LISTS[] = {EN_ARTICLES, IT_ARTICLES};
+const ArticlesByLanguage ARTICLES{ARTICLE_TAGS, ARTICLE_CODES, ARTICLE_LISTS, 2, EN_ARTICLES};
+const ArticlesByLanguage ITALIAN_FALLBACK{ARTICLE_TAGS, ARTICLE_CODES, ARTICLE_LISTS, 2, IT_ARTICLES};
+
+std::string foldOf(LibraryIndexFile& index, const std::string& path) {
+  for (uint16_t ordinal = 0; ordinal < index.bookCount(); ordinal++) {
+    ClixRecord record{};
+    std::string recordPath;
+    if (index.readRecord(ordinal, record) && index.readPath(record, recordPath) && recordPath == path) {
+      return std::string(record.fold, record.foldLen);
+    }
+  }
+  return "<missing>";
+}
 
 std::string numbered(const char* prefix, const unsigned value) {
   char text[32];
@@ -43,7 +66,7 @@ class LibraryBuilderTest : public ::testing::Test {
     fake::add("/b.epub");
   }
 
-  void initial() { ASSERT_TRUE(buildLibraryIndex("/", stats, true)); }
+  void initial() { ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES)); }
 };
 
 }  // namespace
@@ -53,7 +76,7 @@ TEST_F(LibraryBuilderTest, UnchangedRebuildReusesMetadataAndDoesNotReplaceIndex)
   const auto old = fake::files[INDEX]->bytes;
   fake::parses = 0;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   EXPECT_EQ(fake::parses, 0u);
   EXPECT_EQ(stats.parsed, 0);
@@ -69,12 +92,12 @@ TEST_F(LibraryBuilderTest, FolderHeavyUnchangedReconciliationIoScalesLinearly) {
     for (unsigned i = 0; i < count; i++) {
       fake::add("/folder" + numbered("", i) + "/book.txt");
     }
-    if (!buildLibraryIndex("/", stats, false)) {
+    if (!buildLibraryIndex("/", stats, false, ARTICLES)) {
       ADD_FAILURE() << "initial build failed for " << count << " books";
       return 0u;
     }
     fake::resetIoCounters();
-    if (!buildLibraryIndex("/", stats, false)) {
+    if (!buildLibraryIndex("/", stats, false, ARTICLES)) {
       ADD_FAILURE() << "unchanged build failed for " << count << " books";
       return 0u;
     }
@@ -91,7 +114,7 @@ TEST_F(LibraryBuilderTest, FolderHeavyUnchangedReconciliationIoScalesLinearly) {
 TEST_F(LibraryBuilderTest, DirectoryEntriesAreEnumeratedOnce) {
   fake::add("/folder/c.txt");
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, ARTICLES));
 
   EXPECT_EQ(fake::directoryEntriesByPath["/a.epub"], 1u);
   EXPECT_EQ(fake::directoryEntriesByPath["/b.epub"], 1u);
@@ -105,7 +128,7 @@ TEST_F(LibraryBuilderTest, DirectoryResumeFailureRetainsPreviousIndex) {
   fake::add("/aa-folder/c.txt");
   fake::failDirectorySeek = true;
 
-  EXPECT_FALSE(buildLibraryIndex("/", stats, false));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, false, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
 }
 
@@ -113,7 +136,7 @@ TEST_F(LibraryBuilderTest, StagingAndIndexWritesAreBatched) {
   fake::reset();
   for (unsigned i = 0; i < 128; i++) fake::add("/book" + numbered("", i) + ".txt");
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, ARTICLES));
 
   EXPECT_LT(fake::writesByPath["/.crosspoint/library.stage"], 64u);
   EXPECT_LT(fake::writesByPath["/.crosspoint/library.new"], 32u);
@@ -123,7 +146,7 @@ TEST_F(LibraryBuilderTest, ParentDuplicateTrackingSurvivesDirectoryRecursion) {
   fake::add("/folder/c.txt");
   fake::duplicateDirectoryEntry("/a.epub");
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, ARTICLES));
 
   EXPECT_EQ(stats.books, 3);
   EXPECT_EQ(stats.duplicatesDropped, 1);
@@ -133,13 +156,13 @@ TEST_F(LibraryBuilderTest, TimestampAndSizeChangesParseOnlyTheChangedBook) {
   initial();
   fake::files["/a.epub"]->time++;
   fake::parses = 0;
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::parses, 1u);
   EXPECT_EQ(stats.metadataReused, 1);
 
   fake::files["/b.epub"]->bytes.push_back('x');
   fake::parses = 0;
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::parses, 1u);
   EXPECT_EQ(stats.metadataReused, 1);
 }
@@ -150,7 +173,7 @@ TEST_F(LibraryBuilderTest, ZeroTimestampAndFailedExtractionAreNeverFresh) {
   initial();
   fake::parses = 0;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   EXPECT_EQ(fake::parses, 2u);
   EXPECT_EQ(stats.metadataReused, 0);
@@ -161,15 +184,64 @@ TEST_F(LibraryBuilderTest, MetadataModeChangesInvalidateCachedMetadata) {
   initial();
   fake::parses = 0;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, ARTICLES));
   EXPECT_EQ(fake::parses, 0u);
   LibraryIndexFile index;
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(index.header().metadataEnabled, 0);
   index.close();
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::parses, 2u);
+}
+
+TEST_F(LibraryBuilderTest, TitleKeyUsesTheBooksOwnLanguage) {
+  bookMetadata["/a.epub"] = {"I Am Number Four", "Pittacus Lore", "en-US"};
+  bookMetadata["/b.epub"] = {"I promessi sposi", "Alessandro Manzoni", "it"};
+  fake::add("/c.epub");
+  bookMetadata["/c.epub"] = {"The Catcher in the Rye", "J. D. Salinger", "eng"};
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
+
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(foldOf(index, "/a.epub"), "i am number four");
+  EXPECT_EQ(foldOf(index, "/b.epub"), "promessi sposi");
+  EXPECT_EQ(foldOf(index, "/c.epub"), "catcher in the rye");
+  EXPECT_EQ(index.header().articlesId, articleConfigId(ARTICLES));
+}
+
+TEST_F(LibraryBuilderTest, UntaggedAndUnknownLanguagesUseTheFallbackList) {
+  bookMetadata["/a.epub"] = {"I Am Number Four", "Pittacus Lore", ""};
+  bookMetadata["/b.epub"] = {"I, Robot", "Isaac Asimov", "English"};
+  fake::add("/I promessi sposi.txt");
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(foldOf(index, "/a.epub"), "i am number four");
+  EXPECT_EQ(foldOf(index, "/b.epub"), "i robot");
+  EXPECT_EQ(foldOf(index, "/I promessi sposi.txt"), "i promessi sposi");
+  index.close();
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ITALIAN_FALLBACK));
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(foldOf(index, "/a.epub"), "am number four");
+  EXPECT_EQ(foldOf(index, "/b.epub"), "robot");
+  EXPECT_EQ(foldOf(index, "/I promessi sposi.txt"), "promessi sposi");
+}
+
+TEST_F(LibraryBuilderTest, ArticleChangesRefoldInsteadOfReusing) {
+  initial();
+  fake::parses = 0;
+
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ITALIAN_FALLBACK));
+
+  EXPECT_EQ(fake::parses, 2u);
+  EXPECT_EQ(stats.metadataReused, 0);
+  LibraryIndexFile index;
+  ASSERT_TRUE(index.open(INDEX));
+  EXPECT_EQ(index.header().articlesId, articleConfigId(ITALIAN_FALLBACK));
 }
 
 TEST_F(LibraryBuilderTest, RebuildVotesFromSourceAuthorInsteadOfPriorCanonicalAuthor) {
@@ -182,7 +254,7 @@ TEST_F(LibraryBuilderTest, RebuildVotesFromSourceAuthorInsteadOfPriorCanonicalAu
   ASSERT_TRUE(Storage.remove("/c.epub"));
   fake::parses = 0;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   EXPECT_EQ(fake::parses, 0u);
   LibraryIndexFile index;
@@ -203,7 +275,7 @@ TEST_F(LibraryBuilderTest, EqualBasenamesInDifferentFoldersReconcileIndependentl
   fake::files["/two/same.epub"]->time++;
   fake::parses = 0;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   EXPECT_EQ(fake::parses, 1u);
   EXPECT_EQ(stats.metadataReused, 3);
@@ -214,7 +286,7 @@ TEST_F(LibraryBuilderTest, ArrivalOrderFollowsModificationTimeOverDiscoveryOrder
   // with the newest, so file times, not walk or firstSeen order, decide.
   fake::add("/c.epub", "book c", /*time=*/0);
   fake::add("/d.epub", "book d", /*time=*/9);
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   LibraryIndexFile index;
   ASSERT_TRUE(index.open(INDEX));
@@ -228,7 +300,7 @@ TEST_F(LibraryBuilderTest, ArrivalOrderFollowsModificationTimeOverDiscoveryOrder
 TEST_F(LibraryBuilderTest, AddedRemovedMovedAndRenamedBooksKeepArrivalOrder) {
   initial();
   fake::add("/c.epub");
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   LibraryIndexFile index;
   ASSERT_TRUE(index.open(INDEX));
@@ -239,7 +311,7 @@ TEST_F(LibraryBuilderTest, AddedRemovedMovedAndRenamedBooksKeepArrivalOrder) {
 
   ASSERT_TRUE(Storage.remove("/b.epub"));
   ASSERT_TRUE(Storage.rename("/a.epub", "/moved.epub"));
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(stats.removed, 1);
   EXPECT_EQ(stats.renamed, 1);
   ASSERT_TRUE(index.open(INDEX));
@@ -248,7 +320,7 @@ TEST_F(LibraryBuilderTest, AddedRemovedMovedAndRenamedBooksKeepArrivalOrder) {
   index.close();
 
   ASSERT_TRUE(Storage.rename("/moved.epub", "/renamed.epub"));
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(stats.renamed, 1);
   ASSERT_TRUE(index.open(INDEX));
   EXPECT_EQ(pathAt(index, SortOrder::RecentAsc, 0), "/renamed.epub");
@@ -262,7 +334,7 @@ TEST_F(LibraryBuilderTest, WholeFolderRenameWithUniqueSizePreservesArrivalOrder)
   ASSERT_TRUE(Storage.rename("/old/unique.epub", "/new/unique.epub"));
   fake::parses = 0;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
 
   EXPECT_EQ(stats.renamed, 1);
   EXPECT_EQ(stats.removed, 0);
@@ -274,7 +346,7 @@ TEST_F(LibraryBuilderTest, WholeFolderRenameWithUniqueSizePreservesArrivalOrder)
 
 TEST_F(LibraryBuilderTest, DuplicateDetectionRemainsBoundedAndFindsTrackedKeysAfterTheCap) {
   fake::duplicateDirectoryEntry("/a.epub");
-  ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(stats.books, 2);
   EXPECT_EQ(stats.duplicatesDropped, 1);
   EXPECT_FALSE(stats.dedupDegraded);
@@ -285,7 +357,7 @@ TEST_F(LibraryBuilderTest, DuplicateDetectionRemainsBoundedAndFindsTrackedKeysAf
     fake::add("/book" + numbered("", i) + ".txt");
   }
   fake::duplicateDirectoryEntry("/book0000.txt");
-  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, ARTICLES));
   EXPECT_EQ(stats.books, LIBRARY_MAX_DEDUP_KEYS + 1);
   EXPECT_EQ(stats.duplicatesDropped, 1);
   EXPECT_TRUE(stats.dedupDegraded);
@@ -297,31 +369,31 @@ TEST_F(LibraryBuilderTest, ReadWriteCloseAndAllocationFailuresRetainPreviousInde
   const auto old = fake::files[INDEX]->bytes;
 
   fake::failRead = 0;
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
   fake::failRead = -1;
 
   fake::files["/a.epub"]->time++;
   fake::failWrite = 0;
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
   fake::failWrite = -1;
 
   fake::failWritePath = "/.crosspoint/library.new";
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
 
   fake::failClosePath = "/.crosspoint/library.new";
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
 
   fake::failAlloc = 3;
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
   fake::failAlloc = -1;
 
   fake::failRename = 1;
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, old);
 }
 
@@ -336,7 +408,7 @@ TEST_F(LibraryBuilderTest, TruncatedPersistedPathHashAbortsAndRetainsTheLiveInde
   std::memcpy(bytes.data() + recordOffset(header, 0), &record, sizeof(record));
   const auto corrupted = bytes;
 
-  EXPECT_FALSE(buildLibraryIndex("/", stats, true));
+  EXPECT_FALSE(buildLibraryIndex("/", stats, true, ARTICLES));
   EXPECT_EQ(fake::files[INDEX]->bytes, corrupted);
   EXPECT_FALSE(Storage.exists("/.crosspoint/library.stage"));
   EXPECT_FALSE(Storage.exists("/.crosspoint/library.stage.f"));
@@ -355,7 +427,7 @@ TEST_F(LibraryBuilderTest, LibrariesPastOldGateAndAtFormatCeilingKeepAllOrders) 
       bookMetadata[path].author = numbered("Writer ", (i * (count == 513 ? 257u : 2053u)) % count);
     }
 
-    ASSERT_TRUE(buildLibraryIndex("/", stats, true)) << count;
+    ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES)) << count;
     ASSERT_EQ(stats.books, count);
     EXPECT_FALSE(stats.ranksDegraded);
 
@@ -363,7 +435,7 @@ TEST_F(LibraryBuilderTest, LibrariesPastOldGateAndAtFormatCeilingKeepAllOrders) 
       const auto old = fake::files[INDEX]->bytes;
       fake::parses = 0;
       fake::resetIoCounters();
-      ASSERT_TRUE(buildLibraryIndex("/", stats, true));
+      ASSERT_TRUE(buildLibraryIndex("/", stats, true, ARTICLES));
       EXPECT_EQ(fake::parses, 0u);
       EXPECT_EQ(stats.metadataReused, CLIX_MAX_RECORDS);
       EXPECT_FALSE(stats.indexReplaced);
@@ -391,7 +463,7 @@ TEST_F(LibraryBuilderTest, SortAllocationFailureProducesValidDegradedIndex) {
   for (unsigned i = 0; i < 513; i++) fake::add("/book" + numbered("", i) + ".txt");
   fake::failAlloc = 6;
 
-  ASSERT_TRUE(buildLibraryIndex("/", stats, false));
+  ASSERT_TRUE(buildLibraryIndex("/", stats, false, ARTICLES));
   EXPECT_TRUE(fake::failureTriggered);
   EXPECT_TRUE(stats.ranksDegraded);
   EXPECT_TRUE(stats.indexReplaced);

@@ -2,6 +2,7 @@ _language_name: "Tiếng Việt"
 _language_code: "VI"
 _order: "25"
 _bcp47: "vi"
+_iso639_2: "vie"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ĐANG KHỞI ĐỘNG"

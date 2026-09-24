@@ -2,6 +2,7 @@ _language_name: "Български"
 _language_code: "BG"
 _order: "31"
 _bcp47: "bg"
+_iso639_2: "bul"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ЗАРЕЖДАНЕ"

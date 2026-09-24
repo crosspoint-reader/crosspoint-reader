@@ -2,6 +2,8 @@ _language_name: "Français"
 _language_code: "FR"
 _order: "2"
 _bcp47: "fr"
+_iso639_2: "fre fra"
+_articles: "le la les l' un une du des"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "DÉMARRAGE EN COURS"

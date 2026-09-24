@@ -2,6 +2,7 @@ _language_name: "עברית"
 _language_code: "HE"
 _order: "23"
 _bcp47: "he"
+_iso639_2: "heb"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "מפעיל..."

@@ -47,7 +47,9 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
-  bool loadMetadata(std::string& title, std::string& author);
+  // Package metadata only (title, author, language): the existing cache when
+  // there is one, else the OPF parsed up to </metadata>.
+  bool loadMetadata(BookMetadataCache::BookMetadata& out);
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

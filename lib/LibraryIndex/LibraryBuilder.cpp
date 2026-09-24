@@ -257,6 +257,8 @@ struct WalkState {
   bool dedupDegraded = false;
   bool failed = false;
   bool readMetadata = false;
+  const ArticlesByLanguage* articles = nullptr;
+  uint32_t articlesId = 0;
   LibraryIndexFile* previous = nullptr;
   BuildStats* stats = nullptr;
   uint16_t enriched = 0;
@@ -299,6 +301,7 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   // and a name pulled out of one by pattern is a guess wearing a fact's clothes.
   std::string title = stemOf(name);
   std::string author;
+  std::string language;
   bool titleFromBook = false;
   bool authorFromBook = false;
 
@@ -317,7 +320,8 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
     reuseMetadata =
         st.prior[priorIndex].fileSize == fileSize && modificationTime != 0 &&
         priorRecord.modificationTime == modificationTime && st.previous->header().foldVersion == CLIX_FOLD_VERSION &&
-        st.previous->header().metadataEnabled == st.readMetadata && priorRecord.metadataStatus == expectedStatus;
+        st.previous->header().articlesId == st.articlesId && st.previous->header().metadataEnabled == st.readMetadata &&
+        priorRecord.metadataStatus == expectedStatus;
   }
 
   if (reuseMetadata) {
@@ -346,14 +350,16 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
   if (!reuseMetadata && extractionExpected) {
     st.stats->parsed++;
     Epub epub(fullPath, CACHE_DIR);
-    std::string bookTitle;
-    if (epub.loadMetadata(bookTitle, author)) {
+    BookMetadataCache::BookMetadata book;
+    if (epub.loadMetadata(book)) {
       entry.record.metadataStatus = CLIX_METADATA_EXTRACTED;
-      if (!bookTitle.empty()) {
-        title = std::move(bookTitle);
+      if (!book.title.empty()) {
+        title = std::move(book.title);
         titleFromBook = true;
       }
+      author = std::move(book.author);
       authorFromBook = !author.empty();
+      language = std::move(book.language);
     } else {
       entry.record.metadataStatus = CLIX_METADATA_FAILED;
     }
@@ -370,9 +376,16 @@ int findPrior(WalkState& st, const uint64_t pathHash) {
 
   if (titleFromBook || authorFromBook) st.enriched++;
 
+  // Only the book's own language says which leading word is an article: "I" is
+  // one in Italian and a pronoun in English. A book that names no language, and
+  // every non-EPUB, takes the fallback list.
+  std::string folded;
+  if (!reuseMetadata) {
+    folded = fold(title);
+    stripLeadingArticle(folded, articlesForLanguage(language, *st.articles));
+  }
   // An absent author is a fact, not a gap to fill: the row joins the Unknown
   // group rather than borrowing a name from its surroundings.
-  const std::string folded = reuseMetadata ? std::string() : fold(title, true);
   const std::string key = reuseMetadata ? std::string() : authorKey(author);
 
   entry.record.fileSize = fileSize;
@@ -572,6 +585,7 @@ bool emitIndex(const char* folderStagePath, WalkState& st, const uint16_t* order
   header.folderCount = st.folderId;
   header.nextFirstSeen = st.nextFirstSeen;
   header.metadataEnabled = st.readMetadata;
+  header.articlesId = st.articlesId;
   // Placeholder only. Degradations are known after the sorts have run.
   header.flags = 0;
   // The blob is the LAST section, so its size affects only selfSize — every
@@ -1061,7 +1075,8 @@ bool markLibraryIndexDirty() {
 
 bool isLibraryIndexDirty() { return dirtyInMemory || Storage.exists(DIRTY_PATH); }
 
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata) {
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readMetadata,
+                       const ArticlesByLanguage& articles) {
   const uint32_t startMs = millis();
   uint32_t serviceUnits = 0;
   stats = BuildStats{};
@@ -1140,6 +1155,8 @@ bool buildLibraryIndex(const char* rootPath, BuildStats& stats, const bool readM
   st.prior = priorList.get();
   st.priorCount = priorList ? priorCount : 0;
   st.readMetadata = readMetadata;
+  st.articles = &articles;
+  st.articlesId = articleConfigId(articles);
   st.previous = previous.isOpen() ? &previous : nullptr;
   st.stats = &stats;
 

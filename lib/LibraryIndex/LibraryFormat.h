@@ -30,9 +30,9 @@ inline constexpr char CLIX_MAGIC[4] = {'C', 'L', 'X', '1'};
 // validation and is rebuilt. No previous development format is accepted.
 inline constexpr uint8_t CLIX_FORMAT_VERSION = 2;
 
-// Bump when the fold, the article table, or a permutation's sort key changes.
-// Forces fold and ranks to be rebuilt while firstSeen values are preserved, so
-// arrival history survives.
+// Bump when the fold or a permutation's sort key changes. Forces fold and ranks
+// to be rebuilt while firstSeen values are preserved, so arrival history
+// survives. Article lists are data, not code: ClixHeader::articlesId tracks them.
 inline constexpr uint8_t CLIX_FOLD_VERSION = 3;
 
 inline constexpr uint32_t CLIX_ALIGN = 512;
@@ -87,7 +87,11 @@ struct ClixHeader {
   // Expected total file size. Comparing it with the real size is a free
   // truncation guard: a build interrupted by a power cut cannot pass.
   uint32_t selfSize;
-  uint8_t reserved[20];
+  // articleConfigId() of the article lists the folds were built with. A
+  // different value (0 in an index older than the field) means every title's
+  // sort key must be rebuilt, as a fold version change does.
+  uint32_t articlesId;
+  uint8_t reserved[16];
 };
 static_assert(sizeof(ClixHeader) == 64, "ClixHeader must be exactly 64 bytes");
 

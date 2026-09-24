@@ -2,6 +2,7 @@ _language_name: "Čeština"
 _language_code: "CS"
 _order: "4"
 _bcp47: "cs"
+_iso639_2: "cze ces"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "SPUŠTĚNÍ"

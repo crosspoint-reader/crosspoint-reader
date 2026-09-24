@@ -198,4 +198,6 @@ TEST(LibraryFormat, ByteImageIsStableAcrossBuilds) {
   EXPECT_EQ(offsetof(ClixHeader, bookCount), 8u);
   EXPECT_EQ(offsetof(ClixHeader, folderStart), 16u);
   EXPECT_EQ(offsetof(ClixHeader, selfSize), 40u);
+  // Taken from the old reserved bytes, which were always written as zero.
+  EXPECT_EQ(offsetof(ClixHeader, articlesId), 44u);
 }

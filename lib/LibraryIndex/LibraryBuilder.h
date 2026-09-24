@@ -26,6 +26,8 @@
 
 namespace library {
 
+struct ArticlesByLanguage;
+
 // Directory levels below the scan root that are walked. The measured corpus is
 // two deep (genre/author/book); the cap exists because a corrupted FAT can
 // contain a directory that contains itself — also measured on the same card —
@@ -65,7 +67,10 @@ struct BuildStats {
 // book over its filename. It reads an existing cache when available; otherwise
 // it stops the normal EPUB parser at the end of <metadata>, before the manifest,
 // without building the reader's spine, TOC, CSS, or section caches.
-bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata = false);
+// `articles` decides which leading word of each title the sort skips; its
+// articleConfigId() goes into the header, and books folded under a different
+// one are refolded rather than reused.
+bool buildLibraryIndex(const char* rootPath, BuildStats& stats, bool readMetadata, const ArticlesByLanguage& articles);
 
 // Live index path, shared by the builder and activity.
 const char* libraryIndexPath();

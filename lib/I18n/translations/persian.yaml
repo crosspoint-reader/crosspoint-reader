@@ -2,6 +2,7 @@ _language_name: "فارسی"
 _language_code: "FA"
 _order: "35"
 _bcp47: "fa"
+_iso639_2: "per fas"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "در حال راه‌اندازی"

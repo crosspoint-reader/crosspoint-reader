@@ -2,6 +2,7 @@ _language_name: "Suomi"
 _language_code: "FI"
 _order: "14"
 _bcp47: "fi"
+_iso639_2: "fin"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "KÄYNNISTYY"

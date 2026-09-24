@@ -593,14 +593,12 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   return true;
 }
 
-bool Epub::loadMetadata(std::string& title, std::string& author) {
-  title.clear();
-  author.clear();
+bool Epub::loadMetadata(BookMetadataCache::BookMetadata& out) {
+  out = BookMetadataCache::BookMetadata{};
 
   auto metadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   if (metadataCache && metadataCache->load()) {
-    title = metadataCache->coreMetadata.title;
-    author = metadataCache->coreMetadata.author;
+    out = metadataCache->coreMetadata;
     return true;
   }
   if (!metadataCache) {
@@ -614,14 +612,9 @@ bool Epub::loadMetadata(std::string& title, std::string& author) {
     return false;
   }
 
-  BookMetadataCache::BookMetadata metadata;
-  const bool loaded = parseContentOpf(metadata, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
+  const bool loaded = parseContentOpf(out, /*writeSpineEntries=*/false, /*metadataOnly=*/true, &zip);
   zip.close();
-  if (!loaded) return false;
-
-  title = std::move(metadata.title);
-  author = std::move(metadata.author);
-  return true;
+  return loaded;
 }
 
 bool Epub::clearCache() const {

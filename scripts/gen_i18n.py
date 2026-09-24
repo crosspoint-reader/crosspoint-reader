@@ -14,6 +14,14 @@ Each YAML file must contain:
   _bcp47: "tag"                     (e.g. "es"; drives Language enum order)
   STR_KEY: "translation text"
 
+and, when _bcp47 starts with a two-letter code, also:
+  _iso639_2: "codes"                (e.g. "ger deu"; the three-letter codes
+                                     some books use for this language)
+
+and may contain:
+  _articles: "words"                (e.g. "el la los las un"; leading articles
+                                     the Library skips when sorting titles)
+
 The English file is the reference. Missing keys in other languages are
 automatically filled from English, with a warning.
 
@@ -44,6 +52,11 @@ I18N_NAMESPACE_CLOSE = "}  // namespace i18n_strings"
 YAML_KEY_RE = re.compile(r'^([A-Za-z_]\w*)\s*:\s*"(.*)"$', flags=re.ASCII)
 CPP_IDENTIFIER_RE = re.compile(r"^[A-Za-z_]\w*$", flags=re.ASCII)
 STR_KEY_RE = re.compile(r"\bSTR_\w+\b", flags=re.ASCII)
+# Articles are matched against folded titles (lowercase ASCII, accents
+# stripped), so they must be written in that form. An elided article ends in
+# an apostrophe and is matched without a following space ("l'").
+ARTICLE_RE = re.compile(r"^[a-z]+'?$", flags=re.ASCII)
+ISO639_2_RE = re.compile(r"^[a-z]{3}$", flags=re.ASCII)
 
 
 # ---------------------------------------------------------------------------
@@ -120,17 +133,57 @@ def parse_yaml_file(filepath: str) -> Dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
+def parse_articles(value: str, fname: str) -> str:
+    """Validate an _articles value and return it single-space separated."""
+    words = value.split()
+    for word in words:
+        if not ARTICLE_RE.match(word):
+            raise ValueError(
+                f"{fname}: bad _articles entry {word!r}; "
+                "write articles lowercase, without accents, e.g. \"the a an\" or \"l'\""
+            )
+    if len(set(words)) != len(words):
+        raise ValueError(f"{fname}: duplicate word in _articles")
+    return " ".join(words)
+
+
+def parse_iso639_2(value: str, bcp47: str, fname: str) -> str:
+    """Validate an _iso639_2 value and return it single-space separated.
+
+    Required whenever the language's own tag uses a two-letter code, since every
+    such language also has a three-letter one that books may use instead.
+    """
+    codes = value.split()
+    for code in codes:
+        if not ISO639_2_RE.match(code):
+            raise ValueError(f"{fname}: bad _iso639_2 entry {code!r}; expected three lowercase letters")
+    if not codes and len(re.split(r"[-_]", bcp47)[0]) == 2:
+        raise ValueError(f"{fname}: missing _iso639_2 (the ISO 639-2 code(s) for {bcp47!r}, e.g. \"ger deu\")")
+    return " ".join(codes)
+
+
 def load_translations(
     translations_dir: str,
     verbose: bool = False,
-) -> Tuple[List[str], List[str], List[str], List[str], Dict[str, List[str]], List[Set[str]]]:
+) -> Tuple[
+    List[str],
+    List[str],
+    List[str],
+    List[str],
+    List[str],
+    List[str],
+    Dict[str, List[str]],
+    List[Set[str]],
+]:
     """
     Read every YAML file in *translations_dir* and return:
-        language_codes   e.g. ["EN", "ES", ...]
-        language_names   e.g. ["English", "Español", ...]
-        language_bcp47   e.g. ["en", "es", ...]
-        string_keys      ordered list of STR_* keys (from English)
-        translations     {key: [translation_per_language]}
+        language_codes     e.g. ["EN", "ES", ...]
+        language_names     e.g. ["English", "Español", ...]
+        language_bcp47     e.g. ["en", "es", ...]
+        language_iso639_2  e.g. ["eng", "spa", ...]
+        language_articles  e.g. ["the a an", "el la los las un", ...]; "" when none
+        string_keys        ordered list of STR_* keys (from English)
+        translations       {key: [translation_per_language]}
 
     English is always first; the rest are sorted by _bcp47.
     """
@@ -202,6 +255,8 @@ def load_translations(
     language_codes: List[str] = []
     language_names: List[str] = []
     language_bcp47: List[str] = []
+    language_iso639_2: List[str] = []
+    language_articles: List[str] = []
     for fname in ordered_files:
         data = parsed[fname]
         code = data.get("_language_code")
@@ -211,6 +266,8 @@ def load_translations(
         language_codes.append(code)
         language_names.append(name)
         language_bcp47.append(data["_bcp47"])
+        language_iso639_2.append(parse_iso639_2(data.get("_iso639_2", ""), data["_bcp47"], fname))
+        language_articles.append(parse_articles(data.get("_articles", ""), fname))
 
     # String keys come from English (order matters)
     english_data = parsed[english_file]
@@ -254,7 +311,16 @@ def load_translations(
 
     if verbose:
         print(f"Loaded {len(language_codes)} languages, {len(string_keys)} string keys")
-    return language_codes, language_names, language_bcp47, string_keys, translations, inherited_sets
+    return (
+        language_codes,
+        language_names,
+        language_bcp47,
+        language_iso639_2,
+        language_articles,
+        string_keys,
+        translations,
+        inherited_sets,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -468,6 +534,7 @@ def generate_keys_header(
     lines: List[str] = [
         "#pragma once",
         "#include <cstdint>",
+        "#include <span>",
         "",
         AUTO_GENERATED_COMMENT,
         CLANG_FORMAT_OFF_COMMENT,
@@ -503,6 +570,16 @@ def generate_keys_header(
     lines.append("")
     lines.append("// Character sets for each language (defined in I18nStrings.cpp)")
     lines.append("extern const char* const CHARACTER_SETS[];")
+    lines.append("")
+    lines.append("// BCP 47 tag for each language (defined in I18nStrings.cpp)")
+    lines.append("extern const char* const LANGUAGE_BCP47[];")
+    lines.append("")
+    lines.append("// ISO 639-2 codes for each language (defined in I18nStrings.cpp)")
+    lines.append("extern const std::span<const char* const> LANGUAGE_ISO639_2[];")
+    lines.append("")
+    lines.append("// Leading articles skipped when sorting titles, already folded; empty for a")
+    lines.append("// language with none (defined in I18nStrings.cpp)")
+    lines.append("extern const std::span<const char* const> LANGUAGE_ARTICLES[];")
     lines.append("")
 
     # StrId enum
@@ -623,6 +700,9 @@ def generate_strings_header(
 def generate_strings_cpp(
     languages: List[str],
     language_names: List[str],
+    language_bcp47: List[str],
+    language_iso639_2: List[str],
+    language_articles: List[str],
     string_keys: List[str],
     translations: Dict[str, List[str]],
     output_path: str,
@@ -666,6 +746,21 @@ def generate_strings_cpp(
         _append_string_entry(lines, charset, comment=name)
     lines.append("};")
     lines.append("")
+
+    # LANGUAGE_BCP47, LANGUAGE_ISO639_2 and LANGUAGE_ARTICLES arrays. Every
+    # language is listed, built in or not: a book's language has nothing to do
+    # with the UI's.
+    lines.append("// BCP 47 tags")
+    lines.append("const char* const LANGUAGE_BCP47[] = {")
+    for tag in language_bcp47:
+        _append_string_entry(lines, tag)
+    lines.append("};")
+    lines.append("")
+
+    _append_word_lists(lines, "ISO 639-2 codes", "LANGUAGE_ISO639_2", "ISO639_2", languages, language_iso639_2)
+    _append_word_lists(
+        lines, "Leading articles skipped when sorting titles", "LANGUAGE_ARTICLES", "ARTICLES", languages, language_articles
+    )
 
     # Per-language flat string blobs and offset tables.
     # Non-English languages skip strings identical to English; their offset
@@ -828,6 +923,27 @@ def _append_string_data_entry(lines: List[str], text: str) -> None:
     lines.extend(format_cpp_string_literal(segments))
 
 
+def _append_word_lists(
+    lines: List[str], title: str, table: str, prefix: str, languages: List[str], values: List[str]
+) -> None:
+    """Emit one word array per language and a table of spans over them.
+
+    Values were validated by parse_articles/parse_iso639_2 (lowercase ASCII and
+    apostrophes only), so the words need no escaping. C++ has no zero-length
+    arrays, so a language without words gets an empty span instead.
+    """
+    lines.append(f"// {title}")
+    for code, value in zip(languages, values):
+        if value:
+            words = ", ".join(f'"{word}"' for word in value.split())
+            lines.append(f"static const char* const {prefix}_{code}[] = {{{words}}};")
+    lines.append(f"const std::span<const char* const> {table}[] = {{")
+    for code, value in zip(languages, values):
+        lines.append(f"    {prefix}_{code}," if value else "    {},")
+    lines.append("};")
+    lines.append("")
+
+
 def _append_string_entry(lines: List[str], text: str, comment: str = "") -> None:
     """Escape *text*, format as indented C++ lines, append comma (and optional comment)."""
     segments = escape_cpp_string(text)
@@ -910,9 +1026,16 @@ def main(
         print()
 
     try:
-        languages, language_names, language_bcp47, string_keys, translations, inherited_sets = (
-            load_translations(translations_dir, verbose)
-        )
+        (
+            languages,
+            language_names,
+            language_bcp47,
+            language_iso639_2,
+            language_articles,
+            string_keys,
+            translations,
+            inherited_sets,
+        ) = load_translations(translations_dir, verbose)
         builtin = parse_builtin_langs(builtin_langs, languages)
 
         # --- Unused-string detection ---
@@ -993,6 +1116,9 @@ def main(
         generate_strings_cpp(
             languages,
             language_names,
+            language_bcp47,
+            language_iso639_2,
+            language_articles,
             string_keys,
             translations,
             str(out / "I18nStrings.cpp"),

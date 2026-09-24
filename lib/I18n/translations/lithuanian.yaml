@@ -2,6 +2,7 @@ _language_name: "Lietuvių"
 _language_code: "LT"
 _order: "20"
 _bcp47: "lt"
+_iso639_2: "lit"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "KRAUNASI"

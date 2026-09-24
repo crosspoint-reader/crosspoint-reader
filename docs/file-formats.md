@@ -432,8 +432,8 @@ Sections are 512-byte aligned so each starts on an SD block boundary.
 A fixed stride is what lets the reader seek straight to record *n* without an
 offset table, and read a screenful in one 4 KB block. `static_assert` enforces it.
 
-Each record carries `fold[96]`, the title normalised for search and sorting —
-accents stripped, case dropped, leading articles removed — and `authorKey[12]`,
+Each record carries `fold[96]`, the title normalised for sorting —
+accents stripped, case dropped, leading article removed — and `authorKey[12]`,
 the author's words folded and sorted so that "Victor Hugo" and "Hugo Victor" group as
 one person. `authorKey` is a GROUPING key, not an ordering one: the shelf orders by
 surname, derived separately from the display name.
@@ -444,9 +444,21 @@ modification date and time returned by SdFat. A zero timestamp is not trusted.
 These fields occupy the alignment and reserved bytes from version 1, so the
 record remains exactly 128 bytes.
 
+The leading article is removed in the book's own language: its `dc:language`,
+by `_bcp47` or `_iso639_2` code, picks one of the `_articles` lists from the
+translation files (`docs/i18n.md`), so "I Am Number Four" keeps its "I" in
+English while "I promessi sposi" loses it in Italian. A book whose language is
+missing or matches no translation file, and every non-EPUB, uses the UI
+language's list, or English's when the UI language has none.
+
 The header records whether EPUB metadata extraction was enabled for the build.
 This prevents a metadata-disabled rebuild from making filename fallbacks look
-fresh to a later metadata-enabled build.
+fresh to a later metadata-enabled build. It also records `articlesId` (bytes
+44-47, formerly reserved and always zero): a hash of every language's codes,
+article list and the fallback list. When it differs from the running firmware's, as it
+does after a change of UI language, an edit to `_articles`, or on an index
+written before the field existed, the Library rebuilds and every title is
+folded again.
 
 ### The name blob
 
@@ -472,7 +484,8 @@ display reads still stop at the author or title fields and retain their offsets.
 
 Reconciliation treats the persisted 64-bit complete-path fingerprint as the
 book identity. Metadata is reused only when the fingerprint, size, nonzero FAT
-timestamp, fold version, metadata mode, and expected extraction status agree.
+timestamp, fold version, `articlesId`, metadata mode, and expected extraction
+status agree.
 EPUBs with a zero timestamp or a previous extraction failure are parsed again.
 
 If every current record reuses metadata, the old and new counts agree, and no

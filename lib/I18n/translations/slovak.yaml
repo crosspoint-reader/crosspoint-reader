@@ -2,6 +2,7 @@ _language_name: "Slovenčina"
 _language_code: "SK"
 _order: "24"
 _bcp47: "sk"
+_iso639_2: "slo slk"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "SPÚŠŤANIE"
