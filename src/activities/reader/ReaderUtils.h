@@ -33,7 +33,8 @@ inline bool isRtlBookLanguage(std::string_view tag) {
   if (tag.size() < 2 || (tag.size() > 2 && tag[2] != '-' && tag[2] != '_')) return false;
   const auto first = std::tolower(static_cast<unsigned char>(tag[0]));
   const auto second = std::tolower(static_cast<unsigned char>(tag[1]));
-  return (first == 'h' && second == 'e') || (first == 'a' && second == 'r') || (first == 'f' && second == 'a');
+  return (first == 'h' && second == 'e') || (first == 'i' && second == 'w') || (first == 'a' && second == 'r') ||
+         (first == 'f' && second == 'a');
 }
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
