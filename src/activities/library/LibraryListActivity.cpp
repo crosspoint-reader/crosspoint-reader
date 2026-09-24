@@ -303,6 +303,18 @@ void LibraryListActivity::showRecentBookOptions(const int entry) {
   requestUpdate();
 }
 
+#if FREEINK_CAP_TOUCH
+void LibraryListActivity::swipeDelete(const int entry) {
+  activeNav().selected = entry + 1;
+  if (isRecentSort(sortOrder) && entry < pinnedCount()) {
+    const auto& book = RECENT_BOOKS.getBooks()[static_cast<size_t>(entry)];
+    promptDeleteBookByPath(book.path, book.title);
+  } else {
+    promptDeleteBook(entry);
+  }
+}
+#endif
+
 // Manual index refresh, same card discipline as the onEnter rebuild: the walk
 // wants the card to itself, and the render task must not read the index (or
 // the filter) around it.
@@ -455,6 +467,9 @@ void LibraryListActivity::onTabAction(const int index) {
 }
 
 void LibraryListActivity::selectTab(const int index, const bool toggleIfActive) {
+#if FREEINK_CAP_TOUCH
+  closeSwipeDelete();
+#endif
   if (index < 0 || index >= TAB_SLOTS) return;
   if (toggleIfActive && index == activeTab()) descendingTabs ^= static_cast<uint8_t>(1u << index);
   sortOrder = orderForTab(index, descendingTabs);
@@ -866,6 +881,9 @@ void LibraryListActivity::buildRows(UiScreen& screen) {
   props.items = winItems.data();
   props.itemsWindowFirst = static_cast<uint16_t>(windowStart);
   props.itemsWindowCount = static_cast<uint16_t>(winItems.size());
+#if FREEINK_CAP_TOUCH
+  configureSwipeDelete(screen, props);
+#endif
   screen.list(props);
   const int next = nav.drawnRows;
   const auto body = screen.body();
