@@ -260,6 +260,9 @@ void stripLeadingArticle(std::string& folded, const Articles articles) {
     if (folded.size() <= lenToStrip || folded.compare(0, article.size(), article) != 0) continue;
     if (!elided && folded[article.size()] != ' ') continue;
     folded.erase(0, lenToStrip);
+    // An elided article can still be followed by a space ("L' Étranger");
+    // left in, it would sort the title before every letter.
+    if (!folded.empty() && folded.front() == ' ') folded.erase(0, 1);
     return;
   }
 }

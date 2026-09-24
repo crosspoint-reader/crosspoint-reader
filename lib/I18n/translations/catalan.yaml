@@ -3,7 +3,7 @@ _language_code: "CA"
 _order: "9"
 _bcp47: "ca"
 _iso639_2: "cat"
-_articles: "el la les l' un"
+_articles: "el els la les l' un una uns unes"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "ARRENCANT"

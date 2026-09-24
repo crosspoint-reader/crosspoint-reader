@@ -111,8 +111,8 @@ namespace {
 constexpr const char* EN_ARTICLES[] = {"the", "a", "an"};
 constexpr const char* FR_ARTICLES[] = {"le", "la", "les", "l'", "un", "une", "du", "des"};
 constexpr const char* DE_ARTICLES[] = {"der", "die", "das"};
-constexpr const char* IT_ARTICLES[] = {"il", "lo", "la", "l'", "gli", "i", "un"};
-constexpr const char* PT_ARTICLES[] = {"o", "os", "a"};
+constexpr const char* IT_ARTICLES[] = {"il", "lo", "la", "l'", "i", "gli", "le", "un", "uno", "una", "un'"};
+constexpr const char* PT_ARTICLES[] = {"o", "os", "a", "as", "um", "uma", "uns", "umas"};
 constexpr library::Articles NO_ARTICLES{};
 
 // std::span has no ==; the same list is the same array.
@@ -161,6 +161,12 @@ TEST(LibraryArticles, EachLanguageStripsItsOwn) {
   EXPECT_EQ(sortKey("Die Verwandlung", DE_ARTICLES), "verwandlung");
   EXPECT_EQ(sortKey("I promessi sposi", IT_ARTICLES), "promessi sposi");
   EXPECT_EQ(sortKey("L'amica geniale", IT_ARTICLES), "amica geniale");
+  // "un" is tried before "una" and "un'", and must not match the start of either.
+  EXPECT_EQ(sortKey("Una storia semplice", IT_ARTICLES), "storia semplice");
+  EXPECT_EQ(sortKey("Un'estate fa", IT_ARTICLES), "estate fa");
+  // A space after an elided article goes with it, or the key would start with
+  // a space and sort before every letter.
+  EXPECT_EQ(sortKey("L' \xC3\x89tranger", FR_ARTICLES), "etranger");
   EXPECT_EQ(sortKey("The Hobbit", NO_ARTICLES), "the hobbit");
 }
 

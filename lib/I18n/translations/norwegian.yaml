@@ -3,6 +3,7 @@ _language_code: "NB"
 _order: "26"
 _bcp47: "nb"
 _iso639_2: "nob"
+_articles: "en ei et"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "STARTER"

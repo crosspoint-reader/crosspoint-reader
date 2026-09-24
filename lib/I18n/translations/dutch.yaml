@@ -3,7 +3,7 @@ _language_code: "NL"
 _order: "16"
 _bcp47: "nl"
 _iso639_2: "dut nld"
-_articles: "de"
+_articles: "de het een"
 
 STR_CROSSPOINT: "CrossPoint"
 STR_BOOTING: "OPSTARTEN"

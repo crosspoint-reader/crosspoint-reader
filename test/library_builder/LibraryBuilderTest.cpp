@@ -23,7 +23,7 @@ constexpr const char* ARTICLE_TAGS[] = {"en", "it"};
 constexpr const char* EN_CODES[] = {"eng"};
 constexpr const char* IT_CODES[] = {"ita"};
 constexpr const char* EN_ARTICLES[] = {"the", "a", "an"};
-constexpr const char* IT_ARTICLES[] = {"il", "lo", "la", "l'", "gli", "i", "un"};
+constexpr const char* IT_ARTICLES[] = {"il", "lo", "la", "l'", "i", "gli", "le", "un", "uno", "una", "un'"};
 constexpr LanguageCodes ARTICLE_CODES[] = {EN_CODES, IT_CODES};
 constexpr Articles ARTICLE_LISTS[] = {EN_ARTICLES, IT_ARTICLES};
 const ArticlesByLanguage ARTICLES{ARTICLE_TAGS, ARTICLE_CODES, ARTICLE_LISTS, 2, EN_ARTICLES};
