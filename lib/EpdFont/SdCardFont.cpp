@@ -861,6 +861,18 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
   }
   if (cpBudget == 0) return -1;
 
+  // Place resident tables before the temporary codepoint buffer.
+  uint8_t loadedKernLigMask = 0;
+  if (!metadataOnly && loadKernLig) {
+    for (uint8_t si = 0; si < MAX_STYLES; si++) {
+      auto& s = styles_[si];
+      if (!(styleMask & (1 << si)) || !s.present || s.kernLigLoaded) continue;
+      if (loadStyleKernLigatureData(s) && (s.kernLeftClasses || s.ligaturePairs)) {
+        loadedKernLigMask |= static_cast<uint8_t>(1 << si);
+      }
+    }
+  }
+
   // Step 1: Extract unique codepoints from the UTF-8 texts (shared across all styles).
   // Dedup uses O(n^2) linear scan — worst case is MAX_PAGE_GLYPHS (512) unique codepoints
   // = ~131K comparisons, but in practice pages contain far fewer unique codepoints so the
@@ -868,6 +880,14 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
   // set, bitmap) exceed the 256-byte stack limit or add template bloat.
   // Heap-allocated: MAX_PAGE_GLYPHS * 4 = 2048 bytes, too large for stack (limit < 256 bytes)
   std::unique_ptr<uint32_t[]> codepoints(new (std::nothrow) uint32_t[MAX_PAGE_GLYPHS]);
+  if (!codepoints && loadedKernLigMask != 0) {
+    // Prioritize glyph loading if the newly loaded tables leave no room for scratch.
+    for (uint8_t si = 0; si < MAX_STYLES; si++) {
+      if (loadedKernLigMask & (1 << si)) freeStyleKernLigatureData(styles_[si]);
+    }
+    LOG_DBG("SDCF", "Retrying codepoint buffer after kern/lig release");
+    codepoints = makeUniqueNoThrow<uint32_t[]>(MAX_PAGE_GLYPHS);
+  }
   if (!codepoints) {
     LOG_ERR("SDCF", "Failed to allocate codepoint buffer (%u bytes)", MAX_PAGE_GLYPHS * 4);
     return -1;
@@ -909,10 +929,7 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
     }
   }
 
-  // Add ligature output codepoints from all styles being prewarmed.
-  // Skip during metadata-only prewarm (layout measurement) to avoid loading
-  // kern/lig data for all styles upfront (~22KB per style). Kern/lig is
-  // loaded per-style in prewarmStyle() during the full render prewarm instead.
+  // Add ligature outputs for full prewarms, retrying any failed or released tables.
   if (!metadataOnly && loadKernLig) {
     for (uint8_t si = 0; si < MAX_STYLES; si++) {
       if (!(styleMask & (1 << si)) || !styles_[si].present) continue;
