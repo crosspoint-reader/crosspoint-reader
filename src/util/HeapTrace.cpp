@@ -47,6 +47,8 @@ namespace {
 constexpr uint32_t RING_BYTES = HEAP_TRACE_RING_BYTES;
 static_assert((RING_BYTES & (RING_BYTES - 1)) == 0, "HEAP_TRACE_RING_BYTES must be a power of two");
 constexpr int STACK_DEPTH = HEAP_TRACE_STACK_DEPTH;
+// The alloc record lives on the allocating task's stack; some system tasks have 1 KiB stacks.
+static_assert(STACK_DEPTH >= 1 && STACK_DEPTH <= 16, "HEAP_TRACE_STACK_DEPTH must be between 1 and 16");
 // Allocator frames (IRAM) precede the first recorded caller.
 constexpr int MAX_UNWIND_STEPS = STACK_DEPTH + 8;
 constexpr uint8_t FORMAT_VERSION = 1;
@@ -56,6 +58,7 @@ constexpr size_t MAX_RECORD_BYTES = ALLOC_HEADER_BYTES + 4 * STACK_DEPTH;
 constexpr size_t PASS_MARKER_BYTES = 13;
 // 150 raw bytes encode to a 200-character payload; lines stay under the CDC ring item size.
 constexpr size_t LINE_RAW_BYTES = 150;
+static_assert(MAX_RECORD_BYTES <= LINE_RAW_BYTES, "an alloc record must fit in one output line");
 constexpr size_t PASS_CAPACITY = 96;
 constexpr size_t MAX_TASKS = 24;
 constexpr uint32_t AUTO_SNAPSHOT_INTERVAL_MS = 2000;

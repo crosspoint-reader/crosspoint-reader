@@ -658,7 +658,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("capture", help="events.jsonl, serial.bin, or a text log")
     sub = parser.add_subparsers(dest="command", required=True)
-    add = lambda name, help: sub.add_parser(name, help=help, parents=[common])  # noqa: E731
+    add = lambda name, description: sub.add_parser(name, help=description, parents=[common])  # noqa: E731
     add("summary", "stream health, busiest sites, live memory at end").set_defaults(func=cmd_summary)
     add("snapshots", "per-snapshot fragmentation metrics").set_defaults(func=cmd_snapshots)
     frag = add("frag", "free-block layout and pinning allocations at a snapshot")
