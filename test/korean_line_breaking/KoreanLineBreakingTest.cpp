@@ -61,19 +61,19 @@ TEST(KoreanLineBreaking, HyphenationOnSplitsBetweenSyllablesWithoutHyphen) {
   EXPECT_EQ(lines[0].xpos, (std::vector<int16_t>{0, 26}));
 }
 
-TEST(KoreanLineBreaking, HyphenationOnLeavesTwoSyllablesOnEachSide) {
+TEST(KoreanLineBreaking, HyphenationOnKeepsTrailingPunctuationWithSyllable) {
   Hyphenator::setPreferredLanguage("ko");
-  // 가나다 + space leaves 28 px. 라마바 (24 px) would fit but leaves one syllable, so 라마 is used.
-  const auto lines = layout({"가나다", "라마바사.", "자"}, true, 56);
-  const std::vector<std::vector<std::string>> expected{{"가나다", "라마"}, {"바사.", "자"}};
+  // 가나다 + space leaves 36 px. 라마바사 (32 px) would fit, but 사. stays together, so 라마바 is used.
+  const auto lines = layout({"가나다", "라마바사.", "자"}, true, 64);
+  const std::vector<std::vector<std::string>> expected{{"가나다", "라마바"}, {"사.", "자"}};
   EXPECT_EQ(wordsOf(lines), expected);
 }
 
-TEST(KoreanLineBreaking, HyphenationOnMovesShortWordsDownWhole) {
+TEST(KoreanLineBreaking, HyphenationOnSplitsShortWords) {
   Hyphenator::setPreferredLanguage("ko");
-  // 라마바 has no legal split, so it moves down even though 라마 would fit.
+  // 가나다 + space leaves 22 px, so the three-syllable word splits after 라마 (16 px).
   const auto lines = layout({"가나다", "라마바", "자"}, true, 50);
-  const std::vector<std::vector<std::string>> expected{{"가나다"}, {"라마바", "자"}};
+  const std::vector<std::vector<std::string>> expected{{"가나다", "라마"}, {"바", "자"}};
   EXPECT_EQ(wordsOf(lines), expected);
 }
 

@@ -246,30 +246,28 @@ std::vector<size_t> hangulBreakOffsets(const std::string& word) {
 }
 }  // namespace
 
-TEST(HangulBreaks, KeepsTwoSyllablesOnEachSideForAnyLanguage) {
+TEST(HangulBreaks, SplitsBetweenAnySyllablesForAnyLanguage) {
   for (const char* lang : {"", "en", "ko"}) {
     Hyphenator::setPreferredLanguage(lang);
-    EXPECT_TRUE(hangulBreakOffsets("사과를").empty()) << lang;
-    EXPECT_EQ(hangulBreakOffsets("대한민국"), (std::vector<size_t>{6})) << lang;
-    EXPECT_EQ(hangulBreakOffsets("대한민국의"), (std::vector<size_t>{6, 9})) << lang;
-    EXPECT_EQ(hangulBreakOffsets("아름다운사람"), (std::vector<size_t>{6, 9, 12})) << lang;
+    EXPECT_EQ(hangulBreakOffsets("사과를"), (std::vector<size_t>{3, 6})) << lang;
+    EXPECT_EQ(hangulBreakOffsets("대한민국의"), (std::vector<size_t>{3, 6, 9, 12})) << lang;
+    EXPECT_TRUE(hangulBreakOffsets("가").empty()) << lang;
   }
   Hyphenator::setPreferredLanguage("");
 }
 
-TEST(HangulBreaks, CountsOnlyHangulRunsAndKeepsNeighborsAttached) {
+TEST(HangulBreaks, KeepsDigitsLatinAndPunctuationAttached) {
   Hyphenator::setPreferredLanguage("");
-  EXPECT_EQ(hangulBreakOffsets("했습니다."), (std::vector<size_t>{6}));  // 했습|니다.
-  EXPECT_TRUE(hangulBreakOffsets("3개를").empty());
+  EXPECT_EQ(hangulBreakOffsets("했다."), (std::vector<size_t>{3}));  // 했|다., the period stays attached
+  EXPECT_EQ(hangulBreakOffsets("3개를"), (std::vector<size_t>{4}));  // 3개|를
   EXPECT_TRUE(hangulBreakOffsets("iPhone을").empty());
-  EXPECT_EQ(hangulBreakOffsets("“대한민국”이라고"), (std::vector<size_t>{9}));  // 이라고 is too short
-  EXPECT_EQ(hangulBreakOffsets("12월부터는"), (std::vector<size_t>{8}));        // 월부|터는
+  EXPECT_EQ(hangulBreakOffsets("“안녕”이라고"), (std::vector<size_t>{6, 15, 18}));  // not after ”
+  EXPECT_EQ(hangulBreakOffsets("소신(conviction)이"), (std::vector<size_t>{3}));    // 소|신(conviction)이
 }
 
 TEST(HangulBreaks, BreaksAfterVisibleHyphenTouchingHangul) {
   Hyphenator::setPreferredLanguage("");
-  EXPECT_EQ(hangulBreakOffsets("대한민국-서울"), (std::vector<size_t>{6, 13}));  // 대한|민국-서울, 대한민국-|서울
-  EXPECT_EQ(hangulBreakOffsets("서울-부산"), (std::vector<size_t>{7}));          // 서울-|부산
-  EXPECT_EQ(hangulBreakOffsets("Wi-Fi네트워크"), (std::vector<size_t>{3, 11}));  // Wi-|Fi네트워크, Wi-Fi네트|워크
-  EXPECT_TRUE(hangulBreakOffsets("서울\u2011부산").empty());                     // non-breaking hyphen
+  EXPECT_EQ(hangulBreakOffsets("서울-부산"), (std::vector<size_t>{3, 7, 10}));          // 서울-|부산
+  EXPECT_EQ(hangulBreakOffsets("Wi-Fi네트워크"), (std::vector<size_t>{3, 8, 11, 14}));  // Wi-|Fi네트워크
+  EXPECT_EQ(hangulBreakOffsets("서울\u2011부산"), (std::vector<size_t>{3, 12}));        // not after U+2011
 }

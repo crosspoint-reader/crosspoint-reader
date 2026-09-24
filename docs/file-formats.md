@@ -95,8 +95,8 @@ if (parsedSize != fileSize) {
 Version 48 keeps the version 47 serialized layout unchanged. It was bumped
 because Hangul text no longer has implicit line-break opportunities between
 syllables: Korean words wrap at spaces (like CSS `word-break: keep-all`), and
-with hyphenation enabled a word of four or more syllables may also split at the
-end of a line, without a hyphen, keeping at least two syllables on each side. Justification stretches only word spaces. Cached line breaks and word
+with hyphenation enabled a word may also split between syllables or after a
+visible hyphen at the end of a line, without an inserted hyphen. Justification stretches only word spaces. Cached line breaks and word
 positions from version 47 no longer match.
 
 ### Version 47

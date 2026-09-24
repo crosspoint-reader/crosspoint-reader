@@ -18,11 +18,10 @@ class Hyphenator {
   // Returns byte offsets where the word may be hyphenated.
   //
   // Break sources (in priority order):
-  //   0. Hangul syllable boundaries, regardless of language, leaving at least two syllables on
-  //      each side, plus breaks after visible hyphens touching Hangul. Korean wraps without a hyphen,
-  //      so a word with any such boundary returns only these and its explicit-hyphen breaks.
-  //      Example: "대한민국의" -> 대한|민국의, 대한민|국의; "대한민국-서울" -> 대한|민국-서울,
-  //      대한민국-|서울; "사과를" has none.
+  //   0. Boundaries between two Hangul syllables, and after visible hyphens touching Hangul,
+  //      regardless of language. Korean wraps without a hyphen, so a word with any such boundary
+  //      returns only these and its explicit-hyphen breaks.
+  //      Example: "사과를" -> 사|과를, 사과|를; "서울-부산" -> 서|울-부산, 서울-|부산, 서울-부|산.
   //   1. Explicit hyphens already present in the word (e.g. '-' or soft-hyphen U+00AD).
   //      When found, language patterns are additionally run on each alphabetic segment
   //      between separators so compound words can break within their parts.
