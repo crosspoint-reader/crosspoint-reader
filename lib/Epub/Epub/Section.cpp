@@ -52,7 +52,8 @@ namespace {
 // v46: Ordered lists number their items, list-style-type: none suppresses markers,
 //      and <ul>/<ol> containers contribute their own margins/padding to child insets.
 // v47: Word and character spacing in the header (cache validation); cached BlockStyle stores only character spacing.
-constexpr uint8_t SECTION_FILE_VERSION = 47;
+// v48: Record the installed hyphenation pack identity in the layout key.
+constexpr uint8_t SECTION_FILE_VERSION = 48;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -74,7 +75,7 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(int8_t) +
-                                 sizeof(uint8_t);
+                                 sizeof(uint8_t) + sizeof(uint32_t);
 }  // namespace
 
 // Out-of-line so the unique_ptr<ChapterHtmlSlimParser> in BuildContext can be
@@ -120,7 +121,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
                                    sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphAlignment) +
                                    sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) + sizeof(pageCount) +
-                                   sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedStyle) +
+                                   sizeof(spec.hyphenationEnabled) + sizeof(uint32_t) + sizeof(spec.embeddedStyle) +
                                    sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) +
                                    sizeof(spec.characterSpacing) + sizeof(spec.wordSpacingPercent) + sizeof(uint32_t) +
                                    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
@@ -135,6 +136,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.viewportWidth);
   serialization::writePod(file, spec.viewportHeight);
   serialization::writePod(file, spec.hyphenationEnabled);
+  serialization::writePod(file, spec.hyphenationEnabled ? Hyphenator::patternIdentity(epub->getLanguage()) : 0u);
   serialization::writePod(file, spec.embeddedStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
@@ -173,6 +175,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     bool fileExtraParagraphSpacing;
     uint8_t fileParagraphAlignment;
     bool fileHyphenationEnabled;
+    uint32_t fileHyphenationPatternIdentity;
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
@@ -185,6 +188,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileViewportWidth);
     serialization::readPod(file, fileViewportHeight);
     serialization::readPod(file, fileHyphenationEnabled);
+    serialization::readPod(file, fileHyphenationPatternIdentity);
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
@@ -194,9 +198,12 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     if (spec.fontId != fileFontId || spec.lineCompression != fileLineCompression ||
         spec.extraParagraphSpacing != fileExtraParagraphSpacing || spec.paragraphAlignment != fileParagraphAlignment ||
         spec.viewportWidth != fileViewportWidth || spec.viewportHeight != fileViewportHeight ||
-        spec.hyphenationEnabled != fileHyphenationEnabled || spec.embeddedStyle != fileEmbeddedStyle ||
-        spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled ||
-        spec.characterSpacing != fileCharacterSpacing || spec.wordSpacingPercent != fileWordSpacingPercent) {
+        spec.hyphenationEnabled != fileHyphenationEnabled ||
+        (spec.hyphenationEnabled &&
+         Hyphenator::patternIdentity(epub->getLanguage()) != fileHyphenationPatternIdentity) ||
+        spec.embeddedStyle != fileEmbeddedStyle || spec.imageRendering != fileImageRendering ||
+        spec.focusReadingEnabled != fileFocusReadingEnabled || spec.characterSpacing != fileCharacterSpacing ||
+        spec.wordSpacingPercent != fileWordSpacingPercent) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
@@ -471,6 +478,9 @@ bool Section::buildSomeMore(const int maxPages) {
   // pageCount stays pinned at the partial's watermark until the build passes it, which
   // would otherwise turn one "small" chunk into a blocking rebuild of the whole watermark.
   const int startCount = builtPageCount_;
+#ifdef HYPHENATION_BENCHMARK
+  const uint32_t startedUs = micros();
+#endif
   for (;;) {
     const auto status = build_->parser->parseStep();
     if (status == ChapterHtmlSlimParser::ParseStatus::Error) {
@@ -479,10 +489,18 @@ bool Section::buildSomeMore(const int maxPages) {
       return false;
     }
     if (status == ChapterHtmlSlimParser::ParseStatus::Done) {
+#ifdef HYPHENATION_BENCHMARK
+      LOG_INF("HYBENCH", "spine=%d pages=%d us=%lu", spineIndex, builtPageCount_ - startCount,
+              static_cast<unsigned long>(micros() - startedUs));
+#endif
       return finalizeBuild();
     }
     // ParseStatus::More: yield once we've laid out the requested number of pages.
     if (maxPages > 0 && (builtPageCount_ - startCount) >= maxPages) {
+#ifdef HYPHENATION_BENCHMARK
+      LOG_INF("HYBENCH", "spine=%d pages=%d us=%lu", spineIndex, builtPageCount_ - startCount,
+              static_cast<unsigned long>(micros() - startedUs));
+#endif
       build_->bytesConsumed = build_->parser->parseBytesConsumed();
       return true;
     }

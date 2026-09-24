@@ -2,6 +2,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -11,12 +12,35 @@
 #include "lib/Epub/Epub/hyphenation/HyphenationCommon.h"
 #include "lib/Epub/Epub/hyphenation/LanguageHyphenator.h"
 #include "lib/Epub/Epub/hyphenation/LanguageRegistry.h"
+#include "lib/Epub/Epub/hyphenation/generated/hyph-de.trie.h"
+#include "lib/Epub/Epub/hyphenation/generated/hyph-es.trie.h"
+#include "lib/Epub/Epub/hyphenation/generated/hyph-pl.trie.h"
+#include "lib/Epub/Epub/hyphenation/generated/hyph-ru.trie.h"
+#include "lib/Epub/Epub/hyphenation/generated/hyph-sv.trie.h"
+#include "lib/Epub/Epub/hyphenation/generated/hyph-uk.trie.h"
 
 #ifndef HYPHENATION_RESOURCES_DIR
 #error "HYPHENATION_RESOURCES_DIR must be defined by the build system"
 #endif
 
 namespace {
+
+bool testPackLookup(const char* code, ExternalHyphenationPatterns& out) {
+  struct TestPack {
+    const char* code;
+    const SerializedHyphenationPatterns* patterns;
+  };
+  static constexpr TestPack packs[] = {{"de", &de_patterns}, {"es", &es_patterns}, {"pl", &pl_patterns},
+                                       {"ru", &ru_patterns}, {"sv", &sv_patterns}, {"uk", &uk_patterns}};
+  for (const auto& pack : packs) {
+    if (std::strcmp(code, pack.code) == 0) {
+      out.patterns = *pack.patterns;
+      out.identity = 1;
+      return true;
+    }
+  }
+  return false;
+}
 
 struct TestCase {
   std::string word;
@@ -180,6 +204,7 @@ EvaluationResult evaluateWord(const TestCase& testCase, const std::vector<size_t
 // is at or above `minF1Percent`. Thresholds are set ~1pp below measured
 // baselines so unrelated tweaks don't fail CI but real regressions still trip.
 void runLanguageEval(const char* langName, const char* primaryTag, const char* resourceFile, double minF1Percent) {
+  setExternalHyphenationLookup(testPackLookup);
   const auto* hyphenator = getLanguageHyphenatorForPrimaryTag(primaryTag);
   ASSERT_NE(hyphenator, nullptr) << "No hyphenator registered for tag: " << primaryTag;
 

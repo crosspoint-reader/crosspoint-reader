@@ -2,6 +2,8 @@
 
 #include <Epub/Page.h>
 #include <Epub/blocks/TextBlock.h>
+#include <Epub/hyphenation/Hyphenator.h>
+#include <Epub/hyphenation/LanguageRegistry.h>
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -29,6 +31,7 @@
 #include "EpubReaderFootnoteSelectActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "HyphenationPackStore.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -40,7 +43,9 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "activities/settings/HyphenationManagerActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
@@ -172,6 +177,34 @@ EpubReaderActivity::~EpubReaderActivity() {
   } else {
     epub.reset();
   }
+}
+
+void EpubReaderActivity::onEnter() {
+  ReaderActivity::onEnter();
+  if (!epub || !SETTINGS.hyphenationEnabled) return;
+  char code[3];
+  if (!Hyphenator::primaryLanguageTag(epub->getLanguage(), code)) return;
+  const LanguageEntry* language = findLanguageEntry(code);
+  if (!language || language->hyphenator || HyphenationPackStore::isInstalled(code)) return;
+
+  char body[128];
+  snprintf(body, sizeof(body), tr(STR_HYPHENATION_MISSING_BODY), language->cliName);
+  auto warning = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_HYPHENATION_MISSING), body,
+                                                         StrId::STR_IGNORE, StrId::STR_MANAGE_HYPHENATION);
+  if (!warning) {
+    LOG_ERR("HYPH", "OOM: missing-pack warning");
+    return;
+  }
+  startActivityForResult(std::move(warning), [this, code0 = code[0], code1 = code[1]](const ActivityResult& result) {
+    if (result.isCancelled) return;
+    char wanted[3] = {code0, code1, '\0'};
+    auto manager = makeUniqueNoThrow<HyphenationManagerActivity>(renderer, mappedInput, wanted);
+    if (!manager) {
+      LOG_ERR("HYPH", "OOM: hyphenation manager");
+      return;
+    }
+    startActivityForResult(std::move(manager), [](const ActivityResult&) {});
+  });
 }
 
 bool EpubReaderActivity::loadBook() {

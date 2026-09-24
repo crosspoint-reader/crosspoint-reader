@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <BoardConfig.h>
 #include <Epub.h>
+#include <Epub/hyphenation/LanguageRegistry.h>
 #include <FontCacheManager.h>
 #include <FontDecompressor.h>
 #include <GfxRenderer.h>
@@ -25,6 +26,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "HyphenationPackStore.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -410,6 +412,10 @@ void setup() {
     setupDisplayAndFonts(isSilentReboot);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
+  }
+
+  if (HyphenationPackStore::begin()) {
+    setExternalHyphenationLookup(HyphenationPackStore::lookup);
   }
 
   HalSystem::checkPanic();
