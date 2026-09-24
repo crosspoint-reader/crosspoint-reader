@@ -55,6 +55,9 @@ void UiTabListActivity::onRowAction(const fui::ActionEvent& event) {
 }
 
 void UiTabListActivity::moveRingTo(const int ringIndex) {
+#if FREEINK_CAP_TOUCH
+  closeSwipeDelete();
+#endif
   activeNav().requestSelection(ringIndex);
   requestUpdate();
 }
