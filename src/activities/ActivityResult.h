@@ -67,9 +67,20 @@ struct FilePathResult {
   std::string path;
 };
 
+// A word picked in DictionaryWordSelectActivity when it's lending its Page
+// (DictionaryDefinitionActivity's own currently displayed page, see that
+// class) rather than owning one -- the caller swaps this into its own view
+// in place instead of the sub-activity stacking a new one on top of it.
+struct DictionaryLookupResult {
+  std::string headword;
+  std::string definition;
+  bool isHtml = false;
+};
+
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult,
+                 DictionaryLookupResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
