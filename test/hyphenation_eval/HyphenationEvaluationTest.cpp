@@ -265,3 +265,11 @@ TEST(HangulBreaks, CountsOnlyHangulRunsAndKeepsNeighborsAttached) {
   EXPECT_EQ(hangulBreakOffsets("“대한민국”이라고"), (std::vector<size_t>{9}));  // 이라고 is too short
   EXPECT_EQ(hangulBreakOffsets("12월부터는"), (std::vector<size_t>{8}));        // 월부|터는
 }
+
+TEST(HangulBreaks, BreaksAfterVisibleHyphenTouchingHangul) {
+  Hyphenator::setPreferredLanguage("");
+  EXPECT_EQ(hangulBreakOffsets("대한민국-서울"), (std::vector<size_t>{6, 13}));  // 대한|민국-서울, 대한민국-|서울
+  EXPECT_EQ(hangulBreakOffsets("서울-부산"), (std::vector<size_t>{7}));          // 서울-|부산
+  EXPECT_EQ(hangulBreakOffsets("Wi-Fi네트워크"), (std::vector<size_t>{3, 11}));  // Wi-|Fi네트워크, Wi-Fi네트|워크
+  EXPECT_TRUE(hangulBreakOffsets("서울\u2011부산").empty());                     // non-breaking hyphen
+}

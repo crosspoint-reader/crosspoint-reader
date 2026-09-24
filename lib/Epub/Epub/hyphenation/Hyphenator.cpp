@@ -84,8 +84,13 @@ std::vector<Hyphenator::BreakInfo> buildExplicitBreakInfos(const std::vector<Cod
 
 // Korean needs no syllable rules: a run of 4+ Hangul syllables may split anywhere that leaves at
 // least MIN_HANGUL_PIECE syllables on each side, without a hyphen (4 -> 2+2, 5 -> 2+3 or 3+2).
-// Shorter runs, and boundaries next to digits, Latin letters, or punctuation, never split.
+// A visible hyphen touching Hangul may also break after it (대한민국-|서울). Shorter runs, and
+// boundaries next to digits, Latin letters, or other punctuation, never split.
 constexpr size_t MIN_HANGUL_PIECE = 2;
+
+bool isHangulHyphenNeighbor(const uint32_t cp) {
+  return utf8IsHangulSyllable(cp) || isAlphabetic(cp) || isAsciiDigit(cp);
+}
 
 std::vector<Hyphenator::BreakInfo> buildHangulBreakInfos(const std::vector<CodepointInfo>& cps) {
   std::vector<Hyphenator::BreakInfo> breaks;
@@ -99,6 +104,18 @@ std::vector<Hyphenator::BreakInfo> buildHangulBreakInfos(const std::vector<Codep
       }
     }
     runStart = i + 1;
+  }
+
+  constexpr uint32_t NON_BREAKING_HYPHEN_CP = 0x2011;
+  for (size_t i = 1; i + 1 < cps.size(); ++i) {
+    const uint32_t cp = cps[i].value;
+    if (!isExplicitHyphen(cp) || isSoftHyphen(cp) || cp == NON_BREAKING_HYPHEN_CP) continue;
+    const uint32_t before = cps[i - 1].value;
+    const uint32_t after = cps[i + 1].value;
+    if ((utf8IsHangulSyllable(before) || utf8IsHangulSyllable(after)) && isHangulHyphenNeighbor(before) &&
+        isHangulHyphenNeighbor(after)) {
+      breaks.push_back({cps[i + 1].byteOffset, false});
+    }
   }
   return breaks;
 }
@@ -205,6 +222,9 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
 
   // Hangul breaks do not depend on the publication language.
   if (auto hangulBreaks = buildHangulBreakInfos(cps); !hangulBreaks.empty()) {
+    const auto explicitBreakInfos = buildExplicitBreakInfos(cps);
+    hangulBreaks.insert(hangulBreaks.end(), explicitBreakInfos.begin(), explicitBreakInfos.end());
+    sortAndDedupeBreakInfos(hangulBreaks);
     return hangulBreaks;
   }
 

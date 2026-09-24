@@ -76,3 +76,11 @@ TEST(KoreanLineBreaking, HyphenationOnMovesShortWordsDownWhole) {
   const std::vector<std::vector<std::string>> expected{{"가나다"}, {"라마바", "자"}};
   EXPECT_EQ(wordsOf(lines), expected);
 }
+
+TEST(KoreanLineBreaking, HyphenationOnBreaksAfterVisibleHyphen) {
+  Hyphenator::setPreferredLanguage("ko");
+  // 가 + space leaves 44 px: 대한민국- (40 px) beats the syllable split 대한 (16 px).
+  const auto lines = layout({"가", "대한민국-서울"}, true, 56);
+  const std::vector<std::vector<std::string>> expected{{"가", "대한민국-"}, {"서울"}};
+  EXPECT_EQ(wordsOf(lines), expected);
+}
