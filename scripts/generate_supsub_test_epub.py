@@ -205,6 +205,8 @@ if __name__ == '__main__':
 <h2>CSS Classes</h2>
 <p>This tests superscript via CSS class (.super): E = mc<span class="super">2</span>.</p>
 <p>This tests subscript via CSS class (.sub): Water is H<span class="sub">2</span>O.</p>
+<p>This tests a CSS superscript internal link: Footnote<a class="super" href="#css-footnote">1</a>.</p>
+<p id="css-footnote">CSS superscript internal-link target.</p>
 
 <h2>CSS Inline Styles</h2>
 <p>This tests superscript via inline style: E = mc<span style="vertical-align: super;">2</span>.</p>

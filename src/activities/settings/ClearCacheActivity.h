@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 
 class ClearCacheActivity final : public Activity {
  public:
@@ -24,5 +25,7 @@ class ClearCacheActivity final : public Activity {
 
   int clearedCount = 0;
   int failedCount = 0;
+  OptionPopup confirmPopup;
+  void beginClear();
   void clearCache();
 };

@@ -1,5 +1,8 @@
 #include "Logging.h"
 
+#include <BoardConfig.h>
+#include <esp_rom_sys.h>
+
 #include <string>
 
 #define MAX_ENTRY_LEN 256
@@ -59,9 +62,14 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
     }
   }
   va_end(args);
+#if FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF
+  // Sticky's USB serial bridge uses UART0; ROM output also works before Serial0.begin().
+  esp_rom_printf("%s", buf);
+#else
   if (logSerial) {
     logSerial.print(buf);
   }
+#endif
   addToLogRingBuffer(buf);
 }
 

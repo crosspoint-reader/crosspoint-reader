@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+class Bitmap;
 class GfxRenderer;
 struct RecentBook;
 
@@ -16,11 +17,6 @@ struct Rect {
   int height;
 
   explicit Rect(int x = 0, int y = 0, int width = 0, int height = 0) : x(x), y(y), width(width), height(height) {}
-};
-
-struct TabInfo {
-  const char* label;
-  bool selected;
 };
 
 struct ThemeMetrics {
@@ -38,11 +34,39 @@ struct ThemeMetrics {
   int contentSidePadding;
   int listRowHeight;
   int listWithSubtitleRowHeight;
+  // FreeInkUI list shape, consumed by uiThemeTokens() for screens rendered
+  // through FreeInkApp: the theme supplies geometry and selection style, the
+  // uiScale fonts supply the sizes. Plain data by design — the eventual
+  // SD-card theme files will provide exactly these values.
+  int listRowGap;          // vertical gap between rows
+  int listRowRadius;       // row corner radius (RoundedRaff cards, Lyra pill)
+  int listInset;           // horizontal inset of the whole list band
+  int listSidePadding;     // text inset within a row
+  int listSelectionStyle;  // 0=invert fill, 1=light pill, 2=underline, 3=triangle (fui::SelectionStyle order)
+  int listScrollWidth;     // scroll indicator thickness
+  int listScrollSide;      // 0 = right edge, 1 = left edge
+  bool listTitleBold;      // bold row titles (RoundedRaff)
+  // FreeInkUI header shape, same contract as the list fields above.
+  int headerSidePadding;    // title text inset
+  int headerUnderlineSize;  // bottom rule thickness (Lyra), 0 = none
+  int headerTitleAlign;     // 0 = left, 1 = center, 2 = right (fui::TextAlign order)
+  int headerBatterySide;    // 0 = right edge, 1 = left edge
+  // Battery in its own corner strip (batteryBarHeight tall) with the title on
+  // the lower sub-band spanning the full width (Lyra), vs sharing the title
+  // line with a width reserve (Classic, RoundedRaff).
+  bool headerBatteryDetached;
+  // Header clock opt-out for themes whose title layout can't spare the left
+  // reserve (RoundedRaff); the user setting still governs the themes that can.
+  bool headerShowsClock = true;
   int menuRowHeight;
   int menuSpacing;
 
   int tabSpacing;
   int tabBarHeight;
+  int coverGridTabBarHeight = 72;
+  // Selected-tab pill fills its equal-width slot (legacy RoundedRaff tabs)
+  // instead of shrinking to hug the label (legacy Lyra tabs).
+  bool tabPillFullSlot = false;
 
   int scrollBarWidth;
   int scrollBarRightOffset;
@@ -61,24 +85,12 @@ struct ThemeMetrics {
   int progressBarMarginTop;
   int statusBarHorizontalMargin;
   int statusBarVerticalMargin;
-
-  int keyboardKeyWidth;
   int keyboardKeyHeight;
   int keyboardKeySpacing;
-  int keyboardBottomKeyHeight;
-  int keyboardBottomKeySpacing;
-  bool keyboardBottomAligned;
   bool keyboardCenteredText;
   int keyboardVerticalOffset;
   int keyboardTextFieldWidthPercent;
   int keyboardWidthPercent;
-  int keyboardKeyCornerRadius;
-  bool keyboardFillUnselected;
-  bool keyboardOutlineAllUnselected;
-  bool keyboardDrawSpecialOutlineWhenUnselected;
-  int keyboardSecondaryLabelRightPadding;
-  int keyboardSecondaryLabelTopPadding;
-  int keyboardMinArrowHeadSize;
 
   float popupTopOffsetRatio;
   int popupMarginX;
@@ -96,26 +108,40 @@ struct ThemeMetrics {
 
   int optionPopupItemSpacing;
   int optionPopupInnerPadding;
-  int optionPopupSelectionHPadding;
   int optionPopupSelectionVPadding;
-  int optionPopupTitleGap;
-  bool optionPopupUseSmallFont;
-  bool optionPopupOptionFontBold;
-  int optionPopupSelectionRadius;
-  bool optionPopupSelectionLight;
-  bool optionPopupDrawAllRows;
   int optionPopupDialogSideMargin;
-  bool optionPopupTitleSeparator;
 
   int textFieldHorizontalPadding;
   int textFieldNormalThickness;
   int textFieldCursorThickness;
   int textFieldLineEndOffset;
+
+  // FreeInkUI control shape (the control center panel), same contract as the
+  // list fields above: quick-setting tiles and slider step buttons, the
+  // sheet's free-edge corners, and the capsule slider's corners (255 = full
+  // stadium, i.e. radius = half the control height).
+  int controlRadius;
+  int sheetRadius;
+  int capsuleRadius;
 };
 
-enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
-
-enum class KeyboardKeyType { Normal, Shift, Mode, Space, Del, Ok, Disabled };
+enum UIIcon {
+  None = 0,
+  Folder,
+  Text,
+  Image,
+  Book,
+  File,
+  Recent,
+  Settings,
+  Transfer,
+  Library,
+  Wifi,
+  Hotspot,
+  Bookmark,
+  Usb,
+  Blocks
+};
 
 // Default theme implementation (Classic Theme)
 // Additional themes can inherit from this and override methods as needed
@@ -132,6 +158,19 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 50,
+                                 .listRowGap = 0,
+                                 .listRowRadius = 0,
+                                 .listInset = 0,
+                                 .listSidePadding = 20,
+                                 .listSelectionStyle = 0,  // invert fill
+                                 .listScrollWidth = 4,
+                                 .listScrollSide = 0,
+                                 .listTitleBold = false,
+                                 .headerSidePadding = 18,
+                                 .headerUnderlineSize = 0,
+                                 .headerTitleAlign = 1,  // centered
+                                 .headerBatterySide = 0,
+                                 .headerBatteryDetached = false,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,
                                  .tabSpacing = 10,
@@ -150,23 +189,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .progressBarMarginTop = 1,
                                  .statusBarHorizontalMargin = 5,
                                  .statusBarVerticalMargin = 19,
-                                 .keyboardKeyWidth = 22,
-                                 .keyboardKeyHeight = 40,
+                                 .keyboardKeyHeight = 48,
                                  .keyboardKeySpacing = 0,
-                                 .keyboardBottomKeyHeight = 35,
-                                 .keyboardBottomKeySpacing = 5,
-                                 .keyboardBottomAligned = true,
                                  .keyboardCenteredText = false,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
-                                 .keyboardWidthPercent = 90,
-                                 .keyboardKeyCornerRadius = 0,
-                                 .keyboardFillUnselected = false,
-                                 .keyboardOutlineAllUnselected = false,
-                                 .keyboardDrawSpecialOutlineWhenUnselected = true,
-                                 .keyboardSecondaryLabelRightPadding = 1,
-                                 .keyboardSecondaryLabelTopPadding = 0,
-                                 .keyboardMinArrowHeadSize = 0,
+                                 .keyboardWidthPercent = 94,
                                  .popupTopOffsetRatio = 0.075f,
                                  .popupMarginX = 15,
                                  .popupMarginY = 15,
@@ -182,20 +210,15 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupProgressOutlineInverted = true,
                                  .optionPopupItemSpacing = 6,
                                  .optionPopupInnerPadding = 16,
-                                 .optionPopupSelectionHPadding = 8,
                                  .optionPopupSelectionVPadding = 4,
-                                 .optionPopupTitleGap = 10,
-                                 .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = true,
-                                 .optionPopupSelectionRadius = 0,
-                                 .optionPopupSelectionLight = false,
-                                 .optionPopupDrawAllRows = false,
                                  .optionPopupDialogSideMargin = 20,
-                                 .optionPopupTitleSeparator = true,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0};
+                                 .textFieldLineEndOffset = 0,
+                                 .controlRadius = 0,
+                                 .sheetRadius = 0,
+                                 .capsuleRadius = 0};
 }
 
 class BaseTheme {
@@ -203,28 +226,34 @@ class BaseTheme {
   virtual ~BaseTheme() = default;
 
   // Component drawing methods
-  void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
+  static void drawCoverPlaceholder(const GfxRenderer& renderer, Rect rect);
+  // Draws a pre-dithered cover thumb 1:1, centered and clipped to fill the
+  // slot. Rescaling a dithered bitmap aliases badly, so overflow is cropped.
+  static bool drawCoverThumbFill(const GfxRenderer& renderer, const Bitmap& bitmap, Rect slot);
+  static void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total);
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
                        bool showPercentage = true) const;  // Left aligned (reader mode)
-  void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
-                        bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
+  // Shared by every theme's drawButtonHints(): centres a hint label in its box,
+  // wrapping to two lines rather than overflowing when it's too wide to fit.
+  static void drawHintLabel(const GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
+                            int boxHeight, int singleLineYOffset);
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
-  virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
-  virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                        const std::function<std::string(int index)>& rowTitle,
-                        const std::function<std::string(int index)>& rowSubtitle = nullptr,
-                        const std::function<UIIcon(int index)>& rowIcon = nullptr,
-                        const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
-                        const std::function<bool(int index)>& rowDimmed = nullptr) const;
+  // Menu row height as DRAWN by drawButtonMenu. HomeActivity builds its touch
+  // grid from this, so hit bands always match the visuals (RoundedRaff derives
+  // its row height from the font, not the metrics table).
+  virtual int getMenuRowHeight(const GfxRenderer& renderer) const;
+  // Also draws the wall clock opposite the battery when the user enabled
+  // SETTINGS.clockShowInHeader and an RTC is present.
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
+  // Edge inset drawHeader uses for the clock/battery status line (detached
+  // layouts hug the corner with a legacy 12px inset instead of the padding).
+  static int headerStatusInset();
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
-  virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
-                          bool selected) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
@@ -232,20 +261,18 @@ class BaseTheme {
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
-  virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                               int selectedIndex) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
-  void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
-                     std::string title, const int paddingBottom = 0, const int textYOffset = 0,
-                     const bool fillMargin = true, const bool isPageBookmarked = false,
-                     const bool pageCountEstimated = false) const;
-  void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  static void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
+                            std::string title, const int paddingBottom = 0, const int textYOffset = 0,
+                            const bool fillMargin = true, const bool isPageBookmarked = false,
+                            const bool pageCountEstimated = false);
+  static void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label);
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
-  virtual void drawKeyboardKey(const GfxRenderer& renderer, Rect rect, const char* label, const bool isSelected,
-                               const char* secondaryLabel = nullptr, KeyboardKeyType keyType = KeyboardKeyType::Normal,
-                               bool inactiveSelection = false) const;
   virtual bool showsFileIcons() const { return false; }
+  // Thumb generation height for home covers; 0 means use metrics.homeCoverHeight.
+  // Themes with slots wider than 0.6 aspect override this so covers still fill.
+  virtual int homeCoverThumbHeight(const GfxRenderer&) const { return 0; }
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;

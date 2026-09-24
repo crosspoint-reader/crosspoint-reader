@@ -4,10 +4,12 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Block.h"
 #include "BlockStyle.h"
+#include "Epub/FootnoteEntry.h"
 
 // Represents a line of text on a page.
 //
@@ -37,6 +39,14 @@
 // entirely when no word on the line has a split (zero per-word RAM cost when
 // focus reading is disabled).
 class TextBlock final : public Block {
+ public:
+  struct LinkSpan {
+    char href[FOOTNOTE_HREF_LEN];
+    int16_t x;
+    int16_t width;
+    int16_t topLift;
+  };
+
  private:
   BlockStyle blockStyle;
   uint16_t numWords = 0;
@@ -54,6 +64,10 @@ class TextBlock final : public Block {
   const uint8_t* stylesArr = nullptr;
   const uint8_t* focusBoundaryArr = nullptr;  // null when !focusPresent
   const char* textArr = nullptr;
+  std::vector<std::string> rubyTexts;
+  // Layout-only metadata. ChapterHtmlSlimParser moves it into Page::links
+  // immediately; cached TextBlocks therefore keep the same compact format.
+  std::vector<LinkSpan> linkSpans;
 
   TextBlock() = default;  // deserialize() fills the fields directly
   static size_t arenaSize(uint16_t wordCount, bool hasFocus, uint16_t textBytes);
@@ -65,7 +79,8 @@ class TextBlock final : public Block {
   // is false -- callers must check and fail the line instead of using it.
   explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
-                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle());
+                     const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle = BlockStyle(),
+                     std::vector<std::string> rubyTexts = {}, std::vector<LinkSpan> linkSpans = {});
   ~TextBlock() override = default;
   TextBlock(const TextBlock&) = delete;
   TextBlock& operator=(const TextBlock&) = delete;
@@ -85,6 +100,10 @@ class TextBlock final : public Block {
   EpdFontFamily::Style wordStyle(const uint16_t i) const { return static_cast<EpdFontFamily::Style>(stylesArr[i]); }
   uint8_t focusBoundary(const uint16_t i) const { return focusPresent ? focusBoundaryArr[i] : 0; }
   uint16_t focusSuffixX(const uint16_t i) const { return focusPresent ? focusSuffixXArr[i] : 0; }
+  bool hasRuby() const;
+  int getRubyShift(int ascender) const { return hasRuby() ? (ascender / 2) : 0; }
+  const std::vector<std::string>& getRubyTexts() const { return rubyTexts; }
+  std::vector<LinkSpan> takeLinkSpans() { return std::move(linkSpans); }
 
   void render(const GfxRenderer& renderer, int fontId, int x, int y) const;
   BlockType getType() override { return TEXT_BLOCK; }

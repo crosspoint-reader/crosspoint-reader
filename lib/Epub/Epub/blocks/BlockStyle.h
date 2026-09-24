@@ -17,6 +17,8 @@ struct BlockStyle {
 
   CssTextAlign alignment = CssTextAlign::Justify;
 
+  // Extra pixels between glyphs during layout and drawing.
+  int8_t characterSpacing = 0;
   // Spacing (in pixels)
   int16_t marginTop = 0;
   int16_t marginBottom = 0;
@@ -49,6 +51,14 @@ struct BlockStyle {
     BlockStyle result = *this;
     result.marginBottom = 0;
     result.paddingBottom = 0;
+    return result;
+  }
+
+  // Return a copy with top margins/padding zeroed out.
+  [[nodiscard]] BlockStyle withoutTop() const {
+    BlockStyle result = *this;
+    result.marginTop = 0;
+    result.paddingTop = 0;
     return result;
   }
 
