@@ -42,6 +42,7 @@ class ReaderActivity : public Activity {
   bool handleEndOfBookPageTurn(bool prevTriggered, bool nextTriggered);
   void clearEndOfBookOptionsIfNeeded();
   void disableFastInitialRefresh();
+  void prepareReaderFont();
 
  public:
   ~ReaderActivity() override = default;

@@ -51,10 +51,10 @@ void FontCacheManager::clearCache() {
 #endif
 }
 
-void FontCacheManager::releaseSdFontCaches() {
+void FontCacheManager::releaseSdFontCaches(bool preserveAdvances) {
   if (fontDecompressor_) fontDecompressor_->clearCache();
   for (auto& [id, font] : sdCardFonts_) {
-    font->releaseResidentCaches();
+    font->releaseResidentCaches(preserveAdvances);
   }
 #if CROSSPOINT_VECTOR_FONTS
   for (auto& [id, font] : ttfFonts_) {

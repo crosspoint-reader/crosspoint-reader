@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Memory.h>
+#include <SdCardFont.h>
 
 #include <algorithm>
 
@@ -46,6 +47,14 @@ void ReaderActivity::applyInitialOrientation() { ReaderUtils::applyOrientation(r
 
 void ReaderActivity::disableFastInitialRefresh() { pagesUntilFullRefresh = 0; }
 
+void ReaderActivity::prepareReaderFont() {
+  const auto& sdFonts = renderer.getSdCardFonts();
+  const auto font = sdFonts.find(SETTINGS.getReaderFontId());
+  if (font != sdFonts.end() && !font->second->prepareAdvances()) {
+    LOG_ERR("READER", "Advance preparation incomplete; using direct metric reads");
+  }
+}
+
 void ReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -67,6 +76,8 @@ void ReaderActivity::onEnter() {
     return;
   }
 
+  prepareReaderFont();
+
   APP_STATE.openEpubPath = bookPath;
   APP_STATE.saveToFile();
   RECENT_BOOKS.addBook(bookPath, getBookTitle(), getBookAuthor(), getBookThumbBmpPath());
@@ -76,6 +87,11 @@ void ReaderActivity::onEnter() {
 void ReaderActivity::onExit() {
   Activity::onExit();
 
+#if LOG_LEVEL >= 2
+  for (const auto& [id, font] : renderer.getSdCardFonts()) {
+    font->logAdvanceStats("reader-exit");
+  }
+#endif
   LOG_INF("MEM", "reader exit: free=%u max_block=%u", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMaxAllocHeap());
 
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);

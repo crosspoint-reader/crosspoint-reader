@@ -11,4 +11,5 @@ target_include_directories(SdCardFontTest PRIVATE
 )
 target_link_libraries(SdCardFontTest PRIVATE crosspoint_test_common GTest::gtest_main)
 target_compile_options(SdCardFontTest PRIVATE -fno-exceptions)
+target_compile_definitions(SdCardFontTest PRIVATE LOG_LEVEL=2)
 gtest_discover_tests(SdCardFontTest)

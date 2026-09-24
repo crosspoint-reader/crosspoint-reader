@@ -856,6 +856,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                    nextPageNumber = section->currentPage;
                                  }
                                  section.reset();
+                                 prepareReaderFont();
                                }
                                openReaderMenu();
                              });
@@ -2401,10 +2402,6 @@ void EpubReaderActivity::paintOverlayPopup() {
 
 void EpubReaderActivity::applyReaderTextSettings() {
   SETTINGS.saveToFile();
-  // (Re)load or unload the selected SD-card font for the current family/size.
-  // The reader otherwise only loads SD fonts on book open, so without this an
-  // in-reader font change wouldn't take effect until re-opening the book.
-  sdFontSystem.ensureLoaded(renderer);
   RenderLock lock;
   if (section) {
     rememberCurrentContentOffset();
@@ -2413,6 +2410,9 @@ void EpubReaderActivity::applyReaderTextSettings() {
     nextPageNumber = section->currentPage;
   }
   section.reset();  // force re-pagination with the new settings
+  // Replace and prepare fonts after the previous layout is gone, under the render lock.
+  sdFontSystem.ensureLoaded(renderer);
+  prepareReaderFont();
 }
 
 // The More panel carries everything the classic list menu offers except the

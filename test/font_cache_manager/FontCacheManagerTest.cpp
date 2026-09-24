@@ -145,3 +145,15 @@ TEST(FontCacheManagerTest, IncrementalPrewarmRequestsAccumulation) {
   ASSERT_EQ(1, font.prewarmCallCount);
   EXPECT_TRUE(font.prewarmCalls[0].accumulate);
 }
+
+TEST(FontCacheManagerTest, SectionReleasePreservesAdvancesButHeapCriticalReleaseEvictsThem) {
+  SdCardFont font;
+  const std::map<int, EpdFontFamily> noBuiltinFonts;
+  const std::map<int, SdCardFont*> sdFonts{{7, &font}};
+  FontCacheManager manager(noBuiltinFonts, sdFonts, kNoTtfFonts);
+  manager.releaseSdFontCaches(true);
+  EXPECT_TRUE(font.preservedAdvances);
+  manager.releaseSdFontCaches();
+  EXPECT_FALSE(font.preservedAdvances);
+  EXPECT_EQ(2, font.releaseCount);
+}
