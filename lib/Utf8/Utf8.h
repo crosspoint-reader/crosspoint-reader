@@ -20,6 +20,10 @@ void utf8TruncateChars(std::string& str, size_t numChars);
 // filename written by macOS) otherwise renders broken or blank.
 std::string utf8ComposeNfc(const std::string& in);
 
+// Compose a null-terminated display buffer without allocating or growing it.
+// Uncomposed bytes (including malformed UTF-8) are preserved unchanged.
+void utf8ComposeNfcInPlace(char* buffer);
+
 // The base letter a precomposed codepoint decomposes to, or 0 when there is
 // none ("é" -> "e", but "ø" -> 0: it is a letter in its own right, not
 // o-with-stroke). Lives here rather than in a caller because the compose table

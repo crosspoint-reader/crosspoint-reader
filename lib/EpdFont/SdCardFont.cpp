@@ -1,5 +1,6 @@
 #include "SdCardFont.h"
 
+#include <FontPsram.h>  // PSRAM-preferring resident buffers (font memory lift)
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -11,6 +12,15 @@
 #include <memory>
 
 #include "EpdFontFamily.h"
+
+// Resident SD-font buffers (glyph/kern arenas, interval + advance tables, the
+// overflow ring) are placed in PSRAM when the board has it — freeing scarce
+// internal SRAM — via these helpers. On a no-PSRAM board they fall back to the
+// same internal heap `new[]`/`delete[]` used before, so behavior (and the
+// fragmentation-avoidance logic below) is unchanged there. Every buffer routed
+// through psramNewArray MUST be released with psramDeleteArray.
+using freeink::font::psramDeleteArray;
+using freeink::font::psramNewArray;
 
 static_assert(sizeof(EpdGlyph) == 16, "EpdGlyph must be 16 bytes to match .cpfont file layout");
 static_assert(sizeof(EpdUnicodeInterval) == 12, "EpdUnicodeInterval must be 12 bytes to match .cpfont file layout");
@@ -66,9 +76,6 @@ bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& c
   return false;
 }
 
-const char* asCStr(const std::string& s) { return s.c_str(); }
-const char* asCStr(const char* s) { return s; }
-
 // resetStyleMiniData retention bounds (see the PerStyle comment in the header).
 constexpr size_t MINI_RETAIN_MIN_FREE_HEAP = 40 * 1024;
 constexpr uint8_t MINI_UNDERUSE_RUNS_BEFORE_FREE = 3;
@@ -85,8 +92,8 @@ constexpr uint32_t PREWARM_MAX_ALLOC_RESERVE = 4 * 1024;
 template <typename T, typename CapT>
 bool ensureArrayCapacity(T*& buf, CapT& capacity, const uint32_t needed) {
   if (buf && capacity >= needed) return true;
-  delete[] buf;
-  buf = new (std::nothrow) T[needed > 0 ? needed : 1];
+  psramDeleteArray(buf);
+  buf = psramNewArray<T>(needed > 0 ? needed : 1);
   capacity = buf ? static_cast<CapT>(needed) : 0;
   return buf != nullptr;
 }
@@ -98,11 +105,11 @@ SdCardFont::~SdCardFont() { freeAll(); }
 // --- Per-style free/cleanup ---
 
 void SdCardFont::freeStyleMiniData(PerStyle& s) {
-  delete[] s.miniIntervals;
+  psramDeleteArray(s.miniIntervals);
   s.miniIntervals = nullptr;
-  delete[] s.miniGlyphs;
+  psramDeleteArray(s.miniGlyphs);
   s.miniGlyphs = nullptr;
-  delete[] s.miniBitmap;
+  psramDeleteArray(s.miniBitmap);
   s.miniBitmap = nullptr;
   s.miniIntervalCount = 0;
   s.miniGlyphCount = 0;
@@ -136,21 +143,21 @@ void SdCardFont::freeStyleKernLigatureData(PerStyle& s) {
   s.stubData.ligaturePairCount = 0;
   s.miniData.ligaturePairs = nullptr;
   s.miniData.ligaturePairCount = 0;
-  delete[] s.kernLeftClasses;
+  psramDeleteArray(s.kernLeftClasses);
   s.kernLeftClasses = nullptr;
-  delete[] s.kernRightClasses;
+  psramDeleteArray(s.kernRightClasses);
   s.kernRightClasses = nullptr;
-  delete[] s.ligaturePairs;
+  psramDeleteArray(s.ligaturePairs);
   s.ligaturePairs = nullptr;
   s.kernLigLoaded = false;
 }
 
 void SdCardFont::freeStyleMiniKern(PerStyle& s) {
-  delete[] s.miniKernLeftClasses;
+  psramDeleteArray(s.miniKernLeftClasses);
   s.miniKernLeftClasses = nullptr;
-  delete[] s.miniKernRightClasses;
+  psramDeleteArray(s.miniKernRightClasses);
   s.miniKernRightClasses = nullptr;
-  delete[] s.miniKernMatrix;
+  psramDeleteArray(s.miniKernMatrix);
   s.miniKernMatrix = nullptr;
   s.miniKernLeftEntryCount = 0;
   s.miniKernRightEntryCount = 0;
@@ -163,10 +170,14 @@ void SdCardFont::freeStyleMiniKern(PerStyle& s) {
 
 void SdCardFont::freeStyleAll(PerStyle& s) {
   freeStyleMiniData(s);
-  delete[] s.fullIntervals;
+  // An earlier style owns any shared interval table.
+  if (!s.intervalsShared) {
+    psramDeleteArray(s.fullIntervals);
+    psramDeleteArray(s.bmpIntervals);
+  }
   s.fullIntervals = nullptr;
-  delete[] s.bmpIntervals;
   s.bmpIntervals = nullptr;
+  s.intervalsShared = false;
   s.intervalsAreBmp16 = false;
   freeStyleKernLigatureData(s);
   s.present = false;
@@ -198,7 +209,7 @@ void SdCardFont::freeAll() {
 
 void SdCardFont::clearOverflow() {
   for (uint32_t i = 0; i < overflowCount_; i++) {
-    delete[] overflow_[i].bitmap;
+    psramDeleteArray(overflow_[i].bitmap);
     overflow_[i].bitmap = nullptr;
     overflow_[i].codepoint = 0;
   }
@@ -252,8 +263,8 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
     // Load only the small class-lookup tables (~3KB each). The full matrix
     // (~36KB contiguous for Literata) is built per-page from SD in
     // buildMiniKernMatrix().
-    s.kernLeftClasses = new (std::nothrow) EpdKernClassEntry[s.header.kernLeftEntryCount];
-    s.kernRightClasses = new (std::nothrow) EpdKernClassEntry[s.header.kernRightEntryCount];
+    s.kernLeftClasses = psramNewArray<EpdKernClassEntry>(s.header.kernLeftEntryCount);
+    s.kernRightClasses = psramNewArray<EpdKernClassEntry>(s.header.kernRightEntryCount);
 
     if (!s.kernLeftClasses || !s.kernRightClasses) {
       LOG_ERR("SDCF", "Failed to allocate kern classes (%u+%u bytes)", s.header.kernLeftEntryCount * 3u,
@@ -278,7 +289,7 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
   }
 
   if (hasLig) {
-    s.ligaturePairs = new (std::nothrow) EpdLigaturePair[s.header.ligaturePairCount];
+    s.ligaturePairs = psramNewArray<EpdLigaturePair>(s.header.ligaturePairCount);
     if (!s.ligaturePairs) {
       LOG_ERR("SDCF", "Failed to allocate ligature pairs");
       freeStyleKernLigatureData(s);
@@ -633,6 +644,22 @@ bool SdCardFont::load(const char* path) {
     uint32_t expectedOffset = 0;
     uint32_t prevLast = 0;
     EpdUnicodeInterval iv{};
+
+    // Regular/bold/italic weights of the same family almost always cover the identical codepoint
+    // set, so a later style's table is usually a byte-for-byte copy of an earlier one's. Sharing
+    // it saves a full table per style, which on a broad CJK font is tens of KB, and saves the
+    // PEAK rather than just the residency: allocating first and de-duplicating afterwards still
+    // needs both tables at once, and that peak is what fails on a tight heap.
+    // The decision rides along with the validation read below -- every record is already being
+    // read here -- so it costs no second pass over the table and no buffer to hold one.
+    // A style stays a candidate only while its table has matched every record so far.
+    uint8_t shareCandidates = 0;
+    for (uint8_t k = 0; k < i; k++) {
+      const auto& owner = styles_[k];
+      if (!owner.present || owner.header.intervalCount != s.header.intervalCount) continue;
+      if (!owner.bmpIntervals && !owner.fullIntervals) continue;
+      shareCandidates |= static_cast<uint8_t>(1u << k);
+    }
     for (uint32_t j = 0; j < s.header.intervalCount; ++j) {
       if (file.read(reinterpret_cast<uint8_t*>(&iv), sizeof(iv)) != sizeof(iv)) {
         LOG_ERR("SDCF", "Failed to read interval %u for style %u", j, i);
@@ -661,18 +688,50 @@ bool SdCardFont::load(const char* path) {
       if (iv.first > UINT16_MAX || iv.last > UINT16_MAX || iv.offset > UINT16_MAX) {
         canUseBmp16 = false;
       }
+      for (uint8_t k = 0; k < i && shareCandidates != 0; k++) {
+        if ((shareCandidates & (1u << k)) == 0) continue;
+        const auto& owner = styles_[k];
+        // Compared by value, so an above-BMP record never equals a compact one and drops out here.
+        const bool same = owner.intervalsAreBmp16
+                              ? (owner.bmpIntervals[j].first == iv.first && owner.bmpIntervals[j].last == iv.last &&
+                                 owner.bmpIntervals[j].offset == iv.offset)
+                              : (owner.fullIntervals[j].first == iv.first && owner.fullIntervals[j].last == iv.last &&
+                                 owner.fullIntervals[j].offset == iv.offset);
+        if (!same) shareCandidates &= static_cast<uint8_t>(~(1u << k));
+      }
       expectedOffset += span;
       prevLast = iv.last;
     }
 
-    if (!file.seekSet(s.intervalsFileOffset)) {
+    // Survived every record: alias the earlier style's table instead of allocating a copy.
+    // freeStyleAll() releases the table through its owning style.
+    for (uint8_t k = 0; k < i && shareCandidates != 0; k++) {
+      if ((shareCandidates & (1u << k)) == 0) continue;
+      auto& owner = styles_[k];
+      // Identical content can still be held in the other resident form when the two styles
+      // disagree on glyph count; aliasing across forms would misread the table.
+      if (owner.intervalsAreBmp16 != canUseBmp16) continue;
+      s.bmpIntervals = owner.bmpIntervals;
+      s.fullIntervals = owner.fullIntervals;
+      s.intervalsAreBmp16 = owner.intervalsAreBmp16;
+      s.intervalsShared = true;
+      LOG_DBG("SDCF", "Style %u: sharing style %u's %u-interval table (%u B not allocated)", i, k,
+              s.header.intervalCount,
+              s.header.intervalCount * (canUseBmp16 ? 6u : static_cast<uint32_t>(sizeof(EpdUnicodeInterval))));
+      break;
+    }
+
+    // Only the allocate-and-read path below needs the records again; a shared style is done.
+    if (!s.intervalsShared && !file.seekSet(s.intervalsFileOffset)) {
       LOG_ERR("SDCF", "Failed to seek back to intervals for style %u", i);
       freeAll();
       return false;
     }
 
-    if (canUseBmp16) {
-      s.bmpIntervals = new (std::nothrow) PerStyle::BmpInterval16[s.header.intervalCount];
+    if (s.intervalsShared) {
+      // Aliased above; fall through to the stub/metadata setup without touching the table.
+    } else if (canUseBmp16) {
+      s.bmpIntervals = psramNewArray<PerStyle::BmpInterval16>(s.header.intervalCount);
       if (!s.bmpIntervals) {
         LOG_ERR("SDCF", "Failed to allocate compact intervals for style %u", i);
         freeAll();
@@ -689,7 +748,7 @@ bool SdCardFont::load(const char* path) {
       }
       s.intervalsAreBmp16 = true;
     } else {
-      s.fullIntervals = new (std::nothrow) EpdUnicodeInterval[s.header.intervalCount];
+      s.fullIntervals = psramNewArray<EpdUnicodeInterval>(s.header.intervalCount);
       if (!s.fullIntervals) {
         LOG_ERR("SDCF", "Failed to allocate %u intervals for style %u", s.header.intervalCount, i);
         freeAll();
@@ -1181,7 +1240,7 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     // holes can coalesce with the old arena. Recreate only the small read order.
     if (totalBitmapSize > s.miniBitmapCapacity) {
       readOrder.reset();
-      delete[] s.miniBitmap;
+      psramDeleteArray(s.miniBitmap);
       s.miniBitmap = nullptr;
       s.miniBitmapCapacity = 0;
       if (ESP.getMaxAllocHeap() < totalBitmapSize) {
@@ -1326,7 +1385,7 @@ void SdCardFont::clearCache() {
 
 void SdCardFont::clearPersistentCache() {
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
-    delete[] advanceTable_[i];
+    psramDeleteArray(advanceTable_[i]);
     advanceTable_[i] = nullptr;
     advanceTableSize_[i] = 0;
   }
@@ -1363,7 +1422,7 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
   uint32_t mergedCap = oldSize + newCount;
   if (mergedCap > ADVANCE_CACHE_LIMIT) mergedCap = ADVANCE_CACHE_LIMIT;
 
-  AdvanceEntry* merged = new (std::nothrow) AdvanceEntry[mergedCap];
+  AdvanceEntry* merged = psramNewArray<AdvanceEntry>(mergedCap);
   if (!merged) {
     LOG_ERR("SDCF", "mergeIntoAdvanceTable: alloc failed (%u entries) style %u", mergedCap, styleIdx);
     return;
@@ -1380,7 +1439,7 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
     }
   }
 
-  delete[] advanceTable_[styleIdx];
+  psramDeleteArray(advanceTable_[styleIdx]);
   advanceTable_[styleIdx] = merged;
   advanceTableSize_[styleIdx] = k;
 }
@@ -1518,9 +1577,9 @@ int SdCardFont::fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCoun
   return totalMissed;
 }
 
-template <typename Iter>
-int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
-                                       const char* extraText) {
+int SdCardFont::buildAdvanceTablePacked(const char* const* segments, const size_t* segmentLens,
+                                        const size_t segmentCount, const bool includeSpace, const bool includeHyphen,
+                                        uint8_t styleMask, const char* extraText) {
   if (!loaded_) return -1;
   styleMask = resolveStyleMask(styleMask);
   if (styleMask == 0) return 0;
@@ -1537,8 +1596,14 @@ int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, 
   uint32_t cpCount = 0;
   bool hitCap = false;
 
-  for (auto it = begin; it != end && !hitCap; ++it) {
-    hitCap = collectUniqueCodepoints(asCStr(*it), codepoints, cpCount, MAX_UNIQUE_CODEPOINTS);
+  // Each segment holds consecutive NUL-terminated words; walk word by word.
+  for (size_t seg = 0; seg < segmentCount && !hitCap; ++seg) {
+    const char* p = segments[seg];
+    const char* const end = p + segmentLens[seg];
+    while (p < end && !hitCap) {
+      hitCap = collectUniqueCodepoints(p, codepoints, cpCount, MAX_UNIQUE_CODEPOINTS);
+      p += strlen(p) + 1;
+    }
   }
   if (extraText && !hitCap) {
     hitCap = collectUniqueCodepoints(extraText, codepoints, cpCount, MAX_UNIQUE_CODEPOINTS);
@@ -1561,12 +1626,8 @@ int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, 
 }
 
 int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask, const char* extraText) {
-  return buildAdvanceTableRange(&utf8Text, &utf8Text + 1, false, false, styleMask, extraText);
-}
-
-int SdCardFont::buildAdvanceTable(const std::deque<std::string>& words, bool includeHyphen, uint8_t styleMask,
-                                  const char* extraText) {
-  return buildAdvanceTableRange(words.begin(), words.end(), words.size() > 1, includeHyphen, styleMask, extraText);
+  const size_t len = strlen(utf8Text);
+  return buildAdvanceTablePacked(&utf8Text, &len, 1, false, false, styleMask, extraText);
 }
 
 // --- Stats ---
@@ -1667,27 +1728,27 @@ const EpdGlyph* SdCardFont::onGlyphMiss(void* ctx, uint32_t codepoint) {
   // Read bitmap data into temporary (if any)
   uint8_t* tempBitmap = nullptr;
   if (tempGlyph.dataLength > 0) {
-    tempBitmap = new (std::nothrow) uint8_t[tempGlyph.dataLength];
+    tempBitmap = psramNewArray<uint8_t>(tempGlyph.dataLength);
     if (!tempBitmap) {
       LOG_ERR("SDCF", "Overflow: failed to allocate %u bytes for U+%04X bitmap", tempGlyph.dataLength, codepoint);
       return nullptr;
     }
     if (!file.seekSet(s.bitmapFileOffset + tempGlyph.dataOffset)) {
       LOG_ERR("SDCF", "Overflow: failed to seek to bitmap for U+%04X", codepoint);
-      delete[] tempBitmap;
+      psramDeleteArray(tempBitmap);
       file.close();
       return nullptr;
     }
     if (file.read(tempBitmap, tempGlyph.dataLength) != static_cast<int>(tempGlyph.dataLength)) {
       LOG_ERR("SDCF", "Overflow: failed to read bitmap for U+%04X", codepoint);
-      delete[] tempBitmap;
+      psramDeleteArray(tempBitmap);
       return nullptr;
     }
   }
 
   // All reads succeeded — commit to slot and advance ring buffer
   if (wasAtCapacity) {
-    delete[] self->overflow_[slot].bitmap;
+    psramDeleteArray(self->overflow_[slot].bitmap);
   } else {
     self->overflowCount_++;
   }

@@ -121,6 +121,14 @@ upload.
 Installed fonts appear in **Settings > Reader > Font Family** after the font
 registry refreshes.
 
+On devices with external RAM enabled in CrossPoint, you can use TTF/OTF/TTC
+fonts directly.
+Copy them into `/fonts/` or `/.fonts/` on the SD card. The Fonts page and
+`/api/fonts/upload` accept `.cpfont` files only. See the
+[SD card font guide](./sd-card-fonts.md) for the direct font folder layout.
+To remove a loose direct font, delete its file from the SD card. The Fonts page
+can delete a family stored in a subfolder.
+
 ## Command Line Use
 
 Power users can use `curl`, WebDAV clients, or WebSocket clients while the web
