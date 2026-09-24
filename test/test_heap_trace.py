@@ -153,6 +153,30 @@ class AnalysisTest(unittest.TestCase):
         self.assertIn("untraced", symbolizer.site(untraced))
 
 
+class LocationTest(unittest.TestCase):
+    def test_labels_show_repo_relative_paths(self):
+        # addr2line output from a heaptrace ELF, with the home directory replaced.
+        cases = {
+            "/home/dev/crosspoint-reader/lib/EpdFont/SdCardFont.cpp:1478": "lib/EpdFont/SdCardFont.cpp:1478",
+            "/home/dev/crosspoint-reader/freeink-sdk/libs/hardware/InputManager/src/InputManager.cpp:197":
+                "freeink-sdk/libs/hardware/InputManager/src/InputManager.cpp:197",
+            "/home/dev/.platformio/packages/framework-espidf/components/pthread/pthread.c:623":
+                "framework-espidf/components/pthread/pthread.c:623",
+            "/home/dev/.platformio/packages/framework-arduinoespressif32/cores/esp32/WString.cpp:185":
+                "arduino/cores/esp32/WString.cpp:185",
+            "/home/dev/.platformio/packages/framework-arduinoespressif32/libraries/Wire/src/Wire.cpp:453 "
+            "(discriminator 2)": "arduino/libraries/Wire/src/Wire.cpp:453",
+            "/home/dev/.platformio/packages/toolchain-riscv32-esp/riscv32-esp-elf/include/c++/14.2.0/bits/"
+            "basic_string.tcc:332 (discriminator 1)": "c++/basic_string.tcc:332",
+            # libstdc++ headers keep the toolchain build machine's path.
+            "/builds/idf/crosstool-NG/.build/riscv32-esp-elf/build/build-cc-gcc-final/riscv32-esp-elf/"
+            "rv32imc_zicsr_zifencei/ilp32/no-rtti/libstdc++-v3/include/riscv32-esp-elf/bits/gthr-default.h:746":
+                "gthr-default.h:746",
+        }
+        for raw, label in cases.items():
+            self.assertEqual(heap_trace.clean_location(raw), label)
+
+
 class CommandTest(unittest.TestCase):
     def run_command(self, stream, *argv):
         with tempfile.TemporaryDirectory() as directory:

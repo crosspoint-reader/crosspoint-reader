@@ -113,6 +113,29 @@ A typical fragmentation investigation:
 `summary` reports stream health, the busiest call sites overall and what is
 still allocated at the end of the capture.
 
+### Example maps
+
+Both maps come from one X3 capture of a Korean EPUB, opened with an empty book
+cache. The first is Home before opening the book: 105,568 B free, and the
+largest free block is 102,388 B.
+
+![Heap map on Home before reading](images/heap-trace/heap-map-home.png)
+
+The second is 10 pages into the book, while the chapter layout is still being
+built in the background. Free heap is 51,840 B, but the largest free block is
+only 17,396 B.
+
+- The blue advance-width table from `SdCardFont::fetchAdvancesForCodepoints`
+  (red outline) sits between the outlined 17 KB block and the free rows above
+  it. Freeing it would give a 39 KB block.
+- An orange kerning table caps a second hole.
+
+![Heap map with the largest free block split by a font table](images/heap-trace/heap-map-fragmented.png)
+
+To hover the blocks, open [heap-map-home.svg](images/heap-trace/heap-map-home.svg)
+or [heap-map-fragmented.svg](images/heap-trace/heap-map-fragmented.svg) from a
+local checkout in a browser.
+
 Every command accepts:
 
 - `--elf`: the ELF of the build that produced the capture. The default is

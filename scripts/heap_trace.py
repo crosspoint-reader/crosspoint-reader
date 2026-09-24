@@ -271,6 +271,21 @@ class Replay:
                 snap.removed_stale += 1
 
 
+
+def clean_location(location: str) -> str:
+    """Shortens an addr2line location and removes the local checkout and toolchain paths."""
+    location = re.sub(r" \(discriminator \d+\)", "", location)
+    if match := re.search(r"/include/c\+\+/[^/]+/(?:bits/)?(.*)", location):
+        return "c++/" + match[1]
+    if match := re.search(r"/\.platformio/packages/(.*)", location):
+        return re.sub(r"^framework-arduinoespressif32/", "arduino/", match[1])
+    if match := re.match(r"/.*?/((?:src|lib|freeink-sdk|test)/.*)", location):
+        return match[1]  # the first repository directory, so SDK paths keep their prefix
+    if location.startswith("/"):
+        return location.rsplit("/", 1)[-1]  # an unrecognized absolute path: keep only the file name
+    return location
+
+
 class Symbolizer:
     def __init__(self, elf: Path | None):
         self.elf = elf if elf and elf.exists() else None
@@ -296,10 +311,7 @@ class Symbolizer:
             for position, address in enumerate(chunk):
                 function = output[2 * position] if 2 * position < len(output) else "??"
                 location = output[2 * position + 1] if 2 * position + 1 < len(output) else "??:0"
-                location = re.sub(r".*/include/c\+\+/[^/]+/(bits/)?", "c++/", location)
-                location = re.sub(r".*/framework-arduinoespressif32/", "arduino/", location)
-                location = re.sub(r".*/(src|lib|freeink-sdk)/", r"\1/", location)
-                location = re.sub(r" \(discriminator \d+\)", "", location)
+                location = clean_location(location)
                 self.cache[address] = f"{function} ({location})"
 
     def site(self, alloc: Alloc, frames: int = 1) -> str:
@@ -575,9 +587,8 @@ def cmd_map(args):
     out.append(f'<text x="{left}" y="36">free {stats["free"]:,} B · largest {stats["largest"]:,} B · '
                f'fragmentation {frag:.2f} · {stats["free_blocks"]} free / {stats["allocated_blocks"]} used blocks · '
                f'1 px = {bytes_per_px} B, 1 row = {row_bytes} B</text>')
-    out.append(f'<text id="info" x="{left}" y="52" fill="#555">Hover a block: address, size, age and call site '
-               f'appear here, and blocks from the same site are highlighted. Black outline = largest free block; '
-               f'red outline = run that caps it ({len(pins)}).</text>')
+    out.append(f'<text id="info" x="{left}" y="52" fill="#555">Hover a block for its details and same-site blocks. '
+               f'Black outline: largest free block. Red outline: runs that cap it ({len(pins)}).</text>')
     out.append(f'<text id="info2" x="{left}" y="{top - 2}" fill="#b00" font-size="10"></text>')
     for i, row in enumerate(rows):
         out.append(f'<text x="4" y="{top + i * row_h + row_h - 1}" font-size="7" fill="#777">0x{row:08x}</text>')
