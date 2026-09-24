@@ -211,7 +211,6 @@ void WifiSelectionActivity::processWifiScanResults() {
     appendHiddenNetworkEntry();
     rebuildNetworkRowItems();
     autoConnecting = false;
-    manualNetworkListRequested = false;
     state = WifiSelectionState::NETWORK_LIST;
     selectedNetworkIndex = 0;
     requestUpdate();
@@ -266,7 +265,6 @@ void WifiSelectionActivity::processWifiScanResults() {
   }
 
   autoConnecting = false;
-  manualNetworkListRequested = false;
   state = WifiSelectionState::NETWORK_LIST;
   selectedNetworkIndex = 0;
   requestUpdate();
@@ -449,6 +447,7 @@ void WifiSelectionActivity::showNetworkListFromAutoConnect() {
 
   if (networks.empty()) {
     startWifiScan(false);
+    manualNetworkListRequested = true;
     return;
   }
 
@@ -520,7 +519,7 @@ void WifiSelectionActivity::checkConnectionStatus() {
 
     // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
     // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
+    // Settings > System > Clock > Sync clock now.
     if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
@@ -741,6 +740,13 @@ void WifiSelectionActivity::loop() {
 
   // Handle network list state
   if (state == WifiSelectionState::NETWORK_LIST) {
+    if (manualNetworkListRequested) {
+      if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+        manualNetworkListRequested = false;
+      }
+      return;
+    }
+
     // Check for Back button to exit (cancel)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onComplete(false);
@@ -748,7 +754,7 @@ void WifiSelectionActivity::loop() {
     }
 
     // Check for Confirm button to select network or rescan
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (!networks.empty()) {
         selectNetwork(selectedNetworkIndex);
       } else {
@@ -806,7 +812,7 @@ void WifiSelectionActivity::loop() {
   }
 }
 
-std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi) const {
+std::string WifiSelectionActivity::getSignalStrengthIndicator(const int32_t rssi) {
   // Convert RSSI to signal bars representation
   if (rssi >= -50) {
     return "||||";  // Excellent
@@ -890,7 +896,7 @@ void WifiSelectionActivity::buildListScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   // Content below the header + MAC sub-band, above the legend line.
-  screen.setContentMargin(fui::Insets{
+  screen.setContentMarginFromScreen(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight +
                            metrics.verticalSpacing),
       static_cast<int16_t>(renderer.getScreenWidth() - (safe.x + safe.width)),
@@ -931,24 +937,14 @@ void WifiSelectionActivity::buildListScreen(UiScreen& screen) {
   // Tap opens; long-press a saved network forgets it (physical buttons stay in loop()).
   props.inputMask = fui::InputTouch | fui::InputLongPress;
   props.valueInset = 8;  // air between the signal bars and the row edge
-  // Long SSIDs wrap onto a second line inside the row (two body lines always
-  // fit the theme row height) instead of truncating; the trailing value is
+  // Long SSIDs grow their row to a second line; the trailing value is
   // just the short status glyphs, so skip the balanced 60%-band wrap cap.
   props.labelText = screen.theme().bodyText;
   props.labelText.maxLines = 2;
   props.balanceWrappedLabelWithValue = false;
   listNav.selected = static_cast<int>(selectedNetworkIndex);
-  int16_t rowHeight = screen.theme().rowHeight;
-  if (!mappedInput.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser row height
-    // instead of FreeInkUI's touch-target-sized default (see
-    // UiListActivity::syncListViewport; this screen predates that base and
-    // syncs its own viewport directly). A long SSID that wraps grows only
-    // its own row: list() sizes wrapped items per-row.
-    rowHeight = static_cast<int16_t>(metrics.listRowHeight);
-    props.rowHeight = rowHeight;
-  }
-  listNav.syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, static_cast<int>(networks.size()), props);
+  props.partialTrailingRow = true;
+  screen.syncListViewport(listNav, props, static_cast<int>(networks.size()));
   screen.list(props);
 }
 

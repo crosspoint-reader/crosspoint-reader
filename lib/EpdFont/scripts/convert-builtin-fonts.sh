@@ -13,7 +13,7 @@ for size in ${NOTOSERIF_FONT_SIZES[@]}; do
     font_name="notoserif_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSerif/NotoSerif-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli > $output_path
     echo "Generated $output_path"
   done
 done
@@ -23,7 +23,7 @@ for size in ${NOTOSANS_FONT_SIZES[@]}; do
     font_name="notosans_${size}_$(echo $style | tr '[:upper:]' '[:lower:]')"
     font_path="../builtinFonts/source/NotoSans/NotoSans-${style}.ttf"
     output_path="../builtinFonts/${font_name}.h"
-    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum > $output_path
+    python fontconvert.py $font_name $size $font_path --2bit --compress --pnum --zopfli > $output_path
     echo "Generated $output_path"
   done
 done
@@ -45,9 +45,11 @@ ARABIC_INTERVALS=(
   --additional-intervals 0x061F,0x061F  # Arabic question mark
   --additional-intervals 0x0621,0x0621  # hamza (non-joining, never shaped)
   --additional-intervals 0x0640,0x0640  # tatweel
+  --additional-intervals 0x0654,0x0654  # Persian/Urdu ezafe hamza, Arabic hamza carriers
   --additional-intervals 0x0660,0x0669  # Arabic-Indic digits
   --additional-intervals 0x06BA,0x06BA  # noon ghunna base (initial/medial keep base cp)
   --additional-intervals 0x06D4,0x06D4  # Urdu full stop
+  --additional-intervals 0x06D5,0x06D5  # ae (isolated; Kurdish/Uyghur/Ottoman) — has no presentation form
   --additional-intervals 0x06F0,0x06F9  # extended Arabic-Indic digits (Farsi/Urdu)
   --additional-intervals 0xFB56,0xFB59  # peh (Farsi)
   --additional-intervals 0xFB66,0xFB69  # tteh (Urdu)

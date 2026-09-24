@@ -8,22 +8,27 @@
 #include <string>
 #include <vector>
 
+#include "WordStore.h"
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
 class GfxRenderer;
 
 class ParsedText {
-  // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
-  // of tokens (CJK splits every character), and a vector grows by reallocating its
-  // whole element array into one contiguous block (32 B/std::string -> 64-128 KB at
-  // a few thousand tokens). On the ESP32-C3 that single large contiguous request
-  // fails under a fragmented, BLE-resident heap and the throwing operator new
-  // abort()s the firmware (fresh-open CJK crash). A deque grows in fixed ~512 B nodes
-  // (largest contiguous alloc stays ~2 KB regardless of token count), so it never
-  // triggers that. The per-token parallel arrays below stay vectors: 1 byte / 1 bit
-  // each, they never approach the contiguous-block ceiling.
-  std::deque<std::string> words;
+  // Word text lives in wordStore (chunked bump arena, NUL-terminated entries);
+  // words holds 8-byte handles into it. This replaces the former
+  // std::deque<std::string>: per-word string objects, their SSO spills, and
+  // every hyphenation/NFC temporary were the layout path's dominant
+  // small-allocation churn, and any failed implicit allocation abort()s under
+  // -fno-exceptions. Handles stay in a std::deque for the #2814 reason: no
+  // large contiguous reallocation at CJK token counts (deque grows in fixed
+  // ~512 B nodes). On arena OOM the word is dropped and hadDroppedWords()
+  // latches so the section build can fail readably instead of aborting.
+  // rubyTexts stays a deque of strings: ruby is rare and per-block small.
+  // The per-token parallel arrays below stay vectors: 1 byte / 1 bit each,
+  // they never approach the contiguous-block ceiling.
+  WordStore wordStore;
+  std::deque<WordStore::StoredWord> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   // Boundary flags use all four combinations:
   //   continues=false, noSpace=false: ordinary breakable word gap
@@ -36,6 +41,11 @@ class ParsedText {
   // 0 = none. An annotation rather than a token split, so the hyphenator and line breaker still
   // see whole words; TextBlock stores emphasis the same way, so extractLine passes it through.
   std::vector<uint8_t> wordFocusBoundary;
+  // Internal-link identity through tokenization, hyphenation and BiDi reorder.
+  // Zero means plain text; non-zero indexes linkTargets. Kept at one byte per
+  // token and discarded after layout, never added to the page-cache TextBlock.
+  std::vector<uint8_t> wordLinkIds;
+  std::vector<std::string> linkTargets;
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
   // uint16_t deltas from a shared base to keep this layout-only metadata small.
   // Pathological spans wider than uint16_t use sparse rebases; rendered
@@ -49,11 +59,13 @@ class ParsedText {
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
+  uint8_t wordSpacingPercent = 100;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
   bool isNaturalAlign;
   bool hasRtlWord;
+  bool droppedWords = false;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -62,6 +74,8 @@ class ParsedText {
   std::vector<uint8_t> reorderedFocusBoundaryScratch;
   std::vector<uint16_t> visualOrderScratch;
 
+  std::string_view wordAt(const size_t i) const { return wordStore.view(words[i]); }
+  bool storeWord(std::string_view text, WordStore::StoredWord& out);
   uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
   uint32_t visibleOffsetAt(size_t wordIndex) const;
   void pushVisibleOffset(uint32_t offset);
@@ -82,7 +96,7 @@ class ParsedText {
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                    const std::vector<size_t>& lineBreakIndices,
-                   const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
+                   const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                    const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
@@ -98,7 +112,9 @@ class ParsedText {
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
-               uint32_t visibleTextOffset = 0);
+               uint32_t visibleTextOffset = 0, uint8_t linkId = 0);
+  uint8_t addLinkTarget(const char* href);
+  bool linkTargetMatches(uint8_t linkId, const char* href) const;
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
   EpdFontFamily::Style getWordStyleAt(size_t index) const {
@@ -110,7 +126,11 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  // True once any word was dropped because the text arena could not allocate.
+  // Callers must treat the block as incomplete and fail the section build.
+  bool hadDroppedWords() const { return droppedWords; }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
-                             const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
-                             bool includeLastLine = true);
+                             const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
+                             bool includeLastLine = true, int8_t characterSpacing = 0,
+                             uint8_t wordSpacingPercent = 100);
 };

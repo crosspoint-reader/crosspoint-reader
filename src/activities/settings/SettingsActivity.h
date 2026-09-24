@@ -2,6 +2,7 @@
 #include <I18n.h>
 
 #include <functional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ enum class SettingAction {
   None,
   RemapFrontButtons,
   CustomiseStatusBar,
+  ClockSettings,
   KOReaderSync,
   OPDSBrowser,
   Network,
@@ -24,6 +26,9 @@ enum class SettingAction {
   Language,
   DownloadFonts,
   TextSettings,
+  KeyboardLayouts,
+  HomeButton,
+  About,
 };
 
 struct SettingInfo {
@@ -31,6 +36,7 @@ struct SettingInfo {
   SettingType type;
   uint8_t CrossPointSettings::* valuePtr = nullptr;
   std::vector<StrId> enumValues;
+  std::span<const StrId> staticEnumValues;
   std::vector<std::string> enumStringValues;  // runtime alternative to StrId enumValues (for SD card fonts etc.)
   SettingAction action = SettingAction::None;
 
@@ -66,6 +72,10 @@ struct SettingInfo {
     return *this;
   }
 
+  std::span<const StrId> enumLabels() const {
+    return staticEnumValues.empty() ? std::span<const StrId>(enumValues) : staticEnumValues;
+  }
+
   static SettingInfo Toggle(StrId nameId, uint8_t CrossPointSettings::* ptr, const char* key = nullptr,
                             StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
@@ -84,6 +94,18 @@ struct SettingInfo {
     s.type = SettingType::ENUM;
     s.valuePtr = ptr;
     s.enumValues = std::move(values);
+    s.key = key;
+    s.category = category;
+    return s;
+  }
+
+  static SettingInfo StaticEnum(StrId nameId, uint8_t CrossPointSettings::* ptr, std::span<const StrId> values,
+                                const char* key = nullptr, StrId category = StrId::STR_NONE_OPT) {
+    SettingInfo s;
+    s.nameId = nameId;
+    s.type = SettingType::ENUM;
+    s.valuePtr = ptr;
+    s.staticEnumValues = values;
     s.key = key;
     s.category = category;
     return s;
@@ -109,7 +131,7 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo String(StrId nameId, char* ptr, size_t maxLen, const char* key = nullptr,
+  static SettingInfo String(StrId nameId, const char* ptr, size_t maxLen, const char* key = nullptr,
                             StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
     s.nameId = nameId;
@@ -176,7 +198,8 @@ class SettingsActivity final : public UiTabListActivity {
   void rebuildRowItems();
 
   static constexpr int categoryCount = 4;
-  static const StrId categoryNames[categoryCount];
+  static constexpr StrId categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
+                                                         StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
   // --- UiTabListActivity contract ---
   int listCount() const override { return settingsCount; }
@@ -200,9 +223,12 @@ class SettingsActivity final : public UiTabListActivity {
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
+  void drawChrome() override;
+  void drawFooter() override;
+
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
   void onEnter() override;
   void onExit() override;
-  void render(RenderLock&&) override;
+  void render(RenderLock&& lock) override;
 };

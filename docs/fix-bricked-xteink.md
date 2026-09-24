@@ -30,7 +30,7 @@ If your device isn't USB-locked, flash it over USB instead — it's safer and mu
 
 Two options:
 
-- Use the backup provided by @Uri-Tauber at `crosspoint-reader/docs/images/spiflash/crosspoint_spiflash_backup.tar.xz`, and extract the `.bin` file.
+- Use the backup provided by @Uri-Tauber at `crosspoint-reader/docs/images/spiflash/crosspoint_spiflash_backup.tar.xz`, and extract the `.bin` file. (⚠️ WARNING: This firmware file is for xteink x4/x3 alone! ⚠️)
 - Dump one yourself from a working, unlocked device over USB:
     - Turn the device on, connect the USB cable and do:
     ```bash

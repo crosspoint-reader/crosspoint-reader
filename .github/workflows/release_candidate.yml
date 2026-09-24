@@ -5,7 +5,6 @@ on:
 
 jobs:
   build-release-candidate:
-    if: startsWith(github.ref_name, 'release/')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -17,6 +16,8 @@ jobs:
             asset: firmware-sticky.bin
           - pio_env: x4pro-gh_release_rc
             asset: firmware-x4pro.bin
+          - pio_env: x4c-gh_release_rc
+            asset: firmware-x4c.bin
           - pio_env: papermono-gh_release_rc
             asset: firmware-papermono.bin
     steps:
@@ -49,8 +50,18 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
-          restore-keys: pio-${{ runner.os }}-
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-v2-${{ runner.os }}-
+
+      - name: Pin pioarduino core inside the platform penv
+        run: |
+          set -euo pipefail
+          # Envs with custom_sdkconfig run a nested `pio run` from
+          # ~/.platformio/penv. Keep that core on the same version as the outer core.
+          # See https://github.com/pioarduino/platform-espressif32/issues/529
+          pio pkg install -e ${{ matrix.pio_env }}
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          ~/.platformio/penv/bin/pio --version
 
       - name: Extract env
         run: |
@@ -70,7 +81,7 @@ jobs:
           fi
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: CrossPoint-RC-${{ env.BRANCH_SUFFIX }}-${{ matrix.pio_env }}
           path: |

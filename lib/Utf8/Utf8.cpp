@@ -1,11 +1,19 @@
 #include "Utf8.h"
 
+#include <cstring>
+
 #include "Utf8ComposeTable.h"
 
 namespace {
-// Look up the canonical composition of (base + combining mark), or 0 if none.
+// Look up canonical composition, including algorithmic Hangul LV / LVT pairs.
 uint32_t utf8ComposePair(const uint32_t base, const uint32_t mark) {
-  if (base > 0xFFFF || mark > 0xFFFF) return 0;
+  if (base >= 0x1100 && base <= 0x1112 && mark >= 0x1161 && mark <= 0x1175) {
+    return 0xAC00 + (base - 0x1100) * 588 + (mark - 0x1161) * 28;
+  }
+  if (base >= 0xAC00 && base <= 0xD7A3 && (base - 0xAC00) % 28 == 0 && mark >= 0x11A8 && mark <= 0x11C2) {
+    return base + mark - 0x11A7;
+  }
+  if (!utf8IsCombiningMark(mark) || base > 0xFFFF || mark > 0xFFFF) return 0;
   int lo = 0;
   int hi = kUtf8ComposeTableSize - 1;
   while (lo <= hi) {
@@ -23,15 +31,25 @@ uint32_t utf8ComposePair(const uint32_t base, const uint32_t mark) {
 }
 }  // namespace
 
+uint32_t utf8DecomposedBase(const uint32_t cp) {
+  if (cp < 0x00C0) return 0;  // no precomposed Latin letter below this
+  for (const auto& e : kUtf8ComposeTable) {
+    if (e.composed == cp) return e.base;
+  }
+  return 0;
+}
+
 std::string utf8ComposeNfc(const std::string& in) {
   // Fast path: NFC composition can only change text that contains a combining
-  // diacritical mark U+0300-036F (UTF-8 lead byte 0xCC or 0xCD). Plain ASCII and
+  // diacritical mark U+0300-036F (UTF-8 lead byte 0xCC or 0xCD) or conjoining
+  // Hangul jamo (lead byte 0xE1 for U+1000-1FFF). Plain ASCII and
   // already-precomposed (NFC) text -- the vast majority of words -- have none, so
-  // return them untouched without walking codepoints or allocating. A 0xCD that is
-  // actually a non-combining codepoint just falls through to the full pass below.
+  // return them untouched without walking codepoints or allocating. A 0xCD or
+  // 0xE1 that is actually a non-composing codepoint (e.g. Georgian, Cherokee)
+  // just falls through to the full pass below.
   bool maybeHasMarks = false;
   for (const unsigned char c : in) {
-    if (c == 0xCC || c == 0xCD) {
+    if (c == 0xCC || c == 0xCD || c == 0xE1) {
       maybeHasMarks = true;
       break;
     }
@@ -46,12 +64,12 @@ std::string utf8ComposeNfc(const std::string& in) {
   while (*p) {
     const uint32_t cp = utf8NextCodepoint(&p);
     if (cp == 0) break;
+    const uint32_t composed = haveBase ? utf8ComposePair(base, cp) : 0;
+    if (composed) {
+      base = composed;  // keep accumulating marks or trailing jamo
+      continue;
+    }
     if (utf8IsCombiningMark(cp)) {
-      const uint32_t composed = haveBase ? utf8ComposePair(base, cp) : 0;
-      if (composed) {
-        base = composed;  // keep accumulating further marks onto the composed char
-        continue;
-      }
       // No composition: flush the pending base, then emit the mark unchanged.
       if (haveBase) {
         utf8AppendCodepoint(base, out);
@@ -59,13 +77,49 @@ std::string utf8ComposeNfc(const std::string& in) {
       }
       utf8AppendCodepoint(cp, out);
     } else {
-      if (haveBase) utf8AppendCodepoint(base, out);
+      if (haveBase) {
+        utf8AppendCodepoint(base, out);
+      }
       base = cp;
       haveBase = true;
     }
   }
   if (haveBase) utf8AppendCodepoint(base, out);
   return out;
+}
+
+void utf8ComposeNfcInPlace(char* buffer) {
+  const auto* read = reinterpret_cast<const unsigned char*>(buffer);
+  char* write = buffer;
+  char* baseStart = buffer;
+  uint32_t base = 0;
+  while (*read) {
+    const auto* start = read;
+    const uint32_t cp = utf8NextCodepoint(&read);
+    const uint32_t composed = utf8ComposePair(base, cp);
+    if (composed) {
+      // All supported compositions are BMP codepoints and fit within the
+      // consumed pair's bytes, so rewriting the base cannot overtake read.
+      write = baseStart;
+      if (composed < 0x800) {
+        *write++ = static_cast<char>(0xC0 | (composed >> 6));
+      } else {
+        *write++ = static_cast<char>(0xE0 | (composed >> 12));
+        *write++ = static_cast<char>(0x80 | ((composed >> 6) & 0x3F));
+      }
+      *write++ = static_cast<char>(0x80 | (composed & 0x3F));
+      base = composed;
+    } else {
+      baseStart = write;
+      const size_t length = read - start;
+      // Preserve uncomposed bytes, including malformed UTF-8: replacement
+      // characters could expand the buffer. Earlier compositions may overlap.
+      memmove(write, start, length);
+      write += length;
+      base = utf8IsCombiningMark(cp) ? 0 : cp;
+    }
+  }
+  *write = '\0';
 }
 
 int utf8CodepointLen(const unsigned char c) {

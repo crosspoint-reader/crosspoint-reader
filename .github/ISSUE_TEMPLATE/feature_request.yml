@@ -8,7 +8,7 @@ body:
       value: |
         Thanks for taking the time to propose a change to CrossPoint!
 
-        **Before you continue, please read [SCOPE.md](../blob/master/SCOPE.md) and [ROADMAP.md](../blob/master/ROADMAP.md).**
+        **Before you continue, please read [SCOPE.md](https://github.com/crosspoint-reader/crosspoint-reader/blob/master/SCOPE.md) and [ROADMAP.md](https://github.com/crosspoint-reader/crosspoint-reader/blob/master/ROADMAP.md).**
 
         CrossPoint is intentionally narrow. Most rejected proposals are rejected for scope reasons that are already
         documented. The checklist below exists to save both of us time.
@@ -26,7 +26,7 @@ body:
           required: true
         - label: This is **not** a new theme or theming change (themes are temporarily closed pending the move to SD-loaded themes).
           required: true
-        - label: This is **not** a new external network connector (sync engine, cloud storage, remote file access, OPDS extensions beyond what exists, or any new "talk to a server" feature).
+        - label: This is **not** a new external network connector (sync engine, cloud storage, remote file access, or any new "talk to a server" feature). Improvements to the existing OPDS support are in scope and do not count as a new connector.
           required: true
         - label: This is **not** an interactive app (game, calculator, notepad), writing/authoring tool, RSS/news/browser feature, media playback feature, or PDF rendering.
           required: true

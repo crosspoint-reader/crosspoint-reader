@@ -92,7 +92,7 @@ All under `freeink-sdk/libs/ui/FreeInkUI/include/components/`:
 |---|---|
 | Controls | `button`, `checkbox`, `slider`, `progress-bar`, `header` |
 | Lists | `list` (virtualized), `table`, `dropdown`, `radio-group`, `setting-row`, `toggle-row`, `stepper-row` |
-| Keyboard | `keyboard` (QWERTY/AZERTY/QWERTZ/ES layouts), `key-grid` |
+| Keyboard | `keyboard` (Latin, Cyrillic and Hebrew layouts), `key-grid` |
 | Overlays | `popup`, `option-dialog`, `context-menu`, `message-panel`, `toast` |
 | Bars | `status-bar`, `tab-bar`, `reader-chrome`, `battery-indicator`, `gesture-bar`, `tap-zones` |
 | Media | `book-card`, `cover-grid`, `cover-carousel`, `metric-card` |

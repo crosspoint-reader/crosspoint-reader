@@ -126,8 +126,19 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
     modeName = "Connect to Calibre";
   } else if (mode == NetworkMode::CREATE_HOTSPOT) {
     modeName = "Create Hotspot";
+#if FREEINK_CAP_USB_MSC
+  } else if (mode == NetworkMode::USB_DRIVE) {
+    modeName = "USB Drive";
+#endif
   }
   LOG_DBG("WEBACT", "Network mode selected: %s", modeName);
+
+#if FREEINK_CAP_USB_MSC
+  if (mode == NetworkMode::USB_DRIVE) {
+    activityManager.goToUsbDrive();
+    return;
+  }
+#endif
 
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
@@ -362,9 +373,9 @@ void CrossPointWebServerActivity::loop() {
         if ((i & 0x3F) == 0x3F) {
           yield();
           // Pump input inside this blocking loop so exit events remain responsive.
-          mappedInput.update();
-          // This update consumes the one-shot Home event before ActivityManager
-          // can see it, so handle Home here alongside Back.
+          mappedInput.update(true);
+          // Home remains available now; other configured actions are deferred
+          // to the next main-loop pass.
           if (mappedInput.wasReleased(MappedInputManager::Button::Back) || mappedInput.wasHomeGesture()) {
             onGoHome();
             return;

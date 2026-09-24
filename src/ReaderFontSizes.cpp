@@ -5,8 +5,12 @@
 std::vector<uint8_t> readerFontPointSizes(const SdCardFontRegistry* registry, const char* sdFamilyName) {
   if (registry && sdFamilyName && sdFamilyName[0] != '\0') {
     if (const auto* family = registry->findFamily(sdFamilyName)) {
-      auto sizes = family->availableSizes();
-      if (!sizes.empty()) return sizes;
+      // Vector (.ttf/.otf) fonts render at any size — offer the standard reader
+      // sizes instead of the placeholder size-0 entry in the family record.
+      if (!family->vector) {
+        auto sizes = family->availableSizes();
+        if (!sizes.empty()) return sizes;
+      }
     }
   }
   return {std::begin(BUILTIN_READER_POINT_SIZES), std::end(BUILTIN_READER_POINT_SIZES)};

@@ -286,3 +286,118 @@ families:
       bold:       {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Bold.ttf"}
       italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
+
+  # ── Hebrew ─────────────────────────────────────────────────────────────
+
+  - name: FrankRuhlLibre
+    description: "Hebrew serif (Hebrew, Latin)"
+    scripts: [hebrew, latin]
+    intervals: hebrew,latin-ext,ipa-chars,punctuation,reading,symbols
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/FrankRuhlLibre%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/frankruhllibre/FrankRuhlLibre%5Bwght%5D.ttf", variable: {wght: 700}}
+
+  - name: DavidLibre
+    description: "Traditional Hebrew serif (Hebrew, Latin)"
+    scripts: [hebrew, latin]
+    intervals: hebrew,latin-ext,ipa-chars,punctuation,reading,symbols
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/davidlibre/DavidLibre-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/davidlibre/DavidLibre-Bold.ttf"}
+
+  - name: Alef
+    description: "Simple, legible Hebrew sans-serif (Hebrew, Latin)"
+    scripts: [hebrew, latin]
+    intervals: hebrew,latin-ext,ipa-chars,punctuation,reading,symbols
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alef/Alef-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/alef/Alef-Bold.ttf"}
+
+  # ── Arabic ─────────────────────────────────────────────────────────────
+
+  - name: Amiri
+    description: "Arabic naskh-style serif (Arabic, Latin)"
+    scripts: [arabic, latin]
+    intervals: arabic,latin-ext,ipa-chars
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Regular.ttf"}
+      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Bold.ttf"}
+      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-Italic.ttf"}
+      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/amiri/Amiri-BoldItalic.ttf"}
+
+  - name: NotoNaskhArabicUI
+    description: "Arabic naskh tuned for screen reading (Arabic)"
+    scripts: [arabic]
+    intervals: arabic,ascii,latin1,punctuation
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Regular.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+
+  - name: NotoNaskhArabicUISemiBold
+    description: "Noto Naskh Arabic UI at SemiBold weight, heavier body text (Arabic)"
+    scripts: [arabic]
+    intervals: arabic,ascii,latin1,punctuation
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-SemiBold.ttf"}
+      bold:    {url: "https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/NotoNaskhArabicUI/hinted/ttf/NotoNaskhArabicUI-Bold.ttf"}
+
+  - name: NotoKufiArabic
+    description: "Arabic kufi-style sans-serif (Arabic, Latin)"
+    scripts: [arabic, latin]
+    intervals: arabic,latin-ext,ipa-chars
+    sizes: [12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/notokufiarabic/NotoKufiArabic%5Bwght%5D.ttf", variable: {wght: 700}}
+
+  # ── Korean ─────────────────────────────────────────────────────────────
+
+  - name: Pretendard
+    description: "Modern Korean sans-serif (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Bold.otf"}
+
+  - name: PretendardMedium
+    description: "Pretendard at Medium weight, slightly heavier body text (Hangul, Latin)"
+    scripts: [hangul, latin]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Medium.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-ExtraBold.otf"}
+
+  - name: RIDIBatang
+    description: "RIDI's e-book serif, single weight (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/RIDIBatang/f1628238e56fd41c12451dfc7d975527b61ebfc7/RIDIBatang.otf"}
+
+  - name: MaruBuri
+    description: "Naver's serif for screen reading (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Regular.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
+
+  - name: MaruBuriSemiBold
+    description: "MaruBuri at SemiBold weight, heavier body text (Hangul, Latin)"
+    scripts: [hangul]
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [8, 10, 12, 14, 16, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-SemiBold.otf"}
+      bold:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}

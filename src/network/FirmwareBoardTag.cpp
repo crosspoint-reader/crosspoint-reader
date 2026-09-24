@@ -1,13 +1,16 @@
 #include "FirmwareBoardTag.h"
 
+#include <BoardConfig.h>
+
 #include <cstring>
 
 // The board name derives from the FREEINK_DEVICE_* build flags so every env
 // (and any fork built from this source) is tagged automatically. The combined
-// X3/X4 ESP32-C3 binary is one compatibility class, tagged "x4". Names match
-// the release asset suffixes (firmware-<name>.bin; plain firmware.bin for x4).
+// X3/X4 ESP32-C3 binary is one compatibility class, tagged "x4".
 #if FREEINK_DEVICE_X4PRO
 #define CROSSPOINT_BOARD_NAME "x4pro"
+#elif FREEINK_DEVICE_X4CLASSIC
+#define CROSSPOINT_BOARD_NAME "x4c"
 #elif FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
 #define CROSSPOINT_BOARD_NAME "x4"
 #elif FREEINK_DEVICE_PAPERMONO
