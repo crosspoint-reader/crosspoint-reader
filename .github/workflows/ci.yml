@@ -68,11 +68,24 @@ jobs:
           key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-v2-${{ runner.os }}-
 
-      - name: Install cppcheck runtime dependency
+      - name: Install cppcheck runtime dependencies
         run: |
           # pioarduino's Linux cppcheck binary links against libpcre.so.3.
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libpcre3
+          sudo apt-get install -y --no-install-recommends libpcre3 cmake
+
+      - name: Bootstrap PlatformIO tools
+        run: |
+          set -euo pipefail
+          pio pkg install -e default
+          uv pip install --python ~/.platformio/penv/bin/python "pioarduino==6.1.19"
+          ~/.platformio/penv/bin/pio --version
+          cmake_path="$HOME/.platformio/packages/tool-cmake/bin/cmake"
+          if [[ ! -x "$cmake_path" ]]; then
+            # The registry descriptor can be installed without its Linux CMake payload.
+            mkdir -p "$(dirname "$cmake_path")"
+            ln -sf "$(command -v cmake)" "$cmake_path"
+          fi
 
       - name: Run cppcheck
         run: pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high
