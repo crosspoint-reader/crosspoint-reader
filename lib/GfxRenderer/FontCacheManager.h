@@ -22,9 +22,11 @@ class FontCacheManager {
   //     rings, advance tables (SdCardFont::releaseResidentCaches).
   //   * TTF (vector): byte arenas, glyph tables, and the lazy bold/italic
   //     FreeType faces (TtfEpdFont::releaseResidentCaches).
-  // Everything faults back in on demand. For heap-critical transitions (e.g.
+  // Metrics remain available after eviction; advance working sets are reserved
+  // at reader open. For heap-critical transitions (e.g.
   // web-server + WiFi startup, image decode, dictionary, sleep).
-  void releaseSdFontCaches();
+  // Section layout preserves the small SD advance working sets.
+  void releaseSdFontCaches(bool preserveAdvances = false);
   void prewarmCache(int fontId, const char* utf8Text, uint8_t styleMask = 0x0F, bool accumulate = true);
   void logStats(const char* label = "render");
   void resetStats();

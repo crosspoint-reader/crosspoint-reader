@@ -274,9 +274,9 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
   }
-  // Reclaim rebuildable font caches before CSS and layout allocations.
+  // Reclaim bitmap/kern arenas while preserving the fixed layout metric caches.
   if (auto* fontCache = renderer.getFontCacheManager()) {
-    fontCache->releaseSdFontCaches();
+    fontCache->releaseSdFontCaches(/*preserveAdvances=*/true);
   }
   buildComplete_ = false;
   builtPageCount_ = 0;

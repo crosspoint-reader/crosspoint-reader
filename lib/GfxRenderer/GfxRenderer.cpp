@@ -36,8 +36,8 @@ uint16_t getSdCardSpaceAdvance(SdCardFont& font, const EpdFontFamily::Style styl
   const uint16_t advance = font.getAdvance(' ', resolvedStyle);
   if (advance != 0) return advance;
 
-  // Zero means uncached (full table, style not prewarmed, or failed
-  // preparation): read the glyph, as the per-codepoint slow path does.
+  // Zero can be an exact advance or unavailable metrics (unprepared, missing,
+  // or failed SD read). Match the per-codepoint glyph fallback.
   const EpdFont* epdFont = font.getEpdFont(resolvedStyle);
   const EpdGlyph* glyph = epdFont ? epdFont->getGlyph(' ') : nullptr;
   return glyph ? glyph->advanceX : 0;
@@ -51,8 +51,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, BidiU
 // getTextAdvanceX() measures the bidi-reordered, Arabic-shaped codepoint stream,
 // so the SD advance table must be warmed with the presentation forms as well as
 // the logical codepoints — otherwise every RTL word measurement misses the fast
-// path and falls through to onGlyphMiss(), which opens the .cpfont and reads
-// glyph metadata + bitmap into the 8-slot overflow ring, once per glyph.
+// path and reads glyph metadata from the .cpfont once per glyph.
 // Tokens without RTL lead bytes (0xD6-0xDB) are skipped with a byte scan, so
 // pure-LTR text pays almost nothing.
 void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
