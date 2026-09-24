@@ -129,8 +129,8 @@ class ParsedText {
   // True once text was dropped because an arena could not allocate.
   // Callers must treat the block as incomplete and fail the section build.
   bool hadDroppedWords() const { return droppedWords; }
-  // Consumes words even on failure. A false result requires discarding the
-  // incomplete section, not retrying layout with this paragraph.
+  // Failure retains words, including already emitted lines and any hyphenation
+  // splits. Discard the incomplete section instead of retrying this paragraph.
   bool layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::unique_ptr<TextBlock>, uint32_t)>& processLine,
                              bool includeLastLine = true, int8_t characterSpacing = 0,

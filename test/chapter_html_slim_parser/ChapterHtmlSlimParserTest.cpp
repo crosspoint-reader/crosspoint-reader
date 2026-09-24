@@ -804,7 +804,7 @@ TEST(TextSpacingLayout, CachedPageRestoresSpacing) {
       [&](std::unique_ptr<TextBlock> line, auto) {
         ++lines;
         Page page;
-        page.elements.push_back(std::make_unique<PageLine>(std::move(line), 4, 12));
+        ASSERT_TRUE(page.elements.push_back(std::make_unique<PageLine>(std::move(line), 4, 12)));
         const auto* original = static_cast<const PageLine&>(*page.elements[0]).getBlock();
         {
           HalFile file;
