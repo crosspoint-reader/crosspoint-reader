@@ -319,6 +319,58 @@ TEST_F(ChapterHtmlSlimParserTest, ReclaimsFlushedTableAnchorStorageBeforeCollect
   EXPECT_TRUE(parser.pendingAnchorId.empty());
 }
 
+TEST_F(ChapterHtmlSlimParserTest, KeepsAnchorsAcrossRepeatedStackedStorageOverflow) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  for (size_t i = 0; i < 80; ++i) {
+    parser.pendingAnchorId = "paragraph-" + std::to_string(i);
+    parser.collectPendingTableAnchor();
+    EXPECT_TRUE(parser.pendingAnchorId.empty());
+    EXPECT_LE(parser.tableRowAnchorBytes, ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES);
+  }
+  parser.flushTableRowAnchors();
+  ASSERT_EQ(parser.anchorData.size(), 80u);
+  std::set<std::string> ids;
+  for (const auto& anchor : parser.anchorData) ids.insert(anchor.first);
+  EXPECT_EQ(ids.size(), 80u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, OversizedTocAnchorKeepsBufferedAliasesAfterPageBreak) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  parser.pendingAnchorId = "alias";
+  parser.collectPendingTableAnchor();
+  const std::string chapter(ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES, 'x');
+  parser.tocAnchors = {chapter};
+  parser.currentPage = std::make_unique<Page>();
+  ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
+  size_t completed = 0;
+  parser.completePageFn = [&](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) { ++completed; };
+  parser.pendingAnchorId = chapter;
+  parser.collectPendingTableAnchor();
+  parser.flushTableRowAnchors();
+  EXPECT_EQ(completed, 1u);
+  ASSERT_EQ(parser.anchorData.size(), 2u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, OverflowingAliasFollowsBufferedTocPageBreak) {
+  parser.tableRowStacked = true;
+  parser.insideTableCell = true;
+  const std::string chapter(ChapterHtmlSlimParser::MAX_GRID_TABLE_ANCHOR_BYTES - 2, 'x');
+  parser.tocAnchors = {chapter};
+  parser.pendingAnchorId = chapter;
+  parser.collectPendingTableAnchor();
+  parser.currentPage = std::make_unique<Page>();
+  ASSERT_TRUE(parser.currentPage->elements.push_back(std::make_unique<PageHorizontalRule>(100, 1, 0, 0)));
+  parser.completePageFn = [](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t) {};
+  parser.pendingAnchorId = "alias";
+  parser.collectPendingTableAnchor();
+  parser.flushTableRowAnchors();
+  ASSERT_EQ(parser.anchorData.size(), 2u);
+  for (const auto& anchor : parser.anchorData) EXPECT_EQ(anchor.second, 1u);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, DoesNotEmitEmptyPageForOversizedLine) {
   parser.viewportHeight = 8;
   parser.currentPage = std::make_unique<Page>();

@@ -333,8 +333,14 @@ void ChapterHtmlSlimParser::collectPendingTableAnchor() {
     if (!tableRowStacked) {
       fallbackTableRowToStacked();
     } else {
-      LOG_DBG("EHP", "Dropped oversized table anchor: %.48s", pendingAnchorId.c_str());
-      pendingAnchorId.clear();
+      // Retain overflow IDs at the current page without growing the row buffer.
+      // Apply any TOC break before recording the cell's other aliases.
+      if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
+        flushPendingAnchor();
+      }
+      flushPendingTableCellAnchors();
+      flushPendingAnchor();
+      compactTableRowAnchors();
     }
     return;
   }
