@@ -25,8 +25,8 @@ class DictionaryWordSelectActivity final : public Activity {
   explicit DictionaryWordSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                         std::unique_ptr<Page> page, std::string dictionaryFolder, int marginLeft,
                                         int marginTop)
-      : DictionaryWordSelectActivity(renderer, mappedInput, page.get(), std::move(page),
-                                     std::move(dictionaryFolder), marginLeft, marginTop) {}
+      : DictionaryWordSelectActivity(renderer, mappedInput, page.get(), std::move(page), std::move(dictionaryFolder),
+                                     marginLeft, marginTop) {}
 
   // Borrows `page`: the caller keeps ownership and must keep it alive and
   // unchanged until this activity finishes (definition-view flow).

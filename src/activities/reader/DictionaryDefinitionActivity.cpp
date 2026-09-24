@@ -224,15 +224,14 @@ void DictionaryDefinitionActivity::wrapText() {
 void DictionaryDefinitionActivity::openWordSelect() {
   if (pages.empty()) return;
   const BodyOrigin origin = bodyOrigin();
-  startActivityForResult(
-      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, pages[currentPage].get(),
-                                                      dictionaryFolder, origin.x, origin.y),
-      [this](const ActivityResult& result) {
-        if (const auto* lookup = std::get_if<DictionaryLookupResult>(&result.data)) {
-          showDefinition(lookup->headword, lookup->definition, lookup->isHtml);
-        }
-        requestUpdate(true);
-      });
+  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, pages[currentPage].get(),
+                                                                        dictionaryFolder, origin.x, origin.y),
+                         [this](const ActivityResult& result) {
+                           if (const auto* lookup = std::get_if<DictionaryLookupResult>(&result.data)) {
+                             showDefinition(lookup->headword, lookup->definition, lookup->isHtml);
+                           }
+                           requestUpdate(true);
+                         });
 }
 
 // Swaps a cross-referenced word's definition into this same activity instead

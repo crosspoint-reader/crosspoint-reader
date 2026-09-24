@@ -330,7 +330,7 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
   startActivityForResult(
       std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), SETTINGS.dictionaryName,
-                                                      orientedMarginLeft, orientedMarginTop),
+                                                     orientedMarginLeft, orientedMarginTop),
       [this](const ActivityResult&) { requestUpdate(); });
 }
 

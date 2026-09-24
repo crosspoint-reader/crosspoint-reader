@@ -183,11 +183,10 @@ void DictionaryWordSelectActivity::performLookup() {
       // Reader flow: this activity owns its page, so it stays on the stack
       // (Back returns to word-select over the same reader page) while a new
       // definition view is pushed on top.
-      startActivityForResult(
-          std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
-                                                         std::move(definition), dictionaryFolder,
-                                                         dict.definitionsAreHtml()),
-          [this](const ActivityResult&) { requestUpdate(); });
+      startActivityForResult(std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
+                                                                            std::move(definition), dictionaryFolder,
+                                                                            dict.definitionsAreHtml()),
+                             [this](const ActivityResult&) { requestUpdate(); });
       return;
     }
     // Definition-chaining flow: hand the pick back to the

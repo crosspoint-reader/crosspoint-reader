@@ -77,10 +77,9 @@ struct DictionaryLookupResult {
   bool isHtml = false;
 };
 
-using ResultVariant =
-    std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult,
-                 DictionaryLookupResult>;
+using ResultVariant = std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult,
+                                   IntervalResult, PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult,
+                                   FilePathResult, DictionaryLookupResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
