@@ -72,7 +72,8 @@ be a power of two) or when stacks are too short:
 PLATFORMIO_BUILD_FLAGS="-DHEAP_TRACE_RING_BYTES=16384 -DHEAP_TRACE_STACK_DEPTH=8" pio run -e heaptrace -t upload
 ```
 
-A larger ring costs the same amount of heap.
+A larger ring costs the same amount of heap. The stack depth can be 1 to 16;
+each extra frame adds 4 bytes to the stack of every task that allocates.
 
 ## Analyze
 
