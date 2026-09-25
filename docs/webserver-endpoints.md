@@ -341,6 +341,7 @@ Response:
     "name": "My Catalog",
     "url": "http://calibre.local:8080/opds",
     "username": "reader",
+    "saveDirectory": "/Calibre",
     "hasPassword": true
   }
 ]
@@ -354,7 +355,7 @@ If `password` is omitted during an update, the existing password is preserved.
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
-  -d '{"name":"My Catalog","url":"http://calibre.local:8080/opds","username":"reader","password":"secret"}' \
+  -d '{"name":"My Catalog","url":"http://calibre.local:8080/opds","username":"reader","password":"secret","saveDirectory":"/Calibre"}' \
   http://crosspoint.local/api/opds
 ```
 
