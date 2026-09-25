@@ -11,11 +11,15 @@
 
 #include "../../../../src/fontIds.h"
 
-size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes) {
+size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const uint16_t textBytes,
+                            const bool hasDisplay, const uint16_t displayBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
   size_t size = static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(int16_t) + sizeof(uint8_t));
   if (hasFocus) {
     size += static_cast<size_t>(wordCount) * (sizeof(uint16_t) + sizeof(uint8_t));
+  }
+  if (hasDisplay) {
+    size += static_cast<size_t>(wordCount) * sizeof(uint16_t) + displayBytes;
   }
   return size + textBytes;
 }
@@ -30,6 +34,10 @@ void TextBlock::bindArenaPointers() {
     focusSuffixXArr = reinterpret_cast<const uint16_t*>(base + off);
     off += wc * 2;
   }
+  if (displayPresent) {
+    displayOffArr = reinterpret_cast<const uint16_t*>(base + off);
+    off += wc * 2;
+  }
   stylesArr = base + off;
   off += wc;
   if (focusPresent) {
@@ -37,12 +45,16 @@ void TextBlock::bindArenaPointers() {
     off += wc;
   }
   textArr = reinterpret_cast<const char*>(base + off);
+  if (displayPresent) {
+    displayArr = textArr + textBytes;
+  }
 }
 
 TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const BlockStyle& blockStyle,
-                     std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans)
+                     std::vector<std::string> rubyTexts, std::vector<LinkSpan> linkSpans,
+                     const std::vector<std::string>& displayWords)
     : blockStyle(blockStyle), rubyTexts(std::move(rubyTexts)), linkSpans(std::move(linkSpans)) {
   // Same invariant as deserialize(): a block never holds an all-empty rubyTexts, so a
   // ruby-less line costs nothing beyond its arena. The layout engine hands one over for
@@ -55,8 +67,10 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   // Focus annotations are optional: empty vectors mean no word in this block has a split.
   // When present, they must be sized in lockstep with words[].
   const bool hasFocus = !focusBoundary.empty();
+  const bool hasDisplay = !displayWords.empty();
   if (words.size() != wordXpos.size() || words.size() != wordStyles.size() || words.size() > 10000 ||
-      (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size()))) {
+      (hasFocus && (words.size() != focusBoundary.size() || words.size() != focusSuffixX.size())) ||
+      (hasDisplay && words.size() != displayWords.size())) {
     LOG_ERR("TXB", "Construction failed: size mismatch (words=%u, xpos=%u, styles=%u, boundary=%u, suffixX=%u)",
             static_cast<uint32_t>(words.size()), static_cast<uint32_t>(wordXpos.size()),
             static_cast<uint32_t>(wordStyles.size()), static_cast<uint32_t>(focusBoundary.size()),
@@ -67,7 +81,9 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
 
   numWords = static_cast<uint16_t>(words.size());
   focusPresent = hasFocus;
+  displayPresent = hasDisplay;
   if (numWords == 0) {
+    displayPresent = false;
     return;  // valid empty block, no arena
   }
 
@@ -83,8 +99,19 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     return;
   }
   textBytes = static_cast<uint16_t>(totalText);
+  size_t totalDisplay = 0;
+  if (displayPresent) {
+    for (const auto& d : displayWords) totalDisplay += d.empty() ? 0 : d.size() + 1;
+    if (totalDisplay > UINT16_MAX - 1) {
+      LOG_ERR("TXB", "Display text %u bytes exceeds arena limit; drawing unshaped",
+              static_cast<uint32_t>(totalDisplay));
+      displayPresent = false;
+      totalDisplay = 0;
+    }
+  }
+  displayBytes = static_cast<uint16_t>(totalDisplay);
 
-  const size_t size = arenaSize(numWords, focusPresent, textBytes);
+  const size_t size = arenaSize(numWords, focusPresent, textBytes, displayPresent, displayBytes);
   arena = makeUniqueNoThrow<uint8_t[]>(size);
   if (!arena) {
     // Evict rebuildable caches (SD-font mini data, render glyph cache) and
@@ -96,7 +123,9 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
     numWords = 0;
     textBytes = 0;
+    displayBytes = 0;
     focusPresent = false;
+    displayPresent = false;
     isValid = false;
     return;
   }
@@ -122,6 +151,21 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
     for (uint16_t i = 0; i < numWords; i++) {
       suffixX[i] = focusSuffixX[i];
       boundary[i] = focusBoundary[i];
+    }
+  }
+  if (displayPresent) {
+    auto* displayOff = const_cast<uint16_t*>(displayOffArr);
+    auto* display = const_cast<char*>(displayArr);
+    uint16_t dOff = 0;
+    for (uint16_t i = 0; i < numWords; i++) {
+      if (displayWords[i].empty()) {
+        displayOff[i] = NO_DISPLAY;
+        continue;
+      }
+      displayOff[i] = dOff;
+      memcpy(display + dOff, displayWords[i].data(), displayWords[i].size());
+      dOff += static_cast<uint16_t>(displayWords[i].size());
+      display[dOff++] = '\0';
     }
   }
 }
@@ -162,7 +206,7 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         }
         int groupActualWidth = 0;
         for (int k = 0; k < groupWordCount; ++k) {
-          groupActualWidth += renderer.getTextAdvanceX(fontId, wordText(i + k), wordStyle(i + k), tracking);
+          groupActualWidth += renderer.getTextAdvanceX(fontId, displayText(i + k), wordStyle(i + k), tracking);
         }
         const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, tracking);
         const int leaderWordX = xposArr[i] + x;
@@ -211,11 +255,14 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
   const int rubyShift = getRubyShift(ascender);
 
   for (uint16_t i = 0; i < numWords; i++) {
-    const char* word = wordText(i);
+    // Focus splits only occur on words without a display form (ParsedText
+    // never splits a complex-script word), so the byte boundary below always
+    // indexes the logical text it was computed on.
+    const char* word = displayText(i);
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
     const auto baseDir =
-        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));
+        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(wordText(i), blockStyle.isRtl ? 1 : 0));
     const uint8_t boundary = focusBoundary(i);
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside
@@ -270,6 +317,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
                                                GfxRenderer::TextMeasureMode::Rendered);
 
       // Do not decorate the synthetic em-space used for paragraph indentation.
+      // (A display form copies the logical text outside its shaped runs, so
+      // the em-space prefix is the same in both.)
       if (wordTextLen(i) >= 3 && static_cast<uint8_t>(word[0]) == 0xE2 && static_cast<uint8_t>(word[1]) == 0x80 &&
           static_cast<uint8_t>(word[2]) == 0x83) {
         const char* visibleText = word + 3;
@@ -312,10 +361,14 @@ bool TextBlock::serialize(HalFile& file) const {
   // exactly the on-disk layout (see TextBlock.h), so one write covers all
   // per-word arrays and the text blob.
   serialization::writePod(file, numWords);
-  serialization::writePod(file, static_cast<uint8_t>(focusPresent ? 1 : 0));
+  serialization::writePod(file,
+                          static_cast<uint8_t>((focusPresent ? FLAG_FOCUS : 0) | (displayPresent ? FLAG_DISPLAY : 0)));
   serialization::writePod(file, textBytes);
+  if (displayPresent) {
+    serialization::writePod(file, displayBytes);
+  }
   if (numWords > 0) {
-    const size_t size = arenaSize(numWords, focusPresent, textBytes);
+    const size_t size = arenaSize(numWords, focusPresent, textBytes, displayPresent, displayBytes);
     if (file.write(arena.get(), size) != size) {
       LOG_ERR("TXB", "Serialization failed: arena write (%u bytes)", static_cast<uint32_t>(size));
       return false;
@@ -349,11 +402,20 @@ bool TextBlock::serialize(HalFile& file) const {
 
 std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint16_t wc;
-  uint8_t hasFocus;
+  uint8_t flags;
   uint16_t textBytes;
+  uint16_t displayBytes = 0;
   serialization::readPod(file, wc);
-  serialization::readPod(file, hasFocus);
+  serialization::readPod(file, flags);
   serialization::readPod(file, textBytes);
+  const bool hasDisplay = (flags & FLAG_DISPLAY) != 0;
+  if (hasDisplay) {
+    serialization::readPod(file, displayBytes);
+  }
+  if ((flags & ~(FLAG_FOCUS | FLAG_DISPLAY)) != 0 || (hasDisplay && wc == 0)) {
+    LOG_ERR("TXB", "Deserialization failed: bad flags 0x%02X", flags);
+    return nullptr;
+  }
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
@@ -373,10 +435,12 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   }
   block->numWords = wc;
   block->textBytes = textBytes;
-  block->focusPresent = hasFocus != 0;
+  block->displayBytes = displayBytes;
+  block->focusPresent = (flags & FLAG_FOCUS) != 0;
+  block->displayPresent = hasDisplay;
 
   if (wc > 0) {
-    const size_t size = arenaSize(wc, block->focusPresent, textBytes);
+    const size_t size = arenaSize(wc, block->focusPresent, textBytes, hasDisplay, displayBytes);
     block->arena = makeUniqueNoThrow<uint8_t[]>(size);
     if (!block->arena) {
       LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
@@ -401,6 +465,24 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
       if (textOff[i] <= textOff[i - 1] || textOff[i] >= textBytes || text[textOff[i] - 1] != '\0') {
         LOG_ERR("TXB", "Deserialization failed: corrupt word offset %u", i);
         return nullptr;
+      }
+    }
+    // Display offsets: each either absent or the start of a NUL-terminated
+    // entry inside the display region.
+    if (hasDisplay) {
+      const uint16_t* displayOff = block->displayOffArr;
+      const char* display = block->displayArr;
+      if (displayBytes == 0 || display[displayBytes - 1] != '\0') {
+        LOG_ERR("TXB", "Deserialization failed: corrupt display layout");
+        return nullptr;
+      }
+      for (uint16_t i = 0; i < wc; i++) {
+        const uint16_t off = displayOff[i];
+        if (off == NO_DISPLAY) continue;
+        if (off >= displayBytes || (off > 0 && display[off - 1] != '\0')) {
+          LOG_ERR("TXB", "Deserialization failed: corrupt display offset %u", i);
+          return nullptr;
+        }
       }
     }
   }

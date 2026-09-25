@@ -90,6 +90,17 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 49
+
+Version 49 shapes Bengali text. Fonts with shaping data form conjuncts, reph
+and positioned marks through HarfBuzz, and other fonts reorder pre-base vowel
+signs; both change word widths, so cached word positions from version 48 no
+longer match. TextBlock's former `hasFocus` byte became a flags byte: bit 1
+adds a `displayBytes` count, a `displayOff[]` table and a `display[]` blob that
+hold each complex-script word in its drawn form (ShapingTokens.h glyph,
+advance and offset tokens), so page renders draw shaped words without running
+the shaper. Words without a display entry draw `text[]` as before.
+
 ### Version 48
 
 Version 48 keeps the version 47 serialized layout unchanged. It was bumped
@@ -262,20 +273,29 @@ struct BlockStyle {
 
 struct TextBlock {
     u16 wordCount;
-    u8 hasFocus;
+    u8 flags [[comment("Bit 0: focus split arrays present. Bit 1: display text present (v49)")]];
     u16 textBytes [[comment("Total size of text[], including one NUL per word")]];
+    if ((flags & 2) != 0) {
+        u16 displayBytes [[comment("Total size of display[], including one NUL per stored entry")]];
+    }
 
     if (wordCount > 0) {
         u16 textOff[wordCount] [[comment("Byte offset of word i's text within text[]")]];
         s16 wordXPos[wordCount];
-        if (hasFocus != 0) {
+        if ((flags & 1) != 0) {
             u16 wordFocusSuffixX[wordCount] [[comment("Suffix x offset from word start")]];
         }
+        if ((flags & 2) != 0) {
+            u16 displayOff[wordCount] [[comment("Offset within display[], 0xFFFF = draw text[] as is")]];
+        }
         WordStyle wordStyle[wordCount];
-        if (hasFocus != 0) {
+        if ((flags & 1) != 0) {
             u8 wordFocusBoundary[wordCount] [[comment("UTF-8 byte boundary between bold prefix and suffix")]];
         }
         char text[textBytes] [[comment("All words back to back, each NUL-terminated")]];
+        if ((flags & 2) != 0) {
+            char display[displayBytes] [[comment("Drawn form of complex-script words (shaped glyph tokens)")]];
+        }
     }
 
     BlockStyle blockStyle;

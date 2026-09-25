@@ -48,4 +48,9 @@ class GfxRenderer {
   int getSpaceAdvance(int, uint32_t, uint32_t, EpdFontFamily::Style) const { return 4; }
   bool isSdCardFont(int) const { return false; }
   void ensureSdCardFontReady(int, const char* const*, const size_t*, size_t, bool, bool, uint8_t) const {}
+  bool shapeForDisplay(int, const char*, EpdFontFamily::Style, std::string&) const { return false; }
+  struct ShapingMemoScope {
+    ShapingMemoScope() {}
+    ~ShapingMemoScope() {}
+  };
 };
