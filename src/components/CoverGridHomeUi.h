@@ -18,6 +18,10 @@ class CoverGridHomeUi final : public UiAppHost {
   static constexpr int GRID_ROWS = 2;
   static constexpr int MAX_BOOKS = 1 + GRID_COLUMNS * GRID_ROWS;
   static_assert(MAX_BOOKS <= HomeCoverCache::MAX_COVERS);
+  // Home menu tabs: Browse Files, Library, OPDS Browser (optional), File
+  // Transfer, Settings. drawTabs()'s ICONS table must have exactly this many
+  // entries -- it static_asserts against this constant.
+  static constexpr int TAB_COUNT = 5;
   explicit CoverGridHomeUi(GfxRenderer& renderer);
   void begin(const std::vector<RecentBook>& books, bool hasOpds, bool hasContinueReading);
   void refreshCoverPaths();
@@ -60,5 +64,5 @@ class CoverGridHomeUi final : public UiAppHost {
   freeink::ui::CoverGridProps grid;
   freeink::ui::Rect gridBounds{};
   freeink::ui::TabBarProps tabs;
-  std::array<freeink::ui::TabItem, 5> tabItems;
+  std::array<freeink::ui::TabItem, TAB_COUNT> tabItems;
 };
