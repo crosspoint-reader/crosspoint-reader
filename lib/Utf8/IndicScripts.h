@@ -1,7 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 
 // The Indic scripts CrossPoint shapes (Brahmic scripts written with spaces
 // between words): what the shaper, line breaking, font probes and the
@@ -89,17 +91,11 @@ inline constexpr uint32_t VIRAMAS[] = {0x094D, 0x09CD, 0x0A4D, 0x0ACD, 0x0B4D, 0
 inline constexpr uint32_t NUKTAS[] = {0x093C, 0x09BC, 0x0A3C, 0x0ABC, 0x0B3C, 0x0C3C, 0x0CBC};
 
 constexpr bool isVirama(const uint32_t cp) {
-  for (const uint32_t v : VIRAMAS) {
-    if (v == cp) return true;
-  }
-  return false;
+  return std::any_of(std::begin(VIRAMAS), std::end(VIRAMAS), [cp](const uint32_t v) { return v == cp; });
 }
 
 constexpr bool isNukta(const uint32_t cp) {
-  for (const uint32_t n : NUKTAS) {
-    if (n == cp) return true;
-  }
-  return false;
+  return std::any_of(std::begin(NUKTAS), std::end(NUKTAS), [cp](const uint32_t n) { return n == cp; });
 }
 
 struct CodepointRange {
