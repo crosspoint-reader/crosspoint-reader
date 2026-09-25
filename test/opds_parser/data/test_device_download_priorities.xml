@@ -1,0 +1,34 @@
+<feed
+  xmlns="http://www.w3.org/2005/Atom"
+  xmlns:dc="http://purl.org/dc/terms/"
+  xmlns:ns3="http://calibre-ebook.com"
+  xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/"
+>
+  <entry>
+    <title>Device-specific preferences 1</title>
+    <link
+      rel="http://opds-spec.org/acquisition"
+      href="a.x3.epub"
+      type="application/epub+zip"
+    />
+    <link
+      rel="http://opds-spec.org/acquisition"
+      href="b.x4.epub"
+      type="application/epub+zip"
+    />
+  </entry>
+
+  <entry>
+    <title>Device-specific preferences 2</title>
+    <link
+      rel="http://opds-spec.org/acquisition"
+      href="a.x4.epub"
+      type="application/epub+zip"
+    />
+    <link
+      rel="http://opds-spec.org/acquisition"
+      href="b.x3.epub"
+      type="application/epub+zip"
+    />
+  </entry>
+</feed>
