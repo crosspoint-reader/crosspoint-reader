@@ -88,6 +88,26 @@ Mapping gMappings[kSlots] = {};
 uint8_t gMappingCount = 0;
 int8_t gUsable = -1;  // -1 unchecked, 0 no, 1 yes
 
+// Keys whose copy failed verification: the source does not hash to its key
+// (a corrupt file, or a bad hash in its header), so copying it again would
+// only erase and rewrite a slot on every face build. Oldest entry recycled.
+uint32_t gRejected[kSlots] = {};
+uint8_t gRejectedCount = 0;
+uint8_t gRejectedNext = 0;
+
+bool isRejected(const uint32_t key) {
+  for (uint8_t i = 0; i < gRejectedCount; i++) {
+    if (gRejected[i] == key) return true;
+  }
+  return false;
+}
+
+void rememberRejected(const uint32_t key) {
+  gRejected[gRejectedNext] = key;
+  gRejectedNext = static_cast<uint8_t>((gRejectedNext + 1) % kSlots);
+  if (gRejectedCount < kSlots) gRejectedCount++;
+}
+
 uint32_t slotOffset(const uint32_t slot) { return (slot + 1) * kSlotSize; }
 
 bool usable() {
@@ -147,7 +167,7 @@ bool copyIn(const uint32_t slot, const uint32_t length, const Reader read, void*
 }  // namespace
 
 const uint8_t* acquire(const uint32_t key, const uint32_t length, const Reader read, void* ctx) {
-  if (key == 0 || length == 0 || length > kSlotSize || !usable()) return nullptr;
+  if (key == 0 || length == 0 || length > kSlotSize || isRejected(key) || !usable()) return nullptr;
 
   DirEntry dir[kSlots];
   if (!backend::read(0, dir, sizeof(dir))) return nullptr;
@@ -182,6 +202,7 @@ const uint8_t* acquire(const uint32_t key, const uint32_t length, const Reader r
   const uint8_t* data = mapVerified(slot, key, length);
   if (data == nullptr) {
     LOG_ERR("FBC", "Slot %u failed verification after copy", slot);
+    rememberRejected(key);
     return nullptr;
   }
   // The entry is recorded only after the data verified, so an interrupted

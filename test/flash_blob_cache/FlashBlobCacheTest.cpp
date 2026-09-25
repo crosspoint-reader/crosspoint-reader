@@ -158,6 +158,23 @@ TEST_F(FlashBlobCacheTest, RecopiesACorruptedSlot) {
   EXPECT_EQ(std::memcmp(again, blob.data(), blob.size()), 0);
 }
 
+TEST_F(FlashBlobCacheTest, DoesNotRewriteFlashForABlobThatFailsItsHash) {
+  const auto blob = makeBlob(4096, 6);
+  const uint32_t wrongKey = keyOf(blob) ^ 0x100;  // e.g. a corrupt hash in the .cpfont header
+  EXPECT_EQ(FlashBlobCache::acquire(wrongKey, static_cast<uint32_t>(blob.size()), readBlob,
+                                    const_cast<std::vector<uint8_t>*>(&blob)),
+            nullptr);
+  const int erasesAfterFirst = fake::erases;
+  EXPECT_GT(erasesAfterFirst, 0);
+
+  gReads = 0;
+  EXPECT_EQ(FlashBlobCache::acquire(wrongKey, static_cast<uint32_t>(blob.size()), readBlob,
+                                    const_cast<std::vector<uint8_t>*>(&blob)),
+            nullptr);
+  EXPECT_EQ(fake::erases, erasesAfterFirst) << "a rejected blob must not erase a slot again";
+  EXPECT_EQ(gReads, 0);
+}
+
 TEST_F(FlashBlobCacheTest, RecyclesTheOldestIdleSlotButNeverAMappedOne) {
   std::vector<std::vector<uint8_t>> blobs;
   for (uint8_t i = 0; i < 9; i++) blobs.push_back(makeBlob(1000 + i, static_cast<uint8_t>(10 + i)));
