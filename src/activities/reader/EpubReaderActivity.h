@@ -160,6 +160,7 @@ class EpubReaderActivity final : public ReaderActivity {
   std::string moreRowName(int row) const;
   std::string moreRowValue(int row) const;
   void activateMoreRow(int row);
+  void openFootnoteSelect(bool reopenMenuOnCancel);
   void openDictionaryWordSelect();
   bool launchKOReaderSync();
   unsigned long confirmLongPressThreshold() const;

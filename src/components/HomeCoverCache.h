@@ -19,7 +19,6 @@ class HomeCoverCache {
   void prepare();
   void invalidate();
   void invalidate(size_t index);
-  void readSize(const std::string& path, int& width, int& height);
   bool paint(freeink::ui::Rect rect, size_t index, const std::string& path);
 
  private:

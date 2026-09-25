@@ -90,14 +90,23 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 48
+### Version 49
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 48 adds a fixed-size table-grid-row page element containing its bounds
+Version 49 adds a fixed-size table-grid-row page element containing its bounds
 and equal-width column count.
+
+### Version 48
+
+Version 48 keeps the version 47 serialized layout unchanged. It was bumped
+because Hangul text no longer has implicit line-break opportunities between
+syllables: Korean words wrap at spaces (like CSS `word-break: keep-all`), and
+with hyphenation enabled a word may also split at the end of a line wherever the
+CJK line-breaking rules allow, without an inserted hyphen. Justification stretches only word spaces. Cached line breaks and word
+positions from version 47 no longer match.
 
 ### Version 47
 
@@ -192,7 +201,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 48
+#define EXPECTED_VERSION 49
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256

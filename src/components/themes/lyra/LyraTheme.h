@@ -8,8 +8,10 @@ class GfxRenderer;
 namespace LyraMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .batteryHeight = 12,
-                                 .topPadding = 5,
-                                 .batteryBarHeight = 40,
+                                 // Shared anchor for every header band, including the cover-grid
+                                 // home's status band; roomy enough that the strip clears the edge.
+                                 .topPadding = 10,
+                                 .batteryBarHeight = 20,
                                  .headerHeight = 84,
                                  .verticalSpacing = 16,
                                  .previewPadding = 12,
@@ -29,7 +31,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .headerUnderlineSize = 3,
                                  .headerTitleAlign = 0,  // left
                                  .headerBatterySide = 0,
-                                 .headerBatteryDetached = true,
+                                 .headerClockCentered = false,
                                  .menuRowHeight = 64,
                                  .menuSpacing = 8,
                                  .tabSpacing = 8,
@@ -78,7 +80,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 16,
                                  .controlRadius = 6,
                                  .sheetRadius = 6,
                                  .capsuleRadius = 6};
-}
+}  // namespace LyraMetrics
 
 class LyraTheme : public BaseTheme {
  public:

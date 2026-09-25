@@ -504,21 +504,25 @@ void releaseSdFontCachesForDecode(const GfxRenderer& renderer) {
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
-  const bool frameWasInverted = display.isInverted();
-
-  // Sleep screens always use normal polarity. This activity draws directly
-  // from onEnter (outside ActivityManager's per-render polarity resolution),
-  // so clear any inversion left over from a night-mode reader render.
-  display.setInverted(false);
-
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
       (fromTimeout &&
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
 
   if (renderQuickResume) {
+    // Quick Resume keeps the current frame as-is, so the driver's inversion
+    // state stays too: a night-mode page sleeps in night polarity, and the
+    // moon icon inverts with it at transfer like any other draw.
     return renderLastScreenSleepScreen();
   }
+
+  const bool frameWasInverted = display.isInverted();
+
+  // The remaining sleep screens draw fresh content in normal polarity. This
+  // activity draws directly from onEnter (outside ActivityManager's
+  // per-render polarity resolution), so clear any inversion left over from a
+  // night-mode reader render.
+  display.setInverted(false);
 
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
     // Transparent mode retains the current framebuffer. Materialize any
@@ -874,12 +878,13 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderLastScreenSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
   renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
+  // Only the moon differs from the displayed frame, so a differential FAST
+  // update adds it without the flashing clean pass (which sweeps the panel
+  // through the inverse — a full white flash on a night-mode page).
   if (gpio.deviceIsX3()) {
-    // The controller still holds the displayed page, so its differential base
-    // waveform can add the moon without a full-screen flash.
     renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
   } else {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   }
 }
 

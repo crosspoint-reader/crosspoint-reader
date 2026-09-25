@@ -6,6 +6,9 @@
 #include <HalTiltSensor.h>
 #include <Logging.h>
 
+#include <cctype>
+#include <string_view>
+
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
 
@@ -24,6 +27,14 @@ inline bool gestureAllowsSwipe(const uint8_t gesture) {
 inline bool gestureAllowsTap(const uint8_t gesture) {
   return gesture == CrossPointSettings::TAP_AND_SWIPE || gesture == CrossPointSettings::TAP_ONLY ||
          gesture == CrossPointSettings::INVERTED_TAP;
+}
+
+inline bool isRtlBookLanguage(std::string_view tag) {
+  if (tag.size() < 2 || (tag.size() > 2 && tag[2] != '-' && tag[2] != '_')) return false;
+  const auto first = std::tolower(static_cast<unsigned char>(tag[0]));
+  const auto second = std::tolower(static_cast<unsigned char>(tag[1]));
+  return (first == 'h' && second == 'e') || (first == 'i' && second == 'w') || (first == 'a' && second == 'r') ||
+         (first == 'f' && second == 'a');
 }
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
@@ -78,7 +89,8 @@ struct TouchPageTurn {
   unsigned long heldMs;
 };
 
-inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input) {
+inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input,
+                                         const bool rtlBook = false) {
   TouchPageTurn result{false, false, 0};
   if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
     return result;
@@ -87,8 +99,10 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   // A slow swipe never becomes a long-press chapter skip.
   const auto dir = input.wasSwipe();
   if (dir != MappedInputManager::SwipeDir::None) {
-    result.next = dir == MappedInputManager::SwipeDir::Left && gestureAllowsSwipe(SETTINGS.pageTurnGesture);
-    result.prev = dir == MappedInputManager::SwipeDir::Right && gestureAllowsSwipe(SETTINGS.previousPageGesture);
+    result.next = dir == (rtlBook ? MappedInputManager::SwipeDir::Right : MappedInputManager::SwipeDir::Left) &&
+                  gestureAllowsSwipe(SETTINGS.pageTurnGesture);
+    result.prev = dir == (rtlBook ? MappedInputManager::SwipeDir::Left : MappedInputManager::SwipeDir::Right) &&
+                  gestureAllowsSwipe(SETTINGS.previousPageGesture);
     return result;
   }
 
@@ -114,10 +128,10 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   }
 
   // Give the whole page to the sole tap-enabled direction. When both accept
-  // taps, split at the left third; either Inverted Tap setting swaps the
-  // shared zones.
-  const bool inverted = SETTINGS.pageTurnGesture == CrossPointSettings::INVERTED_TAP ||
-                        SETTINGS.previousPageGesture == CrossPointSettings::INVERTED_TAP;
+  // taps, split at the left third. RTL books and Inverted Tap each reverse
+  // the shared zones.
+  const bool inverted = (SETTINGS.pageTurnGesture == CrossPointSettings::INVERTED_TAP ||
+                         SETTINGS.previousPageGesture == CrossPointSettings::INVERTED_TAP) != rtlBook;
   const bool nextZone = inverted ? x < (width * 2) / 3 : x >= width / 3;
   result.next = nextTaps && (!prevTaps || nextZone);
   result.prev = prevTaps && (!nextTaps || !nextZone);

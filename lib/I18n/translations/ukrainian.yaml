@@ -374,7 +374,6 @@ STR_PWR_BTN_FOOTNOTE_BACK: "Швидке повернення з приміто�
 STR_BACK_SHORT_TO_FILE_BROWSER: "Назад відкриватиме файл. провід."
 STR_SET_SLEEP_COVER: "Як обкл."
 STR_FOOTNOTES: "Примітки"
-STR_NO_FOOTNOTES: "На цій сторінці немає приміток"
 STR_LINK: "[посилання]"
 STR_SCREENSHOT_BUTTON: "Знімок екрана"
 STR_SLEEP_TIMER_VALUE_FORMAT: "%u хв"

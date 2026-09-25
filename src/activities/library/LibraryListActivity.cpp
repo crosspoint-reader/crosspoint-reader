@@ -20,6 +20,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/icons/headerIcons.h"
 #include "components/icons/listIcons.h"
 #include "components/icons/search32.h"
 #include "fontIds.h"
@@ -81,6 +82,7 @@ void LibraryListActivity::onEnter() {
   UiTabListActivity::onEnter();
   app.on(ACTION_SEARCH, &LibraryListActivity::searchActionTrampoline, this);
   app.on(ACTION_REBUILD, &LibraryListActivity::rebuildActionTrampoline, this);
+  app.on(ACTION_BACK, &LibraryListActivity::backActionTrampoline, this);
 
   // Recent is backed by the resident store. Prune before opening the index so
   // its persistence write never overlaps the long-lived index reader.
@@ -646,8 +648,34 @@ void LibraryListActivity::applyFilter() {
   filteredCount = matchCount;
 }
 
+// Staged back-out, shared by the Back button and the header's back arrow:
+// clear the search, expand collapsed groups, return focus to the tabs, then
+// leave for home.
+void LibraryListActivity::handleBackAction() {
+  auto& nav = activeNav();
+  if (!query.empty()) {
+    query.clear();
+    applyFilter();
+    nav.selected = 0;
+    nav.top = 0;
+    requestUpdate();
+  } else if (groupsCollapsed) {
+    restoreExpandedList();
+  } else if (!tabsFocused() && !degraded) {
+    // Keep the current list and viewport while returning focus to the tabs.
+    nav.selected = 0;
+    requestUpdate();
+  } else {
+    onGoHome();
+  }
+}
+
 void LibraryListActivity::searchActionTrampoline(const fui::ActionEvent&, void* user) {
   static_cast<LibraryListActivity*>(user)->openSearch();
+}
+
+void LibraryListActivity::backActionTrampoline(const fui::ActionEvent&, void* user) {
+  static_cast<LibraryListActivity*>(user)->handleBackAction();
 }
 
 void LibraryListActivity::rebuildActionTrampoline(const fui::ActionEvent&, void* user) {
@@ -703,7 +731,6 @@ bool LibraryListActivity::handleCustomInput() {
 
 bool LibraryListActivity::handleButtons() {
   const int count = listCount();
-  auto& nav = activeNav();
 
   // Every hold action fires at the threshold, mid-hold, including the ones
   // that open a dialog (remove-recent, delete). The release that follows is
@@ -726,21 +753,7 @@ bool LibraryListActivity::handleButtons() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (!query.empty()) {
-      query.clear();
-      applyFilter();
-      nav.selected = 0;
-      nav.top = 0;
-      requestUpdate();
-    } else if (groupsCollapsed) {
-      restoreExpandedList();
-    } else if (!tabsFocused() && !degraded) {
-      // Keep the current list and viewport while returning focus to the tabs.
-      nav.selected = 0;
-      requestUpdate();
-    } else {
-      onGoHome();
-    }
+    handleBackAction();
     return true;
   }
 
@@ -912,6 +925,13 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
   }
   header.trailingStyles = fui::plainStyles(fui::Paint::solid(fui::Color::Black));
   header.borderEdges = fui::EdgeBottom;
+  // Same battery/clock band as every GUI.drawHeader screen; the header
+  // heights are unified across themes, so the buttons derive from the band.
+  GUI.applyHeaderStatus(renderer, header);
+  if (mappedInput.hasTouch()) {
+    header.leadingIcon = fui::bitmapFromIcon(icon_header_back_32);
+    header.leadingAction = ACTION_BACK;
+  }
   if (!degraded) {
     // Keep both touch actions together on the right; button boards reach
     // rebuild through the row options menu.
@@ -921,9 +941,8 @@ void LibraryListActivity::buildHeader(UiScreen& screen) {
       header.trailingAdjacentIcon = fui::bitmapFromIcon(icon_refresh_cw_32);
       header.trailingAdjacentAction = ACTION_REBUILD;
     }
-    const int titleFontId = uiScaleSpec().titleFontId;
-    header.actionOffsetY =
-        static_cast<int16_t>((renderer.getLineHeight(titleFontId) - renderer.getTextHeight(titleFontId)) / 2);
+    // Vertical placement comes from applyHeaderStatus: buttons center on the
+    // unified band.
   }
   const auto frameRect = screen.frame().screen();
   // Header and tabs share a screen-relative boundary, independent of bezel insets.
