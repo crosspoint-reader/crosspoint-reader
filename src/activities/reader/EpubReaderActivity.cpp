@@ -375,6 +375,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  rememberBookOnceRendered();
+
   // Someone else turned the screen while this reader was stacked (the control
   // center's orientation tile). Reflow before the next render, or the page
   // would be drawn with a layout built for the previous frame size.
@@ -1156,7 +1158,6 @@ void EpubReaderActivity::renderBook() {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
     automaticPageTurnActive = false;
-    sectionBuildFailed.store(true);
   };
 
   if (currentSpineIndex < 0) currentSpineIndex = 0;
@@ -1443,7 +1444,7 @@ void EpubReaderActivity::renderBook() {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
-    sectionBuildFailed.store(false);
+    markPageRendered();
   }
 
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
@@ -1539,11 +1540,6 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
                  : section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
   }
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset);
-}
-
-void EpubReaderActivity::onExit() {
-  if (sectionBuildFailed.load()) APP_STATE.openEpubPath.clear();
-  ReaderActivity::onExit();
 }
 
 void EpubReaderActivity::rememberCurrentContentOffset() {

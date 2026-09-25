@@ -265,6 +265,7 @@ void TxtReaderActivity::renderBook() {
 
   renderer.clearScreen();
   renderPage(renderer);
+  markPageRendered();
 
   // Save progress
   saveProgress();
