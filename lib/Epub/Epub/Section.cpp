@@ -747,6 +747,12 @@ void Section::suspendBuild() {
       partialBytesConsumed_ = consumed;
       partialTotalBytes_ = build_->totalBytes;
       LOG_INF("SCT", "Suspended build: %u pages persisted", builtPageCount_);
+    } else if (partial_ && !Storage.exists(filePath.c_str())) {
+      // commitBuildFile removes the old file before its rename, so a failed swap can
+      // take the earlier partial with it.
+      LOG_ERR("SCT", "Earlier partial lost with the failed commit");
+      partial_ = false;
+      partialPageCount_ = 0;
     }
   }
 
